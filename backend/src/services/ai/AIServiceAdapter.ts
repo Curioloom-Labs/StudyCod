@@ -1,21 +1,5 @@
-/**
- * AI Service Adapter
- * 
- * Адаптер, який замінює прямі виклики LLMOrchestrator на HTTP-клієнт.
- * Забезпечує сумісність з існуючими сервісами.
- */
-
 import { getAIClient } from './AIClient';
-import { 
-  AiTaskGenerationResult, 
-  AiTheoryResult, 
-  AiQuizResult 
-} from '../llm/LLMOrchestrator';
-
-/**
- * Adapter that provides same interface as openRouterService
- * but uses AI Service HTTP client instead of direct LLM calls
- */
+import { AiTaskGenerationResult, AiTheoryResult, AiQuizResult } from '../llm/LLMOrchestrator';
 export async function generateTaskWithAI(params: {
   topicTitle: string;
   theory: string;
@@ -31,7 +15,6 @@ export async function generateTaskWithAI(params: {
   const client = getAIClient();
   return client.generateTask(params);
 }
-
 export async function generateTheoryWithAI(params: {
   topicTitle: string;
   lang: "JAVA" | "PYTHON";
@@ -44,7 +27,6 @@ export async function generateTheoryWithAI(params: {
   const client = getAIClient();
   return client.generateTheory(params);
 }
-
 export async function generateQuizWithAI(params: {
   lang: "JAVA" | "PYTHON";
   prevTopics: string;
@@ -55,7 +37,6 @@ export async function generateQuizWithAI(params: {
   const client = getAIClient();
   return client.generateQuiz(params);
 }
-
 export async function generateTaskCondition(params: {
   topicTitle: string;
   taskType: "PRACTICE" | "CONTROL";
@@ -63,22 +44,22 @@ export async function generateTaskCondition(params: {
   language: "JAVA" | "PYTHON";
   userId?: number;
   topicId?: number;
-}): Promise<{ description: string }> {
+}): Promise<{
+  description: string;
+}> {
   const client = getAIClient();
   return client.generateTaskCondition(params);
 }
-
 export async function generateTaskTemplate(params: {
   topicTitle: string;
   language: "JAVA" | "PYTHON";
   description?: string;
   userId?: number;
   topicId?: number;
-}): Promise<{ template: string }> {
+}): Promise<{
+  template: string;
+}> {
   const client = getAIClient();
   return client.generateTaskTemplate(params);
 }
-
-// Re-export types for compatibility
 export type { AiTaskGenerationResult, AiTheoryResult, AiQuizResult };
-

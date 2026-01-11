@@ -1,12 +1,10 @@
 import type { DocsSection } from "./docs.types";
-
-export const DOCS_SECTIONS_UK: DocsSection[] = [
-  {
-    id: "welcome",
-    title: "Що таке StudyCod",
-    audience: "ALL",
-    tags: ["welcome", "overview", "studycod"],
-    content: `
+export const DOCS_SECTIONS_UK: DocsSection[] = [{
+  id: "welcome",
+  title: "Що таке StudyCod",
+  audience: "ALL",
+  tags: ["welcome", "overview", "studycod"],
+  content: `
 ## StudyCod — платформа для навчання програмуванню
 
 ![Огляд StudyCod (EDU vs Personal)](/docs/overview.svg)
@@ -36,14 +34,13 @@ StudyCod має **два режими**:
 - EDU (учень): \`/edu/lessons\`
 - EDU (вчитель): \`/edu\` → класи
 - Docs: \`/docs\` або \`/edu/docs\`
-`,
-  },
-  {
-    id: "getting-started",
-    title: "Початок роботи (перше входження)",
-    audience: "ALL",
-    tags: ["start", "first-visit", "account"],
-    content: `
+`
+}, {
+  id: "getting-started",
+  title: "Початок роботи (перше входження)",
+  audience: "ALL",
+  tags: ["start", "first-visit", "account"],
+  content: `
 ## Перше входження
 
 ### Якщо ти учень (EDU)
@@ -65,14 +62,13 @@ StudyCod має **два режими**:
 1. Обери **завдання**.
 2. Виконай і відправ розвʼязок.
 3. Прогрес дивись у **Оцінки**.
-`,
-  },
-  {
-    id: "navigation",
-    title: "Навігація по платформі (карта розділів)",
-    audience: "ALL",
-    tags: ["navigation", "routes", "where", "menu"],
-    content: `
+`
+}, {
+  id: "navigation",
+  title: "Навігація по платформі (карта розділів)",
+  audience: "ALL",
+  tags: ["navigation", "routes", "where", "menu"],
+  content: `
 ## Навігація (що де шукати)
 
 ### EDU (учень)
@@ -94,14 +90,13 @@ StudyCod має **два режими**:
 - **Завдання**: \`/tasks\`
 - **Оцінки / прогрес**: \`/grades\`
 - **Теорія** (якщо є): \`/theory\`
-`,
-  },
-  {
-    id: "edu-student",
-    title: "EDU: учень (як проходити тему і контрольну)",
-    audience: "EDU",
-    tags: ["edu", "student", "lessons", "topic", "control"],
-    content: `
+`
+}, {
+  id: "edu-student",
+  title: "EDU: учень (як проходити тему і контрольну)",
+  audience: "EDU",
+  tags: ["edu", "student", "lessons", "topic", "control"],
+  content: `
 ## EDU: для учня
 
 ### Тема (TOPIC)
@@ -121,14 +116,13 @@ StudyCod має **два режими**:
 - практичні задачі
 
 Після здачі ти побачиш підсумкову оцінку (якщо вчитель дозволив показ результатів або перевірка завершена).
-`,
-  },
-  {
-    id: "edu-teacher",
-    title: "EDU: вчитель (швидкий гайд)",
-    audience: "EDU",
-    tags: ["edu", "teacher", "create", "assign", "gradebook"],
-    content: `
+`
+}, {
+  id: "edu-teacher",
+  title: "EDU: вчитель (швидкий гайд)",
+  audience: "EDU",
+  tags: ["edu", "teacher", "create", "assign", "gradebook"],
+  content: `
 ## EDU: для вчителя
 
 ### Базовий порядок
@@ -139,14 +133,13 @@ StudyCod має **два режими**:
 5. (Опціонально) створи **контрольну/самостійну** у темі
 6. Признач учням (assigned)
 7. Виставляй оцінки у **журналі**
-`,
-  },
-  {
-    id: "edu-topics",
-    title: "EDU: теми (TOPIC)",
-    audience: "EDU",
-    tags: ["topic", "assign", "deadline", "tasks"],
-    content: `
+`
+}, {
+  id: "edu-topics",
+  title: "EDU: теми (TOPIC)",
+  audience: "EDU",
+  tags: ["topic", "assign", "deadline", "tasks"],
+  content: `
 ## Тема (TOPIC)
 
 ![Сторінка теми для вчителя](/docs/screens/edu-topic-page.svg)
@@ -158,14 +151,13 @@ StudyCod має **два режими**:
 
 ### Відкликання (unassign)
 Коли завдання/контрольну відкликано — воно має зникати з усіх списків і з журналу (колонка та оцінки прибираються).
-`,
-  },
-  {
-    id: "edu-tasks",
-    title: "EDU: практичні завдання (PRACTICE)",
-    audience: "EDU",
-    tags: ["practice", "tasks", "grading"],
-    content: `
+`
+}, {
+  id: "edu-tasks",
+  title: "EDU: практичні завдання (PRACTICE)",
+  audience: "EDU",
+  tags: ["practice", "tasks", "grading"],
+  content: `
 ## Практичні завдання
 
 ![Перевірка практичного завдання](/docs/screens/edu-practice-task-check.svg)
@@ -176,14 +168,13 @@ StudyCod має **два режими**:
 
 ### Важливо про manual
 Якщо вчитель поставив **manual grade**, учень не може здавати завдання, поки вчитель не видалить цю оцінку.
-`,
-  },
-  {
-    id: "edu-controlworks",
-    title: "EDU: контрольні/самостійні (CONTROL)",
-    audience: "EDU",
-    tags: ["control", "quiz", "timer", "attempt"],
-    content: `
+`
+}, {
+  id: "edu-controlworks",
+  title: "EDU: контрольні/самостійні (CONTROL)",
+  audience: "EDU",
+  tags: ["control", "quiz", "timer", "attempt"],
+  content: `
 ## Контрольні/самостійні
 
 ![CONTROL flow (таймер, тест, задачі, підсумок)](/docs/controlwork-flow.svg)
@@ -195,14 +186,13 @@ StudyCod має **два режими**:
 
 ### Оцінка
 Контрольна дає **одну підсумкову оцінку** (SummaryGrade, тип CONTROL).
-`,
-  },
-  {
-    id: "edu-quizzes",
-    title: "EDU: тести (quiz) — результати ✅/❌",
-    audience: "EDU",
-    tags: ["quiz", "results", "review"],
-    content: `
+`
+}, {
+  id: "edu-quizzes",
+  title: "EDU: тести (quiz) — результати ✅/❌",
+  audience: "EDU",
+  tags: ["quiz", "results", "review"],
+  content: `
 ## Тести (quiz)
 
 > \`![Quiz редактор](/docs/screens/edu-quiz-editor.svg)\`
@@ -213,14 +203,13 @@ StudyCod має **два режими**:
 - по кожному питанню ✅/❌
 
 > \`![Результати тесту](/docs/screens/edu-quiz-results.svg)\`
-`,
-  },
-  {
-    id: "edu-gradebook",
-    title: "EDU: журнал (Gradebook)",
-    audience: "EDU",
-    tags: ["gradebook", "columns", "export", "import"],
-    content: `
+`
+}, {
+  id: "edu-gradebook",
+  title: "EDU: журнал (Gradebook)",
+  audience: "EDU",
+  tags: ["gradebook", "columns", "export", "import"],
+  content: `
 ## Журнал
 
 ![Логіка колонок у журналі](/docs/gradebook-columns.svg)
@@ -229,27 +218,25 @@ StudyCod має **два режими**:
 - **Практичні**: окремі колонки по кожному завданню
 - **Контрольна**: одна колонка по контрольній
 - **Тематична**: окрема колонка (INTERMEDIATE)
-`,
-  },
-  {
-    id: "edu-thematic",
-    title: "EDU: тематична (INTERMEDIATE)",
-    audience: "EDU",
-    tags: ["intermediate", "thematic", "summary"],
-    content: `
+`
+}, {
+  id: "edu-thematic",
+  title: "EDU: тематична (INTERMEDIATE)",
+  audience: "EDU",
+  tags: ["intermediate", "thematic", "summary"],
+  content: `
 ## Тематична
 
 > \`![Тематична в журналі](/docs/screens/edu-gradebook-thematic.svg)\`
 
 Тематична оцінка створюється/видаляється у журналі і не є обовʼязковою.
-`,
-  },
-  {
-    id: "edu-import-export",
-    title: "EDU: імпорт / експорт CSV",
-    audience: "EDU",
-    tags: ["csv", "import", "export"],
-    content: `
+`
+}, {
+  id: "edu-import-export",
+  title: "EDU: імпорт / експорт CSV",
+  audience: "EDU",
+  tags: ["csv", "import", "export"],
+  content: `
 ## Імпорт / експорт CSV
 
 ### Де це
@@ -258,25 +245,23 @@ StudyCod має **два режими**:
 ### Поради
 - Перевіряй формат CSV і кодування (UTF-8)
 - Після імпорту перезавантаж сторінку класу
-`,
-  },
-  {
-    id: "edu-announcements",
-    title: "EDU: оголошення",
-    audience: "EDU",
-    tags: ["announcements", "email"],
-    content: `
+`
+}, {
+  id: "edu-announcements",
+  title: "EDU: оголошення",
+  audience: "EDU",
+  tags: ["announcements", "email"],
+  content: `
 ## Оголошення
 
 Оголошення — це повідомлення від вчителя для всього класу. Воно може дублюватись email-сповіщенням.
-`,
-  },
-  {
-    id: "grading",
-    title: "Як перевіряються роботи і ставляться оцінки",
-    audience: "ALL",
-    tags: ["grading", "manual", "rules"],
-    content: `
+`
+}, {
+  id: "grading",
+  title: "Як перевіряються роботи і ставляться оцінки",
+  audience: "ALL",
+  tags: ["grading", "manual", "rules"],
+  content: `
 ## Оцінювання
 
 ### Практичні (PRACTICE)
@@ -286,25 +271,23 @@ StudyCod має **два режими**:
 ### Контрольні (CONTROL)
 - підсумкова оцінка по контрольній
 - тестові результати можуть показуватись учню як ✅/❌
-`,
-  },
-  {
-    id: "personal",
-    title: "Personal режим (без класів)",
-    audience: "PERSONAL",
-    tags: ["personal", "solo", "progress"],
-    content: `
+`
+}, {
+  id: "personal",
+  title: "Personal режим (без класів)",
+  audience: "PERSONAL",
+  tags: ["personal", "solo", "progress"],
+  content: `
 ## Personal
 
 Personal — це режим без класів і без вчителя: ти просто вирішуєш завдання й бачиш прогрес.
-`,
-  },
-  {
-    id: "personal-tasks",
-    title: "Personal: завдання та прогрес",
-    audience: "PERSONAL",
-    tags: ["personal", "tasks", "grades"],
-    content: `
+`
+}, {
+  id: "personal-tasks",
+  title: "Personal: завдання та прогрес",
+  audience: "PERSONAL",
+  tags: ["personal", "tasks", "grades"],
+  content: `
 ## Завдання і прогрес
 
 > \`![Personal tasks](/docs/screens/personal-tasks.svg)\`
@@ -313,14 +296,13 @@ Personal — це режим без класів і без вчителя: ти 
 - Розвʼязуй
 - Здавай
 - Дивись прогрес у **Оцінки**
-`,
-  },
-  {
-    id: "faq",
-    title: "FAQ (питання-відповіді)",
-    audience: "ALL",
-    tags: ["faq", "help"],
-    content: `
+`
+}, {
+  id: "faq",
+  title: "FAQ (питання-відповіді)",
+  audience: "ALL",
+  tags: ["faq", "help"],
+  content: `
 ## FAQ
 
 ### Чому я бачу частину українською в англійському режимі?
@@ -334,14 +316,13 @@ Personal — це режим без класів і без вчителя: ти 
 - \`![Опис](/docs/screens/my-screenshot.png)\`
 
 > Після цього скрін буде доступний і з \`/docs\`, і з \`/edu/docs\`.
-`,
-  },
-  {
-    id: "troubleshooting",
-    title: "Troubleshooting (типові проблеми)",
-    audience: "ALL",
-    tags: ["errors", "troubleshooting"],
-    content: `
+`
+}, {
+  id: "troubleshooting",
+  title: "Troubleshooting (типові проблеми)",
+  audience: "ALL",
+  tags: ["errors", "troubleshooting"],
+  content: `
 ## Troubleshooting
 
 ### Не скролиться сторінка в EDU
@@ -351,22 +332,17 @@ EDU оболонка має \`overflow-hidden\`, тому сама сторін�
 Перевір:
 - чи завдання призначене (assigned)
 - чи оцінка не була видалена/відкликана
-`,
-  },
-  {
-    id: "privacy",
-    title: "Приватність і дані",
-    audience: "ALL",
-    tags: ["privacy", "data"],
-    content: `
+`
+}, {
+  id: "privacy",
+  title: "Приватність і дані",
+  audience: "ALL",
+  tags: ["privacy", "data"],
+  content: `
 ## Приватність
 
 - Паролі/токени зберігаються безпечно на стороні сервера
 - Скріншоти в Docs — це статичні файли у \`frontend/public\`
-`,
-  },
-];
-
+`
+}];
 export default DOCS_SECTIONS_UK;
-
-

@@ -1,38 +1,22 @@
-// frontend/src/pages/ClassGradebookPage.tsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
-import {
-  getClassGradebook,
-  createManualGrade,
-  updateGrade,
-  createSummaryGrade,
-  updateSummaryGrade,
-  deleteThematicForTopic,
-  getControlWorkDetails,
-  getControlWorkStudentWork,
-  getTopicTaskStudentWork,
-  unassignTask,
-  unassignControlWork,
-  updateControlWorkGrade,
-  deleteTaskGrade,
-  type GradebookResponse,
-  type GradebookStudent,
-  type GradebookLesson,
-  type UpdateGradeRequest,
-  type ControlWorkDetails,
-  type ControlWorkStudentWork,
-  type TopicTaskStudentWork,
-} from "../lib/api/edu";
+import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, deleteThematicForTopic, getControlWorkDetails, getControlWorkStudentWork, getTopicTaskStudentWork, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork } from "../lib/api/edu";
 import { ArrowLeft, Calculator, Download, Edit2, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
 export const ClassGradebookPage: React.FC = () => {
-  const { t, i18n } = useTranslation();
-  const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
-  const { classId } = useParams<{ classId: string }>();
+  const {
+    t,
+    i18n
+  } = useTranslation();
+  const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const {
+    classId
+  } = useParams<{
+    classId: string;
+  }>();
   const navigate = useNavigate();
   const [gradebook, setGradebook] = useState<GradebookResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,13 +43,11 @@ export const ClassGradebookPage: React.FC = () => {
   const [showCreateThematic, setShowCreateThematic] = useState(false);
   const [thematicTopicId, setThematicTopicId] = useState<number | null>(null);
   const [calculatingThematic, setCalculatingThematic] = useState(false);
-
   useEffect(() => {
     if (classId) {
       loadGradebook();
     }
   }, [classId]);
-
   const loadGradebook = async () => {
     if (!classId) return;
     try {
@@ -77,55 +59,48 @@ export const ClassGradebookPage: React.FC = () => {
       setLoading(false);
     }
   };
-
   const getGradeColor = (grade: number | null) => {
     if (grade === null) return "text-text-muted";
-    // Градієнт від червоного (1) до зеленого (12)
-    if (grade >= 10) return "text-accent-success font-bold"; // Зелений
-    if (grade >= 7) return "text-accent-warn font-semibold"; // Жовтий
-    if (grade >= 4) return "text-yellow-500 font-semibold"; // Помаранчевий
-    return "text-accent-error font-semibold"; // Червоний
+    if (grade >= 10) return "text-accent-success font-bold";
+    if (grade >= 7) return "text-accent-warn font-semibold";
+    if (grade >= 4) return "text-yellow-500 font-semibold";
+    return "text-accent-error font-semibold";
   };
-
   const handleGradeClick = async (student: GradebookStudent, taskId: number, grade: any, taskTitle: string) => {
-    // Перевіряємо, чи це контрольна робота (перевіряємо по lessonType або isControlWork)
     const isControlWork = grade?.lessonType === "CONTROL" || grade?.isControlWork || taskTitle.includes("Контрольна робота");
     const isSummaryGrade = grade?.lessonType === "SUMMARY" || grade?.isSummaryGrade || taskTitle === "Тематична";
-    
-    // Для всіх завдань (включаючи контрольну роботу) відкриваємо модальне вікно редагування оцінки
     setEditingGrade({
       studentId: student.studentId,
-      taskId: taskId, // controlWorkId для контрольної роботи
-      gradeId: grade?.gradeId || null, // summaryGradeId для контрольної роботи
+      taskId: taskId,
+      gradeId: grade?.gradeId || null,
       currentGrade: grade?.grade ?? null,
       studentName: student.studentName,
       taskTitle: taskTitle,
       isControlWork: isControlWork,
-      isSummaryGrade,
+      isSummaryGrade
     });
     setGradeValue(grade?.grade?.toString() || "");
     setFeedback("");
   };
-
   const handleSaveGrade = async () => {
     if (!editingGrade || !classId) return;
-    
     const gradeNum = Number.isFinite(Number(gradeValue)) ? Math.round(Number(gradeValue)) : NaN;
-    console.log('[ClassGradebookPage] handleSaveGrade:', { gradeValue, gradeNum, isNaN: isNaN(gradeNum) });
-    
+    console.log('[ClassGradebookPage] handleSaveGrade:', {
+      gradeValue,
+      gradeNum,
+      isNaN: isNaN(gradeNum)
+    });
     if (isNaN(gradeNum) || gradeNum < 0 || gradeNum > 12) {
       alert(t('gradeRange'));
       return;
     }
-
     setSaving(true);
     try {
       if (editingGrade.isControlWork) {
-        // Для контрольної роботи оновлюємо SummaryGrade
         console.log('[ClassGradebookPage] Updating control work grade:', {
           controlWorkId: editingGrade.taskId,
           studentId: editingGrade.studentId,
-          grade: gradeNum,
+          grade: gradeNum
         });
         await updateControlWorkGrade(editingGrade.taskId, editingGrade.studentId, gradeNum);
       } else if (editingGrade.isSummaryGrade) {
@@ -135,27 +110,22 @@ export const ClassGradebookPage: React.FC = () => {
           await updateSummaryGrade(parseInt(classId, 10), editingGrade.gradeId, gradeNum);
         }
       } else {
-        // Для звичайних завдань
         if (editingGrade.gradeId) {
-          // Оновлюємо існуючу оцінку
           const update: UpdateGradeRequest = {
             total: gradeNum,
-            feedback: feedback || undefined,
+            feedback: feedback || undefined
           };
           console.log('[ClassGradebookPage] Updating grade:', update);
           await updateGrade(editingGrade.gradeId, update);
         } else {
-          // Створюємо нову оцінку
           const payload = {
             total: gradeNum,
-            feedback: feedback || undefined,
+            feedback: feedback || undefined
           };
           console.log('[ClassGradebookPage] Creating grade:', payload);
           await createManualGrade(editingGrade.taskId, editingGrade.studentId, payload);
         }
       }
-      
-      // Перезавантажуємо журнал
       await loadGradebook();
       setEditingGrade(null);
       setGradeValue("");
@@ -167,7 +137,6 @@ export const ClassGradebookPage: React.FC = () => {
       setSaving(false);
     }
   };
-
   const handleDeleteGrade = async () => {
     if (!editingGrade || !classId) return;
     if (!editingGrade.gradeId) return;
@@ -175,14 +144,7 @@ export const ClassGradebookPage: React.FC = () => {
       alert(tr("Видалення доступне тільки для оцінок за практичні завдання.", "Deletion is available only for practice task grades."));
       return;
     }
-    if (
-      !confirm(
-        tr(
-          `Видалити оцінку за завдання "${editingGrade.taskTitle}" для учня "${editingGrade.studentName}"?\nПісля цього учень зможе виконати завдання та отримати оцінку самостійно.`,
-          `Delete the grade for "${editingGrade.taskTitle}" for student "${editingGrade.studentName}"?\nAfter that, the student will be able to submit the task and earn a grade themselves.`
-        )
-      )
-    ) {
+    if (!confirm(tr(`Видалити оцінку за завдання "${editingGrade.taskTitle}" для учня "${editingGrade.studentName}"?\nПісля цього учень зможе виконати завдання та отримати оцінку самостійно.`, `Delete the grade for "${editingGrade.taskTitle}" for student "${editingGrade.studentName}"?\nAfter that, the student will be able to submit the task and earn a grade themselves.`))) {
       return;
     }
     try {
@@ -197,12 +159,16 @@ export const ClassGradebookPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося видалити оцінку", "Failed to delete grade"));
     }
   };
-
   const optionLabel = (key: string) => {
-    const map: Record<string, string> = { "А": "A", "Б": "B", "В": "C", "Г": "D", "Д": "E" };
-    return i18n.language?.toLowerCase().startsWith("en") ? (map[key] || key) : key;
+    const map: Record<string, string> = {
+      "А": "A",
+      "Б": "B",
+      "В": "C",
+      "Г": "D",
+      "Д": "E"
+    };
+    return i18n.language?.toLowerCase().startsWith("en") ? map[key] || key : key;
   };
-
   const handleViewWork = async () => {
     if (!editingGrade) return;
     setWorkLoading(true);
@@ -225,7 +191,6 @@ export const ClassGradebookPage: React.FC = () => {
       setWorkLoading(false);
     }
   };
-
   const handleCreateThematic = async () => {
     if (!classId) return;
     if (!thematicTopicId) {
@@ -233,20 +198,13 @@ export const ClassGradebookPage: React.FC = () => {
       return;
     }
     try {
-      if (
-        !confirm(
-          tr(
-            "Автоматично порахувати (і перезаписати, якщо вже є) “Тематичну” для цієї теми?",
-            "Auto-calculate (and overwrite if already exists) the “Thematic” grade for this topic?"
-          )
-        )
-      ) {
+      if (!confirm(tr("Автоматично порахувати (і перезаписати, якщо вже є) “Тематичну” для цієї теми?", "Auto-calculate (and overwrite if already exists) the “Thematic” grade for this topic?"))) {
         return;
       }
       setCalculatingThematic(true);
       await createSummaryGrade(parseInt(classId, 10), {
         name: "Тематична",
-        topicId: thematicTopicId,
+        topicId: thematicTopicId
       });
       setShowCreateThematic(false);
       setThematicTopicId(null);
@@ -258,22 +216,17 @@ export const ClassGradebookPage: React.FC = () => {
       setCalculatingThematic(false);
     }
   };
-
   const recalculateThematicForTopic = async (topicId: number, topicTitle?: string) => {
     if (!classId) return;
-    if (
-      !confirm(
-        tr(
-          `Автоматично порахувати (і перезаписати) “Тематичну” для теми "${topicTitle || topicId}"?`,
-          `Auto-calculate (and overwrite) the “Thematic” grade for topic "${topicTitle || topicId}"?`
-        )
-      )
-    ) {
+    if (!confirm(tr(`Автоматично порахувати (і перезаписати) “Тематичну” для теми "${topicTitle || topicId}"?`, `Auto-calculate (and overwrite) the “Thematic” grade for topic "${topicTitle || topicId}"?`))) {
       return;
     }
     setCalculatingThematic(true);
     try {
-      await createSummaryGrade(parseInt(classId, 10), { name: "Тематична", topicId });
+      await createSummaryGrade(parseInt(classId, 10), {
+        name: "Тематична",
+        topicId
+      });
       await loadGradebook();
     } catch (error: any) {
       console.error("Failed to recalculate thematic:", error);
@@ -282,28 +235,23 @@ export const ClassGradebookPage: React.FC = () => {
       setCalculatingThematic(false);
     }
   };
-
   const recalculateAllThematics = async () => {
     if (!classId || !gradebook) return;
-    const topics = (gradebook.lessons as any[]).filter((l) => l.type === "TOPIC");
+    const topics = (gradebook.lessons as any[]).filter(l => l.type === "TOPIC");
     if (topics.length === 0) {
       alert(tr("Немає тем для перерахунку", "No topics to recalculate"));
       return;
     }
-    if (
-      !confirm(
-        tr(
-          `Порахувати тематичні для всіх тем (${topics.length})? Це перезапише існуючі.`,
-          `Calculate thematics for all topics (${topics.length})? This will overwrite existing ones.`
-        )
-      )
-    ) {
+    if (!confirm(tr(`Порахувати тематичні для всіх тем (${topics.length})? Це перезапише існуючі.`, `Calculate thematics for all topics (${topics.length})? This will overwrite existing ones.`))) {
       return;
     }
     setCalculatingThematic(true);
     try {
       for (const topic of topics) {
-        await createSummaryGrade(parseInt(classId, 10), { name: "Тематична", topicId: topic.id });
+        await createSummaryGrade(parseInt(classId, 10), {
+          name: "Тематична",
+          topicId: topic.id
+        });
       }
       await loadGradebook();
       alert(tr("Тематичні перераховано", "Thematics recalculated"));
@@ -314,70 +262,41 @@ export const ClassGradebookPage: React.FC = () => {
       setCalculatingThematic(false);
     }
   };
-
   const exportToCSV = () => {
     if (!gradebook) return;
-
-    const headers = [tr("Учень", "Student"), ...gradebook.lessons.flatMap(l => 
-      l.tasks.map(t => `${l.title} - ${t.title}`)
-    )];
-    
+    const headers = [tr("Учень", "Student"), ...gradebook.lessons.flatMap(l => l.tasks.map(t => `${l.title} - ${t.title}`))];
     const rows = gradebook.students.map(student => {
       const studentName = student.studentName;
       const grades = student.grades.map(g => g.grade ?? "");
       return [studentName, ...grades];
     });
-
-    const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.join(","))
-    ].join("\n");
-
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;"
+    });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `journal_${classId}_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
   };
-
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-text-primary font-mono">
+    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
         {t('loading')}
-      </div>
-    );
+      </div>;
   }
-
   if (!gradebook) {
-    return (
-      <div className="h-full flex items-center justify-center text-text-primary font-mono">
+    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
         {t('failedToLoad')}
-      </div>
-    );
+      </div>;
   }
-
-  // Фільтруємо журнал по темі:
-  // - TOPIC: id теми
-  // - CONTROL: parentId = id теми
-  // - SUMMARY: parentId = id теми
-  const filteredLessons = selectedLesson === "all"
-    ? gradebook.lessons
-    : gradebook.lessons.filter((l: any) =>
-        (l.type === "TOPIC" && l.id === selectedLesson) ||
-        (l.type === "CONTROL" && l.parentId === selectedLesson) ||
-        (l.type === "SUMMARY" && l.parentId === selectedLesson)
-      );
-
+  const filteredLessons = selectedLesson === "all" ? gradebook.lessons : gradebook.lessons.filter((l: any) => l.type === "TOPIC" && l.id === selectedLesson || l.type === "CONTROL" && l.parentId === selectedLesson || l.type === "SUMMARY" && l.parentId === selectedLesson);
   const allTasks = filteredLessons.flatMap(l => l.tasks.map(t => ({
     ...t,
     lessonId: l.id,
-    // Для КР: підписуємо колонку назвою теми, а не самою КР
     lessonTitle: (l as any).parentTitle || l.title,
-    lessonType: l.type,
+    lessonType: l.type
   })));
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+  return <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex-shrink-0 p-6 pb-4">
         <div className="max-w-full mx-auto">
           <div className="flex items-center justify-between mb-6">
@@ -402,54 +321,46 @@ export const ClassGradebookPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Фільтр по урокам */}
+          {}
           <Card className="p-4 mb-4">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-mono text-text-secondary">{t("filter")}:</span>
-              <button
-                onClick={() => setSelectedLesson("all")}
-                className={`px-3 py-1 text-xs font-mono border transition-fast ${
-                  selectedLesson === "all"
-                    ? "border-primary bg-bg-hover text-text-primary"
-                    : "border-border text-text-secondary hover:text-text-primary"
-                }`}
-              >
+              <button onClick={() => setSelectedLesson("all")} className={`px-3 py-1 text-xs font-mono border transition-fast ${selectedLesson === "all" ? "border-primary bg-bg-hover text-text-primary" : "border-border text-text-secondary hover:text-text-primary"}`}>
                 {tr("Всі уроки", "All lessons")}
               </button>
               {(() => {
-                const topicsMap = new Map<number, { id: number; title: string }>();
-                for (const l of gradebook.lessons as any[]) {
-                  if (l.type === "TOPIC") {
-                    topicsMap.set(l.id, { id: l.id, title: l.title });
-                  } else if (l.type === "CONTROL" && l.parentId && l.parentTitle) {
-                    if (!topicsMap.has(l.parentId)) {
-                      topicsMap.set(l.parentId, { id: l.parentId, title: l.parentTitle });
-                    }
+              const topicsMap = new Map<number, {
+                id: number;
+                title: string;
+              }>();
+              for (const l of gradebook.lessons as any[]) {
+                if (l.type === "TOPIC") {
+                  topicsMap.set(l.id, {
+                    id: l.id,
+                    title: l.title
+                  });
+                } else if (l.type === "CONTROL" && l.parentId && l.parentTitle) {
+                  if (!topicsMap.has(l.parentId)) {
+                    topicsMap.set(l.parentId, {
+                      id: l.parentId,
+                      title: l.parentTitle
+                    });
                   }
                 }
-                return Array.from(topicsMap.values()).map(topic => (
-                  <button
-                    key={`TOPIC-${topic.id}`}
-                    onClick={() => setSelectedLesson(topic.id)}
-                    className={`px-3 py-1 text-xs font-mono border transition-fast ${
-                      selectedLesson === topic.id
-                        ? "border-primary bg-bg-hover text-text-primary"
-                        : "border-border text-text-secondary hover:text-text-primary"
-                    }`}
-                  >
+              }
+              return Array.from(topicsMap.values()).map(topic => <button key={`TOPIC-${topic.id}`} onClick={() => setSelectedLesson(topic.id)} className={`px-3 py-1 text-xs font-mono border transition-fast ${selectedLesson === topic.id ? "border-primary bg-bg-hover text-text-primary" : "border-border text-text-secondary hover:text-text-primary"}`}>
                     {topic.title}
-                  </button>
-                ));
-              })()}
+                  </button>);
+            })()}
             </div>
           </Card>
         </div>
       </div>
 
-      {/* Scrollable table container */}
+      {}
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         <div className="max-w-full mx-auto">
-          {/* Таблиця журналу */}
+          {}
           <Card className="p-0">
             <div className="overflow-x-auto">
               <div className="min-w-full">
@@ -459,12 +370,7 @@ export const ClassGradebookPage: React.FC = () => {
                       <th className="px-4 py-3 text-left text-sm font-mono text-text-primary sticky left-0 bg-bg-surface z-10 border-r border-border">
                         {t('student')}
                       </th>
-                      {allTasks.map(task => (
-                        <th
-                          key={`${task.type}-${task.id}`}
-                          className="px-3 py-3 text-center text-xs font-mono text-text-secondary border-r border-border min-w-[80px] relative group"
-                          title={`${task.lessonTitle} - ${task.title}`}
-                        >
+                      {allTasks.map(task => <th key={`${task.type}-${task.id}`} className="px-3 py-3 text-center text-xs font-mono text-text-secondary border-r border-border min-w-[80px] relative group" title={`${task.lessonTitle} - ${task.title}`}>
                           <div className="flex flex-col items-center justify-center gap-1">
                             <div className="w-full max-w-[140px] text-center truncate px-1">
                               {task.title}
@@ -473,143 +379,88 @@ export const ClassGradebookPage: React.FC = () => {
                               {task.lessonTitle}
                             </div>
                           </div>
-                          {/* Не показуємо "Відкликати" для тематичної */}
-                          {task.type !== "SUMMARY" && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (!confirm(tr(
-                                  `Ви впевнені, що хочете відкликати завдання "${task.title}"? Всі оцінки будуть видалені.`,
-                                  `Are you sure you want to unassign "${task.title}"? All grades will be deleted.`
-                                ))) {
-                                  return;
-                                }
-                                try {
-                                  const isControlWork = task.type === "CONTROL" || task.title.includes("Контрольна робота");
-                                  if (isControlWork) {
-                                    await unassignControlWork(task.id);
-                                  } else {
-                                    await unassignTask(task.id);
-                                  }
-                                  await loadGradebook();
-                                  alert(tr("Завдання відкликано", "Task unassigned"));
-                                } catch (error: any) {
-                                  console.error("Failed to unassign task:", error);
-                                  alert(error.response?.data?.message || tr("Не вдалося відкликати завдання", "Failed to unassign task"));
-                                }
-                              }}
-                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:text-accent-error/80 text-xs font-bold"
-                              title={tr("Відкликати завдання", "Unassign task")}
-                            >
+                          {}
+                          {task.type !== "SUMMARY" && <button onClick={async e => {
+                        e.stopPropagation();
+                        if (!confirm(tr(`Ви впевнені, що хочете відкликати завдання "${task.title}"? Всі оцінки будуть видалені.`, `Are you sure you want to unassign "${task.title}"? All grades will be deleted.`))) {
+                          return;
+                        }
+                        try {
+                          const isControlWork = task.type === "CONTROL" || task.title.includes("Контрольна робота");
+                          if (isControlWork) {
+                            await unassignControlWork(task.id);
+                          } else {
+                            await unassignTask(task.id);
+                          }
+                          await loadGradebook();
+                          alert(tr("Завдання відкликано", "Task unassigned"));
+                        } catch (error: any) {
+                          console.error("Failed to unassign task:", error);
+                          alert(error.response?.data?.message || tr("Не вдалося відкликати завдання", "Failed to unassign task"));
+                        }
+                      }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:text-accent-error/80 text-xs font-bold" title={tr("Відкликати завдання", "Unassign task")}>
                               ×
-                            </button>
-                          )}
-                          {task.type === "SUMMARY" &&
-                            gradebook.students.some((s) =>
-                              s.grades.some((g) => g.lessonType === "SUMMARY" && g.taskId === task.id && g.gradeId)
-                            ) && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (!classId) return;
-                                if (!confirm(tr(
-                                  `Видалити тематичну для теми "${task.lessonTitle}"? Це прибере оцінки для всіх учнів.`,
-                                  `Delete thematic for topic "${task.lessonTitle}"? This will remove grades for all students.`
-                                ))) {
-                                  return;
-                                }
-                                try {
-                                  const result = await deleteThematicForTopic(parseInt(classId, 10), task.id);
-                                  await loadGradebook();
-                                  if (!result.deleted) {
-                                    alert(tr("Немає тематичної для видалення", "No thematic to delete"));
-                                  } else {
-                                    alert(tr(`Тематичну видалено (оцінок: ${result.deleted})`, `Thematic deleted (grades: ${result.deleted})`));
-                                  }
-                                } catch (error: any) {
-                                  console.error("Failed to delete thematic:", error);
-                                  alert(error.response?.data?.message || tr("Не вдалося видалити тематичну", "Failed to delete thematic"));
-                                }
-                              }}
-                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:text-accent-error/80 p-1"
-                              title={tr("Видалити тематичну", "Delete thematic")}
-                            >
+                            </button>}
+                          {task.type === "SUMMARY" && gradebook.students.some(s => s.grades.some(g => g.lessonType === "SUMMARY" && g.taskId === task.id && g.gradeId)) && <button onClick={async e => {
+                        e.stopPropagation();
+                        if (!classId) return;
+                        if (!confirm(tr(`Видалити тематичну для теми "${task.lessonTitle}"? Це прибере оцінки для всіх учнів.`, `Delete thematic for topic "${task.lessonTitle}"? This will remove grades for all students.`))) {
+                          return;
+                        }
+                        try {
+                          const result = await deleteThematicForTopic(parseInt(classId, 10), task.id);
+                          await loadGradebook();
+                          if (!result.deleted) {
+                            alert(tr("Немає тематичної для видалення", "No thematic to delete"));
+                          } else {
+                            alert(tr(`Тематичну видалено (оцінок: ${result.deleted})`, `Thematic deleted (grades: ${result.deleted})`));
+                          }
+                        } catch (error: any) {
+                          console.error("Failed to delete thematic:", error);
+                          alert(error.response?.data?.message || tr("Не вдалося видалити тематичну", "Failed to delete thematic"));
+                        }
+                      }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:text-accent-error/80 p-1" title={tr("Видалити тематичну", "Delete thematic")}>
                               <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                          {task.type === "SUMMARY" && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void recalculateThematicForTopic(task.id, task.lessonTitle);
-                              }}
-                              className="absolute top-1 right-7 opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-primary p-1"
-                              title={tr("Автоматично порахувати тематичну", "Auto-calculate thematic")}
-                              disabled={calculatingThematic}
-                            >
+                            </button>}
+                          {task.type === "SUMMARY" && <button onClick={e => {
+                        e.stopPropagation();
+                        void recalculateThematicForTopic(task.id, task.lessonTitle);
+                      }} className="absolute top-1 right-7 opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-primary p-1" title={tr("Автоматично порахувати тематичну", "Auto-calculate thematic")} disabled={calculatingThematic}>
                               <Calculator className="w-3 h-3" />
-                            </button>
-                          )}
-                        </th>
-                      ))}
+                            </button>}
+                        </th>)}
                     </tr>
                   </thead>
                   <tbody>
-                    {gradebook.students.map(student => (
-                      <tr
-                        key={student.studentId}
-                        className="border-b border-border hover:bg-bg-hover transition-fast"
-                      >
+                    {gradebook.students.map(student => <tr key={student.studentId} className="border-b border-border hover:bg-bg-hover transition-fast">
                         <td className="px-4 py-2 text-sm font-mono text-text-primary sticky left-0 bg-bg-base z-10 border-r border-border">
                           {student.studentName}
                         </td>
                         {allTasks.map(task => {
-                          // IMPORTANT:
-                          // - task.type is PRACTICE/SUMMARY/CONTROL
-                          // - grade.lessonType is TOPIC/SUMMARY/CONTROL
-                          // For practice tasks, we must match by task.lessonType (TOPIC), not task.type (PRACTICE),
-                          // otherwise grades exist in DB but never render.
-                          const grade = student.grades.find(
-                            (g) => g.taskId === task.id && g.lessonType === (task as any).lessonType
-                          );
-                          return (
-                            <td
-                              key={`${task.type}-${task.id}`}
-                              onClick={() => handleGradeClick(student, task.id, grade, task.title)}
-                              className={`px-3 py-2 text-center text-sm font-mono border-r border-border cursor-pointer hover:bg-bg-hover transition-fast ${getGradeColor(grade?.grade ?? null)}`}
-                              title={t('gradeFor')}
-                            >
-                              {(grade?.grade ?? 0) > 0 ? grade!.grade : "-"}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                      const grade = student.grades.find(g => g.taskId === task.id && g.lessonType === (task as any).lessonType);
+                      return <td key={`${task.type}-${task.id}`} onClick={() => handleGradeClick(student, task.id, grade, task.title)} className={`px-3 py-2 text-center text-sm font-mono border-r border-border cursor-pointer hover:bg-bg-hover transition-fast ${getGradeColor(grade?.grade ?? null)}`} title={t('gradeFor')}>
+                              {grade?.grade === null || grade?.grade === undefined ? "-" : grade.grade}
+                            </td>;
+                    })}
+                      </tr>)}
                   </tbody>
                 </table>
               </div>
             </div>
           </Card>
 
-          {gradebook.students.length === 0 && (
-            <Card className="p-8 text-center">
+          {gradebook.students.length === 0 && <Card className="p-8 text-center">
               <p className="text-text-secondary">{t('noStudents')}</p>
-            </Card>
-          )}
+            </Card>}
         </div>
       </div>
 
-      {/* Модальне вікно для редагування оцінки */}
-      {editingGrade && (
-        <Modal
-          open={!!editingGrade}
-          onClose={() => {
-            setEditingGrade(null);
-            setGradeValue("");
-            setFeedback("");
-          }}
-          title={t('edit')}
-        >
+      {}
+      {editingGrade && <Modal open={!!editingGrade} onClose={() => {
+      setEditingGrade(null);
+      setGradeValue("");
+      setFeedback("");
+    }} title={t('edit')}>
           <div className="p-6">
             <div className="mb-4">
               <p className="text-sm text-text-secondary mb-1">{t('student')}:</p>
@@ -623,109 +474,55 @@ export const ClassGradebookPage: React.FC = () => {
               <label className="block text-sm text-text-secondary mb-2">
                 {t('grade')} (0-12):
               </label>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value={gradeValue}
-                onChange={(e) => setGradeValue(e.target.value)}
-                className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary"
-                placeholder={t('enterGrade')}
-                autoFocus
-              />
+              <input type="number" min="0" max="12" value={gradeValue} onChange={e => setGradeValue(e.target.value)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary" placeholder={t('enterGrade')} autoFocus />
             </div>
             <div className="mb-6">
               <label className="block text-sm text-text-secondary mb-2">
                 {t('feedback')} ({t('optional')}):
               </label>
-              <textarea
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary"
-                rows={3}
-                placeholder={t('feedback')}
-              />
+              <textarea value={feedback} onChange={e => setFeedback(e.target.value)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary" rows={3} placeholder={t('feedback')} />
             </div>
             <div className="flex gap-2 justify-end">
-              {!editingGrade.isSummaryGrade && (
-                <Button
-                  variant="ghost"
-                  onClick={handleViewWork}
-                  disabled={saving}
-                >
+              {!editingGrade.isSummaryGrade && <Button variant="ghost" onClick={handleViewWork} disabled={saving}>
                   {tr("Переглянути роботу", "View work")}
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setEditingGrade(null);
-                  setGradeValue("");
-                  setFeedback("");
-                }}
-                disabled={saving}
-              >
+                </Button>}
+              <Button variant="ghost" onClick={() => {
+            setEditingGrade(null);
+            setGradeValue("");
+            setFeedback("");
+          }} disabled={saving}>
                 {t('cancel')}
               </Button>
-              {!editingGrade.isControlWork && !editingGrade.isSummaryGrade && editingGrade.gradeId && (
-                <Button
-                  variant="ghost"
-                  onClick={handleDeleteGrade}
-                  disabled={saving}
-                  className="text-accent-error border border-accent-error hover:bg-bg-hover"
-                >
+              {!editingGrade.isControlWork && !editingGrade.isSummaryGrade && editingGrade.gradeId && <Button variant="ghost" onClick={handleDeleteGrade} disabled={saving} className="text-accent-error border border-accent-error hover:bg-bg-hover">
                   <Trash2 className="w-4 h-4 mr-2" />
                   {t("delete")}
-                </Button>
-              )}
-              <Button
-                onClick={handleSaveGrade}
-                disabled={saving || !gradeValue}
-              >
+                </Button>}
+              <Button onClick={handleSaveGrade} disabled={saving || !gradeValue}>
                 {saving ? t('saving') : t('save')}
               </Button>
             </div>
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Student Work Modal (practice or control work) */}
-      {showWorkModal && (
-        <Modal
-          open={showWorkModal}
-          onClose={() => {
-            setShowWorkModal(false);
-            setPracticeWork(null);
-            setControlWorkWork(null);
-          }}
-          title={
-            editingGrade
-              ? `${editingGrade.studentName} — ${editingGrade.taskTitle}`
-              : tr("Робота учня", "Student work")
-          }
-        >
+      {}
+      {showWorkModal && <Modal open={showWorkModal} onClose={() => {
+      setShowWorkModal(false);
+      setPracticeWork(null);
+      setControlWorkWork(null);
+    }} title={editingGrade ? `${editingGrade.studentName} — ${editingGrade.taskTitle}` : tr("Робота учня", "Student work")}>
           <div className="p-6 max-h-[80vh] overflow-y-auto">
-            {workLoading ? (
-              <div className="text-sm font-mono text-text-secondary">{tr("Завантаження...", "Loading...")}</div>
-            ) : practiceWork ? (
-              <div className="space-y-4">
+            {workLoading ? <div className="text-sm font-mono text-text-secondary">{tr("Завантаження...", "Loading...")}</div> : practiceWork ? <div className="space-y-4">
                 <div className="text-xs text-text-muted">
                   {tr("Спроби:", "Submissions:")} {practiceWork.submissions.length}
                 </div>
-                {practiceWork.submissions.length === 0 ? (
-                  <div className="text-sm text-text-secondary">{tr("Немає відправлених спроб.", "No submissions yet.")}</div>
-                ) : (
-                  practiceWork.submissions.map((s, idx) => (
-                    <Card key={s.id} className="p-4">
+                {practiceWork.submissions.length === 0 ? <div className="text-sm text-text-secondary">{tr("Немає відправлених спроб.", "No submissions yet.")}</div> : practiceWork.submissions.map((s, idx) => <Card key={s.id} className="p-4">
                       <div className="flex items-start justify-between gap-4 mb-3">
                         <div>
                           <div className="text-sm font-mono text-text-primary">
                             {tr("Спроба", "Submission")} #{practiceWork.submissions.length - idx}
                           </div>
                           <div className="text-xs text-text-muted">
-                            {s.createdAt
-                              ? new Date(s.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")
-                              : "—"}
+                            {s.createdAt ? new Date(s.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA") : "—"}
                           </div>
                         </div>
                         <div className="text-right">
@@ -736,22 +533,16 @@ export const ClassGradebookPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      {s.feedback && (
-                        <div className="mb-3 text-xs text-text-secondary whitespace-pre-wrap">
+                      {s.feedback && <div className="mb-3 text-xs text-text-secondary whitespace-pre-wrap">
                           <span className="text-text-muted">{tr("Коментар:", "Comment:")}</span> {s.feedback}
-                        </div>
-                      )}
+                        </div>}
                       <div className="border border-border bg-bg-code p-3 overflow-x-auto">
                         <pre className="text-xs text-text-primary whitespace-pre-wrap m-0 font-mono">
                           {s.submittedCode || tr("// Немає коду", "// No code")}
                         </pre>
                       </div>
-                    </Card>
-                  ))
-                )}
-              </div>
-            ) : controlWorkWork ? (
-              <div className="space-y-6">
+                    </Card>)}
+              </div> : controlWorkWork ? <div className="space-y-6">
                 <Card className="p-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -767,18 +558,14 @@ export const ClassGradebookPage: React.FC = () => {
                   </div>
                 </Card>
 
-                {/* Quiz */}
+                {}
                 <div>
                   <h3 className="text-lg font-mono text-text-primary mb-3">{tr("Тест", "Quiz")}</h3>
-                  {!controlWorkWork.quizReview ? (
-                    <div className="text-sm text-text-secondary">{tr("Немає відповідей на тест.", "No quiz submission yet.")}</div>
-                  ) : (
-                    <div className="space-y-3">
+                  {!controlWorkWork.quizReview ? <div className="text-sm text-text-secondary">{tr("Немає відповідей на тест.", "No quiz submission yet.")}</div> : <div className="space-y-3">
                       <div className="text-xs text-text-muted">
                         {tr("Результат:", "Result:")} {controlWorkWork.quizReview.correctAnswers}/{controlWorkWork.quizReview.totalQuestions}
                       </div>
-                      {controlWorkWork.quizReview.questions.map((q) => (
-                        <Card key={q.index} className="p-4">
+                      {controlWorkWork.quizReview.questions.map(q => <Card key={q.index} className="p-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="text-sm font-mono text-text-primary">
                               {tr("Питання", "Question")} {q.index + 1}: {q.question}
@@ -789,19 +576,9 @@ export const ClassGradebookPage: React.FC = () => {
                           </div>
                           <div className="mt-3 space-y-2">
                             {Object.entries(q.options || {}).map(([key, text]) => {
-                              const isCorrect = String(q.correct).toUpperCase() === key.toUpperCase();
-                              const isStudent = (q.student || "").toUpperCase() === key.toUpperCase();
-                              return (
-                                <div
-                                  key={key}
-                                  className={`p-2 border text-xs font-mono ${
-                                    isCorrect
-                                      ? "border-accent-success bg-accent-success/10"
-                                      : isStudent
-                                      ? "border-primary/60 bg-primary/10"
-                                      : "border-border bg-bg-surface"
-                                  }`}
-                                >
+                    const isCorrect = String(q.correct).toUpperCase() === key.toUpperCase();
+                    const isStudent = (q.student || "").toUpperCase() === key.toUpperCase();
+                    return <div key={key} className={`p-2 border text-xs font-mono ${isCorrect ? "border-accent-success bg-accent-success/10" : isStudent ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface"}`}>
                                   <div className="flex items-center justify-between gap-3">
                                     <div className="text-text-primary">
                                       <span className="text-text-muted">{optionLabel(key)}.</span> {text}
@@ -810,32 +587,23 @@ export const ClassGradebookPage: React.FC = () => {
                                       {isCorrect ? tr("правильна", "correct") : isStudent ? tr("вибір учня", "student") : ""}
                                     </div>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                </div>;
+                  })}
                           </div>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
+                        </Card>)}
+                    </div>}
                 </div>
 
-                {/* Practice */}
+                {}
                 <div>
                   <h3 className="text-lg font-mono text-text-primary mb-3">{tr("Практичні завдання", "Practice tasks")}</h3>
-                  {controlWorkWork.practiceTasks.length === 0 ? (
-                    <div className="text-sm text-text-secondary">{tr("Немає практичних завдань.", "No practice tasks.")}</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {controlWorkWork.practiceTasks.map((pt) => (
-                        <Card key={pt.taskId} className="p-4">
+                  {controlWorkWork.practiceTasks.length === 0 ? <div className="text-sm text-text-secondary">{tr("Немає практичних завдань.", "No practice tasks.")}</div> : <div className="space-y-3">
+                      {controlWorkWork.practiceTasks.map(pt => <Card key={pt.taskId} className="p-4">
                           <div className="flex items-start justify-between gap-4 mb-3">
                             <div>
                               <div className="text-sm font-mono text-text-primary">{pt.taskTitle}</div>
                               <div className="text-xs text-text-muted">
-                                {pt.createdAt
-                                  ? new Date(pt.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")
-                                  : "—"}
+                                {pt.createdAt ? new Date(pt.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA") : "—"}
                               </div>
                             </div>
                             <div className="text-right">
@@ -846,41 +614,28 @@ export const ClassGradebookPage: React.FC = () => {
                               </div>
                             </div>
                           </div>
-                          {pt.feedback && (
-                            <div className="mb-3 text-xs text-text-secondary whitespace-pre-wrap">
+                          {pt.feedback && <div className="mb-3 text-xs text-text-secondary whitespace-pre-wrap">
                               <span className="text-text-muted">{tr("Коментар:", "Comment:")}</span> {pt.feedback}
-                            </div>
-                          )}
+                            </div>}
                           <div className="border border-border bg-bg-code p-3 overflow-x-auto">
                             <pre className="text-xs text-text-primary whitespace-pre-wrap m-0 font-mono">
                               {pt.submittedCode || tr("// Немає коду", "// No code")}
                             </pre>
                           </div>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
+                        </Card>)}
+                    </div>}
                 </div>
-              </div>
-            ) : (
-              <div className="text-sm text-text-secondary">{tr("Немає даних для перегляду.", "No data to show.")}</div>
-            )}
+              </div> : <div className="text-sm text-text-secondary">{tr("Немає даних для перегляду.", "No data to show.")}</div>}
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Модальне вікно для перегляду деталей контрольної роботи */}
-      {showControlWorkDetails && controlWorkDetails && (
-        <Modal
-          open={showControlWorkDetails}
-          onClose={() => {
-            setShowControlWorkDetails(false);
-            setControlWorkDetails(null);
-          }}
-          title={controlWorkDetails.controlWork.title}
-        >
+      {}
+      {showControlWorkDetails && controlWorkDetails && <Modal open={showControlWorkDetails} onClose={() => {
+      setShowControlWorkDetails(false);
+      setControlWorkDetails(null);
+    }} title={controlWorkDetails.controlWork.title}>
           <div className="p-6 max-h-[80vh] overflow-y-auto">
-            {/* Загальна інформація */}
+            {}
             <div className="mb-6">
               <h3 className="text-lg font-mono text-text-primary mb-4">{tr("Загальна оцінка", "Overall grade")}</h3>
               <div className="grid grid-cols-2 gap-4">
@@ -891,34 +646,28 @@ export const ClassGradebookPage: React.FC = () => {
                   </div>
                   <div className="text-xs text-text-muted">{tr("з 12", "out of 12")}</div>
                 </div>
-                {controlWorkDetails.controlWork.hasTheory && controlWorkDetails.summaryGrade?.theoryGrade !== null && (
-                  <div className="p-3 border border-border bg-bg-surface">
+                {controlWorkDetails.controlWork.hasTheory && controlWorkDetails.summaryGrade?.theoryGrade !== null && <div className="p-3 border border-border bg-bg-surface">
                     <div className="text-sm text-text-secondary mb-1">{tr("Оцінка за тест", "Quiz grade")}</div>
                     <div className="text-2xl font-mono font-bold text-text-primary">
                       {controlWorkDetails.summaryGrade.theoryGrade}
                     </div>
                     <div className="text-xs text-text-muted">{tr("з 12", "out of 12")}</div>
-                  </div>
-                )}
-                {controlWorkDetails.controlWork.hasPractice && (
-                  <div className="p-3 border border-border bg-bg-surface">
+                  </div>}
+                {controlWorkDetails.controlWork.hasPractice && <div className="p-3 border border-border bg-bg-surface">
                     <div className="text-sm text-text-secondary mb-1">{tr("Середнє за практичні", "Practice average")}</div>
                     <div className="text-2xl font-mono font-bold text-text-primary">
                       {controlWorkDetails.averagePracticeGrade.toFixed(2)}
                     </div>
                     <div className="text-xs text-text-muted">{tr("з 12", "out of 12")}</div>
-                  </div>
-                )}
+                  </div>}
               </div>
             </div>
 
-            {/* Практичні завдання */}
-            {controlWorkDetails.controlWork.hasPractice && controlWorkDetails.practiceTasks.length > 0 && (
-              <div className="mb-6">
+            {}
+            {controlWorkDetails.controlWork.hasPractice && controlWorkDetails.practiceTasks.length > 0 && <div className="mb-6">
                 <h3 className="text-lg font-mono text-text-primary mb-4">{tr("Практичні завдання", "Practice tasks")}</h3>
                 <div className="space-y-3">
-                  {controlWorkDetails.practiceTasks.map((task) => (
-                    <div key={task.taskId} className="p-4 border border-border bg-bg-surface">
+                  {controlWorkDetails.practiceTasks.map(task => <div key={task.taskId} className="p-4 border border-border bg-bg-surface">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <h4 className="text-sm font-mono text-text-primary mb-1">{task.taskTitle}</h4>
@@ -933,83 +682,51 @@ export const ClassGradebookPage: React.FC = () => {
                           <div className="text-xs text-text-muted">{tr("з 12", "out of 12")}</div>
                         </div>
                       </div>
-                      {task.feedback && (
-                        <div className="mt-2 text-xs text-text-secondary">
+                      {task.feedback && <div className="mt-2 text-xs text-text-secondary">
                           <strong>{tr("Коментар", "Feedback")}:</strong> {task.feedback}
-                        </div>
-                      )}
-                      {task.createdAt && (
-                        <div className="mt-2 text-xs text-text-muted">
+                        </div>}
+                      {task.createdAt && <div className="mt-2 text-xs text-text-muted">
                           {new Date(task.createdAt).toLocaleDateString("uk-UA")}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        </div>}
+                    </div>)}
                 </div>
-              </div>
-            )}
+              </div>}
 
-            {/* Формула розрахунку */}
+            {}
             <div className="mt-6 p-4 border border-border bg-bg-surface">
               <h4 className="text-sm font-mono text-text-primary mb-2">{tr("Формула розрахунку", "Formula")}:</h4>
-              {controlWorkDetails.controlWork.hasTheory && controlWorkDetails.summaryGrade?.theoryGrade !== null ? (
-                <div className="text-xs text-text-secondary">
+              {controlWorkDetails.controlWork.hasTheory && controlWorkDetails.summaryGrade?.theoryGrade !== null ? <div className="text-xs text-text-secondary">
                   {tr("Оцінка = (Тест + 1.3 × середнє за практичні) / 2", "Grade = (Quiz + 1.3 × practice average) / 2")}
-                </div>
-              ) : (
-                <div className="text-xs text-text-secondary">
+                </div> : <div className="text-xs text-text-secondary">
                   {tr("Оцінка = середнє за практичні завдання", "Grade = practice tasks average")}
-                </div>
-              )}
+                </div>}
             </div>
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Модальне вікно створення тематичної */}
-      {showCreateThematic && (
-        <Modal
-          open={showCreateThematic}
-          onClose={() => {
-            setShowCreateThematic(false);
-            setThematicTopicId(null);
-          }}
-          title={tr("Порахувати тематичну", "Calculate thematic")}
-          showCloseButton={false}
-        >
+      {}
+      {showCreateThematic && <Modal open={showCreateThematic} onClose={() => {
+      setShowCreateThematic(false);
+      setThematicTopicId(null);
+    }} title={tr("Порахувати тематичну", "Calculate thematic")} showCloseButton={false}>
           <div className="p-6">
             <div className="mb-4">
               <label className="block text-sm text-text-secondary mb-2">{tr("Тема", "Topic")} *</label>
-              <select
-                value={thematicTopicId || ""}
-                onChange={(e) => setThematicTopicId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary"
-              >
+              <select value={thematicTopicId || ""} onChange={e => setThematicTopicId(e.target.value ? parseInt(e.target.value, 10) : null)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary">
                 <option value="">{tr("Виберіть тему", "Select a topic")}</option>
-                {(gradebook.lessons as any[])
-                  .filter((l) => l.type === "TOPIC")
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
+                {(gradebook.lessons as any[]).filter(l => l.type === "TOPIC").map(t => <option key={t.id} value={t.id}>
                       {t.title}
-                    </option>
-                  ))}
+                    </option>)}
               </select>
               <div className="text-xs text-text-muted mt-2">
-                {tr(
-                  "Буде створено/перераховано одну “Тематичну” для обраної теми та додано в журнал.",
-                  "One “Thematic” grade will be created/recalculated for the selected topic and added to the gradebook."
-                )}
+                {tr("Буде створено/перераховано одну “Тематичну” для обраної теми та додано в журнал.", "One “Thematic” grade will be created/recalculated for the selected topic and added to the gradebook.")}
               </div>
             </div>
             <div className="flex gap-2 justify-end">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowCreateThematic(false);
-                  setThematicTopicId(null);
-                }}
-                disabled={calculatingThematic}
-              >
+              <Button variant="ghost" onClick={() => {
+            setShowCreateThematic(false);
+            setThematicTopicId(null);
+          }} disabled={calculatingThematic}>
                 {t('cancel')}
               </Button>
               <Button onClick={handleCreateThematic} disabled={!thematicTopicId || calculatingThematic}>
@@ -1017,10 +734,6 @@ export const ClassGradebookPage: React.FC = () => {
               </Button>
             </div>
           </div>
-        </Modal>
-      )}
-    </div>
-  );
+        </Modal>}
+    </div>;
 };
-
-

@@ -168,11 +168,21 @@
     font-family: var(--font-mono);
   }
 
+  html,
+  body {
+    height: 100%;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
   body {
     background-color: var(--bg-base);
     color: var(--text-primary);
     font-size: var(--font-base);
     line-height: 1.6;
+    overflow-y: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

@@ -1,5 +1,3 @@
-// frontend/src/pages/CreateTopicPage.tsx
-// Нова сторінка для створення теми
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -9,22 +7,24 @@ import { ArrowLeft } from "lucide-react";
 import { getClasses } from "../lib/api/edu";
 import { api } from "../lib/api/client";
 import { tr } from "../i18n";
-
 export const CreateTopicPage: React.FC = () => {
-  const { i18n } = useTranslation();
-  const { classId } = useParams<{ classId: string }>();
+  const {
+    i18n
+  } = useTranslation();
+  const {
+    classId
+  } = useParams<{
+    classId: string;
+  }>();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [language, setLanguage] = useState<"JAVA" | "PYTHON">("JAVA");
-
   const safeServerMessage = (value: unknown) => {
     const msg = typeof value === "string" ? value : String(value ?? "");
     if (i18n.language === "en" && /[А-Яа-яІіЇїЄєҐґ]/.test(msg)) return "";
     return msg;
   };
-
-  // Завантажуємо мову програмування з класу
   useEffect(() => {
     const loadClassInfo = async () => {
       if (!classId) return;
@@ -40,23 +40,19 @@ export const CreateTopicPage: React.FC = () => {
     };
     loadClassInfo();
   }, [classId]);
-
   const handleSubmit = async () => {
     if (!classId || !title.trim()) {
       alert(tr("Заповніть назву теми", "Enter a topic title"));
       return;
     }
-
     try {
       const res = await api.post("/topics", {
         title,
         description: description.trim() || null,
         language,
-        classId: parseInt(classId, 10),
+        classId: parseInt(classId, 10)
       });
-
       void res.data.topic;
-      // Повертаємося до класу після створення теми
       navigate(`/edu/classes/${classId}`);
     } catch (error: any) {
       console.error("Failed to create topic:", error);
@@ -64,9 +60,7 @@ export const CreateTopicPage: React.FC = () => {
       alert(raw || tr("Не вдалося створити тему", "Failed to create topic"));
     }
   };
-
-  return (
-    <div className="h-full p-6 overflow-y-auto">
+  return <div className="p-6">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
@@ -81,25 +75,14 @@ export const CreateTopicPage: React.FC = () => {
             <label className="block text-sm font-mono text-text-secondary mb-2">
               {tr("Назва теми *", "Topic title *")}
             </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-              placeholder={tr("Наприклад: Масиви та цикли", "Example: Arrays and loops")}
-            />
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Наприклад: Масиви та цикли", "Example: Arrays and loops")} />
           </div>
 
           <div>
             <label className="block text-sm font-mono text-text-secondary mb-2">
               {tr("Опис теми (необов'язково)", "Topic description (optional)")}
             </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px]"
-              placeholder={tr("Короткий опис теми...", "Short topic description...")}
-            />
+            <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px]" placeholder={tr("Короткий опис теми...", "Short topic description...")} />
           </div>
 
           <div>
@@ -107,18 +90,10 @@ export const CreateTopicPage: React.FC = () => {
               {tr("Мова програмування", "Programming language")}
             </label>
             <div className="flex gap-2">
-              <Button
-                variant={language === "JAVA" ? "primary" : "ghost"}
-                onClick={() => setLanguage("JAVA")}
-                className="flex-1"
-              >
+              <Button variant={language === "JAVA" ? "primary" : "ghost"} onClick={() => setLanguage("JAVA")} className="flex-1">
                 Java
               </Button>
-              <Button
-                variant={language === "PYTHON" ? "primary" : "ghost"}
-                onClick={() => setLanguage("PYTHON")}
-                className="flex-1"
-              >
+              <Button variant={language === "PYTHON" ? "primary" : "ghost"} onClick={() => setLanguage("PYTHON")} className="flex-1">
                 Python
               </Button>
             </div>
@@ -132,7 +107,5 @@ export const CreateTopicPage: React.FC = () => {
           </div>
         </Card>
       </div>
-    </div>
-  );
+    </div>;
 };
-

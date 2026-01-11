@@ -2,7 +2,6 @@ import { CloudflareAIProvider } from './CloudflareAIProvider';
 import { OpenRouterProvider } from './OpenRouterProvider';
 import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
 import { AIResponseValidator, AIValidationError } from './AIResponseValidator';
-
 export interface AiTaskGenerationResult {
   title: string;
   topic: string;
@@ -19,21 +18,17 @@ export interface AiTaskGenerationResult {
   }>;
   codeTemplate: string;
 }
-
 export interface AiTheoryResult {
   theory: string;
 }
-
 export interface AiQuizResult {
   quizJson: string;
 }
-
 export interface TestDataExample {
   input: string;
   output: string;
   explanation?: string;
 }
-
 function getDifficultyPrompt(difus: number): string {
   if (difus < 0.2) return "Рівень: ПОЧАТКОВИЙ (Дуже легко). Завдання має бути максимально простим, лише на відпрацювання синтаксису. Жодних складних алгоритмів.";
   if (difus < 0.4) return "Рівень: ЛЕГКИЙ. Просте завдання, мінімум умов. Фокус на розумінні теми.";
@@ -41,53 +36,29 @@ function getDifficultyPrompt(difus: number): string {
   if (difus < 0.8) return "Рівень: ВИЩЕ СЕРЕДНЬОГО. Потрібно трохи подумати. Можна додати неочевидний момент в умові.";
   return "Рівень: СКЛАДНИЙ. Завдання на логічне мислення. Вимагає оптимізації або обробки граничних випадків.";
 }
-
 function isCloudflareError(error: any): boolean {
   if (!error) return false;
   const message = error.message || String(error);
-  return (
-    message.includes('AI_GENERATION_FAILED') ||
-    message.includes('CloudflareAI') ||
-    message.includes('Cloudflare Worker') ||
-    message.includes('timeout') ||
-    message.includes('CLOUDFLARE_AI_URL not configured') ||
-    message.includes('Failed to parse') ||
-    message.includes('Empty response')
-  );
+  return message.includes('AI_GENERATION_FAILED') || message.includes('CloudflareAI') || message.includes('Cloudflare Worker') || message.includes('timeout') || message.includes('CLOUDFLARE_AI_URL not configured') || message.includes('Failed to parse') || message.includes('Empty response');
 }
-
 function shouldFallbackToOpenRouter(error: any): boolean {
   if (!error) return false;
-  // Якщо є явний маркер fallback
   if (error.shouldFallback) return true;
   const message = error.message || String(error);
-  // 502 від Worker - одразу fallback
   return message.includes('502') || message.includes('Bad Gateway');
 }
-
 function isRetryableError(error: any): boolean {
   if (!error) return false;
   const message = error.message || String(error);
-  return (
-    message.includes('timeout') ||
-    message.includes('network') ||
-    message.includes('ECONNREFUSED') ||
-    message.includes('ENOTFOUND') ||
-    message.includes('Failed to parse') ||
-    message.includes('Empty response') ||
-    message.includes('Invalid JSON')
-  );
+  return message.includes('timeout') || message.includes('network') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('Failed to parse') || message.includes('Empty response') || message.includes('Invalid JSON');
 }
-
 export class LLMOrchestrator {
   private cloudflareProvider: CloudflareAIProvider;
   private openRouterProvider: OpenRouterProvider;
-
   constructor() {
     this.cloudflareProvider = new CloudflareAIProvider();
     this.openRouterProvider = new OpenRouterProvider();
   }
-
   async generateTaskWithAI(params: {
     topicTitle: string;
     theory: string;
@@ -101,71 +72,51 @@ export class LLMOrchestrator {
     topicId?: number;
     language?: "uk" | "en";
   }): Promise<AiTaskGenerationResult> {
-    // CloudflareAI temporarily disabled
-    // try {
-    //   if (this.cloudflareProvider && typeof (this.cloudflareProvider as any).generateTaskWithAI === 'function') {
-    //     const result = await (this.cloudflareProvider as any).generateTaskWithAI(params, { language: params.language ?? "uk" });
-    //     // Strict validation before caching
-    //     const validated = AIResponseValidator.validateGenerateTask(result);
-    //     
-    //     // Step 3: Cache successful result
-    //     await this.cacheService.set('generateTask', params, validated);
-    //     
-    //     return validated;
-    //   }
-    // } catch (error: any) {
-    //   // При 502 від Worker - одразу fallback
-    //   if (shouldFallbackToOpenRouter(error)) {
-    //     console.log('[LLMOrchestrator] Cloudflare Worker returned 502, falling back to OpenRouter', { error: error.message });
-    //   } else if (error instanceof AIValidationError || isRetryableError(error)) {
-    //     console.log('[LLMOrchestrator] CloudflareAI failed or validation failed, falling back to OpenRouter', { error: error.message });
-    //   } else if (isCloudflareError(error)) {
-    //     // Інші помилки Cloudflare (не 4xx) - fallback
-    //     console.log('[LLMOrchestrator] CloudflareAI error, falling back to OpenRouter', { error: error.message });
-    //   } else {
-    //     // Не Cloudflare помилки - не fallback, кидаємо далі
-    //     throw error;
-    //   }
-    // }
     console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-
     const result = await this.generateTaskWithAI_OpenRouter(params);
     return result;
   }
-
-  /**
-   * Крок A: Генерація semantic anchor для жорсткої прив'язки до теми
-   * Повертає тільки anchor: topic (immutable), coreOperation, allowedScope, forbiddenScope
-   */
   private async generateTaskAnchor(params: {
     topicTitle: string;
     lang: "JAVA" | "PYTHON";
     userId?: number;
     topicId?: number;
-  }): Promise<{ topic: string; coreOperation: string; allowedScope: string[]; forbiddenScope: string[] }> {
+  }): Promise<{
+    topic: string;
+    coreOperation: string;
+    allowedScope: string[];
+    forbiddenScope: string[];
+  }> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
-
     const anchorSchema = {
       type: "object",
       properties: {
-        topic: { type: "string", description: `Тема завдання (ОБОВ'ЯЗКОВО "${params.topicTitle}")` },
-        coreOperation: { type: "string", description: "Одна чітке формулювання того, ЩО саме потрібно зробити" },
+        topic: {
+          type: "string",
+          description: `Тема завдання (ОБОВ'ЯЗКОВО "${params.topicTitle}")`
+        },
+        coreOperation: {
+          type: "string",
+          description: "Одна чітке формулювання того, ЩО саме потрібно зробити"
+        },
         allowedScope: {
           type: "array",
-          items: { type: "string" },
+          items: {
+            type: "string"
+          },
           description: "Що дозволено робити, які дії дозволені"
         },
         forbiddenScope: {
           type: "array",
-          items: { type: "string" },
+          items: {
+            type: "string"
+          },
           description: "Що категорично заборонено, які дії НЕ МОЖНА виконувати"
         }
       },
       required: ["topic", "coreOperation", "allowedScope", "forbiddenScope"]
     };
-
     const systemPrompt = `Ти семантичний архітектор навчальних завдань. Створюй anchor для завдання. Відповідай ТІЛЬКИ JSON.`;
-
     const userPrompt = `Створи semantic anchor для завдання з теми "${params.topicTitle}" (мова: ${langName}).
 
 КРИТИЧНО ВАЖЛИВО:
@@ -175,81 +126,106 @@ export class LLMOrchestrator {
 - forbiddenScope: що категорично заборонено робити (інші теми, інші операції)
 
 Поверни ТІЛЬКИ JSON без пояснень.`;
-
-    const parsed = await this.openRouterProvider.generateJSON<{ topic: string; coreOperation: string; allowedScope: string[]; forbiddenScope: string[] }>(
-      userPrompt,
-      anchorSchema,
-      systemPrompt,
-      {
-        timeout: 30000,
-        maxRetries: 0,
-        userId: params.userId,
-        topicId: params.topicId,
-        temperature: 0.2,
-        maxTokens: 500,
-      }
-    );
-
-    // HARD VALIDATION ANCHOR (НЕ LLM!)
+    const parsed = await this.openRouterProvider.generateJSON<{
+      topic: string;
+      coreOperation: string;
+      allowedScope: string[];
+      forbiddenScope: string[];
+    }>(userPrompt, anchorSchema, systemPrompt, {
+      timeout: 30000,
+      maxRetries: 0,
+      userId: params.userId,
+      topicId: params.topicId,
+      temperature: 0.2,
+      maxTokens: 500
+    });
     if (parsed.topic.trim() !== params.topicTitle.trim()) {
       throw new Error(`ANCHOR_TOPIC_MISMATCH: Expected topic "${params.topicTitle}", but anchor contains "${parsed.topic}". Topic must exactly match.`);
     }
-
     if (parsed.coreOperation.trim().length < 10) {
       throw new Error(`ANCHOR_TOO_VAGUE: coreOperation "${parsed.coreOperation}" is too vague (less than 10 characters). Generation aborted.`);
     }
-
     return parsed;
   }
-
-  /**
-   * Крок B: Генерація повного завдання з anchor
-   * anchor передається як immutable input - не можна змінити
-   */
   private async generateTaskFromAnchor(params: {
     topicTitle: string;
     theory: string;
     lang: "JAVA" | "PYTHON";
-    anchor: { topic: string; coreOperation: string; allowedScope: string[]; forbiddenScope: string[] };
+    anchor: {
+      topic: string;
+      coreOperation: string;
+      allowedScope: string[];
+      forbiddenScope: string[];
+    };
     difus?: number;
     userId?: number;
     topicId?: number;
   }): Promise<AiTaskGenerationResult> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
     const difficultyPrompt = getDifficultyPrompt(params.difus ?? 0);
-
     const jsonSchema = {
       type: "object",
       properties: {
-        title: { type: "string", description: "Назва завдання" },
-        topic: { type: "string", description: `Тема завдання (ОБОВ'ЯЗКОВО "${params.anchor.topic}")` },
-        difficulty: { type: "number", description: "Складність 0-5" },
-        theoryMarkdown: { type: "string", description: "Теорія у форматі Markdown" },
-        practicalTask: { type: "string", description: "Практичне завдання" },
-        inputFormat: { type: "string", description: "Формат вхідних даних" },
-        outputFormat: { type: "string", description: "Формат вихідних даних" },
-        constraints: { type: "string", description: "Обмеження" },
+        title: {
+          type: "string",
+          description: "Назва завдання"
+        },
+        topic: {
+          type: "string",
+          description: `Тема завдання (ОБОВ'ЯЗКОВО "${params.anchor.topic}")`
+        },
+        difficulty: {
+          type: "number",
+          description: "Складність 0-5"
+        },
+        theoryMarkdown: {
+          type: "string",
+          description: "Теорія у форматі Markdown"
+        },
+        practicalTask: {
+          type: "string",
+          description: "Практичне завдання"
+        },
+        inputFormat: {
+          type: "string",
+          description: "Формат вхідних даних"
+        },
+        outputFormat: {
+          type: "string",
+          description: "Формат вихідних даних"
+        },
+        constraints: {
+          type: "string",
+          description: "Обмеження"
+        },
         examples: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              input: { type: "string" },
-              output: { type: "string" },
-              explanation: { type: "string" }
+              input: {
+                type: "string"
+              },
+              output: {
+                type: "string"
+              },
+              explanation: {
+                type: "string"
+              }
             },
             required: ["input", "output", "explanation"]
           }
         },
-        codeTemplate: { type: "string", description: "Шаблон коду" }
+        codeTemplate: {
+          type: "string",
+          description: "Шаблон коду"
+        }
       },
       required: ["title", "topic", "difficulty", "theoryMarkdown", "practicalTask", "inputFormat", "outputFormat", "constraints", "examples", "codeTemplate"]
     };
-
     const systemPrompt = `Ти досвідчений викладач програмування. Створюй якісні завдання з теорією та практикою. Відповідай українською мовою у форматі JSON згідно з наданою схемою.
 
 КРИТИЧНО: Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}". НЕ змінюй anchor.`;
-
     const userPrompt = `
 SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
 - Тема: ${params.anchor.topic}
@@ -282,81 +258,44 @@ ${params.theory.slice(0, 2000)}
 
 Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
 `.trim();
-
     const maxRetries = 2;
     let lastError: Error | null = null;
-
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const parsed = await this.openRouterProvider.generateJSON<any>(
-          userPrompt,
-          jsonSchema,
-          systemPrompt,
-          {
-            timeout: 30000,
-            maxRetries: 0,
-            userId: params.userId,
-            topicId: params.topicId,
-            temperature: 0.2,
-            maxTokens: 4000,
-          }
-        );
-
+        const parsed = await this.openRouterProvider.generateJSON<any>(userPrompt, jsonSchema, systemPrompt, {
+          timeout: 30000,
+          maxRetries: 0,
+          userId: params.userId,
+          topicId: params.topicId,
+          temperature: 0.2,
+          maxTokens: 4000
+        });
         const validated = AIResponseValidator.validateGenerateTask(parsed, params.anchor.topic);
-        
-        // ЖОРСТКИЙ SEMANTIC GATE
         const practicalTaskLower = validated.practicalTask.toLowerCase();
         const coreOperationLower = params.anchor.coreOperation.toLowerCase();
         const titleLower = validated.title.toLowerCase();
-
-        // Перевірка coreOperation - перевіряємо в practicalTask або title
         const coreOperationWords = coreOperationLower.split(/\s+/).filter(w => w.length > 3);
-        const coreOperationMentioned = practicalTaskLower.includes(coreOperationLower) || 
-          titleLower.includes(coreOperationLower) ||
-          (coreOperationWords.length > 0 && coreOperationWords.some(word => 
-            practicalTaskLower.includes(word) || titleLower.includes(word)
-          ));
-
+        const coreOperationMentioned = practicalTaskLower.includes(coreOperationLower) || titleLower.includes(coreOperationLower) || coreOperationWords.length > 0 && coreOperationWords.some(word => practicalTaskLower.includes(word) || titleLower.includes(word));
         if (!coreOperationMentioned) {
           throw new Error(`CORE_OPERATION_MISSING: Practical task or title does not contain core operation "${params.anchor.coreOperation}". Generation aborted.`);
         }
-
-        // Перевірка forbiddenScope
         for (const forbidden of params.anchor.forbiddenScope) {
           const forbiddenLower = forbidden.toLowerCase();
           if (practicalTaskLower.includes(forbiddenLower) || validated.title.toLowerCase().includes(forbiddenLower)) {
             throw new Error(`FORBIDDEN_SCOPE_VIOLATION: Task contains forbidden scope "${forbidden}". Generation aborted.`);
           }
         }
-
-        // ЖОРСТКО ЗАБОРОНИТИ MULTI-TASK
-        const multiTaskMarkers = [
-          "завдання 1",
-          "завдання 2",
-          "завдання 3",
-          "контрольна робота:",
-          "## завдання",
-          "підзадача",
-          "задача 1",
-          "задача 2"
-        ];
-
+        const multiTaskMarkers = ["завдання 1", "завдання 2", "завдання 3", "контрольна робота:", "## завдання", "підзадача", "задача 1", "задача 2"];
         const taskContentLower = (validated.title + " " + validated.practicalTask).toLowerCase();
         for (const marker of multiTaskMarkers) {
           if (taskContentLower.includes(marker)) {
             throw new Error(`MULTI_TASK_NOT_ALLOWED: Task contains multi-task marker "${marker}". Single task only. Generation aborted.`);
           }
         }
-
         return validated;
       } catch (err: any) {
         lastError = err;
-        if (err.message && (
-          err.message.includes('TOPIC_MISMATCH_HARD_FAIL') ||
-          err.message.includes('CORE_OPERATION_MISSING') ||
-          err.message.includes('FORBIDDEN_SCOPE_VIOLATION') ||
-          err.message.includes('MULTI_TASK_NOT_ALLOWED')
-        )) {
+        if (err.message && (err.message.includes('TOPIC_MISMATCH_HARD_FAIL') || err.message.includes('CORE_OPERATION_MISSING') || err.message.includes('FORBIDDEN_SCOPE_VIOLATION') || err.message.includes('MULTI_TASK_NOT_ALLOWED'))) {
           if (attempt < maxRetries) {
             console.log(`[LLMOrchestrator] Retrying due to semantic gate failure (attempt ${attempt + 1}/${maxRetries}): ${err.message}`);
             await new Promise(r => setTimeout(r, 1000));
@@ -371,10 +310,8 @@ ${params.theory.slice(0, 2000)}
         throw new Error(`AI_GENERATION_FAILED: ${err.message || 'Unknown error'}`);
       }
     }
-
     throw new Error(`AI_GENERATION_FAILED: All retries exhausted. Last error: ${lastError?.message || 'Unknown error'}`);
   }
-
   private async generateTaskWithAI_OpenRouter(params: {
     topicTitle: string;
     theory: string;
@@ -387,15 +324,12 @@ ${params.theory.slice(0, 2000)}
     userId?: number;
     topicId?: number;
   }): Promise<AiTaskGenerationResult> {
-    // Крок A: Генерація semantic anchor з жорсткою прив'язкою до теми
     const anchor = await this.generateTaskAnchor({
       topicTitle: params.topicTitle,
       lang: params.lang,
       userId: params.userId,
-      topicId: params.topicId,
+      topicId: params.topicId
     });
-
-    // Крок B: Генерація повного завдання з anchor (anchor immutable)
     const result = await this.generateTaskFromAnchor({
       topicTitle: params.topicTitle,
       theory: params.theory,
@@ -403,12 +337,10 @@ ${params.theory.slice(0, 2000)}
       anchor: anchor,
       difus: params.difus,
       userId: params.userId,
-      topicId: params.topicId,
+      topicId: params.topicId
     });
-
     return result;
   }
-
   async generateTheoryWithAI(params: {
     topicTitle: string;
     lang: "JAVA" | "PYTHON";
@@ -419,35 +351,10 @@ ${params.theory.slice(0, 2000)}
     topicId?: number;
     language?: "uk" | "en";
   }): Promise<AiTheoryResult> {
-    // CloudflareAI temporarily disabled
-    // try {
-    //   if (this.cloudflareProvider && typeof (this.cloudflareProvider as any).generateTheoryWithAI === 'function') {
-    //     const result = await (this.cloudflareProvider as any).generateTheoryWithAI(params, { language: params.language ?? "uk" });
-    //     const validated = AIResponseValidator.validateGenerateTheory(result);
-    //     
-    //     await this.cacheService.set('generateTheory', params, validated);
-    //     return validated;
-    //   }
-    // } catch (error: any) {
-    //   // При 502 від Worker - одразу fallback
-    //   if (shouldFallbackToOpenRouter(error)) {
-    //     console.log('[LLMOrchestrator] Cloudflare Worker returned 502, falling back to OpenRouter', { error: error.message });
-    //   } else if (error instanceof AIValidationError || isRetryableError(error)) {
-    //     console.log('[LLMOrchestrator] CloudflareAI failed or validation failed, falling back to OpenRouter', { error: error.message });
-    //   } else if (isCloudflareError(error)) {
-    //     // Інші помилки Cloudflare (не 4xx) - fallback
-    //     console.log('[LLMOrchestrator] CloudflareAI error, falling back to OpenRouter', { error: error.message });
-    //   } else {
-    //     // Не Cloudflare помилки - не fallback, кидаємо далі
-    //     throw error;
-    //   }
-    // }
     console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-
     const result = await this.generateTheoryWithAI_OpenRouter(params);
     return result;
   }
-
   private async generateTheoryWithAI_OpenRouter(params: {
     topicTitle: string;
     lang: "JAVA" | "PYTHON";
@@ -458,49 +365,34 @@ ${params.theory.slice(0, 2000)}
     topicId?: number;
   }): Promise<AiTheoryResult> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
-
-    const systemPrompt = `Ти досвідчений викладач програмування. Створюй якісні уроки з детальними поясненнями та прикладами коду. Відповідай українською мовою у форматі Markdown.`;
-
+    const systemPrompt = `Ти досвідчений викладач програмування. Відповідай українською мовою у форматі Markdown.`;
     let userPrompt: string;
-    
-    if (params.taskDescription && params.taskType) {
-      const taskTypeText = params.taskType === "CONTROL" ? "контрольного" : "практичного";
-      userPrompt = `Створи теорію для ${taskTypeText} завдання з теми "${params.topicTitle}" для мови ${langName}.
+    const context = params.taskDescription && params.taskType ? `\n\nКОНТЕКСТ (НЕ ПЕРЕПОВІДАЙ, НЕ ФОРМУЛЮЙ УМОВУ, НЕ ДОДАВАЙ ЗАВДАННЯ):\n${params.taskDescription}` : "";
+    userPrompt = `Згенеруй ТІЛЬКИ теоретичне пояснення теми "${params.topicTitle}" для мови ${langName}.${context}
 
-Опис завдання:
-${params.taskDescription}
-
-Теорія має:
-- Пояснювати ключові концепції, необхідні для виконання завдання
-- Містити приклади коду
-- Бути структурованою та зрозумілою
-- Бути у форматі Markdown`;
-    } else {
-      userPrompt = `Створи теорію для теми "${params.topicTitle}" для мови ${langName}.
-
-Теорія має:
-- Пояснювати ключові концепції теми
-- Містити приклади коду
-- Бути структурованою та зрозумілою
-- Бути у форматі Markdown`;
-    }
-
+ВИМОГИ (обов'язково):
+- НЕ додавай практичних завдань.
+- НЕ формулюй умови задач.
+- НЕ використовуй імперативи типу: "виконайте", "обчисліть", "знайдіть", "написати програму", "введіть/прочитайте".
+- НЕ додавай секцій "Практика", "Завдання", "Вправа", "Умова".
+- МОЖНА: пояснення понять, синтаксис, короткі приклади коду (як ілюстрація).
+- Формат: Markdown. Без вступів на кшталт "Ось теорія".`;
     try {
       const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
         temperature: 0.7,
-        maxTokens: 3000,
+        maxTokens: 3000
       });
-      const validated = AIResponseValidator.validateGenerateTheory({ theory: content.trim() });
-      
+      const validated = AIResponseValidator.validateGenerateTheory({
+        theory: content.trim()
+      });
       return validated;
     } catch (error: any) {
       throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
     }
   }
-
   async generateQuizWithAI(params: {
     lang: "JAVA" | "PYTHON";
     prevTopics: string;
@@ -509,35 +401,10 @@ ${params.taskDescription}
     topicId?: number;
     language?: "uk" | "en";
   }): Promise<AiQuizResult> {
-    // CloudflareAI temporarily disabled
-    // try {
-    //   if (this.cloudflareProvider && typeof (this.cloudflareProvider as any).generateQuizWithAI === 'function') {
-    //     const result = await (this.cloudflareProvider as any).generateQuizWithAI(params, { language: params.language ?? "uk" });
-    //     const validated = AIResponseValidator.validateGenerateQuiz(result, params.count);
-    //     
-    //     await this.cacheService.set('generateQuiz', params, validated);
-    //     return validated;
-    //   }
-    // } catch (error: any) {
-    //   // При 502 від Worker - одразу fallback
-    //   if (shouldFallbackToOpenRouter(error)) {
-    //     console.log('[LLMOrchestrator] Cloudflare Worker returned 502, falling back to OpenRouter', { error: error.message });
-    //   } else if (error instanceof AIValidationError || isRetryableError(error)) {
-    //     console.log('[LLMOrchestrator] CloudflareAI failed or validation failed, falling back to OpenRouter', { error: error.message });
-    //   } else if (isCloudflareError(error)) {
-    //     // Інші помилки Cloudflare (не 4xx) - fallback
-    //     console.log('[LLMOrchestrator] CloudflareAI error, falling back to OpenRouter', { error: error.message });
-    //   } else {
-    //     // Не Cloudflare помилки - не fallback, кидаємо далі
-    //     throw error;
-    //   }
-    // }
     console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-
     const result = await this.generateQuizWithAI_OpenRouter(params);
     return result;
   }
-
   private async generateQuizWithAI_OpenRouter(params: {
     lang: "JAVA" | "PYTHON";
     prevTopics: string;
@@ -547,9 +414,7 @@ ${params.taskDescription}
   }): Promise<AiQuizResult> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
     const questionCount = params.count || 12;
-
     const systemPrompt = `Ти екзаменатор з програмування. Створюй тестові питання з правильними відповідями. Відповідай ТІЛЬКИ у форматі JSON масиву без додаткових пояснень, коментарів або тексту до або після JSON.`;
-
     let userPrompt = `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
 ВИМОГИ:
 - Кількість питань: РІВНО ${questionCount}
@@ -557,10 +422,8 @@ ${params.taskDescription}
 - Формат: ТІЛЬКИ ВАЛІДНИЙ JSON масив без жодного додаткового тексту
 - Кожне питання має формат: {"q": "питання", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
 - Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown, без code blocks`;
-
     let lastError: Error | null = null;
     const maxRetries = 2;
-
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
@@ -568,11 +431,9 @@ ${params.taskDescription}
           userId: params.userId,
           topicId: params.topicId,
           temperature: 0.7,
-          maxTokens: 3000,
+          maxTokens: 3000
         });
-        
         if (!content) throw new Error('Empty AI response');
-
         let parsed: any;
         try {
           parsed = JSON.parse(content.trim());
@@ -588,12 +449,10 @@ ${params.taskDescription}
                 cleaned = cleaned.trim();
               }
             }
-            
             const jsonStart = cleaned.indexOf('[');
             const objStart = cleaned.indexOf('{');
             let startPos = -1;
             let isArray = false;
-            
             if (jsonStart !== -1 && (objStart === -1 || jsonStart < objStart)) {
               startPos = jsonStart;
               isArray = true;
@@ -601,35 +460,29 @@ ${params.taskDescription}
               startPos = objStart;
               isArray = false;
             }
-            
             if (startPos !== -1) {
               let depth = 0;
               let inString = false;
               let escapeNext = false;
               let endPos = startPos;
-              
               for (let i = startPos; i < cleaned.length; i++) {
                 const char = cleaned[i];
-                
                 if (escapeNext) {
                   escapeNext = false;
                   continue;
                 }
-                
                 if (char === '\\') {
                   escapeNext = true;
                   continue;
                 }
-                
                 if (char === '"' && !escapeNext) {
                   inString = !inString;
                   continue;
                 }
-                
                 if (!inString) {
-                  if ((isArray && char === '[') || (!isArray && char === '{')) {
+                  if (isArray && char === '[' || !isArray && char === '{') {
                     depth++;
-                  } else if ((isArray && char === ']') || (!isArray && char === '}')) {
+                  } else if (isArray && char === ']' || !isArray && char === '}') {
                     depth--;
                     if (depth === 0) {
                       endPos = i + 1;
@@ -638,7 +491,6 @@ ${params.taskDescription}
                   }
                 }
               }
-              
               if (endPos > startPos) {
                 let fixed = cleaned.substring(startPos, endPos).replace(/,(\s*[}\]])/g, '$1').trim();
                 if (isArray) {
@@ -663,17 +515,13 @@ ${params.taskDescription}
             parsed = tryFixJsonResponse(content);
           }
         }
-
         if (typeof parsed === 'object' && !Array.isArray(parsed)) {
           const keys = Object.keys(parsed);
           if (keys.length > 0 && Array.isArray(parsed[keys[0]])) {
             parsed = parsed[keys[0]];
           }
         }
-
-        // Strict validation - no auto-fixing
         const validated = AIResponseValidator.validateGenerateQuiz(parsed, questionCount);
-        
         return validated;
       } catch (err: any) {
         lastError = err;
@@ -684,10 +532,8 @@ ${params.taskDescription}
         }
       }
     }
-
     throw new Error(`AI_GENERATION_FAILED: Quiz generation failed: ${lastError?.message || 'Unknown error'}`);
   }
-
   async generateTaskCondition(params: {
     topicTitle: string;
     taskType: "PRACTICE" | "CONTROL";
@@ -696,36 +542,13 @@ ${params.taskDescription}
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
-  }): Promise<{ description: string }> {
-    // CloudflareAI temporarily disabled
-    // try {
-    //   if (this.cloudflareProvider && typeof (this.cloudflareProvider as any).generateTaskCondition === 'function') {
-    //     const result = await (this.cloudflareProvider as any).generateTaskCondition(params, { language: params.userLanguage ?? "uk" });
-    //     const validated = AIResponseValidator.validateGenerateTaskCondition(result);
-    //     
-    //     await this.cacheService.set('generateTaskCondition', cacheParams, validated);
-    //     return validated;
-    //   }
-    // } catch (error: any) {
-    //   // При 502 від Worker - одразу fallback
-    //   if (shouldFallbackToOpenRouter(error)) {
-    //     console.log('[LLMOrchestrator] Cloudflare Worker returned 502, falling back to OpenRouter', { error: error.message });
-    //   } else if (error instanceof AIValidationError || isRetryableError(error)) {
-    //     console.log('[LLMOrchestrator] CloudflareAI failed or validation failed, falling back to OpenRouter', { error: error.message });
-    //   } else if (isCloudflareError(error)) {
-    //     // Інші помилки Cloudflare (не 4xx) - fallback
-    //     console.log('[LLMOrchestrator] CloudflareAI error, falling back to OpenRouter', { error: error.message });
-    //   } else {
-    //     // Не Cloudflare помилки - не fallback, кидаємо далі
-    //     throw error;
-    //   }
-    // }
+  }): Promise<{
+    description: string;
+  }> {
     console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-
     const result = await this.generateTaskCondition_OpenRouter(params);
     return result;
   }
-
   private async generateTaskCondition_OpenRouter(params: {
     topicTitle: string;
     taskType: "PRACTICE" | "CONTROL";
@@ -734,22 +557,16 @@ ${params.taskDescription}
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
-  }): Promise<{ description: string }> {
+  }): Promise<{
+    description: string;
+  }> {
     const langName = params.language === "JAVA" ? "Java" : "Python";
     const difficulty = params.difficulty ?? 3;
     const difficultyPrompt = getDifficultyPrompt(difficulty / 5);
-
-    const taskTypeText = params.taskType === "CONTROL" 
-      ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі"
-      : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
-
+    const taskTypeText = params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
     const isEnglish = params.userLanguage === "en";
-    const systemPrompt = isEnglish 
-      ? `You are an experienced programming teacher. Create clear, detailed task descriptions with examples.`
-      : `Ти досвідчений викладач програмування. Створюй чіткі, детальні умови завдань з прикладами.`;
-
-    const userPrompt = isEnglish
-      ? `Create a detailed task description for ${taskTypeText.toLowerCase()} "${params.topicTitle}" for ${langName} language.
+    const systemPrompt = isEnglish ? `You are an experienced programming teacher. Create clear, detailed task descriptions with examples.` : `Ти досвідчений викладач програмування. Створюй чіткі, детальні умови завдань з прикладами.`;
+    const userPrompt = isEnglish ? `Create a detailed task description for ${taskTypeText.toLowerCase()} "${params.topicTitle}" for ${langName} language.
 
 CRITICAL: The task MUST be specifically about the topic "${params.topicTitle}". If the topic is "harmonic mean of array" - the task must be about harmonic mean of array, not about other topics.
 
@@ -767,8 +584,7 @@ REQUIREMENTS:
 - Format: Markdown with proper headings and code blocks
 - The task should be related to the topic "${params.topicTitle}"
 
-Return ONLY the task description in Markdown format without additional comments.`
-      : `Створи детальну умову ${taskTypeText.toLowerCase()} "${params.topicTitle}" для мови ${langName}.
+Return ONLY the task description in Markdown format without additional comments.` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${params.topicTitle}" для мови ${langName}.
 
 КРИТИЧНО ВАЖЛИВО: Завдання МАЄ бути саме про тему "${params.topicTitle}". Якщо тема "середнє гармонічне масиву" - завдання має бути про середнє гармонічне масиву, а не про інші теми.
 
@@ -786,7 +602,6 @@ ${difficultyPrompt}
 - Формат: Markdown з правильними заголовками та код-блоками
 
 Поверни ТІЛЬКИ умову завдання у форматі Markdown без додаткових коментарів.`;
-
     try {
       const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
@@ -794,16 +609,16 @@ ${difficultyPrompt}
         topicId: params.topicId,
         temperature: 0.7,
         maxTokens: 1500,
-        language: params.userLanguage || "uk",
+        language: params.userLanguage || "uk"
       });
-      const validated = AIResponseValidator.validateGenerateTaskCondition({ description: content.trim() });
-      
+      const validated = AIResponseValidator.validateGenerateTaskCondition({
+        description: content.trim()
+      });
       return validated;
     } catch (error: any) {
       throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
     }
   }
-
   async generateTaskTemplate(params: {
     topicTitle: string;
     language: "JAVA" | "PYTHON";
@@ -811,47 +626,24 @@ ${difficultyPrompt}
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
-  }): Promise<{ template: string }> {
-    // CloudflareAI temporarily disabled
-    // try {
-    //   if (this.cloudflareProvider && typeof (this.cloudflareProvider as any).generateTaskTemplate === 'function') {
-    //     const result = await (this.cloudflareProvider as any).generateTaskTemplate(params, { language: params.userLanguage ?? "uk" });
-    //     const validated = AIResponseValidator.validateGenerateTaskTemplate(result);
-    //     
-    //     await this.cacheService.set('generateTaskTemplate', params, validated);
-    //     return validated;
-    //   }
-    // } catch (error: any) {
-    //   // При 502 від Worker - одразу fallback
-    //   if (shouldFallbackToOpenRouter(error)) {
-    //     console.log('[LLMOrchestrator] Cloudflare Worker returned 502, falling back to OpenRouter', { error: error.message });
-    //   } else if (error instanceof AIValidationError || isRetryableError(error)) {
-    //     console.log('[LLMOrchestrator] CloudflareAI failed or validation failed, falling back to OpenRouter', { error: error.message });
-    //   } else if (isCloudflareError(error)) {
-    //     // Інші помилки Cloudflare (не 4xx) - fallback
-    //     console.log('[LLMOrchestrator] CloudflareAI error, falling back to OpenRouter', { error: error.message });
-    //   } else {
-    //     // Не Cloudflare помилки - не fallback, кидаємо далі
-    //     throw error;
-    //   }
-    // }
+  }): Promise<{
+    template: string;
+  }> {
     console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-
     const result = await this.generateTaskTemplate_OpenRouter(params);
     return result;
   }
-
   private async generateTaskTemplate_OpenRouter(params: {
     topicTitle: string;
     language: "JAVA" | "PYTHON";
     description?: string;
     userId?: number;
     topicId?: number;
-  }): Promise<{ template: string }> {
+  }): Promise<{
+    template: string;
+  }> {
     const langName = params.language === "JAVA" ? "Java" : "Python";
-
     const systemPrompt = `Ти досвідчений викладач програмування. Створюй порожні шаблони коду з TODO-коментарями. ЗАБОРОНЕНО писати реалізацію або готовий код.`;
-
     const userPrompt = `Створи порожній шаблон коду для завдання "${params.topicTitle}" на мові ${langName}.
 
 ${params.description ? `Опис завдання:\n${params.description}\n\n` : ''}
@@ -913,29 +705,26 @@ public class Main {
 \`\`\`
 
 Поверни ТІЛЬКИ код без markdown блоків та пояснень.`;
-
     try {
       const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
         temperature: 0.3,
-        maxTokens: 1000,
+        maxTokens: 1000
       });
-      
       let template = content.trim();
       template = template.replace(/^```\w*\n?/gm, '');
       template = template.replace(/```$/gm, '');
       template = template.trim();
-      
-      const validated = AIResponseValidator.validateGenerateTaskTemplate({ template });
-      
+      const validated = AIResponseValidator.validateGenerateTaskTemplate({
+        template
+      });
       return validated;
     } catch (error: any) {
       throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
     }
   }
-
   async generateTestDataWithAI(params: {
     taskDescription: string;
     taskTitle: string;
@@ -943,33 +732,10 @@ public class Main {
     count: number;
     userId?: number;
   }): Promise<TestDataExample[]> {
-    // CloudflareAI temporarily disabled
-    // try {
-    //   if (this.cloudflareProvider && typeof (this.cloudflareProvider as any).generateTestDataWithAI === 'function') {
-    //     const result = await (this.cloudflareProvider as any).generateTestDataWithAI(params, { language: params.language ?? "uk" });
-    //     const validated = AIResponseValidator.validateGenerateTestData(result, params.count);
-    //     return validated;
-    //   }
-    // } catch (error: any) {
-    //   // При 502 від Worker - одразу fallback
-    //   if (shouldFallbackToOpenRouter(error)) {
-    //     console.log('[LLMOrchestrator] Cloudflare Worker returned 502, falling back to OpenRouter', { error: error.message });
-    //   } else if (error instanceof AIValidationError || isRetryableError(error)) {
-    //     console.log('[LLMOrchestrator] CloudflareAI failed or validation failed, falling back to OpenRouter', { error: error.message });
-    //   } else if (isCloudflareError(error)) {
-    //     // Інші помилки Cloudflare (не 4xx) - fallback
-    //     console.log('[LLMOrchestrator] CloudflareAI error, falling back to OpenRouter', { error: error.message });
-    //   } else {
-    //     // Не Cloudflare помилки - не fallback, кидаємо далі
-    //     throw error;
-    //   }
-    // }
     console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-
     const result = await this.generateTestDataWithAI_OpenRouter(params);
     return result;
   }
-
   private async generateTestDataWithAI_OpenRouter(params: {
     taskDescription: string;
     taskTitle: string;
@@ -978,7 +744,11 @@ public class Main {
     userId?: number;
   }): Promise<TestDataExample[]> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
-
+    const taskDesc = params.taskDescription.slice(0, 2000);
+    const taskDescLower = taskDesc.toLowerCase();
+    const explicitlyNoInput = /нема(є)?\s+вхідн/i.test(taskDesc) || /без\s+вхідн/i.test(taskDesc) || /no\s+input/i.test(taskDesc) || /does\s+not\s+take\s+input/i.test(taskDesc);
+    const needsInput = !explicitlyNoInput && (taskDescLower.includes("читати") || taskDescLower.includes("читайте") || taskDescLower.includes("зчитайте") || taskDescLower.includes("введ") || taskDescLower.includes("input") || taskDescLower.includes("stdin") || taskDescLower.includes("вхідні дані") || taskDescLower.includes("формат вхід") || taskDescLower.includes("вхід:"));
+    const desiredCount = needsInput ? params.count : 1;
     const jsonSchema = {
       type: "object",
       properties: {
@@ -987,40 +757,48 @@ public class Main {
           items: {
             type: "object",
             properties: {
-              input: { type: "string", description: "Вхідні дані для тесту (текст або числа через пробіл)" },
-              output: { type: "string", description: "Очікуваний вивід програми" },
-              explanation: { type: "string", description: "Пояснення тесту (опціонально)" }
-          },
+              input: {
+                type: "string",
+                description: "Вхідні дані для тесту"
+              },
+              output: {
+                type: "string",
+                description: "Очікуваний вивід програми"
+              },
+              explanation: {
+                type: "string",
+                description: "Пояснення тесту (опціонально)"
+              }
+            },
             required: ["input", "output"]
           },
-          minItems: params.count,
-          maxItems: params.count
+          minItems: desiredCount,
+          maxItems: desiredCount
         }
       },
       required: ["tests"]
     };
-
-    const systemPrompt = `Ти досвідчений викладач програмування. Твоя задача - створити тестові дані для перевірки програм учнів.
+    const systemPrompt = needsInput ? `Ти досвідчений викладач програмування. Твоя задача - створити тестові дані для перевірки програм учнів.
 
 ВИМОГИ:
-1. Створи РІВНО ${params.count} тестових прикладів
+1. Створи РІВНО ${desiredCount} тестових прикладів
 2. Кожен тест має мати НЕПОРОЖНІ input та output
-3. Тести мають покривати різні випадки: базові, граничні, складні
+    3. Тести мають покривати різні випадки: базові, граничні, складні
 4. Input та output мають бути у форматі, який можна прочитати з консолі
 5. Для масивів використовуй формат: числа через пробіл (наприклад: "1 2 3 4 5")
 6. Всі тести мають бути ВАЛІДНИМИ для завдання
+    7. Заборонено створювати дублікати тестів (однакові input/output)
+    8. Заборонено використовувати плейсхолдери на кшталт input="1" output="1" якщо це не випливає з умови
+
+ВІДПОВІДАЙ ТІЛЬКИ ВАЛІДНИМ JSON БЕЗ БУДЬ-ЯКИХ ПОЯСНЕНЬ.` : `Ти досвідчений викладач програмування. Твоя задача - створити ОДИН детермінований приклад перевірки.
+
+ВИМОГИ:
+1. Створи РІВНО 1 тестовий приклад
+2. Завдання НЕ має вхідних даних: input ОБОВ'ЯЗКОВО має бути порожнім рядком ""
+3. output має бути НЕПОРОЖНІМ і має ТОЧНО відповідати тому, що вимагає умова (включно з розділовими знаками)
+4. Не вигадуй варіативні "вхідні дані". Якщо вводу немає — він завжди порожній.
 
 ВІДПОВІДАЙ ТІЛЬКИ ВАЛІДНИМ JSON БЕЗ БУДЬ-ЯКИХ ПОЯСНЕНЬ.`;
-
-    // Перевіряємо, чи завдання потребує вхідних даних
-    const taskDesc = params.taskDescription.slice(0, 2000);
-    const needsInput = !taskDesc.includes("Немає вхідних даних") && 
-                       (taskDesc.includes("читати") || 
-                        taskDesc.includes("читайте") || 
-                        taskDesc.includes("введення") ||
-                        taskDesc.includes("input") ||
-                        taskDesc.includes("вхідні дані"));
-
     const userPrompt = `
 Завдання: ${params.taskTitle}
 
@@ -1031,13 +809,12 @@ ${taskDesc}
 
 ${needsInput ? `
 ⚠️ ЗАВДАННЯ ПОТРЕБУЄ ВХІДНИХ ДАНИХ з консолі.
-Створи РІВНО ${params.count} тестових прикладів з РІЗНИМИ значеннями в input.
+Створи РІВНО ${desiredCount} тестових прикладів з РІЗНИМИ значеннями в input.
 ` : `
 ⚠️ ЗАВДАННЯ НЕ ПОТРЕБУЄ ВХІДНИХ ДАНИХ - використовуються тільки захардкоджені значення.
-Створи ${params.count} тестів, де:
-- input може бути порожнім рядком "" або нерелевантним значенням
-- output має відповідати очікуваному результату програми з захардкодженими значеннями
-- Різні тести можуть мати різні output (якщо завдання дозволяє варіативність)
+Створи РІВНО 1 тест, де:
+- input ОБОВ'ЯЗКОВО дорівнює "" (порожній рядок)
+- output — єдиний правильний очікуваний вивід для цього завдання
 `}
 
 Створи тестові дані у форматі JSON згідно з цією схемою:
@@ -1045,28 +822,21 @@ ${JSON.stringify(jsonSchema, null, 2)}
 
 ВАЖЛИВО:
 - Всі тести мають мати НЕПОРОЖНІ output
-- ${needsInput ? 'Input має бути різним для кожного тесту' : 'Input може бути порожнім, якщо завдання не потребує вхідних даних'}
-- Тести мають бути різноманітними (різні випадки)
+- ${needsInput ? 'Input має бути різним для кожного тесту' : 'Input має бути порожнім рядком ""'}
+- ${needsInput ? 'Тести мають бути різноманітними (різні випадки)' : 'Не вигадуй "різні випадки" — вводу немає, тому тест один'}
 - Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень
 `.trim();
-
     try {
-      const parsed = await this.openRouterProvider.generateJSON<{ tests: TestDataExample[] }>(
-        userPrompt,
-        jsonSchema,
-        systemPrompt,
-        {
-          timeout: 30000,
-          maxRetries: 1,
-          userId: params.userId,
-          temperature: 0.7,
-          maxTokens: 2000,
-        }
-      );
-
-      // Strict validation - no auto-fixing, no filtering
-      const validated = AIResponseValidator.validateGenerateTestData(parsed, params.count);
-      
+      const parsed = await this.openRouterProvider.generateJSON<{
+        tests: TestDataExample[];
+      }>(userPrompt, jsonSchema, systemPrompt, {
+        timeout: 30000,
+        maxRetries: 1,
+        userId: params.userId,
+        temperature: 0.4,
+        maxTokens: 2000
+      });
+      const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount);
       return validated;
     } catch (error: any) {
       console.error("Error generating test data with AI:", error);
@@ -1074,13 +844,10 @@ ${JSON.stringify(jsonSchema, null, 2)}
     }
   }
 }
-
 let orchestratorInstance: LLMOrchestrator | null = null;
-
 export function getLLMOrchestrator(): LLMOrchestrator {
   if (!orchestratorInstance) {
     orchestratorInstance = new LLMOrchestrator();
   }
   return orchestratorInstance;
 }
-

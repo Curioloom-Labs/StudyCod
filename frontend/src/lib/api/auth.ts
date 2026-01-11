@@ -1,24 +1,12 @@
-
 import { api } from "./client";
 import type { User, CourseLanguage } from "../../types";
-
 export interface RegisterResponse {
   message: string;
   requiresEmailVerification?: boolean;
   token?: string;
   user?: User;
 }
-
-export async function register(
-  username: string,
-  email: string,
-  password: string,
-  course: CourseLanguage,
-  firstName: string,
-  lastName: string,
-  birthDay: number,
-  birthMonth: number
-): Promise<RegisterResponse> {
+export async function register(username: string, email: string, password: string, course: CourseLanguage, firstName: string, lastName: string, birthDay: number, birthMonth: number): Promise<RegisterResponse> {
   const res = await api.post("/auth/register", {
     username,
     email,
@@ -27,39 +15,55 @@ export async function register(
     firstName,
     lastName,
     birthDay,
-    birthMonth,
+    birthMonth
   });
   if (res.data.token) {
     localStorage.setItem("token", res.data.token);
   }
   return res.data as RegisterResponse;
 }
-
 export async function login(username: string, password: string): Promise<User> {
-  const res = await api.post("/auth/login", { username, password });
+  const res = await api.post("/auth/login", {
+    username,
+    password
+  });
   localStorage.setItem("token", res.data.token);
   return res.data.user as User;
 }
-
-export async function verifyEmail(token: string): Promise<{ token: string; user: User }> {
-  const res = await api.get("/auth/verify-email", { params: { token } });
+export async function verifyEmail(token: string): Promise<{
+  token: string;
+  user: User;
+}> {
+  const res = await api.get("/auth/verify-email", {
+    params: {
+      token
+    }
+  });
   localStorage.setItem("token", res.data.token);
-  return { token: res.data.token, user: res.data.user };
+  return {
+    token: res.data.token,
+    user: res.data.user
+  };
 }
-
 export async function resendVerificationEmail(email: string): Promise<void> {
-  await api.post("/auth/resend-verification", { email });
+  await api.post("/auth/resend-verification", {
+    email
+  });
 }
-
 export async function requestPasswordReset(email: string): Promise<void> {
-  await api.post("/auth/forgot-password", { email });
+  await api.post("/auth/forgot-password", {
+    email
+  });
 }
-
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
-  await api.post("/auth/reset-password", { token, newPassword });
+  await api.post("/auth/reset-password", {
+    token,
+    newPassword
+  });
 }
-
 export async function linkGoogleAccount(token: string): Promise<User> {
-  const res = await api.post("/auth/google/link", { token });
+  const res = await api.post("/auth/google/link", {
+    token
+  });
   return res.data.user as User;
 }

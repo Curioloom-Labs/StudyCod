@@ -5,88 +5,63 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
-
-// Мемоізація плагінів (вони не змінюються)
 const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeKatex];
-
-// Мемоізація стилю для SyntaxHighlighter
 const syntaxHighlighterStyle = vscDarkPlus;
-
 interface MarkdownViewProps {
   content: string;
 }
-
-export const MarkdownView: React.FC<MarkdownViewProps> = memo(({ content }) => {
-  // Мемоізація компонентів для code blocks
-  const codeComponents = useMemo(
-    () => ({
-      code({ node, inline, className, children, ...props }: any) {
-        const match = /language-(\w+)/.exec(className || "");
-        const language = match ? match[1] : "";
-
-        if (!inline && match) {
-          return (
-            <div className="my-4 overflow-hidden border border-border">
-              <SyntaxHighlighter
-                language={language}
-                style={syntaxHighlighterStyle}
-                customStyle={{
-                  margin: 0,
-                  padding: "1rem",
-                  fontSize: "0.875rem",
-                  lineHeight: "1.5",
-                  background: "var(--bg-code)",
-                }}
-                PreTag="div"
-                {...props}
-              >
+export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
+  content
+}) => {
+  const codeComponents = useMemo(() => ({
+    code({
+      node,
+      inline,
+      className,
+      children,
+      ...props
+    }: any) {
+      const match = /language-(\w+)/.exec(className || "");
+      const language = match ? match[1] : "";
+      if (!inline && match) {
+        return <div className="my-4 overflow-hidden border border-border">
+              <SyntaxHighlighter language={language} style={syntaxHighlighterStyle} customStyle={{
+            margin: 0,
+            padding: "1rem",
+            fontSize: "0.875rem",
+            lineHeight: "1.5",
+            background: "var(--bg-code)"
+          }} PreTag="div" {...props}>
                 {String(children).replace(/\n$/, "")}
               </SyntaxHighlighter>
-            </div>
-          );
-        }
-
-        return (
-          <code
-            className="bg-bg-code border border-border px-1.5 py-0.5 text-sm font-mono text-text-primary"
-            {...props}
-          >
+            </div>;
+      }
+      return <code className="bg-bg-code border border-border px-1.5 py-0.5 text-sm font-mono text-text-primary" {...props}>
             {children}
-          </code>
-        );
-      },
-    }),
-    []
-  );
-
-  // Перетворюємо LaTeX команди на Markdown
+          </code>;
+    }
+  }), []);
+  const normalizeForRender = (raw: string) => {
+    let s = String(raw ?? "");
+    s = s.replace(/\r\n/g, "\n");
+    const escapedNewlinesCount = (s.match(/\\n/g) || []).length;
+    if (!s.includes("\n") && escapedNewlinesCount >= 2 || escapedNewlinesCount >= 6) {
+      s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+    }
+    s = s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+    return s;
+  };
   const processedContent = useMemo(() => {
     if (!content) return "";
-    let processed = content;
-    
-    // Замінюємо \( \) на $ для підтримки KaTeX
-    processed = processed
-      .replace(/\\\(/g, "$")
-      .replace(/\\\)/g, "$")
-      .replace(/\\\[/g, "$$")
-      .replace(/\\\]/g, "$$");
-    
-    // Перетворюємо \textbf{} на Markdown **текст**
+    let processed = normalizeForRender(content);
+    processed = processed.replace(/\\\(/g, "$").replace(/\\\)/g, "$").replace(/\\\[/g, "$$").replace(/\\\]/g, "$$");
     processed = processed.replace(/\\textbf\{([^}]+)\}/g, "**$1**");
-    
-    // Перетворюємо \textit{} на Markdown *текст*
     processed = processed.replace(/\\textit\{([^}]+)\}/g, "*$1*");
-    
-    // Перетворюємо \emph{} на Markdown *текст*
     processed = processed.replace(/\\emph\{([^}]+)\}/g, "*$1*");
-    
     return processed;
   }, [content]);
-
-  return (
-    <div
-      className="prose prose-invert max-w-none font-mono
+  return <div className="prose prose-invert max-w-none font-mono
       prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-4 prose-pre:border-0
       prose-code:bg-bg-code prose-code:px-1.5 prose-code:py-0.5 prose-code:border prose-code:border-border prose-code:text-sm prose-code:font-mono prose-code:text-text-primary
       prose-code:before:content-[''] prose-code:after:content-['']
@@ -110,13 +85,10 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({ content }) => {
       [&_.katex_mathit]:!text-text-primary
       [&_.katex_main]:!text-text-primary
       [&_.katex_math]:!text-text-primary
-      [&_.katex]:!bg-transparent"
-    >
+      [&_.katex]:!bg-transparent">
       <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={codeComponents}>
         {processedContent}
       </ReactMarkdown>
-    </div>
-  );
+    </div>;
 });
-
 MarkdownView.displayName = "MarkdownView";

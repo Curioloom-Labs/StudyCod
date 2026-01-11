@@ -1,9 +1,7 @@
 import { LLMProvider } from './LLMProvider';
 import { OpenRouterProvider } from './OpenRouterProvider';
 import { CloudflareAIProvider } from './CloudflareAIProvider';
-
 let providerInstance: LLMProvider | null = null;
-
 export function getLLMProvider(): LLMProvider {
   if (!providerInstance) {
     const providerType = process.env.LLM_PROVIDER || 'openrouter';
@@ -15,8 +13,6 @@ export function getLLMProvider(): LLMProvider {
   }
   return providerInstance;
 }
-
 export function setLLMProvider(provider: LLMProvider): void {
   providerInstance = provider;
 }
-

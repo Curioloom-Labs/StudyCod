@@ -1,4 +1,10 @@
-<svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="32"
+  height="32"
+  viewBox="0 0 100 100"
+  fill="none"
+>
   <!-- Ліве крило - зелена фігурна дужка { -->
   <path
     d="M 20 20 Q 15 30 15 40 Q 15 50 20 60 Q 25 70 20 80"
@@ -6,9 +12,8 @@
     stroke-width="4"
     stroke-linecap="round"
     stroke-linejoin="round"
-    fill="none"
   />
-  
+
   <!-- Праве крило - зелена фігурна дужка } -->
   <path
     d="M 80 20 Q 85 30 85 40 Q 85 50 80 60 Q 75 70 80 80"
@@ -16,43 +21,8 @@
     stroke-width="4"
     stroke-linecap="round"
     stroke-linejoin="round"
-    fill="none"
   />
-  
-  <!-- Тіло - помаранчевий слеш / -->
-  <line
-    x1="55"
-    y1="25"
-    x2="45"
-    y2="75"
-    stroke="#ff8c00"
-    stroke-width="4"
-    stroke-linecap="round"
-  />
-</svg>
 
-
-
-  <!-- Ліве крило - зелена фігурна дужка { -->
-  <path
-    d="M 20 20 Q 15 30 15 40 Q 15 50 20 60 Q 25 70 20 80"
-    stroke="#00ff88"
-    stroke-width="4"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    fill="none"
-  />
-  
-  <!-- Праве крило - зелена фігурна дужка } -->
-  <path
-    d="M 80 20 Q 85 30 85 40 Q 85 50 80 60 Q 75 70 80 80"
-    stroke="#00ff88"
-    stroke-width="4"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    fill="none"
-  />
-  
   <!-- Тіло - помаранчевий слеш / -->
   <line
     x1="55"

@@ -1,14 +1,6 @@
-/**
- * Приклади використання sandbox системи
- */
 import { CodeRunner, ExecutionStatus } from "./index";
-
-/**
- * Приклад 1: Виконання Python коду
- */
 export async function examplePython() {
   const runner = new CodeRunner();
-
   const result = await runner.run({
     language: "python",
     code: `
@@ -16,22 +8,16 @@ print("Hello, World!")
 a = int(input())
 print(a * 2)
     `.trim(),
-    input: "5\n",
+    input: "5\n"
   });
-
   console.log("Status:", result.status);
   console.log("Stdout:", result.stdout);
   console.log("Stderr:", result.stderr);
   console.log("Exit Code:", result.exitCode);
   console.log("Wall Time:", result.wallTimeMs, "ms");
 }
-
-/**
- * Приклад 2: Виконання C++ коду
- */
 export async function exampleCpp() {
   const runner = new CodeRunner();
-
   const result = await runner.run({
     language: "cpp",
     code: `
@@ -45,30 +31,23 @@ int main() {
     return 0;
 }
     `.trim(),
-    input: "5\n",
+    input: "5\n"
   });
-
   console.log("Status:", result.status);
   console.log("Stdout:", result.stdout);
   console.log("Stderr:", result.stderr);
   console.log("Exit Code:", result.exitCode);
 }
-
-/**
- * Приклад 3: Обробка помилок
- */
 export async function exampleErrorHandling() {
   const runner = new CodeRunner();
-
   try {
     const result = await runner.run({
       language: "python",
       code: `
 import time
 time.sleep(10)  # Перевищення таймауту
-      `.trim(),
+      `.trim()
     });
-
     if (result.status === ExecutionStatus.TIME_LIMIT) {
       console.log("Code exceeded time limit");
     }
@@ -76,13 +55,8 @@ time.sleep(10)  # Перевищення таймауту
     console.error("Error:", error.message);
   }
 }
-
-/**
- * Приклад 4: Виконання Java коду
- */
 export async function exampleJava() {
   const runner = new CodeRunner();
-
   const result = await runner.run({
     language: "java",
     code: `
@@ -94,21 +68,15 @@ public class Main {
     }
 }
     `.trim(),
-    input: "5\n",
+    input: "5\n"
   });
-
   console.log("Status:", result.status);
   console.log("Stdout:", result.stdout);
   console.log("Stderr:", result.stderr);
   console.log("Exit Code:", result.exitCode);
 }
-
-/**
- * Приклад 5: Використання кастомних обмежень
- */
 export async function exampleCustomLimits() {
   const runner = new CodeRunner();
-
   const result = await runner.run({
     language: "python",
     code: "print('Hello')",
@@ -118,10 +86,8 @@ export async function exampleCustomLimits() {
       wallTimeSeconds: 2,
       maxOutputBytes: 32 * 1024,
       maxProcesses: 1,
-      maxFiles: 16,
-    },
+      maxFiles: 16
+    }
   });
-
   console.log("Result:", result);
 }
-

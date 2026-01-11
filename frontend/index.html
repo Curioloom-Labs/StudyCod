@@ -4,8 +4,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StudyCod Web</title>
+    <title>StudyCod</title>
+    <meta
+      name="description"
+      content="StudyCod — навчальна платформа для вивчення програмування: уроки, задачі, прогрес, класи та оцінки."
+    />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+
+    <!-- Canonical is important for SEO; set it dynamically for SPA routes. -->
+    <link rel="canonical" href="/" />
+
+    <!-- Open Graph / social previews (also influences how links look when shared). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="StudyCod" />
+    <meta property="og:site_name" content="StudyCod" />
+    <meta
+      property="og:description"
+      content="StudyCod — навчальна платформа для вивчення програмування: уроки, задачі, прогрес, класи та оцінки."
+    />
+    <meta property="og:image" content="/favicon.svg" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.svg" sizes="any" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -16,14 +35,34 @@
       <noscript>
         <div style="padding: 20px; font-family: monospace; color: #fff; background: #1a1a1a; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
           <div style="text-align: center;">
-            <h1 style="color: #ef4444;">JavaScript вимкнено</h1>
-            <p>Будь ласка, увімкніть JavaScript для роботи цього додатку.</p>
+            <h1 style="color: #22c55e; margin: 0 0 12px;">StudyCod</h1>
+            <p style="margin: 0 0 10px;">Навчальна платформа для вивчення програмування: уроки, задачі, прогрес.</p>
+            <p style="margin: 0; color: #fbbf24;">Для повної роботи сайту потрібно увімкнути JavaScript.</p>
           </div>
         </div>
       </noscript>
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      // Keep canonical in sync with the current SPA URL (helps avoid duplicate indexing).
+      (function () {
+        try {
+          var canonical = document.querySelector('link[rel="canonical"]');
+          if (!canonical) return;
+          canonical.setAttribute('href', window.location.origin + window.location.pathname);
+
+          var ogUrl = document.querySelector('meta[property="og:url"]');
+          if (!ogUrl) {
+            ogUrl = document.createElement('meta');
+            ogUrl.setAttribute('property', 'og:url');
+            document.head.appendChild(ogUrl);
+          }
+          ogUrl.setAttribute('content', window.location.href);
+        } catch (_) {
+          // ignore
+        }
+      })();
+
       // Діагностика: перевірка чи завантажився скрипт
       console.log("HTML loaded, root element:", document.getElementById("root"));
       window.addEventListener("error", function(e) {

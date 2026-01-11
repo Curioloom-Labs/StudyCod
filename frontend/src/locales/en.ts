@@ -1,19 +1,16 @@
 export default {
-  // Common
   save: 'Save',
   cancel: 'Cancel',
+  edit: 'Edit',
+  delete: 'Delete',
   loading: 'Loading...',
   back: 'Back',
   close: 'Close',
-  delete: 'Delete',
-  edit: 'Edit',
   create: 'Create',
   update: 'Update',
   search: 'Search',
   filter: 'Filter',
   actions: 'Actions',
-  
-  // Navigation
   home: 'Home',
   tasks: 'Tasks',
   grades: 'Grades',
@@ -24,8 +21,6 @@ export default {
   myJournal: 'My Journal',
   lessons: 'Lessons',
   toHome: 'To Home',
-  
-  // Auth
   login: 'Login',
   register: 'Register',
   email: 'Email',
@@ -33,8 +28,6 @@ export default {
   username: 'Username',
   forgotPassword: 'Forgot password?',
   resetPassword: 'Reset Password',
-  
-  // Gradebook
   gradebook: 'Gradebook',
   student: 'Student',
   grade: 'Grade',
@@ -49,29 +42,20 @@ export default {
   noGrades: 'No grades',
   exportCSV: 'Export CSV',
   failedToLoad: 'Failed to load gradebook',
-  
-  // Tasks
   task: 'Task',
-  tasks: 'Tasks',
   taskTitle: 'Task Title',
   taskDescription: 'Task Description',
   deadline: 'Deadline',
   expired: 'Expired',
   until: 'Until',
   execute: 'Execute',
-  submit: 'Submit',
   submitted: 'Submitted',
   notSubmitted: 'Not Submitted',
-  
-  // Lessons
   lesson: 'Lesson',
-  lessons: 'Lessons',
   lessonTitle: 'Lesson Title',
   addTask: 'Add Task',
   noTasks: 'No tasks',
   taskCount: 'Tasks',
-  
-  // Common messages
   error: 'Error',
   success: 'Success',
   warning: 'Warning',
@@ -79,36 +63,27 @@ export default {
   confirm: 'Confirm',
   areYouSure: 'Are you sure?',
   optional: 'optional',
-  
-  // Profile
-  profile: 'Profile',
   firstName: 'First Name',
   lastName: 'Last Name',
   middleName: 'Middle Name',
   language: 'Language',
+  programmingLanguage: 'Programming language',
   timezone: 'Timezone',
-  
-  // Classes
   class: 'Class',
   classes: 'Classes',
-  className: 'Class Name',
+  className: 'Class name',
   students: 'Students',
   teacher: 'Teacher',
-  noStudents: 'No students',
-  
-  // Control works
   controlWork: 'Control Work',
   controlWorks: 'Control Works',
   completed: 'Completed',
   notCompleted: 'Not Completed',
-  
-  // Topics
   topic: 'Topic',
   topics: 'Topics',
   topicTitle: 'Topic Title',
-  practicalTasks: 'Practical Tasks',
-  
-  // Test
+  practicalTasks: 'Practice tasks',
+  createControlWork: 'Create control work',
+  assign: 'Assign',
   test: 'Test',
   tests: 'Tests',
   testCount: 'Tests',
@@ -116,22 +91,14 @@ export default {
   testCompleted: 'Test Completed',
   correctAnswers: 'Correct Answers',
   totalQuestions: 'Total Questions',
-  
-  // Settings
   settings: 'Settings',
   configure: 'Configure',
-  
-  // Theory
   theory: 'Theory',
   readTheory: 'Read Theory',
-  
-  // Status
   active: 'Active',
   inactive: 'Inactive',
   closed: 'Closed',
   open: 'Open',
-  
-  // Error messages
   errorLoading: 'Loading Error',
   unknownError: 'Unknown Error',
   reload: 'Reload',
@@ -145,11 +112,12 @@ export default {
   backToHome: 'Back to home',
   javaCourse: 'Java course',
   pythonCourse: 'Python course',
-
-  // Onboarding
   onboardingQuickTour: 'Quick tour',
   onboardingNewHere: 'New here? Tour',
   onboardingStepOf: 'Step {{current}} of {{total}}',
+  next: 'Next',
+  skip: 'Skip',
+  done: 'Done',
   onboardingWelcomeTitle: 'StudyCod — quick start',
   onboardingWelcomeBody: 'Two modes: EDU (classes, lessons, gradebook) and Personal (solo tasks). Pick what you need right now.',
   onboardingEduTitle: 'EDU: lessons, topics, control works',
@@ -160,14 +128,10 @@ export default {
   onboardingJournalBody: 'Practice tasks are separate grades. Control work is one column. Thematic grade can be created/deleted in the gradebook.',
   onboardingSupportTitle: 'Where to find help',
   onboardingSupportBody: 'Help (Docs) is in the header. Course questions — ask your teacher. Tech support — via the administrator.',
-
-  // Docs
   all: 'All',
   searchPlaceholder: 'Search…',
   linkCopied: 'Link copied',
   copyLink: 'Copy link',
-
-  // StudentTaskPage / runtime messages
   timeUpAutoSubmit: 'Time is up! The task will be submitted automatically.',
   gradeSummary: 'Grade: {{passed}}/{{total}} tests passed. Final grade: {{grade}}/12',
   enterCodeToRun: 'Enter code to run',
@@ -205,8 +169,6 @@ export default {
   timeSs: '{{s}}s',
   attempts: 'Attempts',
   taskClosed: 'Task closed',
-  
-  // Tasks
   failedToLoadTasks: 'Failed to load tasks',
   runNotAvailable: 'Code execution function is not available yet. Use "Submit" to check your code.',
   runError: 'Error while running code',
@@ -217,34 +179,24 @@ export default {
   gradeOutOf: 'Grade',
   failedToSubmit: 'Failed to submit code',
   failedToSubmitTest: 'Failed to submit test',
-  
-  // Teacher Dashboard
-  myClasses: 'My Classes',
   createClass: 'Create Class',
   createTopic: 'Create Topic',
   reviewTasks: 'Review Tasks',
-  students: 'students',
   noClassesYet: 'You don\'t have any classes yet',
   createFirstClass: 'Create first class',
   failedToCreateClass: 'Failed to create class',
   gradeMustBe: 'Grade must be between 1 and 12',
   gradeSetSuccessfully: 'Grade set successfully',
   failedToSetGrade: 'Failed to set grade',
-  className: 'Class Name',
   classNamePlaceholder: 'For example: 10-A',
-  programmingLanguage: 'Programming Language',
   gradeLabel: 'Grade (1-12) *',
   commentOptional: 'Comment (optional)',
   taskSubmittedForReviewShort: 'Task submitted for review',
   workScore: 'Workability',
   optimizationScore: 'Optimization',
-  
-  // HomePage
   hello: 'Hello',
   classesCount: 'Classes',
   studentsCount: 'Students',
-  
-  // ClassDetailsPage
   classDetails: 'Class Details',
   studentsCountLabel: 'Students',
   topicsCountLabel: 'Topics',
@@ -254,32 +206,15 @@ export default {
   noStudents: 'No students',
   noTopics: 'No topics',
   tasksCount: 'Tasks',
-  open: 'Open',
   addStudents: 'Add Students',
-  lastName: 'Last Name',
-  firstName: 'First Name',
-  middleName: 'Middle Name',
-  submit: 'Submit',
   failedToExport: 'Failed to export',
   selectCSV: 'Select CSV file',
   failedToImport: 'Failed to import students',
   addAtLeastOne: 'Add at least one student',
   failedToAddStudents: 'Failed to add students',
   failedToLoadData: 'Failed to load data',
-  
-  // TopicDetailsPage
-  practicalTasks: 'Practical Tasks',
-  addTask: 'Add Task',
   assigned: 'Assigned',
   deadlineLabel: 'Deadline',
-  tests: 'Tests',
-  edit: 'Edit',
-  theory: 'Theory',
-  delete: 'Delete',
-  controlWorks: 'Control Works',
-  createControlWork: 'Create Control Work',
-  testPlusPractice: 'Test + Practice',
-  assign: 'Assign',
   fillAllFields: 'Fill all required fields',
   failedToLoadTopic: 'Failed to load topic',
   failedToCreateTask: 'Failed to create task',
@@ -293,18 +228,11 @@ export default {
   taskAssignedSuccessfully: 'Task assigned successfully',
   failedToAssignTask: 'Failed to assign task',
   controlWorkAssignedSuccessfully: 'Control work assigned successfully',
-  
-  // StudentDashboardPage
-  myJournal: 'My Journal',
   noGradesYet: 'You don\'t have any grades yet',
   intermediateGrades: 'Intermediate Grades',
   outOf: 'out of',
-  
-  // ProfilePage
-  profile: 'Profile',
   classLabel: 'Class',
   unknown: 'Unknown',
-  programmingLanguage: 'Programming Language',
   difus: 'Difus',
   advanced: 'Advanced',
   basic: 'Basic',
@@ -319,7 +247,6 @@ export default {
   teachersCannotChangeProfile: 'Teachers cannot change profile through this interface.',
   changesSaved: 'Changes saved.',
   profileSaveError: 'Profile save error',
-  saving: 'Saving...',
   saveChanges: 'Save Changes',
   saveAvatar: 'Save Avatar',
   teachersCannotChangeLanguage: 'Teachers cannot change programming language through profile.',
@@ -334,6 +261,5 @@ export default {
   practice: 'Practice',
   min: 'min',
   deleteThisTest: 'Delete this test?',
-  deleteTask: 'Delete task',
+  deleteTask: 'Delete task'
 };
-

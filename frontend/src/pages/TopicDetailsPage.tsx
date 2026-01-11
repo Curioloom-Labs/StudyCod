@@ -1,5 +1,3 @@
-// frontend/src/pages/TopicDetailsPage.tsx
-// Сторінка деталей теми з можливістю додавати завдання та контрольні роботи
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
@@ -13,7 +11,6 @@ import type { User } from "../types";
 import { MarkdownView } from "../components/MarkdownView";
 import { generateTestData, getTestData, addTestData, updateTestData, deleteTestData, unassignTask, unassignControlWork, type TestData } from "../lib/api/edu";
 import { convertLocalToUTC, convertUTCToLocal, formatDeadlineForDisplay, getUserTimezone } from "../utils/timezone";
-
 interface Topic {
   id: number;
   title: string;
@@ -23,7 +20,6 @@ interface Topic {
   tasks?: TopicTask[];
   controlWorks?: ControlWork[];
 }
-
 interface TopicTask {
   id: number;
   title: string;
@@ -37,12 +33,10 @@ interface TopicTask {
   isAssigned: boolean;
   theory?: TaskTheory | null;
 }
-
 interface TaskTheory {
   id: number;
   content: string;
 }
-
 interface ControlWork {
   id: number;
   title?: string | null;
@@ -53,11 +47,17 @@ interface ControlWork {
   isAssigned: boolean;
   deadline?: string | null;
 }
-
 export const TopicDetailsPage: React.FC = () => {
-  const { t, i18n } = useTranslation();
-  const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
-  const { topicId } = useParams<{ topicId: string }>();
+  const {
+    t,
+    i18n
+  } = useTranslation();
+  const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const {
+    topicId
+  } = useParams<{
+    topicId: string;
+  }>();
   const navigate = useNavigate();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +71,7 @@ export const TopicDetailsPage: React.FC = () => {
     template: "",
     type: "PRACTICE" as "PRACTICE" | "CONTROL",
     maxAttempts: 3,
-    theory: "",
+    theory: ""
   });
   const [generatingCondition, setGeneratingCondition] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
@@ -92,20 +92,21 @@ export const TopicDetailsPage: React.FC = () => {
   const [testDataTaskId, setTestDataTaskId] = useState<number | null>(null);
   const [testDataList, setTestDataList] = useState<TestData[]>([]);
   const [editingTestIndex, setEditingTestIndex] = useState<number | null>(null);
-  const [editingTest, setEditingTest] = useState<{ input: string; expectedOutput: string; points: number } | null>(null);
+  const [editingTest, setEditingTest] = useState<{
+    input: string;
+    expectedOutput: string;
+    points: number;
+  } | null>(null);
   const [newTestCount, setNewTestCount] = useState(10);
   const [generatingTestData, setGeneratingTestData] = useState(false);
-
   useEffect(() => {
     loadUser();
   }, []);
-
   useEffect(() => {
     if (user && topicId) {
       loadTopic();
     }
   }, [user, topicId]);
-
   const loadUser = async () => {
     try {
       const u = await getMe();
@@ -114,7 +115,6 @@ export const TopicDetailsPage: React.FC = () => {
       console.error("Failed to load user:", error);
     }
   };
-
   const loadTopic = async () => {
     if (!topicId) return;
     try {
@@ -127,13 +127,11 @@ export const TopicDetailsPage: React.FC = () => {
       setLoading(false);
     }
   };
-
   const handleCreateTask = async () => {
     if (!topicId || !newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
       alert(t('fillAllFields'));
       return;
     }
-
     try {
       const taskData: any = {
         title: newTask.title,
@@ -141,33 +139,34 @@ export const TopicDetailsPage: React.FC = () => {
         template: newTask.template,
         type: newTask.type,
         maxAttempts: newTask.maxAttempts,
-        order: (topic?.tasks?.length || 0) + 1,
+        order: (topic?.tasks?.length || 0) + 1
       };
-      
       const res = await api.post(`/topics/${topicId}/tasks`, taskData);
       const createdTaskId = res.data.task?.id;
-      
-      // Якщо є теорія, додаємо її окремо
       if (newTask.theory.trim() && createdTaskId) {
         try {
           await api.post(`/topics/${topicId}/tasks/${createdTaskId}/theory`, {
-            content: newTask.theory,
+            content: newTask.theory
           });
         } catch (theoryError: any) {
           console.error("Failed to add theory:", theoryError);
-          // Не блокуємо створення завдання, якщо теорія не додалась
         }
       }
-      
       await loadTopic();
       setShowCreateTask(false);
-      setNewTask({ title: "", description: "", template: "", type: "PRACTICE", maxAttempts: 3, theory: "" });
+      setNewTask({
+        title: "",
+        description: "",
+        template: "",
+        type: "PRACTICE",
+        maxAttempts: 3,
+        theory: ""
+      });
     } catch (error: any) {
       console.error("Failed to create task:", error);
       alert(error.response?.data?.message || t('failedToCreateTask'));
     }
   };
-
   const handleGenerateCondition = async () => {
     if (!topic) return;
     setGeneratingCondition(true);
@@ -176,9 +175,12 @@ export const TopicDetailsPage: React.FC = () => {
       const res = await api.post(`/topics/${topicId}/tasks/generate-condition`, {
         taskType: newTask.type,
         difficulty: parseInt(taskDifficulty),
-        language: userLanguage,
+        language: userLanguage
       });
-      setNewTask({ ...newTask, description: res.data.description });
+      setNewTask({
+        ...newTask,
+        description: res.data.description
+      });
     } catch (error: any) {
       console.error("Failed to generate condition:", error);
       alert(error.response?.data?.message || t('failedToGenerateCondition'));
@@ -186,15 +188,17 @@ export const TopicDetailsPage: React.FC = () => {
       setGeneratingCondition(false);
     }
   };
-
   const handleGenerateTemplate = async () => {
     if (!topic) return;
     setGeneratingTemplate(true);
     try {
       const res = await api.post(`/topics/${topicId}/tasks/generate-template`, {
-        description: newTask.description,
+        description: newTask.description
       });
-      setNewTask({ ...newTask, template: res.data.template });
+      setNewTask({
+        ...newTask,
+        template: res.data.template
+      });
     } catch (error: any) {
       console.error("Failed to generate template:", error);
       alert(error.response?.data?.message || t('failedToGenerateTemplate'));
@@ -202,7 +206,6 @@ export const TopicDetailsPage: React.FC = () => {
       setGeneratingTemplate(false);
     }
   };
-
   const handleGenerateTheory = async () => {
     if (!topic || !newTask.description.trim()) {
       alert(t('enterTaskConditionFirst'));
@@ -213,9 +216,12 @@ export const TopicDetailsPage: React.FC = () => {
       const res = await api.post(`/topics/${topicId}/tasks/generate-theory`, {
         taskDescription: newTask.description,
         taskType: newTask.type,
-        difficulty: parseInt(taskDifficulty),
+        difficulty: parseInt(taskDifficulty)
       });
-      setNewTask({ ...newTask, theory: res.data.theory });
+      setNewTask({
+        ...newTask,
+        theory: res.data.theory
+      });
     } catch (error: any) {
       console.error("Failed to generate theory:", error);
       alert(error.response?.data?.message || t('failedToGenerateTheory'));
@@ -223,7 +229,6 @@ export const TopicDetailsPage: React.FC = () => {
       setGeneratingTheory(false);
     }
   };
-
   const handleCreateControlWork = async () => {
     if (!topicId) return;
     try {
@@ -231,7 +236,7 @@ export const TopicDetailsPage: React.FC = () => {
         title: newControlWorkTitle.trim() || null,
         timeLimitMinutes: null,
         hasTheory: false,
-        hasPractice: true,
+        hasPractice: true
       });
       await loadTopic();
       setShowCreateControlWork(false);
@@ -241,41 +246,42 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || t('failedToCreateControlWork'));
     }
   };
-
   const handleUpdateTask = async () => {
     if (!topicId || !editingTask || !newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
       alert(t('fillAllFields'));
       return;
     }
-
     try {
       await api.put(`/topics/${topicId}/tasks/${editingTask.id}`, {
         title: newTask.title,
         description: newTask.description,
         template: newTask.template,
-        maxAttempts: newTask.maxAttempts,
+        maxAttempts: newTask.maxAttempts
       });
       await loadTopic();
       setShowEditTask(false);
       setEditingTask(null);
-      setNewTask({ title: "", description: "", template: "", type: "PRACTICE", maxAttempts: 3 });
+      setNewTask({
+        title: "",
+        description: "",
+        template: "",
+        type: "PRACTICE",
+        maxAttempts: 3
+      });
     } catch (error: any) {
       console.error("Failed to update task:", error);
       alert(error.response?.data?.message || t('failedToUpdateTask'));
     }
   };
-
   const handleAssignTask = async () => {
     if (!topicId || !assigningTask || !assignDeadline) {
       alert(t('fillAllFieldsRequired'));
       return;
     }
-
     try {
-      // Конвертуємо локальний час користувача в UTC перед відправкою
       const deadlineUTC = convertLocalToUTC(assignDeadline, user?.timezone || undefined);
       await api.post(`/topics/${topicId}/tasks/${assigningTask.id}/assign`, {
-        deadline: deadlineUTC,
+        deadline: deadlineUTC
       });
       await loadTopic();
       setShowAssignTask(false);
@@ -287,18 +293,15 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || t('failedToAssignTask'));
     }
   };
-
   const handleAssignControlWork = async () => {
     if (!assigningControlWork || !assignDeadline) {
       alert(t('fillAllFieldsRequired'));
       return;
     }
-
     try {
-      // Конвертуємо локальний час користувача в UTC перед відправкою
       const deadlineUTC = convertLocalToUTC(assignDeadline, user?.timezone || undefined);
       await api.post(`/topics/control-works/${assigningControlWork.id}/assign`, {
-        deadline: deadlineUTC,
+        deadline: deadlineUTC
       });
       await loadTopic();
       setShowAssignControlWork(false);
@@ -310,7 +313,6 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося призначити контрольну роботу", "Failed to assign control work"));
     }
   };
-
   const handleAddTheory = async (taskId: number) => {
     if (!taskTheory.trim()) {
       alert(tr("Введіть теорію", "Enter theory"));
@@ -318,7 +320,7 @@ export const TopicDetailsPage: React.FC = () => {
     }
     try {
       await api.post(`/topics/${topicId}/tasks/${taskId}/theory`, {
-        content: taskTheory,
+        content: taskTheory
       });
       await loadTopic();
       setShowTaskTheory(false);
@@ -329,7 +331,6 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося додати теорію", "Failed to add theory"));
     }
   };
-
   const handleOpenTestData = async (taskId: number) => {
     setTestDataTaskId(taskId);
     setShowTestDataModal(true);
@@ -341,7 +342,6 @@ export const TopicDetailsPage: React.FC = () => {
       setTestDataList([]);
     }
   };
-
   const handleGenerateTestData = async () => {
     if (!testDataTaskId) return;
     setGeneratingTestData(true);
@@ -356,13 +356,14 @@ export const TopicDetailsPage: React.FC = () => {
       setGeneratingTestData(false);
     }
   };
-
   const handleAddTestData = async () => {
     if (!testDataTaskId) return;
     try {
-      await addTestData(testDataTaskId, [
-        { input: "", expectedOutput: "", points: 1 }
-      ]);
+      await addTestData(testDataTaskId, [{
+        input: "",
+        expectedOutput: "",
+        points: 1
+      }]);
       const data = await getTestData(testDataTaskId);
       setTestDataList(data.testData || []);
     } catch (error: any) {
@@ -370,7 +371,6 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося додати тест", "Failed to add test"));
     }
   };
-
   const handleUpdateTestData = async (testDataId: number) => {
     if (!testDataTaskId || !editingTest) return;
     try {
@@ -384,7 +384,6 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося оновити тест", "Failed to update test"));
     }
   };
-
   const handleDeleteTestData = async (testDataId: number) => {
     if (!testDataTaskId) return;
     if (!confirm(t('deleteThisTest'))) return;
@@ -397,7 +396,6 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося видалити тест", "Failed to delete test"));
     }
   };
-
   const handleDeleteTask = async (taskId: number) => {
     if (!topicId) return;
     try {
@@ -409,7 +407,6 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося видалити завдання", "Failed to delete task"));
     }
   };
-
   const handleDeleteControlWork = async (controlWorkId: number) => {
     try {
       await api.delete(`/topics/control-works/${controlWorkId}`);
@@ -420,28 +417,19 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося видалити контрольну роботу", "Failed to delete control work"));
     }
   };
-
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center">
+    return <div className="h-full flex items-center justify-center">
         <div className="text-text-primary font-mono">{t("loading")}</div>
-      </div>
-    );
+      </div>;
   }
-
   if (!topic) {
-    return (
-      <div className="h-full flex items-center justify-center">
+    return <div className="h-full flex items-center justify-center">
         <div className="text-text-primary font-mono">{t('topicNotFound')}</div>
-      </div>
-    );
+      </div>;
   }
-
   const practiceTasks = topic.tasks?.filter(t => t.type === "PRACTICE") || [];
   const controlWorks = topic.controlWorks || [];
-
-  return (
-    <div className="h-full p-6 overflow-y-auto">
+  return <div className="p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <Button variant="ghost" onClick={() => navigate(-1)}>
@@ -450,186 +438,125 @@ export const TopicDetailsPage: React.FC = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-mono text-text-primary">{topic.title}</h1>
-            {topic.description && (
-              <p className="text-text-secondary text-sm mt-1">{topic.description}</p>
-            )}
+            {topic.description && <p className="text-text-secondary text-sm mt-1">{topic.description}</p>}
           </div>
         </div>
 
-        {/* Практичні завдання */}
+        {}
         <Card className="p-4 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-mono text-text-primary">{t('practicalTasks')} ({practiceTasks.length})</h2>
-            {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-              <Button onClick={() => setShowCreateTask(true)}>
+            {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => setShowCreateTask(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 {t('addTask')}
-              </Button>
-            )}
+              </Button>}
           </div>
 
           <div className="space-y-2">
-            {practiceTasks.length === 0 ? (
-              <p className="text-text-secondary text-sm">{t('noTasks')}</p>
-            ) : (
-              practiceTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="p-3 border border-border hover:bg-bg-hover transition-fast"
-                >
+            {practiceTasks.length === 0 ? <p className="text-text-secondary text-sm">{t('noTasks')}</p> : practiceTasks.map(task => <div key={task.id} className="p-3 border border-border hover:bg-bg-hover transition-fast">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="text-sm font-mono text-text-primary">{task.title}</div>
                       <div className="flex items-center gap-2 mt-1">
-                        {task.theory && (
-                          <div className="text-xs text-text-secondary">✓ {t('theoryAdded')}</div>
-                        )}
-                        {task.isAssigned && (
-                          <div className="text-xs text-green-500">✓ {t('assigned')}</div>
-                        )}
-                        {task.deadline && (
-                          <div className="text-xs text-text-secondary">
+                        {task.theory && <div className="text-xs text-text-secondary">✓ {t('theoryAdded')}</div>}
+                        {task.isAssigned && <div className="text-xs text-green-500">✓ {t('assigned')}</div>}
+                        {task.deadline && <div className="text-xs text-text-secondary">
                             {t('deadlineLabel')}: {formatDeadlineForDisplay(task.deadline, user?.timezone || undefined)}
-                          </div>
-                        )}
+                          </div>}
                       </div>
                     </div>
-                    {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-                      <div className="flex gap-2 items-center">
+                    {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex gap-2 items-center">
                         <div className="flex gap-2">
-                          {!task.isAssigned ? (
-                            <Button
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setAssigningTask(task);
-                                setShowAssignTask(true);
-                              }}
-                              className="text-xs"
-                            >
+                          {!task.isAssigned ? <Button variant="ghost" onClick={e => {
+                    e.stopPropagation();
+                    setAssigningTask(task);
+                    setShowAssignTask(true);
+                  }} className="text-xs">
                               <Plus className="w-3 h-3 mr-1" />
                               {t('assign')}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (confirm(tr(`Відкликати завдання "${task.title}"?`, `Unassign task "${task.title}"?`))) {
-                                  try {
-                                    await unassignTask(task.id);
-                                    await loadTopic();
-                                    alert(tr("Завдання відкликано", "Task unassigned"));
-                                  } catch (error: any) {
-                                    console.error("Failed to unassign task:", error);
-                                    alert(error.response?.data?.message || tr("Не вдалося відкликати завдання", "Failed to unassign task"));
-                                  }
-                                }
-                              }}
-                              className="text-xs text-accent-warning hover:text-accent-warning"
-                            >
+                            </Button> : <Button variant="ghost" onClick={async e => {
+                    e.stopPropagation();
+                    if (confirm(tr(`Відкликати завдання "${task.title}"?`, `Unassign task "${task.title}"?`))) {
+                      try {
+                        await unassignTask(task.id);
+                        await loadTopic();
+                        alert(tr("Завдання відкликано", "Task unassigned"));
+                      } catch (error: any) {
+                        console.error("Failed to unassign task:", error);
+                        alert(error.response?.data?.message || tr("Не вдалося відкликати завдання", "Failed to unassign task"));
+                      }
+                    }
+                  }} className="text-xs text-accent-warning hover:text-accent-warning">
                               <X className="w-3 h-3 mr-1" />
                               {tr("Відкликати", "Unassign")}
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenTestData(task.id);
-                            }}
-                            className="text-xs"
-                          >
+                            </Button>}
+                          <Button variant="ghost" onClick={e => {
+                    e.stopPropagation();
+                    handleOpenTestData(task.id);
+                  }} className="text-xs">
                             <FileText className="w-3 h-3 mr-1" />
                             {t('tests')}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingTask(task);
-                              setNewTask({
-                                title: task.title,
-                                description: task.description,
-                                template: task.template,
-                                type: task.type,
-                                maxAttempts: task.maxAttempts,
-                              });
-                              setShowEditTask(true);
-                            }}
-                            className="text-xs"
-                          >
+                          <Button variant="ghost" onClick={e => {
+                    e.stopPropagation();
+                    setEditingTask(task);
+                    setNewTask({
+                      title: task.title,
+                      description: task.description,
+                      template: task.template,
+                      type: task.type,
+                      maxAttempts: task.maxAttempts
+                    });
+                    setShowEditTask(true);
+                  }} className="text-xs">
                             <Edit2 className="w-3 h-3 mr-1" />
                             {t('edit')}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedTaskId(task.id);
-                              setTaskTheory(task.theory?.content || "");
-                              setShowTaskTheory(true);
-                            }}
-                            className="text-xs"
-                          >
+                          <Button variant="ghost" onClick={e => {
+                    e.stopPropagation();
+                    setSelectedTaskId(task.id);
+                    setTaskTheory(task.theory?.content || "");
+                    setShowTaskTheory(true);
+                  }} className="text-xs">
                             <Edit2 className="w-3 h-3 mr-1" />
                             {t('theory')}
                           </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`${t('deleteTask')} "${task.title}"?`)) {
-                              handleDeleteTask(task.id);
-                            }
-                          }}
-                          className="text-xs text-accent-error hover:text-accent-error ml-auto"
-                        >
+                        <Button variant="ghost" onClick={e => {
+                  e.stopPropagation();
+                  if (confirm(`${t('deleteTask')} "${task.title}"?`)) {
+                    handleDeleteTask(task.id);
+                  }
+                }} className="text-xs text-accent-error hover:text-accent-error ml-auto">
                           <Trash2 className="w-3 h-3 mr-1" />
                           {t('delete')}
                         </Button>
-                      </div>
-                    )}
+                      </div>}
                   </div>
-                </div>
-              ))
-            )}
+                </div>)}
           </div>
         </Card>
 
-        {/* Контрольні роботи */}
+        {}
         <Card className="p-4 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-mono text-text-primary">{t('controlWorks')} ({controlWorks.length})</h2>
-            {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-              <Button onClick={() => setShowCreateControlWork(true)}>
+            {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => setShowCreateControlWork(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 {t('createControlWork')}
-              </Button>
-            )}
+              </Button>}
           </div>
 
 
           <div className="space-y-2">
-            {controlWorks.length === 0 ? (
-              <p className="text-text-secondary text-sm">{t('noControlWorks')}</p>
-            ) : (
-              controlWorks.map((cw) => (
-                <div
-                  key={cw.id}
-                  className="p-3 border border-border hover:bg-bg-hover transition-fast"
-                >
+            {controlWorks.length === 0 ? <p className="text-text-secondary text-sm">{t('noControlWorks')}</p> : controlWorks.map(cw => <div key={cw.id} className="p-3 border border-border hover:bg-bg-hover transition-fast">
                   <div className="flex items-center justify-between">
-                    <div
-                      className="flex-1 cursor-pointer"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log("Navigating to control work:", cw.id);
-                        navigate(`/edu/control-works/${cw.id}`);
-                      }}
-                    >
+                    <div className="flex-1 cursor-pointer" onClick={e => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("Navigating to control work:", cw.id);
+                navigate(`/edu/control-works/${cw.id}`);
+              }}>
                       <div className="text-sm font-mono text-text-primary">
                         {cw.title || `${t('controlWork')} #${cw.id}`}
                         {cw.timeLimitMinutes && ` (${cw.timeLimitMinutes} ${t('min')})`}
@@ -638,198 +565,132 @@ export const TopicDetailsPage: React.FC = () => {
                         <div className="text-xs text-text-secondary">
                           {cw.hasTheory && `✓ ${t('test')}`} {cw.hasTheory && cw.hasPractice && " + "} {cw.hasPractice && `✓ ${t('practice')}`}
                         </div>
-                        {cw.isAssigned && (
-                          <div className="text-xs text-green-500">✓ {t('assigned')}</div>
-                        )}
-                        {cw.deadline && (
-                          <div className="text-xs text-text-secondary">
+                        {cw.isAssigned && <div className="text-xs text-green-500">✓ {t('assigned')}</div>}
+                        {cw.deadline && <div className="text-xs text-text-secondary">
                             {t('deadlineLabel')}: {formatDeadlineForDisplay(cw.deadline, user?.timezone || undefined)}
-                          </div>
-                        )}
+                          </div>}
                       </div>
                     </div>
-                    {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-                      <div className="flex gap-2 items-center">
-                        {!cw.isAssigned ? (
-                          <Button
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAssigningControlWork(cw);
-                              setShowAssignControlWork(true);
-                            }}
-                            className="text-xs"
-                          >
+                    {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex gap-2 items-center">
+                        {!cw.isAssigned ? <Button variant="ghost" onClick={e => {
+                  e.stopPropagation();
+                  setAssigningControlWork(cw);
+                  setShowAssignControlWork(true);
+                }} className="text-xs">
                             <Plus className="w-3 h-3 mr-1" />
                             {t('assign')}
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (confirm(tr(
-                                `Відкликати контрольну роботу "${cw.title || `Контрольна робота #${cw.id}`}"?`,
-                                `Unassign control work "${cw.title || `Control work #${cw.id}`}"?`
-                              ))) {
-                                try {
-                                  await unassignControlWork(cw.id);
-                                  await loadTopic();
-                                  alert(tr("Контрольну роботу відкликано", "Control work unassigned"));
-                                } catch (error: any) {
-                                  console.error("Failed to unassign control work:", error);
-                                  alert(error.response?.data?.message || tr("Не вдалося відкликати контрольну роботу", "Failed to unassign control work"));
-                                }
-                              }
-                            }}
-                            className="text-xs text-accent-warning hover:text-accent-warning"
-                          >
+                          </Button> : <Button variant="ghost" onClick={async e => {
+                  e.stopPropagation();
+                  if (confirm(tr(`Відкликати контрольну роботу "${cw.title || `Контрольна робота #${cw.id}`}"?`, `Unassign control work "${cw.title || `Control work #${cw.id}`}"?`))) {
+                    try {
+                      await unassignControlWork(cw.id);
+                      await loadTopic();
+                      alert(tr("Контрольну роботу відкликано", "Control work unassigned"));
+                    } catch (error: any) {
+                      console.error("Failed to unassign control work:", error);
+                      alert(error.response?.data?.message || tr("Не вдалося відкликати контрольну роботу", "Failed to unassign control work"));
+                    }
+                  }
+                }} className="text-xs text-accent-warning hover:text-accent-warning">
                             <X className="w-3 h-3 mr-1" />
                             {tr("Відкликати", "Unassign")}
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`${t('delete')} ${t('controlWork')} #${cw.id}?`)) {
-                              handleDeleteControlWork(cw.id);
-                            }
-                          }}
-                          className="text-xs text-accent-error hover:text-accent-error ml-auto"
-                        >
+                          </Button>}
+                        <Button variant="ghost" onClick={e => {
+                  e.stopPropagation();
+                  if (confirm(`${t('delete')} ${t('controlWork')} #${cw.id}?`)) {
+                    handleDeleteControlWork(cw.id);
+                  }
+                }} className="text-xs text-accent-error hover:text-accent-error ml-auto">
                           <Trash2 className="w-3 h-3 mr-1" />
                           {t('delete')}
                         </Button>
-                      </div>
-                    )}
+                      </div>}
                   </div>
-                </div>
-              ))
-            )}
+                </div>)}
           </div>
         </Card>
 
-        {/* Модальне вікно створення завдання */}
-        {showCreateTask && (
-          <Modal
-            open={showCreateTask}
-            onClose={() => {
-              setShowCreateTask(false);
-              setNewTask({ title: "", description: "", template: "", type: "PRACTICE", maxAttempts: 3, theory: "" });
-            }}
-            title={
-              newTask.type === "CONTROL"
-                ? tr("Створити контрольне завдання", "Create control task")
-                : tr("Створити практичне завдання", "Create practice task")
-            }
-          >
+        {}
+        {showCreateTask && <Modal open={showCreateTask} onClose={() => {
+        setShowCreateTask(false);
+        setNewTask({
+          title: "",
+          description: "",
+          template: "",
+          type: "PRACTICE",
+          maxAttempts: 3,
+          theory: ""
+        });
+      }} title={newTask.type === "CONTROL" ? tr("Створити контрольне завдання", "Create control task") : tr("Створити практичне завдання", "Create practice task")}>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Назва завдання", "Task title")} *</label>
-                <input
-                  type="text"
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  placeholder={tr("Назва завдання", "Task title")}
-                />
+                <input type="text" value={newTask.title} onChange={e => setNewTask({
+              ...newTask,
+              title: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Назва завдання", "Task title")} />
               </div>
 
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Умова завдання", "Task statement")} *
-                  <Button
-                    variant="ghost"
-                    onClick={handleGenerateCondition}
-                    disabled={generatingCondition}
-                    className="ml-2 text-xs"
-                  >
+                  <Button variant="ghost" onClick={handleGenerateCondition} disabled={generatingCondition} className="ml-2 text-xs">
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingCondition ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
                 </label>
-                <textarea
-                  value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]"
-                  placeholder={tr("Умова завдання...", "Task statement...")}
-                />
+                <textarea value={newTask.description} onChange={e => setNewTask({
+              ...newTask,
+              description: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Умова завдання...", "Task statement...")} />
               </div>
 
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Шаблон коду", "Code template")} *
-                  <Button
-                    variant="ghost"
-                    onClick={handleGenerateTemplate}
-                    disabled={generatingTemplate}
-                    className="ml-2 text-xs"
-                  >
+                  <Button variant="ghost" onClick={handleGenerateTemplate} disabled={generatingTemplate} className="ml-2 text-xs">
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingTemplate ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
                 </label>
-                <textarea
-                  value={newTask.template}
-                  onChange={(e) => setNewTask({ ...newTask, template: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] font-mono text-sm"
-                  placeholder={tr("Шаблон коду...", "Code template...")}
-                />
+                <textarea value={newTask.template} onChange={e => setNewTask({
+              ...newTask,
+              template: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] font-mono text-sm" placeholder={tr("Шаблон коду...", "Code template...")} />
               </div>
 
-              {newTask.type === "PRACTICE" && (
-                <div>
+              {newTask.type === "PRACTICE" && <div>
                   <label className="block text-sm font-mono text-text-secondary mb-2">
                     {tr("Максимальна кількість спроб", "Max attempts")}
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newTask.maxAttempts}
-                    onChange={(e) => setNewTask({ ...newTask, maxAttempts: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  />
-                </div>
-              )}
+                  <input type="number" min="1" value={newTask.maxAttempts} onChange={e => setNewTask({
+              ...newTask,
+              maxAttempts: parseInt(e.target.value) || 1
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
+                </div>}
 
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Теорія (необов'язково)", "Theory (optional)")}
-                  <Button
-                    variant="ghost"
-                    onClick={handleGenerateTheory}
-                    disabled={generatingTheory || !newTask.description.trim()}
-                    className="ml-2 text-xs"
-                  >
+                  <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory || !newTask.description.trim()} className="ml-2 text-xs">
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingTheory ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
                 </label>
-                <textarea
-                  value={newTask.theory}
-                  onChange={(e) => setNewTask({ ...newTask, theory: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]"
-                  placeholder={tr("Теорія до завдання (Markdown)...", "Task theory (Markdown)...")}
-                />
+                <textarea value={newTask.theory} onChange={e => setNewTask({
+              ...newTask,
+              theory: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Теорія до завдання (Markdown)...", "Task theory (Markdown)...")} />
                 <p className="text-xs text-text-muted mt-1">
-                  {tr(
-                    "Теорія буде доступна учням для вивчення та як підказка після помилки",
-                    "Theory will be available to students for learning and as a hint after mistakes"
-                  )}
+                  {tr("Теорія буде доступна учням для вивчення та як підказка після помилки", "Theory will be available to students for learning and as a hint after mistakes")}
                 </p>
               </div>
 
-              {newTask.type === "PRACTICE" && (
-                <div>
+              {newTask.type === "PRACTICE" && <div>
                   <label className="block text-sm font-mono text-text-secondary mb-2">
                     {tr("Складність (для генерації умови)", "Difficulty (for generation)")}
                   </label>
-                  <select
-                    value={taskDifficulty}
-                    onChange={(e) => setTaskDifficulty(e.target.value as "1" | "2" | "3" | "4" | "5")}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  >
+                  <select value={taskDifficulty} onChange={e => setTaskDifficulty(e.target.value as "1" | "2" | "3" | "4" | "5")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
                     <option value="1">{tr("Легка (1) - базові концепції", "Easy (1) — basics")}</option>
                     <option value="2">{tr("Проста (2) - прості алгоритми", "Simple (2) — simple algorithms")}</option>
                     <option value="3">{tr("Середня (3) - стандартні задачі", "Medium (3) — standard problems")}</option>
@@ -839,115 +700,91 @@ export const TopicDetailsPage: React.FC = () => {
                   <p className="text-xs text-text-muted mt-1">
                     {tr("Впливає на складність згенерованої умови завдання", "Affects the generated task difficulty")}
                   </p>
-                </div>
-              )}
+                </div>}
 
               <div className="flex gap-2 justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowCreateTask(false);
-                    setNewTask({ title: "", description: "", template: "", type: "PRACTICE", maxAttempts: 3, theory: "" });
-                  }}
-                >
+                <Button variant="ghost" onClick={() => {
+              setShowCreateTask(false);
+              setNewTask({
+                title: "",
+                description: "",
+                template: "",
+                type: "PRACTICE",
+                maxAttempts: 3,
+                theory: ""
+              });
+            }}>
                   {t("cancel")}
                 </Button>
                 <Button onClick={handleCreateTask}>{t("create")}</Button>
               </div>
             </div>
-          </Modal>
-        )}
+          </Modal>}
 
-        {/* Модальне вікно редагування завдання */}
-        {showEditTask && editingTask && (
-          <Modal
-            open={showEditTask}
-            onClose={() => {
-              setShowEditTask(false);
-              setEditingTask(null);
-              setNewTask({ title: "", description: "", template: "", type: "PRACTICE", maxAttempts: 3 });
-            }}
-            title={tr("Редагувати завдання", "Edit task")}
-          >
+        {}
+        {showEditTask && editingTask && <Modal open={showEditTask} onClose={() => {
+        setShowEditTask(false);
+        setEditingTask(null);
+        setNewTask({
+          title: "",
+          description: "",
+          template: "",
+          type: "PRACTICE",
+          maxAttempts: 3
+        });
+      }} title={tr("Редагувати завдання", "Edit task")}>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Назва завдання", "Task title")} *</label>
-                <input
-                  type="text"
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  placeholder={tr("Назва завдання", "Task title")}
-                />
+                <input type="text" value={newTask.title} onChange={e => setNewTask({
+              ...newTask,
+              title: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Назва завдання", "Task title")} />
               </div>
 
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Умова завдання", "Task description")} *
-                  <Button
-                    variant="ghost"
-                    onClick={handleGenerateCondition}
-                    disabled={generatingCondition}
-                    className="ml-2 text-xs"
-                  >
+                  <Button variant="ghost" onClick={handleGenerateCondition} disabled={generatingCondition} className="ml-2 text-xs">
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingCondition ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
                 </label>
-                <textarea
-                  value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]"
-                  placeholder={tr("Умова завдання...", "Task description...")}
-                />
+                <textarea value={newTask.description} onChange={e => setNewTask({
+              ...newTask,
+              description: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Умова завдання...", "Task description...")} />
               </div>
 
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Шаблон коду", "Code template")} *
-                  <Button
-                    variant="ghost"
-                    onClick={handleGenerateTemplate}
-                    disabled={generatingTemplate}
-                    className="ml-2 text-xs"
-                  >
+                  <Button variant="ghost" onClick={handleGenerateTemplate} disabled={generatingTemplate} className="ml-2 text-xs">
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingTemplate ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
                 </label>
-                <textarea
-                  value={newTask.template}
-                  onChange={(e) => setNewTask({ ...newTask, template: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] font-mono text-sm"
-                  placeholder={tr("Шаблон коду...", "Code template...")}
-                />
+                <textarea value={newTask.template} onChange={e => setNewTask({
+              ...newTask,
+              template: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] font-mono text-sm" placeholder={tr("Шаблон коду...", "Code template...")} />
               </div>
 
-              {editingTask.type === "PRACTICE" && (
-                <div>
+              {editingTask.type === "PRACTICE" && <div>
                   <label className="block text-sm font-mono text-text-secondary mb-2">
                     {tr("Максимальна кількість спроб", "Max attempts")}
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newTask.maxAttempts}
-                    onChange={(e) => setNewTask({ ...newTask, maxAttempts: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  />
-                </div>
-              )}
+                  <input type="number" min="1" value={newTask.maxAttempts} onChange={e => setNewTask({
+              ...newTask,
+              maxAttempts: parseInt(e.target.value) || 1
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
+                </div>}
 
-              {editingTask.type === "PRACTICE" && (
-                <div>
+              {editingTask.type === "PRACTICE" && <div>
                   <label className="block text-sm font-mono text-text-secondary mb-2">
                     {tr("Складність (для генерації умови)", "Difficulty (for generation)")}
                   </label>
-                  <select
-                    value={taskDifficulty}
-                    onChange={(e) => setTaskDifficulty(e.target.value as "1" | "2" | "3" | "4" | "5")}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  >
+                  <select value={taskDifficulty} onChange={e => setTaskDifficulty(e.target.value as "1" | "2" | "3" | "4" | "5")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
                     <option value="1">{tr("Легка (1) - базові концепції", "Easy (1) — basics")}</option>
                     <option value="2">{tr("Проста (2) - прості алгоритми", "Simple (2) — simple algorithms")}</option>
                     <option value="3">{tr("Середня (3) - стандартні задачі", "Medium (3) — standard problems")}</option>
@@ -957,140 +794,100 @@ export const TopicDetailsPage: React.FC = () => {
                   <p className="text-xs text-text-muted mt-1">
                     {tr("Впливає на складність згенерованої умови завдання", "Affects the difficulty of the generated task description")}
                   </p>
-                </div>
-              )}
+                </div>}
 
               <div className="flex gap-2 justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowEditTask(false);
-                    setEditingTask(null);
-                    setNewTask({ title: "", description: "", template: "", type: "PRACTICE", maxAttempts: 3 });
-                  }}
-                >
+                <Button variant="ghost" onClick={() => {
+              setShowEditTask(false);
+              setEditingTask(null);
+              setNewTask({
+                title: "",
+                description: "",
+                template: "",
+                type: "PRACTICE",
+                maxAttempts: 3
+              });
+            }}>
                   {t("cancel")}
                 </Button>
                 <Button onClick={handleUpdateTask}>{t("save")}</Button>
               </div>
             </div>
-          </Modal>
-        )}
+          </Modal>}
 
-        {/* Модальне вікно призначення завдання */}
-        {showAssignTask && assigningTask && (
-          <Modal
-            open={showAssignTask}
-            onClose={() => {
-              setShowAssignTask(false);
-              setAssigningTask(null);
-              setAssignDeadline("");
-            }}
-            title={tr("Призначити завдання учням", "Assign task to students")}
-          >
+        {}
+        {showAssignTask && assigningTask && <Modal open={showAssignTask} onClose={() => {
+        setShowAssignTask(false);
+        setAssigningTask(null);
+        setAssignDeadline("");
+      }} title={tr("Призначити завдання учням", "Assign task to students")}>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Дедлайн", "Deadline")} *
                 </label>
-                <input
-                  type="datetime-local"
-                  value={assignDeadline}
-                  onChange={(e) => setAssignDeadline(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                />
+                <input type="datetime-local" value={assignDeadline} onChange={e => setAssignDeadline(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
               </div>
 
               <div className="flex gap-2 justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowAssignTask(false);
-                    setAssigningTask(null);
-                    setAssignDeadline("");
-                  }}
-                >
+                <Button variant="ghost" onClick={() => {
+              setShowAssignTask(false);
+              setAssigningTask(null);
+              setAssignDeadline("");
+            }}>
                   {t("cancel")}
                 </Button>
                 <Button onClick={handleAssignTask}>{tr("Призначити", "Assign")}</Button>
               </div>
             </div>
-          </Modal>
-        )}
+          </Modal>}
 
-        {/* Модальне вікно призначення контрольної роботи */}
-        {showAssignControlWork && assigningControlWork && (
-          <Modal
-            open={showAssignControlWork}
-            onClose={() => {
-              setShowAssignControlWork(false);
-              setAssigningControlWork(null);
-              setAssignDeadline("");
-            }}
-            title={tr("Призначити контрольну роботу учням", "Assign control work to students")}
-          >
+        {}
+        {showAssignControlWork && assigningControlWork && <Modal open={showAssignControlWork} onClose={() => {
+        setShowAssignControlWork(false);
+        setAssigningControlWork(null);
+        setAssignDeadline("");
+      }} title={tr("Призначити контрольну роботу учням", "Assign control work to students")}>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Дедлайн", "Deadline")} *
                 </label>
-                <input
-                  type="datetime-local"
-                  value={assignDeadline}
-                  onChange={(e) => setAssignDeadline(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                />
+                <input type="datetime-local" value={assignDeadline} onChange={e => setAssignDeadline(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
               </div>
 
               <div className="flex gap-2 justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowAssignControlWork(false);
-                    setAssigningControlWork(null);
-                    setAssignDeadline("");
-                  }}
-                >
+                <Button variant="ghost" onClick={() => {
+              setShowAssignControlWork(false);
+              setAssigningControlWork(null);
+              setAssignDeadline("");
+            }}>
                   {t("cancel")}
                 </Button>
                 <Button onClick={handleAssignControlWork}>{tr("Призначити", "Assign")}</Button>
               </div>
             </div>
-          </Modal>
-        )}
+          </Modal>}
 
-        {/* Модальне вікно додавання теорії */}
-        {showTaskTheory && (
-          <Modal
-            open={showTaskTheory}
-            onClose={() => {
-              setShowTaskTheory(false);
-              setTaskTheory("");
-              setSelectedTaskId(null);
-            }}
-            title={tr("Теорія до завдання", "Task theory")}
-          >
+        {}
+        {showTaskTheory && <Modal open={showTaskTheory} onClose={() => {
+        setShowTaskTheory(false);
+        setTaskTheory("");
+        setSelectedTaskId(null);
+      }} title={tr("Теорія до завдання", "Task theory")}>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Контент теорії (Markdown)", "Theory content (Markdown)")}
                 </label>
-                <textarea
-                  value={taskTheory}
-                  onChange={(e) => setTaskTheory(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[300px]"
-                  placeholder={tr("Введіть теорію...", "Enter theory...")}
-                />
+                <textarea value={taskTheory} onChange={e => setTaskTheory(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[300px]" placeholder={tr("Введіть теорію...", "Enter theory...")} />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowTaskTheory(false);
-                    setTaskTheory("");
-                    setSelectedTaskId(null);
-                  }}
-                >
+                <Button variant="ghost" onClick={() => {
+              setShowTaskTheory(false);
+              setTaskTheory("");
+              setSelectedTaskId(null);
+            }}>
                   {t("cancel")}
                 </Button>
                 <Button onClick={() => selectedTaskId && handleAddTheory(selectedTaskId)}>
@@ -1098,43 +895,28 @@ export const TopicDetailsPage: React.FC = () => {
                 </Button>
               </div>
             </div>
-          </Modal>
-        )}
+          </Modal>}
 
-        {/* Модальне вікно створення контрольної роботи */}
-        {showCreateControlWork && (
-          <Modal
-            open={showCreateControlWork}
-            onClose={() => {
-              setShowCreateControlWork(false);
-              setNewControlWorkTitle("");
-            }}
-            title={t('createControlWork')}
-          >
+        {}
+        {showCreateControlWork && <Modal open={showCreateControlWork} onClose={() => {
+        setShowCreateControlWork(false);
+        setNewControlWorkTitle("");
+      }} title={t('createControlWork')}>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Назва контрольної роботи", "Control work title")} ({t('optional')})
                 </label>
-                <input
-                  type="text"
-                  value={newControlWorkTitle}
-                  onChange={(e) => setNewControlWorkTitle(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  placeholder={tr("Наприклад: Контрольна робота №1", "Example: Control work #1")}
-                />
+                <input type="text" value={newControlWorkTitle} onChange={e => setNewControlWorkTitle(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Наприклад: Контрольна робота №1", "Example: Control work #1")} />
                 <p className="text-xs text-text-muted mt-1">
                   {tr('Якщо не вказано, буде використано "Контрольна робота #ID"', 'If empty, we will use "Control work #ID"')}
                 </p>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowCreateControlWork(false);
-                    setNewControlWorkTitle("");
-                  }}
-                >
+                <Button variant="ghost" onClick={() => {
+              setShowCreateControlWork(false);
+              setNewControlWorkTitle("");
+            }}>
                   {t('cancel')}
                 </Button>
                 <Button onClick={handleCreateControlWork}>
@@ -1142,42 +924,24 @@ export const TopicDetailsPage: React.FC = () => {
                 </Button>
               </div>
             </div>
-          </Modal>
-        )}
+          </Modal>}
 
-        {/* Модальне вікно управління тестовими даними */}
-        {showTestDataModal && testDataTaskId && (
-          <Modal
-            open={showTestDataModal}
-            onClose={() => {
-              setShowTestDataModal(false);
-              setTestDataTaskId(null);
-              setTestDataList([]);
-              setEditingTestIndex(null);
-              setEditingTest(null);
-            }}
-            title={tr("Тестові дані для перевірки завдання", "Test data for checking")}
-          >
+        {}
+        {showTestDataModal && testDataTaskId && <Modal open={showTestDataModal} onClose={() => {
+        setShowTestDataModal(false);
+        setTestDataTaskId(null);
+        setTestDataList([]);
+        setEditingTestIndex(null);
+        setEditingTest(null);
+      }} title={tr("Тестові дані для перевірки завдання", "Test data for checking")}>
             <div className="space-y-4 max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Button
-                    onClick={handleGenerateTestData}
-                    disabled={generatingTestData}
-                    className="text-xs"
-                  >
+                  <Button onClick={handleGenerateTestData} disabled={generatingTestData} className="text-xs">
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingTestData ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={newTestCount}
-                    onChange={(e) => setNewTestCount(parseInt(e.target.value) || 10)}
-                    className="w-20 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs"
-                    placeholder={tr("Кількість", "Count")}
-                  />
+                  <input type="number" min="1" max="20" value={newTestCount} onChange={e => setNewTestCount(parseInt(e.target.value) || 10)} className="w-20 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs" placeholder={tr("Кількість", "Count")} />
                   <span className="text-xs text-text-secondary">{tr("тестів", "tests")}</span>
                 </div>
                 <Button onClick={handleAddTestData} variant="ghost" className="text-xs">
@@ -1187,37 +951,22 @@ export const TopicDetailsPage: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                {testDataList.length === 0 ? (
-                  <p className="text-text-secondary text-sm text-center py-4">
+                {testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
                     {tr("Немає тестових даних. Згенеруйте або додайте вручну.", "No test data. Generate or add manually.")}
-                  </p>
-                ) : (
-                  testDataList.map((test, index) => (
-                    <Card key={test.id} className="p-3">
-                      {editingTestIndex === index ? (
-                        <div className="space-y-2">
+                  </p> : testDataList.map((test, index) => <Card key={test.id} className="p-3">
+                      {editingTestIndex === index ? <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-mono text-text-secondary">
                               {tr("Тест", "Test")} #{index + 1}
                             </span>
                             <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                onClick={() => handleUpdateTestData(test.id)}
-                                className="text-xs p-1 h-6 w-6 flex items-center justify-center"
-                                title={t("save")}
-                              >
+                              <Button variant="ghost" onClick={() => handleUpdateTestData(test.id)} className="text-xs p-1 h-6 w-6 flex items-center justify-center" title={t("save")}>
                                 <Save className="w-3 h-3" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingTestIndex(null);
-                                  setEditingTest(null);
-                                }}
-                                className="text-xs p-1 h-6 w-6 flex items-center justify-center"
-                                title={t("cancel")}
-                              >
+                              <Button variant="ghost" onClick={() => {
+                      setEditingTestIndex(null);
+                      setEditingTest(null);
+                    }} className="text-xs p-1 h-6 w-6 flex items-center justify-center" title={t("cancel")}>
                                 <X className="w-3 h-3" />
                               </Button>
                             </div>
@@ -1226,60 +975,46 @@ export const TopicDetailsPage: React.FC = () => {
                             <label className="block text-xs font-mono text-text-secondary mb-1">
                               {tr("Вхідні дані", "Input")}
                             </label>
-                            <textarea
-                              value={editingTest?.input || ""}
-                              onChange={(e) => setEditingTest({ ...editingTest!, input: e.target.value })}
-                              placeholder={tr("Наприклад: 5 10", "Example: 5 10")}
-                              className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                            />
+                            <textarea value={editingTest?.input || ""} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    input: e.target.value
+                  })} placeholder={tr("Наприклад: 5 10", "Example: 5 10")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                           </div>
                           <div>
                             <label className="block text-xs font-mono text-text-secondary mb-1">
                               {tr("Очікуваний вивід", "Expected output")}
                             </label>
-                            <textarea
-                              value={editingTest?.expectedOutput || ""}
-                              onChange={(e) => setEditingTest({ ...editingTest!, expectedOutput: e.target.value })}
-                              placeholder={tr("Наприклад: 15", "Example: 15")}
-                              className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                            />
+                            <textarea value={editingTest?.expectedOutput || ""} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    expectedOutput: e.target.value
+                  })} placeholder={tr("Наприклад: 15", "Example: 15")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                           </div>
                           <div>
                             <label className="block text-xs font-mono text-text-secondary mb-1">
                               {tr("Бали", "Points")}
                             </label>
-                            <input
-                              type="number"
-                              min="1"
-                              max="12"
-                              value={editingTest?.points || 1}
-                              onChange={(e) => setEditingTest({ ...editingTest!, points: parseInt(e.target.value) || 1 })}
-                              className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                            />
+                            <input type="number" min="1" max="12" value={editingTest?.points || 1} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    points: parseInt(e.target.value) || 1
+                  })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                           </div>
-                        </div>
-                      ) : (
-                        <div>
+                        </div> : <div>
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs font-mono text-text-secondary">
                               {tr("Тест", "Test")} #{index + 1} • {test.points} {tr("балів", "points")}
                             </span>
                             <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  setEditingTestIndex(index);
-                                  setEditingTest({ input: test.input, expectedOutput: test.expectedOutput, points: test.points });
-                                }}
-                                className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast"
-                                title={tr("Редагувати", "Edit")}
-                              >
+                              <button onClick={() => {
+                      setEditingTestIndex(index);
+                      setEditingTest({
+                        input: test.input,
+                        expectedOutput: test.expectedOutput,
+                        points: test.points
+                      });
+                    }} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={tr("Редагувати", "Edit")}>
                                 <Edit2 className="w-4 h-4 text-primary" />
                               </button>
-                              <button
-                                onClick={() => handleDeleteTestData(test.id)}
-                                className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast"
-                                title={t('delete')}
-                              >
+                              <button onClick={() => handleDeleteTestData(test.id)} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t('delete')}>
                                 <Trash2 className="w-4 h-4 text-accent-error" />
                               </button>
                             </div>
@@ -1292,17 +1027,11 @@ export const TopicDetailsPage: React.FC = () => {
                               <strong>{tr("Вивід", "Output")}:</strong> {test.expectedOutput || tr("(порожньо)", "(empty)")}
                             </div>
                           </div>
-                        </div>
-                      )}
-                    </Card>
-                  ))
-                )}
+                        </div>}
+                    </Card>)}
               </div>
             </div>
-          </Modal>
-        )}
+          </Modal>}
       </div>
-    </div>
-  );
+    </div>;
 };
-

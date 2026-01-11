@@ -1,7 +1,4 @@
-// frontend/src/lib/api/edu.ts
 import { api } from "./client";
-
-// Student Login
 export interface StudentLoginResponse {
   token: string;
   student: {
@@ -16,20 +13,17 @@ export interface StudentLoginResponse {
     language: "JAVA" | "PYTHON";
   };
 }
-
-export async function studentLogin(
-  username: string,
-  password: string
-): Promise<StudentLoginResponse> {
-  const res = await api.post("/edu/student-login", { username, password });
+export async function studentLogin(username: string, password: string): Promise<StudentLoginResponse> {
+  const res = await api.post("/edu/student-login", {
+    username,
+    password
+  });
   if (res.data.token) {
     localStorage.setItem("token", res.data.token);
     localStorage.setItem("userType", "STUDENT");
   }
   return res.data;
 }
-
-// Types
 export interface Class {
   id: number;
   name: string;
@@ -37,7 +31,6 @@ export interface Class {
   studentsCount: number;
   createdAt: string;
 }
-
 export interface Student {
   id: number;
   firstName: string;
@@ -47,7 +40,6 @@ export interface Student {
   generatedUsername: string;
   createdAt: string;
 }
-
 export interface StudentCredentials {
   firstName: string;
   lastName: string;
@@ -56,10 +48,9 @@ export interface StudentCredentials {
   username: string;
   password: string;
 }
-
 export interface Lesson {
   id: number;
-  type: "TOPIC" | "CONTROL" | "LESSON"; // TOPIC - практичні завдання з теми, CONTROL - контрольна робота, LESSON - для сумісності
+  type: "TOPIC" | "CONTROL" | "LESSON";
   title: string;
   parentTopicId?: number;
   parentTopicTitle?: string;
@@ -93,18 +84,18 @@ export interface Lesson {
       index: number;
       question: string;
       options: Record<string, string>;
-      correct: string; // А/Б/В/Г/Д
-      student: string | null; // А/Б/В/Г/Д
+      correct: string;
+      student: string | null;
       isCorrect: boolean;
     }>;
   } | null;
-  deadline?: string | null; // Дедлайн уроку
+  deadline?: string | null;
   tasks?: Array<{
     id: number;
     title: string;
     description?: string;
     template?: string;
-    deadline?: string | null; // Дедлайн завдання
+    deadline?: string | null;
     maxAttempts?: number;
     isClosed?: boolean;
     testDataCount?: number;
@@ -121,11 +112,10 @@ export interface Lesson {
         actual: string;
         stderr?: string;
         passed: boolean;
-      }> | null; // Збережені результати тестів
+      }> | null;
     };
-  }>; // Завдання з дедлайнами
+  }>;
 }
-
 export interface Task {
   id: number;
   title: string;
@@ -134,7 +124,6 @@ export interface Task {
   testDataCount: number;
   createdAt: string;
 }
-
 export interface TaskWithGrade {
   id: number;
   title: string;
@@ -142,7 +131,7 @@ export interface TaskWithGrade {
   template: string;
   language: "JAVA" | "PYTHON";
   testDataCount: number;
-  savedCode?: string; // Збережений код учня
+  savedCode?: string;
   maxAttempts?: number;
   deadline?: string | null;
   isClosed?: boolean;
@@ -150,7 +139,7 @@ export interface TaskWithGrade {
   lesson: {
     id: number;
     title: string;
-    type: "TOPIC" | "CONTROL" | "LESSON"; // TOPIC - практичні завдання з теми, CONTROL - контрольна робота, LESSON - для сумісності
+    type: "TOPIC" | "CONTROL" | "LESSON";
     hasTheory: boolean;
     theory?: string;
     timeLimitMinutes?: number;
@@ -167,19 +156,19 @@ export interface TaskWithGrade {
     testsPassed: number;
     testsTotal: number;
     feedback?: string;
+    isManuallyGraded?: boolean;
     isCompleted?: boolean;
     createdAt: string;
-    submittedCode?: string; // Код, який відправив студент
+    submittedCode?: string;
     testResults?: Array<{
       input: string;
       expected: string;
       actual: string;
       stderr?: string;
       passed: boolean;
-    }> | null; // Збережені результати тестів
+    }> | null;
   };
 }
-
 export interface Grade {
   id: number;
   total: number;
@@ -196,10 +185,25 @@ export interface Grade {
       title: string;
       type: "LESSON" | "CONTROL";
       theory?: string | null;
-    };
-  };
+    } | null;
+  } | null;
+  topicTask?: {
+    id: number;
+    title: string;
+    topicId?: number | null;
+    topicTitle?: string | null;
+    controlWorkId?: number | null;
+    controlWorkTitle?: string | null;
+  } | null;
+  submittedCode?: string | null;
+  testResults?: Array<{
+    input: string;
+    expected: string;
+    actual: string;
+    stderr?: string;
+    passed: boolean;
+  }> | null;
 }
-
 export interface TestResult {
   testId?: number;
   input: string;
@@ -207,38 +211,33 @@ export interface TestResult {
   stderr?: string;
   passed: boolean;
 }
-
-// Teacher Registration
-export async function registerTeacher(
-  username: string,
-  email: string,
-  password: string,
-  language: "JAVA" | "PYTHON"
-): Promise<{ token?: string; user?: any; requiresEmailVerification?: boolean }> {
+export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON"): Promise<{
+  token?: string;
+  user?: any;
+  requiresEmailVerification?: boolean;
+}> {
   const res = await api.post("/edu/register-teacher", {
     username,
     email,
     password,
-    language,
+    language
   });
   if (res.data.token) {
     localStorage.setItem("token", res.data.token);
   }
   return res.data;
 }
-
-// Classes
 export async function createClass(name: string, language: "JAVA" | "PYTHON"): Promise<Class> {
-  const res = await api.post("/edu/classes", { name, language });
+  const res = await api.post("/edu/classes", {
+    name,
+    language
+  });
   return res.data.class;
 }
-
 export async function getClasses(): Promise<Class[]> {
   const res = await api.get("/edu/classes");
   return res.data.classes;
 }
-
-// Students
 export interface AddStudentsRequest {
   students: Array<{
     firstName: string;
@@ -247,44 +246,42 @@ export interface AddStudentsRequest {
     email: string;
   }>;
 }
-
-export async function addStudents(
-  classId: number,
-  students: AddStudentsRequest["students"]
-): Promise<{ count: number; credentials: StudentCredentials[] }> {
-  const res = await api.post(`/edu/classes/${classId}/students`, { students });
+export async function addStudents(classId: number, students: AddStudentsRequest["students"]): Promise<{
+  count: number;
+  credentials: StudentCredentials[];
+}> {
+  const res = await api.post(`/edu/classes/${classId}/students`, {
+    students
+  });
   return res.data;
 }
-
 export async function getStudents(classId: number): Promise<Student[]> {
   const res = await api.get(`/edu/classes/${classId}/students`);
   return res.data.students;
 }
-
 export async function exportStudents(classId: number, withPasswords?: boolean): Promise<Blob> {
   const query = withPasswords ? "?withPasswords=1" : "";
   const res = await api.get(`/edu/classes/${classId}/students/export${query}`, {
-    responseType: "blob",
+    responseType: "blob"
   });
   return res.data;
 }
-
-export async function importStudents(
-  classId: number,
-  csvData: string
-): Promise<{ count: number; credentials: StudentCredentials[] }> {
+export async function importStudents(classId: number, csvData: string): Promise<{
+  count: number;
+  credentials: StudentCredentials[];
+}> {
   const res = await api.post(`/edu/classes/${classId}/students/import`, {
-    csvData,
+    csvData
   });
   return res.data;
 }
-
-export async function regeneratePassword(studentId: number): Promise<{ username: string; password: string }> {
+export async function regeneratePassword(studentId: number): Promise<{
+  username: string;
+  password: string;
+}> {
   const res = await api.post(`/edu/students/${studentId}/regenerate-password`);
   return res.data;
 }
-
-// Lessons
 export interface CreateLessonRequest {
   type: "LESSON" | "CONTROL";
   title: string;
@@ -294,39 +291,33 @@ export interface CreateLessonRequest {
   controlHasTheory?: boolean;
   controlHasPractice?: boolean;
 }
-
 export async function createLesson(classId: number, lesson: CreateLessonRequest): Promise<Lesson> {
   const res = await api.post(`/edu/classes/${classId}/lessons`, lesson);
   return res.data.lesson;
 }
-
 export async function getLessons(classId: number): Promise<Lesson[]> {
   const res = await api.get(`/edu/classes/${classId}/lessons`);
   return res.data.lessons;
 }
-
-// Control Work Formula API
 export interface ControlWork {
   id: number;
   title: string | null;
   formula: string | null;
   topicId: number;
 }
-
-export async function updateControlWorkFormula(
-  controlWorkId: number,
-  formula: string | null
-): Promise<{ message: string; controlWorkId: number }> {
-  const res = await api.put(`/edu/control-works/${controlWorkId}/formula`, { formula });
+export async function updateControlWorkFormula(controlWorkId: number, formula: string | null): Promise<{
+  message: string;
+  controlWorkId: number;
+}> {
+  const res = await api.put(`/edu/control-works/${controlWorkId}/formula`, {
+    formula
+  });
   return res.data;
 }
-
 export async function getStudentLessons(): Promise<Lesson[]> {
   const res = await api.get(`/edu/students/me/lessons`);
   return res.data.lessons;
 }
-
-// Topics API
 export interface Topic {
   id: number;
   title: string;
@@ -336,7 +327,6 @@ export interface Topic {
   tasks?: any[];
   controlWorks?: any[];
 }
-
 export async function getTopics(classId?: number, language?: "JAVA" | "PYTHON"): Promise<Topic[]> {
   const params = new URLSearchParams();
   if (classId) params.append("classId", classId.toString());
@@ -344,61 +334,69 @@ export async function getTopics(classId?: number, language?: "JAVA" | "PYTHON"):
   const res = await api.get(`/topics?${params.toString()}`);
   return res.data.topics || [];
 }
-
-export async function getLesson(
-  lessonId: number,
-  type?: "TOPIC" | "CONTROL" | "LESSON"
-): Promise<Lesson & { tasks: Task[] }> {
+export async function getLesson(lessonId: number, type?: "TOPIC" | "CONTROL" | "LESSON"): Promise<Lesson & {
+  tasks: Task[];
+}> {
   const qs = type ? `?type=${encodeURIComponent(type)}` : "";
   const res = await api.get(`/edu/lessons/${lessonId}${qs}`);
   return res.data.lesson;
 }
-
-export async function generateTheory(lessonId: number, topicTitle: string): Promise<{ theory: string }> {
-  const res = await api.post(`/edu/lessons/${lessonId}/generate-theory`, { topicTitle });
+export async function generateTheory(lessonId: number, topicTitle: string): Promise<{
+  theory: string;
+}> {
+  const res = await api.post(`/edu/lessons/${lessonId}/generate-theory`, {
+    topicTitle
+  });
   return res.data;
 }
-
-export async function generateTheoryPreview(topicTitle: string, language: "JAVA" | "PYTHON"): Promise<{ theory: string }> {
-  const res = await api.post(`/edu/generate-theory`, { topicTitle, language });
+export async function generateTheoryPreview(topicTitle: string, language: "JAVA" | "PYTHON"): Promise<{
+  theory: string;
+}> {
+  const res = await api.post(`/edu/generate-theory`, {
+    topicTitle,
+    language
+  });
   return res.data;
 }
-
 export async function generateQuiz(lessonId: number, count?: number, topicTitle?: string): Promise<{
   count: number;
   quiz: any[];
   quizJson: string;
 }> {
-  const res = await api.post(`/edu/lessons/${lessonId}/generate-quiz`, { count, topicTitle });
+  const res = await api.post(`/edu/lessons/${lessonId}/generate-quiz`, {
+    count,
+    topicTitle
+  });
   return res.data;
 }
-
 export async function saveQuiz(lessonId: number, quiz: any[]): Promise<void> {
-  await api.put(`/edu/lessons/${lessonId}/quiz`, { quiz });
+  await api.put(`/edu/lessons/${lessonId}/quiz`, {
+    quiz
+  });
 }
-
-// Tasks
 export interface CreateTaskRequest {
   title: string;
   description: string;
   template: string;
 }
-
 export async function createTask(lessonId: number, task: CreateTaskRequest): Promise<Task> {
   const res = await api.post(`/edu/lessons/${lessonId}/tasks`, task);
   return res.data.task;
 }
-
 export async function getTask(taskId: number): Promise<TaskWithGrade> {
   const res = await api.get(`/edu/tasks/${taskId}`);
   return res.data.task;
 }
-
-export async function runCode(taskId: number, code: string, input?: string): Promise<{ output: string; stderr?: string }> {
-  const res = await api.post(`/edu/tasks/${taskId}/run`, { code, input });
+export async function runCode(taskId: number, code: string, input?: string): Promise<{
+  output: string;
+  stderr?: string;
+}> {
+  const res = await api.post(`/edu/tasks/${taskId}/run`, {
+    code,
+    input
+  });
   return res.data;
 }
-
 export async function submitCode(taskId: number, code: string): Promise<{
   message?: string;
   grade: {
@@ -411,10 +409,11 @@ export async function submitCode(taskId: number, code: string): Promise<{
   testResults?: TestResult[];
   requiresManualReview?: boolean;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/submit`, { code });
+  const res = await api.post(`/edu/tasks/${taskId}/submit`, {
+    code
+  });
   return res.data;
 }
-
 export async function completeTask(taskId: number, code: string): Promise<{
   message?: string;
   grade: {
@@ -428,11 +427,11 @@ export async function completeTask(taskId: number, code: string): Promise<{
   testResults?: TestResult[];
   requiresManualReview?: boolean;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/complete`, { code });
+  const res = await api.post(`/edu/tasks/${taskId}/complete`, {
+    code
+  });
   return res.data;
 }
-
-// Test Data
 export async function generateTestData(taskId: number, count: number): Promise<{
   count: number;
   testData: Array<{
@@ -441,85 +440,94 @@ export async function generateTestData(taskId: number, count: number): Promise<{
     points: number;
   }>;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/test-data/generate`, { count });
+  const res = await api.post(`/edu/tasks/${taskId}/test-data/generate`, {
+    count
+  });
   return res.data;
 }
-
 export interface TestDataItem {
-  input: string;
-  expectedOutput: string; // write-only (never returned by API)
-  points: number;
-  isHidden?: boolean;
-}
-
-export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{ count: number }> {
-  const res = await api.post(`/edu/tasks/${taskId}/test-data`, { testData });
-  return res.data;
-}
-
-export interface TestData {
-  id: number;
   input: string;
   expectedOutput: string;
   points: number;
+  isHidden?: boolean;
 }
-
-export async function getTestData(taskId: number): Promise<{ testData: TestData[] }> {
+export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{
+  count: number;
+}> {
+  const res = await api.post(`/edu/tasks/${taskId}/test-data`, {
+    testData
+  });
+  return res.data;
+}
+export interface TestData {
+  id: number;
+  input: string;
+  expectedOutput?: string;
+  points: number;
+}
+export async function getTestData(taskId: number): Promise<{
+  testData: TestData[];
+}> {
   const res = await api.get(`/edu/tasks/${taskId}/test-data`);
   return res.data;
 }
-
-export async function updateTestData(
-  taskId: number,
-  testDataId: number,
-  update: { input?: string; expectedOutput?: string; points?: number }
-): Promise<{ message: string; testData: TestData }> {
+export async function updateTestData(taskId: number, testDataId: number, update: {
+  input?: string;
+  expectedOutput?: string;
+  points?: number;
+}): Promise<{
+  message: string;
+  testData: TestData;
+}> {
   const res = await api.put(`/edu/tasks/${taskId}/test-data/${testDataId}`, update);
   return res.data;
 }
-
-export async function deleteTestData(taskId: number, testDataId: number): Promise<{ message: string }> {
+export async function deleteTestData(taskId: number, testDataId: number): Promise<{
+  message: string;
+}> {
   const res = await api.delete(`/edu/tasks/${taskId}/test-data/${testDataId}`);
   return res.data;
 }
-
 export interface UpdateTaskDetailsRequest {
   maxAttempts?: number;
   deadline?: string | null;
   isClosed?: boolean;
 }
-
-export async function updateTaskDetails(
-  taskId: number,
-  update: UpdateTaskDetailsRequest
-): Promise<{ message: string; task: { id: number; maxAttempts: number; deadline: string | null; isClosed: boolean } }> {
+export async function updateTaskDetails(taskId: number, update: UpdateTaskDetailsRequest): Promise<{
+  message: string;
+  task: {
+    id: number;
+    maxAttempts: number;
+    deadline: string | null;
+    isClosed: boolean;
+  };
+}> {
   const res = await api.put(`/edu/tasks/${taskId}`, update);
   return res.data;
 }
-
 export interface CreateManualGradeRequest {
   total: number;
   feedback?: string;
 }
-
-export async function createManualGrade(
-  taskId: number,
-  studentId: number,
-  grade: CreateManualGradeRequest
-): Promise<{ message: string; grade: { id: number; total: number; feedback?: string; isManuallyGraded: boolean } }> {
+export async function createManualGrade(taskId: number, studentId: number, grade: CreateManualGradeRequest): Promise<{
+  message: string;
+  grade: {
+    id: number;
+    total: number;
+    feedback?: string;
+    isManuallyGraded: boolean;
+  };
+}> {
   const res = await api.post(`/edu/tasks/${taskId}/grades/${studentId}`, grade);
   return res.data;
 }
-
-export async function deleteTaskGrade(
-  taskId: number,
-  studentId: number
-): Promise<{ message: string; deleted: number }> {
+export async function deleteTaskGrade(taskId: number, studentId: number): Promise<{
+  message: string;
+  deleted: number;
+}> {
   const res = await api.delete(`/edu/tasks/${taskId}/grades/${studentId}`);
   return res.data;
 }
-
-// Student Info
 export async function getMyStudentInfo(): Promise<{
   student: {
     id: number;
@@ -537,8 +545,6 @@ export async function getMyStudentInfo(): Promise<{
   const res = await api.get("/edu/students/me");
   return res.data;
 }
-
-// Grades (for students)
 export type SummaryGrade = {
   id: number;
   name: string;
@@ -547,20 +553,18 @@ export type SummaryGrade = {
   assessmentType?: "PRACTICE" | "INTERMEDIATE" | "CONTROL";
   controlWorkId?: number | null;
   controlWorkTitle?: string | null;
+  topicId?: number | null;
+  topicTitle?: string | null;
   createdAt: string;
 };
-
 export interface StudentGradesResponse {
   grades: Grade[];
   summaryGrades: SummaryGrade[];
 }
-
 export async function getStudentGrades(studentId: number): Promise<StudentGradesResponse> {
   const res = await api.get(`/edu/students/${studentId}/grades`);
   return res.data;
 }
-
-// Grades (for teachers)
 export interface TaskGrade {
   student: {
     id: number;
@@ -579,12 +583,10 @@ export interface TaskGrade {
     createdAt: string;
   } | null;
 }
-
 export async function getTaskGrades(taskId: number): Promise<TaskGrade[]> {
   const res = await api.get(`/edu/tasks/${taskId}/grades`);
   return res.data.students;
 }
-
 export async function getStudentCode(gradeId: number): Promise<{
   code: string;
   grade: {
@@ -609,12 +611,10 @@ export async function getStudentCode(gradeId: number): Promise<{
   const res = await api.get(`/edu/grades/${gradeId}/code`);
   return res.data;
 }
-
 export interface UpdateGradeRequest {
   total?: number;
   feedback?: string;
 }
-
 export async function updateGrade(gradeId: number, update: UpdateGradeRequest): Promise<{
   message: string;
   grade: {
@@ -627,7 +627,6 @@ export async function updateGrade(gradeId: number, update: UpdateGradeRequest): 
   const res = await api.put(`/edu/grades/${gradeId}`, update);
   return res.data;
 }
-
 export interface PendingReview {
   gradeId: number;
   student: {
@@ -655,13 +654,12 @@ export interface PendingReview {
   submittedAt: string;
   system: "old" | "new";
 }
-
-export async function getPendingReviews(): Promise<{ pendingReviews: PendingReview[] }> {
+export async function getPendingReviews(): Promise<{
+  pendingReviews: PendingReview[];
+}> {
   const res = await api.get("/edu/tasks/pending-review");
   return res.data;
 }
-
-// Class Announcements
 export interface ClassAnnouncementDto {
   id: number;
   title: string | null;
@@ -674,43 +672,49 @@ export interface ClassAnnouncementDto {
     name: string;
   };
 }
-
-export async function getClassAnnouncements(classId: number): Promise<{ announcements: ClassAnnouncementDto[] }> {
+export async function getClassAnnouncements(classId: number): Promise<{
+  announcements: ClassAnnouncementDto[];
+}> {
   const res = await api.get(`/edu/classes/${classId}/announcements`);
   return res.data;
 }
-
-export async function createClassAnnouncement(
-  classId: number,
-  payload: { title?: string | null; content: string; pinned?: boolean }
-): Promise<{ message: string; id: number }> {
+export async function createClassAnnouncement(classId: number, payload: {
+  title?: string | null;
+  content: string;
+  pinned?: boolean;
+}): Promise<{
+  message: string;
+  id: number;
+}> {
   const res = await api.post(`/edu/classes/${classId}/announcements`, payload);
   return res.data;
 }
-
-export async function updateClassAnnouncement(
-  classId: number,
-  id: number,
-  payload: { title?: string | null; content?: string; pinned?: boolean }
-): Promise<{ message: string }> {
+export async function updateClassAnnouncement(classId: number, id: number, payload: {
+  title?: string | null;
+  content?: string;
+  pinned?: boolean;
+}): Promise<{
+  message: string;
+}> {
   const res = await api.put(`/edu/classes/${classId}/announcements/${id}`, payload);
   return res.data;
 }
-
-export async function deleteClassAnnouncement(classId: number, id: number): Promise<{ message: string }> {
+export async function deleteClassAnnouncement(classId: number, id: number): Promise<{
+  message: string;
+}> {
   const res = await api.delete(`/edu/classes/${classId}/announcements/${id}`);
   return res.data;
 }
-
 export async function getMyAnnouncements(): Promise<{
-  class: { id: number; name: string };
+  class: {
+    id: number;
+    name: string;
+  };
   announcements: ClassAnnouncementDto[];
 }> {
   const res = await api.get(`/edu/students/me/announcements`);
   return res.data;
 }
-
-// Summary Grades
 export interface CreateSummaryGradeRequest {
   name: string;
   topicId: number;
@@ -719,52 +723,41 @@ export interface CreateSummaryGradeRequest {
     grade: number;
   }>;
 }
-
-export async function createSummaryGrade(
-  classId: number,
-  request: CreateSummaryGradeRequest
-): Promise<{ count: number }> {
+export async function createSummaryGrade(classId: number, request: CreateSummaryGradeRequest): Promise<{
+  count: number;
+}> {
   const res = await api.post(`/edu/classes/${classId}/summary-grades`, request);
   return res.data;
 }
-
 export interface SummaryGradeGroup {
   name: string;
   grades: Array<{
-    id: number; // ID для редагування
+    id: number;
     studentId: number;
     studentName: string;
     grade: number;
     createdAt: string;
   }>;
 }
-
 export async function getSummaryGrades(classId: number): Promise<SummaryGradeGroup[]> {
   const res = await api.get(`/edu/classes/${classId}/summary-grades`);
   return res.data.summaryGrades;
 }
-
-export async function updateSummaryGrade(
-  classId: number,
-  summaryGradeId: number,
-  grade: number
-): Promise<void> {
-  await api.put(`/edu/classes/${classId}/summary-grades/${summaryGradeId}`, { grade });
+export async function updateSummaryGrade(classId: number, summaryGradeId: number, grade: number): Promise<void> {
+  await api.put(`/edu/classes/${classId}/summary-grades/${summaryGradeId}`, {
+    grade
+  });
 }
-
-export async function deleteSummaryGrade(
-  classId: number,
-  summaryGradeId: number
-): Promise<void> {
+export async function deleteSummaryGrade(classId: number, summaryGradeId: number): Promise<void> {
   await api.delete(`/edu/classes/${classId}/summary-grades/${summaryGradeId}`);
 }
-
-export async function deleteThematicForTopic(classId: number, topicId: number): Promise<{ message: string; deleted: number }> {
+export async function deleteThematicForTopic(classId: number, topicId: number): Promise<{
+  message: string;
+  deleted: number;
+}> {
   const res = await api.delete(`/edu/classes/${classId}/topics/${topicId}/thematic`);
   return res.data;
 }
-
-// Gradebook
 export interface GradebookStudent {
   studentId: number;
   studentName: string;
@@ -781,7 +774,6 @@ export interface GradebookStudent {
     isSummaryGrade?: boolean;
   }>;
 }
-
 export interface GradebookLesson {
   id: number;
   title: string;
@@ -794,17 +786,14 @@ export interface GradebookLesson {
     type?: string;
   }>;
 }
-
 export interface GradebookResponse {
   students: GradebookStudent[];
   lessons: GradebookLesson[];
 }
-
 export async function getClassGradebook(classId: number): Promise<GradebookResponse> {
   const res = await api.get(`/edu/classes/${classId}/gradebook`);
   return res.data;
 }
-
 export interface ControlWorkDetails {
   controlWork: {
     id: number;
@@ -830,12 +819,10 @@ export interface ControlWorkDetails {
   averagePracticeGrade: number;
   calculatedGrade: number | null;
 }
-
 export async function getControlWorkDetails(controlWorkId: number, studentId: number): Promise<ControlWorkDetails> {
   const res = await api.get(`/edu/control-works/${controlWorkId}/students/${studentId}/details`);
   return res.data;
 }
-
 export interface TopicTaskStudentWork {
   task: {
     id: number;
@@ -864,12 +851,10 @@ export interface TopicTaskStudentWork {
     updatedAt: string | null;
   }>;
 }
-
 export async function getTopicTaskStudentWork(taskId: number, studentId: number): Promise<TopicTaskStudentWork> {
   const res = await api.get(`/edu/topic-tasks/${taskId}/students/${studentId}/work`);
   return res.data;
 }
-
 export interface ControlWorkStudentWork {
   controlWork: {
     id: number;
@@ -916,35 +901,29 @@ export interface ControlWorkStudentWork {
     createdAt: string | null;
   }>;
 }
-
 export async function getControlWorkStudentWork(controlWorkId: number, studentId: number): Promise<ControlWorkStudentWork> {
   const res = await api.get(`/edu/control-works/${controlWorkId}/students/${studentId}/work`);
   return res.data;
 }
-
 export async function unassignTask(taskId: number): Promise<void> {
   await api.post(`/topics/tasks/${taskId}/unassign`);
 }
-
 export async function unassignControlWork(controlWorkId: number): Promise<void> {
   await api.post(`/topics/control-works/${controlWorkId}/unassign`);
 }
-
-export async function updateControlWorkGrade(
-  controlWorkId: number,
-  studentId: number,
-  grade: number
-): Promise<{ message: string; summaryGrade: { id: number; grade: number } }> {
-  const res = await api.put(`/edu/control-works/${controlWorkId}/students/${studentId}/grade`, { grade });
+export async function updateControlWorkGrade(controlWorkId: number, studentId: number, grade: number): Promise<{
+  message: string;
+  summaryGrade: {
+    id: number;
+    grade: number;
+  };
+}> {
+  const res = await api.put(`/edu/control-works/${controlWorkId}/students/${studentId}/grade`, {
+    grade
+  });
   return res.data;
 }
-
-// Quiz submission
-export async function submitQuizAnswers(
-  taskOrLessonId: number,
-  answers: Record<number, string>,
-  isLessonId?: boolean
-): Promise<{
+export async function submitQuizAnswers(taskOrLessonId: number, answers: Record<number, string>, isLessonId?: boolean): Promise<{
   message: string;
   grade: {
     id: number;
@@ -966,14 +945,12 @@ export async function submitQuizAnswers(
     }>;
   };
 }> {
-  const endpoint = isLessonId 
-    ? `/edu/lessons/${taskOrLessonId}/submit-quiz`
-    : `/edu/tasks/${taskOrLessonId}/submit-quiz`;
-  const res = await api.post(endpoint, { answers });
+  const endpoint = isLessonId ? `/edu/lessons/${taskOrLessonId}/submit-quiz` : `/edu/tasks/${taskOrLessonId}/submit-quiz`;
+  const res = await api.post(endpoint, {
+    answers
+  });
   return res.data;
 }
-
-// Lesson attempts (time limit)
 export async function startLessonAttempt(lessonId: number): Promise<{
   attemptId: number;
   startedAt: string;
@@ -983,7 +960,6 @@ export async function startLessonAttempt(lessonId: number): Promise<{
   const res = await api.post(`/edu/lessons/${lessonId}/start-attempt`);
   return res.data;
 }
-
 export async function getLessonAttemptStatus(lessonId: number): Promise<{
   hasActiveAttempt: boolean;
   remainingSeconds: number;
@@ -995,7 +971,6 @@ export async function getLessonAttemptStatus(lessonId: number): Promise<{
   const res = await api.get(`/edu/lessons/${lessonId}/attempt-status`);
   return res.data;
 }
-
 export async function getControlWorkStatus(lessonId: number): Promise<{
   status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
   startedAt?: string;

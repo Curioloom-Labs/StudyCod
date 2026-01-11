@@ -1,13 +1,3 @@
-/**
- * Hybrid Grading Pipeline - Interfaces and Types
- * 
- * Architecture for next-generation code evaluation system
- * combining: Tests + AST Analysis + LLM Code Critique
- */
-
-/**
- * Input: Student's code submission
- */
 export interface CodeSubmission {
   code: string;
   language: "JAVA" | "PYTHON";
@@ -15,16 +5,11 @@ export interface CodeSubmission {
   userId: number;
   testData: TestDataItem[];
 }
-
 export interface TestDataItem {
   input: string;
   output: string;
   explanation?: string;
 }
-
-/**
- * Test Runner Result
- */
 export interface TestRunnerResult {
   passed: boolean;
   passedCount: number;
@@ -37,14 +22,10 @@ export interface TestRunnerResult {
     passed: boolean;
     error?: string;
   }>;
-  correctnessScore: number; // 0.0 - 1.0 (based on passed tests)
+  correctnessScore: number;
 }
-
-/**
- * AST Analysis Result
- */
 export interface ASTAnalysisResult {
-  complexityScore: number; // 0.0 - 1.0 (higher = better complexity management)
+  complexityScore: number;
   metrics: {
     cyclomaticComplexity: number;
     maxNestingDepth: number;
@@ -65,12 +46,8 @@ export interface ASTAnalysisResult {
     line?: number;
   }>;
 }
-
-/**
- * LLM Code Critique Result
- */
 export interface LLMCodeCritiqueResult {
-  styleScore: number; // 0.0 - 1.0 (code style, readability, maintainability)
+  styleScore: number;
   feedback: {
     readability: string;
     style: string;
@@ -85,44 +62,25 @@ export interface LLMCodeCritiqueResult {
     documentation: "EXCELLENT" | "GOOD" | "FAIR" | "POOR" | "NONE";
   };
 }
-
-/**
- * Final Grading Result
- */
 export interface HybridGradingResult {
-  // Individual scores (0.0 - 1.0)
   correctnessScore: number;
   complexityScore: number;
   styleScore: number;
-  
-  // Weighted final score (0.0 - 1.0)
   finalScore: number;
-  
-  // Weights used for calculation
   weights: {
-    correctness: number; // Default: 0.6
-    complexity: number;  // Default: 0.25
-    style: number;       // Default: 0.15
+    correctness: number;
+    complexity: number;
+    style: number;
   };
-  
-  // Detailed feedback
   feedback: {
     testResults: TestRunnerResult;
     astAnalysis: ASTAnalysisResult;
-    llmCritique?: LLMCodeCritiqueResult; // Optional if tests failed
+    llmCritique?: LLMCodeCritiqueResult;
   };
-  
-  // Overall feedback message
   overallFeedback: string;
-  
-  // Grade in points (e.g., 0-12)
   gradePoints: number;
   maxPoints: number;
 }
-
-/**
- * Grading Configuration
- */
 export interface GradingConfig {
   weights: {
     correctness: number;
@@ -136,10 +94,9 @@ export interface GradingConfig {
   };
   llmCritique: {
     enabled: boolean;
-    onlyIfTestsPass: boolean; // Only run LLM if all tests pass
+    onlyIfTestsPass: boolean;
     provider: "cloudflare" | "openrouter";
     model?: string;
   };
   maxPoints: number;
 }
-

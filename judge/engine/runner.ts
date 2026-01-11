@@ -5,6 +5,7 @@ import { NsJailExecutor } from "./executor";
 import { Compiler, mapRuntimeToVerdict } from "./compiler";
 import { validateAndResolveLimits } from "./limits";
 import { CheckerSpec, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
+import { cleanPythonRuntimeError, filterNsJailStderr } from "./stderr";
 import { checkExact } from "../checkers/exact";
 import { checkWhitespace } from "../checkers/whitespace";
 import { checkFloat } from "../checkers/float";
@@ -12,41 +13,42 @@ import { cppLanguage } from "../languages/cpp";
 import { javaLanguage } from "../languages/java";
 import { pythonLanguage } from "../languages/python";
 import type { LanguageAdapter, LanguageId } from "../languages/types";
-
 export interface RunnerConfig {
   nsjailPath: string;
   nsjailConfigPath: string;
+  useConfig: boolean;
+  chrootByLanguage: Partial<Record<LanguageId, string>>;
+  cwd: string;
 }
-
 export class Runner {
   private exec = new NsJailExecutor();
   private compiler = new Compiler(this.exec);
-
   constructor(private cfg: RunnerConfig) {}
-
   async run(req: JudgeRequest): Promise<JudgeResponse> {
     validateRequest(req);
-
     const adapter = getLanguage(req.language);
     const limits = validateAndResolveLimits(req.language, req.limits);
     const checker = normalizeChecker(req.checker);
-
+    const chroot = this.resolveChroot(req.language);
+    await this.assertChrootAvailable(req.language, chroot);
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "studycod-judge-"));
     try {
       await adapter.writeSource(workDir, req.source);
-
       const compilePlan = adapter.getCompilePlan();
       if (compilePlan) {
+        const compileTimeLimitMs = resolveCompileTimeLimitMs(req.language, limits.timeLimitMs);
         const compileRes = await this.compiler.compile({
           nsjailPath: this.cfg.nsjailPath,
           nsjailConfigPath: this.cfg.nsjailConfigPath,
+          useConfig: this.cfg.useConfig,
+          chroot,
+          cwd: this.cfg.cwd,
           hostWorkDir: workDir,
           argv: compilePlan.argv,
-          timeLimitMs: Math.min(3000, Math.max(500, limits.timeLimitMs + 800)),
+          timeLimitMs: compileTimeLimitMs,
           memoryLimitBytes: limits.memoryLimitBytes,
-          outputLimitBytes: Math.max(64 * 1024, limits.outputLimitBytes),
+          outputLimitBytes: Math.max(64 * 1024, limits.outputLimitBytes)
         });
-
         if (!compileRes.ok) {
           return {
             submission_id: req.submission_id,
@@ -54,58 +56,54 @@ export class Runner {
             time_ms: compileRes.time_ms,
             memory_kb: compileRes.memory_kb,
             compile: compileRes,
-            tests: [],
+            tests: []
           };
         }
       }
-
       const tests: TestRunResult[] = [];
       let totalTime = 0;
       let peakMemKb: number | null = null;
       const runAll = req.run_all !== false;
       let finalVerdict: Verdict = "AC";
-
       const runPlan = adapter.getRunPlan();
-
       for (let i = 0; i < req.tests.length; i++) {
         const test = req.tests[i];
         const input = test.input ?? "";
         const expected = test.output ?? "";
-
         const r = await this.exec.exec({
           nsjailPath: this.cfg.nsjailPath,
           nsjailConfigPath: this.cfg.nsjailConfigPath,
+          useConfig: this.cfg.useConfig,
+          chroot,
+          cwd: this.cfg.cwd,
           hostWorkDir: workDir,
           stdin: input,
           timeLimitMs: limits.timeLimitMs,
           memoryLimitBytes: limits.memoryLimitBytes,
           outputLimitBytes: limits.outputLimitBytes,
           argv: runPlan.argv,
-          sandboxId: `t${i + 1}`,
+          sandboxId: `t${i + 1}`
         });
-
         const timeMs = Math.round(r.timeMs);
         totalTime += timeMs;
         if (r.memoryKb !== null) {
           peakMemKb = peakMemKb === null ? r.memoryKb : Math.max(peakMemKb, r.memoryKb);
         }
-
         const runtimeVerdict = mapRuntimeToVerdict({
           timedOut: r.timedOut,
           outputLimitExceeded: r.outputLimitExceeded,
           exitCode: r.exitCode,
           signal: r.signal,
-          stderr: r.stderr,
+          stderr: r.stderr
         });
-
+        const stderrForUser = req.language === "python" ? cleanPythonRuntimeError(r.stderr) || filterNsJailStderr(r.stderr) : filterNsJailStderr(r.stderr);
         const allowDetails = !!req.debug || !test.hidden;
         const base: TestRunResult = {
           test_id: test.id,
           verdict: runtimeVerdict,
           time_ms: timeMs,
-          memory_kb: r.memoryKb,
+          memory_kb: r.memoryKb
         };
-
         if (runtimeVerdict === "AC") {
           const ok = checkOutput(checker, r.stdout, expected);
           if (!ok) {
@@ -115,78 +113,90 @@ export class Runner {
               base.input = truncate(input, 4096);
               base.expected = truncate(expected, 4096);
               base.actual = truncate(r.stdout, 4096);
-              base.stderr = truncate(r.stderr, 2048);
+              base.stderr = truncate(stderrForUser, 2048);
             }
             tests.push(base);
             finalVerdict = worsen(finalVerdict, "WA");
             if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests);
             continue;
           }
-
           if (allowDetails) {
             base.actual = truncate(r.stdout, 2048);
           }
           tests.push(base);
           continue;
         }
-
-        base.message =
-          runtimeVerdict === "TLE"
-            ? "Time limit exceeded"
-            : runtimeVerdict === "MLE"
-            ? "Memory limit exceeded"
-            : r.outputLimitExceeded
-            ? "Output limit exceeded"
-            : "Runtime error";
-
+        base.message = runtimeVerdict === "TLE" ? "Time limit exceeded" : runtimeVerdict === "MLE" ? "Memory limit exceeded" : r.outputLimitExceeded ? "Output limit exceeded" : "Runtime error";
         if (allowDetails) {
           base.input = truncate(input, 4096);
           base.expected = truncate(expected, 4096);
           base.actual = truncate(r.stdout, 4096);
-          base.stderr = truncate(r.stderr, 4096);
+          base.stderr = truncate(stderrForUser, 4096);
         }
-
         tests.push(base);
         finalVerdict = worsen(finalVerdict, runtimeVerdict);
         if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests);
       }
-
       return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests);
     } finally {
       await safeRm(workDir);
     }
   }
+  private resolveChroot(language: LanguageId): string {
+    if (this.cfg.useConfig) return this.cfg.chrootByLanguage[language] || "/sandbox/rootfs";
+    const v = (this.cfg.chrootByLanguage[language] || "").trim();
+    if (!v) {
+      return "/sandbox/rootfs";
+    }
+    return v;
+  }
+  private async assertChrootAvailable(language: LanguageId, chroot: string): Promise<void> {
+    if (this.cfg.useConfig) return;
+    const hostPath = (chroot || "").trim();
+    if (!hostPath) {
+      throw new Error(`NSJAIL_CHROOT_NOT_SET: set NSJAIL_CHROOT_${language.toUpperCase()} (or NSJAIL_CHROOT) to an existing directory on the host`);
+    }
+    try {
+      const st = await fs.stat(hostPath);
+      if (!st.isDirectory()) {
+        throw new Error(`NSJAIL_CHROOT_NOT_A_DIRECTORY: ${hostPath} (set NSJAIL_CHROOT_${language.toUpperCase()} to a directory)`);
+      }
+    } catch {
+      throw new Error(`NSJAIL_CHROOT_NOT_FOUND: ${hostPath}. Create it on the server or set NSJAIL_CHROOT_${language.toUpperCase()} to the correct existing path (e.g. /sandbox/${language}).`);
+    }
+  }
 }
-
-function finalize(
-  submissionId: string,
-  verdict: Verdict,
-  timeMs: number,
-  memoryKb: number | null,
-  tests: TestRunResult[]
-): JudgeResponse {
+function resolveCompileTimeLimitMs(language: LanguageId, runTimeLimitMs: number): number {
+  const base = Math.max(500, Math.min(30_000, runTimeLimitMs));
+  switch (language) {
+    case "java":
+      return Math.min(20_000, Math.max(8_000, base * 2 + 1_000));
+    case "cpp":
+      return Math.min(15_000, Math.max(4_000, base * 2));
+    case "python":
+      return Math.min(8_000, Math.max(2_000, base + 500));
+  }
+}
+function finalize(submissionId: string, verdict: Verdict, timeMs: number, memoryKb: number | null, tests: TestRunResult[]): JudgeResponse {
   return {
     submission_id: submissionId,
     verdict,
     time_ms: timeMs,
     memory_kb: memoryKb,
-    tests,
+    tests
   };
 }
-
 function worsen(current: Verdict, next: Verdict): Verdict {
-  // Higher number = worse outcome.
   const rank: Record<Verdict, number> = {
     AC: 0,
     WA: 1,
     TLE: 2,
     MLE: 3,
     RE: 4,
-    CE: 5,
+    CE: 5
   };
   return rank[next] > rank[current] ? next : current;
 }
-
 function getLanguage(id: LanguageId): LanguageAdapter {
   switch (id) {
     case "java":
@@ -197,17 +207,23 @@ function getLanguage(id: LanguageId): LanguageAdapter {
       return cppLanguage;
   }
 }
-
 function normalizeChecker(spec?: CheckerSpec): CheckerSpec {
-  if (!spec) return { type: "whitespace" };
+  if (!spec) return {
+    type: "whitespace"
+  };
   if (spec.type === "float") {
     const eps = Number((spec as any).epsilon);
-    if (!Number.isFinite(eps) || eps <= 0 || eps > 1) return { type: "float", epsilon: 1e-6 };
-    return { type: "float", epsilon: eps };
+    if (!Number.isFinite(eps) || eps <= 0 || eps > 1) return {
+      type: "float",
+      epsilon: 1e-6
+    };
+    return {
+      type: "float",
+      epsilon: eps
+    };
   }
   return spec;
 }
-
 function checkOutput(spec: CheckerSpec, actual: string, expected: string): boolean {
   switch (spec.type) {
     case "exact":
@@ -218,32 +234,26 @@ function checkOutput(spec: CheckerSpec, actual: string, expected: string): boole
       return checkFloat(actual, expected, spec.epsilon);
   }
 }
-
 function truncate(s: string, max: number): string {
   if (!s) return "";
   if (s.length <= max) return s;
   return s.slice(0, max);
 }
-
 async function safeRm(dir: string) {
   try {
-    await fs.rm(dir, { recursive: true, force: true });
-  } catch {
-    // ignore
-  }
+    await fs.rm(dir, {
+      recursive: true,
+      force: true
+    });
+  } catch {}
 }
-
 function validateRequest(req: JudgeRequest) {
   if (!req || typeof req !== "object") throw new Error("INVALID_REQUEST: not an object");
-  if (!req.submission_id || typeof req.submission_id !== "string")
-    throw new Error("INVALID_REQUEST: submission_id required");
-  if (req.language !== "java" && req.language !== "python" && req.language !== "cpp")
-    throw new Error("INVALID_REQUEST: language must be java|python|cpp");
-  if (typeof req.source !== "string" || req.source.length === 0)
-    throw new Error("INVALID_REQUEST: source required");
+  if (!req.submission_id || typeof req.submission_id !== "string") throw new Error("INVALID_REQUEST: submission_id required");
+  if (req.language !== "java" && req.language !== "python" && req.language !== "cpp") throw new Error("INVALID_REQUEST: language must be java|python|cpp");
+  if (typeof req.source !== "string" || req.source.length === 0) throw new Error("INVALID_REQUEST: source required");
   if (req.source.length > 1024 * 1024) throw new Error("INVALID_REQUEST: source too large");
-  if (!Array.isArray(req.tests) || req.tests.length === 0)
-    throw new Error("INVALID_REQUEST: tests required");
+  if (!Array.isArray(req.tests) || req.tests.length === 0) throw new Error("INVALID_REQUEST: tests required");
   if (req.tests.length > 200) throw new Error("INVALID_REQUEST: too many tests");
   for (const t of req.tests) {
     if (!t) throw new Error("INVALID_REQUEST: bad test");
@@ -256,5 +266,3 @@ function validateRequest(req: JudgeRequest) {
   }
   if (!req.limits) throw new Error("INVALID_REQUEST: limits required");
 }
-
-

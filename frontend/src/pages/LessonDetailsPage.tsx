@@ -1,55 +1,39 @@
-// frontend/src/pages/LessonDetailsPage.tsx
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
-import {
-  getLesson,
-  createTask,
-  generateTestData,
-  getTaskGrades,
-  generateQuiz,
-  saveQuiz,
-  submitQuizAnswers,
-  getTestData,
-  updateTestData,
-  deleteTestData,
-  addTestData,
-  updateTaskDetails,
-  getTask,
-  startLessonAttempt,
-  getLessonAttemptStatus,
-  getControlWorkStatus,
-  type Lesson,
-  type Task,
-  type CreateTaskRequest,
-  type TestData,
-  type TestDataItem,
-  type TaskWithGrade,
-} from "../lib/api/edu";
+import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, updateTestData, deleteTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type Task, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade } from "../lib/api/edu";
 import { GlobalTimer } from "../components/GlobalTimer";
 import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock } from "lucide-react";
 import { getMe } from "../lib/api/profile";
 import { MarkdownView } from "../components/MarkdownView";
 import type { User } from "../types";
 import { isDeadlineExpired } from "../utils/timezone";
-
 export const LessonDetailsPage: React.FC = () => {
-  const { t, i18n } = useTranslation();
-  const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
-  const { lessonId } = useParams<{ lessonId: string }>();
+  const {
+    t,
+    i18n
+  } = useTranslation();
+  const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const {
+    lessonId
+  } = useParams<{
+    lessonId: string;
+  }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [lesson, setLesson] = useState<Lesson & { tasks: Task[] } | null>(null);
+  const [lesson, setLesson] = useState<Lesson & {
+    tasks: Task[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [newTask, setNewTask] = useState<CreateTaskRequest>({
     title: "",
     description: "",
-    template: "",
+    template: ""
   });
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [showGrades, setShowGrades] = useState(false);
@@ -62,14 +46,24 @@ export const LessonDetailsPage: React.FC = () => {
   const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
   const [newQuestion, setNewQuestion] = useState({
     question: "",
-    options: { А: "", Б: "", В: "", Г: "", Д: "" },
-    correct: "А" as "А" | "Б" | "В" | "Г" | "Д",
+    options: {
+      А: "",
+      Б: "",
+      В: "",
+      Г: "",
+      Д: ""
+    },
+    correct: "А" as "А" | "Б" | "В" | "Г" | "Д"
   });
   const [showTestDataModal, setShowTestDataModal] = useState(false);
   const [testDataTaskId, setTestDataTaskId] = useState<number | null>(null);
   const [testDataList, setTestDataList] = useState<TestData[]>([]);
   const [editingTestIndex, setEditingTestIndex] = useState<number | null>(null);
-  const [editingTest, setEditingTest] = useState<{ input: string; expectedOutput: string; points: number } | null>(null);
+  const [editingTest, setEditingTest] = useState<{
+    input: string;
+    expectedOutput: string;
+    points: number;
+  } | null>(null);
   const [newTestCount, setNewTestCount] = useState(10);
   const [loadingTestData, setLoadingTestData] = useState(false);
   const [showTaskSettings, setShowTaskSettings] = useState(false);
@@ -79,70 +73,52 @@ export const LessonDetailsPage: React.FC = () => {
   const [taskIsClosed, setTaskIsClosed] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [timeExpired, setTimeExpired] = useState(false);
-  // Quiz state for students
   const [studentQuizAnswers, setStudentQuizAnswers] = useState<Record<number, "А" | "Б" | "В" | "Г" | "Д">>({});
   const [studentQuizSubmitted, setStudentQuizSubmitted] = useState(false);
   const [studentQuizGrade, setStudentQuizGrade] = useState<number | null>(null);
   const [studentQuizReview, setStudentQuizReview] = useState<any | null>(null);
   const [hasAutoRedirected, setHasAutoRedirected] = useState(false);
   const [controlWorkStatus, setControlWorkStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | null>(null);
-
   useEffect(() => {
     const initialize = async () => {
       await loadUser();
-    if (lessonId) {
+      if (lessonId) {
         await loadLesson();
-      // Скидаємо прапорець при зміні уроку
-      setHasAutoRedirected(false);
-    }
+        setHasAutoRedirected(false);
+      }
     };
     initialize();
   }, [lessonId, searchParams]);
-
-  // Перезавантажуємо урок коли user завантажиться, щоб правильно перевірити стан тесту
   useEffect(() => {
     if (user && lessonId && lesson && user.userMode === "EDUCATIONAL" && user.studentId) {
-      // Перезавантажуємо урок тільки для учнів, щоб отримати правильний стан тесту
       loadLesson();
     }
-  }, [user?.id, user?.studentId]); // Перезавантажуємо тільки коли змінюється ID користувача або studentId
-
-  // Автоматичний перехід на завдання для ЛЕГАСІ уроків з одним завданням
+  }, [user?.id, user?.studentId]);
   useEffect(() => {
     if (lesson && user?.userMode === "EDUCATIONAL" && user?.studentId && !hasAutoRedirected) {
-      // Для учнів: якщо урок має одне завдання, автоматично переходимо на нього
-      // Але тільки один раз, щоб не було циклу при поверненні назад
-      // ВАЖЛИВО: тільки для старої системи (LESSON). Для TOPIC/CONTROL завжди показуємо список.
       if (lesson.type === "LESSON" && lesson.tasks.length === 1) {
         const task = lesson.tasks[0];
         setHasAutoRedirected(true);
-        // Використовуємо navigate замість window.location.href для кращої інтеграції з React Router
-        navigate(`/edu/tasks/${task.id}`, { replace: true });
+        navigate(`/edu/tasks/${task.id}`, {
+          replace: true
+        });
       }
     }
   }, [lesson, user, hasAutoRedirected, navigate]);
-
-  // Запускаємо таймер для контрольних робіт
   useEffect(() => {
     if (lesson && lesson.type === "CONTROL" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && user?.userMode === "EDUCATIONAL" && user?.studentId && controlWorkStatus !== "COMPLETED") {
       const initializeTimer = async () => {
         try {
-          // Спочатку перевіряємо статус КР
           const statusData = await getControlWorkStatus(parseInt(lessonId!, 10));
           setControlWorkStatus(statusData.status);
-          
           if (statusData.status === "COMPLETED") {
-            return; // КР завершена, не запускаємо таймер
+            return;
           }
-          
-          // Перевіряємо чи є активна спроба
           const status = await getLessonAttemptStatus(parseInt(lessonId!, 10));
           if (status.hasActiveAttempt && status.remainingSeconds > 0) {
             setRemainingSeconds(status.remainingSeconds);
             setControlWorkStatus("IN_PROGRESS");
           } else {
-            // IMPORTANT: do NOT auto-start attempt just by opening the page.
-            // Student must explicitly click "Почати контрольну".
             setRemainingSeconds(null);
           }
         } catch (error: any) {
@@ -157,7 +133,6 @@ export const LessonDetailsPage: React.FC = () => {
       initializeTimer();
     }
   }, [lesson, user, lessonId]);
-
   const loadUser = async () => {
     try {
       const u = await getMe();
@@ -166,20 +141,23 @@ export const LessonDetailsPage: React.FC = () => {
       console.error("Failed to load user:", error);
     }
   };
-
   const loadLesson = async () => {
     if (!lessonId) return;
     try {
-      const requestedType = (searchParams.get("type") || undefined) as
-        | "TOPIC"
-        | "CONTROL"
-        | "LESSON"
-        | undefined;
+      const requestedType = (searchParams.get("type") || undefined) as "TOPIC" | "CONTROL" | "LESSON" | undefined;
       const data = await getLesson(parseInt(lessonId, 10), requestedType);
-      console.log(`[LessonDetailsPage] Loaded lesson:`, { id: data.id, type: data.type, title: data.title, tasksCount: data.tasks?.length, tasks: data.tasks?.map(t => ({ id: t.id, title: t.title, type: t.type })) });
+      console.log(`[LessonDetailsPage] Loaded lesson:`, {
+        id: data.id,
+        type: data.type,
+        title: data.title,
+        tasksCount: data.tasks?.length,
+        tasks: data.tasks?.map(t => ({
+          id: t.id,
+          title: t.title,
+          type: t.type
+        }))
+      });
       setLesson(data);
-      
-      // Для контрольних робіт перевіряємо статус
       if (data.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId) {
         try {
           const statusData = await getControlWorkStatus(parseInt(lessonId, 10));
@@ -188,54 +166,40 @@ export const LessonDetailsPage: React.FC = () => {
           console.error("Failed to load control work status:", error);
         }
       }
-      
-      // Завантажуємо quiz питання якщо є
       if (data.quizJson) {
         try {
           const quiz = JSON.parse(data.quizJson);
           setQuizQuestions(quiz);
-          
-          // Завантажуємо збережені відповіді учня (якщо учень)
           if (user?.userMode === "EDUCATIONAL" && user?.studentId) {
-            // Явна перевірка: тест вважається відправленим тільки якщо data.quizSubmitted === true
-            // (не undefined, не null, не 0, не пустий рядок)
             const isQuizSubmitted = data.quizSubmitted === true;
-            
             if (isQuizSubmitted) {
               setStudentQuizSubmitted(true);
-              // Валідація quizGrade перед встановленням
               if (data.quizGrade !== null && data.quizGrade !== undefined && typeof data.quizGrade === 'number') {
                 const gradeValue = Number(data.quizGrade);
                 if (!isNaN(gradeValue) && gradeValue >= 0 && gradeValue <= 12) {
                   setStudentQuizGrade(gradeValue);
                 }
               }
-              // Review (які відповіді правильні/неправильні) з бекенду
               if ((data as any).quizReview) {
                 setStudentQuizReview((data as any).quizReview);
               } else {
                 setStudentQuizReview(null);
               }
-              // Очищаємо localStorage, щоб не показувати тест при наступному завантаженні
               localStorage.removeItem(`quiz_answers_lesson_${lessonId}`);
               localStorage.removeItem(`quiz_submitted_lesson_${lessonId}`);
               localStorage.removeItem(`quiz_grade_lesson_${lessonId}`);
             } else {
-              // Якщо не відправлений, завантажуємо збережені відповіді з localStorage
-              // Але тільки якщо на бекенді тест не відправлений
               try {
-            const savedAnswers = localStorage.getItem(`quiz_answers_lesson_${lessonId}`);
-            if (savedAnswers) {
+                const savedAnswers = localStorage.getItem(`quiz_answers_lesson_${lessonId}`);
+                if (savedAnswers) {
                   const parsed = JSON.parse(savedAnswers);
                   if (parsed && typeof parsed === 'object') {
                     setStudentQuizAnswers(parsed);
                   }
                 }
               } catch (e) {
-                // Якщо не вдалося розпарсити, очищаємо localStorage
                 localStorage.removeItem(`quiz_answers_lesson_${lessonId}`);
               }
-              // Скидаємо стан відправки, якщо тест не відправлений на бекенді
               setStudentQuizSubmitted(false);
               setStudentQuizGrade(null);
               setStudentQuizReview(null);
@@ -250,33 +214,32 @@ export const LessonDetailsPage: React.FC = () => {
     } catch (error: any) {
       console.error("Failed to load lesson:", error);
       if (error.response?.status === 404 || error.response?.status === 403) {
-        // Показуємо повідомлення про помилку
         alert(error.response?.data?.message || tr("Урок не знайдено", "Lesson not found"));
       }
     } finally {
       setLoading(false);
     }
   };
-
   const handleCreateTask = async () => {
     if (!lessonId || !newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
       alert(tr("Заповніть всі поля", "Fill all fields"));
       return;
     }
-
     try {
       await createTask(parseInt(lessonId, 10), newTask);
-      setNewTask({ title: "", description: "", template: "" });
+      setNewTask({
+        title: "",
+        description: "",
+        template: ""
+      });
       setShowCreateTask(false);
       await loadLesson();
     } catch (error: any) {
       console.error("Failed to create task:", error);
-      const errorMessage =
-        error.response?.data?.error || error.response?.data?.message || tr("Не вдалося створити завдання", "Failed to create task");
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || tr("Не вдалося створити завдання", "Failed to create task");
       alert(errorMessage);
     }
   };
-
   const handleGenerateTests = async (taskId: number, count: number) => {
     try {
       await generateTestData(taskId, count);
@@ -290,7 +253,6 @@ export const LessonDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося згенерувати тести", "Failed to generate tests"));
     }
   };
-
   const loadTestData = async (taskId: number) => {
     setLoadingTestData(true);
     try {
@@ -303,13 +265,11 @@ export const LessonDetailsPage: React.FC = () => {
       setLoadingTestData(false);
     }
   };
-
   const handleOpenTestDataModal = async (taskId: number) => {
     setTestDataTaskId(taskId);
     setShowTestDataModal(true);
     await loadTestData(taskId);
   };
-
   const handleSaveTest = async (testDataId: number, index: number) => {
     if (!testDataTaskId || !editingTest) return;
     try {
@@ -322,7 +282,6 @@ export const LessonDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося оновити тест", "Failed to update test"));
     }
   };
-
   const handleDeleteTest = async (testDataId: number) => {
     if (!testDataTaskId) return;
     if (!confirm(tr("Видалити цей тест?", "Delete this test?"))) return;
@@ -335,7 +294,6 @@ export const LessonDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося видалити тест", "Failed to delete test"));
     }
   };
-
   const handleAddNewTest = async () => {
     if (!testDataTaskId || !editingTest) return;
     try {
@@ -348,7 +306,6 @@ export const LessonDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося додати тест", "Failed to add test"));
     }
   };
-
   const handleOpenTaskSettings = async (taskId: number) => {
     try {
       const task = await getTask(taskId);
@@ -362,14 +319,13 @@ export const LessonDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося завантажити завдання", "Failed to load task"));
     }
   };
-
   const handleSaveTaskSettings = async () => {
     if (!settingsTask) return;
     try {
       await updateTaskDetails(settingsTask.id, {
         maxAttempts: taskMaxAttempts,
         deadline: taskDeadline || null,
-        isClosed: taskIsClosed,
+        isClosed: taskIsClosed
       });
       await loadLesson();
       setShowTaskSettings(false);
@@ -379,7 +335,6 @@ export const LessonDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося оновити налаштування", "Failed to update settings"));
     }
   };
-
   const handleViewGrades = async (taskId: number) => {
     try {
       const data = await getTaskGrades(taskId);
@@ -391,25 +346,17 @@ export const LessonDetailsPage: React.FC = () => {
       alert(tr("Не вдалося завантажити оцінки", "Failed to load grades"));
     }
   };
-
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-text-primary font-mono">
+    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
         {t("loading")}
-      </div>
-    );
+      </div>;
   }
-
   if (!lesson) {
-    return (
-      <div className="h-full flex items-center justify-center text-text-primary font-mono">
+    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
         {tr("Урок не знайдено", "Lesson not found")}
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="h-full overflow-y-auto" style={{ height: 'calc(100vh - 4rem)' }}>
+  return <>
       <div className="max-w-6xl mx-auto p-6">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
@@ -419,40 +366,27 @@ export const LessonDetailsPage: React.FC = () => {
           </Button>
           <h1 className="text-2xl font-mono text-text-primary">{lesson.title}</h1>
           <span className="text-xs text-text-muted px-2 py-1 border border-border">
-            {lesson.type === "TOPIC"
-              ? t("topic")
-              : lesson.type === "CONTROL"
-              ? tr("Контрольна", "Control work")
-              : t("lesson")}
+            {lesson.type === "TOPIC" ? t("topic") : lesson.type === "CONTROL" ? tr("Контрольна", "Control work") : t("lesson")}
           </span>
           </div>
-          {lesson.type === "CONTROL" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && remainingSeconds !== null && user?.userMode === "EDUCATIONAL" && user?.studentId && (
-            <GlobalTimer
-              remainingSeconds={remainingSeconds}
-              onExpired={() => {
-                setTimeExpired(true);
-                alert(tr("Час вийшов! Ви не можете більше відправляти відповіді.", "Time is up! You can no longer submit answers."));
-              }}
-            />
-          )}
+          {lesson.type === "CONTROL" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && remainingSeconds !== null && user?.userMode === "EDUCATIONAL" && user?.studentId && <GlobalTimer remainingSeconds={remainingSeconds} onExpired={() => {
+          setTimeExpired(true);
+          alert(tr("Час вийшов! Ви не можете більше відправляти відповіді.", "Time is up! You can no longer submit answers."));
+        }} />}
         </div>
 
-        {lesson.hasTheory && lesson.theory && (
-          <Card className="p-4 mb-6">
+        {lesson.hasTheory && lesson.theory && <Card className="p-4 mb-6">
             <h2 className="text-lg font-mono text-text-primary mb-3">{t("theory")}</h2>
             <div className="prose prose-invert max-w-none text-text-secondary font-mono text-sm">
               <MarkdownView content={lesson.theory} />
             </div>
-          </Card>
-        )}
+          </Card>}
 
-        {/* Control works inside a topic */}
-        {lesson.type === "TOPIC" && Array.isArray((lesson as any).controlWorks) && (lesson as any).controlWorks.length > 0 && (
-          <Card className="p-4 mb-6">
+        {}
+        {lesson.type === "TOPIC" && Array.isArray((lesson as any).controlWorks) && (lesson as any).controlWorks.length > 0 && <Card className="p-4 mb-6">
             <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Контрольні роботи", "Control works")}</h2>
             <div className="space-y-3">
-              {(lesson as any).controlWorks.map((cw: any) => (
-                <div key={cw.id} className="p-3 border border-border bg-bg-base flex items-start justify-between gap-3">
+              {(lesson as any).controlWorks.map((cw: any) => <div key={cw.id} className="p-3 border border-border bg-bg-base flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-text-muted px-2 py-1 border border-border">{tr("Контрольна", "Control work")}</span>
@@ -461,504 +395,352 @@ export const LessonDetailsPage: React.FC = () => {
                     <div className="mt-2 text-xs text-text-muted flex flex-wrap gap-3">
                       <span>{tr("Завдань", "Tasks")}: {cw.tasksCount}</span>
                       {cw.timeLimitMinutes ? <span>{tr("Обмеження", "Limit")}: {cw.timeLimitMinutes} {t("min")}</span> : null}
-                      {cw.deadline ? (
-                        <span>
+                      {cw.deadline ? <span>
                           {tr("Дедлайн", "Deadline")}:{" "}
                           {new Date(cw.deadline).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
-                        </span>
-                      ) : null}
-                      {cw.studentGrade !== null && cw.studentGrade !== undefined && (
-                        <span className="text-text-primary">
+                        </span> : null}
+                      {cw.studentGrade !== null && cw.studentGrade !== undefined && <span className="text-text-primary">
                           {t("grade")}: <span className="font-bold">{cw.studentGrade}</span>/12
-                        </span>
-                      )}
+                        </span>}
                     </div>
                   </div>
                   <Button variant="ghost" onClick={() => navigate(`/edu/lessons/${cw.id}?type=CONTROL`)}>
                     {t("open")}
                   </Button>
-                </div>
-              ))}
+                </div>)}
             </div>
-          </Card>
-        )}
+          </Card>}
 
-        {/* Quiz Generation and Display for Control Works */}
-        {/* Для учня результати тесту мають бути видимі навіть якщо КР COMPLETED */}
-        {lesson.type === "CONTROL" && lesson.controlHasTheory && (controlWorkStatus !== "COMPLETED" || studentQuizSubmitted) && (
-          <Card className="p-4 mb-6">
-            {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-            <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Теоретична частина (Питання)", "Theory part (Questions)")}</h2>
-            )}
+        {}
+        {}
+        {lesson.type === "CONTROL" && lesson.controlHasTheory && (controlWorkStatus !== "COMPLETED" || studentQuizSubmitted) && <Card className="p-4 mb-6">
+            {user?.userMode === "EDUCATIONAL" && !user?.studentId && <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Теоретична частина (Питання)", "Theory part (Questions)")}</h2>}
             
-            {/* Quiz Display - тільки для вчителів, для учнів питання не показуються */}
+            {}
             {lesson.quizJson && !user?.studentId && (() => {
-              try {
-                const quiz = JSON.parse(lesson.quizJson);
-                return (
-                  <div className="mb-4 space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                    {quiz.map((q: any, index: number) => (
-                      <div key={index} className="p-3 border border-border bg-bg-base relative">
-                        {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-                          <div className="absolute top-2 right-2 flex gap-1">
-                            <button
-                              onClick={() => {
-                                // Нормалізуємо формат для редагування
-                                const questionText = q.question || q.q || "";
-                                const optionsObj = Array.isArray(q.options) 
-                                  ? { А: q.options[0] || "", Б: q.options[1] || "", В: q.options[2] || "", Г: q.options[3] || "", Д: q.options[4] || "" }
-                                  : (q.options || { А: "", Б: "", В: "", Г: "", Д: "" });
-                                const correctKey = typeof q.correct === 'number' 
-                                  ? ['А', 'Б', 'В', 'Г', 'Д'][q.correct] || 'А'
-                                  : (q.correct || 'А');
-                                
-                                setNewQuestion({
-                                  question: questionText,
-                                  options: optionsObj,
-                                  correct: correctKey as "А" | "Б" | "В" | "Г" | "Д",
-                                });
-                                setEditingQuestionIndex(index);
-                                setShowAddQuestion(true);
-                              }}
-                              className="text-xs p-1 h-6 w-6 border border-border hover:bg-bg-hover flex items-center justify-center"
-                              title={t("edit")}
-                            >
+          try {
+            const quiz = JSON.parse(lesson.quizJson);
+            return <div className="mb-4 space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                    {quiz.map((q: any, index: number) => <div key={index} className="p-3 border border-border bg-bg-base relative">
+                        {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="absolute top-2 right-2 flex gap-1">
+                            <button onClick={() => {
+                    const questionText = q.question || q.q || "";
+                    const optionsObj = Array.isArray(q.options) ? {
+                      А: q.options[0] || "",
+                      Б: q.options[1] || "",
+                      В: q.options[2] || "",
+                      Г: q.options[3] || "",
+                      Д: q.options[4] || ""
+                    } : q.options || {
+                      А: "",
+                      Б: "",
+                      В: "",
+                      Г: "",
+                      Д: ""
+                    };
+                    const correctKey = typeof q.correct === 'number' ? ['А', 'Б', 'В', 'Г', 'Д'][q.correct] || 'А' : q.correct || 'А';
+                    setNewQuestion({
+                      question: questionText,
+                      options: optionsObj,
+                      correct: correctKey as "А" | "Б" | "В" | "Г" | "Д"
+                    });
+                    setEditingQuestionIndex(index);
+                    setShowAddQuestion(true);
+                  }} className="text-xs p-1 h-6 w-6 border border-border hover:bg-bg-hover flex items-center justify-center" title={t("edit")}>
                               <Edit2 className="w-3 h-3" />
                             </button>
-                            <button
-                              onClick={async () => {
-                                if (!confirm(tr("Видалити це питання?", "Delete this question?"))) return;
-                                try {
-                                  const updatedQuiz = [...quiz];
-                                  updatedQuiz.splice(index, 1);
-                                  await saveQuiz(parseInt(lessonId!, 10), updatedQuiz);
-                                  await loadLesson();
-                                } catch (error: any) {
-                                  console.error("Failed to delete question:", error);
-                                  alert(tr("Не вдалося видалити питання", "Failed to delete question"));
-                                }
-                              }}
-                              className="text-xs p-1 h-6 w-6 border border-border hover:bg-bg-hover flex items-center justify-center text-accent-error"
-                              title={t("delete")}
-                            >
+                            <button onClick={async () => {
+                    if (!confirm(tr("Видалити це питання?", "Delete this question?"))) return;
+                    try {
+                      const updatedQuiz = [...quiz];
+                      updatedQuiz.splice(index, 1);
+                      await saveQuiz(parseInt(lessonId!, 10), updatedQuiz);
+                      await loadLesson();
+                    } catch (error: any) {
+                      console.error("Failed to delete question:", error);
+                      alert(tr("Не вдалося видалити питання", "Failed to delete question"));
+                    }
+                  }} className="text-xs p-1 h-6 w-6 border border-border hover:bg-bg-hover flex items-center justify-center text-accent-error" title={t("delete")}>
                               <Trash2 className="w-3 h-3" />
                             </button>
-                          </div>
-                        )}
+                          </div>}
                         <div className="text-sm font-mono text-text-primary mb-2 pr-16">
                           {index + 1}. {q.question || q.q || tr("Питання без тексту", "Question without text")}
                         </div>
                         <div className="space-y-1 text-xs text-text-secondary">
-                          {(Array.isArray(q.options) 
-                            ? q.options.map((opt: string, idx: number) => [['А', 'Б', 'В', 'Г', 'Д'][idx], opt])
-                            : Object.entries(q.options || {})
-                          ).map(([key, value]: [string, any], optIndex: number) => {
-                            // Перевіряємо, чи це правильна відповідь
-                            const isCorrect = typeof q.correct === 'number' 
-                              ? optIndex === q.correct
-                              : key === q.correct;
-                            
-                            return (
-                            <div key={key} className="flex items-center gap-2">
+                          {(Array.isArray(q.options) ? q.options.map((opt: string, idx: number) => [['А', 'Б', 'В', 'Г', 'Д'][idx], opt]) : Object.entries(q.options || {})).map(([key, value]: [string, any], optIndex: number) => {
+                    const isCorrect = typeof q.correct === 'number' ? optIndex === q.correct : key === q.correct;
+                    return <div key={key} className="flex items-center gap-2">
                               <span className="font-mono">{key})</span>
                               <span>{value}</span>
-                                {isCorrect && user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-                                <span className="text-accent-success ml-2">{tr("✓ Правильна відповідь", "✓ Correct answer")}</span>
-                              )}
-                            </div>
-                            );
-                          })}
+                                {isCorrect && user?.userMode === "EDUCATIONAL" && !user?.studentId && <span className="text-accent-success ml-2">{tr("✓ Правильна відповідь", "✓ Correct answer")}</span>}
+                            </div>;
+                  })}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              } catch (e) {
-                console.error("Failed to parse quiz:", e);
-                return null;
-              }
-            })()}
+                      </div>)}
+                  </div>;
+          } catch (e) {
+            console.error("Failed to parse quiz:", e);
+            return null;
+          }
+        })()}
 
-            {/* Quiz Interface for Students */}
-            {user?.userMode === "EDUCATIONAL" && user?.studentId && lesson.quizJson && !studentQuizSubmitted && controlWorkStatus !== "COMPLETED" && (
-              <div className="mb-4 space-y-4">
+            {}
+            {user?.userMode === "EDUCATIONAL" && user?.studentId && lesson.quizJson && !studentQuizSubmitted && controlWorkStatus !== "COMPLETED" && <div className="mb-4 space-y-4">
                 {(() => {
-                  try {
-                    const quiz = JSON.parse(lesson.quizJson);
-                    return quiz.map((q: any, index: number) => (
-                      <div key={index} className="p-4 border border-border bg-bg-base">
+            try {
+              const quiz = JSON.parse(lesson.quizJson);
+              return quiz.map((q: any, index: number) => <div key={index} className="p-4 border border-border bg-bg-base">
                         <div className="text-sm font-mono text-text-primary mb-3">
                           {index + 1}. {q.question || q.q || tr("Питання без тексту", "Question without text")}
                         </div>
                         <div className="space-y-2">
-                          {(Array.isArray(q.options) 
-                            ? q.options.map((opt: string, idx: number) => [['А', 'Б', 'В', 'Г', 'Д'][idx], opt])
-                            : Object.entries(q.options || {})
-                          ).map(([key, value]: [string, any]) => (
-                            <label key={key} className="flex items-center gap-2 cursor-pointer hover:bg-bg-hover p-2 rounded">
-                              <input
-                                type="radio"
-                                name={`quiz_question_${index}`}
-                                value={key}
-                                checked={studentQuizAnswers[index] === key}
-                                onChange={(e) => {
-                                  const newAnswers = {
-                                    ...studentQuizAnswers,
-                                    [index]: key as "А" | "Б" | "В" | "Г" | "Д",
-                                  };
-                                  setStudentQuizAnswers(newAnswers);
-                                  try {
-                                    localStorage.setItem(`quiz_answers_lesson_${lessonId}`, JSON.stringify(newAnswers));
-                                  } catch (e) {
-                                    console.error("Failed to save quiz answers to localStorage:", e);
-                                  }
-                                }}
-                                className="w-4 h-4"
-                              />
+                          {(Array.isArray(q.options) ? q.options.map((opt: string, idx: number) => [['А', 'Б', 'В', 'Г', 'Д'][idx], opt]) : Object.entries(q.options || {})).map(([key, value]: [string, any]) => <label key={key} className="flex items-center gap-2 cursor-pointer hover:bg-bg-hover p-2 rounded">
+                              <input type="radio" name={`quiz_question_${index}`} value={key} checked={studentQuizAnswers[index] === key} onChange={e => {
+                      const newAnswers = {
+                        ...studentQuizAnswers,
+                        [index]: key as "А" | "Б" | "В" | "Г" | "Д"
+                      };
+                      setStudentQuizAnswers(newAnswers);
+                      try {
+                        localStorage.setItem(`quiz_answers_lesson_${lessonId}`, JSON.stringify(newAnswers));
+                      } catch (e) {
+                        console.error("Failed to save quiz answers to localStorage:", e);
+                      }
+                    }} className="w-4 h-4" />
                               <span className="font-mono text-text-secondary">{key})</span>
                               <span className="text-text-secondary">{value}</span>
-                            </label>
-                          ))}
+                            </label>)}
                         </div>
-                      </div>
-                    ));
-                  } catch (e) {
-                    return null;
-                  }
-                })()}
+                      </div>);
+            } catch (e) {
+              return null;
+            }
+          })()}
                 <div className="flex justify-end">
-                  <Button
-                    onClick={async () => {
-                      if (Object.keys(studentQuizAnswers).length < quizQuestions.length) {
-                        alert(tr("Будь ласка, відповідьте на всі питання", "Please answer all questions"));
-                        return;
-                      }
-                      try {
-                        const result = await submitQuizAnswers(parseInt(lessonId!, 10), studentQuizAnswers, true);
-                        setStudentQuizGrade(result.grade.theoryGrade);
-                        setStudentQuizSubmitted(true);
-                        if ((result as any).review) {
-                          setStudentQuizReview((result as any).review);
-                        }
-                        localStorage.setItem(`quiz_submitted_lesson_${lessonId}`, "true");
-                        localStorage.setItem(`quiz_grade_lesson_${lessonId}`, result.grade.theoryGrade.toString());
-                        
-                        // Перевіряємо чи КР завершена після відправки тесту
-                        try {
-                          const statusData = await getControlWorkStatus(parseInt(lessonId!, 10));
-                          if (statusData.status === "COMPLETED") {
-                            setControlWorkStatus("COMPLETED");
-                            alert(tr(
-                              `Контрольна робота завершена! Оцінка за тест: ${result.grade.theoryGrade}/12`,
-                              `Control work completed! Quiz grade: ${result.grade.theoryGrade}/12`
-                            ));
-                            await loadLesson(); // Перезавантажуємо урок
-                            return;
-                          }
-                        } catch (e) {
-                          console.error("Failed to check control work status:", e);
-                        }
-                        
-                        alert(
-                          tr(
-                            `Тест завершено! Оцінка: ${result.grade.theoryGrade}/12 (${result.grade.correctAnswers}/${result.grade.totalQuestions} правильних відповідей)`,
-                            `Quiz completed! Grade: ${result.grade.theoryGrade}/12 (${result.grade.correctAnswers}/${result.grade.totalQuestions} correct)`
-                          )
-                        );
-                      } catch (error: any) {
-                        console.error("Failed to submit quiz:", error);
-                        if (error.response?.status === 409 && error.response?.data?.message === "CONTROL_WORK_COMPLETED") {
-                          setControlWorkStatus("COMPLETED");
-                          alert(tr("Контрольна робота вже завершена", "Control work is already completed"));
-                          await loadLesson();
-                        } else if (error.response?.status === 409 && error.response?.data?.message === "QUIZ_ALREADY_SUBMITTED") {
-                          // Refresh from server to show submitted state + grade/review
-                          alert(tr("Тест уже відправлено. Повторна здача неможлива.", "Quiz has already been submitted. Retake is not allowed."));
-                          await loadLesson();
-                        } else {
-                          alert(error.response?.data?.message || tr("Не вдалося відправити тест", "Failed to submit quiz"));
-                        }
-                      }
-                    }}
-                    disabled={studentQuizSubmitted}
-                  >
+                  <Button onClick={async () => {
+              if (Object.keys(studentQuizAnswers).length < quizQuestions.length) {
+                alert(tr("Будь ласка, відповідьте на всі питання", "Please answer all questions"));
+                return;
+              }
+              try {
+                const result = await submitQuizAnswers(parseInt(lessonId!, 10), studentQuizAnswers, true);
+                setStudentQuizGrade(result.grade.theoryGrade);
+                setStudentQuizSubmitted(true);
+                if ((result as any).review) {
+                  setStudentQuizReview((result as any).review);
+                }
+                localStorage.setItem(`quiz_submitted_lesson_${lessonId}`, "true");
+                localStorage.setItem(`quiz_grade_lesson_${lessonId}`, result.grade.theoryGrade.toString());
+                try {
+                  const statusData = await getControlWorkStatus(parseInt(lessonId!, 10));
+                  if (statusData.status === "COMPLETED") {
+                    setControlWorkStatus("COMPLETED");
+                    alert(tr(`Контрольна робота завершена! Оцінка за тест: ${result.grade.theoryGrade}/12`, `Control work completed! Quiz grade: ${result.grade.theoryGrade}/12`));
+                    await loadLesson();
+                    return;
+                  }
+                } catch (e) {
+                  console.error("Failed to check control work status:", e);
+                }
+                alert(tr(`Тест завершено! Оцінка: ${result.grade.theoryGrade}/12 (${result.grade.correctAnswers}/${result.grade.totalQuestions} правильних відповідей)`, `Quiz completed! Grade: ${result.grade.theoryGrade}/12 (${result.grade.correctAnswers}/${result.grade.totalQuestions} correct)`));
+              } catch (error: any) {
+                console.error("Failed to submit quiz:", error);
+                if (error.response?.status === 409 && error.response?.data?.message === "CONTROL_WORK_COMPLETED") {
+                  setControlWorkStatus("COMPLETED");
+                  alert(tr("Контрольна робота вже завершена", "Control work is already completed"));
+                  await loadLesson();
+                } else if (error.response?.status === 409 && error.response?.data?.message === "QUIZ_ALREADY_SUBMITTED") {
+                  alert(tr("Тест уже відправлено. Повторна здача неможлива.", "Quiz has already been submitted. Retake is not allowed."));
+                  await loadLesson();
+                } else {
+                  alert(error.response?.data?.message || tr("Не вдалося відправити тест", "Failed to submit quiz"));
+                }
+              }
+            }} disabled={studentQuizSubmitted}>
                     <Send className="w-4 h-4 mr-2" />
                     {t("submitTest")}
                   </Button>
                 </div>
-              </div>
-            )}
+              </div>}
 
-            {/* Quiz Results for Students */}
-            {user?.userMode === "EDUCATIONAL" && user?.studentId && studentQuizSubmitted && (
-              <div className="mb-4 space-y-3">
-                {studentQuizGrade !== null && (
-                  <div className="p-4 border border-accent-success bg-accent-success/10 rounded">
+            {}
+            {user?.userMode === "EDUCATIONAL" && user?.studentId && studentQuizSubmitted && <div className="mb-4 space-y-3">
+                {studentQuizGrade !== null && <div className="p-4 border border-accent-success bg-accent-success/10 rounded">
                     <div className="text-lg font-mono text-accent-success mb-2">{t("testCompleted")}!</div>
                     <div className="text-text-primary">
                       {t("grade")}: <span className="font-bold">{studentQuizGrade}</span> {t("outOf")} 12
                     </div>
-                  </div>
-                )}
+                  </div>}
 
-                {studentQuizReview?.questions && Array.isArray(studentQuizReview.questions) && (
-                  <div className="p-4 border border-border bg-bg-base">
+                {studentQuizReview?.questions && Array.isArray(studentQuizReview.questions) && <div className="p-4 border border-border bg-bg-base">
                     <div className="text-sm font-mono text-text-primary mb-3">
                       {tr("Результати тесту", "Quiz results")}: {studentQuizReview.correctAnswers}/{studentQuizReview.totalQuestions}
                     </div>
                     <div className="space-y-4">
-                      {studentQuizReview.questions.map((q: any) => (
-                        <div key={q.index} className="p-3 border border-border bg-bg-surface/40">
+                      {studentQuizReview.questions.map((q: any) => <div key={q.index} className="p-3 border border-border bg-bg-surface/40">
                           <div className="flex items-start justify-between gap-3">
                             <div className="text-sm font-mono text-text-primary">
                               {q.index + 1}. {q.question || tr("Питання", "Question")}
                             </div>
-                            <div
-                              className={`text-xs font-mono px-2 py-1 border ${
-                                q.isCorrect ? "border-accent-success text-accent-success" : "border-accent-error text-accent-error"
-                              }`}
-                            >
+                            <div className={`text-xs font-mono px-2 py-1 border ${q.isCorrect ? "border-accent-success text-accent-success" : "border-accent-error text-accent-error"}`}>
                               {q.isCorrect ? tr("✓ Правильно", "✓ Correct") : tr("✗ Неправильно", "✗ Incorrect")}
                             </div>
                           </div>
                           <div className="mt-2 space-y-1 text-xs">
                             {Object.entries(q.options || {}).map(([key, value]) => {
-                              const k = String(key).toUpperCase();
-                              const correct = String(q.correct || "").toUpperCase();
-                              const student = q.student ? String(q.student).toUpperCase() : null;
-                              const isCorrect = k === correct;
-                              const isStudent = student ? k === student : false;
-                              const cls = isCorrect
-                                ? "text-accent-success"
-                                : isStudent
-                                  ? "text-accent-error"
-                                  : "text-text-secondary";
-                              return (
-                                <div key={key} className={`flex items-center gap-2 ${cls}`}>
+                    const k = String(key).toUpperCase();
+                    const correct = String(q.correct || "").toUpperCase();
+                    const student = q.student ? String(q.student).toUpperCase() : null;
+                    const isCorrect = k === correct;
+                    const isStudent = student ? k === student : false;
+                    const cls = isCorrect ? "text-accent-success" : isStudent ? "text-accent-error" : "text-text-secondary";
+                    return <div key={key} className={`flex items-center gap-2 ${cls}`}>
                                   <span className="font-mono">{key})</span>
                                   <span>{String(value)}</span>
                                   {isCorrect && <span className="ml-2">✓</span>}
                                   {isStudent && !isCorrect && <span className="ml-2">{tr("• ваш вибір", "• your choice")}</span>}
-                                </div>
-                              );
-                            })}
+                                </div>;
+                  })}
                           </div>
-                        </div>
-                      ))}
+                        </div>)}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  </div>}
+              </div>}
 
-            {/* Quiz Management (only for teachers) */}
-            {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-              <>
-                {/* Add Question Button */}
-                {lesson.quizJson && (
-                  <div className="mb-3">
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setNewQuestion({
-                          question: "",
-                          options: { А: "", Б: "", В: "", Г: "", Д: "" },
-                          correct: "А",
-                        });
-                        setEditingQuestionIndex(null);
-                        setShowAddQuestion(true);
-                      }}
-                      className="text-xs"
-                    >
+            {}
+            {user?.userMode === "EDUCATIONAL" && !user?.studentId && <>
+                {}
+                {lesson.quizJson && <div className="mb-3">
+                    <Button variant="ghost" onClick={() => {
+              setNewQuestion({
+                question: "",
+                options: {
+                  А: "",
+                  Б: "",
+                  В: "",
+                  Г: "",
+                  Д: ""
+                },
+                correct: "А"
+              });
+              setEditingQuestionIndex(null);
+              setShowAddQuestion(true);
+            }} className="text-xs">
                       <Plus className="w-4 h-4 mr-1" />
                       {tr("Додати питання", "Add question")}
                     </Button>
-                  </div>
-                )}
-                {!lesson.quizJson && (
-                  <>
+                  </div>}
+                {!lesson.quizJson && <>
                     <div className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={quizTopicTitle}
-                        onChange={(e) => setQuizTopicTitle(e.target.value)}
-                        placeholder={tr("Назва теми для генерації питань", "Topic for generating questions")}
-                        className="flex-1 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        max="50"
-                        value={quizCount}
-                        onChange={(e) => setQuizCount(parseInt(e.target.value) || 12)}
-                        placeholder={tr("Кількість", "Count")}
-                        className="w-24 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                      />
-                      <Button
-                        variant="ghost"
-                        onClick={async () => {
-                          if (!lessonId || !quizTopicTitle.trim()) {
-                            alert(tr("Введіть назву теми", "Enter a topic"));
-                            return;
-                          }
-                          setGeneratingQuiz(true);
-                          try {
-                            const result = await generateQuiz(parseInt(lessonId, 10), quizCount, quizTopicTitle);
-                            alert(tr(`Згенеровано ${result.count} питань`, `Generated ${result.count} questions`));
-                            setQuizTopicTitle("");
-                            await loadLesson();
-                          } catch (error: any) {
-                            console.error("Failed to generate quiz:", error);
-                            alert(error.response?.data?.message || tr("Не вдалося згенерувати питання", "Failed to generate questions"));
-                          } finally {
-                            setGeneratingQuiz(false);
-                          }
-                        }}
-                        disabled={generatingQuiz}
-                        className="text-xs"
-                      >
+                      <input type="text" value={quizTopicTitle} onChange={e => setQuizTopicTitle(e.target.value)} placeholder={tr("Назва теми для генерації питань", "Topic for generating questions")} className="flex-1 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
+                      <input type="number" min="1" max="50" value={quizCount} onChange={e => setQuizCount(parseInt(e.target.value) || 12)} placeholder={tr("Кількість", "Count")} className="w-24 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
+                      <Button variant="ghost" onClick={async () => {
+                if (!lessonId || !quizTopicTitle.trim()) {
+                  alert(tr("Введіть назву теми", "Enter a topic"));
+                  return;
+                }
+                setGeneratingQuiz(true);
+                try {
+                  const result = await generateQuiz(parseInt(lessonId, 10), quizCount, quizTopicTitle);
+                  alert(tr(`Згенеровано ${result.count} питань`, `Generated ${result.count} questions`));
+                  setQuizTopicTitle("");
+                  await loadLesson();
+                } catch (error: any) {
+                  console.error("Failed to generate quiz:", error);
+                  alert(error.response?.data?.message || tr("Не вдалося згенерувати питання", "Failed to generate questions"));
+                } finally {
+                  setGeneratingQuiz(false);
+                }
+              }} disabled={generatingQuiz} className="text-xs">
                         <Sparkles className="w-4 h-4 mr-1" />
                         {generatingQuiz ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                       </Button>
                     </div>
                     <p className="text-xs text-text-muted">
-                      {tr(
-                        "Згенеруйте питання для теоретичної частини контрольної роботи",
-                        "Generate questions for the theory part of the control work"
-                      )}
+                      {tr("Згенеруйте питання для теоретичної частини контрольної роботи", "Generate questions for the theory part of the control work")}
                     </p>
-                  </>
-                )}
-              </>
-            )}
-          </Card>
-        )}
+                  </>}
+              </>}
+          </Card>}
 
-        {/* Повідомлення про завершену КР */}
-        {lesson.type === "CONTROL" && controlWorkStatus === "COMPLETED" && (
-          <Card className="p-4 mb-6 border-accent-success">
+        {}
+        {lesson.type === "CONTROL" && controlWorkStatus === "COMPLETED" && <Card className="p-4 mb-6 border-accent-success">
             <div className="text-lg font-mono text-accent-success mb-2">
               {tr("Контрольна робота завершена", "Control work completed")}
             </div>
             <div className="text-text-secondary">
-              {tr(
-                "Ви вже завершили цю контрольну роботу. Результати доступні в журналі.",
-                "You have already completed this control work. Results are available in the gradebook."
-              )}
+              {tr("Ви вже завершили цю контрольну роботу. Результати доступні в журналі.", "You have already completed this control work. Results are available in the gradebook.")}
             </div>
-          </Card>
-        )}
+          </Card>}
 
-        {/* Start control work (students) */}
-        {lesson.type === "CONTROL" &&
-          user?.userMode === "EDUCATIONAL" &&
-          user?.studentId &&
-          controlWorkStatus === "NOT_STARTED" &&
-          lesson.timeLimitMinutes !== undefined &&
-          lesson.timeLimitMinutes !== null && (
-            <Card className="p-4 mb-6 border-primary/40">
+        {}
+        {lesson.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId && controlWorkStatus === "NOT_STARTED" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && <Card className="p-4 mb-6 border-primary/40">
               <div className="text-lg font-mono text-text-primary mb-2">{tr("Контрольна ще не розпочата", "Control work not started")}</div>
               <div className="text-text-secondary mb-3">
-                {tr(
-                  "Натисніть «Почати контрольну», щоб запустити таймер. Після старту час піде одразу.",
-                  "Click “Start control work” to start the timer. Time starts immediately after you start."
-                )}
+                {tr("Натисніть «Почати контрольну», щоб запустити таймер. Після старту час піде одразу.", "Click “Start control work” to start the timer. Time starts immediately after you start.")}
               </div>
-              <Button
-                onClick={async () => {
-                  try {
-                    const attempt = await startLessonAttempt(parseInt(lessonId!, 10));
-                    setRemainingSeconds(attempt.remainingSeconds);
-                    setControlWorkStatus("IN_PROGRESS");
-                  } catch (error: any) {
-                    console.error("Failed to start attempt:", error);
-                    if (error.response?.status === 409 && error.response?.data?.message === "CONTROL_WORK_COMPLETED") {
-                      setControlWorkStatus("COMPLETED");
-                    } else {
-                      alert(error.response?.data?.message || tr("Не вдалося почати контрольну", "Failed to start control work"));
-                    }
-                  }
-                }}
-              >
+              <Button onClick={async () => {
+          try {
+            const attempt = await startLessonAttempt(parseInt(lessonId!, 10));
+            setRemainingSeconds(attempt.remainingSeconds);
+            setControlWorkStatus("IN_PROGRESS");
+          } catch (error: any) {
+            console.error("Failed to start attempt:", error);
+            if (error.response?.status === 409 && error.response?.data?.message === "CONTROL_WORK_COMPLETED") {
+              setControlWorkStatus("COMPLETED");
+            } else {
+              alert(error.response?.data?.message || tr("Не вдалося почати контрольну", "Failed to start control work"));
+            }
+          }
+        }}>
                 {tr("Почати контрольну", "Start control work")}
               </Button>
-            </Card>
-          )}
+            </Card>}
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-mono text-text-primary">
             {t("tasks")} ({lesson.tasks.length})
           </h2>
-          {user?.userMode === "EDUCATIONAL" && !user?.studentId && (
-            <Button 
-              onClick={() => {
-                // Для звичайних уроків перевіряємо, чи вже є завдання
-                if (lesson.type === "LESSON" && lesson.tasks.length > 0) {
-                  alert(
-                    tr(
-                      "Звичайний урок може мати тільки одне завдання. Видаліть існуюче завдання або створіть контрольну роботу для множинних завдань.",
-                      "A regular lesson can have only one task. Delete the existing task or create a control work for multiple tasks."
-                    )
-                  );
-                  return;
-                }
-                setShowCreateTask(true);
-              }}
-            >
+          {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => {
+          if (lesson.type === "LESSON" && lesson.tasks.length > 0) {
+            alert(tr("Звичайний урок може мати тільки одне завдання. Видаліть існуюче завдання або створіть контрольну роботу для множинних завдань.", "A regular lesson can have only one task. Delete the existing task or create a control work for multiple tasks."));
+            return;
+          }
+          setShowCreateTask(true);
+        }}>
               <Plus className="w-4 h-4 mr-2" />
               {t("addTask")}
-            </Button>
-          )}
+            </Button>}
         </div>
 
         <div className="space-y-3">
-          {lesson.tasks.length === 0 ? (
-            <Card className="p-8 text-center">
+          {lesson.tasks.length === 0 ? <Card className="p-8 text-center">
               <p className="text-text-secondary">{t("noTasks")}</p>
-            </Card>
-          ) : controlWorkStatus === "COMPLETED" ? (
-            <Card className="p-8 text-center">
+            </Card> : controlWorkStatus === "COMPLETED" ? <Card className="p-8 text-center">
               <p className="text-text-secondary">{tr("Контрольна робота завершена", "Control work completed")}</p>
-            </Card>
-          ) : (
-            lesson.tasks.map((task) => {
-              const isExpired = task.deadline && isDeadlineExpired(task.deadline);
-              const hasGrade = task.hasGrade || false;
-              // ВАЖЛИВО: Не показуємо "Протерміновано", якщо завдання вже виконане
-              const showOverdue = isExpired && !hasGrade;
-              // Визначаємо, чи показувати кнопку "Виконати" або "Переглянути"
-              // Показуємо "Переглянути", якщо є оцінка або завдання протерміновано і не виконано
-              const showViewButton = hasGrade || showOverdue;
-              
-              return (
-              <Card key={task.id} className={`p-4 ${showOverdue ? 'border-accent-error/50 bg-accent-error/5' : ''}`}>
+            </Card> : lesson.tasks.map(task => {
+          const isExpired = task.deadline && isDeadlineExpired(task.deadline);
+          const hasGrade = task.hasGrade || false;
+          const showOverdue = isExpired && !hasGrade;
+          const showViewButton = hasGrade || showOverdue;
+          return <Card key={task.id} className={`p-4 ${showOverdue ? 'border-accent-error/50 bg-accent-error/5' : ''}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-lg font-mono text-text-primary">{task.title}</h3>
-                      {showOverdue && (
-                        <span className="text-xs px-2 py-1 bg-accent-error/20 text-accent-error border border-accent-error/30 rounded flex items-center gap-1">
+                      {showOverdue && <span className="text-xs px-2 py-1 bg-accent-error/20 text-accent-error border border-accent-error/30 rounded flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {t("expired")}
-                        </span>
-                      )}
-                      {task.deadline && !isExpired && (
-                        <span className="text-xs px-2 py-1 bg-bg-hover text-text-secondary border border-border rounded flex items-center gap-1">
+                        </span>}
+                      {task.deadline && !isExpired && <span className="text-xs px-2 py-1 bg-bg-hover text-text-secondary border border-border rounded flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {t("until")}{" "}
                           {new Date(task.deadline).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
-                        </span>
-                      )}
-                      {hasGrade && task.grade && (
-                        <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${
-                          task.grade.total >= 10 ? 'bg-accent-success/20 text-accent-success border border-accent-success/30' :
-                          task.grade.total >= 7 ? 'bg-accent-warn/20 text-accent-warn border border-accent-warn/30' :
-                          task.grade.total >= 4 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' :
-                          'bg-accent-error/20 text-accent-error border border-accent-error/30'
-                        }`}>
+                        </span>}
+                      {hasGrade && task.grade && <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${task.grade.total >= 10 ? 'bg-accent-success/20 text-accent-success border border-accent-success/30' : task.grade.total >= 7 ? 'bg-accent-warn/20 text-accent-warn border border-accent-warn/30' : task.grade.total >= 4 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' : 'bg-accent-error/20 text-accent-error border border-accent-error/30'}`}>
                           {t("grade")}: {task.grade.total}/12
-                        </span>
-                      )}
+                        </span>}
                     </div>
                     <div className="text-sm text-text-secondary mb-2 line-clamp-2">
                       {task.description}
@@ -968,71 +750,39 @@ export const LessonDetailsPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {user?.userMode === "EDUCATIONAL" && !user?.studentId ? (
-                      <>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleViewGrades(task.id)}
-                          className="text-xs"
-                        >
+                    {user?.userMode === "EDUCATIONAL" && !user?.studentId ? <>
+                        <Button variant="ghost" onClick={() => handleViewGrades(task.id)} className="text-xs">
                           <Users className="w-4 h-4 mr-1" />
                           {t("grades")}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleOpenTestDataModal(task.id)}
-                          className="text-xs"
-                        >
+                        <Button variant="ghost" onClick={() => handleOpenTestDataModal(task.id)} className="text-xs">
                           <FileText className="w-4 h-4 mr-1" />
                           {t("tests")} ({task.testDataCount || 0})
                         </Button>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleOpenTaskSettings(task.id)}
-                          className="text-xs"
-                        >
+                        <Button variant="ghost" onClick={() => handleOpenTaskSettings(task.id)} className="text-xs">
                           <Settings className="w-4 h-4 mr-1" />
                           {t("settings")}
                         </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant={showViewButton ? "ghost" : "primary"}
-                        onClick={() => {
-                          window.location.href = `/edu/tasks/${task.id}`;
-                        }}
-                        className="text-xs"
-                      >
-                        {showViewButton ? (
-                          <>
+                      </> : <Button variant={showViewButton ? "ghost" : "primary"} onClick={() => {
+                  window.location.href = `/edu/tasks/${task.id}`;
+                }} className="text-xs">
+                        {showViewButton ? <>
                             <FileText className="w-4 h-4 mr-1" />
                             {tr("Переглянути", "View")}
-                          </>
-                        ) : (
-                          <>
+                          </> : <>
                             <Play className="w-4 h-4 mr-1" />
                             {t("execute")}
-                          </>
-                        )}
-                      </Button>
-                    )}
+                          </>}
+                      </Button>}
                   </div>
                 </div>
-              </Card>
-            );
-            })
-          )}
+              </Card>;
+        })}
         </div>
       </div>
 
-      {/* Create Task Modal */}
-      {showCreateTask && (
-        <Modal 
-          open={showCreateTask}
-          onClose={() => setShowCreateTask(false)}
-          title={tr("Створити завдання", "Create task")}
-          showCloseButton={false}
-        >
+      {}
+      {showCreateTask && <Modal open={showCreateTask} onClose={() => setShowCreateTask(false)} title={tr("Створити завдання", "Create task")} showCloseButton={false}>
           <div className="p-6 max-w-3xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Створити завдання", "Create task")}</h2>
             <div className="space-y-4">
@@ -1040,32 +790,28 @@ export const LessonDetailsPage: React.FC = () => {
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Назва завдання", "Task title")} *
                 </label>
-                <input
-                  type="text"
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                />
+                <input type="text" value={newTask.title} onChange={e => setNewTask({
+              ...newTask,
+              title: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
               </div>
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Опис завдання (Markdown)", "Task description (Markdown)")} *
                 </label>
-                <textarea
-                  value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]"
-                />
+                <textarea value={newTask.description} onChange={e => setNewTask({
+              ...newTask,
+              description: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" />
               </div>
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Шаблон коду", "Code template")} *
                 </label>
-                <textarea
-                  value={newTask.template}
-                  onChange={(e) => setNewTask({ ...newTask, template: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] font-mono text-sm"
-                />
+                <textarea value={newTask.template} onChange={e => setNewTask({
+              ...newTask,
+              template: e.target.value
+            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] font-mono text-sm" />
               </div>
               <div className="flex gap-2 justify-end">
                 <Button variant="ghost" onClick={() => setShowCreateTask(false)}>
@@ -1075,159 +821,131 @@ export const LessonDetailsPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Add/Edit Question Modal */}
-      {showAddQuestion && (
-        <Modal
-          open={showAddQuestion}
-          onClose={() => {
-            setShowAddQuestion(false);
-            setEditingQuestionIndex(null);
-            setNewQuestion({
-              question: "",
-              options: { А: "", Б: "", В: "", Г: "", Д: "" },
-              correct: "А",
-            });
-          }}
-          title={
-            editingQuestionIndex !== null
-              ? tr("Редагувати питання", "Edit question")
-              : tr("Додати питання", "Add question")
-          }
-          showCloseButton={false}
-        >
+      {}
+      {showAddQuestion && <Modal open={showAddQuestion} onClose={() => {
+      setShowAddQuestion(false);
+      setEditingQuestionIndex(null);
+      setNewQuestion({
+        question: "",
+        options: {
+          А: "",
+          Б: "",
+          В: "",
+          Г: "",
+          Д: ""
+        },
+        correct: "А"
+      });
+    }} title={editingQuestionIndex !== null ? tr("Редагувати питання", "Edit question") : tr("Додати питання", "Add question")} showCloseButton={false}>
           <div className="p-6 max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Питання", "Question")} *
                 </label>
-                <textarea
-                  value={newQuestion.question}
-                  onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
-                  placeholder={tr("Введіть текст питання", "Enter question text")}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary resize-none"
-                  rows={3}
-                />
+                <textarea value={newQuestion.question} onChange={e => setNewQuestion({
+              ...newQuestion,
+              question: e.target.value
+            })} placeholder={tr("Введіть текст питання", "Enter question text")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary resize-none" rows={3} />
               </div>
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Варіанти відповідей", "Answer options")} *
                 </label>
                 <div className="space-y-2">
-                  {Object.entries(newQuestion.options).map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-2">
+                  {Object.entries(newQuestion.options).map(([key, value]) => <div key={key} className="flex items-center gap-2">
                       <span className="font-mono w-6 text-text-secondary">{key})</span>
-                      <input
-                        type="text"
-                        value={value}
-                        onChange={(e) =>
-                          setNewQuestion({
-                            ...newQuestion,
-                            options: { ...newQuestion.options, [key]: e.target.value },
-                          })
-                        }
-                        placeholder={tr(`Варіант ${key}`, `Option ${key}`)}
-                        className="flex-1 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                      />
-                      <input
-                        type="radio"
-                        name="correct"
-                        checked={newQuestion.correct === key}
-                        onChange={() => setNewQuestion({ ...newQuestion, correct: key as "А" | "Б" | "В" | "Г" | "Д" })}
-                        className="w-4 h-4"
-                      />
+                      <input type="text" value={value} onChange={e => setNewQuestion({
+                  ...newQuestion,
+                  options: {
+                    ...newQuestion.options,
+                    [key]: e.target.value
+                  }
+                })} placeholder={tr(`Варіант ${key}`, `Option ${key}`)} className="flex-1 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
+                      <input type="radio" name="correct" checked={newQuestion.correct === key} onChange={() => setNewQuestion({
+                  ...newQuestion,
+                  correct: key as "А" | "Б" | "В" | "Г" | "Д"
+                })} className="w-4 h-4" />
                       <span className="text-xs text-text-muted">{tr("Правильна", "Correct")}</span>
-                    </div>
-                  ))}
+                    </div>)}
                 </div>
               </div>
             </div>
             <div className="flex gap-2 justify-end mt-6">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowAddQuestion(false);
-                  setEditingQuestionIndex(null);
-                  setNewQuestion({
-                    question: "",
-                    options: { А: "", Б: "", В: "", Г: "", Д: "" },
-                    correct: "А",
-                  });
-                }}
-              >
+              <Button variant="ghost" onClick={() => {
+            setShowAddQuestion(false);
+            setEditingQuestionIndex(null);
+            setNewQuestion({
+              question: "",
+              options: {
+                А: "",
+                Б: "",
+                В: "",
+                Г: "",
+                Д: ""
+              },
+              correct: "А"
+            });
+          }}>
                 {t("cancel")}
               </Button>
-              <Button
-                onClick={async () => {
-                  if (!newQuestion.question.trim()) {
-                    alert(tr("Введіть текст питання", "Enter question text"));
-                    return;
-                  }
-                  if (Object.values(newQuestion.options).some((v) => !v.trim())) {
-                    alert(tr("Заповніть всі варіанти відповідей", "Fill all answer options"));
-                    return;
-                  }
-                  try {
-                    const currentQuiz = lesson?.quizJson
-                      ? JSON.parse(lesson.quizJson)
-                      : [];
-                    const updatedQuiz = [...currentQuiz];
-                    
-                    // Нормалізуємо формат питання перед збереженням
-                    const optionKeys: ("А" | "Б" | "В" | "Г" | "Д")[] = ['А', 'Б', 'В', 'Г', 'Д'];
-                    const normalizedQuestion = {
-                      q: newQuestion.question.trim(),
-                      options: optionKeys.map((key) => newQuestion.options[key] || ''),
-                      correct: optionKeys.indexOf(newQuestion.correct),
-                    };
-                    
-                    if (editingQuestionIndex !== null) {
-                      updatedQuiz[editingQuestionIndex] = normalizedQuestion;
-                    } else {
-                      updatedQuiz.push(normalizedQuestion);
-                    }
-                    
-                    await saveQuiz(parseInt(lessonId!, 10), updatedQuiz);
-                    await loadLesson();
-                    setShowAddQuestion(false);
-                    setEditingQuestionIndex(null);
-                    setNewQuestion({
-                      question: "",
-                      options: { А: "", Б: "", В: "", Г: "", Д: "" },
-                      correct: "А",
-                    });
-                  } catch (error: any) {
-                    console.error("Failed to save question:", error);
-                    alert(error.response?.data?.message || tr("Не вдалося зберегти питання", "Failed to save question"));
-                  }
-                }}
-              >
+              <Button onClick={async () => {
+            if (!newQuestion.question.trim()) {
+              alert(tr("Введіть текст питання", "Enter question text"));
+              return;
+            }
+            if (Object.values(newQuestion.options).some(v => !v.trim())) {
+              alert(tr("Заповніть всі варіанти відповідей", "Fill all answer options"));
+              return;
+            }
+            try {
+              const currentQuiz = lesson?.quizJson ? JSON.parse(lesson.quizJson) : [];
+              const updatedQuiz = [...currentQuiz];
+              const optionKeys: ("А" | "Б" | "В" | "Г" | "Д")[] = ['А', 'Б', 'В', 'Г', 'Д'];
+              const normalizedQuestion = {
+                q: newQuestion.question.trim(),
+                options: optionKeys.map(key => newQuestion.options[key] || ''),
+                correct: optionKeys.indexOf(newQuestion.correct)
+              };
+              if (editingQuestionIndex !== null) {
+                updatedQuiz[editingQuestionIndex] = normalizedQuestion;
+              } else {
+                updatedQuiz.push(normalizedQuestion);
+              }
+              await saveQuiz(parseInt(lessonId!, 10), updatedQuiz);
+              await loadLesson();
+              setShowAddQuestion(false);
+              setEditingQuestionIndex(null);
+              setNewQuestion({
+                question: "",
+                options: {
+                  А: "",
+                  Б: "",
+                  В: "",
+                  Г: "",
+                  Д: ""
+                },
+                correct: "А"
+              });
+            } catch (error: any) {
+              console.error("Failed to save question:", error);
+              alert(error.response?.data?.message || tr("Не вдалося зберегти питання", "Failed to save question"));
+            }
+          }}>
                 {editingQuestionIndex !== null ? tr("Зберегти зміни", "Save changes") : tr("Додати питання", "Add question")}
               </Button>
             </div>
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Grades Modal */}
-      {showGrades && (
-        <Modal 
-          open={showGrades}
-          onClose={() => setShowGrades(false)}
-          title={tr("Оцінки учнів", "Student grades")}
-          showCloseButton={false}
-        >
+      {}
+      {showGrades && <Modal open={showGrades} onClose={() => setShowGrades(false)} title={tr("Оцінки учнів", "Student grades")} showCloseButton={false}>
           <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Оцінки учнів", "Student grades")}</h2>
             <div className="space-y-2">
-              {grades.map((item, index) => (
-                <div
-                  key={index}
-                  className="p-3 border border-border bg-bg-surface flex items-center justify-between"
-                >
+              {grades.map((item, index) => <div key={index} className="p-3 border border-border bg-bg-surface flex items-center justify-between">
                   <div>
                     <div className="text-sm font-mono text-text-primary">
                       {item.student.lastName} {item.student.firstName} {item.student.middleName || ""}
@@ -1235,109 +953,69 @@ export const LessonDetailsPage: React.FC = () => {
                     <div className="text-xs text-text-secondary">{item.student.email}</div>
                   </div>
                   <div className="flex items-center gap-4">
-                    {item.grade ? (
-                      <>
+                    {item.grade ? <>
                         <div className="text-right">
-                          <div className={`text-lg font-mono font-bold ${
-                            item.grade.total >= 10 ? "text-accent-success" :
-                            item.grade.total >= 7 ? "text-accent-warn" :
-                            item.grade.total >= 4 ? "text-yellow-500" :
-                            "text-accent-error"
-                          }`}>
+                          <div className={`text-lg font-mono font-bold ${item.grade.total >= 10 ? "text-accent-success" : item.grade.total >= 7 ? "text-accent-warn" : item.grade.total >= 4 ? "text-yellow-500" : "text-accent-error"}`}>
                             {item.grade.total}
                           </div>
                           <div className="text-xs text-text-muted">{t("outOf")} 12</div>
                         </div>
-                      <Button
-                        variant="ghost"
-                        onClick={() => window.location.href = `/edu/grades/${item.grade.id}`}
-                        className="text-xs"
-                      >
+                      <Button variant="ghost" onClick={() => window.location.href = `/edu/grades/${item.grade.id}`} className="text-xs">
                         {tr("Деталі", "Details")}
                       </Button>
-                      </>
-                    ) : (
-                      <span className="text-xs text-text-muted">{tr("Немає оцінки", "No grade")}</span>
-                    )}
+                      </> : <span className="text-xs text-text-muted">{tr("Немає оцінки", "No grade")}</span>}
                   </div>
-                </div>
-              ))}
+                </div>)}
             </div>
             <div className="flex justify-end mt-4">
               <Button onClick={() => setShowGrades(false)}>{t("close")}</Button>
             </div>
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Test Data Management Modal */}
-      {showTestDataModal && testDataTaskId && (
-        <Modal
-          open={showTestDataModal}
-          onClose={() => {
-            setShowTestDataModal(false);
-            setTestDataTaskId(null);
-            setTestDataList([]);
-            setEditingTestIndex(null);
-            setEditingTest(null);
-          }}
-          title={tr("Управління тестами", "Test management")}
-          showCloseButton={false}
-        >
+      {}
+      {showTestDataModal && testDataTaskId && <Modal open={showTestDataModal} onClose={() => {
+      setShowTestDataModal(false);
+      setTestDataTaskId(null);
+      setTestDataList([]);
+      setEditingTestIndex(null);
+      setEditingTest(null);
+    }} title={tr("Управління тестами", "Test management")} showCloseButton={false}>
           <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-mono text-text-primary">{tr("Тестові дані", "Test data")}</h2>
               <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={newTestCount}
-                  onChange={(e) => setNewTestCount(parseInt(e.target.value) || 10)}
-                  className="w-20 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                />
-                <Button
-                  variant="ghost"
-                  onClick={() => handleGenerateTests(testDataTaskId, newTestCount)}
-                  className="text-xs"
-                >
+                <input type="number" min="1" max="50" value={newTestCount} onChange={e => setNewTestCount(parseInt(e.target.value) || 10)} className="w-20 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
+                <Button variant="ghost" onClick={() => handleGenerateTests(testDataTaskId, newTestCount)} className="text-xs">
                   <Sparkles className="w-4 h-4 mr-1" />
                   {tr("Згенерувати", "Generate")} {newTestCount}
                 </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingTestIndex(-1);
-                    setEditingTest({ input: "", expectedOutput: "", points: 1 });
-                  }}
-                  className="text-xs"
-                >
+                <Button variant="ghost" onClick={() => {
+              setEditingTestIndex(-1);
+              setEditingTest({
+                input: "",
+                expectedOutput: "",
+                points: 1
+              });
+            }} className="text-xs">
                   <Plus className="w-4 h-4 mr-1" />
                   {tr("Додати вручну", "Add manually")}
                 </Button>
               </div>
             </div>
 
-            {loadingTestData ? (
-              <div className="text-center py-8 text-text-secondary font-mono">
+            {loadingTestData ? <div className="text-center py-8 text-text-secondary font-mono">
                 {t("loading")}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Форма для додавання нового тесту */}
-                {editingTestIndex === -1 && (
-                  <Card className="p-4 border-2 border-primary">
+              </div> : <div className="space-y-3">
+                {}
+                {editingTestIndex === -1 && <Card className="p-4 border-2 border-primary">
                     <div className="space-y-3">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-sm font-mono text-text-primary">{tr("Новий тест", "New test")}</h3>
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingTestIndex(null);
-                            setEditingTest(null);
-                          }}
-                          className="text-xs p-1 h-6 w-6"
-                        >
+                        <Button variant="ghost" onClick={() => {
+                  setEditingTestIndex(null);
+                  setEditingTest(null);
+                }} className="text-xs p-1 h-6 w-6">
                           <X className="w-3 h-3" />
                         </Button>
                       </div>
@@ -1345,125 +1023,86 @@ export const LessonDetailsPage: React.FC = () => {
                         <label className="block text-xs font-mono text-text-secondary mb-1">
                           {tr("Вхідні дані", "Input")}
                         </label>
-                        <textarea
-                          value={editingTest?.input || ""}
-                          onChange={(e) => setEditingTest({ ...editingTest!, input: e.target.value })}
-                          placeholder={tr("Наприклад: 5 10", "Example: 5 10")}
-                          className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                        />
+                        <textarea value={editingTest?.input || ""} onChange={e => setEditingTest({
+                  ...editingTest!,
+                  input: e.target.value
+                })} placeholder={tr("Наприклад: 5 10", "Example: 5 10")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                       </div>
                       <div>
                         <label className="block text-xs font-mono text-text-secondary mb-1">
                           {tr("Очікуваний вивід", "Expected output")}
                         </label>
-                        <textarea
-                          value={editingTest?.expectedOutput || ""}
-                          onChange={(e) => setEditingTest({ ...editingTest!, expectedOutput: e.target.value })}
-                          placeholder={tr("Наприклад: 15", "Example: 15")}
-                          className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                        />
+                        <textarea value={editingTest?.expectedOutput || ""} onChange={e => setEditingTest({
+                  ...editingTest!,
+                  expectedOutput: e.target.value
+                })} placeholder={tr("Наприклад: 15", "Example: 15")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
                           <label className="block text-xs font-mono text-text-secondary mb-1">
                             {tr("Бали", "Points")} (1-12)
                           </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="12"
-                            value={editingTest?.points || 1}
-                            onChange={(e) => setEditingTest({ ...editingTest!, points: parseInt(e.target.value) || 1 })}
-                            className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                          />
+                          <input type="number" min="1" max="12" value={editingTest?.points || 1} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    points: parseInt(e.target.value) || 1
+                  })} className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                         </div>
-                        <Button
-                          variant="primary"
-                          onClick={handleAddNewTest}
-                          className="text-xs"
-                        >
+                        <Button variant="primary" onClick={handleAddNewTest} className="text-xs">
                           <Plus className="w-4 h-4 mr-1" />
                           {t("add")}
                         </Button>
                       </div>
                     </div>
-                  </Card>
-                )}
+                  </Card>}
 
-                {/* Список існуючих тестів */}
-                {testDataList.length === 0 ? (
-                  <Card className="p-8 text-center">
+                {}
+                {testDataList.length === 0 ? <Card className="p-8 text-center">
                     <p className="text-text-secondary mb-4">{tr("Немає тестових даних", "No test data")}</p>
                     <p className="text-xs text-text-muted">
-                      {tr(
-                        "Згенеруйте тести автоматично або додайте їх вручну",
-                        "Generate tests automatically or add them manually"
-                      )}
+                      {tr("Згенеруйте тести автоматично або додайте їх вручну", "Generate tests automatically or add them manually")}
                     </p>
-                  </Card>
-                ) : (
-                  testDataList.map((test, index) => (
-                    <Card key={test.id} className="p-4">
-                      {editingTestIndex === index ? (
-                        <div className="space-y-3">
+                  </Card> : testDataList.map((test, index) => <Card key={test.id} className="p-4">
+                      {editingTestIndex === index ? <div className="space-y-3">
                           <div>
                             <label className="block text-xs font-mono text-text-secondary mb-1">
                               {tr("Вхідні дані", "Input")}
                             </label>
-                            <textarea
-                              value={editingTest?.input || ""}
-                              onChange={(e) => setEditingTest({ ...editingTest!, input: e.target.value })}
-                              placeholder={tr("Наприклад: 5 10", "Example: 5 10")}
-                              className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                            />
+                            <textarea value={editingTest?.input || ""} onChange={e => setEditingTest({
+                  ...editingTest!,
+                  input: e.target.value
+                })} placeholder={tr("Наприклад: 5 10", "Example: 5 10")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                           </div>
                           <div>
                             <label className="block text-xs font-mono text-text-secondary mb-1">
                               {tr("Очікуваний вивід", "Expected output")}
                             </label>
-                            <textarea
-                              value={editingTest?.expectedOutput || ""}
-                              onChange={(e) => setEditingTest({ ...editingTest!, expectedOutput: e.target.value })}
-                              placeholder={tr("Наприклад: 15", "Example: 15")}
-                              className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y"
-                            />
+                            <textarea value={editingTest?.expectedOutput || ""} onChange={e => setEditingTest({
+                  ...editingTest!,
+                  expectedOutput: e.target.value
+                })} placeholder={tr("Наприклад: 15", "Example: 15")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="flex-1">
                               <label className="block text-xs font-mono text-text-secondary mb-1">
                                 {tr("Бали", "Points")} (1-12)
                               </label>
-                              <input
-                                type="number"
-                                min="1"
-                                max="12"
-                                value={editingTest?.points || 1}
-                                onChange={(e) => setEditingTest({ ...editingTest!, points: parseInt(e.target.value) || 1 })}
-                                className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                              />
+                              <input type="number" min="1" max="12" value={editingTest?.points || 1} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    points: parseInt(e.target.value) || 1
+                  })} className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                             </div>
-                            <Button
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingTestIndex(null);
-                                setEditingTest(null);
-                              }}
-                              className="text-xs"
-                            >
+                            <Button variant="ghost" onClick={() => {
+                  setEditingTestIndex(null);
+                  setEditingTest(null);
+                }} className="text-xs">
                               <X className="w-4 h-4" />
                             </Button>
-                            <Button
-                              variant="primary"
-                              onClick={() => handleSaveTest(test.id, index)}
-                              className="text-xs"
-                            >
+                            <Button variant="primary" onClick={() => handleSaveTest(test.id, index)} className="text-xs">
                               <Save className="w-4 h-4 mr-1" />
                               {t("save")}
                             </Button>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-start justify-between gap-4">
+                        </div> : <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 space-y-2">
                             <div>
                               <span className="text-xs font-mono text-text-muted">{tr("Вхід", "Input")}:</span>
@@ -1482,46 +1121,31 @@ export const LessonDetailsPage: React.FC = () => {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingTestIndex(index);
-                                setEditingTest({ input: test.input, expectedOutput: test.expectedOutput, points: test.points });
-                              }}
-                              className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast"
-                              title={t("edit")}
-                            >
+                            <button onClick={() => {
+                  setEditingTestIndex(index);
+                  setEditingTest({
+                    input: test.input,
+                    expectedOutput: test.expectedOutput,
+                    points: test.points
+                  });
+                }} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")}>
                               <Edit2 className="w-4 h-4 text-primary" />
                             </button>
-                            <button
-                              onClick={() => handleDeleteTest(test.id)}
-                              className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast"
-                              title={t("delete")}
-                            >
+                            <button onClick={() => handleDeleteTest(test.id)} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")}>
                               <Trash2 className="w-4 h-4 text-accent-error" />
                             </button>
                           </div>
-                        </div>
-                      )}
-                    </Card>
-                  ))
-                )}
-              </div>
-            )}
+                        </div>}
+                    </Card>)}
+              </div>}
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Task Settings Modal */}
-      {showTaskSettings && settingsTask && (
-        <Modal
-          open={showTaskSettings}
-          onClose={() => {
-            setShowTaskSettings(false);
-            setSettingsTask(null);
-          }}
-          title={tr("Налаштування завдання", "Task settings")}
-          showCloseButton={false}
-        >
+      {}
+      {showTaskSettings && settingsTask && <Modal open={showTaskSettings} onClose={() => {
+      setShowTaskSettings(false);
+      setSettingsTask(null);
+    }} title={tr("Налаштування завдання", "Task settings")} showCloseButton={false}>
           <div className="p-6 max-w-2xl">
             <h2 className="text-xl font-mono text-text-primary mb-4">{settingsTask.title}</h2>
             <div className="space-y-4">
@@ -1529,13 +1153,7 @@ export const LessonDetailsPage: React.FC = () => {
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Кількість спроб (мінімум 1)", "Attempts (min 1)")}
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={taskMaxAttempts}
-                  onChange={(e) => setTaskMaxAttempts(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                />
+                <input type="number" min="1" value={taskMaxAttempts} onChange={e => setTaskMaxAttempts(Math.max(1, parseInt(e.target.value) || 1))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
                 <p className="text-xs text-text-muted mt-1">
                   {tr("Скільки разів учень може відправити код на перевірку", "How many times a student can submit code for checking")}
                 </p>
@@ -1545,69 +1163,40 @@ export const LessonDetailsPage: React.FC = () => {
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Дедлайн (необов'язково)", "Deadline (optional)")}
                 </label>
-                <input
-                  type="datetime-local"
-                  value={taskDeadline}
-                  onChange={(e) => setTaskDeadline(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                />
+                <input type="datetime-local" value={taskDeadline} onChange={e => setTaskDeadline(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
                 <p className="text-xs text-text-muted mt-1">
                   {tr("Після цієї дати учень не зможе відправити код", "After this date, the student cannot submit code")}
                 </p>
-                {taskDeadline && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setTaskDeadline("")}
-                    className="text-xs mt-2"
-                  >
+                {taskDeadline && <Button variant="ghost" onClick={() => setTaskDeadline("")} className="text-xs mt-2">
                     <X className="w-3 h-3 mr-1" />
                     {tr("Прибрати дедлайн", "Remove deadline")}
-                  </Button>
-                )}
+                  </Button>}
               </div>
 
               <div>
                 <label className="flex items-center gap-2 text-sm font-mono text-text-secondary">
-                  <input
-                    type="checkbox"
-                    checked={taskIsClosed}
-                    onChange={(e) => setTaskIsClosed(e.target.checked)}
-                    className="w-4 h-4"
-                  />
+                  <input type="checkbox" checked={taskIsClosed} onChange={e => setTaskIsClosed(e.target.checked)} className="w-4 h-4" />
                   {tr("Завдання закрите для відправок", "Task is closed for submissions")}
                 </label>
                 <p className="text-xs text-text-muted mt-1">
-                  {tr(
-                    "Якщо увімкнено, учень не зможе відправити код, навіть якщо є спроби та дедлайн не пройшов",
-                    "If enabled, the student cannot submit code even if attempts remain and the deadline hasn’t passed"
-                  )}
+                  {tr("Якщо увімкнено, учень не зможе відправити код, навіть якщо є спроби та дедлайн не пройшов", "If enabled, the student cannot submit code even if attempts remain and the deadline hasn’t passed")}
                 </p>
               </div>
 
               <div className="flex gap-2 justify-end mt-6">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setShowTaskSettings(false);
-                    setSettingsTask(null);
-                  }}
-                >
+                <Button variant="ghost" onClick={() => {
+              setShowTaskSettings(false);
+              setSettingsTask(null);
+            }}>
                   {t("cancel")}
                 </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleSaveTaskSettings}
-                >
+                <Button variant="primary" onClick={handleSaveTaskSettings}>
                   {t("save")}
                 </Button>
               </div>
             </div>
           </div>
-        </Modal>
-      )}
-    </div>
-  );
+        </Modal>}
+    </>;
 };
-
 export default LessonDetailsPage;
-

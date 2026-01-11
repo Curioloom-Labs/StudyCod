@@ -1,19 +1,17 @@
 export default {
-  // Common
   save: 'Зберегти',
   cancel: 'Скасувати',
+  edit: 'Редагувати',
+  delete: 'Видалити',
   loading: 'Завантаження...',
   back: 'Назад',
   close: 'Закрити',
-  delete: 'Видалити',
-  edit: 'Редагувати',
   create: 'Створити',
   update: 'Оновити',
   search: 'Пошук',
   filter: 'Фільтр',
   actions: 'Дії',
-  
-  // Navigation
+  optional: 'необов\'язково',
   home: 'Головна',
   tasks: 'Завдання',
   grades: 'Оцінки',
@@ -24,8 +22,6 @@ export default {
   myJournal: 'Мій журнал',
   lessons: 'Уроки',
   toHome: 'На головну',
-  
-  // Auth
   login: 'Увійти',
   register: 'Зареєструватись',
   email: 'Email',
@@ -33,8 +29,6 @@ export default {
   username: 'Ім\'я користувача',
   forgotPassword: 'Забули пароль?',
   resetPassword: 'Скинути пароль',
-  
-  // Gradebook
   gradebook: 'Журнал',
   student: 'Учень',
   grade: 'Оцінка',
@@ -49,65 +43,47 @@ export default {
   noGrades: 'Немає оцінок',
   exportCSV: 'Експорт CSV',
   failedToLoad: 'Не вдалося завантажити журнал',
-  
-  // Tasks
   task: 'Завдання',
-  tasks: 'Завдання',
   taskTitle: 'Назва завдання',
   taskDescription: 'Опис завдання',
   deadline: 'Дедлайн',
   expired: 'Протерміновано',
   until: 'До',
   execute: 'Виконати',
-  submit: 'Відправити',
   submitted: 'Відправлено',
   notSubmitted: 'Не відправлено',
-  
-  // Lessons
   lesson: 'Урок',
-  lessons: 'Уроки',
   lessonTitle: 'Назва уроку',
   addTask: 'Додати завдання',
   noTasks: 'Немає завдань',
   taskCount: 'Завдань',
-  
-  // Common messages
   error: 'Помилка',
   success: 'Успіх',
   warning: 'Попередження',
   info: 'Інформація',
   confirm: 'Підтвердити',
   areYouSure: 'Ви впевнені?',
-  
-  // Profile
-  profile: 'Профіль',
   firstName: 'Ім\'я',
   lastName: 'Прізвище',
   middleName: 'По батькові',
   language: 'Мова',
+  programmingLanguage: 'Мова програмування',
   timezone: 'Часовий пояс',
-  
-  // Classes
   class: 'Клас',
   classes: 'Класи',
   className: 'Назва класу',
   students: 'Учні',
   teacher: 'Вчитель',
-  noStudents: 'Немає учнів',
-  
-  // Control works
   controlWork: 'Контрольна робота',
   controlWorks: 'Контрольні роботи',
   completed: 'Завершено',
   notCompleted: 'Не завершено',
-  
-  // Topics
   topic: 'Тема',
   topics: 'Теми',
   topicTitle: 'Назва теми',
   practicalTasks: 'Практичні завдання',
-  
-  // Test
+  createControlWork: 'Створити контрольну роботу',
+  assign: 'Призначити',
   test: 'Тест',
   tests: 'Тести',
   testCount: 'Тестів',
@@ -115,22 +91,14 @@ export default {
   testCompleted: 'Тест завершено',
   correctAnswers: 'Правильних відповідей',
   totalQuestions: 'Всього питань',
-  
-  // Settings
   settings: 'Налаштування',
   configure: 'Налаштувати',
-  
-  // Theory
   theory: 'Теорія',
   readTheory: 'Читати теорію',
-  
-  // Status
   active: 'Активне',
   inactive: 'Неактивне',
   closed: 'Закрито',
   open: 'Відкрито',
-  
-  // Error messages
   errorLoading: 'Помилка завантаження',
   unknownError: 'Невідома помилка',
   reload: 'Перезавантажити',
@@ -144,11 +112,12 @@ export default {
   backToHome: 'Повернутись на головну',
   javaCourse: 'Курс Java',
   pythonCourse: 'Курс Python',
-
-  // Onboarding
   onboardingQuickTour: 'Швидкий тур',
   onboardingNewHere: 'Новачок? Тур',
   onboardingStepOf: 'Крок {{current}} з {{total}}',
+  next: 'Далі',
+  skip: 'Пропустити',
+  done: 'Готово',
   onboardingWelcomeTitle: 'StudyCod — швидкий старт',
   onboardingWelcomeBody: 'Дві моделі: EDU (клас, уроки, журнал) та Personal (соло задачі). Обери те, що потрібно зараз.',
   onboardingEduTitle: 'EDU: уроки, теми, контрольні',
@@ -159,14 +128,10 @@ export default {
   onboardingJournalBody: 'Практичні — окремі оцінки. Контрольна — одна колонка. Тематичну можна створити/видалити в журналі.',
   onboardingSupportTitle: 'Де шукати допомогу',
   onboardingSupportBody: 'Довідка (Docs) у хедері. Питання по курсу — до вчителя. Техпідтримка — через адміністратора.',
-
-  // Docs
   all: 'Все',
   searchPlaceholder: 'Пошук…',
   linkCopied: 'Посилання скопійовано',
   copyLink: 'Скопіювати лінк',
-
-  // StudentTaskPage / runtime messages
   timeUpAutoSubmit: 'Час вийшов! Завдання буде автоматично відправлено.',
   gradeSummary: 'Оцінка: {{passed}}/{{total}} тестів пройдено. Загальна оцінка: {{grade}}/12',
   enterCodeToRun: 'Введіть код для запуску',
@@ -204,8 +169,6 @@ export default {
   timeSs: '{{s}} сек',
   attempts: 'Спроб',
   taskClosed: 'Завдання закрите',
-  
-  // Tasks
   failedToLoadTasks: 'Не вдалося завантажити завдання',
   runNotAvailable: 'Функція запуску коду поки що недоступна. Використовуй "Здати" для перевірки коду.',
   runError: 'Помилка під час запуску коду',
@@ -216,34 +179,24 @@ export default {
   gradeOutOf: 'Оцінка',
   failedToSubmit: 'Не вдалося відправити код',
   failedToSubmitTest: 'Не вдалося відправити тест',
-  
-  // Teacher Dashboard
-  myClasses: 'Мої класи',
   createClass: 'Створити клас',
   createTopic: 'Створити тему',
   reviewTasks: 'Перевірити завдання',
-  students: 'учнів',
   noClassesYet: 'У вас поки немає класів',
   createFirstClass: 'Створити перший клас',
   failedToCreateClass: 'Не вдалося створити клас',
   gradeMustBe: 'Оцінка повинна бути від 1 до 12',
   gradeSetSuccessfully: 'Оцінку успішно виставлено',
   failedToSetGrade: 'Не вдалося виставити оцінку',
-  className: 'Назва класу',
   classNamePlaceholder: 'Наприклад: 10-А',
-  programmingLanguage: 'Мова програмування',
   gradeLabel: 'Оцінка (1-12) *',
   commentOptional: 'Коментар (необов\'язково)',
   taskSubmittedForReviewShort: 'Завдання відправлено на перевірку',
   workScore: 'Працездатність',
   optimizationScore: 'Оптимізація',
-  
-  // HomePage
   hello: 'Привіт',
   classesCount: 'Класів',
   studentsCount: 'Учнів',
-  
-  // ClassDetailsPage
   classDetails: 'Деталі класу',
   studentsCountLabel: 'Учні',
   topicsCountLabel: 'Теми',
@@ -253,32 +206,15 @@ export default {
   noStudents: 'Немає учнів',
   noTopics: 'Немає тем',
   tasksCount: 'Завдань',
-  open: 'Відкрити',
   addStudents: 'Додати учнів',
-  lastName: 'Прізвище',
-  firstName: 'Ім\'я',
-  middleName: 'По батькові',
-  submit: 'Відправити',
   failedToExport: 'Не вдалося експортувати',
   selectCSV: 'Виберіть CSV файл',
   failedToImport: 'Не вдалося імпортувати учнів',
   addAtLeastOne: 'Додайте хоча б одного учня',
   failedToAddStudents: 'Не вдалося додати учнів',
   failedToLoadData: 'Не вдалося завантажити дані',
-  
-  // TopicDetailsPage
-  practicalTasks: 'Практичні завдання',
-  addTask: 'Додати завдання',
   assigned: 'Призначено',
   deadlineLabel: 'Дедлайн',
-  tests: 'Тести',
-  edit: 'Редагувати',
-  theory: 'Теорія',
-  delete: 'Видалити',
-  controlWorks: 'Контрольні роботи',
-  createControlWork: 'Створити контрольну роботу',
-  testPlusPractice: 'Тест + Практика',
-  assign: 'Призначити',
   fillAllFields: 'Заповніть всі обов\'язкові поля',
   failedToLoadTopic: 'Не вдалося завантажити тему',
   failedToCreateTask: 'Не вдалося створити завдання',
@@ -292,18 +228,11 @@ export default {
   taskAssignedSuccessfully: 'Завдання успішно призначено учням',
   failedToAssignTask: 'Не вдалося призначити завдання',
   controlWorkAssignedSuccessfully: 'Контрольну роботу успішно призначено учням',
-  
-  // StudentDashboardPage
-  myJournal: 'Мій журнал',
   noGradesYet: 'У вас поки немає оцінок',
   intermediateGrades: 'Проміжні оцінки',
   outOf: 'з',
-  
-  // ProfilePage
-  profile: 'Профіль',
   classLabel: 'Клас',
   unknown: 'Невідомо',
-  programmingLanguage: 'Мова програмування',
   difus: 'Difus',
   advanced: 'Підвищений',
   basic: 'Базовий',
@@ -318,7 +247,6 @@ export default {
   teachersCannotChangeProfile: 'Вчителі не можуть змінювати профіль через цей інтерфейс.',
   changesSaved: 'Зміни збережено.',
   profileSaveError: 'Помилка збереження профілю',
-  saving: 'Збереження...',
   saveChanges: 'Зберегти зміни',
   saveAvatar: 'Зберегти аватарку',
   teachersCannotChangeLanguage: 'Вчителі не можуть змінювати мову програмування через профіль.',
@@ -333,6 +261,5 @@ export default {
   practice: 'Практика',
   min: 'хв',
   deleteThisTest: 'Видалити цей тест?',
-  deleteTask: 'Видалити завдання',
+  deleteTask: 'Видалити завдання'
 };
-

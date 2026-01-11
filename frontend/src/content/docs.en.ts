@@ -1,12 +1,10 @@
 import type { DocsSection } from "./docs.types";
-
-export const DOCS_SECTIONS_EN: DocsSection[] = [
-  {
-    id: "welcome",
-    title: "What is StudyCod",
-    audience: "ALL",
-    tags: ["welcome", "overview", "studycod"],
-    content: `
+export const DOCS_SECTIONS_EN: DocsSection[] = [{
+  id: "welcome",
+  title: "What is StudyCod",
+  audience: "ALL",
+  tags: ["welcome", "overview", "studycod"],
+  content: `
 ## StudyCod — a platform to learn programming
 
 ![StudyCod overview (EDU vs Personal)](/docs/overview.svg)
@@ -36,14 +34,13 @@ StudyCod has **two modes**:
 - EDU (student): \`/edu/lessons\`
 - EDU (teacher): \`/edu\` → classes
 - Docs: \`/docs\` or \`/edu/docs\`
-`,
-  },
-  {
-    id: "getting-started",
-    title: "Getting started (first login)",
-    audience: "ALL",
-    tags: ["start", "first-visit", "account"],
-    content: `
+`
+}, {
+  id: "getting-started",
+  title: "Getting started (first login)",
+  audience: "ALL",
+  tags: ["start", "first-visit", "account"],
+  content: `
 ## First login
 
 ### If you are a student (EDU)
@@ -65,14 +62,13 @@ StudyCod has **two modes**:
 1. Pick a **task**.
 2. Solve and submit.
 3. Track progress in **Grades**.
-`,
-  },
-  {
-    id: "navigation",
-    title: "Navigation map (where to find what)",
-    audience: "ALL",
-    tags: ["navigation", "routes", "menu"],
-    content: `
+`
+}, {
+  id: "navigation",
+  title: "Navigation map (where to find what)",
+  audience: "ALL",
+  tags: ["navigation", "routes", "menu"],
+  content: `
 ## Navigation
 
 ### EDU (student)
@@ -92,14 +88,13 @@ StudyCod has **two modes**:
 - **Tasks**: \`/tasks\`
 - **Grades / progress**: \`/grades\`
 - **Theory** (if available): \`/theory\`
-`,
-  },
-  {
-    id: "edu-student",
-    title: "EDU: student (topics, tasks, control works)",
-    audience: "EDU",
-    tags: ["edu", "student", "topic", "control"],
-    content: `
+`
+}, {
+  id: "edu-student",
+  title: "EDU: student (topics, tasks, control works)",
+  audience: "EDU",
+  tags: ["edu", "student", "topic", "control"],
+  content: `
 ## EDU: Student guide
 
 ### Topic (TOPIC)
@@ -120,14 +115,13 @@ A control work can include:
 - practical tasks
 
 After completion, you will see the final grade (and quiz ✅/❌ review if enabled).
-`,
-  },
-  {
-    id: "edu-teacher",
-    title: "EDU: teacher (quick guide)",
-    audience: "EDU",
-    tags: ["edu", "teacher", "create", "assign", "gradebook"],
-    content: `
+`
+}, {
+  id: "edu-teacher",
+  title: "EDU: teacher (quick guide)",
+  audience: "EDU",
+  tags: ["edu", "teacher", "create", "assign", "gradebook"],
+  content: `
 ## EDU: Teacher guide
 
 ### Typical workflow
@@ -138,14 +132,13 @@ After completion, you will see the final grade (and quiz ✅/❌ review if enabl
 5. (Optional) add **control/self-study work** inside the topic
 6. **Assign** to students
 7. Use the **gradebook** to manage grades
-`,
-  },
-  {
-    id: "edu-topics",
-    title: "EDU: topics (TOPIC)",
-    audience: "EDU",
-    tags: ["topic", "assign", "deadline"],
-    content: `
+`
+}, {
+  id: "edu-topics",
+  title: "EDU: topics (TOPIC)",
+  audience: "EDU",
+  tags: ["topic", "assign", "deadline"],
+  content: `
 ## Topic (TOPIC)
 
 ![Teacher topic page](/docs/screens/edu-topic-page.svg)
@@ -157,14 +150,13 @@ After completion, you will see the final grade (and quiz ✅/❌ review if enabl
 
 ### Unassign rule
 When a task/control work is **unassigned**, it should disappear from student lists and from the gradebook (columns and grades removed).
-`,
-  },
-  {
-    id: "edu-tasks",
-    title: "EDU: practice tasks (PRACTICE)",
-    audience: "EDU",
-    tags: ["practice", "tasks", "grading"],
-    content: `
+`
+}, {
+  id: "edu-tasks",
+  title: "EDU: practice tasks (PRACTICE)",
+  audience: "EDU",
+  tags: ["practice", "tasks", "grading"],
+  content: `
 ## Practice tasks
 
 ![Practice task check](/docs/screens/edu-practice-task-check.svg)
@@ -175,14 +167,13 @@ When a task/control work is **unassigned**, it should disappear from student lis
 
 ### Manual grade lock
 If a **manual grade** exists, the student cannot submit until the teacher deletes it.
-`,
-  },
-  {
-    id: "edu-controlworks",
-    title: "EDU: control/self-study works (CONTROL)",
-    audience: "EDU",
-    tags: ["control", "quiz", "timer"],
-    content: `
+`
+}, {
+  id: "edu-controlworks",
+  title: "EDU: control/self-study works (CONTROL)",
+  audience: "EDU",
+  tags: ["control", "quiz", "timer"],
+  content: `
 ## Control/self-study works
 
 ![CONTROL flow](/docs/controlwork-flow.svg)
@@ -192,14 +183,13 @@ NOT_STARTED → IN_PROGRESS → COMPLETED
 
 ### Final grade
 Control work gives **one final grade** (SummaryGrade, type CONTROL).
-`,
-  },
-  {
-    id: "edu-quizzes",
-    title: "EDU: quizzes — ✅/❌ review",
-    audience: "EDU",
-    tags: ["quiz", "results", "review"],
-    content: `
+`
+}, {
+  id: "edu-quizzes",
+  title: "EDU: quizzes — ✅/❌ review",
+  audience: "EDU",
+  tags: ["quiz", "results", "review"],
+  content: `
 ## Quizzes
 
 > \`![Quiz editor](/docs/screens/edu-quiz-editor.svg)\`
@@ -209,14 +199,13 @@ After submission, the student can see:
 - per-question ✅/❌ correctness
 
 > \`![Quiz results](/docs/screens/edu-quiz-results.svg)\`
-`,
-  },
-  {
-    id: "edu-gradebook",
-    title: "EDU: gradebook",
-    audience: "EDU",
-    tags: ["gradebook", "columns"],
-    content: `
+`
+}, {
+  id: "edu-gradebook",
+  title: "EDU: gradebook",
+  audience: "EDU",
+  tags: ["gradebook", "columns"],
+  content: `
 ## Gradebook
 
 ![Gradebook columns logic](/docs/gradebook-columns.svg)
@@ -225,27 +214,25 @@ After submission, the student can see:
 - **Practice**: per-task columns
 - **Control**: one column per control work
 - **Thematic**: a separate INTERMEDIATE column
-`,
-  },
-  {
-    id: "edu-thematic",
-    title: "EDU: thematic grade (INTERMEDIATE)",
-    audience: "EDU",
-    tags: ["intermediate", "thematic"],
-    content: `
+`
+}, {
+  id: "edu-thematic",
+  title: "EDU: thematic grade (INTERMEDIATE)",
+  audience: "EDU",
+  tags: ["intermediate", "thematic"],
+  content: `
 ## Thematic grade
 
 > \`![Thematic in gradebook](/docs/screens/edu-gradebook-thematic.svg)\`
 
 The thematic grade is optional and is created/deleted in the gradebook.
-`,
-  },
-  {
-    id: "edu-import-export",
-    title: "EDU: CSV import / export",
-    audience: "EDU",
-    tags: ["csv", "import", "export"],
-    content: `
+`
+}, {
+  id: "edu-import-export",
+  title: "EDU: CSV import / export",
+  audience: "EDU",
+  tags: ["csv", "import", "export"],
+  content: `
 ## CSV import / export
 
 ### Where
@@ -254,25 +241,23 @@ The thematic grade is optional and is created/deleted in the gradebook.
 ### Tips
 - Use UTF-8
 - Refresh class page after import
-`,
-  },
-  {
-    id: "edu-announcements",
-    title: "EDU: announcements",
-    audience: "EDU",
-    tags: ["announcements", "email"],
-    content: `
+`
+}, {
+  id: "edu-announcements",
+  title: "EDU: announcements",
+  audience: "EDU",
+  tags: ["announcements", "email"],
+  content: `
 ## Announcements
 
 Announcements are teacher messages for the whole class. They can also be sent via email notifications.
-`,
-  },
-  {
-    id: "grading",
-    title: "How grading works",
-    audience: "ALL",
-    tags: ["grading", "manual"],
-    content: `
+`
+}, {
+  id: "grading",
+  title: "How grading works",
+  audience: "ALL",
+  tags: ["grading", "manual"],
+  content: `
 ## Grading
 
 ### Practice (PRACTICE)
@@ -282,25 +267,23 @@ Announcements are teacher messages for the whole class. They can also be sent vi
 ### Control works (CONTROL)
 - one final grade
 - quiz review can show ✅/❌ per question
-`,
-  },
-  {
-    id: "personal",
-    title: "Personal mode (no classes)",
-    audience: "PERSONAL",
-    tags: ["personal", "solo"],
-    content: `
+`
+}, {
+  id: "personal",
+  title: "Personal mode (no classes)",
+  audience: "PERSONAL",
+  tags: ["personal", "solo"],
+  content: `
 ## Personal mode
 
 Personal mode is for self-paced learning: solve tasks and track your own progress without a class.
-`,
-  },
-  {
-    id: "personal-tasks",
-    title: "Personal: tasks & progress",
-    audience: "PERSONAL",
-    tags: ["personal", "tasks", "progress"],
-    content: `
+`
+}, {
+  id: "personal-tasks",
+  title: "Personal: tasks & progress",
+  audience: "PERSONAL",
+  tags: ["personal", "tasks", "progress"],
+  content: `
 ## Tasks & progress
 
 > \`![Personal tasks](/docs/screens/personal-tasks.svg)\`
@@ -309,14 +292,13 @@ Personal mode is for self-paced learning: solve tasks and track your own progres
 - Solve
 - Submit
 - Track progress in **Grades**
-`,
-  },
-  {
-    id: "faq",
-    title: "FAQ",
-    audience: "ALL",
-    tags: ["faq", "help"],
-    content: `
+`
+}, {
+  id: "faq",
+  title: "FAQ",
+  audience: "ALL",
+  tags: ["faq", "help"],
+  content: `
 ## FAQ
 
 ### Why is the UI mixed-language?
@@ -328,14 +310,13 @@ Put the file into:
 
 Then reference in markdown:
 - \`![Description](/docs/screens/my-screenshot.png)\`
-`,
-  },
-  {
-    id: "troubleshooting",
-    title: "Troubleshooting",
-    audience: "ALL",
-    tags: ["errors", "troubleshooting"],
-    content: `
+`
+}, {
+  id: "troubleshooting",
+  title: "Troubleshooting",
+  audience: "ALL",
+  tags: ["errors", "troubleshooting"],
+  content: `
 ## Troubleshooting
 
 ### A page doesn't scroll in EDU
@@ -345,21 +326,16 @@ The EDU shell uses \`overflow-hidden\`, so pages must define their own scroll co
 Check:
 - whether the task is assigned
 - whether grades were deleted on unassign
-`,
-  },
-  {
-    id: "privacy",
-    title: "Privacy & data",
-    audience: "ALL",
-    tags: ["privacy", "data"],
-    content: `
+`
+}, {
+  id: "privacy",
+  title: "Privacy & data",
+  audience: "ALL",
+  tags: ["privacy", "data"],
+  content: `
 ## Privacy
 
 - Screenshots in Docs are static files from \`frontend/public\`.
-`,
-  },
-];
-
+`
+}];
 export default DOCS_SECTIONS_EN;
-
-

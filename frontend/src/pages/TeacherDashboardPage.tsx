@@ -1,4 +1,3 @@
-// frontend/src/pages/TeacherDashboardPage.tsx
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -8,10 +7,12 @@ import { Modal } from "../components/ui/Modal";
 import { getClasses, createClass, type Class, getPendingReviews, updateGrade, type PendingReview } from "../lib/api/edu";
 import { Plus, Users, BookOpen, FileText, CheckCircle, Clock } from "lucide-react";
 import { CodeEditor } from "../components/CodeEditor";
-
 export const TeacherDashboardPage: React.FC = () => {
-  const { t, i18n } = useTranslation();
-  const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
+  const {
+    t,
+    i18n
+  } = useTranslation();
+  const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,12 +25,10 @@ export const TeacherDashboardPage: React.FC = () => {
   const [reviewGrade, setReviewGrade] = useState<number>(1);
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [reviewing, setReviewing] = useState(false);
-
   useEffect(() => {
     loadClasses();
     loadPendingReviews();
   }, []);
-
   const loadPendingReviews = async () => {
     try {
       const data = await getPendingReviews();
@@ -38,7 +37,6 @@ export const TeacherDashboardPage: React.FC = () => {
       console.error("Failed to load pending reviews:", error);
     }
   };
-
   const loadClasses = async () => {
     try {
       const data = await getClasses();
@@ -49,10 +47,8 @@ export const TeacherDashboardPage: React.FC = () => {
       setLoading(false);
     }
   };
-
   const handleCreateClass = async () => {
     if (!newClassName.trim()) return;
-
     try {
       const newClass = await createClass(newClassName, newClassLanguage);
       setClasses([...classes, newClass]);
@@ -64,19 +60,17 @@ export const TeacherDashboardPage: React.FC = () => {
       alert(t('failedToCreateClass'));
     }
   };
-
   const handleReviewGrade = async () => {
     if (!selectedReview) return;
     if (reviewGrade < 1 || reviewGrade > 12) {
       alert(t('gradeMustBe'));
       return;
     }
-
     setReviewing(true);
     try {
       await updateGrade(selectedReview.gradeId, {
         total: reviewGrade,
-        feedback: reviewFeedback || undefined,
+        feedback: reviewFeedback || undefined
       });
       await loadPendingReviews();
       setSelectedReview(null);
@@ -90,34 +84,23 @@ export const TeacherDashboardPage: React.FC = () => {
       setReviewing(false);
     }
   };
-
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-text-primary font-mono">
+    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
         {t('loading')}
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="h-full p-6 overflow-y-auto">
+  return <div className="p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-mono text-text-primary">{t('myClasses')}</h1>
           <div className="flex gap-2">
-            {pendingReviews.length > 0 && (
-              <Button
-                variant="ghost"
-                onClick={() => setShowPendingReviews(true)}
-                className="relative"
-              >
+            {pendingReviews.length > 0 && <Button variant="ghost" onClick={() => setShowPendingReviews(true)} className="relative">
                 <Clock className="w-4 h-4 mr-2" />
                 {t('reviewTasks')}
                 <span className="ml-2 px-2 py-0.5 bg-primary text-text-primary text-xs rounded-full">
                   {pendingReviews.length}
                 </span>
-              </Button>
-            )}
+              </Button>}
           <Button onClick={() => setShowCreateClass(true)}>
             <Plus className="w-4 h-4 mr-2" />
             {t('createClass')}
@@ -125,15 +108,11 @@ export const TeacherDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {classes.length === 0 ? (
-          <Card className="p-8 text-center">
+        {classes.length === 0 ? <Card className="p-8 text-center">
             <p className="text-text-secondary mb-4">{t('noClassesYet')}</p>
             <Button onClick={() => setShowCreateClass(true)}>{t('createFirstClass')}</Button>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {classes.map((cls) => (
-              <Card key={cls.id} className="p-4 hover:bg-bg-hover transition-fast cursor-pointer">
+          </Card> : <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {classes.map(cls => <Card key={cls.id} className="p-4 hover:bg-bg-hover transition-fast cursor-pointer">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="text-lg font-mono text-text-primary">{cls.name}</h3>
                   <span className="text-xs text-text-muted px-2 py-1 border border-border">
@@ -147,52 +126,29 @@ export const TeacherDashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="mt-4 flex gap-2">
-                  <Button
-                    variant="ghost"
-                    className="flex-1 text-xs"
-                    onClick={() => {
-                      navigate(`/edu/classes/${cls.id}`);
-                    }}
-                  >
+                  <Button variant="ghost" className="flex-1 text-xs" onClick={() => {
+              navigate(`/edu/classes/${cls.id}`);
+            }}>
                     {t('open')}
                   </Button>
                 </div>
-              </Card>
-            ))}
-          </div>
-        )}
+              </Card>)}
+          </div>}
       </div>
 
-      {showCreateClass && (
-        <Modal 
-          open={showCreateClass}
-          onClose={() => setShowCreateClass(false)}
-          title={t('createClass')}
-          showCloseButton={false}
-        >
+      {showCreateClass && <Modal open={showCreateClass} onClose={() => setShowCreateClass(false)} title={t('createClass')} showCloseButton={false}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-mono text-text-secondary mb-2">
                 {t('className')}
               </label>
-              <input
-                type="text"
-                value={newClassName}
-                onChange={(e) => setNewClassName(e.target.value)}
-                className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                placeholder={t('classNamePlaceholder')}
-                autoFocus
-              />
+              <input type="text" value={newClassName} onChange={e => setNewClassName(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={t('classNamePlaceholder')} autoFocus />
             </div>
             <div>
               <label className="block text-sm font-mono text-text-secondary mb-2">
                 {t('programmingLanguage')}
               </label>
-              <select
-                value={newClassLanguage}
-                onChange={(e) => setNewClassLanguage(e.target.value as "JAVA" | "PYTHON")}
-                className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-              >
+              <select value={newClassLanguage} onChange={e => setNewClassLanguage(e.target.value as "JAVA" | "PYTHON")} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
                 <option value="JAVA">Java</option>
                 <option value="PYTHON">Python</option>
               </select>
@@ -206,39 +162,27 @@ export const TeacherDashboardPage: React.FC = () => {
               </Button>
             </div>
           </div>
-        </Modal>
-      )}
+        </Modal>}
 
-      {/* Модальне вікно перевірки завдань */}
-      {showPendingReviews && (
-        <Modal
-          open={showPendingReviews}
-          onClose={() => {
-            setShowPendingReviews(false);
-            setSelectedReview(null);
-          }}
-          title={tr("Завдання на перевірку", "Tasks to review")}
-        >
+      {}
+      {showPendingReviews && <Modal open={showPendingReviews} onClose={() => {
+      setShowPendingReviews(false);
+      setSelectedReview(null);
+    }} title={tr("Завдання на перевірку", "Tasks to review")}>
           <div className="max-w-6xl max-h-[80vh] overflow-y-auto">
-            {pendingReviews.length === 0 ? (
-              <div className="p-8 text-center">
+            {pendingReviews.length === 0 ? <div className="p-8 text-center">
                 <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
                 <p className="text-text-secondary">{tr("Немає завдань для перевірки", "No tasks to review")}</p>
-              </div>
-            ) : selectedReview ? (
-              <div className="space-y-4">
+              </div> : selectedReview ? <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-mono text-text-primary">
                     {selectedReview.task?.title || tr("Завдання", "Task")}
                   </h3>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedReview(null);
-                      setReviewGrade(1);
-                      setReviewFeedback("");
-                    }}
-                  >
+                  <Button variant="ghost" onClick={() => {
+              setSelectedReview(null);
+              setReviewGrade(1);
+              setReviewFeedback("");
+            }}>
                     {tr("Назад до списку", "Back to list")}
                   </Button>
                 </div>
@@ -264,13 +208,7 @@ export const TeacherDashboardPage: React.FC = () => {
                     {tr("Код учня", "Student code")}
                   </label>
                   <div className="border border-border">
-                    <CodeEditor
-                      value={selectedReview.submittedCode || ""}
-                      onChange={() => {}}
-                      language="java"
-                      readOnly
-                      height="300px"
-                    />
+                    <CodeEditor value={selectedReview.submittedCode || ""} onChange={() => {}} language="java" readOnly height="300px" />
                   </div>
                 </div>
 
@@ -278,52 +216,30 @@ export const TeacherDashboardPage: React.FC = () => {
                   <label className="block text-sm font-mono text-text-secondary mb-2">
                     {t('gradeLabel')}
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="12"
-                    value={reviewGrade}
-                    onChange={(e) => setReviewGrade(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary"
-                  />
+                  <input type="number" min="1" max="12" value={reviewGrade} onChange={e => setReviewGrade(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
                 </div>
 
                 <div>
                   <label className="block text-sm font-mono text-text-secondary mb-2">
                     {t('commentOptional')}
                   </label>
-                  <textarea
-                    value={reviewFeedback}
-                    onChange={(e) => setReviewFeedback(e.target.value)}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px]"
-                    placeholder={tr("Введіть коментар до роботи...", "Enter feedback...")}
-                  />
+                  <textarea value={reviewFeedback} onChange={e => setReviewFeedback(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px]" placeholder={tr("Введіть коментар до роботи...", "Enter feedback...")} />
                 </div>
 
                 <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedReview(null);
-                      setReviewGrade(1);
-                      setReviewFeedback("");
-                    }}
-                  >
+                  <Button variant="ghost" onClick={() => {
+              setSelectedReview(null);
+              setReviewGrade(1);
+              setReviewFeedback("");
+            }}>
                     {t('cancel')}
                   </Button>
                   <Button onClick={handleReviewGrade} disabled={reviewing}>
                     {reviewing ? tr("Збереження...", "Saving...") : tr("Виставити оцінку", "Set grade")}
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {pendingReviews.map((review) => (
-                  <Card
-                    key={review.gradeId}
-                    className="p-4 hover:bg-bg-hover transition-fast cursor-pointer"
-                    onClick={() => setSelectedReview(review)}
-                  >
+              </div> : <div className="space-y-3">
+                {pendingReviews.map(review => <Card key={review.gradeId} className="p-4 hover:bg-bg-hover transition-fast cursor-pointer" onClick={() => setSelectedReview(review)}>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="text-sm font-mono text-text-primary mb-1">
@@ -343,15 +259,9 @@ export const TeacherDashboardPage: React.FC = () => {
                         {tr("Перевірити", "Review")}
                       </Button>
                     </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+                  </Card>)}
+              </div>}
           </div>
-        </Modal>
-      )}
-    </div>
-  );
+        </Modal>}
+    </div>;
 };
-
-

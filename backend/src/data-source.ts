@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
+import { env } from "./env";
 import { User } from "./entities/User";
 import { Task } from "./entities/Task";
 import { Grade } from "./entities/Grade";
@@ -18,55 +19,32 @@ import { TaskTheory } from "./entities/TaskTheory";
 import { ControlWork } from "./entities/ControlWork";
 import { TopicProgress } from "./entities/TopicProgress";
 import { ClassAnnouncement } from "./entities/ClassAnnouncement";
-
-const dbPort = process.env.DB_PORT != null ? parseInt(process.env.DB_PORT, 10) : 3306;
-
-// Якщо DATABASE_URL встановлений, використовуємо його
-// Інакше використовуємо окремі змінні
+import { TheoryBlock } from "./entities/TheoryBlock";
+import { SupportTicket } from "./entities/SupportTicket";
+import { MaintenanceState } from "./entities/MaintenanceState";
+const dbPort = env.DB_PORT != null ? parseInt(env.DB_PORT, 10) : 3306;
 export const AppDataSource = new DataSource({
   type: "mysql",
-  // DATABASE_URL має пріоритет, але якщо його немає - використовуємо окремі змінні
-  ...(process.env.DATABASE_URL 
-    ? { url: process.env.DATABASE_URL }
-    : {
-        host: process.env.DB_HOST || "localhost",
-        port: dbPort,
-        username: process.env.DB_USER || "root",
-        password: process.env.DB_PASS || "",
-        database: process.env.DB_NAME || "studycod",
-      }
-  ),
-  entities: [
-    User, 
-    Task, 
-    Grade, 
-    Topic,
-    Class,
-    Student,
-    EduLesson,
-    EduTask,
-    TestData,
-    EduGrade,
-    SummaryGrade,
-    LessonAttempt,
-    TopicNew,
-    TopicTask,
-    TaskTheory,
-    ControlWork,
-    TopicProgress,
-    ClassAnnouncement,
-  ],
+  ...(env.DATABASE_URL ? {
+    url: env.DATABASE_URL
+  } : {
+    host: env.DB_HOST || "localhost",
+    port: dbPort,
+    username: env.DB_USER || "root",
+    password: env.DB_PASS || "",
+    database: env.DB_NAME || "studycod"
+  }),
+  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, MaintenanceState],
   synchronize: false,
   logging: false,
   migrations: ["dist/migrations/*.js"],
   extra: {
-    connectionLimit: parseInt(process.env.DB_POOL_SIZE || "10", 10),
+    connectionLimit: parseInt(env.DB_POOL_SIZE || "10", 10),
     connectTimeout: 5000,
     queueLimit: 0,
     multipleStatements: false,
-    dateStrings: false,
+    dateStrings: false
   },
-  cache: false,
+  cache: false
 });
-
 export default AppDataSource;

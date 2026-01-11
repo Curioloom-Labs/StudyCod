@@ -2,7 +2,6 @@ import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../sha
 import { getTaskExamples, formatExamplesForPrompt } from './taskExamples';
 import { getLLMOrchestrator } from './llm/LLMOrchestrator';
 import { getLLMProvider } from './llm/provider';
-
 export interface AiTaskGenerationResult {
   title: string;
   topic: string;
@@ -19,15 +18,12 @@ export interface AiTaskGenerationResult {
   }>;
   codeTemplate: string;
 }
-
 export interface AiTheoryResult {
   theory: string;
 }
-
 export interface AiQuizResult {
   quizJson: string;
 }
-
 function getDifficultyPrompt(difus: number): string {
   if (difus < 0.2) return "Рівень: ПОЧАТКОВИЙ (Дуже легко). Завдання має бути максимально простим, лише на відпрацювання синтаксису. Жодних складних алгоритмів.";
   if (difus < 0.4) return "Рівень: ЛЕГКИЙ. Просте завдання, мінімум умов. Фокус на розумінні теми.";
@@ -35,7 +31,6 @@ function getDifficultyPrompt(difus: number): string {
   if (difus < 0.8) return "Рівень: ВИЩЕ СЕРЕДНЬОГО. Потрібно трохи подумати. Можна додати неочевидний момент в умові.";
   return "Рівень: СКЛАДНИЙ. Завдання на логічне мислення. Вимагає оптимізації або обробки граничних випадків.";
 }
-
 export async function generateTaskWithAI(params: {
   topicTitle: string;
   theory: string;
@@ -51,8 +46,6 @@ export async function generateTaskWithAI(params: {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateTaskWithAI(params);
 }
-
-// Генерація умови завдання через AI
 export async function generateTaskCondition(params: {
   topicTitle: string;
   taskType: "PRACTICE" | "CONTROL";
@@ -60,11 +53,12 @@ export async function generateTaskCondition(params: {
   language: "JAVA" | "PYTHON";
   userId?: number;
   topicId?: number;
-}): Promise<{ description: string }> {
+}): Promise<{
+  description: string;
+}> {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateTaskCondition(params);
 }
-
 async function generateTaskCondition_OLD(params: {
   topicTitle: string;
   taskType: "PRACTICE" | "CONTROL";
@@ -72,18 +66,15 @@ async function generateTaskCondition_OLD(params: {
   language: "JAVA" | "PYTHON";
   userId?: number;
   topicId?: number;
-}): Promise<{ description: string }> {
+}): Promise<{
+  description: string;
+}> {
   const provider = getLLMProvider();
   const langName = params.language === "JAVA" ? "Java" : "Python";
   const difficulty = params.difficulty ?? 3;
   const difficultyPrompt = getDifficultyPrompt(difficulty / 5);
-
-  const taskTypeText = params.taskType === "CONTROL" 
-    ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі"
-    : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
-
+  const taskTypeText = params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
   const systemPrompt = `Ти досвідчений викладач програмування. Створюй чіткі, лаконічні умови завдань без зайвої "води".`;
-
   const userPrompt = `Створи умову ${taskTypeText} "${params.topicTitle}" для мови ${langName}.
 
 ${difficultyPrompt}
@@ -95,51 +86,49 @@ ${difficultyPrompt}
 - Формат: Markdown
 
 Поверни ТІЛЬКИ умову завдання без додаткових коментарів.`;
-
   try {
     const content = await provider.generateText(userPrompt, systemPrompt, {
       timeout: 30000,
       userId: params.userId,
       topicId: params.topicId,
       temperature: 0.7,
-      maxTokens: 1500,
+      maxTokens: 1500
     });
-    return { description: content.trim() };
+    return {
+      description: content.trim()
+    };
   } catch (error: any) {
     throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
   }
 }
-
-// Генерація шаблону коду (пустишка)
 export async function generateTaskTemplate(params: {
   topicTitle: string;
   language: "JAVA" | "PYTHON";
   description?: string;
   userId?: number;
   topicId?: number;
-}): Promise<{ template: string }> {
+}): Promise<{
+  template: string;
+}> {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateTaskTemplate(params);
 }
-
 async function generateTaskTemplate_OLD(params: {
   topicTitle: string;
   language: "JAVA" | "PYTHON";
   description?: string;
   userId?: number;
   topicId?: number;
-}): Promise<{ template: string }> {
+}): Promise<{
+  template: string;
+}> {
   const provider = getLLMProvider();
   const langName = params.language === "JAVA" ? "Java" : "Python";
-
   const systemPrompt = `Ти досвідчений викладач програмування. Створюй шаблони коду з TODO-коментарями для студентів.`;
-
   let userPrompt = `Створи шаблон коду (пустишку) для мови ${langName} по темі "${params.topicTitle}".`;
-  
   if (params.description) {
     userPrompt += `\n\nУмова завдання:\n${params.description}`;
   }
-
   userPrompt += `\n\nВИМОГИ:
 - Шаблон має містити TODO-коментарі з інструкціями
 - Необхідні імпорти/imports
@@ -159,27 +148,25 @@ public class Main {
 \`\`\`
 
 Поверни ТІЛЬКИ код без markdown блоків та пояснень.`;
-
   try {
     const content = await provider.generateText(userPrompt, systemPrompt, {
       timeout: 30000,
       userId: params.userId,
       topicId: params.topicId,
       temperature: 0.3,
-      maxTokens: 1000,
+      maxTokens: 1000
     });
-    
     let template = content.trim();
     template = template.replace(/^```\w*\n?/gm, '');
     template = template.replace(/```$/gm, '');
     template = template.trim();
-    
-    return { template };
+    return {
+      template
+    };
   } catch (error: any) {
     throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
   }
 }
-
 export async function generateTheoryWithAI(params: {
   topicTitle: string;
   lang: "JAVA" | "PYTHON";
@@ -192,7 +179,6 @@ export async function generateTheoryWithAI(params: {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateTheoryWithAI(params);
 }
-
 async function generateTheoryWithAI_OLD(params: {
   topicTitle: string;
   lang: "JAVA" | "PYTHON";
@@ -204,22 +190,11 @@ async function generateTheoryWithAI_OLD(params: {
 }): Promise<AiTheoryResult> {
   const provider = getLLMProvider();
   const langName = params.lang === "JAVA" ? "Java" : "Python";
-
   const systemPrompt = `Ти досвідчений викладач програмування. Створюй якісні уроки з детальними поясненнями та прикладами коду. Відповідай українською мовою у форматі Markdown.`;
-
   let userPrompt: string;
-  
   if (params.taskDescription && params.taskType) {
-    const difficultyDesc = params.difficulty 
-      ? params.difficulty === 1 ? "легкого рівня" 
-        : params.difficulty === 2 ? "простого рівня"
-        : params.difficulty === 3 ? "середнього рівня"
-        : params.difficulty === 4 ? "складного рівня"
-        : "дуже складного рівня"
-      : "середнього рівня";
-    
+    const difficultyDesc = params.difficulty ? params.difficulty === 1 ? "легкого рівня" : params.difficulty === 2 ? "простого рівня" : params.difficulty === 3 ? "середнього рівня" : params.difficulty === 4 ? "складного рівня" : "дуже складного рівня" : "середнього рівня";
     const taskTypeDesc = params.taskType === "CONTROL" ? "контрольного завдання" : "практичного завдання";
-    
     userPrompt = `Напиши детальну теорію для ${taskTypeDesc} ${difficultyDesc} по темі "${params.topicTitle}" для мови ${langName}.
 
 Умова завдання:
@@ -243,22 +218,22 @@ ${params.taskDescription}
 
 Формат: Markdown з код-блоками для прикладів.`;
   }
-
   try {
     const content = await provider.generateText(userPrompt, systemPrompt, {
       timeout: 30000,
       userId: params.userId,
       topicId: params.topicId,
       temperature: 0.7,
-      maxTokens: 3000,
+      maxTokens: 3000
     });
     if (!content || !content.trim()) throw new Error('Empty AI response');
-    return { theory: content.trim() };
+    return {
+      theory: content.trim()
+    };
   } catch (err: any) {
     throw new Error(`AI_GENERATION_FAILED: Theory generation failed: ${err.message || 'Unknown error'}`);
   }
 }
-
 export async function generateQuizWithAI(params: {
   lang: "JAVA" | "PYTHON";
   prevTopics: string;
@@ -269,7 +244,6 @@ export async function generateQuizWithAI(params: {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateQuizWithAI(params);
 }
-
 async function generateQuizWithAI_OLD(params: {
   lang: "JAVA" | "PYTHON";
   prevTopics: string;
@@ -280,9 +254,7 @@ async function generateQuizWithAI_OLD(params: {
   const provider = getLLMProvider();
   const langName = params.lang === "JAVA" ? "Java" : "Python";
   const questionCount = params.count || 12;
-
   const systemPrompt = `Ти екзаменатор з програмування. Створюй тестові питання з правильними відповідями. Відповідай ТІЛЬКИ у форматі JSON масиву без додаткових пояснень, коментарів або тексту до або після JSON.`;
-
   let userPrompt = `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
 ВИМОГИ:
 - Кількість питань: РІВНО ${questionCount}
@@ -290,10 +262,8 @@ async function generateQuizWithAI_OLD(params: {
 - Формат: ТІЛЬКИ ВАЛІДНИЙ JSON масив без жодного додаткового тексту
 - Кожне питання має формат: {"q": "питання", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
 - Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown, без code blocks`;
-
   let lastError: Error | null = null;
   const maxRetries = 2;
-
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const content = await provider.generateText(userPrompt, systemPrompt, {
@@ -301,11 +271,9 @@ async function generateQuizWithAI_OLD(params: {
         userId: params.userId,
         topicId: params.topicId,
         temperature: 0.7,
-        maxTokens: 3000,
+        maxTokens: 3000
       });
-      
       if (!content) throw new Error('Empty AI response');
-
       let parsed: any;
       try {
         parsed = JSON.parse(content.trim());
@@ -321,12 +289,10 @@ async function generateQuizWithAI_OLD(params: {
               cleaned = cleaned.trim();
             }
           }
-          
           const jsonStart = cleaned.indexOf('[');
           const objStart = cleaned.indexOf('{');
           let startPos = -1;
           let isArray = false;
-          
           if (jsonStart !== -1 && (objStart === -1 || jsonStart < objStart)) {
             startPos = jsonStart;
             isArray = true;
@@ -334,35 +300,29 @@ async function generateQuizWithAI_OLD(params: {
             startPos = objStart;
             isArray = false;
           }
-          
           if (startPos !== -1) {
             let depth = 0;
             let inString = false;
             let escapeNext = false;
             let endPos = startPos;
-            
             for (let i = startPos; i < cleaned.length; i++) {
               const char = cleaned[i];
-              
               if (escapeNext) {
                 escapeNext = false;
                 continue;
               }
-              
               if (char === '\\') {
                 escapeNext = true;
                 continue;
               }
-              
               if (char === '"' && !escapeNext) {
                 inString = !inString;
                 continue;
               }
-              
               if (!inString) {
-                if ((isArray && char === '[') || (!isArray && char === '{')) {
+                if (isArray && char === '[' || !isArray && char === '{') {
                   depth++;
-                } else if ((isArray && char === ']') || (!isArray && char === '}')) {
+                } else if (isArray && char === ']' || !isArray && char === '}') {
                   depth--;
                   if (depth === 0) {
                     endPos = i + 1;
@@ -371,7 +331,6 @@ async function generateQuizWithAI_OLD(params: {
                 }
               }
             }
-            
             if (endPos > startPos) {
               let fixed = cleaned.substring(startPos, endPos).replace(/,(\s*[}\]])/g, '$1').trim();
               if (isArray) {
@@ -396,24 +355,22 @@ async function generateQuizWithAI_OLD(params: {
           parsed = tryFixJsonResponse(content);
         }
       }
-
       if (typeof parsed === 'object' && !Array.isArray(parsed)) {
         const keys = Object.keys(parsed);
         if (keys.length > 0 && Array.isArray(parsed[keys[0]])) {
           parsed = parsed[keys[0]];
         }
       }
-
       if (!Array.isArray(parsed)) throw new Error('Response must be an array');
       if (parsed.length !== questionCount) throw new Error(`Expected ${questionCount} questions, got ${parsed.length}`);
-
       parsed.forEach((q: any, idx: number) => {
         if (typeof q.q !== 'string' || !q.q.trim()) throw new Error(`Question ${idx + 1}: missing or invalid 'q' field`);
         if (!Array.isArray(q.options) || q.options.length !== 5) throw new Error(`Question ${idx + 1}: must have exactly 5 options`);
         if (typeof q.correct !== 'number' || q.correct < 0 || q.correct > 4) throw new Error(`Question ${idx + 1}: 'correct' must be 0-4`);
       });
-
-      return { quizJson: JSON.stringify(parsed) };
+      return {
+        quizJson: JSON.stringify(parsed)
+      };
     } catch (err: any) {
       lastError = err;
       if (attempt < maxRetries) {
@@ -423,6 +380,5 @@ async function generateQuizWithAI_OLD(params: {
       }
     }
   }
-
   throw new Error(`AI_GENERATION_FAILED: Quiz generation failed: ${lastError?.message || 'Unknown error'}`);
 }

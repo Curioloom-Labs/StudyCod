@@ -1,9 +1,9 @@
-
-export const JWT_SECRET = process.env.JWT_SECRET || "prod-secret-must-be-set-in-env";
-export const SESSION_SECRET = process.env.SESSION_SECRET || "prod-secret-must-be-set-in-env";
-
-export const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-export const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
-export const PORT = Number(process.env.PORT) || 4000;
-
-export const IS_PRODUCTION = process.env.NODE_ENV === "production";
+import { env } from "./env";
+export const IS_PRODUCTION = env.__isProduction;
+export const JWT_SECRET = env.JWT_SECRET;
+export const SESSION_SECRET = env.SESSION_SECRET;
+export const FRONTEND_URL = env.FRONTEND_URL;
+export const CORS_ORIGIN = env.CORS_ORIGIN;
+export const PORT = env.PORT;
+export const CORS_ORIGINS = env.__corsOrigins;
+export const TRUST_PROXY = env.__trustProxy;
