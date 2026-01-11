@@ -1,5 +1,40 @@
 import { api } from "./client";
 import type { Task } from "../../types";
+
+export type PersonalTaskTestResult = {
+  testId: number;
+  passed: boolean;
+  input?: string;
+  expectedOutput?: string;
+  actualOutput?: string;
+  error?: string | null;
+  verdict?: string | null;
+  errorKind?: string | null;
+};
+
+export type PersonalTaskGrade = {
+  id?: number;
+  gradingMode?: "TESTS" | "AI";
+  total?: number;
+  workScore?: number;
+  optimizationScore?: number;
+  integrityScore?: number;
+  aiFeedback?: string;
+  comparisonFeedback?: string | null;
+  previousGrade?: number | null;
+  testsPassed?: number;
+  testsTotal?: number;
+  testResults?: PersonalTaskTestResult[];
+  hints?: string[];
+  createdAt?: string;
+};
+
+export type SubmitTaskResponse = {
+  grade?: PersonalTaskGrade;
+  milestone?: any;
+  status?: string;
+  message?: string;
+};
 function requireToken(): string {
   const token = localStorage.getItem("token");
   if (!token) {
@@ -42,18 +77,18 @@ export async function saveDraft(id: number, code: string): Promise<void> {
     code
   });
 }
-export async function submitTask(id: number, code: string): Promise<any> {
+export async function submitTask(id: number, code: string): Promise<SubmitTaskResponse> {
   const res = await api.post(`/tasks/${id}/submit`, {
     code
   });
-  return res.data;
+  return res.data as SubmitTaskResponse;
 }
-export async function submitTaskWithMode(id: number, code: string, mode: "TESTS" | "AI"): Promise<any> {
+export async function submitTaskWithMode(id: number, code: string, mode: "TESTS" | "AI"): Promise<SubmitTaskResponse> {
   const res = await api.post(`/tasks/${id}/submit`, {
     code,
     mode
   });
-  return res.data;
+  return res.data as SubmitTaskResponse;
 }
 export async function runTask(id: number, code: string, input?: string): Promise<{
   output: string;

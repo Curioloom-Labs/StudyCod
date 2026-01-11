@@ -1,7 +1,10 @@
 import { NsJailExecutor } from "./executor";
 import { CompileResult, Verdict } from "./result";
 import { filterNsJailStderr } from "./stderr";
+import type { LanguageId } from "../languages/types";
+import { buildUserFacingStderr } from "./userFacingErrors";
 export interface CompileParams {
+  language: LanguageId;
   nsjailPath: string;
   nsjailConfigPath: string;
   useConfig: boolean;
@@ -30,12 +33,15 @@ export class Compiler {
       argv: params.argv,
       sandboxId: "compile"
     });
-    const stderrForUser = filterNsJailStderr(r.stderr);
+    const baseStderrForUser = filterNsJailStderr(r.stderr);
+    const explained = buildUserFacingStderr(params.language, baseStderrForUser);
+    const stderrForUser = explained.stderr;
     if (r.timedOut) {
       return {
         ok: false,
         verdict: "CE",
         message: "Compilation timed out",
+        error_kind: explained.kind,
         stdout: truncate(r.stdout, 4096),
         stderr: truncate(stderrForUser, 8192),
         time_ms: Math.round(r.timeMs),
@@ -47,6 +53,7 @@ export class Compiler {
         ok: false,
         verdict: "CE",
         message: "Compilation output limit exceeded",
+        error_kind: explained.kind,
         stdout: truncate(r.stdout, 4096),
         stderr: truncate(stderrForUser, 8192),
         time_ms: Math.round(r.timeMs),
@@ -58,6 +65,7 @@ export class Compiler {
         ok: false,
         verdict: "CE",
         message: "Compilation error",
+        error_kind: explained.kind,
         stdout: truncate(r.stdout, 4096),
         stderr: truncate(stderrForUser, 8192),
         time_ms: Math.round(r.timeMs),
@@ -68,6 +76,7 @@ export class Compiler {
       ok: true,
       verdict: "AC",
       message: "Compilation OK",
+      error_kind: undefined,
       stdout: truncate(r.stdout, 2048),
       stderr: truncate(stderrForUser, 2048),
       time_ms: Math.round(r.timeMs),

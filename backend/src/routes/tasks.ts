@@ -621,13 +621,16 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
   }
   let total = 0;
   let passedTests = 0;
+  let hintsForUser: string[] = [];
   const testResults: Array<{
     testId: number;
     input: string;
+    expectedOutput?: string;
     actualOutput: string;
     passed: boolean;
     verdict?: string | null;
     error?: string | null;
+    errorKind?: string | null;
   }> = [];
   const sorted = [...(task.testData || [])].sort((a, b) => a.id - b.id);
   const tests = sorted.map(t => ({
@@ -682,7 +685,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     }
     const {
       compareOutput,
-      filterStderr
+      filterStderrWithLang
     } = await import("../services/codeExecutionService");
     const CODE_EXECUTION_TIMEOUT_MS = 8000;
     for (const test of sorted) {
@@ -696,10 +699,12 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
           passedTests++;
           total += test.points;
         }
-        const err = filterStderr(result.stderr || "");
+        const langForErr = task.lang === "JAVA" || task.lang === "PYTHON" ? task.lang : undefined;
+        const err = filterStderrWithLang(result.stderr || "", langForErr);
         testResults.push({
           testId: test.id,
           input: inputValue,
+          expectedOutput: expected,
           actualOutput: actual,
           passed,
           error: err ? err : null
@@ -709,6 +714,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
         testResults.push({
           testId: test.id,
           input: test.input || "",
+          expectedOutput: (test.expectedOutput ?? "").toString(),
           actualOutput: "",
           passed: false,
           error: errorMessage
@@ -723,10 +729,12 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
         testResults.push({
           testId: t.id,
           input: t.input || "",
+          expectedOutput: (t.expectedOutput ?? "").toString(),
           actualOutput: "",
           passed: false,
           verdict: "CE",
-          error: compileErr || "Compilation error"
+          error: compileErr || "Compilation error",
+          errorKind: workerRes.compile.error_kind ?? null
         });
       }
     } else {
@@ -744,10 +752,12 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
         testResults.push({
           testId: t.id,
           input: t.input || "",
+          expectedOutput: (r?.expected ?? t.expectedOutput ?? "").toString(),
           actualOutput: r?.actual ?? "",
           passed,
           verdict: r?.verdict ?? null,
-          error: r?.stderr ?? null
+          error: r?.stderr ?? null,
+          errorKind: (r as any)?.error_kind ?? null
         });
       }
     }
@@ -781,9 +791,11 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
         taskText: task.descriptionMarkdown || task.description,
         language: task.lang,
         code,
-        failures: failuresForHints
+        failures: failuresForHints,
+        maxHints: 4
       });
       if (hints.length) {
+        hintsForUser = hints;
         feedbackLines.push("");
         feedbackLines.push("Підказки (щоб пройти тести):");
         for (const h of hints) feedbackLines.push(`- ${h}`);
@@ -821,6 +833,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
       testsPassed: passedTests,
       testsTotal: (task.testData || []).length,
       testResults,
+      hints: hintsForUser,
       createdAt: savedGrade.createdAt
     }
   });

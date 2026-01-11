@@ -10,11 +10,23 @@ async function main() {
   const useConfig = String(process.env.NSJAIL_USE_CONFIG ?? "").trim() === "1";
   const ROOTFS = "/sandbox/rootfs";
   const hasRootfs = fs.existsSync(ROOTFS);
-  const chrootDefault = ((process.env.NSJAIL_CHROOT || "").trim() || (hasRootfs ? ROOTFS : "")).trim();
+  const envChroot = (process.env.NSJAIL_CHROOT || "").trim();
+  const defaultChrootFallback = hasRootfs ? ROOTFS : "";
+  const chrootDefaultSource = envChroot || defaultChrootFallback;
+  const chrootDefault = chrootDefaultSource.trim();
+  const javaChrootEnv = (process.env.NSJAIL_CHROOT_JAVA || "").trim();
+  const javaChrootFallback = hasRootfs ? ROOTFS : "/sandbox/java";
+  const javaChrootSource = javaChrootEnv || chrootDefault || javaChrootFallback;
+  const cppChrootEnv = (process.env.NSJAIL_CHROOT_CPP || "").trim();
+  const cppChrootFallback = hasRootfs ? ROOTFS : "/sandbox/cpp";
+  const cppChrootSource = cppChrootEnv || chrootDefault || cppChrootFallback;
+  const pythonChrootEnv = (process.env.NSJAIL_CHROOT_PYTHON || "").trim();
+  const pythonChrootFallback = hasRootfs ? ROOTFS : "/sandbox/python";
+  const pythonChrootSource = pythonChrootEnv || chrootDefault || pythonChrootFallback;
   const chrootByLanguage = {
-    java: (process.env.NSJAIL_CHROOT_JAVA || chrootDefault || (hasRootfs ? ROOTFS : "/sandbox/java")).trim(),
-    cpp: (process.env.NSJAIL_CHROOT_CPP || chrootDefault || (hasRootfs ? ROOTFS : "/sandbox/cpp")).trim(),
-    python: (process.env.NSJAIL_CHROOT_PYTHON || chrootDefault || (hasRootfs ? ROOTFS : "/sandbox/python")).trim()
+    java: javaChrootSource.trim(),
+    cpp: cppChrootSource.trim(),
+    python: pythonChrootSource.trim()
   } as const;
   const cwd = (process.env.NSJAIL_CWD || "/work").trim();
   const runner = new Runner({

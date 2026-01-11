@@ -44,6 +44,38 @@ export const TasksPage: React.FC<Props> = ({
     if (msg && statusText) return `${statusText}: ${msg}`;
     return msg || statusText || tr("Невідома помилка", "Unknown error");
   };
+
+  const errorKindLabel = (kind?: string | null): string | null => {
+    if (!kind) return null;
+    switch (kind) {
+      case "compile":
+        return tr("Компіляція", "Compilation");
+      case "syntax":
+        return tr("Синтаксис", "Syntax");
+      case "type":
+        return tr("Типи", "Types");
+      case "name":
+        return tr("Назва", "Name");
+      case "index":
+        return tr("Індекс", "Index");
+      case "key":
+        return tr("Ключ", "Key");
+      case "value":
+        return tr("Значення", "Value");
+      case "zero_division":
+        return tr("Ділення на нуль", "Division by zero");
+      case "null":
+        return tr("Null", "Null");
+      case "oom":
+        return tr("Пам’ять", "Memory");
+      case "timeout":
+        return tr("Час", "Time");
+      case "runtime":
+        return tr("Виконання", "Runtime");
+      default:
+        return kind;
+    }
+  };
   const splitLegacyDescription = (content: string): {
     theory: string | null;
     practice: string | null;
@@ -109,15 +141,20 @@ export const TasksPage: React.FC<Props> = ({
     previousGrade?: number | null;
     testsPassed?: number;
     testsTotal?: number;
+    hints?: string[];
     testResults?: Array<{
       testId: number;
-      input: string;
-      expectedOutput: string;
-      actualOutput: string;
+      input?: string;
+      expectedOutput?: string;
+      actualOutput?: string;
       passed: boolean;
       error?: string | null;
+      verdict?: string | null;
+      errorKind?: string | null;
     }>;
   } | null>(null);
+
+  const [revealedHints, setRevealedHints] = useState(0);
   const [theoryAcknowledged, setTheoryAcknowledged] = useState(false);
   const [showTaskHistory, setShowTaskHistory] = useState(true);
   const [uiState, setUIState] = useState<UIState>("idle");
@@ -158,9 +195,9 @@ export const TasksPage: React.FC<Props> = ({
       setActive(latest);
       setCode(latest.starterCode);
       setAiResult(null);
+      setRevealedHints(0);
       setConsoleOutput("");
-      const content = latest.descriptionMarkdown || "";
-      const hasTheory = computeHasTheory(content);
+      const hasTheory = computeHasTheory(latest);
       setTheoryAcknowledged(!hasTheory);
     } else if (active) {
       const updated = filtered.find(t => t.id === active.id);
@@ -179,6 +216,7 @@ export const TasksPage: React.FC<Props> = ({
         setActive(null);
         setCode("");
         setAiResult(null);
+        setRevealedHints(0);
       }
     }
   }, [active?.id, aiResult?.total]);
@@ -200,8 +238,7 @@ export const TasksPage: React.FC<Props> = ({
             } else {
               setCode(firstTask.starterCode);
             }
-            const content = firstTask.descriptionMarkdown || "";
-            const hasTheory = computeHasTheory(content);
+            const hasTheory = computeHasTheory(firstTask);
             setTheoryAcknowledged(!hasTheory);
           }
         }
@@ -359,13 +396,16 @@ export const TasksPage: React.FC<Props> = ({
         previousGrade: number | null;
         testsPassed?: number;
         testsTotal?: number;
+        hints?: string[];
         testResults?: Array<{
           testId: number;
-          input: string;
-          expectedOutput: string;
-          actualOutput: string;
+          input?: string;
+          expectedOutput?: string;
+          actualOutput?: string;
           passed: boolean;
           error?: string | null;
+          verdict?: string | null;
+          errorKind?: string | null;
         }>;
       } | null = null;
       if (res.grade) {
@@ -381,11 +421,13 @@ export const TasksPage: React.FC<Props> = ({
           previousGrade: grade.previousGrade ?? null,
           testsPassed: grade.testsPassed ?? undefined,
           testsTotal: grade.testsTotal ?? undefined,
+          hints: Array.isArray(grade.hints) ? grade.hints : undefined,
           testResults: grade.testResults ?? undefined
         };
         const outputText = result.gradingMode === "TESTS" ? tr(`Перевірка завершена: ${result.testsPassed ?? 0}/${result.testsTotal ?? 0}. Оцінка: ${result.total}`, `Check completed: ${result.testsPassed ?? 0}/${result.testsTotal ?? 0}. Grade: ${result.total}`) : tr(`Перевірка завершена. Оцінка: ${result.total}`, `Check completed. Grade: ${result.total}`);
         setConsoleOutput(outputText);
         setAiResult(result);
+        setRevealedHints(0);
         setUIState(result.total >= 9 ? "success" : result.total >= 6 ? "idle" : "error");
         if (res.milestone) {
           setMilestone(res.milestone);
@@ -701,7 +743,66 @@ export const TasksPage: React.FC<Props> = ({
                       {aiResult.comparisonFeedback}
                       </div>
                       </div>}
-                      {aiResult.aiFeedback && <div className="text-xs font-mono text-text-secondary mt-3 whitespace-pre-wrap">
+                      {aiResult.gradingMode === "TESTS" && Array.isArray(aiResult.testResults) && aiResult.testResults.length > 0 && <div className="mt-3 space-y-3">
+                          <div className="p-2 border border-border bg-bg-code">
+                            <div className="text-[10px] font-mono text-text-secondary mb-2">
+                              {tr("Результати тестів", "Test results")}
+                            </div>
+                            <div className="space-y-1">
+                              {aiResult.testResults.map((r, idx) => {
+                                const label = errorKindLabel(r.errorKind);
+                                return <div key={`${r.testId}-${idx}`} className="flex items-start gap-2 text-xs font-mono">
+                                      <span className={r.passed ? "text-accent-success" : "text-accent-error"}>
+                                        {r.passed ? "✓" : "✗"}
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-text-primary">{tr("Тест", "Test")} {idx + 1}</span>
+                                          {!r.passed && r.verdict && <span className="text-[10px] text-text-muted">{r.verdict}</span>}
+                                          {!r.passed && label && <span className="text-[10px] px-1.5 py-0.5 border border-border bg-bg-surface text-text-secondary">{label}</span>}
+                                        </div>
+                                        {!r.passed && r.error && <div className="text-text-secondary whitespace-pre-wrap break-words">
+                                            {String(r.error).slice(0, 600)}
+                                          </div>}
+                                      </div>
+                                    </div>;
+                              })}
+                            </div>
+                          </div>
+
+                          {Array.isArray(aiResult.hints) && aiResult.hints.length > 0 && <div className="p-2 border border-primary/30 bg-bg-code">
+                              <div className="text-[10px] font-mono text-primary mb-2">
+                                {tr("Підказки (крок за кроком)", "Hints (step-by-step)")}
+                              </div>
+                              <div className="space-y-2">
+                                {aiResult.hints.slice(0, revealedHints).map((h, i) => <div key={i} className="text-xs font-mono text-text-primary whitespace-pre-wrap">
+                                      {i + 1}. {h}
+                                    </div>)}
+                                <div className="flex gap-2">
+                                  {revealedHints < aiResult.hints.length && <Button variant="ghost" onClick={() => setRevealedHints(v => Math.min(aiResult.hints?.length ?? 0, v + 1))} className="text-xs">
+                                      {tr("Показати підказку", "Show hint")}
+                                    </Button>}
+                                  {revealedHints < aiResult.hints.length && aiResult.hints.length > 1 && <Button variant="ghost" onClick={() => setRevealedHints(aiResult.hints?.length ?? 0)} className="text-xs">
+                                      {tr("Показати всі", "Show all")}
+                                    </Button>}
+                                  {revealedHints > 0 && <Button variant="ghost" onClick={() => setRevealedHints(0)} className="text-xs">
+                                      {tr("Сховати", "Hide")}
+                                    </Button>}
+                                </div>
+                              </div>
+                            </div>}
+
+                          {aiResult.aiFeedback && <details className="border border-border bg-bg-code p-2">
+                              <summary className="cursor-pointer text-[10px] font-mono text-text-secondary">
+                                {tr("Повний текст (debug)", "Full text (debug)")}
+                              </summary>
+                              <div className="mt-2 text-xs font-mono text-text-secondary whitespace-pre-wrap">
+                                {aiResult.aiFeedback}
+                              </div>
+                            </details>}
+                        </div>}
+
+                      {aiResult.gradingMode !== "TESTS" && aiResult.aiFeedback && <div className="text-xs font-mono text-text-secondary mt-3 whitespace-pre-wrap">
                           {aiResult.aiFeedback}
                         </div>}
                     </div>}

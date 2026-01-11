@@ -2453,6 +2453,7 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
       });
     }
     let passed = 0;
+    let hintsForUser: string[] = [];
     const testResults: Array<{
       testId: number;
       input: string;
@@ -2460,6 +2461,7 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
       stderr?: string | null;
       passed: boolean;
       verdict?: string | null;
+      errorKind?: string | null;
     }> = [];
     const judgeLang = topicTask.topic.class.language === "JAVA" ? "java" : topicTask.topic.class.language === "PYTHON" ? "python" : "cpp";
     const defaultLimitsByLang = {
@@ -2519,9 +2521,10 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
           testId: t.id,
           input: t.input,
           actual: r.stdout,
-          stderr: filterStderr(r.stderr),
+          stderr: filterStderr(r.stderr, topicTask.topic.class.language === "JAVA" ? "JAVA" : "PYTHON"),
           passed: isPassed,
-          verdict: null
+          verdict: null,
+          errorKind: null
         });
       }
     }
@@ -2536,7 +2539,8 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
             actual: "",
             stderr: compileErr || "Compilation error",
             passed: false,
-            verdict: "CE"
+            verdict: "CE",
+            errorKind: workerRes.compile.error_kind ?? null
           });
         }
       } else {
@@ -2553,7 +2557,8 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
             actual: r?.actual ?? "",
             stderr: r?.stderr ?? null,
             passed: isPassed,
-            verdict: r?.verdict ?? null
+            verdict: r?.verdict ?? null,
+            errorKind: (r as any)?.error_kind ?? null
           });
         }
       }
@@ -2577,9 +2582,11 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
           taskText: topicTask.description,
           language: langForHints,
           code,
-          failures: failuresForHints
+          failures: failuresForHints,
+          maxHints: 4
         });
         if (hints.length) {
+          hintsForUser = hints;
           feedback = hints.map(h => `- ${h}`).join("\n");
         }
       } catch {}
@@ -2612,7 +2619,8 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
     }
     res.json({
       grade,
-      testResults
+      testResults,
+      hints: hintsForUser
     });
   } catch (error) {
     console.error(error);
@@ -2701,6 +2709,7 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
       });
     }
     let passed = 0;
+    let hintsForUser: string[] = [];
     const testResults: Array<{
       testId: number;
       input: string;
@@ -2708,6 +2717,7 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
       stderr?: string | null;
       passed: boolean;
       verdict?: string | null;
+      errorKind?: string | null;
     }> = [];
     const judgeLang = topicTask.topic.class.language === "JAVA" ? "java" : topicTask.topic.class.language === "PYTHON" ? "python" : "cpp";
     const defaultLimitsByLang = {
@@ -2767,9 +2777,10 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
           testId: t.id,
           input: t.input || "",
           actual: r.stdout,
-          stderr: filterStderr(r.stderr),
+          stderr: filterStderr(r.stderr, topicTask.topic.class.language === "JAVA" ? "JAVA" : "PYTHON"),
           passed: isPassed,
-          verdict: null
+          verdict: null,
+          errorKind: null
         });
       }
     }
@@ -2784,7 +2795,8 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
             actual: "",
             stderr: compileErr || "Compilation error",
             passed: false,
-            verdict: "CE"
+            verdict: "CE",
+            errorKind: workerRes.compile.error_kind ?? null
           });
         }
       } else {
@@ -2801,7 +2813,8 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
             actual: r?.actual ?? "",
             stderr: r?.stderr ?? null,
             passed: isPassed,
-            verdict: r?.verdict ?? null
+            verdict: r?.verdict ?? null,
+            errorKind: (r as any)?.error_kind ?? null
           });
         }
       }
@@ -2825,9 +2838,11 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
           taskText: topicTask.description,
           language: langForHints,
           code,
-          failures: failuresForHints
+          failures: failuresForHints,
+          maxHints: 4
         });
         if (hints.length) {
+          hintsForUser = hints;
           feedback = hints.map(h => `- ${h}`).join("\n");
         }
       } catch {}
@@ -2869,7 +2884,8 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
         isManuallyGraded: saved.isManuallyGraded,
         isCompleted: true
       },
-      testResults
+      testResults,
+      hints: hintsForUser
     });
   } catch (error) {
     console.error(error);

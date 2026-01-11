@@ -31,6 +31,8 @@ export const StudentTaskPage: React.FC = () => {
   const [consoleOutput, setConsoleOutput] = useState("");
   const [testInput, setTestInput] = useState("");
   const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [hints, setHints] = useState<string[]>([]);
+  const [revealedHints, setRevealedHints] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [testProgress, setTestProgress] = useState<Record<number, 'pending' | 'running' | 'passed' | 'failed'>>({});
   const [isRunningTests, setIsRunningTests] = useState(false);
@@ -151,7 +153,9 @@ export const StudentTaskPage: React.FC = () => {
             input: result.input || "",
             actual: result.actual ?? result.actualOutput ?? "",
             stderr: result.stderr ?? result.error ?? undefined,
-            passed: result.passed === true
+            passed: result.passed === true,
+            verdict: result.verdict ?? null,
+            errorKind: result.errorKind ?? result.error_kind ?? null
           }));
           setTestResults(testResults);
           setConsoleOutput(`${t("testResultsHeader", {
@@ -335,6 +339,8 @@ export const StudentTaskPage: React.FC = () => {
       }
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(finalTestResults);
+      setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
+      setRevealedHints(0);
       const updatedProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
       for (const r of finalTestResults as any[]) {
         const id = typeof r.testId === 'number' ? r.testId : undefined;
@@ -430,6 +436,8 @@ export const StudentTaskPage: React.FC = () => {
       }
       const finalTestResults: TestResult[] = Array.isArray((result as any).testResults) ? (result as any).testResults : [];
       setTestResults(finalTestResults);
+      setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
+      setRevealedHints(0);
       const updatedProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
       for (const r of finalTestResults as any[]) {
         const id = typeof r.testId === 'number' ? r.testId : undefined;
@@ -813,6 +821,27 @@ export const StudentTaskPage: React.FC = () => {
       {showResults && <Modal open={showResults} onClose={() => setShowResults(false)} title={tr("Результати тестування", "Test results")} showCloseButton={false}>
           <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Результати тестування", "Test results")}</h2>
+
+            {hints.length > 0 && <div className="mb-4 p-3 border border-primary/30 bg-bg-code">
+                <div className="text-xs font-mono text-primary mb-2">{tr("Підказки (крок за кроком)", "Hints (step-by-step)")}</div>
+                <div className="space-y-2">
+                  {hints.slice(0, revealedHints).map((h, i) => <div key={i} className="text-xs font-mono text-text-primary whitespace-pre-wrap">
+                        {i + 1}. {h}
+                      </div>)}
+                  <div className="flex gap-2">
+                    {revealedHints < hints.length && <Button variant="ghost" onClick={() => setRevealedHints(v => Math.min(hints.length, v + 1))} className="text-xs">
+                        {tr("Показати підказку", "Show hint")}
+                      </Button>}
+                    {revealedHints < hints.length && hints.length > 1 && <Button variant="ghost" onClick={() => setRevealedHints(hints.length)} className="text-xs">
+                        {tr("Показати всі", "Show all")}
+                      </Button>}
+                    {revealedHints > 0 && <Button variant="ghost" onClick={() => setRevealedHints(0)} className="text-xs">
+                        {tr("Сховати", "Hide")}
+                      </Button>}
+                  </div>
+                </div>
+              </div>}
+
             <div className="space-y-3">
               {testResults.map((result, index) => <Card key={index} className="p-3">
                   <div className="flex items-center justify-between mb-2">
@@ -826,6 +855,9 @@ export const StudentTaskPage: React.FC = () => {
                     <div>
                       <strong>{tr("Отримано", "Actual")}:</strong> {result.actual}
                     </div>
+                    {!result.passed && (result.verdict || result.errorKind) && <div className="text-text-muted">
+                        <strong>{tr("Тип", "Type")}:</strong> {[result.verdict, result.errorKind].filter(Boolean).join(" · ")}
+                      </div>}
                     {result.stderr && <div className="text-accent-error">
                         <strong>{tr("Помилка", "Error")}:</strong> {result.stderr}
                       </div>}

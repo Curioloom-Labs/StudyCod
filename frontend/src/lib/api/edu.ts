@@ -166,6 +166,7 @@ export interface TaskWithGrade {
       actual: string;
       stderr?: string;
       passed: boolean;
+      errorKind?: string | null;
     }> | null;
   };
 }
@@ -202,6 +203,7 @@ export interface Grade {
     actual: string;
     stderr?: string;
     passed: boolean;
+    errorKind?: string | null;
   }> | null;
 }
 export interface TestResult {
@@ -210,6 +212,8 @@ export interface TestResult {
   actual: string;
   stderr?: string;
   passed: boolean;
+  verdict?: string | null;
+  errorKind?: string | null;
 }
 export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON"): Promise<{
   token?: string;
@@ -407,6 +411,7 @@ export async function submitCode(taskId: number, code: string): Promise<{
     isManuallyGraded: boolean;
   };
   testResults?: TestResult[];
+  hints?: string[];
   requiresManualReview?: boolean;
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/submit`, {
@@ -425,6 +430,7 @@ export async function completeTask(taskId: number, code: string): Promise<{
     isCompleted: boolean;
   };
   testResults?: TestResult[];
+  hints?: string[];
   requiresManualReview?: boolean;
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/complete`, {

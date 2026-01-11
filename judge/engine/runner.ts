@@ -6,6 +6,7 @@ import { Compiler, mapRuntimeToVerdict } from "./compiler";
 import { validateAndResolveLimits } from "./limits";
 import { CheckerSpec, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
 import { cleanPythonRuntimeError, filterNsJailStderr } from "./stderr";
+import { buildUserFacingStderr } from "./userFacingErrors";
 import { checkExact } from "../checkers/exact";
 import { checkWhitespace } from "../checkers/whitespace";
 import { checkFloat } from "../checkers/float";
@@ -38,6 +39,7 @@ export class Runner {
       if (compilePlan) {
         const compileTimeLimitMs = resolveCompileTimeLimitMs(req.language, limits.timeLimitMs);
         const compileRes = await this.compiler.compile({
+          language: req.language,
           nsjailPath: this.cfg.nsjailPath,
           nsjailConfigPath: this.cfg.nsjailConfigPath,
           useConfig: this.cfg.useConfig,
@@ -89,20 +91,29 @@ export class Runner {
         if (r.memoryKb !== null) {
           peakMemKb = peakMemKb === null ? r.memoryKb : Math.max(peakMemKb, r.memoryKb);
         }
-        const runtimeVerdict = mapRuntimeToVerdict({
+        let runtimeVerdict = mapRuntimeToVerdict({
           timedOut: r.timedOut,
           outputLimitExceeded: r.outputLimitExceeded,
           exitCode: r.exitCode,
           signal: r.signal,
           stderr: r.stderr
         });
-        const stderrForUser = req.language === "python" ? cleanPythonRuntimeError(r.stderr) || filterNsJailStderr(r.stderr) : filterNsJailStderr(r.stderr);
+
+        const baseStderrForUser = req.language === "python" ? cleanPythonRuntimeError(r.stderr) || filterNsJailStderr(r.stderr) : filterNsJailStderr(r.stderr);
+        const explained = buildUserFacingStderr(req.language, baseStderrForUser);
+        const stderrForUser = explained.stderr;
+
+        // For Python, treat pure syntax/indent errors closer to compile errors.
+        if (req.language === "python" && explained.kind === "syntax") {
+          runtimeVerdict = "CE";
+        }
         const allowDetails = !!req.debug || !test.hidden;
         const base: TestRunResult = {
           test_id: test.id,
           verdict: runtimeVerdict,
           time_ms: timeMs,
-          memory_kb: r.memoryKb
+          memory_kb: r.memoryKb,
+          error_kind: explained.kind
         };
         if (runtimeVerdict === "AC") {
           const ok = checkOutput(checker, r.stdout, expected);
@@ -126,7 +137,7 @@ export class Runner {
           tests.push(base);
           continue;
         }
-        base.message = runtimeVerdict === "TLE" ? "Time limit exceeded" : runtimeVerdict === "MLE" ? "Memory limit exceeded" : r.outputLimitExceeded ? "Output limit exceeded" : "Runtime error";
+        base.message = runtimeVerdict === "TLE" ? "Time limit exceeded" : runtimeVerdict === "MLE" ? "Memory limit exceeded" : r.outputLimitExceeded ? "Output limit exceeded" : runtimeVerdict === "CE" ? "Compilation error" : "Runtime error";
         if (allowDetails) {
           base.input = truncate(input, 4096);
           base.expected = truncate(expected, 4096);
@@ -154,7 +165,7 @@ export class Runner {
     if (this.cfg.useConfig) return;
     const hostPath = (chroot || "").trim();
     if (!hostPath) {
-      throw new Error(`NSJAIL_CHROOT_NOT_SET: set NSJAIL_CHROOT_${language.toUpperCase()} (or NSJAIL_CHROOT) to an existing directory on the host`);
+      throw new Error(`NSJAIL_CHROOT_NOT_SET: set NSJAIL_CHROOT_${language.toUpperCase()} (or NSJAIL_CHROOT) to an existing directory on the host (e.g. /sandbox/${language})`);
     }
     try {
       const st = await fs.stat(hostPath);

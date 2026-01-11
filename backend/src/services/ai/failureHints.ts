@@ -14,11 +14,19 @@ export async function generateAlgorithmicHints(params: {
   language: HintLanguage;
   code: string;
   failures: FailureCase[];
+  /** Maximum number of hints to return (progressively more specific). Default: 3 */
+  maxHints?: number;
 }): Promise<string[]> {
   const provider = getLLMProvider();
   const failures = (params.failures || []).slice(0, 3);
   if (failures.length === 0) return [];
+  const maxHints = Math.max(0, Math.min(5, Number(params.maxHints ?? 3) || 3));
   const systemPrompt = `Ти — наставник з алгоритмів та вводу/виводу. Твоя задача — дати КОРОТКІ підказки, чому рішення не проходить тести.
+
+ФОРМАТ ПІДКАЗОК (hint ladder):
+- Підказка #1 має бути найзагальніша (напрямок/ідея).
+- Кожна наступна — трохи конкретніша, але без готового розв'язку.
+- Не пиши код і не давай повний алгоритм.
 
 КРИТИЧНО:
 - Пояснюй ЛИШЕ логічні/алгоритмічні проблеми та помилки формату вводу/виводу.
@@ -36,7 +44,7 @@ export async function generateAlgorithmicHints(params: {
           type: "string"
         },
         minItems: 0,
-        maxItems: 3
+        maxItems: maxHints
       }
     },
     required: ["hints"]
@@ -60,7 +68,7 @@ ${failures.map((f, idx) => {
     return [`Test ${id}${verdict}`, `Input: ${JSON.stringify((f.input ?? "").slice(0, 400))}`, `Expected: ${JSON.stringify((f.expected ?? "").slice(0, 400))}`, `Actual: ${JSON.stringify((f.actual ?? "").slice(0, 400))}`, stderr ? `Stderr: ${JSON.stringify(stderr.slice(0, 300))}` : null].filter(Boolean).join("\n");
   }).join("\n\n")}
 
-Дай до 3 коротких підказок, що саме перевірити/виправити в логіці або I/O, щоб пройти тести.
+Дай до ${maxHints} коротких підказок у форматі "hint ladder" (кожна наступна конкретніша), що саме перевірити/виправити в логіці або I/O, щоб пройти тести.
 Відповідай JSON у форматі {"hints": [..]}.
 `.trim();
   try {
@@ -70,7 +78,7 @@ ${failures.map((f, idx) => {
       temperature: 0.1
     });
     const hints = Array.isArray(parsed?.hints) ? parsed.hints : [];
-    return hints.map(h => String(h).trim()).filter(Boolean).slice(0, 3);
+    return hints.map(h => String(h).trim()).filter(Boolean).slice(0, maxHints);
   } catch {
     return [];
   }

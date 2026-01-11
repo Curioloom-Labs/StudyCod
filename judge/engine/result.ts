@@ -35,6 +35,8 @@ export interface CompileResult {
   ok: boolean;
   verdict: Verdict;
   message: string;
+  /** Optional normalized error classification for UI (backward compatible). */
+  error_kind?: string;
   stdout?: string;
   stderr?: string;
   time_ms: number;
@@ -46,6 +48,8 @@ export interface TestRunResult {
   time_ms: number;
   memory_kb: number | null;
   message?: string;
+  /** Optional normalized error classification for UI (backward compatible). */
+  error_kind?: string;
   input?: string;
   expected?: string;
   actual?: string;
