@@ -59,6 +59,49 @@ export class LLMOrchestrator {
     this.cloudflareProvider = new CloudflareAIProvider();
     this.openRouterProvider = new OpenRouterProvider();
   }
+
+  private normalizeTemplateTodoComments(params: {
+    template: string;
+    language: "JAVA" | "PYTHON";
+    todoText: string;
+  }): string {
+    const original = params.template ?? '';
+    const template = String(original).replace(/\r\n/g, '\n');
+    const lines = template.split('\n');
+
+    const hasCyrillic = /[\u0400-\u04FF]/.test(template);
+    const looksLikeRussianInstruction = /\b(присвойте|переменн|переменных|выведите|введите|считайте|найдите)\b/i.test(template);
+    const shouldAggressivelyNormalizeComments = hasCyrillic && looksLikeRussianInstruction;
+
+    const normalizePython = (line: string): string => {
+      const todoMatch = line.match(/^(\s*)#\s*todo\b.*$/i);
+      if (todoMatch) return `${todoMatch[1]}# TODO: ${params.todoText}`;
+
+      if (shouldAggressivelyNormalizeComments) {
+        const m = line.match(/^(\s*)#\s*.+$/);
+        if (m) return `${m[1]}# TODO: ${params.todoText}`;
+      }
+      return line;
+    };
+
+    const normalizeJava = (line: string): string => {
+      const todoMatch = line.match(/^(\s*)\/\/\s*todo\b.*$/i);
+      if (todoMatch) return `${todoMatch[1]}// TODO: ${params.todoText}`;
+
+      if (shouldAggressivelyNormalizeComments) {
+        const m = line.match(/^(\s*)\/\/\s*.+$/);
+        if (m) return `${m[1]}// TODO: ${params.todoText}`;
+      }
+      return line;
+    };
+
+    const normalizedLines = lines.map(line => {
+      if (params.language === "PYTHON") return normalizePython(line);
+      return normalizeJava(line);
+    });
+
+    return normalizedLines.join('\n').trim();
+  }
   async generateTaskWithAI(params: {
     topicTitle: string;
     theory: string;
@@ -639,14 +682,64 @@ ${difficultyPrompt}
     description?: string;
     userId?: number;
     topicId?: number;
+    userLanguage?: "uk" | "en";
   }): Promise<{
     template: string;
   }> {
     const langName = params.language === "JAVA" ? "Java" : "Python";
-    const systemPrompt = `Ти досвідчений викладач програмування. Створюй порожні шаблони коду з TODO-коментарями. ЗАБОРОНЕНО писати реалізацію або готовий код.`;
-    const userPrompt = `Створи порожній шаблон коду для завдання "${params.topicTitle}" на мові ${langName}.
+    const isEnglish = params.userLanguage === 'en';
+    const todoText = isEnglish ? 'implement the solution according to the statement' : 'реалізуйте рішення задачі згідно з умовою';
+
+    const systemPrompt = isEnglish
+      ? `You are an experienced programming instructor. Create EMPTY code templates with TODO comments. DO NOT write any implementation or final code. DO NOT use Russian language.`
+      : `Ти досвідчений викладач програмування. Створюй ПОРОЖНІ шаблони коду з TODO-коментарями УКРАЇНСЬКОЮ мовою. ЗАБОРОНЕНО писати реалізацію або готовий код. НЕ ВИКОРИСТОВУЙ російську мову.`;
+
+    const userPrompt = isEnglish ? `Create an EMPTY code template for the task "${params.topicTitle}" in ${langName}.
+
+${params.description ? `Task description:\n${params.description}\n\n` : ''}
+
+CRITICAL - THE TEMPLATE MUST BE EMPTY:
+
+FORBIDDEN:
+- Any implementation logic
+- Any final solution code
+- Any calculations/algorithm steps
+
+ALLOWED:
+- Only structure (class/function)
+- A single TODO comment with instruction (IN ENGLISH)
+- Required imports (only if needed for structure)
+
+REQUIREMENTS:
+- Java: ONLY empty class Main with main method and a TODO comment
+- Python: ONLY empty main() function with if __name__ == "__main__" and a TODO comment
+- No implementation
+- No markdown code fences
+
+Correct Java example:
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        // TODO: ${todoText}
+    }
+}
+
+Correct Python example:
+def main():
+    # TODO: ${todoText}
+    pass
+
+if __name__ == "__main__":
+    main()
+
+Return ONLY the code, no explanations.` : `Створи порожній шаблон коду для завдання "${params.topicTitle}" на мові ${langName}.
 
 ${params.description ? `Опис завдання:\n${params.description}\n\n` : ''}
+
+МОВА:
+- Усі TODO-коментарі та інструкції в коді мають бути УКРАЇНСЬКОЮ.
+- Заборонено використовувати російську мову.
 
 КРИТИЧНО ВАЖЛИВО - ШАБЛОН МАЄ БУТИ ПОРОЖНІМ:
 
@@ -674,7 +767,7 @@ import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
-        // TODO: реалізуйте рішення задачі
+    // TODO: ${todoText}
     }
 }
 \`\`\`
@@ -682,7 +775,7 @@ public class Main {
 Приклад ПРАВИЛЬНОГО шаблону для Python:
 \`\`\`python
 def main():
-    # TODO: реалізуйте рішення задачі
+    # TODO: ${todoText}
     pass
 
 if __name__ == "__main__":
@@ -711,12 +804,17 @@ public class Main {
         userId: params.userId,
         topicId: params.topicId,
         temperature: 0.3,
-        maxTokens: 1000
+        maxTokens: 1000,
+        language: params.userLanguage || 'uk'
       });
       let template = content.trim();
       template = template.replace(/^```\w*\n?/gm, '');
       template = template.replace(/```$/gm, '');
-      template = template.trim();
+      template = this.normalizeTemplateTodoComments({
+        template: template.trim(),
+        language: params.language,
+        todoText
+      });
       const validated = AIResponseValidator.validateGenerateTaskTemplate({
         template
       });

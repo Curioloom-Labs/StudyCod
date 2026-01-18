@@ -9,6 +9,16 @@ export interface AIError {
   error?: string;
   details?: any;
 }
+
+function classifyAIProviderStatus(errorMessage: string): number {
+  const msg = (errorMessage || '').toLowerCase();
+  // Prefer not to return 502 from app code: many reverse proxies intercept 502 and hide body.
+  if (msg.includes('rate limit') || msg.includes('429')) return 429;
+  if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('30s exceeded')) return 504;
+  if (msg.includes('no openrouter api keys') || msg.includes('all api keys exhausted') || msg.includes('api key')) return 503;
+  if (msg.includes('invalid request') || msg.includes('400')) return 400;
+  return 503;
+}
 function validateInputParams(mode: AIMode, params: any): void {
   switch (mode) {
     case 'generateTask':
@@ -230,7 +240,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
       return {
         success: false,
         error: {
-          statusCode: 502,
+          statusCode: classifyAIProviderStatus(errorMessage),
           message: 'AI_GENERATION_FAILED: AI provider error',
           error: errorMessage,
           details: {
@@ -244,7 +254,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
       return {
         success: false,
         error: {
-          statusCode: 502,
+          statusCode: 503,
           message: 'AI_GENERATION_FAILED: AI returned error',
           error: String(result.error),
           details: {
@@ -278,7 +288,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
     console.error(`[safeAICall] Unexpected error for ${mode}:`, errorMessage);
     let statusCode = 400;
     if (errorMessage.includes('AI_GENERATION_FAILED') || errorMessage.includes('timeout') || errorMessage.includes('network')) {
-      statusCode = 502;
+      statusCode = classifyAIProviderStatus(errorMessage);
     }
     return {
       success: false,

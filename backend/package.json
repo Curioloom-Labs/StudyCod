@@ -7,7 +7,9 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test \"dist/**/*.test.js\""
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "sanitize-templates": "npm run build && node dist/backend/src/scripts/sanitizeTemplates.js",
+    "fix-missing-output-format": "npm run build && node dist/backend/src/scripts/fixMissingOutputFormat.js"
   },
   "dependencies": {
       "express-rate-limit": "^7.5.0",
