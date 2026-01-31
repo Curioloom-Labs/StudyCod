@@ -65,8 +65,53 @@ class EmailService {
 
   private getFrontendUrl(): string {
     return process.env.FRONTEND_URL || "http://localhost:5173";
+
+  async sendAnnouncementEmail(email: string, username: string, className: string, title: string | null, preview: string) {
+    const html = this.buildBaseEmail({
+      title: title ? `Оголошення: ${title}` : "Оголошення",
+      greeting: `Привіт, ${username}!`,
+      contentHtml: `<p>Ви отримали нове оголошення у класі <b>${this.escapeHtml(className)}</b>:</p><blockquote>${this.escapeHtml(preview)}</blockquote>`
+    });
+    const text = `Оголошення у класі ${className}:
+  }
+    await this.sendEmail({
+      to: email,
+      subject: title ? `Оголошення: ${title}` : "Оголошення",
+      html,
+      text
+    });
   }
 
+  async sendStreakBreakNotification(email: string, username: string, streak: number) {
+    const html = this.buildBaseEmail({
+      title: "Ви можете втратити серію!",
+      greeting: `Привіт, ${username}!`,
+      contentHtml: `<p>Ваша серія успіхів (${streak} днів) під загрозою! Не забудьте виконати завдання сьогодні, щоб не втратити прогрес.</p>`
+    });
+    const text = `Ваша серія успіхів (${streak} днів) під загрозою! Не забудьте виконати завдання сьогодні.`;
+    await this.sendEmail({
+      to: email,
+      subject: "Ви можете втратити серію!",
+      html,
+      text
+    });
+  }
+
+  async sendTaskAssignmentEmail(email: string, username: string, taskTitle: string, deadline: Date, type: string) {
+    const html = this.buildBaseEmail({
+      title: type === "CONTROL_WORK" ? "Контрольна робота" : "Нове завдання",
+      greeting: `Привіт, ${username}!`,
+      contentHtml: `<p>Вам призначено ${type === "CONTROL_WORK" ? "контрольну роботу" : "нове завдання"}: <b>${this.escapeHtml(taskTitle)}</b></p><p>Дедлайн: <b>${deadline.toLocaleString("uk-UA")}</b></p>`
+    });
+    const text = `${type === "CONTROL_WORK" ? "Контрольна робота" : "Нове завдання"}: ${taskTitle}
+
+    await this.sendEmail({
+      to: email,
+      subject: type === "CONTROL_WORK" ? "Контрольна робота" : "Нове завдання",
+      html,
+      text
+    });
+  }
   private escapeHtml(input: unknown): string {
     const s = String(input ?? "");
     return s
