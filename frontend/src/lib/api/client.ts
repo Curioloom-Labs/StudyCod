@@ -55,6 +55,9 @@ api.interceptors.response.use((response: AxiosResponse) => {
 }, (error: AxiosError) => {
   if ((error as any).response?.status === 401) {
     localStorage.removeItem("token");
+    if (typeof window !== "undefined") {
+      window.location.href = "/auth";
+    }
   }
   if ((error as any).response?.status === 503) {
     const data = (error as any).response?.data as any;

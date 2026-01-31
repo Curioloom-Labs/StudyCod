@@ -24,6 +24,13 @@ export type PersonalTaskGrade = {
   previousGrade?: number | null;
   testsPassed?: number;
   testsTotal?: number;
+  score?: number;
+  maxScore?: number;
+  groupScores?: Array<{
+    group: string;
+    score: number;
+    maxScore: number;
+  }>;
   testResults?: PersonalTaskTestResult[];
   hints?: string[];
   createdAt?: string;
@@ -78,12 +85,18 @@ export async function saveDraft(id: number, code: string): Promise<void> {
   });
 }
 export async function submitTask(id: number, code: string): Promise<SubmitTaskResponse> {
+  if (!code || typeof code !== "string") {
+    throw new Error("Code is required and must be a string");
+  }
   const res = await api.post(`/tasks/${id}/submit`, {
     code
   });
   return res.data as SubmitTaskResponse;
 }
 export async function submitTaskWithMode(id: number, code: string, mode: "TESTS" | "AI"): Promise<SubmitTaskResponse> {
+  if (!code || typeof code !== "string") {
+    throw new Error("Code is required and must be a string");
+  }
   const res = await api.post(`/tasks/${id}/submit`, {
     code,
     mode

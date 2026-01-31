@@ -39,6 +39,7 @@ export async function generateQuizWithAI(params: {
 }
 export async function generateTaskCondition(params: {
   topicTitle: string;
+  taskTitle?: string;
   taskType: "PRACTICE" | "CONTROL";
   difficulty?: number;
   language: "JAVA" | "PYTHON";
@@ -52,6 +53,7 @@ export async function generateTaskCondition(params: {
 }
 export async function generateTaskTemplate(params: {
   topicTitle: string;
+  taskTitle?: string;
   language: "JAVA" | "PYTHON";
   description?: string;
   userId?: number;

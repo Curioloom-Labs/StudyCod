@@ -14,7 +14,6 @@ export async function generateAlgorithmicHints(params: {
   language: HintLanguage;
   code: string;
   failures: FailureCase[];
-  /** Maximum number of hints to return (progressively more specific). Default: 3 */
   maxHints?: number;
 }): Promise<string[]> {
   const provider = getLLMProvider();

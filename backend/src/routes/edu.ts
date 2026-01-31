@@ -32,6 +32,7 @@ import { JudgeBusyError } from "../services/judgeWorker/Semaphore";
 import { JWT_SECRET } from "../config";
 import { evaluateFormula, FormulaVariables, validateFormula } from "../utils/safeFormulaEvaluator";
 import { AssessmentType, validateAssessmentType } from "../types/AssessmentType";
+import { detectAICode } from "../services/ai/aiCodeDetector";
 const eduRouter = Router();
 function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec {
   const hasFloatLike = outputs.some(s => {
@@ -2226,20 +2227,30 @@ eduRouter.get("/tasks/:taskId(\\d+)", authRequired, async (req: AuthRequest, res
       }
     }
     let grade = null;
+    let attemptsUsed: number | null = null;
     if (req.studentId) {
       const grades = await gradeRepo().createQueryBuilder("grade").where("grade.student_id = :studentId", {
         studentId: req.studentId
       }).andWhere("grade.topic_task_id = :taskId", {
         taskId
       }).orderBy("grade.created_at", "DESC").getMany();
+      attemptsUsed = grades.length;
       if (grades.length > 0) {
         const latestGrade = grades[0];
         let parsedTestResults = null;
+        let parsedGroupScores = null;
         if (latestGrade.testResults) {
           try {
             parsedTestResults = JSON.parse(latestGrade.testResults);
           } catch (e) {
             console.error("Failed to parse testResults JSON:", e);
+          }
+        }
+        if ((latestGrade as any).groupScores) {
+          try {
+            parsedGroupScores = JSON.parse((latestGrade as any).groupScores);
+          } catch (e) {
+            console.error("Failed to parse groupScores JSON:", e);
           }
         }
         grade = {
@@ -2250,7 +2261,10 @@ eduRouter.get("/tasks/:taskId(\\d+)", authRequired, async (req: AuthRequest, res
           isManuallyGraded: latestGrade.isManuallyGraded === true,
           isCompleted: latestGrade.isCompleted === true,
           submittedCode: latestGrade.submittedCode,
-          testResults: parsedTestResults
+          testResults: parsedTestResults,
+          score: (latestGrade as any).score ?? null,
+          maxScore: (latestGrade as any).maxScore ?? null,
+          groupScores: parsedGroupScores
         };
       }
     }
@@ -2289,6 +2303,7 @@ eduRouter.get("/tasks/:taskId(\\d+)", authRequired, async (req: AuthRequest, res
         description: topicTask.description,
         template: topicTask.template,
         maxAttempts: topicTask.maxAttempts,
+        attemptsUsed: attemptsUsed ?? undefined,
         deadline: topicTask.deadline ? topicTask.deadline.toISOString() : null,
         isClosed: topicTask.isClosed,
         isAssigned: topicTask.isAssigned || false,
@@ -2453,6 +2468,8 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
       });
     }
     let passed = 0;
+    let passedScore = 0;
+    let maxScore = 0;
     let hintsForUser: string[] = [];
     const testResults: Array<{
       testId: number;
@@ -2481,6 +2498,8 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
         output_limit_kb: 64
       }
     } as const;
+    maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
+
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_${studentId}_${taskId}_${Date.now()}`,
       language: judgeLang,
@@ -2489,14 +2508,22 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
         id: t.id,
         input: t.input || "",
         output: t.expectedOutput || "",
-        hidden: t.isHidden === true
+        hidden: t.isHidden === true,
+        group: t.isHidden === true ? "hidden" : "public",
+        weight: t.points || 1
       })),
       limits: defaultLimitsByLang[judgeLang],
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
       debug: false,
+      rerun_failed_once: true,
       run_all: true
     };
     let workerRes: WorkerJudgeResponse | null = null;
+    let scoringGroupScores: Array<{
+      group: string;
+      score: number;
+      maxScore: number;
+    }> | null = null;
     try {
       workerRes = await judgeWithSemaphore(workerReq);
     } catch (e) {
@@ -2516,7 +2543,10 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
       for (const t of tests) {
         const r = await executeCodeWithInput(code, topicTask.topic.class.language, t.input, 10000);
         const isPassed = compareOutput(r.stdout, t.expectedOutput);
-        if (isPassed) passed++;
+        if (isPassed) {
+          passed++;
+          passedScore += t.points || 1;
+        }
         testResults.push({
           testId: t.id,
           input: t.input,
@@ -2549,7 +2579,10 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
         for (const t of tests) {
           const r = byId.get(String(t.id));
           const isPassed = r?.verdict === "AC";
-          if (isPassed) passed++;
+          if (isPassed) {
+            passed++;
+            passedScore += t.points || 1;
+          }
           if (t.isHidden) continue;
           testResults.push({
             testId: t.id,
@@ -2562,6 +2595,18 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
           });
         }
       }
+    }
+
+    if (workerRes && typeof workerRes.score === "number" && typeof workerRes.max_score === "number") {
+      passedScore = workerRes.score;
+      maxScore = workerRes.max_score;
+    }
+    if (workerRes && Array.isArray((workerRes as any).group_scores)) {
+      scoringGroupScores = (workerRes as any).group_scores.map((gs: any) => ({
+        group: String(gs?.group ?? ""),
+        score: Number(gs?.score ?? 0),
+        maxScore: Number(gs?.max_score ?? 0)
+      }));
     }
     let feedback: string | null = null;
     if (passed < tests.length) {
@@ -2591,7 +2636,8 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
         }
       } catch {}
     }
-    const score = Math.round(passed / tests.length * 12);
+    const ratio = maxScore > 0 ? passedScore / maxScore : 0;
+    const score = Math.round(ratio * 12);
     const totalGrade = Math.max(0, Math.min(12, score));
     const grade = gradeRepo().create({
       student: {
@@ -2604,7 +2650,10 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
       submittedCode: code,
       isManuallyGraded: false,
       feedback,
-      testResults: JSON.stringify(testResults)
+      testResults: JSON.stringify(testResults),
+      score: typeof passedScore === "number" ? passedScore : null,
+      maxScore: typeof maxScore === "number" ? maxScore : null,
+      groupScores: scoringGroupScores ? JSON.stringify(scoringGroupScores) : null
     });
     await gradeRepo().save(grade);
     if (topicTask.controlWork && topicTask.controlWork.id) {
@@ -2620,7 +2669,12 @@ eduRouter.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, r
     res.json({
       grade,
       testResults,
-      hints: hintsForUser
+      hints: hintsForUser,
+      scoring: {
+        score: passedScore,
+        maxScore,
+        groupScores: scoringGroupScores
+      }
     });
   } catch (error) {
     console.error(error);
@@ -2689,8 +2743,59 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
       studentId
     }).getCount();
     if (existingGradesCount >= topicTask.maxAttempts) {
-      return res.status(403).json({
-        message: "MAX_ATTEMPTS_REACHED"
+      // Completing the task should not consume another attempt. If the student already
+      // used all attempts, we allow completion by locking the latest existing grade.
+      if (!latestExisting) {
+        return res.status(403).json({
+          message: "MAX_ATTEMPTS_REACHED"
+        });
+      }
+      latestExisting.isCompleted = true;
+      const saved = await gradeRepo().save(latestExisting);
+
+      let parsedTestResults: any[] = [];
+      if (saved.testResults) {
+        try {
+          const parsed = JSON.parse(saved.testResults);
+          if (Array.isArray(parsed)) parsedTestResults = parsed;
+        } catch {}
+      }
+      let parsedGroupScores: any[] | null = null;
+      if ((saved as any).groupScores) {
+        try {
+          const parsed = JSON.parse((saved as any).groupScores);
+          if (Array.isArray(parsed)) parsedGroupScores = parsed;
+        } catch {}
+      }
+
+      if (topicTask.controlWork && topicTask.controlWork.id) {
+        try {
+          await AppDataSource.transaction("SERIALIZABLE", async manager => {
+            await saveControlSummaryGradeForNewSystemWithManager(manager, topicTask.controlWork!.id, studentId, null);
+            await markControlWorkAttemptCompletedIfReadyWithManager(manager, topicTask.controlWork!.id, studentId);
+          });
+        } catch (e) {
+          console.error("Failed to recalculate control work grade after task completion:", e);
+        }
+      }
+
+      return res.json({
+        requiresManualReview: false,
+        grade: {
+          id: saved.id,
+          total: saved.total,
+          testsPassed: saved.testsPassed,
+          testsTotal: saved.testsTotal,
+          isManuallyGraded: saved.isManuallyGraded === true,
+          isCompleted: true
+        },
+        testResults: parsedTestResults,
+        hints: [],
+        scoring: typeof (saved as any).score === "number" && typeof (saved as any).maxScore === "number" ? {
+          score: (saved as any).score,
+          maxScore: (saved as any).maxScore,
+          groupScores: parsedGroupScores
+        } : undefined
       });
     }
     const {
@@ -2709,6 +2814,8 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
       });
     }
     let passed = 0;
+    let passedScore = 0;
+    let maxScore = 0;
     let hintsForUser: string[] = [];
     const testResults: Array<{
       testId: number;
@@ -2737,6 +2844,8 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
         output_limit_kb: 64
       }
     } as const;
+    maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
+
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_complete_${studentId}_${taskId}_${Date.now()}`,
       language: judgeLang,
@@ -2745,14 +2854,22 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
         id: t.id,
         input: t.input || "",
         output: t.expectedOutput || "",
-        hidden: t.isHidden === true
+        hidden: t.isHidden === true,
+        group: t.isHidden === true ? "hidden" : "public",
+        weight: t.points || 1
       })),
       limits: defaultLimitsByLang[judgeLang],
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
       debug: false,
+      rerun_failed_once: true,
       run_all: true
     };
     let workerRes: WorkerJudgeResponse | null = null;
+    let scoringGroupScores: Array<{
+      group: string;
+      score: number;
+      maxScore: number;
+    }> | null = null;
     try {
       workerRes = await judgeWithSemaphore(workerReq);
     } catch (e) {
@@ -2772,7 +2889,10 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
       for (const t of tests) {
         const r = await executeCodeWithInput(code, topicTask.topic.class.language, t.input, 10000);
         const isPassed = compareOutput(r.stdout, t.expectedOutput);
-        if (isPassed) passed++;
+        if (isPassed) {
+          passed++;
+          passedScore += t.points || 1;
+        }
         testResults.push({
           testId: t.id,
           input: t.input || "",
@@ -2805,7 +2925,10 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
         for (const t of tests) {
           const r = byId.get(String(t.id));
           const isPassed = r?.verdict === "AC";
-          if (isPassed) passed++;
+          if (isPassed) {
+            passed++;
+            passedScore += t.points || 1;
+          }
           if (t.isHidden) continue;
           testResults.push({
             testId: t.id,
@@ -2818,6 +2941,18 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
           });
         }
       }
+    }
+
+    if (workerRes && typeof workerRes.score === "number" && typeof workerRes.max_score === "number") {
+      passedScore = workerRes.score;
+      maxScore = workerRes.max_score;
+    }
+    if (workerRes && Array.isArray((workerRes as any).group_scores)) {
+      scoringGroupScores = (workerRes as any).group_scores.map((gs: any) => ({
+        group: String(gs?.group ?? ""),
+        score: Number(gs?.score ?? 0),
+        maxScore: Number(gs?.max_score ?? 0)
+      }));
     }
     let feedback: string | null = null;
     if (passed < tests.length) {
@@ -2847,7 +2982,8 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
         }
       } catch {}
     }
-    const score = Math.round(passed / tests.length * 12);
+    const ratio = maxScore > 0 ? passedScore / maxScore : 0;
+    const score = Math.round(ratio * 12);
     const totalGrade = Math.max(0, Math.min(12, score));
     const grade = gradeRepo().create({
       student: {
@@ -2861,7 +2997,10 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
       isManuallyGraded: false,
       isCompleted: true,
       feedback,
-      testResults: JSON.stringify(testResults)
+      testResults: JSON.stringify(testResults),
+      score: typeof passedScore === "number" ? passedScore : null,
+      maxScore: typeof maxScore === "number" ? maxScore : null,
+      groupScores: scoringGroupScores ? JSON.stringify(scoringGroupScores) : null
     });
     const saved = await gradeRepo().save(grade);
     if (topicTask.controlWork && topicTask.controlWork.id) {
@@ -2885,7 +3024,12 @@ eduRouter.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest,
         isCompleted: true
       },
       testResults,
-      hints: hintsForUser
+      hints: hintsForUser,
+      scoring: {
+        score: passedScore,
+        maxScore,
+        groupScores: scoringGroupScores
+      }
     });
   } catch (error) {
     console.error(error);
@@ -3247,15 +3391,20 @@ eduRouter.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest,
       }
     });
     console.log(`[GET /tasks/:taskId/test-data] Found ${testData.length} test data items for taskId=${taskId}`);
-    const includeExpectedOutput = !(req.userType === "STUDENT" || req.studentId);
+    const isStudentView = req.userType === "STUDENT" || !!req.studentId;
+    const list = isStudentView ? testData.filter(td => td.isHidden !== true) : testData;
+    const includeExpectedOutput = !isStudentView;
     res.json({
-      testData: testData.filter(td => td.isHidden !== true).map(td => ({
+      testData: list.map(td => ({
         id: td.id,
         input: td.input,
         ...(includeExpectedOutput ? {
           expectedOutput: td.expectedOutput
         } : {}),
-        points: td.points
+        points: td.points,
+        ...(includeExpectedOutput ? {
+          isHidden: td.isHidden === true
+        } : {})
       }))
     });
   } catch (error: any) {
@@ -3333,11 +3482,12 @@ eduRouter.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest
     await testDataRepo().save(createdTests);
     res.status(201).json({
       message: "TEST_DATA_ADDED",
-      testData: createdTests.filter(td => td.isHidden !== true).map(td => ({
+      testData: createdTests.map(td => ({
         id: td.id,
         input: td.input,
         expectedOutput: td.expectedOutput,
-        points: td.points
+        points: td.points,
+        isHidden: td.isHidden === true
       }))
     });
   } catch (error: any) {
@@ -3446,11 +3596,12 @@ eduRouter.post("/tasks/:taskId/test-data/generate", authRequired, async (req: Au
       await testDataRepo().save(createdTests);
       res.json({
         count: createdTests.length,
-        testData: createdTests.filter((td: TestData) => td.isHidden !== true).map((td: TestData) => ({
+        testData: createdTests.map((td: TestData) => ({
           id: td.id,
           input: td.input,
           expectedOutput: td.expectedOutput,
-          points: td.points
+          points: td.points,
+          isHidden: td.isHidden === true
         }))
       });
     } catch (error: any) {
@@ -3535,11 +3686,12 @@ eduRouter.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: 
     await testDataRepo().save(testData);
     res.json({
       message: "TEST_DATA_UPDATED",
-      testData: testData.isHidden ? null : {
+      testData: {
         id: testData.id,
         input: testData.input,
         expectedOutput: testData.expectedOutput,
-        points: testData.points
+        points: testData.points,
+        isHidden: testData.isHidden === true
       }
     });
   } catch (error: any) {
@@ -4418,6 +4570,140 @@ eduRouter.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, asy
     });
   }
 });
+
+eduRouter.get("/topic-tasks/:taskId/students/:studentId/ai-detect", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId) {
+      return res.status(403).json({
+        message: "ONLY_TEACHERS_CAN_VIEW_AI_DETECT"
+      });
+    }
+
+    const user = await userRepo().findOne({
+      where: {
+        id: req.userId
+      }
+    });
+    if (!user || user.userMode !== "EDUCATIONAL") {
+      return res.status(403).json({
+        message: "ONLY_TEACHERS_CAN_VIEW_AI_DETECT"
+      });
+    }
+
+    const taskId = parseInt(req.params.taskId, 10);
+    const studentId = parseInt(req.params.studentId, 10);
+    if (isNaN(taskId) || isNaN(studentId)) {
+      return res.status(400).json({
+        message: "INVALID_PARAMS"
+      });
+    }
+
+    const topicTask = await topicTaskRepo().findOne({
+      where: {
+        id: taskId
+      },
+      relations: ["topic", "topic.class", "topic.class.teacher"]
+    });
+    if (!topicTask || !topicTask.topic?.class) {
+      return res.status(404).json({
+        message: "TASK_NOT_FOUND"
+      });
+    }
+    if (!topicTask.topic.class.teacher || topicTask.topic.class.teacher.id !== user.id) {
+      return res.status(403).json({
+        message: "ACCESS_DENIED"
+      });
+    }
+
+    const student = await studentRepo().findOne({
+      where: {
+        id: studentId
+      },
+      relations: ["class", "class.teacher"]
+    });
+    if (!student || !student.class) {
+      return res.status(404).json({
+        message: "STUDENT_NOT_FOUND"
+      });
+    }
+    if (!student.class.teacher || student.class.teacher.id !== user.id) {
+      return res.status(403).json({
+        message: "ACCESS_DENIED"
+      });
+    }
+    if (student.class.id !== topicTask.topic.class.id) {
+      return res.status(403).json({
+        message: "ACCESS_DENIED"
+      });
+    }
+
+    const latest = await gradeRepo().findOne({
+      where: {
+        student: {
+          id: studentId
+        } as any,
+        topicTask: {
+          id: taskId
+        } as any
+      } as any,
+      order: {
+        createdAt: "DESC" as any
+      } as any
+    });
+
+    if (!latest || !latest.submittedCode || !latest.submittedCode.trim()) {
+      return res.json({
+        message: "NO_SUBMISSION",
+        task: {
+          id: topicTask.id,
+          title: topicTask.title
+        },
+        student: {
+          id: student.id,
+          firstName: student.firstName,
+          lastName: student.lastName,
+          middleName: student.middleName || null
+        },
+        detection: null
+      });
+    }
+
+    const detection = await detectAICode({
+      gradeId: latest.id,
+      language: topicTask.topic.class.language,
+      taskTitle: topicTask.title,
+      taskDescription: topicTask.description,
+      template: topicTask.template,
+      submittedCode: latest.submittedCode,
+      requestId: (req as any).requestId,
+      userId: user.id,
+      topicTaskId: topicTask.id
+    });
+
+    return res.json({
+      task: {
+        id: topicTask.id,
+        title: topicTask.title,
+        topicId: topicTask.topic.id,
+        topicTitle: topicTask.topic.title
+      },
+      student: {
+        id: student.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        middleName: student.middleName || null
+      },
+      gradeId: latest.id,
+      createdAt: latest.createdAt ? latest.createdAt.toISOString() : null,
+      detection
+    });
+  } catch (error: any) {
+    console.error("Error running AI detector:", error);
+    return res.status(500).json({
+      message: "INTERNAL_SERVER_ERROR"
+    });
+  }
+});
 eduRouter.get("/control-works/:controlWorkId/students/:studentId/work", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (req.userType === "STUDENT" || req.studentId) {
@@ -4703,6 +4989,7 @@ async function calculateControlGradeForNewSystemWithManager(manager: EntityManag
   finalGrade: number;
   theoryGrade: number | null;
   averageTaskGrade: number;
+  formulaSnapshot: string | null;
 } | null> {
   const controlWork = await manager.createQueryBuilder(ControlWork, "cw").setLock("pessimistic_read").where("cw.id = :controlWorkId", {
     controlWorkId
@@ -4712,15 +4999,15 @@ async function calculateControlGradeForNewSystemWithManager(manager: EntityManag
   }
   const controlTasks = (controlWork.topic.tasks || []).filter((t: TopicTask) => t.type === "CONTROL" && t.controlWork && t.controlWork.id === controlWork.id);
   const taskIds = controlTasks.map((t: TopicTask) => t.id);
-  let hasAnyPracticeGrade = false;
+  const hasPracticePart = controlWork.hasPractice !== false && taskIds.length > 0;
+  let practiceGradedCount = 0;
   let averageTaskGrade = 0;
-  if (taskIds.length > 0) {
+  if (hasPracticePart) {
     const allTaskGrades = await manager.createQueryBuilder(EduGrade, "g").setLock("pessimistic_read").leftJoin("g.student", "student").leftJoin("g.topicTask", "topicTask").where("student.id = :studentId", {
       studentId
     }).andWhere("topicTask.id IN (:...taskIds)", {
       taskIds
-    }).andWhere("(g.type IS NULL OR g.type = 'PRACTICE')").orderBy("g.created_at", "DESC").getMany();
-    hasAnyPracticeGrade = allTaskGrades.length > 0;
+    }).andWhere("(g.type IS NULL OR g.type = 'PRACTICE')").andWhere("g.total IS NOT NULL").orderBy("g.created_at", "DESC").getMany();
     const latestByTaskId = new Map<number, EduGrade>();
     for (const g of allTaskGrades) {
       const tid = (g as any).topicTask?.id;
@@ -4729,14 +5016,16 @@ async function calculateControlGradeForNewSystemWithManager(manager: EntityManag
         latestByTaskId.set(tid, g);
       }
     }
-    const sum = taskIds.reduce((acc, tid) => {
+    let sum = 0;
+    for (const tid of taskIds) {
       const g = latestByTaskId.get(tid);
-      const v = g && g.total !== null && Number.isFinite(Number(g.total)) ? Number(g.total) : 0;
-      return acc + v;
-    }, 0);
-    averageTaskGrade = sum / taskIds.length;
+      const v = g && g.total !== null && Number.isFinite(Number(g.total)) ? Number(g.total) : null;
+      if (v === null) continue;
+      practiceGradedCount++;
+      sum += v;
+    }
+    averageTaskGrade = practiceGradedCount > 0 ? sum / practiceGradedCount : 0;
   }
-  const summaryGradeRepoManager = manager.getRepository(SummaryGrade);
   const summaryGrade = await manager.createQueryBuilder(SummaryGrade, "sg").setLock("pessimistic_read").where("sg.student.id = :studentId", {
     studentId
   }).andWhere("sg.controlWork.id = :controlWorkId", {
@@ -4746,23 +5035,43 @@ async function calculateControlGradeForNewSystemWithManager(manager: EntityManag
   if (summaryGrade && summaryGrade.theoryGrade !== null) {
     theoryGrade = clampGradeToInt(Number(summaryGrade.theoryGrade));
   }
-  if (controlWork.hasTheory && theoryGrade === null) {
+  const hasTheoryPart = !!controlWork.hasTheory;
+  const hasTestGrade = hasTheoryPart && theoryGrade !== null;
+  const hasPracticeGrade = hasPracticePart && practiceGradedCount > 0;
+  if (!hasTestGrade && !hasPracticeGrade) {
     return null;
   }
-  const hasAnyGrades = hasAnyPracticeGrade || theoryGrade !== null;
-  if (!hasAnyGrades) {
-    return null;
-  }
+
   const formulaVariables: FormulaVariables = {
     test: theoryGrade,
     avgPractice: averageTaskGrade
   };
-  const formulaResult = evaluateFormula(controlWork.formula, formulaVariables);
-  const finalGrade = clampGradeToInt(formulaResult !== null ? formulaResult : theoryGrade !== null ? theoryGrade : averageTaskGrade);
+
+  // Dynamic grading:
+  // - if only test exists -> use test
+  // - if only practice exists -> use avg(practice)
+  // - if both exist -> use configured formula, otherwise default
+  const hasCustomFormula = typeof controlWork.formula === "string" && controlWork.formula.trim() !== "";
+  const customFormula = hasCustomFormula ? controlWork.formula!.trim() : null;
+
+  let finalGrade: number;
+  let formulaSnapshot: string | null;
+  if (hasTestGrade && hasPracticeGrade) {
+    const formulaToEvaluate = customFormula;
+    finalGrade = clampGradeToInt(evaluateFormula(formulaToEvaluate, formulaVariables));
+    formulaSnapshot = customFormula ?? "(test + 1.3 * avg(practice)) / 2";
+  } else if (hasTestGrade) {
+    finalGrade = clampGradeToInt(theoryGrade);
+    formulaSnapshot = "test";
+  } else {
+    finalGrade = clampGradeToInt(averageTaskGrade);
+    formulaSnapshot = "avg(practice)";
+  }
   return {
     finalGrade,
     theoryGrade,
-    averageTaskGrade: clampGradeToInt(averageTaskGrade)
+    averageTaskGrade: clampGradeToInt(averageTaskGrade),
+    formulaSnapshot
   };
 }
 async function saveControlSummaryGradeForNewSystemWithManager(manager: EntityManager, controlWorkId: number, studentId: number, theoryGrade: number | null): Promise<void> {
@@ -4784,7 +5093,6 @@ async function saveControlSummaryGradeForNewSystemWithManager(manager: EntityMan
     }
     return;
   }
-  const formulaSnapshot = controlWork.formula || null;
   const calculatedAt = new Date();
   const summaryGradeRepoManager = manager.getRepository(SummaryGrade);
   let summaryGrade = await manager.createQueryBuilder(SummaryGrade, "sg").setLock("pessimistic_write").where("sg.student.id = :studentId", {
@@ -4797,7 +5105,7 @@ async function saveControlSummaryGradeForNewSystemWithManager(manager: EntityMan
     if (theoryGrade !== null) {
       summaryGrade.theoryGrade = theoryGrade;
     }
-    summaryGrade.formulaSnapshot = formulaSnapshot;
+    summaryGrade.formulaSnapshot = gradeData.formulaSnapshot;
     summaryGrade.calculatedAt = calculatedAt;
     await summaryGradeRepoManager.save(summaryGrade);
   } else {
@@ -4822,7 +5130,7 @@ async function saveControlSummaryGradeForNewSystemWithManager(manager: EntityMan
       assessmentType: AssessmentType.CONTROL,
       grade: gradeData.finalGrade,
       theoryGrade: theoryGrade,
-      formulaSnapshot: formulaSnapshot,
+      formulaSnapshot: gradeData.formulaSnapshot,
       calculatedAt: calculatedAt
     });
     validateAssessmentType(AssessmentType.CONTROL, controlWorkId, 'grade');
@@ -4985,45 +5293,68 @@ eduRouter.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Re
       total?: number;
       feedback?: string;
     };
-    const grade = await gradeRepo().findOne({
-      where: {
-        id: gradeId
-      },
-      relations: ["student", "student.class", "student.class.teacher", "task", "topicTask"]
+
+    const updated = await AppDataSource.transaction("SERIALIZABLE", async manager => {
+      const grade = await manager.getRepository(EduGrade).findOne({
+        where: {
+          id: gradeId
+        },
+        relations: ["student", "student.class", "student.class.teacher", "task", "topicTask", "topicTask.controlWork"]
+      });
+      if (!grade) {
+        throw new Error("GRADE_NOT_FOUND");
+      }
+      if (!grade.student.class || grade.student.class.teacher.id !== user.id) {
+        throw new Error("ACCESS_DENIED");
+      }
+
+      if (total !== undefined) {
+        if (total < 0 || total > 12) {
+          throw new Error("INVALID_GRADE_VALUE");
+        }
+        grade.total = total;
+      }
+      if (feedback !== undefined) {
+        grade.feedback = feedback || null;
+      }
+      grade.isManuallyGraded = true;
+      await manager.getRepository(EduGrade).save(grade);
+
+      // If this grade belongs to a CONTROL task inside a ControlWork, recalc the summary grade.
+      const controlWorkId = grade.topicTask?.type === "CONTROL" ? grade.topicTask?.controlWork?.id : null;
+      if (controlWorkId) {
+        await saveControlSummaryGradeForNewSystemWithManager(manager, controlWorkId, grade.student.id, null);
+        await markControlWorkAttemptCompletedIfReadyWithManager(manager, controlWorkId, grade.student.id);
+      }
+
+      return grade;
     });
-    if (!grade) {
+
+    res.json({
+      message: "GRADE_UPDATED",
+      grade: {
+        id: updated.id,
+        total: updated.total!,
+        feedback: updated.feedback || undefined,
+        isManuallyGraded: updated.isManuallyGraded
+      }
+    });
+  } catch (error: any) {
+    if (error?.message === "GRADE_NOT_FOUND") {
       return res.status(404).json({
         message: "GRADE_NOT_FOUND"
       });
     }
-    if (!grade.student.class || grade.student.class.teacher.id !== user.id) {
+    if (error?.message === "ACCESS_DENIED") {
       return res.status(403).json({
         message: "ACCESS_DENIED"
       });
     }
-    if (total !== undefined) {
-      if (total < 0 || total > 12) {
-        return res.status(400).json({
-          message: "INVALID_GRADE_VALUE"
-        });
-      }
-      grade.total = total;
+    if (error?.message === "INVALID_GRADE_VALUE") {
+      return res.status(400).json({
+        message: "INVALID_GRADE_VALUE"
+      });
     }
-    if (feedback !== undefined) {
-      grade.feedback = feedback || null;
-    }
-    grade.isManuallyGraded = true;
-    await gradeRepo().save(grade);
-    res.json({
-      message: "GRADE_UPDATED",
-      grade: {
-        id: grade.id,
-        total: grade.total!,
-        feedback: grade.feedback || undefined,
-        isManuallyGraded: grade.isManuallyGraded
-      }
-    });
-  } catch (error: any) {
     console.error("Error updating grade:", error);
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"

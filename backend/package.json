@@ -8,6 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "test:judge-contract": "node run-judge-contract-test.js",
+    "loadtest": "node loadtest/run.js",
     "sanitize-templates": "npm run build && node dist/backend/src/scripts/sanitizeTemplates.js",
     "fix-missing-output-format": "npm run build && node dist/backend/src/scripts/fixMissingOutputFormat.js"
   },

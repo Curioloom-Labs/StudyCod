@@ -1,19 +1,51 @@
-import React, { useMemo, memo } from "react";
+import React, { useEffect, useMemo, memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
 const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeKatex];
-const syntaxHighlighterStyle = vscDarkPlus;
 interface MarkdownViewProps {
   content: string;
 }
+
+type SyntaxHighlighterComponent = React.ComponentType<any> | null;
+type SyntaxHighlighterStyle = any;
+
+const PlainCodeBlock: React.FC<{ code: string }> = ({ code }) => {
+  return <pre className="my-4 overflow-x-auto border border-border bg-bg-code p-4 text-sm leading-relaxed">
+      <code className="font-mono text-text-primary">{code}</code>
+    </pre>;
+};
+
 export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
   content
 }) => {
+  const [SyntaxHighlighter, setSyntaxHighlighter] = useState<SyntaxHighlighterComponent>(null);
+  const [syntaxStyle, setSyntaxStyle] = useState<SyntaxHighlighterStyle>(null);
+
+  // Lazily load heavy syntax highlighting only when MarkdownView is actually used.
+  // This avoids pulling ~hundreds of KB into the initial bundle.
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      import("react-syntax-highlighter"),
+      import("react-syntax-highlighter/dist/esm/styles/prism")
+    ]).then(([mod, styles]) => {
+      if (cancelled) return;
+      const Highlighter = (mod as any).Prism ?? (mod as any).default ?? null;
+      setSyntaxHighlighter(() => Highlighter);
+      setSyntaxStyle((styles as any).vscDarkPlus ?? null);
+    }).catch(() => {
+      // Ignore: if dynamic import fails, we just render plain code blocks.
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const codeComponents = useMemo(() => ({
     code({
       node,
@@ -25,15 +57,19 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : "";
       if (!inline && match) {
+        const code = String(children).replace(/\n$/, "");
+        if (!SyntaxHighlighter || !syntaxStyle) {
+          return <PlainCodeBlock code={code} />;
+        }
         return <div className="my-4 overflow-hidden border border-border">
-              <SyntaxHighlighter language={language} style={syntaxHighlighterStyle} customStyle={{
+              <SyntaxHighlighter language={language} style={syntaxStyle} customStyle={{
             margin: 0,
             padding: "1rem",
             fontSize: "0.875rem",
             lineHeight: "1.5",
             background: "var(--bg-code)"
           }} PreTag="div" {...props}>
-                {String(children).replace(/\n$/, "")}
+                {code}
               </SyntaxHighlighter>
             </div>;
       }
@@ -41,7 +77,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
             {children}
           </code>;
     }
-  }), []);
+  }), [SyntaxHighlighter, syntaxStyle]);
   const normalizeForRender = (raw: string) => {
     let s = String(raw ?? "");
     s = s.replace(/\r\n/g, "\n");

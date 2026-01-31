@@ -37,7 +37,12 @@ function buildUserDto(user: User) {
     avatarUrl: user.avatarUrl ?? null,
     userMode: user.userMode,
     role: user.role || null,
-    googleId: user.googleId ?? null
+    googleId: user.googleId ?? null,
+    placementDone: Boolean((user as any).placementDone),
+    placementLevel: (user as any).placementLevel ?? null,
+    placementScore: (user as any).placementScore ?? null,
+    placementMasteredUntilTopicIndexJava: (user as any).placementMasteredUntilTopicIndexJava ?? null,
+    placementMasteredUntilTopicIndexPython: (user as any).placementMasteredUntilTopicIndexPython ?? null
   };
 }
 const registerSchema = z.object({

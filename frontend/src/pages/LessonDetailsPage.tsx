@@ -11,6 +11,7 @@ import { getMe } from "../lib/api/profile";
 import { MarkdownView } from "../components/MarkdownView";
 import type { User } from "../types";
 import { isDeadlineExpired } from "../utils/timezone";
+import { importTestsFromInOutFiles } from "../utils/testInOutImport";
 export const LessonDetailsPage: React.FC = () => {
   const {
     t,
@@ -63,9 +64,15 @@ export const LessonDetailsPage: React.FC = () => {
     input: string;
     expectedOutput: string;
     points: number;
+    isHidden?: boolean;
   } | null>(null);
   const [newTestCount, setNewTestCount] = useState(10);
   const [loadingTestData, setLoadingTestData] = useState(false);
+  const [importFiles, setImportFiles] = useState<File[]>([]);
+  const [importPoints, setImportPoints] = useState(1);
+  const [importIsHidden, setImportIsHidden] = useState(false);
+  const [importingFiles, setImportingFiles] = useState(false);
+  const [importInputKey, setImportInputKey] = useState(0);
   const [showTaskSettings, setShowTaskSettings] = useState(false);
   const [settingsTask, setSettingsTask] = useState<TaskWithGrade | null>(null);
   const [taskMaxAttempts, setTaskMaxAttempts] = useState<number>(1);
@@ -154,7 +161,6 @@ export const LessonDetailsPage: React.FC = () => {
         tasks: data.tasks?.map(t => ({
           id: t.id,
           title: t.title,
-          type: t.type
         }))
       });
       setLesson(data);
@@ -251,6 +257,40 @@ export const LessonDetailsPage: React.FC = () => {
     } catch (error: any) {
       console.error("Failed to generate tests:", error);
       alert(error.response?.data?.message || tr("Не вдалося згенерувати тести", "Failed to generate tests"));
+    }
+  };
+
+  const handleImportTestFiles = async () => {
+    if (!testDataTaskId) return;
+    if (importingFiles) return;
+    if (importFiles.length === 0) {
+      alert(tr("Оберіть файли .in та .out", "Choose .in and .out files"));
+      return;
+    }
+    setImportingFiles(true);
+    try {
+      const { tests, errors } = await importTestsFromInOutFiles(importFiles);
+      if (errors.length > 0) {
+        alert(`${tr("Знайдено проблеми з файлами:", "Found issues with selected files:")}\n\n${errors.slice(0, 12).join("\n")}${errors.length > 12 ? `\n... (+${errors.length - 12})` : ""}`);
+      }
+      if (tests.length === 0) return;
+
+      const payload: TestDataItem[] = tests.map(t => ({
+        input: t.input,
+        expectedOutput: t.expectedOutput,
+        points: importPoints,
+        isHidden: importIsHidden
+      }));
+      await addTestData(testDataTaskId, payload);
+      await loadTestData(testDataTaskId);
+      await loadLesson();
+      setImportFiles([]);
+      setImportInputKey(k => k + 1);
+    } catch (error: any) {
+      console.error("Failed to import tests:", error);
+      alert(error.response?.data?.message || tr("Не вдалося імпортувати тести", "Failed to import tests"));
+    } finally {
+      setImportingFiles(false);
     }
   };
   const loadTestData = async (taskId: number) => {
@@ -980,6 +1020,11 @@ export const LessonDetailsPage: React.FC = () => {
       setTestDataList([]);
       setEditingTestIndex(null);
       setEditingTest(null);
+      setImportFiles([]);
+      setImportPoints(1);
+      setImportIsHidden(false);
+      setImportingFiles(false);
+      setImportInputKey(k => k + 1);
     }} title={tr("Управління тестами", "Test management")} showCloseButton={false}>
           <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <div className="mb-4 flex items-center justify-between">
@@ -995,7 +1040,8 @@ export const LessonDetailsPage: React.FC = () => {
               setEditingTest({
                 input: "",
                 expectedOutput: "",
-                points: 1
+                points: 1,
+                isHidden: false
               });
             }} className="text-xs">
                   <Plus className="w-4 h-4 mr-1" />
@@ -1003,6 +1049,29 @@ export const LessonDetailsPage: React.FC = () => {
                 </Button>
               </div>
             </div>
+
+            <Card className="p-4 mb-4">
+              <div className="text-xs font-mono text-text-secondary mb-2">
+                {tr("Імпорт тестів з файлів (.in/.out)", "Import tests from files (.in/.out)")}
+              </div>
+              <input key={importInputKey} type="file" multiple accept=".in,.out,text/plain" onChange={e => setImportFiles(Array.from(e.target.files || []))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs" />
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                <div>
+                  <label className="block text-xs font-mono text-text-secondary mb-1">{tr("Бали", "Points")}</label>
+                  <input type="number" min="1" max="12" value={importPoints} onChange={e => setImportPoints(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs" />
+                </div>
+                <label className="flex items-center gap-2 text-xs font-mono text-text-secondary">
+                  <input type="checkbox" checked={importIsHidden} onChange={e => setImportIsHidden(e.target.checked)} className="h-4 w-4" />
+                  {tr("Імпортувати як приховані", "Import as hidden")}
+                </label>
+                <Button onClick={handleImportTestFiles} disabled={importingFiles || importFiles.length === 0} className="text-xs">
+                  {importingFiles ? tr("Імпорт...", "Importing...") : tr("Імпортувати", "Import")}
+                </Button>
+              </div>
+              <p className="text-[11px] text-text-muted mt-2">
+                {tr("Пари визначаються за назвою: sample.in + sample.out", "Pairs are matched by name: sample.in + sample.out")}
+              </p>
+            </Card>
 
             {loadingTestData ? <div className="text-center py-8 text-text-secondary font-mono">
                 {t("loading")}
@@ -1046,6 +1115,13 @@ export const LessonDetailsPage: React.FC = () => {
                     ...editingTest!,
                     points: parseInt(e.target.value) || 1
                   })} className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input id="new-test-hidden" type="checkbox" checked={editingTest?.isHidden === true} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    isHidden: e.target.checked
+                  })} className="w-4 h-4" />
+                          <label htmlFor="new-test-hidden" className="text-xs font-mono text-text-secondary" title={tr("Прихований тест не показується учню, але впливає на оцінку.", "Hidden test is not shown to the student but affects scoring.")}>{tr("Прихований", "Hidden")}</label>
                         </div>
                         <Button variant="primary" onClick={handleAddNewTest} className="text-xs">
                           <Plus className="w-4 h-4 mr-1" />
@@ -1091,6 +1167,13 @@ export const LessonDetailsPage: React.FC = () => {
                     points: parseInt(e.target.value) || 1
                   })} className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                             </div>
+                            <div className="flex items-center gap-2">
+                              <input id={`edit-test-hidden-${test.id}`} type="checkbox" checked={editingTest?.isHidden === true} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    isHidden: e.target.checked
+                  })} className="w-4 h-4" />
+                              <label htmlFor={`edit-test-hidden-${test.id}`} className="text-xs font-mono text-text-secondary" title={tr("Прихований тест не показується учню, але впливає на оцінку.", "Hidden test is not shown to the student but affects scoring.")}>{tr("Прихований", "Hidden")}</label>
+                            </div>
                             <Button variant="ghost" onClick={() => {
                   setEditingTestIndex(null);
                   setEditingTest(null);
@@ -1118,6 +1201,7 @@ export const LessonDetailsPage: React.FC = () => {
                             </div>
                             <div className="text-xs font-mono text-text-muted">
                               {tr("Бали", "Points")}: <span className="text-text-primary">{test.points}</span>
+                              {test.isHidden ? <span className="ml-2 text-violet-400">• {tr("прихований", "hidden")}</span> : null}
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -1125,8 +1209,9 @@ export const LessonDetailsPage: React.FC = () => {
                   setEditingTestIndex(index);
                   setEditingTest({
                     input: test.input,
-                    expectedOutput: test.expectedOutput,
-                    points: test.points
+                    expectedOutput: test.expectedOutput || "",
+                    points: test.points,
+                    isHidden: test.isHidden === true
                   });
                 }} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")}>
                               <Edit2 className="w-4 h-4 text-primary" />

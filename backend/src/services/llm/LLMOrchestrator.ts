@@ -579,6 +579,7 @@ ${params.theory.slice(0, 2000)}
   }
   async generateTaskCondition(params: {
     topicTitle: string;
+    taskTitle?: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
     language: "JAVA" | "PYTHON";
@@ -594,6 +595,7 @@ ${params.theory.slice(0, 2000)}
   }
   private async generateTaskCondition_OpenRouter(params: {
     topicTitle: string;
+    taskTitle?: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
     language: "JAVA" | "PYTHON";
@@ -608,8 +610,13 @@ ${params.theory.slice(0, 2000)}
     const difficultyPrompt = getDifficultyPrompt(difficulty / 5);
     const taskTypeText = params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
     const isEnglish = params.userLanguage === "en";
+    const teacherTaskTitle = (params.taskTitle || "").trim();
+    const effectiveTitle = teacherTaskTitle || params.topicTitle;
     const systemPrompt = isEnglish ? `You are an experienced programming teacher. Create clear, detailed task descriptions with examples.` : `Ти досвідчений викладач програмування. Створюй чіткі, детальні умови завдань з прикладами.`;
-    const userPrompt = isEnglish ? `Create a detailed task description for ${taskTypeText.toLowerCase()} "${params.topicTitle}" for ${langName} language.
+    const userPrompt = isEnglish ? `Create a detailed task description for ${taskTypeText.toLowerCase()} titled "${effectiveTitle}" for ${langName} language.
+
+  Topic: "${params.topicTitle}"
+  ${teacherTaskTitle ? `Teacher-provided task title: "${teacherTaskTitle}"\nCRITICAL: Use the teacher title as the MAIN theme and do not invent another title.` : ""}
 
 CRITICAL: The task MUST be specifically about the topic "${params.topicTitle}". If the topic is "harmonic mean of array" - the task must be about harmonic mean of array, not about other topics.
 
@@ -627,7 +634,10 @@ REQUIREMENTS:
 - Format: Markdown with proper headings and code blocks
 - The task should be related to the topic "${params.topicTitle}"
 
-Return ONLY the task description in Markdown format without additional comments.` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${params.topicTitle}" для мови ${langName}.
+Return ONLY the task description in Markdown format without additional comments.` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${effectiveTitle}" для мови ${langName}.
+
+ТЕМА: "${params.topicTitle}"
+${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTaskTitle}"\nКРИТИЧНО: Використай назву вчителя як ОСНОВНУ ідею та не вигадуй іншу назву.` : ""}
 
 КРИТИЧНО ВАЖЛИВО: Завдання МАЄ бути саме про тему "${params.topicTitle}". Якщо тема "середнє гармонічне масиву" - завдання має бути про середнє гармонічне масиву, а не про інші теми.
 
@@ -664,6 +674,7 @@ ${difficultyPrompt}
   }
   async generateTaskTemplate(params: {
     topicTitle: string;
+    taskTitle?: string;
     language: "JAVA" | "PYTHON";
     description?: string;
     userId?: number;
@@ -678,6 +689,7 @@ ${difficultyPrompt}
   }
   private async generateTaskTemplate_OpenRouter(params: {
     topicTitle: string;
+    taskTitle?: string;
     language: "JAVA" | "PYTHON";
     description?: string;
     userId?: number;
@@ -689,12 +701,17 @@ ${difficultyPrompt}
     const langName = params.language === "JAVA" ? "Java" : "Python";
     const isEnglish = params.userLanguage === 'en';
     const todoText = isEnglish ? 'implement the solution according to the statement' : 'реалізуйте рішення задачі згідно з умовою';
+    const teacherTaskTitle = (params.taskTitle || '').trim();
+    const effectiveTitle = teacherTaskTitle || params.topicTitle;
 
     const systemPrompt = isEnglish
       ? `You are an experienced programming instructor. Create EMPTY code templates with TODO comments. DO NOT write any implementation or final code. DO NOT use Russian language.`
       : `Ти досвідчений викладач програмування. Створюй ПОРОЖНІ шаблони коду з TODO-коментарями УКРАЇНСЬКОЮ мовою. ЗАБОРОНЕНО писати реалізацію або готовий код. НЕ ВИКОРИСТОВУЙ російську мову.`;
 
-    const userPrompt = isEnglish ? `Create an EMPTY code template for the task "${params.topicTitle}" in ${langName}.
+    const userPrompt = isEnglish ? `Create an EMPTY code template for the task "${effectiveTitle}" in ${langName}.
+
+  Topic: "${params.topicTitle}"
+  ${teacherTaskTitle ? `Teacher-provided task title: "${teacherTaskTitle}"` : ""}
 
 ${params.description ? `Task description:\n${params.description}\n\n` : ''}
 
@@ -733,7 +750,10 @@ def main():
 if __name__ == "__main__":
     main()
 
-Return ONLY the code, no explanations.` : `Створи порожній шаблон коду для завдання "${params.topicTitle}" на мові ${langName}.
+Return ONLY the code, no explanations.` : `Створи порожній шаблон коду для завдання "${effectiveTitle}" на мові ${langName}.
+
+ТЕМА: "${params.topicTitle}"
+${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTaskTitle}"` : ""}
 
 ${params.description ? `Опис завдання:\n${params.description}\n\n` : ''}
 

@@ -90,6 +90,26 @@ export class EduGrade {
     name: "test_results"
   })
   testResults!: string | null;
+
+  @Column({
+    type: "int",
+    nullable: true
+  })
+  score!: number | null;
+
+  @Column({
+    type: "int",
+    nullable: true,
+    name: "max_score"
+  })
+  maxScore!: number | null;
+
+  @Column({
+    type: "text",
+    nullable: true,
+    name: "group_scores"
+  })
+  groupScores!: string | null;
   @CreateDateColumn({
     name: "created_at"
   })

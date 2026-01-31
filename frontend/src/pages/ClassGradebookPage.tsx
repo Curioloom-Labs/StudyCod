@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
-import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, deleteThematicForTopic, getControlWorkDetails, getControlWorkStudentWork, getTopicTaskStudentWork, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork } from "../lib/api/edu";
+import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, deleteThematicForTopic, getControlWorkDetails, getControlWorkStudentWork, getTopicTaskStudentWork, getTopicTaskAIDetection, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork, type TopicTaskAIDetectionResponse } from "../lib/api/edu";
 import { ArrowLeft, Calculator, Download, Edit2, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 export const ClassGradebookPage: React.FC = () => {
@@ -40,6 +40,8 @@ export const ClassGradebookPage: React.FC = () => {
   const [workLoading, setWorkLoading] = useState(false);
   const [practiceWork, setPracticeWork] = useState<TopicTaskStudentWork | null>(null);
   const [controlWorkWork, setControlWorkWork] = useState<ControlWorkStudentWork | null>(null);
+  const [aiDetection, setAiDetection] = useState<TopicTaskAIDetectionResponse | null>(null);
+  const [aiDetectLoading, setAiDetectLoading] = useState(false);
   const [showCreateThematic, setShowCreateThematic] = useState(false);
   const [thematicTopicId, setThematicTopicId] = useState<number | null>(null);
   const [calculatingThematic, setCalculatingThematic] = useState(false);
@@ -174,14 +176,23 @@ export const ClassGradebookPage: React.FC = () => {
     setWorkLoading(true);
     setPracticeWork(null);
     setControlWorkWork(null);
+    setAiDetection(null);
+    setAiDetectLoading(false);
     setShowWorkModal(true);
     try {
       if (editingGrade.isControlWork) {
         const data = await getControlWorkStudentWork(editingGrade.taskId, editingGrade.studentId);
         setControlWorkWork(data);
       } else if (!editingGrade.isSummaryGrade) {
-        const data = await getTopicTaskStudentWork(editingGrade.taskId, editingGrade.studentId);
+        setAiDetectLoading(true);
+        const workPromise = getTopicTaskStudentWork(editingGrade.taskId, editingGrade.studentId);
+        const detectPromise = getTopicTaskAIDetection(editingGrade.taskId, editingGrade.studentId).catch(err => {
+          console.warn("[ClassGradebookPage] AI detector failed:", err);
+          return null;
+        });
+        const [data, detect] = await Promise.all([workPromise, detectPromise]);
         setPracticeWork(data);
+        if (detect) setAiDetection(detect);
       }
     } catch (error: any) {
       console.error("Failed to load student work:", error);
@@ -189,7 +200,24 @@ export const ClassGradebookPage: React.FC = () => {
       setShowWorkModal(false);
     } finally {
       setWorkLoading(false);
+      setAiDetectLoading(false);
     }
+  };
+
+  const formatAiBadge = (det: TopicTaskAIDetectionResponse | null) => {
+    const d = det?.detection;
+    if (!d) return null;
+    const pct = Math.round((d.score || 0) * 100);
+    const label = d.likelihood === "likely" ? tr("ймовірно AI", "likely AI") : d.likelihood === "possible" ? tr("можливо AI", "possible AI") : tr("малоймовірно AI", "unlikely AI");
+    const color = d.likelihood === "likely" ? "text-accent-warn" : d.likelihood === "possible" ? "text-text-secondary" : "text-text-muted";
+    return {
+      text: `AI: ${label} (${pct}%)`,
+      color,
+      tooltip: tr("Оцінка AI-асистованості (не вирок). На простих задачах можливі хибні спрацювання — перевіряйте усно/по кроках.", "AI assistance likelihood (not a verdict). Simple tasks can trigger false positives—verify orally/step-by-step."),
+      reasons: d.reasons || [],
+      caveats: d.caveats || [],
+      cached: d.cached
+    };
   };
   const handleCreateThematic = async () => {
     if (!classId) return;
@@ -509,12 +537,30 @@ export const ClassGradebookPage: React.FC = () => {
       setShowWorkModal(false);
       setPracticeWork(null);
       setControlWorkWork(null);
+      setAiDetection(null);
     }} title={editingGrade ? `${editingGrade.studentName} — ${editingGrade.taskTitle}` : tr("Робота учня", "Student work")}>
           <div className="p-6 max-h-[80vh] overflow-y-auto">
             {workLoading ? <div className="text-sm font-mono text-text-secondary">{tr("Завантаження...", "Loading...")}</div> : practiceWork ? <div className="space-y-4">
                 <div className="text-xs text-text-muted">
                   {tr("Спроби:", "Submissions:")} {practiceWork.submissions.length}
                 </div>
+
+                {editingGrade && !editingGrade.isControlWork && !editingGrade.isSummaryGrade && <div className="text-xs text-text-muted space-y-1">
+                    {aiDetectLoading ? <span>{tr("AI детектор: аналіз...", "AI detector: analyzing...")}</span> : (() => {
+                  const badge = formatAiBadge(aiDetection);
+                  if (!badge) {
+                    return <span>{tr("AI детектор: —", "AI detector: —")}</span>;
+                  }
+                  return <div>
+                        <div className={badge.color} title={badge.tooltip}>
+                          {badge.text}{badge.cached ? tr(" (кеш)", " (cached)") : ""}
+                        </div>
+                        {badge.reasons.length > 0 && <div className="mt-1 text-[11px] text-text-muted" title={badge.caveats.join("\n") || undefined}>
+                            {badge.reasons.slice(0, 3).join(" • ")}
+                          </div>}
+                      </div>;
+                })()}
+                  </div>}
                 {practiceWork.submissions.length === 0 ? <div className="text-sm text-text-secondary">{tr("Немає відправлених спроб.", "No submissions yet.")}</div> : practiceWork.submissions.map((s, idx) => <Card key={s.id} className="p-4">
                       <div className="flex items-start justify-between gap-4 mb-3">
                         <div>

@@ -11,6 +11,7 @@ import type { User } from "../types";
 import { MarkdownView } from "../components/MarkdownView";
 import { generateTestData, getTestData, addTestData, updateTestData, deleteTestData, unassignTask, unassignControlWork, type TestData } from "../lib/api/edu";
 import { convertLocalToUTC, convertUTCToLocal, formatDeadlineForDisplay, getUserTimezone } from "../utils/timezone";
+import { importTestsFromInOutFiles } from "../utils/testInOutImport";
 interface Topic {
   id: number;
   title: string;
@@ -96,9 +97,15 @@ export const TopicDetailsPage: React.FC = () => {
     input: string;
     expectedOutput: string;
     points: number;
+    isHidden?: boolean;
   } | null>(null);
   const [newTestCount, setNewTestCount] = useState(10);
   const [generatingTestData, setGeneratingTestData] = useState(false);
+  const [importFiles, setImportFiles] = useState<File[]>([]);
+  const [importPoints, setImportPoints] = useState(1);
+  const [importIsHidden, setImportIsHidden] = useState(false);
+  const [importingFiles, setImportingFiles] = useState(false);
+  const [importInputKey, setImportInputKey] = useState(0);
   useEffect(() => {
     loadUser();
   }, []);
@@ -169,10 +176,15 @@ export const TopicDetailsPage: React.FC = () => {
   };
   const handleGenerateCondition = async () => {
     if (!topic) return;
+    if (!newTask.title.trim()) {
+      alert(tr("Спочатку введіть назву завдання", "Enter task title first"));
+      return;
+    }
     setGeneratingCondition(true);
     try {
       const userLanguage = i18n.language === 'en' ? 'en' : 'uk';
       const res = await api.post(`/topics/${topicId}/tasks/generate-condition`, {
+        taskTitle: newTask.title.trim(),
         taskType: newTask.type,
         difficulty: parseInt(taskDifficulty),
         language: userLanguage
@@ -190,9 +202,14 @@ export const TopicDetailsPage: React.FC = () => {
   };
   const handleGenerateTemplate = async () => {
     if (!topic) return;
+    if (!newTask.title.trim()) {
+      alert(tr("Спочатку введіть назву завдання", "Enter task title first"));
+      return;
+    }
     setGeneratingTemplate(true);
     try {
       const res = await api.post(`/topics/${topicId}/tasks/generate-template`, {
+        taskTitle: newTask.title.trim(),
         description: newTask.description
       });
       setNewTask({
@@ -214,6 +231,7 @@ export const TopicDetailsPage: React.FC = () => {
     setGeneratingTheory(true);
     try {
       const res = await api.post(`/topics/${topicId}/tasks/generate-theory`, {
+        taskTitle: newTask.title.trim(),
         taskDescription: newTask.description,
         taskType: newTask.type,
         difficulty: parseInt(taskDifficulty)
@@ -369,6 +387,40 @@ export const TopicDetailsPage: React.FC = () => {
     } catch (error: any) {
       console.error("Failed to add test data:", error);
       alert(error.response?.data?.message || tr("Не вдалося додати тест", "Failed to add test"));
+    }
+  };
+
+  const handleImportTestFiles = async () => {
+    if (!testDataTaskId) return;
+    if (importingFiles) return;
+    if (importFiles.length === 0) {
+      alert(tr("Оберіть файли .in та .out", "Choose .in and .out files"));
+      return;
+    }
+    setImportingFiles(true);
+    try {
+      const { tests, errors } = await importTestsFromInOutFiles(importFiles);
+      if (errors.length > 0) {
+        alert(`${tr("Знайдено проблеми з файлами:", "Found issues with selected files:")}\n\n${errors.slice(0, 12).join("\n")}${errors.length > 12 ? `\n... (+${errors.length - 12})` : ""}`);
+      }
+      if (tests.length === 0) return;
+
+      await addTestData(testDataTaskId, tests.map(t => ({
+        input: t.input,
+        expectedOutput: t.expectedOutput,
+        points: importPoints,
+        isHidden: importIsHidden
+      })));
+
+      const data = await getTestData(testDataTaskId);
+      setTestDataList(data.testData || []);
+      setImportFiles([]);
+      setImportInputKey(k => k + 1);
+    } catch (error: any) {
+      console.error("Failed to import tests:", error);
+      alert(error.response?.data?.message || tr("Не вдалося імпортувати тести", "Failed to import tests"));
+    } finally {
+      setImportingFiles(false);
     }
   };
   const handleUpdateTestData = async (testDataId: number) => {
@@ -933,6 +985,11 @@ export const TopicDetailsPage: React.FC = () => {
         setTestDataList([]);
         setEditingTestIndex(null);
         setEditingTest(null);
+        setImportFiles([]);
+        setImportPoints(1);
+        setImportIsHidden(false);
+        setImportingFiles(false);
+        setImportInputKey(k => k + 1);
       }} title={tr("Тестові дані для перевірки завдання", "Test data for checking")}>
             <div className="space-y-4 max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between">
@@ -949,6 +1006,29 @@ export const TopicDetailsPage: React.FC = () => {
                   {tr("Додати вручну", "Add manually")}
                 </Button>
               </div>
+
+              <Card className="p-3">
+                <div className="text-xs font-mono text-text-secondary mb-2">
+                  {tr("Імпорт тестів з файлів (.in/.out)", "Import tests from files (.in/.out)")}
+                </div>
+                <input key={importInputKey} type="file" multiple accept=".in,.out,text/plain" onChange={e => setImportFiles(Array.from(e.target.files || []))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs" />
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="block text-xs font-mono text-text-secondary mb-1">{tr("Бали", "Points")}</label>
+                    <input type="number" min="1" max="12" value={importPoints} onChange={e => setImportPoints(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs" />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-mono text-text-secondary">
+                    <input type="checkbox" checked={importIsHidden} onChange={e => setImportIsHidden(e.target.checked)} className="h-4 w-4" />
+                    {tr("Імпортувати як приховані", "Import as hidden")}
+                  </label>
+                  <Button onClick={handleImportTestFiles} disabled={importingFiles || importFiles.length === 0} className="text-xs">
+                    {importingFiles ? tr("Імпорт...", "Importing...") : tr("Імпортувати", "Import")}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-text-muted mt-2">
+                  {tr("Пари визначаються за назвою: sample.in + sample.out", "Pairs are matched by name: sample.in + sample.out")}
+                </p>
+              </Card>
 
               <div className="space-y-2">
                 {testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
@@ -998,18 +1078,26 @@ export const TopicDetailsPage: React.FC = () => {
                     points: parseInt(e.target.value) || 1
                   })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                           </div>
+                              <div className="flex items-center gap-2">
+                                <input id={`test-hidden-${test.id}`} type="checkbox" checked={editingTest?.isHidden === true} onChange={e => setEditingTest({
+                        ...editingTest!,
+                        isHidden: e.target.checked
+                      })} className="h-4 w-4" />
+                                <label htmlFor={`test-hidden-${test.id}`} className="text-xs font-mono text-text-secondary" title={tr("Прихований тест не показується учню, але впливає на оцінку.", "Hidden test is not shown to the student but affects scoring.")}>{tr("Прихований", "Hidden")}</label>
+                              </div>
                         </div> : <div>
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs font-mono text-text-secondary">
-                              {tr("Тест", "Test")} #{index + 1} • {test.points} {tr("балів", "points")}
+                                  {tr("Тест", "Test")} #{index + 1} • {test.points} {tr("балів", "points")}{test.isHidden ? ` • ${tr("прихований", "hidden")}` : ""}
                             </span>
                             <div className="flex gap-2">
                               <button onClick={() => {
                       setEditingTestIndex(index);
                       setEditingTest({
                         input: test.input,
-                        expectedOutput: test.expectedOutput,
-                        points: test.points
+                            expectedOutput: test.expectedOutput || "",
+                            points: test.points,
+                            isHidden: test.isHidden === true
                       });
                     }} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={tr("Редагувати", "Edit")}>
                                 <Edit2 className="w-4 h-4 text-primary" />

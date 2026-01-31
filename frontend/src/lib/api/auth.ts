@@ -27,7 +27,10 @@ export async function login(username: string, password: string): Promise<User> {
     username,
     password
   });
-  localStorage.setItem("token", res.data.token);
+  if (res.data.token) {
+    localStorage.setItem("token", res.data.token);
+    api.defaults.headers.common.Authorization = `Bearer ${res.data.token}`;
+  }
   return res.data.user as User;
 }
 export async function verifyEmail(token: string): Promise<{

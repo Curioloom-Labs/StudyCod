@@ -19,6 +19,7 @@ import topicsRouter from "./routes/topics";
 import adminRouter from "./routes/admin";
 import supportRouter from "./routes/support";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
+import { requestContextMiddleware } from "./middleware/requestContext";
 import { PORT, CORS_ORIGIN, CORS_ORIGINS, SESSION_SECRET, IS_PRODUCTION, TRUST_PROXY } from "./config";
 import { logger } from "./utils/logger";
 const app = express();
@@ -51,6 +52,7 @@ app.use(express.urlencoded({
   extended: false,
   limit: "512kb"
 }));
+app.use(requestContextMiddleware);
 app.use(maintenanceMiddleware);
 app.use(session({
   secret: SESSION_SECRET,
@@ -117,6 +119,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   const message = process.env.NODE_ENV === "production" ? "INTERNAL_SERVER_ERROR" : err.message || "INTERNAL_SERVER_ERROR";
   res.status(status).json({
     message,
+    code: err.code || message,
+    requestId: res.locals?.requestId || null,
     ...(process.env.NODE_ENV !== "production" && {
       stack: err.stack
     })

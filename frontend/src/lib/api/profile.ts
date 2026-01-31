@@ -12,3 +12,14 @@ export async function updateProfile(data: {
   const res = await api.put("/profile/me", data);
   return res.data as User;
 }
+
+export async function completePlacement(data: {
+  level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  score?: number | null;
+  course?: CourseLanguage;
+  lang?: CourseLanguage;
+  masteredUntilTopicIndex?: number | null;
+}): Promise<User> {
+  const res = await api.put("/profile/placement", data);
+  return res.data as User;
+}

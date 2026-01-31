@@ -396,6 +396,13 @@ export const TasksPage: React.FC<Props> = ({
         previousGrade: number | null;
         testsPassed?: number;
         testsTotal?: number;
+        score?: number;
+        maxScore?: number;
+        groupScores?: Array<{
+          group: string;
+          score: number;
+          maxScore: number;
+        }>;
         hints?: string[];
         testResults?: Array<{
           testId: number;
@@ -421,6 +428,9 @@ export const TasksPage: React.FC<Props> = ({
           previousGrade: grade.previousGrade ?? null,
           testsPassed: grade.testsPassed ?? undefined,
           testsTotal: grade.testsTotal ?? undefined,
+          score: typeof (grade as any).score === "number" ? Number((grade as any).score) : undefined,
+          maxScore: typeof (grade as any).maxScore === "number" ? Number((grade as any).maxScore) : undefined,
+          groupScores: Array.isArray((grade as any).groupScores) ? (grade as any).groupScores : undefined,
           hints: Array.isArray(grade.hints) ? grade.hints : undefined,
           testResults: grade.testResults ?? undefined
         };
@@ -734,6 +744,80 @@ export const TasksPage: React.FC<Props> = ({
                     </span>{" "}
                     · {tr("Оцінка:", "Grade:")}{" "}
                     <span className="text-text-primary">{aiResult.total ?? 0}</span>
+                    {(() => {
+                      const score = aiResult.score;
+                      const maxScore = aiResult.maxScore;
+                      if (typeof score !== "number" || typeof maxScore !== "number" || maxScore <= 0) return null;
+                      const pct = Math.max(0, Math.min(100, Math.round(score / maxScore * 100)));
+                      const groups = Array.isArray(aiResult.groupScores) ? aiResult.groupScores : null;
+                      const segments = (() => {
+                        if (!groups || groups.length === 0) return null;
+                        const totalMax = maxScore;
+                        const normalized = groups.map(g => ({
+                          group: String((g as any)?.group ?? ""),
+                          score: Number((g as any)?.score ?? 0),
+                          maxScore: Number((g as any)?.maxScore ?? 0)
+                        })).filter(g => Number.isFinite(g.score) && g.score > 0);
+                        const order = ["public", "hidden"];
+                        normalized.sort((a, b) => {
+                          const ia = order.indexOf(a.group);
+                          const ib = order.indexOf(b.group);
+                          if (ia === -1 && ib === -1) return a.group.localeCompare(b.group);
+                          if (ia === -1) return 1;
+                          if (ib === -1) return -1;
+                          return ia - ib;
+                        });
+                        return normalized.map(g => {
+                          const raw = totalMax > 0 ? g.score / totalMax * 100 : 0;
+                          const segPct = Math.max(0, Math.min(100, raw));
+                          const className = g.group === "public" ? "bg-primary" : g.group === "hidden" ? "bg-violet-500" : "bg-slate-500";
+                          const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
+                          return {
+                            key: g.group,
+                            pct: segPct,
+                            className,
+                            label,
+                            title: `${label}: ${g.score}/${g.maxScore}`
+                          };
+                        });
+                      })();
+                      const showLegend = Array.isArray(segments) && segments.some(s => s.key === "public" || s.key === "hidden");
+                      return <div className="mt-2">
+                          <div className="h-2 w-full bg-border rounded overflow-hidden">
+                            {Array.isArray(segments) && segments.length > 0 ? <div className="h-2 w-full flex">
+                                {segments.map(seg => <div key={seg.key} className={`h-2 ${seg.className}`} title={seg.title} style={{
+                                width: `${seg.pct}%`
+                              }} />)}
+                              </div> : <div className="h-2 bg-primary" style={{
+                                width: `${pct}%`
+                              }} />}
+                          </div>
+                          <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center justify-between">
+                            <span>{tr("Бал:", "Score:")} <span className="text-text-secondary">{score}/{maxScore}</span></span>
+                            <span>{pct}%</span>
+                          </div>
+                          {showLegend && <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center gap-3">
+                              <span className="inline-flex items-center gap-1" title={tr("Публічні тести", "Public tests")}>
+                                <span className="inline-block w-2 h-2 rounded-sm bg-primary" />
+                                <span>{tr("публічні", "public")}</span>
+                              </span>
+                              <span className="inline-flex items-center gap-1" title={tr("Приховані тести", "Hidden tests")}>
+                                <span className="inline-block w-2 h-2 rounded-sm bg-violet-500" />
+                                <span>{tr("приховані", "hidden")}</span>
+                              </span>
+                            </div>}
+                          {groups && groups.length > 0 && <div className="mt-1 space-y-1">
+                              {groups.map((g, idx) => {
+                              const gpct = g.maxScore > 0 ? Math.round(g.score / g.maxScore * 100) : 0;
+                              const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
+                              return <div key={`${g.group}-${idx}`} className="text-[10px] font-mono text-text-muted flex items-center justify-between">
+                                    <span>{label}</span>
+                                    <span className="text-text-secondary">{g.score}/{g.maxScore} ({gpct}%)</span>
+                                  </div>;
+                            })}
+                            </div>}
+                        </div>;
+                    })()}
                   </div>}
                 {aiResult.comparisonFeedback && <div className="mt-3 p-2 border border-primary/30 bg-bg-code">
                     <div className="text-xs font-mono text-primary mb-1">

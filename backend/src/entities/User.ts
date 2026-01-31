@@ -4,6 +4,7 @@ import { Grade } from "./Grade";
 export type UserLang = "JAVA" | "PYTHON";
 export type UserMode = "PERSONAL" | "EDUCATIONAL";
 export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
+export type PlacementLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn()
@@ -161,6 +162,54 @@ export class User {
     default: null
   })
   timezone?: string | null;
+
+  @Column({
+    type: "boolean",
+    default: false,
+    name: "placement_done"
+  })
+  placementDone!: boolean;
+
+  @Column({
+    type: "enum",
+    enum: ["BEGINNER", "INTERMEDIATE", "ADVANCED"],
+    nullable: true,
+    default: null,
+    name: "placement_level"
+  })
+  placementLevel!: PlacementLevel | null;
+
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "placement_score"
+  })
+  placementScore!: number | null;
+
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "placement_mastered_until_topic_index_java"
+  })
+  placementMasteredUntilTopicIndexJava!: number | null;
+
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "placement_mastered_until_topic_index_python"
+  })
+  placementMasteredUntilTopicIndexPython!: number | null;
+
+  @Column({
+    type: "timestamp",
+    nullable: true,
+    default: null,
+    name: "placement_done_at"
+  })
+  placementDoneAt!: Date | null;
   @OneToMany(() => Task, t => t.user)
   tasks!: Task[];
   @OneToMany(() => Grade, g => g.user)

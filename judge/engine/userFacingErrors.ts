@@ -15,11 +15,8 @@ export type ErrorKind =
 
 export interface ExplainedError {
   kind: ErrorKind;
-  /** One-line human title in Ukrainian (user-facing). */
   title: string;
-  /** Short actionable explanation/tips. */
   tips?: string[];
-  /** Best-effort location (line/column) if we can parse it. */
   location?: {
     line?: number;
     column?: number;
@@ -59,11 +56,6 @@ function explainPython(stderr: string): ExplainedError | null {
   const lines = toLines(stderr);
   const last = lastNonEmptyLine(lines);
 
-  // SyntaxError / IndentationError formats:
-  //   File "main.py", line 3
-  //     print(x)
-  //           ^
-  // SyntaxError: invalid syntax
   const fileLine = lines.find(l => /File\s+".*"\s*,\s*line\s+\d+/.test(l));
   const mFile = fileLine?.match(/line\s+(\d+)/);
   const lineNo = parseIntSafe(mFile?.[1]);
@@ -163,12 +155,10 @@ function explainJava(stderr: string): ExplainedError | null {
   const lines = toLines(stderr);
   const joined = lines.join("\n");
 
-  // Try to capture common runtime exceptions
   const m = joined.match(/Exception in thread "main" ([a-zA-Z0-9_$.]+)(?::\s*(.*))?/);
   const exc = m?.[1];
   const msg = (m?.[2] ?? "").trim();
 
-  // Try to locate line: at Main.main(Main.java:12)
   const locM = joined.match(/\((?:Main|Solution)\.java:(\d+)\)/);
   const lineNo = parseIntSafe(locM?.[1]);
 
@@ -210,7 +200,6 @@ function explainJava(stderr: string): ExplainedError | null {
     };
   }
 
-  // Java compile errors (javac): look for ": error:" lines
   const javacErr = lines.find(l => /\.java:\d+:\s+error:/.test(l));
   if (javacErr) {
     const lm = javacErr.match(/\.java:(\d+):\s+error:\s*(.*)$/);
@@ -240,7 +229,6 @@ function explainCpp(stderr: string): ExplainedError | null {
   const s = String(stderr ?? "");
   const lower = s.toLowerCase();
 
-  // Common runtime failures
   if (lower.includes("segmentation fault") || lower.includes("sigsegv")) {
     return {
       kind: "runtime",
@@ -278,7 +266,6 @@ function explainCpp(stderr: string): ExplainedError | null {
     };
   }
 
-  // Compile errors: typical GCC/Clang 'error:'
   const mErr = s.match(/^(.*):(\d+):(\d+):\s+error:\s+(.*)$/m);
   if (mErr) {
     return {
@@ -309,10 +296,6 @@ export function explainStderr(language: LanguageId, stderr: string): ExplainedEr
   }
 }
 
-/**
- * Combines the original stderr with a short Ukrainian explanation at the top.
- * Keeps the raw error below for transparency.
- */
 export function buildUserFacingStderr(language: LanguageId, stderr: string): { stderr: string; kind?: ErrorKind } {
   const cleaned = String(stderr ?? "").trim();
   if (!cleaned) return { stderr: "" };
@@ -320,7 +303,6 @@ export function buildUserFacingStderr(language: LanguageId, stderr: string): { s
   if (!explained) return { stderr: cleaned };
 
   const header = formatExplained(explained);
-  // Avoid duplicating if stderr already starts with the same explanation.
   const merged = cleaned.startsWith(header) ? cleaned : `${header}\n\n---\n${cleaned}`;
   return {
     stderr: merged.trim(),

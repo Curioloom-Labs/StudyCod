@@ -158,8 +158,15 @@ export interface TaskWithGrade {
     feedback?: string;
     isManuallyGraded?: boolean;
     isCompleted?: boolean;
-    createdAt: string;
+    createdAt?: string;
     submittedCode?: string;
+    score?: number | null;
+    maxScore?: number | null;
+    groupScores?: Array<{
+      group: string;
+      score: number;
+      maxScore: number;
+    }> | null;
     testResults?: Array<{
       input: string;
       expected: string;
@@ -413,6 +420,15 @@ export async function submitCode(taskId: number, code: string): Promise<{
   testResults?: TestResult[];
   hints?: string[];
   requiresManualReview?: boolean;
+  scoring?: {
+    score: number;
+    maxScore: number;
+    groupScores?: Array<{
+      group: string;
+      score: number;
+      maxScore: number;
+    }> | null;
+  };
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/submit`, {
     code
@@ -432,6 +448,15 @@ export async function completeTask(taskId: number, code: string): Promise<{
   testResults?: TestResult[];
   hints?: string[];
   requiresManualReview?: boolean;
+  scoring?: {
+    score: number;
+    maxScore: number;
+    groupScores?: Array<{
+      group: string;
+      score: number;
+      maxScore: number;
+    }> | null;
+  };
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/complete`, {
     code
@@ -443,7 +468,9 @@ export async function generateTestData(taskId: number, count: number): Promise<{
   testData: Array<{
     id: number;
     input: string;
+    expectedOutput: string;
     points: number;
+    isHidden?: boolean;
   }>;
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/test-data/generate`, {
@@ -470,6 +497,7 @@ export interface TestData {
   input: string;
   expectedOutput?: string;
   points: number;
+  isHidden?: boolean;
 }
 export async function getTestData(taskId: number): Promise<{
   testData: TestData[];
@@ -481,6 +509,7 @@ export async function updateTestData(taskId: number, testDataId: number, update:
   input?: string;
   expectedOutput?: string;
   points?: number;
+  isHidden?: boolean;
 }): Promise<{
   message: string;
   testData: TestData;
@@ -859,6 +888,40 @@ export interface TopicTaskStudentWork {
 }
 export async function getTopicTaskStudentWork(taskId: number, studentId: number): Promise<TopicTaskStudentWork> {
   const res = await api.get(`/edu/topic-tasks/${taskId}/students/${studentId}/work`);
+  return res.data;
+}
+
+export type AIDetectorLikelihood = "unlikely" | "possible" | "likely";
+
+export interface TopicTaskAIDetectionResponse {
+  message?: string;
+  task: {
+    id: number;
+    title: string;
+    topicId?: number;
+    topicTitle?: string;
+  };
+  student: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    middleName?: string | null;
+  };
+  gradeId?: number;
+  createdAt?: string | null;
+  detection: null | {
+    likelihood: AIDetectorLikelihood;
+    score: number;
+    reasons: string[];
+    caveats: string[];
+    suggestedChecks: string[];
+    model: string;
+    cached: boolean;
+  };
+}
+
+export async function getTopicTaskAIDetection(taskId: number, studentId: number): Promise<TopicTaskAIDetectionResponse> {
+  const res = await api.get(`/edu/topic-tasks/${taskId}/students/${studentId}/ai-detect`);
   return res.data;
 }
 export interface ControlWorkStudentWork {

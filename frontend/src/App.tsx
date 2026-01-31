@@ -12,6 +12,7 @@ import { staggerContainer, fadeUpItem } from "./lib/motion";
 import { TerminalLoader } from "./components/ui/TerminalLoader";
 import { DocsPage } from "./pages/DocsPage";
 import { OnboardingEntry } from "./components/onboarding/OnboardingEntry";
+import { PlacementEntry } from "./components/placement/PlacementEntry";
 import { applyTheme, getCurrentTheme, type AppTheme } from "./theme";
 import MaintenancePage, { type MaintenancePayload } from "./pages/MaintenancePage";
 import { getMaintenanceStatus } from "./lib/api/maintenance";
@@ -85,6 +86,9 @@ const AdminDashboardPage = React.lazy(() => import("./pages/AdminDashboardPage")
 })));
 const SupportPage = React.lazy(() => import("./pages/SupportPage").then(mod => ({
   default: mod.SupportPage
+})));
+const DevEditorPage = React.lazy(() => import("./pages/DevEditorPage").then(mod => ({
+  default: mod.DevEditorPage
 })));
 const PageLoader: React.FC = () => {
   const {
@@ -440,6 +444,7 @@ const AppContent: React.FC = React.memo(() => {
         })()}
         </Suspense>
       </main>
+      {user ? <PlacementEntry user={user} onUserChange={setUser} /> : null}
       <OnboardingEntry />
     </div>;
 });
@@ -449,6 +454,11 @@ export const App: React.FC = () => {
   return <TheoryModalProvider>
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
+          {import.meta.env.DEV ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <DevEditorPage />
+                </AnimatedPage>
+              </Suspense>} /> : null}
           <Route path="/verify-email" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <VerifyEmailWrapper />
@@ -648,6 +658,7 @@ const GoogleAuthSuccessWrapper: React.FC = React.memo(() => {
 });
 GoogleAuthSuccessWrapper.displayName = "GoogleAuthSuccessWrapper";
 const GoogleAuthErrorPage: React.FC = React.memo(() => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   return <div className="min-h-screen flex items-center justify-center bg-bg-base">
       <div className="w-full max-w-md bg-bg-surface border border-border p-8">

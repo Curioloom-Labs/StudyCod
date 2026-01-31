@@ -1,6 +1,8 @@
 import { AppDataSource } from "../data-source";
 export async function applyDbPatches(): Promise<void> {
   await ensureTestDataIsHiddenColumn();
+  await ensureEduGradesScoringColumns();
+  await ensureUsersPlacementColumns();
   await fixIntroPythonFixedSumTaskTests();
   await ensureMaintenanceStateTable();
   await ensureMaintenanceStateSingletonRow();
@@ -11,6 +13,97 @@ export async function applyDbPatches(): Promise<void> {
   await migrateLegacyTopicTheoryMarkdownToTheoryBlocks();
   await normalizeAndSanitizeTheoryBlocks();
   await fixNoInputFixedExampleTaskTests();
+}
+
+async function ensureUsersPlacementColumns(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'users'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const doneCol = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE 'placement_done'")) as Array<any>;
+    if (!Array.isArray(doneCol) || doneCol.length === 0) {
+      console.warn("[DB Patch] Column users.placement_done is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `users` ADD COLUMN `placement_done` TINYINT(1) NOT NULL DEFAULT 0");
+      console.log("[DB Patch] Added column users.placement_done");
+    }
+
+    const levelCol = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE 'placement_level'")) as Array<any>;
+    if (!Array.isArray(levelCol) || levelCol.length === 0) {
+      console.warn("[DB Patch] Column users.placement_level is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `users` ADD COLUMN `placement_level` ENUM('BEGINNER','INTERMEDIATE','ADVANCED') NULL DEFAULT NULL");
+      console.log("[DB Patch] Added column users.placement_level");
+    }
+
+    const scoreCol = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE 'placement_score'")) as Array<any>;
+    if (!Array.isArray(scoreCol) || scoreCol.length === 0) {
+      console.warn("[DB Patch] Column users.placement_score is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `users` ADD COLUMN `placement_score` INT NULL DEFAULT NULL");
+      console.log("[DB Patch] Added column users.placement_score");
+    }
+
+    const masteredJavaCol = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE 'placement_mastered_until_topic_index_java'")) as Array<any>;
+    if (!Array.isArray(masteredJavaCol) || masteredJavaCol.length === 0) {
+      console.warn("[DB Patch] Column users.placement_mastered_until_topic_index_java is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `users` ADD COLUMN `placement_mastered_until_topic_index_java` INT NULL DEFAULT NULL");
+      console.log("[DB Patch] Added column users.placement_mastered_until_topic_index_java");
+    }
+
+    const masteredPythonCol = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE 'placement_mastered_until_topic_index_python'")) as Array<any>;
+    if (!Array.isArray(masteredPythonCol) || masteredPythonCol.length === 0) {
+      console.warn("[DB Patch] Column users.placement_mastered_until_topic_index_python is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `users` ADD COLUMN `placement_mastered_until_topic_index_python` INT NULL DEFAULT NULL");
+      console.log("[DB Patch] Added column users.placement_mastered_until_topic_index_python");
+    }
+
+    const doneAtCol = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE 'placement_done_at'")) as Array<any>;
+    if (!Array.isArray(doneAtCol) || doneAtCol.length === 0) {
+      console.warn("[DB Patch] Column users.placement_done_at is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `users` ADD COLUMN `placement_done_at` DATETIME(6) NULL DEFAULT NULL");
+      console.log("[DB Patch] Added column users.placement_done_at");
+    }
+  } catch (err: any) {
+    console.error("[DB Patch] Failed to ensure users placement columns:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureEduGradesScoringColumns(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'edu_grades'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const scoreCol = (await AppDataSource.query("SHOW COLUMNS FROM `edu_grades` LIKE 'score'")) as Array<any>;
+    if (!Array.isArray(scoreCol) || scoreCol.length === 0) {
+      console.warn("[DB Patch] Column edu_grades.score is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `edu_grades` ADD COLUMN `score` INT NULL");
+      console.log("[DB Patch] Added column edu_grades.score");
+    }
+
+    const maxScoreCol = (await AppDataSource.query("SHOW COLUMNS FROM `edu_grades` LIKE 'max_score'")) as Array<any>;
+    if (!Array.isArray(maxScoreCol) || maxScoreCol.length === 0) {
+      console.warn("[DB Patch] Column edu_grades.max_score is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `edu_grades` ADD COLUMN `max_score` INT NULL");
+      console.log("[DB Patch] Added column edu_grades.max_score");
+    }
+
+    const groupScoresCol = (await AppDataSource.query("SHOW COLUMNS FROM `edu_grades` LIKE 'group_scores'")) as Array<any>;
+    if (!Array.isArray(groupScoresCol) || groupScoresCol.length === 0) {
+      console.warn("[DB Patch] Column edu_grades.group_scores is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `edu_grades` ADD COLUMN `group_scores` TEXT NULL");
+      console.log("[DB Patch] Added column edu_grades.group_scores");
+    }
+  } catch (err: any) {
+    console.error("[DB Patch] Failed to ensure edu_grades scoring columns:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
 }
 async function ensureMaintenanceStateTable(): Promise<void> {
   try {

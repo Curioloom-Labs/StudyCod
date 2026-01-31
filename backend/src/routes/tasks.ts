@@ -239,6 +239,13 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     if (!user) return res.status(404).json({
       message: "USER_NOT_FOUND"
     });
+
+    const masteredUntilTopicIndex = (() => {
+      const raw = lang === "JAVA" ? (user as any).placementMasteredUntilTopicIndexJava : (user as any).placementMasteredUntilTopicIndexPython;
+      const v = raw === null || raw === undefined ? -1 : Number(raw);
+      if (!Number.isFinite(v)) return -1;
+      return Math.max(-1, Math.floor(v));
+    })();
     const tasks = await taskRepo().find({
       where: {
         user: {
@@ -285,6 +292,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const REQUIRED_TASKS_FOR_REGULAR_TOPIC = 3;
     let topic: Topic | null = null;
     for (const t of topics) {
+      if (t.topicIndex <= masteredUntilTopicIndex) continue;
       const count = await taskRepo().count({
         where: {
           user: {
@@ -637,7 +645,9 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     id: t.id,
     input: t.input || "",
     output: t.expectedOutput || "",
-    hidden: false
+    hidden: false,
+    group: "public",
+    weight: t.points || 1
   }));
   const judgeLang = task.lang === "JAVA" ? "java" : task.lang === "PYTHON" ? "python" : "cpp";
   const defaultLimitsByLang = {
@@ -664,7 +674,8 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     tests,
     limits: defaultLimitsByLang[judgeLang],
     checker: chooseDefaultCheckerFromExpectedOutputs(sorted.map(t => t.expectedOutput || "")),
-    debug: false
+    debug: false,
+    rerun_failed_once: true
   };
   let workerRes: WorkerJudgeResponse | null = null;
   try {
@@ -760,6 +771,9 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
           errorKind: (r as any)?.error_kind ?? null
         });
       }
+      if (typeof workerRes.score === "number" && typeof workerRes.max_score === "number") {
+        total = workerRes.score;
+      }
     }
   }
   const feedbackLines: string[] = [];
@@ -803,6 +817,20 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     } catch {}
   }
   const feedback = feedbackLines.join("\n");
+
+  const maxScore = sorted.reduce((sum, t) => sum + (t.points || 1), 0);
+  const scoringScore = typeof workerRes?.score === "number" ? workerRes.score : total;
+  const scoringMaxScore = typeof workerRes?.max_score === "number" ? workerRes.max_score : maxScore;
+  const scoringGroupScores = Array.isArray(workerRes?.group_scores) ? workerRes.group_scores.map(gs => ({
+    group: String((gs as any).group ?? ""),
+    score: Number((gs as any).score ?? 0),
+    maxScore: Number((gs as any).max_score ?? 0)
+  })) : [{
+    group: "public",
+    score: scoringScore,
+    maxScore: scoringMaxScore
+  }];
+
   task.finalCode = code;
   task.completed = TASK_COMPLETED_FLAG;
   await taskRepo().save(task);
@@ -832,6 +860,9 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
       aiFeedback: savedGrade.aiFeedback,
       testsPassed: passedTests,
       testsTotal: (task.testData || []).length,
+      score: scoringScore,
+      maxScore: scoringMaxScore,
+      groupScores: scoringGroupScores,
       testResults,
       hints: hintsForUser,
       createdAt: savedGrade.createdAt

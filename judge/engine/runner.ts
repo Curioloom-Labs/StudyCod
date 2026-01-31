@@ -4,7 +4,7 @@ import * as path from "path";
 import { NsJailExecutor } from "./executor";
 import { Compiler, mapRuntimeToVerdict } from "./compiler";
 import { validateAndResolveLimits } from "./limits";
-import { CheckerSpec, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
+import { CheckerSpec, GroupScore, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
 import { cleanPythonRuntimeError, filterNsJailStderr } from "./stderr";
 import { buildUserFacingStderr } from "./userFacingErrors";
 import { checkExact } from "../checkers/exact";
@@ -36,6 +36,7 @@ export class Runner {
     try {
       await adapter.writeSource(workDir, req.source);
       const compilePlan = adapter.getCompilePlan();
+      const scoringPlan = computeScoringPlan(req);
       if (compilePlan) {
         const compileTimeLimitMs = resolveCompileTimeLimitMs(req.language, limits.timeLimitMs);
         const compileRes = await this.compiler.compile({
@@ -58,6 +59,9 @@ export class Runner {
             time_ms: compileRes.time_ms,
             memory_kb: compileRes.memory_kb,
             compile: compileRes,
+            score: 0,
+            max_score: scoringPlan.maxScore,
+            group_scores: scoringPlan.groupScoresTemplate,
             tests: []
           };
         }
@@ -67,9 +71,15 @@ export class Runner {
       let peakMemKb: number | null = null;
       const runAll = req.run_all !== false;
       let finalVerdict: Verdict = "AC";
+
+      let score = 0;
+      const groupAgg = scoringPlan.groupAgg;
+
       const runPlan = adapter.getRunPlan();
       for (let i = 0; i < req.tests.length; i++) {
         const test = req.tests[i];
+        const group = normalizeGroup(test.group, test.hidden);
+        const weight = normalizeWeight(test.weight);
         const input = test.input ?? "";
         const expected = test.output ?? "";
         const r = await this.exec.exec({
@@ -99,11 +109,37 @@ export class Runner {
           stderr: r.stderr
         });
 
+        if (req.rerun_failed_once && (runtimeVerdict === "RE" || runtimeVerdict === "TLE" || runtimeVerdict === "MLE")) {
+          try {
+            const rr = await this.exec.exec({
+              nsjailPath: this.cfg.nsjailPath,
+              nsjailConfigPath: this.cfg.nsjailConfigPath,
+              useConfig: this.cfg.useConfig,
+              chroot,
+              cwd: this.cfg.cwd,
+              hostWorkDir: workDir,
+              stdin: input,
+              timeLimitMs: limits.timeLimitMs,
+              memoryLimitBytes: limits.memoryLimitBytes,
+              outputLimitBytes: limits.outputLimitBytes,
+              argv: runPlan.argv,
+              sandboxId: `t${i + 1}r`
+            });
+            const rerunVerdict = mapRuntimeToVerdict({
+              timedOut: rr.timedOut,
+              outputLimitExceeded: rr.outputLimitExceeded,
+              exitCode: rr.exitCode,
+              signal: rr.signal,
+              stderr: rr.stderr
+            });
+            runtimeVerdict = worsen(runtimeVerdict, rerunVerdict);
+          } catch {}
+        }
+
         const baseStderrForUser = req.language === "python" ? cleanPythonRuntimeError(r.stderr) || filterNsJailStderr(r.stderr) : filterNsJailStderr(r.stderr);
         const explained = buildUserFacingStderr(req.language, baseStderrForUser);
         const stderrForUser = explained.stderr;
 
-        // For Python, treat pure syntax/indent errors closer to compile errors.
         if (req.language === "python" && explained.kind === "syntax") {
           runtimeVerdict = "CE";
         }
@@ -113,7 +149,9 @@ export class Runner {
           verdict: runtimeVerdict,
           time_ms: timeMs,
           memory_kb: r.memoryKb,
-          error_kind: explained.kind
+          error_kind: explained.kind,
+          group,
+          weight
         };
         if (runtimeVerdict === "AC") {
           const ok = checkOutput(checker, r.stdout, expected);
@@ -128,8 +166,13 @@ export class Runner {
             }
             tests.push(base);
             finalVerdict = worsen(finalVerdict, "WA");
-            if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests);
+            if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
             continue;
+          }
+          score += weight;
+          const agg = groupAgg[group];
+          if (agg) {
+            agg.score += weight;
           }
           if (allowDetails) {
             base.actual = truncate(r.stdout, 2048);
@@ -146,9 +189,9 @@ export class Runner {
         }
         tests.push(base);
         finalVerdict = worsen(finalVerdict, runtimeVerdict);
-        if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests);
+        if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
       }
-      return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests);
+      return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
     } finally {
       await safeRm(workDir);
     }
@@ -188,14 +231,42 @@ function resolveCompileTimeLimitMs(language: LanguageId, runTimeLimitMs: number)
       return Math.min(8_000, Math.max(2_000, base + 500));
   }
 }
-function finalize(submissionId: string, verdict: Verdict, timeMs: number, memoryKb: number | null, tests: TestRunResult[]): JudgeResponse {
+type GroupAgg = Record<string, { score: number; max_score: number }>;
+
+function finalize(
+  submissionId: string,
+  verdict: Verdict,
+  timeMs: number,
+  memoryKb: number | null,
+  tests: TestRunResult[],
+  score: number,
+  maxScore: number,
+  groupAgg: GroupAgg
+): JudgeResponse {
   return {
     submission_id: submissionId,
     verdict,
     time_ms: timeMs,
     memory_kb: memoryKb,
+    score,
+    max_score: maxScore,
+    group_scores: buildGroupScores(groupAgg),
     tests
   };
+}
+
+function buildGroupScores(groupAgg: GroupAgg): GroupScore[] {
+  const entries = Object.entries(groupAgg);
+  entries.sort(([a], [b]) => {
+    const aa = a === "public" ? "\u0000" : a === "hidden" ? "\uffff" : a;
+    const bb = b === "public" ? "\u0000" : b === "hidden" ? "\uffff" : b;
+    return aa.localeCompare(bb);
+  });
+  return entries.map(([group, v]) => ({
+    group,
+    score: v.score,
+    max_score: v.max_score
+  }));
 }
 function worsen(current: Verdict, next: Verdict): Verdict {
   const rank: Record<Verdict, number> = {
@@ -274,6 +345,63 @@ function validateRequest(req: JudgeRequest) {
     if (typeof t.output !== "string") throw new Error("INVALID_REQUEST: test.output must be string");
     if (inp.length > 256 * 1024) throw new Error("INVALID_REQUEST: test.input too large");
     if (t.output.length > 256 * 1024) throw new Error("INVALID_REQUEST: test.output too large");
+
+    if (t.group !== undefined && t.group !== null && typeof t.group !== "string") {
+      throw new Error("INVALID_REQUEST: test.group must be string");
+    }
+    if (t.weight !== undefined && t.weight !== null && typeof t.weight !== "number") {
+      throw new Error("INVALID_REQUEST: test.weight must be number");
+    }
   }
   if (!req.limits) throw new Error("INVALID_REQUEST: limits required");
+
+  if (req.debug !== undefined && typeof req.debug !== "boolean") throw new Error("INVALID_REQUEST: debug must be boolean");
+  if (req.run_all !== undefined && typeof req.run_all !== "boolean") throw new Error("INVALID_REQUEST: run_all must be boolean");
+  if (req.rerun_failed_once !== undefined && typeof req.rerun_failed_once !== "boolean") throw new Error("INVALID_REQUEST: rerun_failed_once must be boolean");
+}
+
+function computeScoringPlan(req: JudgeRequest): {
+  maxScore: number;
+  groupAgg: GroupAgg;
+  groupScoresTemplate: GroupScore[];
+} {
+  const groupAgg: GroupAgg = {};
+  let maxScore = 0;
+
+  for (const t of req.tests) {
+    const group = normalizeGroup(t.group, t.hidden);
+    const weight = normalizeWeight(t.weight);
+    maxScore += weight;
+    if (!groupAgg[group]) {
+      groupAgg[group] = {
+        score: 0,
+        max_score: 0
+      };
+    }
+    groupAgg[group].max_score += weight;
+  }
+
+  const groupScoresTemplate = buildGroupScores(groupAgg);
+  return {
+    maxScore,
+    groupAgg,
+    groupScoresTemplate
+  };
+}
+
+function normalizeGroup(group: unknown, hidden?: boolean): string {
+  const raw = typeof group === "string" ? group.trim() : "";
+  if (raw) {
+    const normalized = raw.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+/, "").replace(/-+$/, "");
+    return normalized.slice(0, 32) || (hidden ? "hidden" : "public");
+  }
+  return hidden ? "hidden" : "public";
+}
+
+function normalizeWeight(weight: unknown): number {
+  const n = typeof weight === "number" ? weight : Number.NaN;
+  if (!Number.isFinite(n)) return 1;
+  if (n <= 0) return 1;
+  if (n > 1000) return 1000;
+  return Math.round(n * 1000) / 1000;
 }

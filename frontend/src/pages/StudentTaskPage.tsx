@@ -8,7 +8,7 @@ import { Modal } from "../components/ui/Modal";
 import { CodeEditor } from "../components/CodeEditor";
 import { MarkdownView } from "../components/MarkdownView";
 import { getTask, submitCode, runCode, submitQuizAnswers, completeTask, getTestData, type TaskWithGrade, type TestResult } from "../lib/api/edu";
-import { ArrowLeft, Play, Send, Save, Clock, FileText, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Play, Send, Save, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload } from "lucide-react";
 import { isDeadlineExpired } from "../utils/timezone";
 import { getMe } from "../lib/api/profile";
 import type { User } from "../types";
@@ -31,6 +31,15 @@ export const StudentTaskPage: React.FC = () => {
   const [consoleOutput, setConsoleOutput] = useState("");
   const [testInput, setTestInput] = useState("");
   const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [lastScoring, setLastScoring] = useState<null | {
+    score: number;
+    maxScore: number;
+    groupScores?: Array<{
+      group: string;
+      score: number;
+      maxScore: number;
+    }> | null;
+  }>(null);
   const [hints, setHints] = useState<string[]>([]);
   const [revealedHints, setRevealedHints] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -45,6 +54,8 @@ export const StudentTaskPage: React.FC = () => {
   const [quizGrade, setQuizGrade] = useState<number | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [deadlineRemaining, setDeadlineRemaining] = useState<number | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importSolutionKey, setImportSolutionKey] = useState(0);
   const tr = useCallback((uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk, [i18n.language]);
   const taskRef = useRef(task);
   const codeRef = useRef(code);
@@ -83,6 +94,38 @@ export const StudentTaskPage: React.FC = () => {
       }
     };
   }, [taskId, code]);
+
+  const handleImportSolutionFile = async (file: File | null) => {
+    if (!file) return;
+    if (!canEdit) {
+      alert(tr("Завдання закрите для редагування", "Task is read-only"));
+      return;
+    }
+
+    const nameLower = file.name.toLowerCase();
+    const expectedExt = task?.language === "JAVA" ? ".java" : ".py";
+    const looksOk = nameLower.endsWith(expectedExt) || nameLower.endsWith(".txt");
+    if (!looksOk) {
+      const ok = confirm(tr(`Файл має інше розширення. Все одно імпортувати? (${file.name})`, `File extension looks different. Import anyway? (${file.name})`));
+      if (!ok) return;
+    }
+
+    try {
+      const text = (await file.text()).replace(/\r\n/g, "\n");
+      const hasExisting = (code || "").trim().length > 0;
+      const hasNew = text.trim().length > 0;
+      if (hasExisting && hasNew && text !== code) {
+        const ok = confirm(tr("Замінити поточний код на код з файлу?", "Replace current code with file contents?"));
+        if (!ok) return;
+      }
+      setCode(text);
+    } catch (e: any) {
+      console.error("Failed to import solution file:", e);
+      alert(tr("Не вдалося прочитати файл", "Failed to read file"));
+    } finally {
+      setImportSolutionKey(k => k + 1);
+    }
+  };
   useEffect(() => {
     if (!task?.deadline || task.isClosed) {
       setDeadlineRemaining(null);
@@ -142,6 +185,21 @@ export const StudentTaskPage: React.FC = () => {
     try {
       const data = await getTask(parseInt(taskId, 10));
       setTask(data);
+      {
+        const g: any = (data as any).grade;
+        const score = typeof g?.score === "number" ? Number(g.score) : null;
+        const maxScore = typeof g?.maxScore === "number" ? Number(g.maxScore) : null;
+        const groupScores = Array.isArray(g?.groupScores) ? g.groupScores : null;
+        if (score !== null && maxScore !== null && maxScore > 0) {
+          setLastScoring({
+            score,
+            maxScore,
+            groupScores
+          });
+        } else {
+          setLastScoring(null);
+        }
+      }
       const submittedCode = data.grade?.submittedCode;
       const draftCode = localStorage.getItem(`task_draft_${taskId}`);
       const savedCode = (data as any).savedCode;
@@ -340,6 +398,7 @@ export const StudentTaskPage: React.FC = () => {
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(finalTestResults);
       setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
+      setLastScoring((result as any).scoring ?? null);
       setRevealedHints(0);
       const updatedProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
       for (const r of finalTestResults as any[]) {
@@ -368,7 +427,9 @@ export const StudentTaskPage: React.FC = () => {
         return;
       }
       if (result.grade.total !== null) {
-        setConsoleOutput(`${t('reviewCompleted')}: ${result.grade.testsPassed}/${result.grade.testsTotal}. ${t('gradeOutOf')}: ${result.grade.total}/12`);
+        const scoring = (result as any).scoring as any;
+        const scoreLine = scoring && typeof scoring.score === "number" && typeof scoring.maxScore === "number" && scoring.maxScore > 0 ? ` ${tr("Бал", "Score")}: ${scoring.score}/${scoring.maxScore}.` : "";
+        setConsoleOutput(`${t('reviewCompleted')}: ${result.grade.testsPassed}/${result.grade.testsTotal}.${scoreLine} ${t('gradeOutOf')}: ${result.grade.total}/12`);
       } else {
         setConsoleOutput(t('taskSubmittedForReview'));
       }
@@ -396,6 +457,10 @@ export const StudentTaskPage: React.FC = () => {
     }
     if (task?.deadline && isDeadlineExpired(task.deadline)) {
       alert(t("deadlinePassedCannotComplete"));
+      return;
+    }
+    if (task?.grade?.isManuallyGraded) {
+      alert(t("taskLockedManualGrade"));
       return;
     }
     if (task?.grade?.isCompleted) {
@@ -437,6 +502,7 @@ export const StudentTaskPage: React.FC = () => {
       const finalTestResults: TestResult[] = Array.isArray((result as any).testResults) ? (result as any).testResults : [];
       setTestResults(finalTestResults);
       setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
+      setLastScoring((result as any).scoring ?? null);
       setRevealedHints(0);
       const updatedProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
       for (const r of finalTestResults as any[]) {
@@ -461,11 +527,13 @@ export const StudentTaskPage: React.FC = () => {
         setConsoleOutput(t("taskCompletedEarlySent"));
         alert(t("taskCompletedEarlySent"));
       } else if (result.grade.total !== null) {
+        const scoring = (result as any).scoring as any;
+        const scoreLine = scoring && typeof scoring.score === "number" && typeof scoring.maxScore === "number" && scoring.maxScore > 0 ? ` ${tr("Бал", "Score")}: ${scoring.score}/${scoring.maxScore}.` : "";
         setConsoleOutput(t("taskCompletedEarlyDetailed", {
           passed: result.grade.testsPassed,
           total: result.grade.testsTotal,
           grade: result.grade.total
-        }));
+        }) + scoreLine);
         alert(t("taskCompletedEarlyWithGrade", {
           grade: result.grade.total
         }));
@@ -485,7 +553,7 @@ export const StudentTaskPage: React.FC = () => {
       setSubmitting(false);
       setIsRunningTests(false);
     }
-  }, [taskId, code, task?.isClosed, task?.deadline, task?.grade?.isCompleted, loadTask, t]);
+  }, [taskId, code, task?.isClosed, task?.deadline, task?.grade?.isManuallyGraded, task?.grade?.isCompleted, loadTask, t]);
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
@@ -504,11 +572,21 @@ export const StudentTaskPage: React.FC = () => {
   const canEdit = useMemo(() => {
     if (!task) return false;
     if (task.grade?.isCompleted) return false;
+    if (task.grade?.isManuallyGraded) return false;
     if (task.isClosed) return false;
     if (task.deadline && isDeadlineExpired(task.deadline)) return false;
     if (task.maxAttempts && task.attemptsUsed !== undefined && task.attemptsUsed >= task.maxAttempts) return false;
     return true;
   }, [task?.grade, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, task]);
+
+  const canComplete = useMemo(() => {
+    if (!task) return false;
+    if (task.grade?.isCompleted) return false;
+    if (task.grade?.isManuallyGraded) return false;
+    if (task.isClosed) return false;
+    if (task.deadline && isDeadlineExpired(task.deadline)) return false;
+    return true;
+  }, [task?.grade, task?.isClosed, task?.deadline, task]);
   const attemptsRemaining = useMemo(() => {
     if (!task) return null;
     if (task.maxAttempts === undefined || task.attemptsUsed === undefined) return null;
@@ -535,6 +613,49 @@ export const StudentTaskPage: React.FC = () => {
   }
   const hasTheory = task.lesson.hasTheory && task.lesson.theory && task.lesson.theory.trim().length > 0;
   const showTheory = !theoryAcknowledged && hasTheory;
+  const scoringPct = lastScoring && lastScoring.maxScore > 0 ? Math.max(0, Math.min(100, Math.round(lastScoring.score / lastScoring.maxScore * 100))) : null;
+  const scoringSegments = (() => {
+    if (!lastScoring || !(lastScoring.maxScore > 0)) return null;
+    const groups = Array.isArray(lastScoring.groupScores) ? lastScoring.groupScores : null;
+    if (!groups || groups.length === 0) {
+      return [{
+        key: "total",
+        label: "total",
+        pct: typeof scoringPct === "number" ? scoringPct : 0,
+        className: "bg-primary",
+        title: tr("Бал", "Score") + `: ${lastScoring.score}/${lastScoring.maxScore}`
+      }];
+    }
+    const totalMax = lastScoring.maxScore;
+    const normalized = groups.map(g => ({
+      group: String((g as any)?.group ?? ""),
+      score: Number((g as any)?.score ?? 0),
+      maxScore: Number((g as any)?.maxScore ?? 0)
+    })).filter(g => Number.isFinite(g.score) && g.score > 0);
+    const order = ["public", "hidden"];
+    normalized.sort((a, b) => {
+      const ia = order.indexOf(a.group);
+      const ib = order.indexOf(b.group);
+      if (ia === -1 && ib === -1) return a.group.localeCompare(b.group);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+    return normalized.map(g => {
+      const raw = totalMax > 0 ? g.score / totalMax * 100 : 0;
+      const pct = Math.max(0, Math.min(100, raw));
+      const className = g.group === "public" ? "bg-primary" : g.group === "hidden" ? "bg-violet-500" : "bg-slate-500";
+      const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
+      return {
+        key: g.group,
+        label,
+        pct,
+        className,
+        title: `${label}: ${g.score}/${g.maxScore}`
+      };
+    });
+  })();
+  const showScoringLegend = Array.isArray(scoringSegments) && scoringSegments.some(s => s.key === "public" || s.key === "hidden");
   return <div className="h-full min-h-0 flex flex-col bg-bg-base">
       {}
       {!showTheory && <div className="border-b border-border bg-bg-surface p-4 flex-shrink-0">
@@ -594,11 +715,39 @@ export const StudentTaskPage: React.FC = () => {
               {task.grade && <div className={`text-sm font-mono font-bold mr-4 flex items-center ${task.grade.total >= 10 ? "text-accent-success" : task.grade.total >= 7 ? "text-accent-warn" : task.grade.total >= 4 ? "text-yellow-500" : "text-accent-error"}`}>
                   {t("grade")}: {task.grade.total}/12
                 </div>}
+              {lastScoring && typeof scoringPct === "number" && <div className="min-w-[180px] mr-3">
+                  <div className="h-2 w-full bg-border rounded overflow-hidden">
+                    {Array.isArray(scoringSegments) && scoringSegments.length > 0 ? <div className="h-2 w-full flex">
+                        {scoringSegments.map(seg => <div key={seg.key} className={`h-2 ${seg.className}`} title={seg.title} style={{
+                        width: `${seg.pct}%`
+                      }} />)}
+                      </div> : <div className="h-2 bg-primary" style={{
+                        width: `${scoringPct}%`
+                      }} />}
+                  </div>
+                  <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center justify-between">
+                    <span>{tr("Бал", "Score")}: <span className="text-text-secondary">{lastScoring.score}/{lastScoring.maxScore}</span></span>
+                    <span>{scoringPct}%</span>
+                  </div>
+                  {showScoringLegend && <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center gap-3">
+                      <span className="inline-flex items-center gap-1" title={tr("Публічні тести", "Public tests")}> 
+                        <span className="inline-block w-2 h-2 rounded-sm bg-primary" />
+                        <span>{tr("публічні", "public")}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1" title={tr("Приховані тести", "Hidden tests")}>
+                        <span className="inline-block w-2 h-2 rounded-sm bg-violet-500" />
+                        <span>{tr("приховані", "hidden")}</span>
+                      </span>
+                    </div>}
+                </div>}
               {theoryAcknowledged && <>
                   <Button variant="ghost" onClick={() => {
               setTheoryAcknowledged(false);
             }} className="text-xs">
                   <FileText className="w-3 h-3 mr-1" /> {t("theory")}
+                  </Button>
+                  <Button variant="ghost" onClick={() => importInputRef.current?.click()} disabled={!canEdit} className="text-xs" title={tr("Імпорт коду з файлу", "Import code from file")}>
+                    <Upload className="w-3 h-3 mr-1" /> {tr("Імпорт", "Import")}
                   </Button>
                   <Button variant="ghost" onClick={handleRun} disabled={!canEdit || running} className="text-xs">
                   <Play className="w-3 h-3 mr-1" /> {tr("Запустити", "Run")}
@@ -612,12 +761,14 @@ export const StudentTaskPage: React.FC = () => {
                     <Send className="w-3 h-3 mr-1" />
                   {submitting ? tr("Перевірка...", "Checking...") : tr("Відправити", "Submit")}
                   </Button>
-                  {canEdit && !task.grade?.isCompleted && <Button variant="ghost" onClick={handleComplete} disabled={submitting} className="text-xs border border-accent-warn text-accent-warn hover:bg-accent-warn/10" title={tr("Завершити завдання достроково (закриє можливість редагування)", "Complete the task early (will disable editing)")}>
+                  {canComplete && <Button variant="ghost" onClick={handleComplete} disabled={submitting} className="text-xs border border-accent-warn text-accent-warn hover:bg-accent-warn/10" title={tr("Завершити завдання достроково (закриє можливість редагування)", "Complete the task early (will disable editing)")}>
                     {tr("✓ Завершити", "✓ Complete")}
                     </Button>}
                 </>}
             </div>
           </div>
+
+          <input key={importSolutionKey} ref={importInputRef} type="file" accept={task.language === "JAVA" ? ".java,.txt,text/plain" : ".py,.txt,text/plain"} onChange={e => handleImportSolutionFile(e.target.files?.[0] || null)} className="hidden" />
         </div>}
 
       {}
@@ -821,6 +972,43 @@ export const StudentTaskPage: React.FC = () => {
       {showResults && <Modal open={showResults} onClose={() => setShowResults(false)} title={tr("Результати тестування", "Test results")} showCloseButton={false}>
           <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Результати тестування", "Test results")}</h2>
+
+            {lastScoring && lastScoring.maxScore > 0 && <div className="mb-4 p-3 border border-border bg-bg-code">
+                <div className="text-[10px] font-mono text-text-secondary mb-2">{tr("Прогрес", "Progress")}</div>
+                <div className="h-2 w-full bg-border rounded overflow-hidden">
+                  {Array.isArray(scoringSegments) && scoringSegments.length > 0 ? <div className="h-2 w-full flex">
+                      {scoringSegments.map(seg => <div key={seg.key} className={`h-2 ${seg.className}`} title={seg.title} style={{
+                      width: `${seg.pct}%`
+                    }} />)}
+                    </div> : <div className="h-2 bg-primary" style={{
+                      width: `${Math.max(0, Math.min(100, Math.round(lastScoring.score / lastScoring.maxScore * 100)))}%`
+                    }} />}
+                </div>
+                <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center justify-between">
+                  <span>{tr("Бал", "Score")}: <span className="text-text-secondary">{lastScoring.score}/{lastScoring.maxScore}</span></span>
+                  <span>{Math.max(0, Math.min(100, Math.round(lastScoring.score / lastScoring.maxScore * 100)))}%</span>
+                </div>
+                {showScoringLegend && <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center gap-3">
+                    <span className="inline-flex items-center gap-1" title={tr("Публічні тести", "Public tests")}>
+                      <span className="inline-block w-2 h-2 rounded-sm bg-primary" />
+                      <span>{tr("публічні", "public")}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1" title={tr("Приховані тести", "Hidden tests")}>
+                      <span className="inline-block w-2 h-2 rounded-sm bg-violet-500" />
+                      <span>{tr("приховані", "hidden")}</span>
+                    </span>
+                  </div>}
+                {Array.isArray(lastScoring.groupScores) && lastScoring.groupScores.length > 0 && <div className="mt-2 space-y-1">
+                    {lastScoring.groupScores.map((g, idx) => {
+                  const gpct = g.maxScore > 0 ? Math.round(g.score / g.maxScore * 100) : 0;
+                  const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
+                  return <div key={`${g.group}-${idx}`} className="text-[10px] font-mono text-text-muted flex items-center justify-between">
+                          <span>{label}</span>
+                          <span className="text-text-secondary">{g.score}/{g.maxScore} ({gpct}%)</span>
+                        </div>;
+                })}
+                  </div>}
+              </div>}
 
             {hints.length > 0 && <div className="mb-4 p-3 border border-primary/30 bg-bg-code">
                 <div className="text-xs font-mono text-primary mb-2">{tr("Підказки (крок за кроком)", "Hints (step-by-step)")}</div>

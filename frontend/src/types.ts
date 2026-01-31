@@ -17,6 +17,11 @@ export interface User {
   lastName?: string;
   middleName?: string;
   email?: string;
+  placementDone?: boolean;
+  placementLevel?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | null;
+  placementScore?: number | null;
+  placementMasteredUntilTopicIndexJava?: number | null;
+  placementMasteredUntilTopicIndexPython?: number | null;
 }
 export interface Topic {
   id: number;

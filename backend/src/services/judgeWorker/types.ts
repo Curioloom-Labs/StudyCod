@@ -18,6 +18,8 @@ export interface JudgeTestCase {
   input?: string;
   output: string;
   hidden?: boolean;
+  group?: string;
+  weight?: number;
 }
 export interface JudgeRequest {
   submission_id: string;
@@ -28,12 +30,12 @@ export interface JudgeRequest {
   checker?: CheckerSpec;
   debug?: boolean;
   run_all?: boolean;
+  rerun_failed_once?: boolean;
 }
 export interface JudgeCompileResult {
   ok: boolean;
   verdict: JudgeVerdict;
   message: string;
-  /** Optional normalized error classification for UI (backward compatible). */
   error_kind?: string;
   stdout?: string;
   stderr?: string;
@@ -46,18 +48,29 @@ export interface JudgeTestResult {
   time_ms: number;
   memory_kb: number | null;
   message?: string;
-  /** Optional normalized error classification for UI (backward compatible). */
   error_kind?: string;
+  group?: string;
+  weight?: number;
   input?: string;
   expected?: string;
   actual?: string;
   stderr?: string;
 }
+
+export interface GroupScore {
+  group: string;
+  score: number;
+  max_score: number;
+}
+
 export interface JudgeResponse {
   submission_id: string;
   verdict: JudgeVerdict;
   time_ms: number;
   memory_kb: number | null;
+  score?: number;
+  max_score?: number;
+  group_scores?: GroupScore[];
   compile?: JudgeCompileResult;
   tests: JudgeTestResult[];
 }

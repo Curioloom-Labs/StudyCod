@@ -22,7 +22,12 @@ function buildUserDto(user: User) {
     avatarUrl: user.avatarUrl ?? null,
     userMode: user.userMode,
     role: user.role || null,
-    googleId: user.googleId ?? null
+    googleId: user.googleId ?? null,
+    placementDone: Boolean((user as any).placementDone),
+    placementLevel: (user as any).placementLevel ?? null,
+    placementScore: (user as any).placementScore ?? null,
+    placementMasteredUntilTopicIndexJava: (user as any).placementMasteredUntilTopicIndexJava ?? null,
+    placementMasteredUntilTopicIndexPython: (user as any).placementMasteredUntilTopicIndexPython ?? null
   };
 }
 router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -197,5 +202,113 @@ router.post("/milestone-shown", authMiddleware, async (req: AuthRequest, res: Re
     });
   }
 });
+
+router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        message: "UNAUTHORIZED"
+      });
+    }
+    if (req.userType === "STUDENT" || req.studentId) {
+      return res.status(403).json({
+        message: "ONLY_PERSONAL_USERS"
+      });
+    }
+
+    const user = await userRepo().findOne({
+      where: {
+        id: req.userId
+      }
+    });
+    if (!user) {
+      return res.status(404).json({
+        message: "USER_NOT_FOUND"
+      });
+    }
+    if (user.userMode === "EDUCATIONAL") {
+      return res.status(403).json({
+        message: "ONLY_PERSONAL_USERS"
+      });
+    }
+
+    const {
+      level,
+      score,
+      course,
+      lang,
+      masteredUntilTopicIndex
+    } = req.body as {
+      level?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | null;
+      score?: number | null;
+      course?: string | null;
+      lang?: string | null;
+      masteredUntilTopicIndex?: number | null;
+    };
+
+    const normalizedLang = normalizeLang(course || lang || user.lang);
+    if (course !== undefined || lang !== undefined) {
+      user.lang = normalizedLang;
+    }
+
+    if (level !== undefined && level !== null) {
+      const allowed = new Set(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
+      if (!allowed.has(level)) {
+        return res.status(400).json({
+          message: "INVALID_LEVEL"
+        });
+      }
+      (user as any).placementLevel = level;
+    }
+    if (score !== undefined) {
+      if (score !== null && (!Number.isFinite(Number(score)) || Number(score) < 0)) {
+        return res.status(400).json({
+          message: "INVALID_SCORE"
+        });
+      }
+      (user as any).placementScore = score === null ? null : Math.round(Number(score));
+    }
+
+    if (masteredUntilTopicIndex !== undefined) {
+      if (masteredUntilTopicIndex !== null) {
+        const v = Number(masteredUntilTopicIndex);
+        if (!Number.isFinite(v)) {
+          return res.status(400).json({
+            message: "INVALID_MASTERED_UNTIL"
+          });
+        }
+        const rounded = Math.floor(v);
+        if (rounded < -1 || rounded > 10000) {
+          return res.status(400).json({
+            message: "INVALID_MASTERED_UNTIL"
+          });
+        }
+        const normalizedValue = rounded < 0 ? null : rounded;
+        if (normalizedLang === "JAVA") {
+          (user as any).placementMasteredUntilTopicIndexJava = normalizedValue;
+        } else {
+          (user as any).placementMasteredUntilTopicIndexPython = normalizedValue;
+        }
+      } else {
+        if (normalizedLang === "JAVA") {
+          (user as any).placementMasteredUntilTopicIndexJava = null;
+        } else {
+          (user as any).placementMasteredUntilTopicIndexPython = null;
+        }
+      }
+    }
+    (user as any).placementDone = true;
+    (user as any).placementDoneAt = new Date();
+
+    await userRepo().save(user);
+    return res.json(buildUserDto(user));
+  } catch (err) {
+    console.error("PUT /profile/placement error", err);
+    return res.status(500).json({
+      message: "INTERNAL_SERVER_ERROR"
+    });
+  }
+});
+
 export const profileRouter = router;
 export default router;

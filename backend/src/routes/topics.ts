@@ -431,7 +431,8 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
     const {
       taskType,
       difficulty,
-      language
+      language,
+      taskTitle
     } = req.body || {};
     if (!taskType || taskType !== "PRACTICE" && taskType !== "CONTROL") {
       return res.status(400).json({
@@ -441,6 +442,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
     const userLanguage: "uk" | "en" = language === 'en' ? "en" : "uk";
     const result = await safeAICall('generateTaskCondition', {
       topicTitle: topic.title,
+      taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficulty || 3,
       language: topic.language,
@@ -497,11 +499,13 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
       });
     }
     const {
-      description
+      description,
+      taskTitle
     } = req.body || {};
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
     const result = await safeAICall('generateTaskTemplate', {
       topicTitle: topic.title,
+      taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       language: topic.language,
       description,
       userId: user.id,
@@ -903,7 +907,8 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
     const {
       taskDescription,
       taskType,
-      difficulty
+      difficulty,
+      taskTitle
     } = req.body || {};
     if (!taskDescription || !taskType) {
       return res.status(400).json({
@@ -920,6 +925,7 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
     const theoryResult = await safeAICall('generateTheory', {
       topicTitle: topic.title,
+      taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       taskDescription: taskDescription.trim(),
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficultyNum,
