@@ -258,4 +258,18 @@
   .katex * {
     color: inherit !important;
   }
+
+  /* =========================
+     Monaco editor hardening
+     =========================
+     If Monaco base CSS fails to load (or is overridden), its internal hidden
+     input <textarea> can become visible (a grey, resizable box in the corner).
+     These rules keep it invisible and non-resizable in our design system.
+  */
+  .monaco-editor textarea.inputarea {
+    opacity: 0 !important;
+    resize: none !important;
+    width: 1px !important;
+    height: 1px !important;
+  }
 }

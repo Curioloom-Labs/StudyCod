@@ -210,6 +210,47 @@ export class User {
     name: "placement_done_at"
   })
   placementDoneAt!: Date | null;
+
+  @Column({
+    type: "boolean",
+    default: false,
+    name: "placement_coding_passed"
+  })
+  placementCodingPassed!: boolean;
+
+  @Column({
+    type: "enum",
+    enum: ["BEGINNER", "INTERMEDIATE", "ADVANCED"],
+    nullable: true,
+    default: null,
+    name: "placement_coding_level"
+  })
+  placementCodingLevel!: PlacementLevel | null;
+
+  @Column({
+    type: "varchar",
+    length: 80,
+    nullable: true,
+    default: null,
+    name: "placement_coding_task_id"
+  })
+  placementCodingTaskId!: string | null;
+
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "placement_coding_score"
+  })
+  placementCodingScore!: number | null;
+
+  @Column({
+    type: "timestamp",
+    nullable: true,
+    default: null,
+    name: "placement_coding_done_at"
+  })
+  placementCodingDoneAt!: Date | null;
   @OneToMany(() => Task, t => t.user)
   tasks!: Task[];
   @OneToMany(() => Grade, g => g.user)

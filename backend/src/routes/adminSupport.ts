@@ -2,13 +2,145 @@ import { Router, Response } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { SupportTicket } from "../entities/SupportTicket";
+import { SupportConversation } from "../entities/SupportConversation";
+import { SupportMessage } from "../entities/SupportMessage";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { systemAdminGuard } from "../middleware/rolesGuard";
 import { emailService } from "../services/emailService";
+import { logger } from "../utils/logger";
 const router = Router();
 const supportRepo = () => AppDataSource.getRepository(SupportTicket);
+const convRepo = () => AppDataSource.getRepository(SupportConversation);
+const msgRepo = () => AppDataSource.getRepository(SupportMessage);
 const replySchema = z.object({
   replyText: z.string().trim().min(1).max(20_000)
+});
+
+const adminChatReplySchema = z.object({
+  text: z.string().trim().min(1).max(20_000),
+  sendEmail: z.boolean().optional().default(true)
+});
+
+router.get("/conversations", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const conversations = await convRepo().find({
+      order: { lastMessageAt: "DESC" },
+      take: 200
+    });
+
+    return res.json({
+      conversations: conversations.map(c => ({
+        id: c.id,
+        userEmail: c.userEmail,
+        subject: c.subject,
+        status: c.status,
+        createdAt: c.createdAt,
+        lastMessageAt: c.lastMessageAt
+      }))
+    });
+  } catch (err: any) {
+    logger.error("[admin support] failed to list conversations", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.get("/conversations/:id", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const conversationId = Number.parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(conversationId) || conversationId <= 0) {
+      return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
+    }
+
+    const conversation = await convRepo().findOne({ where: { id: conversationId } as any });
+    if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
+
+    const messages = await msgRepo().find({
+      where: { conversation: { id: conversation.id } } as any,
+      order: { createdAt: "ASC" },
+      relations: ["attachments"]
+    });
+
+    return res.json({
+      conversation: {
+        id: conversation.id,
+        userEmail: conversation.userEmail,
+        subject: conversation.subject,
+        status: conversation.status,
+        createdAt: conversation.createdAt,
+        lastMessageAt: conversation.lastMessageAt
+      },
+      messages: messages.map(m => ({
+        id: m.id,
+        senderType: m.senderType,
+        text: m.text || "",
+        createdAt: m.createdAt,
+        attachments: (m.attachments || []).map(a => ({
+          id: a.id,
+          originalName: a.originalName,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes
+        }))
+      }))
+    });
+  } catch (err: any) {
+    logger.error("[admin support] failed to get conversation", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/conversations/:id/messages", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  const conversationId = Number.parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(conversationId) || conversationId <= 0) {
+    return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
+  }
+  const validated = adminChatReplySchema.safeParse(req.body);
+  if (!validated.success) {
+    return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+  }
+  try {
+    const conversation = await convRepo().findOne({ where: { id: conversationId } as any });
+    if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
+    if (conversation.status === "CLOSED") return res.status(409).json({ message: "CONVERSATION_CLOSED" });
+
+    const msg = msgRepo().create({
+      conversation,
+      senderType: "ADMIN",
+      text: validated.data.text,
+      senderUser: req.userId ? ({ id: req.userId } as any) : null
+    } as Partial<SupportMessage>);
+    await msgRepo().save(msg);
+    await convRepo().update({ id: conversation.id }, { lastMessageAt: msg.createdAt } as any);
+
+    if (validated.data.sendEmail !== false) {
+      try {
+        await emailService.sendSupportReply({
+          to: conversation.userEmail,
+          subject: conversation.subject,
+          message: validated.data.text
+        });
+      } catch (err: any) {
+        return res.status(502).json({
+          message: "EMAIL_SEND_FAILED",
+          ...(process.env.NODE_ENV !== "production" && {
+            details: err?.message || String(err)
+          })
+        });
+      }
+    }
+
+    return res.json({
+      ok: true,
+      message: {
+        id: msg.id,
+        senderType: msg.senderType,
+        text: msg.text || "",
+        createdAt: msg.createdAt
+      }
+    });
+  } catch (err: any) {
+    logger.error("[admin support] failed to post admin message", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
 });
 router.get("/", authRequired, systemAdminGuard, async (_req: AuthRequest, res: Response) => {
   const tickets = await supportRepo().find({
@@ -39,7 +171,7 @@ router.post("/:id/reply", authRequired, systemAdminGuard, async (req: AuthReques
   if (!validated.success) {
     return res.status(400).json({
       message: "INVALID_INPUT",
-      errors: validated.error.errors
+      errors: validated.error.issues
     });
   }
   const ticket = await supportRepo().findOne({
@@ -52,13 +184,13 @@ router.post("/:id/reply", authRequired, systemAdminGuard, async (req: AuthReques
       message: "TICKET_NOT_FOUND"
     });
   }
-  try {
-    await emailService.sendSupportReplyEmail({
-      to: ticket.userEmail,
-      originalSubject: ticket.subject,
-      replyText: validated.data.replyText
-    });
-  } catch (err: any) {
+    try {
+      await emailService.sendSupportReply({
+        to: ticket.userEmail,
+        subject: ticket.subject,
+        message: validated.data.replyText
+      });
+    } catch (err: any) {
     return res.status(502).json({
       message: "EMAIL_SEND_FAILED",
       ...(process.env.NODE_ENV !== "production" && {

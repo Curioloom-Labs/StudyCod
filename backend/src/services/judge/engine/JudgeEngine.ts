@@ -49,7 +49,139 @@ export function judgeSolution({
   }
 }
 function judgeExact(userOutput: string, expectedOutput: string): JudgeResult {
-  const success = userOutput === expectedOutput;
+  const hasCyrillic = (s: string) => /[\u0400-\u04FF]/.test(s);
+  const safeNfc = (s: string) => {
+    try {
+      return s.normalize("NFC");
+    } catch {
+      return s;
+    }
+  };
+  const normalizeApostrophes = (s: string) => s.replace(/[\u2018\u2019\u201B\u2032\u02BC]/g, "'");
+  const normalizeInvisibles = (s: string) => s.replace(/\u00A0/g, " ").replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "");
+  const toConfusableSkeleton = (s: string) => {
+    let out = "";
+    for (const ch of s) {
+      switch (ch) {
+        case "A":
+        case "А":
+          out += "A";
+          break;
+        case "a":
+        case "а":
+          out += "a";
+          break;
+        case "B":
+        case "В":
+          out += "B";
+          break;
+        case "C":
+        case "С":
+          out += "C";
+          break;
+        case "c":
+        case "с":
+          out += "c";
+          break;
+        case "E":
+        case "Е":
+          out += "E";
+          break;
+        case "e":
+        case "е":
+          out += "e";
+          break;
+        case "H":
+        case "Н":
+          out += "H";
+          break;
+        case "h":
+        case "н":
+          out += "h";
+          break;
+        case "I":
+        case "І":
+          out += "I";
+          break;
+        case "i":
+        case "і":
+          out += "i";
+          break;
+        case "K":
+        case "К":
+          out += "K";
+          break;
+        case "k":
+        case "к":
+          out += "k";
+          break;
+        case "M":
+        case "М":
+          out += "M";
+          break;
+        case "m":
+        case "м":
+          out += "m";
+          break;
+        case "O":
+        case "О":
+          out += "O";
+          break;
+        case "o":
+        case "о":
+          out += "o";
+          break;
+        case "P":
+        case "Р":
+          out += "P";
+          break;
+        case "p":
+        case "р":
+          out += "p";
+          break;
+        case "T":
+        case "Т":
+          out += "T";
+          break;
+        case "t":
+        case "т":
+          out += "t";
+          break;
+        case "X":
+        case "Х":
+          out += "X";
+          break;
+        case "x":
+        case "х":
+          out += "x";
+          break;
+        case "Y":
+        case "У":
+          out += "Y";
+          break;
+        case "y":
+        case "у":
+          out += "y";
+          break;
+        default:
+          out += ch;
+      }
+    }
+    return out;
+  };
+
+  const expectedHasCyr = hasCyrillic(String(expectedOutput ?? ""));
+  const normalize = (s: string) => {
+    let t = String(s ?? "");
+    t = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    t = normalizeInvisibles(t);
+    t = normalizeApostrophes(t);
+    t = safeNfc(t);
+    if (expectedHasCyr) t = toConfusableSkeleton(t);
+    return t.trim();
+  };
+
+  const success = normalize(userOutput) === normalize(expectedOutput);
   return {
     success,
     message: success ? "Output matches exactly" : `Output does not match. Expected: "${expectedOutput}", Received: "${userOutput}"`,

@@ -1,12 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
 import { Input } from "../components/ui/Input";
-import { getAdminUsers, getAdminUser, createAdminUser, updateAdminUser, updateUserRole, deleteAdminUser, getAdminClasses, createAdminClass, updateAdminClass, deleteAdminClass, getAdminStats, getAdminSupportTickets, replyAdminSupportTicket, getAdminMaintenance, enableAdminMaintenance, disableAdminMaintenance, type MaintenanceState, type AdminUser, type AdminClass, type AdminStats, type AdminSupportTicket, type CreateUserData, type UpdateUserData, type CreateClassData } from "../lib/api/admin";
-import { Users, BookOpen, BarChart3, Plus, Edit, Trash2, Shield, User as UserIcon, GraduationCap, Search, Wrench } from "lucide-react";
-type Tab = "stats" | "users" | "classes" | "support" | "maintenance";
+import { getAdminUsers, getAdminUser, createAdminUser, updateAdminUser, updateUserRole, deleteAdminUser, getAdminClasses, createAdminClass, updateAdminClass, deleteAdminClass, getAdminStats, getAdminSupportTickets, replyAdminSupportTicket, getAdminMaintenance, enableAdminMaintenance, disableAdminMaintenance, getAdminSupportConversations, getAdminSupportConversation, postAdminSupportConversationMessage, getAdminLibraryTasks, approveAdminLibraryTask, rejectAdminLibraryTask, getAdminMaterialTopics, getAdminMaterialsDiagnostics, createAdminMaterialTopic, updateAdminMaterialTopic, deleteAdminMaterialTopic, reorderAdminMaterialTopics, importAdminMaterialTopicsYaml, importAdminMaterialTopicsLegacy, getAdminTheoryBlockRevisions, getAdminTheoryBlockRevision, rollbackAdminTheoryBlockRevision, type AdminTheoryBlockRevision, type MaintenanceState, type AdminUser, type AdminClass, type AdminStats, type AdminSupportTicket, type CreateUserData, type UpdateUserData, type CreateClassData, type AdminSupportChatConversation, type AdminSupportChatMessage, type AdminLibraryTask, type AdminLibraryTaskStatus, type AdminMaterialTopic, type AdminMaterialsDiagnostics } from "../lib/api/admin";
+import { downloadSupportChatAttachment } from "../lib/api/support";
+import { MarkdownView } from "../components/MarkdownView";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Users, BookOpen, BarChart3, Plus, Edit, Trash2, Shield, User as UserIcon, GraduationCap, Search, Wrench, CheckCircle, XCircle, Library, FileText, Save, GripVertical, History } from "lucide-react";
+type Tab = "stats" | "users" | "classes" | "materials" | "library" | "support" | "maintenance";
 function toDatetimeLocalValue(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -19,6 +24,56 @@ function toDatetimeLocalValue(iso: string | null): string {
   const min = pad(d.getMinutes());
   return `${y}-${m}-${day}T${h}:${min}`;
 }
+
+const SortableMaterialTopicRow: React.FC<{
+  topic: AdminMaterialTopic;
+  selected: boolean;
+  onSelect: () => void;
+}> = ({ topic, selected, onSelect }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: topic.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : undefined
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={`flex items-stretch gap-2 rounded-md border transition-fast ${selected ? "border-primary bg-bg-code" : "border-border hover:bg-bg-secondary"}`}>
+      <button onClick={onSelect} className="flex-1 text-left px-3 py-2 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-mono text-text-primary truncate">{topic.order}. {topic.title}</div>
+            <div className="mt-0.5 text-[11px] font-mono text-text-secondary truncate">
+              {topic.theoryBlock ? `Theory v${topic.theoryBlock.version}` : "No theory"}
+            </div>
+          </div>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        className="px-2 flex items-center justify-center text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing"
+        aria-label="Drag to reorder"
+        title="Drag to reorder"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
+
 export const AdminDashboardPage: React.FC = () => {
   const {
     t
@@ -45,7 +100,73 @@ export const AdminDashboardPage: React.FC = () => {
   const [selectedClass, setSelectedClass] = useState<AdminClass | null>(null);
   const [showDeleteClassConfirm, setShowDeleteClassConfirm] = useState(false);
   const [classToDelete, setClassToDelete] = useState<number | null>(null);
+
+  // Materials (global topics & theory by language)
+  const [materialsLanguage, setMaterialsLanguage] = useState<"JAVA" | "PYTHON">("JAVA");
+  const [materialsTopics, setMaterialsTopics] = useState<AdminMaterialTopic[]>([]);
+  const [materialsSelectedTopicId, setMaterialsSelectedTopicId] = useState<number | null>(null);
+  const [materialsSelectedTopic, setMaterialsSelectedTopic] = useState<AdminMaterialTopic | null>(null);
+  const [materialsSaving, setMaterialsSaving] = useState(false);
+  const [materialsDirty, setMaterialsDirty] = useState(false);
+  const [materialsReordering, setMaterialsReordering] = useState(false);
+
+  const [materialsDiagnostics, setMaterialsDiagnostics] = useState<AdminMaterialsDiagnostics | null>(null);
+  const [materialsLegacyImporting, setMaterialsLegacyImporting] = useState(false);
+
+  const [materialsTheoryDirty, setMaterialsTheoryDirty] = useState(false);
+  const [materialsAutoSaveState, setMaterialsAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const materialsAutoSaveSeq = useRef(0);
+
+  const [showTheoryHistory, setShowTheoryHistory] = useState(false);
+  const [theoryHistoryLoading, setTheoryHistoryLoading] = useState(false);
+  const [theoryRevisions, setTheoryRevisions] = useState<AdminTheoryBlockRevision[]>([]);
+  const [theorySelectedVersion, setTheorySelectedVersion] = useState<number | null>(null);
+  const [theorySelectedSnapshot, setTheorySelectedSnapshot] = useState<{ title: string; content: string; level: number | null; tags: any } | null>(null);
+  const [theoryRollbackBusy, setTheoryRollbackBusy] = useState(false);
+  const [theoryRollbackComment, setTheoryRollbackComment] = useState("");
+
+  const [showCreateMaterialTopic, setShowCreateMaterialTopic] = useState(false);
+  const [creatingMaterialTopic, setCreatingMaterialTopic] = useState(false);
+  const [newMaterialTopic, setNewMaterialTopic] = useState({
+    title: "",
+    description: "",
+    order: "",
+    language: "JAVA" as "JAVA" | "PYTHON",
+    theoryContent: ""
+  });
+  const [showDeleteMaterialConfirm, setShowDeleteMaterialConfirm] = useState(false);
+  const [materialToDelete, setMaterialToDelete] = useState<AdminMaterialTopic | null>(null);
+  const [materialDraft, setMaterialDraft] = useState<{
+    title: string;
+    description: string;
+    order: string;
+    language: "JAVA" | "PYTHON";
+    theoryTitle: string;
+    theoryContent: string;
+  } | null>(null);
+  const [materialPreview, setMaterialPreview] = useState(false);
+
+  const [showImportMaterialsYaml, setShowImportMaterialsYaml] = useState(false);
+  const [materialsYamlText, setMaterialsYamlText] = useState<string>("");
+  const [materialsYamlMode, setMaterialsYamlMode] = useState<"merge" | "replace">("merge");
+  const [materialsYamlImporting, setMaterialsYamlImporting] = useState(false);
+  const [materialsYamlFileKey, setMaterialsYamlFileKey] = useState(0);
+
+  const [libraryStatus, setLibraryStatus] = useState<AdminLibraryTaskStatus>("PENDING");
+  const [libraryTasks, setLibraryTasks] = useState<AdminLibraryTask[]>([]);
+  const [librarySelectedTaskId, setLibrarySelectedTaskId] = useState<number | null>(null);
+  const [librarySelectedTask, setLibrarySelectedTask] = useState<AdminLibraryTask | null>(null);
+  const [libraryRejectReason, setLibraryRejectReason] = useState("");
+  const [libraryActing, setLibraryActing] = useState(false);
+
   const [supportTickets, setSupportTickets] = useState<AdminSupportTicket[]>([]);
+  const [supportView, setSupportView] = useState<"chat" | "legacy">("chat");
+  const [supportConversations, setSupportConversations] = useState<AdminSupportChatConversation[]>([]);
+  const [supportSelectedConversationId, setSupportSelectedConversationId] = useState<number | null>(null);
+  const [supportMessages, setSupportMessages] = useState<AdminSupportChatMessage[]>([]);
+  const [supportChatLoading, setSupportChatLoading] = useState(false);
+  const [supportChatReplyText, setSupportChatReplyText] = useState("");
+  const [supportChatSendEmail, setSupportChatSendEmail] = useState(true);
   const [showSupportTicket, setShowSupportTicket] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<AdminSupportTicket | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -75,12 +196,98 @@ export const AdminDashboardPage: React.FC = () => {
   const [teachers, setTeachers] = useState<AdminUser[]>([]);
   useEffect(() => {
     loadData();
-  }, [activeTab, usersPage, usersFilter]);
+  }, [activeTab, usersPage, usersFilter, supportView, libraryStatus, materialsLanguage]);
+
+  const importMaterialsFromLegacyDb = async () => {
+    if (materialsLegacyImporting) return;
+    setMaterialsLegacyImporting(true);
+    try {
+      const res = await importAdminMaterialTopicsLegacy({
+        language: materialsLanguage,
+        mode: "merge"
+      });
+      const list = res.topics || [];
+      setMaterialsTopics(list);
+
+      const selected = list[0] || null;
+      setMaterialsSelectedTopic(selected);
+      setMaterialsSelectedTopicId(selected?.id ?? null);
+      setMaterialDraft(selected ? {
+        title: selected.title,
+        description: selected.description || "",
+        order: String(selected.order ?? 0),
+        language: selected.language,
+        theoryTitle: selected.theoryBlock?.title || selected.title,
+        theoryContent: selected.theoryBlock?.content || ""
+      } : null);
+      setMaterialsDirty(false);
+      setMaterialsTheoryDirty(false);
+      setMaterialsAutoSaveState("idle");
+
+      try {
+        const diag = await getAdminMaterialsDiagnostics({ language: materialsLanguage });
+        setMaterialsDiagnostics(diag);
+      } catch {
+        // ignore
+      }
+
+      alert(`Imported from legacy DB. created=${res.created}, updated=${res.updated}, skipped=${res.skipped}`);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to import legacy topics");
+    } finally {
+      setMaterialsLegacyImporting(false);
+    }
+  };
   useEffect(() => {
     if (activeTab === "classes") {
       loadTeachers();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "materials") return;
+    if (!materialsSelectedTopic || !materialDraft) return;
+    if (!materialsTheoryDirty) return;
+    if (materialsSaving || materialsReordering) return;
+
+    const content = materialDraft.theoryContent.trim();
+    const title = (materialDraft.theoryTitle || materialDraft.title).trim();
+    if (!content || !title) return;
+
+    const seq = ++materialsAutoSaveSeq.current;
+    const timer = window.setTimeout(async () => {
+      // Ignore if a newer autosave request is scheduled.
+      if (seq !== materialsAutoSaveSeq.current) return;
+
+      setMaterialsAutoSaveState("saving");
+      try {
+        const res = await updateAdminMaterialTopic(materialsSelectedTopic.id, {
+          theory: {
+            title,
+            content
+          },
+          theoryRevisionAction: "AUTO"
+        });
+        if (seq !== materialsAutoSaveSeq.current) return;
+
+        const updated = res.topic;
+        setMaterialsTopics(prev => prev.map(t => t.id === updated.id ? updated : t));
+        setMaterialsSelectedTopic(updated);
+        setMaterialsTheoryDirty(false);
+        setMaterialsAutoSaveState("saved");
+        window.setTimeout(() => {
+          setMaterialsAutoSaveState(s => s === "saved" ? "idle" : s);
+        }, 1500);
+      } catch (error: any) {
+        if (seq !== materialsAutoSaveSeq.current) return;
+        setMaterialsAutoSaveState("error");
+      }
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeTab, materialsSelectedTopic?.id, materialDraft?.theoryTitle, materialDraft?.theoryContent, materialsTheoryDirty, materialsSaving, materialsReordering]);
   const loadTeachers = async () => {
     try {
       const teachersData = await getAdminUsers({
@@ -109,9 +316,57 @@ export const AdminDashboardPage: React.FC = () => {
       } else if (activeTab === "classes") {
         const classesData = await getAdminClasses();
         setClasses(classesData.classes);
+      } else if (activeTab === "materials") {
+        const data = await getAdminMaterialTopics({
+          language: materialsLanguage
+        });
+        const list = data.topics || [];
+        setMaterialsTopics(list);
+
+        // Diagnostics: helps explain why list is empty (legacy topics, class topics, etc.)
+        try {
+          const diag = await getAdminMaterialsDiagnostics({ language: materialsLanguage });
+          setMaterialsDiagnostics(diag);
+        } catch {
+          setMaterialsDiagnostics(null);
+        }
+
+        const selected = materialsSelectedTopicId ? list.find(t => t.id === materialsSelectedTopicId) : list[0];
+        setMaterialsSelectedTopic(selected || null);
+        setMaterialsSelectedTopicId(selected?.id ?? null);
+        setMaterialDraft(selected ? {
+          title: selected.title,
+          description: selected.description || "",
+          order: String(selected.order ?? 0),
+          language: selected.language,
+          theoryTitle: selected.theoryBlock?.title || selected.title,
+          theoryContent: selected.theoryBlock?.content || ""
+        } : null);
+        setMaterialsDirty(false);
+        setMaterialsTheoryDirty(false);
+        setMaterialsAutoSaveState("idle");
+      } else if (activeTab === "library") {
+        const data = await getAdminLibraryTasks({
+          status: libraryStatus
+        });
+        setLibraryTasks(data.tasks);
+        const selected = librarySelectedTaskId ? data.tasks.find(t => t.id === librarySelectedTaskId) : data.tasks[0];
+        setLibrarySelectedTask(selected || null);
+        setLibrarySelectedTaskId(selected?.id ?? null);
+        if ((selected?.status ?? libraryStatus) !== "REJECTED") {
+          setLibraryRejectReason("");
+        }
       } else if (activeTab === "support") {
-        const data = await getAdminSupportTickets();
-        setSupportTickets(data.tickets);
+        if (supportView === "legacy") {
+          const data = await getAdminSupportTickets();
+          setSupportTickets(data.tickets);
+        } else {
+          const data = await getAdminSupportConversations();
+          setSupportConversations(data.conversations);
+          if (!supportSelectedConversationId && data.conversations?.length) {
+            setSupportSelectedConversationId(data.conversations[0].id);
+          }
+        }
       } else if (activeTab === "maintenance") {
         const data = await getAdminMaintenance();
         setMaintenanceState(data.state);
@@ -183,6 +438,122 @@ export const AdminDashboardPage: React.FC = () => {
     setReplyText("");
     setShowSupportTicket(true);
   };
+
+  const openSupportConversation = async (conversationId: number) => {
+    setSupportSelectedConversationId(conversationId);
+    setSupportChatLoading(true);
+    try {
+      const data = await getAdminSupportConversation(conversationId);
+      setSupportMessages(data.messages || []);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to load conversation");
+    } finally {
+      setSupportChatLoading(false);
+    }
+  };
+
+  const handleAdminSupportReply = async () => {
+    if (!supportSelectedConversationId) return;
+    const trimmed = supportChatReplyText.trim();
+    if (!trimmed) {
+      alert("Reply text is required");
+      return;
+    }
+    setSupportChatLoading(true);
+    try {
+      const res = await postAdminSupportConversationMessage(supportSelectedConversationId, {
+        text: trimmed,
+        sendEmail: supportChatSendEmail
+      });
+      setSupportChatReplyText("");
+      setSupportMessages(prev => [...prev, {
+        id: res.message.id,
+        senderType: "ADMIN",
+        text: res.message.text,
+        createdAt: res.message.createdAt,
+        attachments: []
+      }]);
+      const list = await getAdminSupportConversations();
+      setSupportConversations(list.conversations);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to send reply");
+    } finally {
+      setSupportChatLoading(false);
+    }
+  };
+
+  const downloadAdminAttachment = async (attachmentId: number) => {
+    try {
+      const { blob, filename } = await downloadSupportChatAttachment(attachmentId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to download");
+    }
+  };
+
+  const selectLibraryTask = (taskId: number) => {
+    setLibrarySelectedTaskId(taskId);
+    const task = libraryTasks.find(t => t.id === taskId) || null;
+    setLibrarySelectedTask(task);
+    setLibraryRejectReason(task?.rejectionReason || "");
+  };
+
+  const refreshLibraryTasks = async () => {
+    const data = await getAdminLibraryTasks({
+      status: libraryStatus
+    });
+    setLibraryTasks(data.tasks);
+    const nextSelected = data.tasks.find(t => t.id === librarySelectedTaskId) ?? data.tasks[0] ?? null;
+    setLibrarySelectedTaskId(nextSelected?.id ?? null);
+    setLibrarySelectedTask(nextSelected);
+  };
+
+  const handleApproveLibraryTask = async () => {
+    if (!librarySelectedTaskId || !librarySelectedTask) return;
+    if (librarySelectedTask.status !== "PENDING") {
+      alert("Only PENDING tasks can be approved");
+      return;
+    }
+    setLibraryActing(true);
+    try {
+      await approveAdminLibraryTask(librarySelectedTaskId);
+      await refreshLibraryTasks();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to approve task");
+    } finally {
+      setLibraryActing(false);
+    }
+  };
+
+  const handleRejectLibraryTask = async () => {
+    if (!librarySelectedTaskId || !librarySelectedTask) return;
+    if (librarySelectedTask.status !== "PENDING") {
+      alert("Only PENDING tasks can be rejected");
+      return;
+    }
+    const reason = libraryRejectReason.trim();
+    if (!reason) {
+      alert("Rejection reason is required");
+      return;
+    }
+    setLibraryActing(true);
+    try {
+      await rejectAdminLibraryTask(librarySelectedTaskId, reason);
+      await refreshLibraryTasks();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to reject task");
+    } finally {
+      setLibraryActing(false);
+    }
+  };
+
   const handleReplyToTicket = async () => {
     if (!selectedTicket) return;
     const trimmed = replyText.trim();
@@ -321,6 +692,332 @@ export const AdminDashboardPage: React.FC = () => {
     });
     setShowEditClass(true);
   };
+
+  const materialsSensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 6
+    }
+  }));
+
+  const handleMaterialsDragEnd = async (event: DragEndEvent) => {
+    const {
+      active,
+      over
+    } = event;
+    if (!over) return;
+    if (active.id === over.id) return;
+
+    const oldIndex = materialsTopics.findIndex(t => t.id === active.id);
+    const newIndex = materialsTopics.findIndex(t => t.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const optimistic = arrayMove(materialsTopics, oldIndex, newIndex).map((t, idx) => ({
+      ...t,
+      order: idx + 1
+    }));
+    setMaterialsTopics(optimistic);
+
+    const selectedId = materialsSelectedTopicId;
+    if (selectedId) {
+      const nextSelected = optimistic.find(t => t.id === selectedId) || null;
+      if (nextSelected) setMaterialsSelectedTopic(nextSelected);
+      if (!materialsDirty && materialDraft && nextSelected) {
+        setMaterialDraft({
+          ...materialDraft,
+          order: String(nextSelected.order ?? 0)
+        });
+      }
+    }
+
+    setMaterialsReordering(true);
+    try {
+      const res = await reorderAdminMaterialTopics({
+        language: materialsLanguage,
+        orderedIds: optimistic.map(t => t.id)
+      });
+      const list = res.topics || [];
+      setMaterialsTopics(list);
+      if (selectedId) {
+        const refreshed = list.find(t => t.id === selectedId) || null;
+        setMaterialsSelectedTopic(refreshed);
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to reorder topics");
+      try {
+        const data = await getAdminMaterialTopics({
+          language: materialsLanguage
+        });
+        setMaterialsTopics(data.topics || []);
+      } catch {
+        // ignore
+      }
+    } finally {
+      setMaterialsReordering(false);
+    }
+  };
+
+  const selectMaterialTopic = (topicId: number) => {
+    if (materialsDirty) {
+      const ok = confirm("You have unsaved changes. Discard them?");
+      if (!ok) return;
+    }
+    const selected = materialsTopics.find(t => t.id === topicId) || null;
+    setMaterialsSelectedTopicId(topicId);
+    setMaterialsSelectedTopic(selected);
+    setMaterialDraft(selected ? {
+      title: selected.title,
+      description: selected.description || "",
+      order: String(selected.order ?? 0),
+      language: selected.language,
+      theoryTitle: selected.theoryBlock?.title || selected.title,
+      theoryContent: selected.theoryBlock?.content || ""
+    } : null);
+    setMaterialsDirty(false);
+    setMaterialsTheoryDirty(false);
+    setMaterialsAutoSaveState("idle");
+    setMaterialPreview(false);
+  };
+
+  const openTheoryHistoryModal = async () => {
+    const theoryBlockId = materialsSelectedTopic?.theoryBlock?.id;
+    if (!theoryBlockId) {
+      alert("This topic has no theory yet");
+      return;
+    }
+    setShowTheoryHistory(true);
+    setTheoryHistoryLoading(true);
+    setTheoryRevisions([]);
+    setTheorySelectedVersion(null);
+    setTheorySelectedSnapshot(null);
+    setTheoryRollbackComment("");
+    try {
+      const res = await getAdminTheoryBlockRevisions(theoryBlockId);
+      const list = res.revisions || [];
+      setTheoryRevisions(list);
+
+      const v = list[0]?.version;
+      if (v) {
+        setTheorySelectedVersion(v);
+        const details = await getAdminTheoryBlockRevision(theoryBlockId, v);
+        setTheorySelectedSnapshot(details.snapshot);
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to load theory history");
+    } finally {
+      setTheoryHistoryLoading(false);
+    }
+  };
+
+  const selectTheoryRevision = async (version: number) => {
+    const theoryBlockId = materialsSelectedTopic?.theoryBlock?.id;
+    if (!theoryBlockId) return;
+    setTheorySelectedVersion(version);
+    setTheoryHistoryLoading(true);
+    try {
+      const details = await getAdminTheoryBlockRevision(theoryBlockId, version);
+      setTheorySelectedSnapshot(details.snapshot);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to load revision");
+    } finally {
+      setTheoryHistoryLoading(false);
+    }
+  };
+
+  const handleRollbackTheory = async () => {
+    const theoryBlockId = materialsSelectedTopic?.theoryBlock?.id;
+    if (!theoryBlockId || !theorySelectedVersion) return;
+
+    if (materialsDirty || materialsTheoryDirty) {
+      const ok = confirm("You have unsaved changes in the editor. Rolling back will refresh data and discard them. Continue?");
+      if (!ok) return;
+    }
+
+    const ok = confirm(`Rollback theory to version ${theorySelectedVersion}?`);
+    if (!ok) return;
+
+    setTheoryRollbackBusy(true);
+    try {
+      await rollbackAdminTheoryBlockRevision(theoryBlockId, theorySelectedVersion, {
+        comment: theoryRollbackComment.trim() || undefined
+      });
+      setShowTheoryHistory(false);
+      setTheorySelectedSnapshot(null);
+      setTheorySelectedVersion(null);
+      await loadData();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to rollback");
+    } finally {
+      setTheoryRollbackBusy(false);
+    }
+  };
+
+  const handleSaveMaterial = async () => {
+    if (!materialsSelectedTopic || !materialDraft) return;
+    const title = materialDraft.title.trim();
+    if (!title) {
+      alert("Title is required");
+      return;
+    }
+    const orderNum = materialDraft.order.trim() ? parseInt(materialDraft.order.trim(), 10) : 0;
+    if (!Number.isFinite(orderNum) || orderNum < 0) {
+      alert("Order must be a non-negative number");
+      return;
+    }
+
+    setMaterialsSaving(true);
+    try {
+      const theoryContent = materialDraft.theoryContent.trim();
+      const payload: any = {
+        title,
+        description: materialDraft.description.trim() || null,
+        order: orderNum,
+        language: materialDraft.language
+      };
+      if (theoryContent) {
+        payload.theory = {
+          title: materialDraft.theoryTitle.trim() || title,
+          content: theoryContent
+        };
+      }
+
+      const res = await updateAdminMaterialTopic(materialsSelectedTopic.id, payload);
+      const updated = res.topic;
+
+      setMaterialsTopics(prev => prev.map(t => t.id === updated.id ? updated : t));
+      setMaterialsSelectedTopic(updated);
+      setMaterialsSelectedTopicId(updated.id);
+      setMaterialDraft({
+        title: updated.title,
+        description: updated.description || "",
+        order: String(updated.order ?? 0),
+        language: updated.language,
+        theoryTitle: updated.theoryBlock?.title || updated.title,
+        theoryContent: updated.theoryBlock?.content || ""
+      });
+      setMaterialsDirty(false);
+      setMaterialsTheoryDirty(false);
+      setMaterialsAutoSaveState("idle");
+      alert("Saved");
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to save");
+    } finally {
+      setMaterialsSaving(false);
+    }
+  };
+
+  const handleCreateMaterial = async () => {
+    const title = newMaterialTopic.title.trim();
+    if (!title) {
+      alert("Title is required");
+      return;
+    }
+    const orderStr = newMaterialTopic.order.trim();
+    const orderNum = orderStr ? parseInt(orderStr, 10) : undefined;
+    if (orderStr && (!Number.isFinite(orderNum) || (orderNum as number) < 0)) {
+      alert("Order must be a non-negative number");
+      return;
+    }
+
+    setCreatingMaterialTopic(true);
+    try {
+      const res = await createAdminMaterialTopic({
+        title,
+        description: newMaterialTopic.description.trim() || null,
+        order: orderNum,
+        language: newMaterialTopic.language,
+        theory: newMaterialTopic.theoryContent.trim() ? {
+          title,
+          content: newMaterialTopic.theoryContent.trim()
+        } : null
+      });
+      const created = res.topic;
+      setShowCreateMaterialTopic(false);
+      setNewMaterialTopic({
+        title: "",
+        description: "",
+        order: "",
+        language: newMaterialTopic.language,
+        theoryContent: ""
+      });
+
+      // Refresh list quickly and select created.
+      setMaterialsTopics(prev => [...prev, created].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+      selectMaterialTopic(created.id);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to create topic");
+    } finally {
+      setCreatingMaterialTopic(false);
+    }
+  };
+
+  const handleImportMaterialsYaml = async () => {
+    const yaml = materialsYamlText.trim();
+    if (!yaml) {
+      alert("YAML is required");
+      return;
+    }
+
+    if (materialsDirty || materialsTheoryDirty) {
+      const ok = confirm("You have unsaved changes. Import will refresh the list and may discard local edits. Continue?");
+      if (!ok) return;
+    }
+
+    setMaterialsYamlImporting(true);
+    try {
+      const res = await importAdminMaterialTopicsYaml({
+        language: materialsLanguage,
+        yaml,
+        mode: materialsYamlMode
+      });
+      const list = res.topics || [];
+      setMaterialsTopics(list);
+      setMaterialsSelectedTopicId(null);
+      setMaterialsSelectedTopic(null);
+      setMaterialDraft(null);
+
+      // Select first topic after import.
+      if (list.length) {
+        setMaterialsSelectedTopicId(list[0].id);
+        setMaterialsSelectedTopic(list[0]);
+        setMaterialDraft({
+          title: list[0].title,
+          description: list[0].description || "",
+          order: String(list[0].order ?? 0),
+          language: list[0].language,
+          theoryTitle: list[0].theoryBlock?.title || list[0].title,
+          theoryContent: list[0].theoryBlock?.content || ""
+        });
+      }
+
+      setMaterialsDirty(false);
+      setMaterialsTheoryDirty(false);
+      setMaterialsAutoSaveState("idle");
+      setShowImportMaterialsYaml(false);
+      alert(`Imported: created=${res.created}, updated=${res.updated}, skipped=${res.skipped}`);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to import YAML");
+    } finally {
+      setMaterialsYamlImporting(false);
+    }
+  };
+
+  const handleDeleteMaterial = async () => {
+    if (!materialToDelete) return;
+    try {
+      await deleteAdminMaterialTopic(materialToDelete.id);
+      setMaterialsTopics(prev => prev.filter(t => t.id !== materialToDelete.id));
+      if (materialsSelectedTopicId === materialToDelete.id) {
+        setMaterialsSelectedTopicId(null);
+        setMaterialsSelectedTopic(null);
+        setMaterialDraft(null);
+      }
+      setShowDeleteMaterialConfirm(false);
+      setMaterialToDelete(null);
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to delete topic");
+    }
+  };
+
   const filteredUsers = users.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase()) || u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || u.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) || u.lastName?.toLowerCase().includes(searchQuery.toLowerCase()));
   if (loading && activeTab === "stats") {
     return <div className="h-full flex items-center justify-center text-text-primary font-mono">
@@ -351,6 +1048,16 @@ export const AdminDashboardPage: React.FC = () => {
         <Button variant={activeTab === "classes" ? "primary" : "secondary"} onClick={() => setActiveTab("classes")} className="flex items-center gap-2">
           <BookOpen className="w-4 h-4" />
           Classes
+        </Button>
+
+        <Button variant={activeTab === "materials" ? "primary" : "secondary"} onClick={() => setActiveTab("materials")} className="flex items-center gap-2">
+          <FileText className="w-4 h-4" />
+          Materials
+        </Button>
+
+        <Button variant={activeTab === "library" ? "primary" : "secondary"} onClick={() => setActiveTab("library")} className="flex items-center gap-2">
+          <Library className="w-4 h-4" />
+          Library
         </Button>
 
         <Button variant={activeTab === "support" ? "primary" : "secondary"} onClick={() => setActiveTab("support")} className="flex items-center gap-2">
@@ -546,48 +1253,518 @@ export const AdminDashboardPage: React.FC = () => {
           </div>}
 
         {}
-        {activeTab === "support" && <div className="space-y-4">
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-bg-secondary border-b border-border">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">ID</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Email</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Subject</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Status</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Created</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Answered</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {supportTickets.map(t => <tr key={t.id} className="border-b border-border hover:bg-bg-secondary transition-fast">
-                        <td className="px-4 py-2 text-sm text-text-primary font-mono">{t.id}</td>
-                        <td className="px-4 py-2 text-sm text-text-secondary font-mono">{t.userEmail}</td>
-                        <td className="px-4 py-2 text-sm text-text-primary">{t.subject}</td>
-                        <td className="px-4 py-2 text-sm text-text-secondary font-mono">{t.status}</td>
-                        <td className="px-4 py-2 text-sm text-text-secondary font-mono">
-                          {new Date(t.createdAt).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-text-secondary font-mono">
-                          {t.answeredAt ? new Date(t.answeredAt).toLocaleString() : "-"}
-                        </td>
-                        <td className="px-4 py-2">
-                          <Button variant="secondary" size="sm" onClick={() => openSupportTicket(t)}>
-                            View / Reply
-                          </Button>
-                        </td>
-                      </tr>)}
-                    {supportTickets.length === 0 && <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-text-secondary font-mono text-sm">
-                          No tickets yet.
-                        </td>
-                      </tr>}
-                  </tbody>
-                </table>
+        {activeTab === "materials" && <div className="space-y-4">
+            <Card className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-mono font-semibold text-text-primary">Learning materials</div>
+                  <div className="mt-1 text-xs font-mono text-text-secondary">Global topics + theory by language (visible for all classes of that language).</div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-mono text-text-secondary">Language</div>
+                  <select value={materialsLanguage} onChange={e => {
+                setMaterialsLanguage(e.target.value as any);
+                setMaterialsSelectedTopicId(null);
+                setMaterialsSelectedTopic(null);
+                setMaterialDraft(null);
+                setMaterialsDirty(false);
+              }} className="px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono text-sm">
+                    <option value="JAVA">JAVA</option>
+                    <option value="PYTHON">PYTHON</option>
+                  </select>
+
+                  <Button variant="secondary" onClick={() => {
+                setMaterialsYamlText("language: " + materialsLanguage + "\n" +
+                  "topics:\n" +
+                  "  - title: Introduction\n" +
+                  "    description: Basic concepts\n" +
+                  "    order: 1\n" +
+                  "    theory:\n" +
+                  "      title: Introduction\n" +
+                  "      content: |\n" +
+                  "        # Hello\n" +
+                  "        This is **theory-only** markdown.\n");
+                setMaterialsYamlMode("merge");
+                setMaterialsYamlFileKey(k => k + 1);
+                setShowImportMaterialsYaml(true);
+              }}>
+                    Import YAML
+                  </Button>
+
+                  <Button onClick={() => {
+                setNewMaterialTopic({
+                  title: "",
+                  description: "",
+                  order: "",
+                  language: materialsLanguage,
+                  theoryContent: ""
+                });
+                setShowCreateMaterialTopic(true);
+              }} className="flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Create topic
+                  </Button>
+                </div>
               </div>
             </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="p-4 md:col-span-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-mono font-semibold text-text-primary">Topics</div>
+                  <div className="text-xs font-mono text-text-secondary">{materialsReordering ? "Reordering…" : materialsTopics.length}</div>
+                </div>
+
+                <DndContext sensors={materialsSensors} collisionDetection={closestCenter} onDragEnd={handleMaterialsDragEnd}>
+                  <SortableContext items={materialsTopics.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                    <div className="mt-3 space-y-2">
+                      {materialsTopics.map(topic => {
+                        const isSelected = materialsSelectedTopicId === topic.id;
+                        return <SortableMaterialTopicRow key={topic.id} topic={topic} selected={isSelected} onSelect={() => selectMaterialTopic(topic.id)} />;
+                      })}
+                      {!materialsTopics.length && <div className="text-sm font-mono text-text-secondary space-y-2">
+                          <div>No global topics for {materialsLanguage}.</div>
+
+                          {materialsDiagnostics ? <div className="text-[11px] font-mono text-text-secondary opacity-80">
+                              In DB: legacy topics={materialsDiagnostics.legacyTopics}, class topics={materialsDiagnostics.topicsNewClass}
+                            </div> : null}
+
+                          {materialsDiagnostics?.legacyTopics ? <div>
+                              <Button variant="secondary" size="sm" onClick={importMaterialsFromLegacyDb} disabled={materialsLegacyImporting}>
+                                {materialsLegacyImporting ? "Importing…" : "Import from existing DB topics"}
+                              </Button>
+                            </div> : null}
+
+                          {materialsDiagnostics?.topicsNewClass ? <div className="text-[11px] font-mono text-text-secondary opacity-80">
+                              Note: class-specific topics exist, but this page shows only global topics (class = NULL).
+                            </div> : null}
+                        </div>}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </Card>
+
+              <Card className="p-4 md:col-span-2">
+                {!materialsSelectedTopic || !materialDraft ? <div className="text-sm font-mono text-text-secondary">Select a topic to edit.</div> : <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-mono font-semibold text-text-primary">Edit topic</div>
+                        <div className="mt-1 text-xs font-mono text-text-secondary">ID: {materialsSelectedTopic.id}{materialsDirty ? " • Unsaved changes" : ""}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="secondary" onClick={() => setMaterialPreview(p => !p)}>
+                          {materialPreview ? "Hide preview" : "Preview"}
+                        </Button>
+                        {materialsAutoSaveState !== "idle" && <div className={`text-xs font-mono ${materialsAutoSaveState === "error" ? "text-red-500" : "text-text-secondary"}`}>
+                            {materialsAutoSaveState === "saving" ? "Auto-saving…" : materialsAutoSaveState === "saved" ? "Auto-saved" : "Auto-save failed"}
+                          </div>}
+                        <Button onClick={handleSaveMaterial} disabled={materialsSaving || !materialsDirty}>
+                          <Save className="w-4 h-4 mr-2" />
+                          {materialsSaving ? "Saving..." : "Save"}
+                        </Button>
+                        <Button variant="secondary" onClick={() => {
+                  setMaterialToDelete(materialsSelectedTopic);
+                  setShowDeleteMaterialConfirm(true);
+                }} className="text-red-500 hover:text-red-700">
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-mono text-text-secondary mb-1">Title</label>
+                        <Input value={materialDraft.title} onChange={e => {
+                    setMaterialDraft({
+                      ...materialDraft,
+                      title: e.target.value
+                    });
+                    setMaterialsDirty(true);
+                  }} />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-mono text-text-secondary mb-1">Order</label>
+                        <Input value={materialDraft.order} onChange={e => {
+                    setMaterialDraft({
+                      ...materialDraft,
+                      order: e.target.value
+                    });
+                    setMaterialsDirty(true);
+                  }} />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-mono text-text-secondary mb-1">Language</label>
+                        <select value={materialDraft.language} onChange={e => {
+                    setMaterialDraft({
+                      ...materialDraft,
+                      language: e.target.value as any
+                    });
+                    setMaterialsDirty(true);
+                  }} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono text-sm">
+                          <option value="JAVA">JAVA</option>
+                          <option value="PYTHON">PYTHON</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-mono text-text-secondary mb-1">Description</label>
+                      <textarea value={materialDraft.description} onChange={e => {
+                  setMaterialDraft({
+                    ...materialDraft,
+                    description: e.target.value
+                  });
+                  setMaterialsDirty(true);
+                }} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[80px]" />
+                    </div>
+
+                    <div className="border-t border-border pt-4">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="text-sm font-mono font-semibold text-text-primary">Theory (Markdown)</div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="secondary" size="sm" onClick={openTheoryHistoryModal} disabled={!materialsSelectedTopic.theoryBlock}>
+                            <History className="w-4 h-4 mr-2" />
+                            History
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={async () => {
+                    const ok = confirm("Remove theory from this topic?");
+                    if (!ok) return;
+                    try {
+                      setMaterialsSaving(true);
+                      const res = await updateAdminMaterialTopic(materialsSelectedTopic.id, {
+                        clearTheory: true
+                      });
+                      const updated = res.topic;
+                      setMaterialsTopics(prev => prev.map(t => t.id === updated.id ? updated : t));
+                      setMaterialsSelectedTopic(updated);
+                      setMaterialDraft({
+                        title: updated.title,
+                        description: updated.description || "",
+                        order: String(updated.order ?? 0),
+                        language: updated.language,
+                        theoryTitle: updated.title,
+                        theoryContent: ""
+                      });
+                      setMaterialsDirty(false);
+                      setMaterialsTheoryDirty(false);
+                      setMaterialsAutoSaveState("idle");
+                    } catch (error: any) {
+                      alert(error.response?.data?.message || "Failed to remove theory");
+                    } finally {
+                      setMaterialsSaving(false);
+                    }
+                  }}>
+                          Remove theory
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <label className="block text-xs font-mono text-text-secondary mb-1">Theory title</label>
+                          <Input value={materialDraft.theoryTitle} onChange={e => {
+                      setMaterialDraft({
+                        ...materialDraft,
+                        theoryTitle: e.target.value
+                      });
+                      setMaterialsDirty(true);
+                      setMaterialsTheoryDirty(true);
+                      setMaterialsAutoSaveState("idle");
+                    }} />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-mono text-text-secondary mb-1">Theory content</label>
+                          <textarea value={materialDraft.theoryContent} onChange={e => {
+                      setMaterialDraft({
+                        ...materialDraft,
+                        theoryContent: e.target.value
+                      });
+                      setMaterialsDirty(true);
+                      setMaterialsTheoryDirty(true);
+                      setMaterialsAutoSaveState("idle");
+                    }} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[240px]" placeholder="Write theory in Markdown..." />
+                        </div>
+
+                        {materialPreview && <div className="p-3 rounded-md border border-border bg-bg-code">
+                            <div className="text-xs font-mono text-text-secondary mb-2">Preview</div>
+                            <MarkdownView content={materialDraft.theoryContent || ""} />
+                          </div>}
+                      </div>
+                    </div>
+                  </div>}
+              </Card>
+            </div>
+          </div>}
+
+        {}
+        {activeTab === "library" && <div className="space-y-4">
+            <Card className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-mono font-semibold text-text-primary">Task library moderation</div>
+                  <div className="mt-1 text-xs font-mono text-text-secondary">
+                    Review teacher submissions and approve/reject for the public library.
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-mono text-text-secondary">Status</div>
+                  <select value={libraryStatus} onChange={e => {
+                setLibraryStatus(e.target.value as AdminLibraryTaskStatus);
+                setLibrarySelectedTaskId(null);
+                setLibrarySelectedTask(null);
+                setLibraryRejectReason("");
+              }} className="px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono text-sm">
+                    <option value="PENDING">PENDING</option>
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="REJECTED">REJECTED</option>
+                    <option value="DRAFT">DRAFT</option>
+                  </select>
+                </div>
+              </div>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="p-4 md:col-span-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-mono font-semibold text-text-primary">Tasks</div>
+                  <div className="text-xs font-mono text-text-secondary">{libraryTasks.length}</div>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {libraryTasks.map(task => {
+                const isSelected = librarySelectedTaskId === task.id;
+                const statusClass = task.status === "PENDING" ? "border-amber-400/60 text-amber-200 bg-amber-400/10" : task.status === "APPROVED" ? "border-emerald-400/60 text-emerald-200 bg-emerald-400/10" : task.status === "REJECTED" ? "border-red-400/60 text-red-200 bg-red-400/10" : "border-border text-text-secondary bg-bg-secondary";
+                return <button key={task.id} onClick={() => selectLibraryTask(task.id)} className={`w-full text-left rounded-md border px-3 py-2 transition-fast ${isSelected ? "border-primary bg-bg-code" : "border-border hover:bg-bg-secondary"}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-mono text-text-primary truncate">{task.title}</div>
+                            <div className="mt-0.5 text-[11px] font-mono text-text-secondary truncate">
+                              {task.author?.username ? `${task.author.username}${task.author.email ? ` (${task.author.email})` : ""}` : "Unknown author"}
+                            </div>
+                          </div>
+                          <div className={`text-[10px] font-mono px-2 py-0.5 rounded border ${statusClass}`}>{task.status}</div>
+                        </div>
+                        <div className="mt-1 text-[11px] font-mono text-text-secondary flex items-center justify-between gap-2">
+                          <span>{task.lang}</span>
+                          <span>#{task.id}</span>
+                        </div>
+                      </button>;
+              })}
+                  {libraryTasks.length === 0 && <div className="text-xs font-mono text-text-secondary">No tasks for this filter.</div>}
+                </div>
+              </Card>
+
+              <Card className="p-4 md:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-mono font-semibold text-text-primary">Details</div>
+                  <div className="text-xs font-mono text-text-secondary">{librarySelectedTask ? `#${librarySelectedTask.id}` : "Select a task"}</div>
+                </div>
+
+                {!librarySelectedTask ? <div className="mt-4 text-sm text-text-secondary font-mono">Select a task from the list to review it.</div> : <div className="mt-4 space-y-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-mono font-semibold text-text-primary">{librarySelectedTask.title}</div>
+                        <div className="mt-1 text-xs font-mono text-text-secondary">
+                          Author: {librarySelectedTask.author?.username || "Unknown"}{librarySelectedTask.author?.email ? ` (${librarySelectedTask.author.email})` : ""}
+                        </div>
+                      </div>
+                      <div className={`px-3 py-1 text-xs font-mono border rounded-md ${librarySelectedTask.status === "PENDING" ? "border-amber-400/60 bg-amber-400/10 text-amber-200" : librarySelectedTask.status === "APPROVED" ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-200" : librarySelectedTask.status === "REJECTED" ? "border-red-400/60 bg-red-400/10 text-red-200" : "border-border bg-bg-code text-text-secondary"}`}>
+                        {librarySelectedTask.status}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="text-xs font-mono text-text-secondary">
+                        <div>Language: <span className="text-text-primary">{librarySelectedTask.lang}</span></div>
+                        <div className="mt-1">Max attempts: <span className="text-text-primary">{librarySelectedTask.maxAttempts}</span></div>
+                      </div>
+                      <div className="text-xs font-mono text-text-secondary">
+                        <div>Submitted: <span className="text-text-primary">{librarySelectedTask.submittedAt ? new Date(librarySelectedTask.submittedAt).toLocaleString() : "-"}</span></div>
+                        <div className="mt-1">Published: <span className="text-text-primary">{librarySelectedTask.publishedAt ? new Date(librarySelectedTask.publishedAt).toLocaleString() : "-"}</span></div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-mono text-text-secondary mb-1">Description</div>
+                      <div className="rounded-md border border-border bg-bg-code p-3 text-sm text-text-primary whitespace-pre-wrap">
+                        {librarySelectedTask.description || "(empty)"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-mono text-text-secondary mb-1">Template</div>
+                      <pre className="rounded-md border border-border bg-bg-code p-3 text-xs text-text-primary overflow-auto max-h-[45vh]">{librarySelectedTask.template || ""}</pre>
+                    </div>
+
+                    {librarySelectedTask.status === "REJECTED" && <div>
+                        <div className="text-xs font-mono text-text-secondary mb-1">Rejection reason</div>
+                        <div className="rounded-md border border-red-400/40 bg-red-400/10 p-3 text-sm text-red-100 whitespace-pre-wrap">
+                          {librarySelectedTask.rejectionReason || "-"}
+                        </div>
+                      </div>}
+
+                    <div className="pt-2 border-t border-border">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-mono text-text-secondary">
+                          Updated: <span className="text-text-primary">{new Date(librarySelectedTask.updatedAt).toLocaleString()}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="primary" onClick={handleApproveLibraryTask} disabled={libraryActing || librarySelectedTask.status !== "PENDING"} className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Approve
+                          </Button>
+                          <Button variant="secondary" onClick={handleRejectLibraryTask} disabled={libraryActing || librarySelectedTask.status !== "PENDING"} className="flex items-center gap-2 text-red-500 hover:text-red-700">
+                            <XCircle className="w-4 h-4" />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+
+                      {librarySelectedTask.status === "PENDING" && <div className="mt-3">
+                          <div className="text-xs font-mono text-text-secondary mb-1">Rejection reason (required for Reject)</div>
+                          <textarea value={libraryRejectReason} onChange={e => setLibraryRejectReason(e.target.value)} rows={3} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="Explain what needs fixing…" />
+                        </div>}
+                    </div>
+                  </div>}
+              </Card>
+            </div>
+          </div>}
+
+        {}
+        {activeTab === "support" && <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant={supportView === "chat" ? "primary" : "secondary"} onClick={() => setSupportView("chat")}>
+                Chat
+              </Button>
+              <Button variant={supportView === "legacy" ? "primary" : "secondary"} onClick={() => setSupportView("legacy")}>
+                Legacy tickets
+              </Button>
+            </div>
+
+            {supportView === "chat" ? <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="p-4 md:col-span-1">
+                  <div className="text-sm font-mono font-semibold text-text-primary">Conversations</div>
+                  <div className="mt-3 space-y-2">
+                    {supportConversations.map(c => <button key={c.id} onClick={() => openSupportConversation(c.id)} className={`w-full text-left rounded-md border px-3 py-2 transition-fast ${supportSelectedConversationId === c.id ? "border-primary bg-bg-code" : "border-border hover:bg-bg-secondary"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-mono text-text-secondary truncate">{c.userEmail}</div>
+                            <div className="text-sm font-mono text-text-primary truncate">{c.subject}</div>
+                          </div>
+                          <div className={`text-[10px] font-mono px-2 py-0.5 rounded border ${c.status === "OPEN" ? "border-emerald-400/60 text-emerald-200 bg-emerald-400/10" : "border-border text-text-secondary bg-bg-secondary"}`}>
+                            {c.status}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-[11px] text-text-secondary font-mono">
+                          {new Date(c.lastMessageAt).toLocaleString()}
+                        </div>
+                      </button>)}
+                    {supportConversations.length === 0 && <div className="text-xs font-mono text-text-secondary">No conversations yet.</div>}
+                  </div>
+                </Card>
+
+                <Card className="p-4 md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-mono font-semibold text-text-primary">Thread</div>
+                    <div className="text-xs font-mono text-text-secondary">
+                      {supportSelectedConversationId ? `#${supportSelectedConversationId}` : "Select a conversation"}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-md border border-border bg-bg-code p-3 h-[55vh] overflow-auto">
+                    {supportChatLoading && <div className="text-xs font-mono text-text-secondary">Loading…</div>}
+                    {!supportChatLoading && supportSelectedConversationId && supportMessages.length === 0 && <div className="text-xs font-mono text-text-secondary">No messages.</div>}
+                    <div className="space-y-3">
+                      {supportMessages.map(m => {
+                    const isUser = m.senderType === "USER";
+                    return <div key={m.id} className={`flex ${isUser ? "justify-start" : "justify-end"}`}>
+                            <div className={`max-w-[85%] rounded-lg border px-3 py-2 ${isUser ? "border-border bg-bg-secondary" : "border-primary/50 bg-primary/10"}`}>
+                              <div className="text-[11px] font-mono text-text-secondary flex items-center justify-between gap-3">
+                                <span>{m.senderType}</span>
+                                <span>{new Date(m.createdAt).toLocaleString()}</span>
+                              </div>
+                              {m.text && <div className="mt-1 text-sm whitespace-pre-wrap">{m.text}</div>}
+
+                              {m.attachments?.length ? <div className="mt-2 space-y-1">
+                                  {m.attachments.map(a => <div key={a.id} className="flex items-center justify-between gap-2 border border-border rounded-md px-2 py-1 bg-bg-base">
+                                      <div className="min-w-0">
+                                        <div className="text-xs font-mono text-text-primary truncate">{a.originalName}</div>
+                                        <div className="text-[11px] font-mono text-text-secondary">{Math.max(0, Math.round((a.sizeBytes || 0) / 1024))} KB</div>
+                                      </div>
+                                      <Button variant="secondary" size="sm" onClick={() => downloadAdminAttachment(a.id)}>
+                                        Download
+                                      </Button>
+                                    </div>)}
+                                </div> : null}
+                            </div>
+                          </div>;
+                  })}
+                    </div>
+                  </div>
+
+                  {supportSelectedConversationId && <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-mono text-text-secondary">Reply</div>
+                        <label className="text-xs font-mono text-text-secondary flex items-center gap-2">
+                          <input type="checkbox" checked={supportChatSendEmail} onChange={e => setSupportChatSendEmail(e.target.checked)} />
+                          send email
+                        </label>
+                      </div>
+                      <textarea value={supportChatReplyText} onChange={e => setSupportChatReplyText(e.target.value)} rows={4} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="Type an admin reply…" />
+                      <div className="flex justify-end">
+                        <Button variant="primary" onClick={handleAdminSupportReply} disabled={supportChatLoading}>
+                          {supportChatLoading ? "Sending…" : "Send"}
+                        </Button>
+                      </div>
+                    </div>}
+                </Card>
+              </div> : <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-bg-secondary border-b border-border">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">ID</th>
+                        <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Email</th>
+                        <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Subject</th>
+                        <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Status</th>
+                        <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Created</th>
+                        <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Answered</th>
+                        <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {supportTickets.map(t => <tr key={t.id} className="border-b border-border hover:bg-bg-secondary transition-fast">
+                          <td className="px-4 py-2 text-sm text-text-primary font-mono">{t.id}</td>
+                          <td className="px-4 py-2 text-sm text-text-secondary font-mono">{t.userEmail}</td>
+                          <td className="px-4 py-2 text-sm text-text-primary">{t.subject}</td>
+                          <td className="px-4 py-2 text-sm text-text-secondary font-mono">{t.status}</td>
+                          <td className="px-4 py-2 text-sm text-text-secondary font-mono">
+                            {new Date(t.createdAt).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-text-secondary font-mono">
+                            {t.answeredAt ? new Date(t.answeredAt).toLocaleString() : "-"}
+                          </td>
+                          <td className="px-4 py-2">
+                            <Button variant="secondary" size="sm" onClick={() => openSupportTicket(t)}>
+                              View / Reply
+                            </Button>
+                          </td>
+                        </tr>)}
+                      {supportTickets.length === 0 && <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-text-secondary font-mono text-sm">
+                            No tickets yet.
+                          </td>
+                        </tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>}
           </div>}
 
         {}
@@ -638,6 +1815,202 @@ export const AdminDashboardPage: React.FC = () => {
             </Card>
           </div>}
       </div>
+
+      {}
+      <Modal isOpen={showCreateMaterialTopic} onClose={() => setShowCreateMaterialTopic(false)} title="Create topic (materials)">
+        <div className="space-y-4">
+          <Input label="Title" value={newMaterialTopic.title} onChange={e => setNewMaterialTopic({
+          ...newMaterialTopic,
+          title: e.target.value
+        })} required />
+
+          <div>
+            <label className="block text-sm font-mono text-text-primary mb-1">Description</label>
+            <textarea value={newMaterialTopic.description} onChange={e => setNewMaterialTopic({
+            ...newMaterialTopic,
+            description: e.target.value
+          })} rows={4} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="Optional" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-mono text-text-primary mb-1">Language</label>
+              <select value={newMaterialTopic.language} onChange={e => setNewMaterialTopic({
+              ...newMaterialTopic,
+              language: e.target.value as any
+            })} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono">
+                <option value="JAVA">JAVA</option>
+                <option value="PYTHON">PYTHON</option>
+              </select>
+            </div>
+            <Input label="Order (optional)" value={newMaterialTopic.order} onChange={e => setNewMaterialTopic({
+            ...newMaterialTopic,
+            order: e.target.value
+          })} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-mono text-text-primary mb-1">Theory (Markdown, optional)</label>
+            <textarea value={newMaterialTopic.theoryContent} onChange={e => setNewMaterialTopic({
+            ...newMaterialTopic,
+            theoryContent: e.target.value
+          })} rows={10} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="If provided, it will be validated as theory-only (no practice/tasks sections)." />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowCreateMaterialTopic(false)} disabled={creatingMaterialTopic}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateMaterial} disabled={creatingMaterialTopic}>
+              {creatingMaterialTopic ? "Creating..." : "Create"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showDeleteMaterialConfirm} onClose={() => {
+      setShowDeleteMaterialConfirm(false);
+      setMaterialToDelete(null);
+    }} title="Delete topic">
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary font-mono">
+            Delete topic <span className="text-text-primary">{materialToDelete?.title}</span>?
+          </p>
+          <p className="text-xs text-text-secondary font-mono">
+            Note: deletion is blocked if the topic still has tasks/control works.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => {
+            setShowDeleteMaterialConfirm(false);
+            setMaterialToDelete(null);
+          }}>
+              Cancel
+            </Button>
+            <Button onClick={handleDeleteMaterial} className="text-red-500 hover:text-red-700">
+              Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showImportMaterialsYaml} onClose={() => setShowImportMaterialsYaml(false)} title={`Import materials from YAML (${materialsLanguage})`}>
+        <div className="space-y-4">
+          <div className="text-xs font-mono text-text-secondary">
+            Imports global topics (class = NULL) for the selected language. YAML can be pasted or uploaded from a .yml/.yaml file.
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-mono text-text-primary mb-1">Mode</label>
+              <select value={materialsYamlMode} onChange={e => setMaterialsYamlMode(e.target.value as any)} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono">
+                <option value="merge">merge (create/update by title)</option>
+                <option value="replace">replace (delete existing empty global topics first)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-mono text-text-primary mb-1">Upload YAML file (optional)</label>
+              <input
+                key={materialsYamlFileKey}
+                type="file"
+                accept=".yml,.yaml,text/yaml,text/x-yaml"
+                className="w-full text-xs font-mono text-text-secondary"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  try {
+                    const text = await f.text();
+                    setMaterialsYamlText(text);
+                  } catch {
+                    alert("Failed to read file");
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-mono text-text-primary mb-1">YAML</label>
+            <textarea
+              value={materialsYamlText}
+              onChange={e => setMaterialsYamlText(e.target.value)}
+              rows={16}
+              className="w-full border border-border bg-bg-code px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md"
+              placeholder={"language: JAVA\ntopics:\n  - title: ...\n    description: ...\n    order: 1\n    theory:\n      content: |\n        # Markdown"}
+            />
+            <div className="mt-2 text-[11px] font-mono text-text-secondary">
+              Tip: Use <code>content: |</code> for multi-line Markdown.
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowImportMaterialsYaml(false)} disabled={materialsYamlImporting}>
+              Cancel
+            </Button>
+            <Button onClick={handleImportMaterialsYaml} disabled={materialsYamlImporting}>
+              {materialsYamlImporting ? "Importing..." : "Import"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showTheoryHistory} onClose={() => {
+      setShowTheoryHistory(false);
+      setTheorySelectedSnapshot(null);
+      setTheorySelectedVersion(null);
+      setTheoryRollbackComment("");
+    }} title={`Theory history${materialsSelectedTopic ? ` — ${materialsSelectedTopic.title}` : ""}`}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="p-3 md:col-span-1">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-mono font-semibold text-text-primary">Revisions</div>
+              <div className="text-xs font-mono text-text-secondary">{theoryRevisions.length}</div>
+            </div>
+            {theoryHistoryLoading && <div className="mt-2 text-xs font-mono text-text-secondary">Loading…</div>}
+            <div className="mt-3 space-y-2 max-h-[420px] overflow-auto">
+              {theoryRevisions.map(r => {
+              const selected = theorySelectedVersion === r.version;
+              return <button key={r.id} onClick={() => selectTheoryRevision(r.version)} className={`w-full text-left rounded-md border px-3 py-2 transition-fast ${selected ? "border-primary bg-bg-code" : "border-border hover:bg-bg-secondary"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-mono text-text-primary">v{r.version} <span className="text-text-secondary">({r.action})</span></div>
+                      <div className="text-[11px] font-mono text-text-secondary">{new Date(r.createdAt).toLocaleString()}</div>
+                    </div>
+                    {r.comment && <div className="mt-1 text-[11px] font-mono text-text-secondary truncate">{r.comment}</div>}
+                  </button>;
+            })}
+              {!theoryRevisions.length && !theoryHistoryLoading && <div className="text-xs font-mono text-text-secondary">No revisions</div>}
+            </div>
+          </Card>
+
+          <Card className="p-3 md:col-span-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-mono font-semibold text-text-primary">Snapshot</div>
+              <div className="text-xs font-mono text-text-secondary">
+                {theorySelectedVersion ? `Selected v${theorySelectedVersion}` : "Select a revision"}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              {theorySelectedSnapshot ? <div className="p-3 rounded-md border border-border bg-bg-code">
+                  <div className="text-xs font-mono text-text-secondary mb-2">{theorySelectedSnapshot.title}</div>
+                  <MarkdownView content={theorySelectedSnapshot.content || ""} />
+                </div> : <div className="text-xs font-mono text-text-secondary">No snapshot loaded</div>}
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+              <Input label="Rollback comment (optional)" value={theoryRollbackComment} onChange={e => setTheoryRollbackComment(e.target.value)} />
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setShowTheoryHistory(false)} disabled={theoryRollbackBusy}>
+                  Close
+                </Button>
+                <Button onClick={handleRollbackTheory} disabled={theoryRollbackBusy || !theorySelectedVersion} className="text-amber-300">
+                  {theoryRollbackBusy ? "Rolling back…" : "Rollback"}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </Modal>
 
       {}
       <Modal isOpen={showCreateUser} onClose={() => setShowCreateUser(false)} title="Create User">

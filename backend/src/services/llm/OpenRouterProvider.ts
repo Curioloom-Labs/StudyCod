@@ -27,10 +27,27 @@ interface OpenRouterResponse {
   };
 }
 function modelsWithoutSystemSupport(): string[] {
-  return ['google/gemma-3-27b-it', 'google/gemma-3-27b-it:free'];
+  // Some routed providers (e.g., Google AI Studio) reject system/developer instructions for certain Gemma models.
+  // When that happens, we must inline the system/developer instructions into the user message.
+  return [
+    'google/gemma-3-27b-it',
+    'google/gemma-3-27b-it:free',
+    'google/gemma-3-12b-it',
+    'google/gemma-3-12b-it:free',
+    'google/gemma-3-12b',
+    'google/gemma-3-12b:free'
+  ];
 }
 function modelsWithoutJsonMode(): string[] {
-  return ['google/gemma-3-27b-it', 'google/gemma-3-27b-it:free'];
+  // These models frequently error on OpenAI-style JSON mode / response_format.
+  return [
+    'google/gemma-3-27b-it',
+    'google/gemma-3-27b-it:free',
+    'google/gemma-3-12b-it',
+    'google/gemma-3-12b-it:free',
+    'google/gemma-3-12b',
+    'google/gemma-3-12b:free'
+  ];
 }
 function normalizeModelForSystemCheck(model: string): string {
   return model.toLowerCase().trim();
@@ -78,7 +95,8 @@ export class OpenRouterProvider implements LLMProvider {
       maxRetries = 2,
       userId,
       topicId,
-      traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      signal
     } = options;
     const model = request.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
     const url = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
@@ -102,6 +120,11 @@ export class OpenRouterProvider implements LLMProvider {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), timeout);
+          const onAbort = () => controller.abort();
+          if (signal) {
+            if (signal.aborted) controller.abort();
+            else signal.addEventListener('abort', onAbort, { once: true });
+          }
           const logContext = {
             traceId,
             userId,
@@ -127,6 +150,7 @@ export class OpenRouterProvider implements LLMProvider {
             signal: controller.signal
           });
           clearTimeout(timeoutId);
+          if (signal) signal.removeEventListener('abort', onAbort);
           if (!response.ok) {
             const errorText = await response.text();
             const error = new Error(`OpenRouter HTTP ${response.status}: ${errorText}`);
@@ -218,6 +242,10 @@ export class OpenRouterProvider implements LLMProvider {
           });
           return data;
         } catch (err: any) {
+          if (signal && err?.name === 'AbortError' && signal.aborted) {
+            // External cancellation (request deadline) – surface as timeout to callers.
+            throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
+          }
           lastError = err;
           if (err.name === 'AbortError' || err.message?.includes('timeout')) {
             logger.warn("OpenRouter request timeout", {

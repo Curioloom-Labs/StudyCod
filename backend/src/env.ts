@@ -19,6 +19,12 @@ import { z } from "zod";
 })();
 const isProduction = process.env.NODE_ENV === "production";
 const enforcePathExistence = isProduction && process.platform !== "win32";
+
+function parseBoolEnv(v: unknown): boolean {
+  const s = String(v ?? "").trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "on";
+}
+
 function requiredInProduction(name: string) {
   return z.string().transform(v => v.trim()).refine(v => !isProduction ? true : v.length > 0, {
     message: `Missing required environment variable in production: ${name}`
@@ -69,7 +75,21 @@ const EnvSchema = z.object({
   NSJAIL_CHROOT_CPP: z.string().optional(),
   NSJAIL_CHROOT_PYTHON: z.string().optional(),
   JUDGE_LOCK_PATH: z.string().optional(),
-  JUDGE_LOCK_STALE_MS: z.string().optional()
+  JUDGE_LOCK_STALE_MS: z.string().optional(),
+
+  // Execution load control (backend -> judge)
+  MAX_CONCURRENT_EXECUTIONS: z.string().optional(),
+  MAX_EXECUTION_QUEUE_SIZE: z.string().optional(),
+  EXECUTION_SCHEDULER_LOG_INTERVAL_MS: z.string().optional(),
+
+  // Per-user submission rate limit (short + long windows)
+  RATE_LIMIT_SHORT_WINDOW_MS: z.string().optional(),
+  RATE_LIMIT_SHORT_MAX: z.string().optional(),
+  RATE_LIMIT_LONG_WINDOW_MS: z.string().optional(),
+  RATE_LIMIT_LONG_MAX: z.string().optional(),
+
+  // Retry-After header for overload responses
+  OVERLOAD_RETRY_AFTER_SECONDS: z.string().optional(),
 }).transform(env => {
   const corsOrigins = normalizeOrigins(env.CORS_ORIGIN);
   return {
@@ -87,7 +107,7 @@ const EnvSchema = z.object({
     __judgeWorkerEntry: (env.JUDGE_WORKER_ENTRY ?? "").trim(),
     __nsjailPath: ((env.NSJAIL_PATH ?? "") || "/usr/bin/nsjail").trim(),
     __nsjailConfig: (env.NSJAIL_CONFIG ?? "").trim(),
-    __nsjailUseConfig: String(env.NSJAIL_USE_CONFIG ?? "").trim() === "1",
+    __nsjailUseConfig: parseBoolEnv(env.NSJAIL_USE_CONFIG),
     __nsjailCwd: ((env.NSJAIL_CWD ?? "") || "/work").trim(),
     __nsjailChroot: (env.NSJAIL_CHROOT ?? "").trim(),
     __nsjailChrootJava: (env.NSJAIL_CHROOT_JAVA ?? "").trim(),
@@ -99,7 +119,57 @@ const EnvSchema = z.object({
       if (!raw) return 120_000;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 120_000;
-    })()
+    })(),
+
+    __maxConcurrentExecutions: (() => {
+      const raw = (env.MAX_CONCURRENT_EXECUTIONS ?? "").trim();
+      if (!raw) return 12;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 12;
+    })(),
+    __maxExecutionQueueSize: (() => {
+      const raw = (env.MAX_EXECUTION_QUEUE_SIZE ?? "").trim();
+      if (!raw) return 50;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 50;
+    })(),
+    __executionSchedulerLogIntervalMs: (() => {
+      const raw = (env.EXECUTION_SCHEDULER_LOG_INTERVAL_MS ?? "").trim();
+      if (!raw) return 10_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 10_000;
+    })(),
+
+    __rateLimitShortWindowMs: (() => {
+      const raw = (env.RATE_LIMIT_SHORT_WINDOW_MS ?? "").trim();
+      if (!raw) return 10_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 10_000;
+    })(),
+    __rateLimitShortMax: (() => {
+      const raw = (env.RATE_LIMIT_SHORT_MAX ?? "").trim();
+      if (!raw) return 5;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 5;
+    })(),
+    __rateLimitLongWindowMs: (() => {
+      const raw = (env.RATE_LIMIT_LONG_WINDOW_MS ?? "").trim();
+      if (!raw) return 60_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 60_000;
+    })(),
+    __rateLimitLongMax: (() => {
+      const raw = (env.RATE_LIMIT_LONG_MAX ?? "").trim();
+      if (!raw) return 20;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 20;
+    })(),
+    __overloadRetryAfterSeconds: (() => {
+      const raw = (env.OVERLOAD_RETRY_AFTER_SECONDS ?? "").trim();
+      if (!raw) return 3;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 3;
+    })(),
   };
 }).superRefine((env, ctx) => {
   if (env.__isProduction) {
@@ -181,6 +251,15 @@ const EnvSchema = z.object({
         });
       }
     }
+
+    if (!env.__nsjailUseConfig) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["NSJAIL_USE_CONFIG"],
+        message: "NSJAIL_USE_CONFIG must be set to '1' in production"
+      });
+    }
+
     if (!env.__nsjailPath) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -204,7 +283,7 @@ const EnvSchema = z.object({
         });
       }
     }
-    const wantsConfig = String(process.env.NSJAIL_USE_CONFIG ?? "").trim() === "1";
+    const wantsConfig = parseBoolEnv(process.env.NSJAIL_USE_CONFIG);
     if (!wantsConfig && enforcePathExistence) {
       const resolveChroot = (lang: "java" | "cpp" | "python"): string => {
         const byLang = lang === "java" ? env.__nsjailChrootJava : lang === "cpp" ? env.__nsjailChrootCpp : env.__nsjailChrootPython;

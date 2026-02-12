@@ -22,7 +22,7 @@ router.post("/enable", authRequired, systemAdminGuard, async (req: AuthRequest, 
   if (!validated.success) {
     return res.status(400).json({
       message: "INVALID_INPUT",
-      errors: validated.error.errors
+      errors: validated.error.issues
     });
   }
   const rawUntil = validated.data.until ?? null;

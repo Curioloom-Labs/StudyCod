@@ -10,6 +10,7 @@ import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { emailService } from "../services/emailService";
 import { maintenanceService } from "../services/maintenanceService";
 import { JWT_SECRET, FRONTEND_URL } from "../config";
+import { logger } from "../utils/logger";
 export const authRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 authRouter.get("/maintenance", async (_req: Request, res: Response) => {
@@ -42,7 +43,12 @@ function buildUserDto(user: User) {
     placementLevel: (user as any).placementLevel ?? null,
     placementScore: (user as any).placementScore ?? null,
     placementMasteredUntilTopicIndexJava: (user as any).placementMasteredUntilTopicIndexJava ?? null,
-    placementMasteredUntilTopicIndexPython: (user as any).placementMasteredUntilTopicIndexPython ?? null
+    placementMasteredUntilTopicIndexPython: (user as any).placementMasteredUntilTopicIndexPython ?? null,
+    placementCodingPassed: Boolean((user as any).placementCodingPassed),
+    placementCodingLevel: (user as any).placementCodingLevel ?? null,
+    placementCodingTaskId: (user as any).placementCodingTaskId ?? null,
+    placementCodingScore: (user as any).placementCodingScore ?? null,
+    placementCodingDoneAt: (user as any).placementCodingDoneAt ?? null
   };
 }
 const registerSchema = z.object({
@@ -74,13 +80,13 @@ const resetPasswordSchema = z.object({
   token: z.string().min(1),
   newPassword: z.string().min(6)
 });
-authRouter.post("/register", async (req: Request, res: Response) => {
+authRouter.post("/register", async (req: AuthRequest, res: Response) => {
   try {
     const validated = registerSchema.safeParse(req.body);
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const {
@@ -127,20 +133,20 @@ authRouter.post("/register", async (req: Request, res: Response) => {
     });
     await userRepo().save(user);
     emailService.sendVerificationEmail(email, verificationToken, username).catch(err => {
-      console.error("[Email Error]:", err);
+      logger.error("[auth] sendVerificationEmail failed", { requestId: req.requestId, email, username, err });
     });
     return res.status(201).json({
       message: "REGISTRATION_SUCCESSFUL_EMAIL_SENT",
       requiresEmailVerification: true
     });
   } catch (err) {
-    console.error("Register error:", err);
+    logger.error("[auth] Register error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
   }
 });
-authRouter.post("/login", async (req: Request, res: Response) => {
+authRouter.post("/login", async (req: AuthRequest, res: Response) => {
   try {
     const {
       username,
@@ -182,7 +188,7 @@ authRouter.post("/login", async (req: Request, res: Response) => {
       user: buildUserDto(user)
     });
   } catch (err) {
-    console.error("Login error:", err);
+    logger.error("[auth] Login error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "INTERNAL_ERROR"
     });
@@ -216,17 +222,17 @@ authRouter.get("/google/callback", passport.authenticate("google", {
     });
     return res.redirect(`${FRONTEND_URL}/auth/google/success?token=${token}`);
   } catch (err) {
-    console.error("Google callback error:", err);
+    logger.error("[auth] Google callback error", { requestId: (req as any).requestId, err });
     return res.redirect(`${FRONTEND_URL}/auth/google/error`);
   }
 });
-authRouter.post("/google/complete", async (req: Request, res: Response) => {
+authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
   try {
     const validated = googleCompleteSchema.safeParse(req.body);
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const {
@@ -337,13 +343,13 @@ authRouter.post("/google/complete", async (req: Request, res: Response) => {
       user: buildUserDto(user)
     });
   } catch (err) {
-    console.error("Google complete error:", err);
+    logger.error("[auth] Google complete error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
   }
 });
-authRouter.get("/verify-email", async (req: Request, res: Response) => {
+authRouter.get("/verify-email", async (req: AuthRequest, res: Response) => {
   try {
     const {
       token
@@ -383,13 +389,13 @@ authRouter.get("/verify-email", async (req: Request, res: Response) => {
       user: buildUserDto(user)
     });
   } catch (err) {
-    console.error("Verify email error:", err);
+    logger.error("[auth] Verify email error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "INTERNAL_ERROR"
     });
   }
 });
-authRouter.post("/resend-verification", async (req: Request, res: Response) => {
+authRouter.post("/resend-verification", async (req: AuthRequest, res: Response) => {
   try {
     const {
       email
@@ -418,25 +424,25 @@ authRouter.post("/resend-verification", async (req: Request, res: Response) => {
     user.emailVerificationToken = verificationToken;
     await userRepo().save(user);
     emailService.sendVerificationEmail(user.email!, verificationToken, user.username).catch(err => {
-      console.error("[Email Error]:", err);
+      logger.error("[auth] sendVerificationEmail failed", { requestId: req.requestId, email: user.email, username: user.username, err });
     });
     return res.json({
       message: "EMAIL_SENT"
     });
   } catch (err) {
-    console.error("Resend verification error:", err);
+    logger.error("[auth] Resend verification error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "INTERNAL_ERROR"
     });
   }
 });
-authRouter.post("/forgot-password", async (req: Request, res: Response) => {
+authRouter.post("/forgot-password", async (req: AuthRequest, res: Response) => {
   try {
     const validated = forgotPasswordSchema.safeParse(req.body);
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const email = validated.data.email.trim().toLowerCase();
@@ -456,25 +462,25 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
     user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
     await userRepo().save(user);
     emailService.sendPasswordResetEmail(user.email, rawToken, user.username).catch(err => {
-      console.error("[Email Error]:", err);
+      logger.error("[auth] sendPasswordResetEmail failed", { requestId: req.requestId, email: user.email, username: user.username, err });
     });
     return res.json({
       message: "RESET_EMAIL_SENT"
     });
   } catch (err) {
-    console.error("Forgot password error:", err);
+    logger.error("[auth] Forgot password error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
   }
 });
-authRouter.post("/reset-password", async (req: Request, res: Response) => {
+authRouter.post("/reset-password", async (req: AuthRequest, res: Response) => {
   try {
     const validated = resetPasswordSchema.safeParse(req.body);
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const {
@@ -500,7 +506,7 @@ authRouter.post("/reset-password", async (req: Request, res: Response) => {
       message: "PASSWORD_UPDATED"
     });
   } catch (err) {
-    console.error("Reset password error:", err);
+    logger.error("[auth] Reset password error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });

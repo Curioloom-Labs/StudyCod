@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { logger } from '../../utils/logger';
 export type LLMCacheMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 interface CacheEntry<T> {
   data: T;
@@ -77,23 +78,17 @@ class RedisCacheAdapter implements CacheAdapter {
         url: redisUrl
       });
       this.client.on('error', (err: Error) => {
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('[LLMCache] Redis error:', err.message);
-        }
+        logger.warn('[llm-cache] redis error', { message: err.message });
         this.isConnected = false;
       });
       this.client.on('connect', () => {
         this.isConnected = true;
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('[LLMCache] Redis connected');
-        }
+        logger.info('[llm-cache] redis connected');
       });
       await this.client.connect();
     } catch (error: any) {
       this.isConnected = false;
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[LLMCache] Redis not available:', error.message);
-      }
+      logger.debug('[llm-cache] redis unavailable', { message: error?.message });
     }
   }
   async get<T>(key: string): Promise<T | null> {
@@ -103,7 +98,7 @@ class RedisCacheAdapter implements CacheAdapter {
       if (!value) return null;
       return JSON.parse(value) as T;
     } catch (error: any) {
-      console.error('[LLMCache] Redis get error:', error.message);
+      logger.warn('[llm-cache] redis get failed', { message: error?.message });
       return null;
     }
   }
@@ -112,7 +107,7 @@ class RedisCacheAdapter implements CacheAdapter {
     try {
       await this.client.setEx(key, ttlSeconds, JSON.stringify(value));
     } catch (error: any) {
-      console.error('[LLMCache] Redis set error:', error.message);
+      logger.warn('[llm-cache] redis set failed', { message: error?.message });
     }
   }
   async delete(key: string): Promise<void> {
@@ -120,7 +115,7 @@ class RedisCacheAdapter implements CacheAdapter {
     try {
       await this.client.del(key);
     } catch (error: any) {
-      console.error('[LLMCache] Redis delete error:', error.message);
+      logger.warn('[llm-cache] redis delete failed', { message: error?.message });
     }
   }
 }
@@ -137,9 +132,7 @@ export class LLMCacheService {
           await new Promise(resolve => setTimeout(resolve, 500));
           if (redisAdapter.isConnected) {
             this.adapter = redisAdapter;
-            if (process.env.NODE_ENV !== 'production') {
-              console.log('[LLMCache] Using Redis cache');
-            }
+            logger.info('[llm-cache] using redis');
           }
         } catch (error) {}
       })();
@@ -167,15 +160,7 @@ export class LLMCacheService {
     const normalized = JSON.stringify(cleaned);
     const hash = crypto.createHash('sha256').update(`${mode}:${normalized}`).digest('hex').substring(0, 16);
     const key = `${this.cachePrefix}${mode}:${hash}`;
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[LLMCache] Generated key for ${mode}`, {
-        key,
-        paramsKeys: Object.keys(cleaned),
-        topicTitle: cleaned.topicTitle,
-        taskType: cleaned.taskType,
-        language: cleaned.language
-      });
-    }
+    logger.debug('[llm-cache] key', { mode, key, paramsKeys: Object.keys(cleaned) });
     return key;
   }
   async get<T>(mode: LLMCacheMode, params: any): Promise<T | null> {
@@ -183,13 +168,13 @@ export class LLMCacheService {
       const key = this.generateCacheKey(mode, params);
       const cached = await this.adapter.get<T>(key);
       if (cached) {
-        console.log(`[LLMCache] Cache HIT for ${mode}`);
+        logger.debug('[llm-cache] hit', { mode });
         return cached;
       }
-      console.log(`[LLMCache] Cache MISS for ${mode}`);
+      logger.debug('[llm-cache] miss', { mode });
       return null;
     } catch (error: any) {
-      console.error(`[LLMCache] Get error for ${mode}:`, error.message);
+      logger.warn('[llm-cache] get failed', { mode, message: error?.message });
       return null;
     }
   }
@@ -198,22 +183,22 @@ export class LLMCacheService {
       const key = this.generateCacheKey(mode, params);
       const ttl = this.getTTL(mode);
       await this.adapter.set(key, value, ttl);
-      console.log(`[LLMCache] Cached result for ${mode} (TTL: ${ttl}s)`);
+      logger.debug('[llm-cache] set', { mode, ttlSeconds: ttl });
     } catch (error: any) {
-      console.error(`[LLMCache] Set error for ${mode}:`, error.message);
+      logger.warn('[llm-cache] set failed', { mode, message: error?.message });
     }
   }
   async invalidate(mode: LLMCacheMode, params: any): Promise<void> {
     try {
       const key = this.generateCacheKey(mode, params);
       await this.adapter.delete(key);
-      console.log(`[LLMCache] Invalidated cache for ${mode}`);
+      logger.debug('[llm-cache] invalidate', { mode });
     } catch (error: any) {
-      console.error(`[LLMCache] Invalidate error for ${mode}:`, error.message);
+      logger.warn('[llm-cache] invalidate failed', { mode, message: error?.message });
     }
   }
   async clearAll(): Promise<void> {
-    console.warn('[LLMCache] clearAll() called - not fully implemented for Redis');
+    logger.warn('[llm-cache] clearAll not implemented');
   }
 }
 let cacheServiceInstance: LLMCacheService | null = null;

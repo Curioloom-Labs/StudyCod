@@ -1,4 +1,4 @@
-export type JudgeLanguage = "java" | "python" | "cpp";
+export type JudgeLanguage = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
 export type JudgeVerdict = "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE";
 export type CheckerSpec = {
   type: "exact";
@@ -21,10 +21,21 @@ export interface JudgeTestCase {
   group?: string;
   weight?: number;
 }
+
+export interface JudgeFile {
+  // Relative path inside submission workdir (e.g. "Main.java").
+  path: string;
+  content: string;
+}
 export interface JudgeRequest {
   submission_id: string;
   language: JudgeLanguage;
-  source: string;
+  // Backwards-compatible single-file source.
+  source?: string;
+  // Optional multi-file submission.
+  files?: JudgeFile[];
+  // Optional entry file hint.
+  entry?: string;
   tests: JudgeTestCase[];
   limits: JudgeLimits;
   checker?: CheckerSpec;

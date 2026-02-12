@@ -12,10 +12,6 @@
     />
     <meta name="robots" content="index,follow,max-image-preview:large" />
 
-    <!-- Canonical is important for SEO; set it dynamically for SPA routes. -->
-    <link rel="canonical" href="/" />
-
-    <!-- Open Graph / social previews (also influences how links look when shared). -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="StudyCod" />
     <meta property="og:site_name" content="StudyCod" />
@@ -45,11 +41,14 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Keep canonical in sync with the current SPA URL (helps avoid duplicate indexing).
       (function () {
         try {
           var canonical = document.querySelector('link[rel="canonical"]');
-          if (!canonical) return;
+          if (!canonical) {
+            canonical = document.createElement('link');
+            canonical.setAttribute('rel', 'canonical');
+            document.head.appendChild(canonical);
+          }
           canonical.setAttribute('href', window.location.origin + window.location.pathname);
 
           var ogUrl = document.querySelector('meta[property="og:url"]');
@@ -60,11 +59,9 @@
           }
           ogUrl.setAttribute('content', window.location.href);
         } catch (_) {
-          // ignore
         }
       })();
 
-      // Діагностика: перевірка чи завантажився скрипт
       console.log("HTML loaded, root element:", document.getElementById("root"));
       window.addEventListener("error", function(e) {
         console.error("Global error:", e.error, e.filename, e.lineno, e.colno);

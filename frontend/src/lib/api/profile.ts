@@ -23,3 +23,50 @@ export async function completePlacement(data: {
   const res = await api.put("/profile/placement", data);
   return res.data as User;
 }
+
+export type PlacementCodingChallenge = {
+  id: string;
+  level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  taskId: string;
+  titleUk: string;
+  titleEn: string;
+  promptUk: string;
+  promptEn: string;
+  starterCode: string;
+  language: CourseLanguage;
+  sampleInput: string;
+  sampleOutput: string;
+};
+
+export async function getPlacementCodingChallenge(params: {
+  level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  course?: CourseLanguage;
+  lang?: CourseLanguage;
+}): Promise<PlacementCodingChallenge> {
+  const res = await api.get("/profile/placement/coding-challenge", {
+    params
+  });
+  return res.data as PlacementCodingChallenge;
+}
+
+export type PlacementCodingSubmitResult = {
+  passed: boolean;
+  passedCount: number;
+  total: number;
+  caseIndex?: number;
+  expected?: string;
+  actual?: string;
+  stderr?: string | null;
+  stdout?: string | null;
+};
+
+export async function submitPlacementCoding(data: {
+  code: string;
+  level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  challengeId: string;
+  course?: CourseLanguage;
+  lang?: CourseLanguage;
+}): Promise<PlacementCodingSubmitResult> {
+  const res = await api.post("/profile/placement/coding-submit", data);
+  return res.data as PlacementCodingSubmitResult;
+}

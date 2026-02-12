@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
+import { logger } from '../../utils/logger';
 interface CloudflareWorkerRequest {
   mode: string;
   language: "uk" | "en";
@@ -27,7 +28,8 @@ export class CloudflareAIProvider implements LLMProvider {
       maxRetries = 1,
       userId,
       topicId,
-      traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      signal
     } = options;
     const url = process.env.CLOUDFLARE_AI_URL;
     if (!url) {
@@ -54,10 +56,12 @@ export class CloudflareAIProvider implements LLMProvider {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
-        console.log(`[CloudflareAI] Request started`, {
-          ...logContext,
-          attempt: attempt + 1
-        });
+        const onAbort = () => controller.abort();
+        if (signal) {
+          if (signal.aborted) controller.abort();
+          else signal.addEventListener('abort', onAbort, { once: true });
+        }
+        logger.debug('[cf-ai] request', { ...logContext, attempt: attempt + 1 });
         const response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -67,13 +71,15 @@ export class CloudflareAIProvider implements LLMProvider {
           signal: controller.signal
         });
         clearTimeout(timeoutId);
+        if (signal) signal.removeEventListener('abort', onAbort);
         if (!response.ok) {
           const errorText = await response.text();
           const error = new Error(`CloudflareAI HTTP ${response.status}: ${errorText}`);
-          console.error(`[CloudflareAI] Request failed`, {
+          logger.warn('[cf-ai] http error', {
             ...logContext,
+            attempt: attempt + 1,
             status: response.status,
-            error: errorText
+            error: String(errorText).slice(0, 2000)
           });
           if (response.status === 502) {
             const fallbackError = new Error(`AI_GENERATION_FAILED: Cloudflare Worker returned 502 (Bad Gateway). Fallback to OpenRouter.`);
@@ -86,10 +92,7 @@ export class CloudflareAIProvider implements LLMProvider {
           if (attempt < maxRetries && (response.status >= 500 || response.status === 429)) {
             lastError = error;
             const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
-            console.log(`[CloudflareAI] Retrying after ${delay}ms`, {
-              ...logContext,
-              attempt: attempt + 1
-            });
+            logger.debug('[cf-ai] retry', { ...logContext, attempt: attempt + 1, delayMs: delay, status: response.status });
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -98,37 +101,20 @@ export class CloudflareAIProvider implements LLMProvider {
         const rawData = await response.json();
         const isArray = Array.isArray(rawData);
         const isObject = rawData && typeof rawData === 'object' && !isArray;
-        console.log(`[CloudflareAI] Raw response received`, {
+        logger.debug('[cf-ai] response', {
           ...logContext,
-          isArray,
-          isObject,
-          hasSuccess: isObject && 'success' in rawData,
-          hasContent: isObject && 'content' in rawData,
-          hasData: isObject && 'data' in rawData,
-          dataKeys: isArray ? `[array with ${rawData.length} items]` : isObject ? Object.keys(rawData) : null,
-          dataPreview: isArray ? JSON.stringify(rawData).substring(0, 200) : isObject ? JSON.stringify(rawData).substring(0, 200) : rawData
+          attempt: attempt + 1,
+          shape: isArray ? `array:${rawData.length}` : isObject ? 'object' : typeof rawData
         });
         if (isArray && mode === 'generate-test-data') {
-          console.log(`[CloudflareAI] Detected array response for generate-test-data`, {
-            ...logContext,
-            arrayLength: rawData.length
-          });
           const content = JSON.stringify(rawData);
           const data: CloudflareWorkerResponse = {
             content
           };
-          console.log(`[CloudflareAI] Request succeeded (array format)`, {
-            ...logContext,
-            contentLength: content.length
-          });
           return data;
         }
         if (isObject && !('success' in rawData) && !('content' in rawData)) {
           if ('task_condition' in rawData || 'theory_md' in rawData || 'description' in rawData || 'questions' in rawData || 'quizJson' in rawData) {
-            console.log(`[CloudflareAI] Detected old Cloudflare Worker format`, {
-              ...logContext,
-              dataKeys: Object.keys(rawData)
-            });
             let content: string | undefined;
             const legacy: any = rawData as any;
             if (mode === 'generate-task-condition' && legacy.task_condition) {
@@ -145,129 +131,96 @@ export class CloudflareAIProvider implements LLMProvider {
               content = JSON.stringify(rawData);
             }
             if (!content) {
-              console.error(`[CloudflareAI] Failed to extract content from old format`, {
-                ...logContext,
-                mode,
-                dataKeys: Object.keys(rawData)
-              });
+              logger.error('[cf-ai] extract failed (legacy)', { ...logContext, mode, keys: Object.keys(rawData) });
               throw new Error(`AI_GENERATION_FAILED: Empty response from CloudflareAI (mode: ${mode}, old format)`);
             }
             const data: CloudflareWorkerResponse = {
               content
             };
-            console.log(`[CloudflareAI] Request succeeded (old format)`, {
-              ...logContext,
-              contentLength: content.length
-            });
             return data;
           }
         }
         if (rawData && typeof rawData === 'object' && 'success' in rawData) {
           const expressResponse = rawData as ExpressServiceResponse;
-          console.log(`[CloudflareAI] Detected Express service format`, {
-            ...logContext,
-            success: expressResponse.success,
-            hasData: !!expressResponse.data,
-            dataType: expressResponse.data ? typeof expressResponse.data : null,
-            dataKeys: expressResponse.data && typeof expressResponse.data === 'object' ? Object.keys(expressResponse.data) : null
-          });
           if (!expressResponse.success) {
-            const error = new Error(`AI_GENERATION_FAILED: ${expressResponse.error || 'Unknown error'}`);
-            console.error(`[CloudflareAI] API error`, {
-              ...logContext,
-              error: expressResponse.error
-            });
-            throw error;
+            logger.warn('[cf-ai] api error', { ...logContext, error: expressResponse.error || 'unknown' });
+            throw new Error(`AI_GENERATION_FAILED: ${expressResponse.error || 'Unknown error'}`);
           }
+
+          const d = expressResponse.data;
           let content: string | undefined;
-          if (expressResponse.data) {
-            if (mode === 'generate-task-condition' && expressResponse.data.description) {
-              content = typeof expressResponse.data.description === 'string' ? expressResponse.data.description : JSON.stringify(expressResponse.data.description);
-              console.log(`[CloudflareAI] Extracted description`, {
-                ...logContext,
-                contentLength: content?.length
-              });
-            } else if (mode === 'generate-theory' && expressResponse.data.theory) {
-              content = typeof expressResponse.data.theory === 'string' ? expressResponse.data.theory : JSON.stringify(expressResponse.data.theory);
-            } else if (mode === 'generate-task-template' && expressResponse.data.template) {
-              content = typeof expressResponse.data.template === 'string' ? expressResponse.data.template : JSON.stringify(expressResponse.data.template);
-            } else if (mode === 'generate-quiz' && expressResponse.data.quizJson) {
-              content = typeof expressResponse.data.quizJson === 'string' ? expressResponse.data.quizJson : JSON.stringify(expressResponse.data.quizJson);
+
+          if (d != null) {
+            const obj = d as any;
+            if (mode === 'generate-task-condition' && obj?.description != null) {
+              content = typeof obj.description === 'string' ? obj.description : JSON.stringify(obj.description);
+            } else if (mode === 'generate-theory' && obj?.theory != null) {
+              content = typeof obj.theory === 'string' ? obj.theory : JSON.stringify(obj.theory);
+            } else if (mode === 'generate-task-template' && obj?.template != null) {
+              content = typeof obj.template === 'string' ? obj.template : JSON.stringify(obj.template);
+            } else if (mode === 'generate-quiz' && obj?.quizJson != null) {
+              content = typeof obj.quizJson === 'string' ? obj.quizJson : JSON.stringify(obj.quizJson);
             } else if (mode === 'generate-task' || mode === 'generate-test-data') {
-              content = JSON.stringify(expressResponse.data);
+              content = JSON.stringify(d);
             } else if (mode === 'generate-text' || mode === 'generate-json') {
-              content = typeof expressResponse.data === 'string' ? expressResponse.data : JSON.stringify(expressResponse.data);
-            } else {
-              console.log(`[CloudflareAI] Mode ${mode} not matched, trying fallback extraction`, {
-                ...logContext,
-                dataKeys: Object.keys(expressResponse.data)
-              });
-              if (typeof expressResponse.data === 'string') {
-                content = expressResponse.data;
-              } else if (expressResponse.data && typeof expressResponse.data === 'object') {
-                for (const [key, value] of Object.entries(expressResponse.data)) {
-                  if (typeof value === 'string' && value.trim().length > 0) {
-                    content = value;
-                    console.log(`[CloudflareAI] Found string value in key: ${key}`, {
-                      ...logContext
-                    });
-                    break;
-                  }
-                }
-                if (!content) {
-                  content = JSON.stringify(expressResponse.data);
+              content = typeof d === 'string' ? d : JSON.stringify(d);
+            } else if (typeof d === 'string') {
+              content = d;
+            } else if (d && typeof d === 'object') {
+              for (const value of Object.values(d)) {
+                if (typeof value === 'string' && value.trim().length > 0) {
+                  content = value;
+                  break;
                 }
               }
             }
           }
+
           if (!content) {
-            console.error(`[CloudflareAI] Failed to extract content`, {
+            logger.error('[cf-ai] extract failed', {
               ...logContext,
               mode,
-              data: expressResponse.data,
-              dataType: typeof expressResponse.data,
-              dataKeys: expressResponse.data && typeof expressResponse.data === 'object' ? Object.keys(expressResponse.data) : null
+              dataType: d == null ? null : typeof d,
+              keys: d && typeof d === 'object' ? Object.keys(d) : null
             });
             throw new Error(`AI_GENERATION_FAILED: Empty response from CloudflareAI (mode: ${mode})`);
           }
-          const data: CloudflareWorkerResponse = {
-            content
-          };
-          console.log(`[CloudflareAI] Request succeeded`, {
-            ...logContext,
-            contentLength: content.length
-          });
+
+          return { content };
+        }
+
+        if (rawData && typeof rawData === 'object') {
+          const data = rawData as CloudflareWorkerResponse;
+          if (data.error) {
+            logger.warn('[cf-ai] api error', { ...logContext, error: data.error });
+            throw new Error(`AI_GENERATION_FAILED: ${data.error}`);
+          }
+          if (!data.content) {
+            logger.error('[cf-ai] empty content', { ...logContext, mode });
+            throw new Error(`AI_GENERATION_FAILED: Empty response from CloudflareAI (mode: ${mode})`);
+          }
           return data;
         }
-        const data = rawData as CloudflareWorkerResponse;
-        if (data.error) {
-          const error = new Error(`AI_GENERATION_FAILED: ${data.error}`);
-          console.error(`[CloudflareAI] API error`, {
-            ...logContext,
-            error: data.error
-          });
-          throw error;
+
+        if (typeof rawData === 'string' && rawData.trim().length > 0) {
+          return { content: rawData };
         }
-        console.log(`[CloudflareAI] Request succeeded`, {
-          ...logContext
-        });
-        return data;
+
+        logger.error('[cf-ai] unexpected response', { ...logContext, mode, type: typeof rawData });
+        throw new Error(`AI_GENERATION_FAILED: Unexpected response from CloudflareAI (mode: ${mode})`);
       } catch (err: any) {
+        if (signal && err?.name === 'AbortError' && signal.aborted) {
+          throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
+        }
         lastError = err;
         if (err.shouldFallback) {
           throw err;
         }
         if (err.name === 'AbortError' || err.message?.includes('timeout')) {
-          console.error(`[CloudflareAI] Request timeout`, {
-            ...logContext,
-            attempt: attempt + 1
-          });
+          logger.warn('[cf-ai] timeout', { ...logContext, attempt: attempt + 1 });
           if (attempt < maxRetries) {
             const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
-            console.log(`[CloudflareAI] Retrying after ${delay}ms (timeout)`, {
-              ...logContext,
-              attempt: attempt + 1
-            });
+            logger.debug('[cf-ai] retry', { ...logContext, attempt: attempt + 1, delayMs: delay, reason: 'timeout' });
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -279,10 +232,7 @@ export class CloudflareAIProvider implements LLMProvider {
         const isNetworkError = err.message?.includes('ECONNREFUSED') || err.message?.includes('ENOTFOUND') || err.message?.includes('network') || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND';
         if (isNetworkError && attempt < maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
-          console.log(`[CloudflareAI] Retrying after ${delay}ms (network error)`, {
-            ...logContext,
-            attempt: attempt + 1
-          });
+          logger.debug('[cf-ai] retry', { ...logContext, attempt: attempt + 1, delayMs: delay, reason: 'network' });
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -482,12 +432,22 @@ export class CloudflareAIProvider implements LLMProvider {
     try {
       const parsed = JSON.parse(response.content);
       const tests = parsed.tests || parsed || [];
-      const validTests = tests.filter((t: any) => t.input && t.output && t.input.trim() !== "" && t.output.trim() !== "");
+      const taskDescLower = String(params.taskDescription ?? "").toLowerCase();
+      const explicitlyNoInput = /нема(є)?\s+вхідн/i.test(taskDescLower) || /без\s+вхідн/i.test(taskDescLower) || /відсутн/i.test(taskDescLower) || /no\s+input/i.test(taskDescLower) || /does\s+not\s+take\s+input/i.test(taskDescLower);
+      const allowEmptyInput = explicitlyNoInput || params.count <= 1;
+
+      const validTests = (Array.isArray(tests) ? tests : []).filter((t: any) => {
+        const input = typeof t?.input === "string" ? t.input : String(t?.input ?? "");
+        const output = typeof t?.output === "string" ? t.output : String(t?.output ?? "");
+        if (!output || output.trim() === "") return false;
+        if (!allowEmptyInput && (!input || input.trim() === "")) return false;
+        return true;
+      });
       if (validTests.length === 0) {
         throw new Error("No valid tests generated");
       }
       return validTests.map((t: any) => ({
-        input: String(t.input).trim(),
+        input: String(t.input ?? "").trim(),
         output: String(t.output).trim(),
         explanation: t.explanation ? String(t.explanation).trim() : undefined
       }));

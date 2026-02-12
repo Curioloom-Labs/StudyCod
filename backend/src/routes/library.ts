@@ -1,0 +1,1505 @@
+import { Router, Response } from "express";
+import { z } from "zod";
+import AdmZip from "adm-zip";
+import multer from "multer";
+import { AppDataSource } from "../data-source";
+import { authOptional, authRequired, AuthRequest } from "../middleware/authMiddleware";
+import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
+import { teacherOrAdminGuard } from "../middleware/rolesGuard";
+import { User } from "../entities/User";
+import { LibraryTask, type LibraryTaskLang, type LibraryTaskStatus } from "../entities/LibraryTask";
+import { LibraryTaskAttempt } from "../entities/LibraryTaskAttempt";
+import { TaskTheory } from "../entities/TaskTheory";
+import { TestData } from "../entities/TestData";
+import { TopicNew } from "../entities/TopicNew";
+import { TopicTask } from "../entities/TopicTask";
+import { executeCodeWithInput, compareOutput, filterStderrWithLang } from "../services/codeExecutionService";
+import { judgeWithSemaphore } from "../services/judgeWorker";
+import { JudgeBusyError } from "../services/judgeWorker/Semaphore";
+import type { CheckerSpec, JudgeLanguage, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
+import { In } from "typeorm";
+import { logger } from "../utils/logger";
+import { HttpError } from "../utils/httpError";
+import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
+
+const libraryRouter = Router();
+
+type ApiCodeFile = { path: string; content: string };
+function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ApiCodeFile[] = [];
+  for (const f of raw) {
+    if (!f || typeof f !== "object") continue;
+    const p = typeof (f as any).path === "string" ? (f as any).path.trim() : "";
+    const c = typeof (f as any).content === "string" ? (f as any).content : "";
+    if (!p) continue;
+    if (p.includes("/") || p.includes("\\") || p.includes("..") || p.startsWith(".")) continue;
+    out.push({ path: p, content: c });
+  }
+  const byPath = new Map<string, ApiCodeFile>();
+  for (const f of out) byPath.set(f.path, f);
+  return [...byPath.values()];
+}
+
+function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
+  switch (lang) {
+    case "java":
+      return "Main.java";
+    case "python":
+      return "main.py";
+    case "cpp":
+      return "main.cpp";
+    case "c":
+      return "main.c";
+    case "kotlin":
+      return "Main.kt";
+    case "csharp":
+      return "Program.cs";
+  }
+}
+
+const archiveUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 30 * 1024 * 1024,
+  },
+});
+
+const userRepo = () => AppDataSource.getRepository(User);
+const libraryRepo = () => AppDataSource.getRepository(LibraryTask);
+const attemptRepo = () => AppDataSource.getRepository(LibraryTaskAttempt);
+const theoryRepo = () => AppDataSource.getRepository(TaskTheory);
+const testDataRepo = () => AppDataSource.getRepository(TestData);
+const topicRepo = () => AppDataSource.getRepository(TopicNew);
+const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
+
+const ALL_JUDGE_LANGS: JudgeLanguage[] = ["java", "python", "cpp", "c", "csharp", "kotlin"];
+
+function parseDisabledJudgeLanguagesEnv(): Set<JudgeLanguage> {
+  const raw = String(process.env.JUDGE_DISABLED_LANGUAGES ?? process.env.DISABLED_JUDGE_LANGUAGES ?? "").trim();
+  if (!raw) return new Set();
+  const parts = raw
+    .split(/[,\s]+/g)
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+  const disabled = new Set<JudgeLanguage>();
+  for (const p of parts) {
+    if (p === "java" || p === "python" || p === "cpp" || p === "c" || p === "csharp" || p === "kotlin") {
+      disabled.add(p);
+    }
+  }
+  return disabled;
+}
+
+const DISABLED_JUDGE_LANGS = parseDisabledJudgeLanguagesEnv();
+
+function filterEnabledJudgeLanguages(langs: JudgeLanguage[]): JudgeLanguage[] {
+  if (DISABLED_JUDGE_LANGS.size === 0) return langs;
+  return langs.filter(l => !DISABLED_JUDGE_LANGS.has(l));
+}
+
+const DEFAULT_LIMITS_BY_LANG: Record<JudgeLanguage, { time_limit_ms: number; memory_limit_mb: number; output_limit_kb: number }> = {
+  java: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
+  python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
+  cpp: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
+  c: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
+  // dotnet CLI is memory-hungry under nsjail/chroot. Keep a higher default.
+  csharp: { time_limit_ms: 2000, memory_limit_mb: 1024, output_limit_kb: 64 },
+  kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
+};
+
+function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec {
+  const hasFloatLike = outputs.some(s => {
+    const v = String(s ?? "");
+    return /(^|\s)[-+]?(?:\d*\.\d+|\d+\.\d*)(?:[eE][-+]?\d+)?(\s|$)/.test(v) || /(^|\s)[-+]?\d+(?:[eE][-+]?\d+)(\s|$)/.test(v);
+  });
+  return hasFloatLike
+    ? { type: "float", epsilon: 1e-6 }
+    : { type: "whitespace" };
+}
+
+function normalizeLang(input: any): LibraryTaskLang {
+  const raw = String(input ?? "").toUpperCase().trim();
+  return raw.startsWith("PY") ? "PYTHON" : "JAVA";
+}
+
+function defaultJudgeLanguageFromTask(task: LibraryTask): JudgeLanguage {
+  const allowed = getAllowedJudgeLanguages(task);
+  return (allowed[0] || "java") as JudgeLanguage;
+}
+
+function normalizeJudgeLanguage(input: any): JudgeLanguage | null {
+  const raw = String(input ?? "").trim().toLowerCase();
+  if (raw === "java" || raw === "python" || raw === "cpp" || raw === "c" || raw === "csharp" || raw === "kotlin") return raw;
+  return null;
+}
+
+function getAllowedJudgeLanguages(task: LibraryTask): JudgeLanguage[] {
+  const configured = (task as any).allowedLanguages as any;
+  if (Array.isArray(configured) && configured.length > 0) {
+    const normalized = configured.map((x: any) => normalizeJudgeLanguage(x)).filter(Boolean) as JudgeLanguage[];
+    const filtered = filterEnabledJudgeLanguages(Array.from(new Set(normalized)));
+    if (filtered.length > 0) return filtered;
+    // If task is configured with only disabled/unknown languages, fall back to globally enabled set.
+    const fallback = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS);
+    return fallback.length > 0 ? fallback : ["java"];
+  }
+  // If task doesn't explicitly restrict languages, allow all supported languages.
+  const filteredAll = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS);
+  return filteredAll.length > 0 ? filteredAll : ["java"];
+}
+
+function ensureJudgeConfigDefaults(task: LibraryTask, tests: TestData[]): boolean {
+  let dirty = false;
+
+  // Limits: choose a safe default considering all allowed languages.
+  const allowed = getAllowedJudgeLanguages(task);
+  const maxTime = Math.max(...allowed.map(l => DEFAULT_LIMITS_BY_LANG[l].time_limit_ms));
+  const maxMem = Math.max(...allowed.map(l => DEFAULT_LIMITS_BY_LANG[l].memory_limit_mb));
+  const maxOut = Math.max(...allowed.map(l => DEFAULT_LIMITS_BY_LANG[l].output_limit_kb));
+
+  const time = Number((task as any).timeLimitMs);
+  if (!Number.isFinite(time) || time <= 0) {
+    (task as any).timeLimitMs = maxTime;
+    dirty = true;
+  }
+  const mem = Number((task as any).memoryLimitMb);
+  if (!Number.isFinite(mem) || mem <= 0) {
+    (task as any).memoryLimitMb = maxMem;
+    dirty = true;
+  }
+  const out = Number((task as any).outputLimitKb);
+  if (!Number.isFinite(out) || out <= 0) {
+    (task as any).outputLimitKb = maxOut;
+    dirty = true;
+  }
+
+  const checker = (task as any).checkerSpec as CheckerSpec | null | undefined;
+  if (!checker || typeof checker !== "object" || typeof (checker as any).type !== "string") {
+    (task as any).checkerSpec = chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || ""));
+    dirty = true;
+  }
+
+  return dirty;
+}
+
+function canReadTask(task: LibraryTask, userId: number | null, userRole: string | null): boolean {
+  if (task.status === "APPROVED") return true;
+  if (userRole === "SYSTEM_ADMIN") return true;
+  if (userId && (task as any)?.author?.id === userId) return true;
+  return false;
+}
+
+function buildTaskDto(task: LibraryTask) {
+  return {
+    id: task.id,
+    problemCode: (task as any).problemCode ?? null,
+    slug: (task as any).slug ?? null,
+    title: task.title,
+    description: task.description,
+    template: task.template,
+    templatesByLanguage: (task as any).templatesByLanguage ?? null,
+    lang: task.lang,
+    difficulty: (task as any).difficulty ?? null,
+    tags: (task as any).tags ?? null,
+    section: (task as any).section ?? null,
+    maxAttempts: task.maxAttempts,
+    timeLimitMs: (task as any).timeLimitMs ?? null,
+    memoryLimitMb: (task as any).memoryLimitMb ?? null,
+    outputLimitKb: (task as any).outputLimitKb ?? null,
+    checkerSpec: (task as any).checkerSpec ?? null,
+    // Always return a resolved list (and apply global disables), so the UI stays consistent.
+    allowedLanguages: getAllowedJudgeLanguages(task),
+    status: task.status,
+    rejectionReason: task.rejectionReason ?? null,
+    submittedAt: task.submittedAt ?? null,
+    publishedAt: task.publishedAt ?? null,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    author: (task as any)?.author
+      ? {
+          id: (task as any).author.id,
+          username: (task as any).author.username,
+        }
+      : null,
+  };
+}
+
+function buildAttemptSummary(attempt: LibraryTaskAttempt | null) {
+  if (!attempt) return null;
+  const passed = attempt.lastTestsPassed;
+  const total = attempt.lastTestsTotal;
+  const solved = typeof passed === "number" && typeof total === "number" && total > 0 && passed >= total;
+  return {
+    solved,
+    lastTestsPassed: passed ?? null,
+    lastTestsTotal: total ?? null,
+    lastScore: attempt.lastScore ?? null,
+    lastMaxScore: attempt.lastMaxScore ?? null,
+    submissionsCount: attempt.submissionsCount ?? 0,
+    lastCheckedAt: attempt.lastCheckedAt ?? null,
+  };
+}
+
+function truncateText(s: string, max: number): string {
+  const v = String(s ?? "");
+  if (v.length <= max) return v;
+  return v.slice(0, max) + `\n…(truncated, ${v.length - max} more chars)`;
+}
+
+const createLibraryTaskSchema = z.object({
+  title: z.string().min(1).max(255),
+  problemCode: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+  slug: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?$/)
+    .optional(),
+  difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
+  tags: z.array(z.string().min(1).max(32)).max(20).optional(),
+  section: z.string().min(1).max(80).optional(),
+  description: z.string().min(1),
+  template: z.string().min(1),
+  lang: z.enum(["JAVA", "PYTHON"]).optional(),
+  maxAttempts: z.number().int().min(1).max(100).optional(),
+  timeLimitMs: z.number().int().min(100).max(60000).optional(),
+  memoryLimitMb: z.number().int().min(16).max(2048).optional(),
+  outputLimitKb: z.number().int().min(4).max(1024).optional(),
+  checkerSpec: z
+    .discriminatedUnion("type", [
+      z.object({ type: z.literal("exact") }),
+      z.object({ type: z.literal("whitespace") }),
+      z.object({ type: z.literal("float"), epsilon: z.number().positive().max(1) }),
+    ])
+    .optional(),
+  allowedLanguages: z
+    .array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
+    .min(1)
+    .max(6)
+    .optional(),
+  theory: z.string().optional(),
+  tests: z
+    .array(
+      z.object({
+        input: z.string(),
+        expectedOutput: z.string(),
+        isHidden: z.boolean().optional(),
+        points: z.number().int().min(1).max(1000).optional(),
+      })
+    )
+    .optional(),
+});
+
+const updateLibraryTaskSchema = createLibraryTaskSchema.partial();
+
+libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response) => {
+  try {
+    const lang = req.query.lang ? normalizeLang(req.query.lang) : null;
+    const judgeLanguage = req.query.judgeLanguage ? normalizeJudgeLanguage(req.query.judgeLanguage) : null;
+    const q = String(req.query.q ?? "").trim();
+
+    const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
+    const pageSizeRaw = parseInt(String(req.query.pageSize ?? "20"), 10);
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+    const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(100, pageSizeRaw) : 20;
+
+    const qb = libraryRepo().createQueryBuilder("t")
+      .leftJoinAndSelect("t.author", "author")
+      .where("t.status = :st", { st: "APPROVED" as LibraryTaskStatus });
+
+    if (lang) qb.andWhere("t.lang = :lang", { lang });
+    if (judgeLanguage) {
+      // allowed_languages is stored as simple-json (TEXT). When NULL => allow all languages.
+      // Filter matches exact JSON string values: ["java", ...]
+      qb.andWhere("(t.allowed_languages IS NULL OR t.allowed_languages LIKE :jl)", { jl: `%\"${judgeLanguage}\"%` });
+    }
+    if (q) {
+      qb.andWhere("(t.title LIKE :q OR t.description LIKE :q)", { q: `%${q}%` });
+    }
+
+    const [tasks, total] = await qb
+      .orderBy("t.updatedAt", "DESC")
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+
+    const ids = tasks.map(t => t.id);
+    const attempts = ids.length && req.userId
+      ? await attemptRepo().find({
+          where: {
+            user: { id: req.userId },
+            libraryTask: { id: In(ids) }
+          } as any,
+          relations: ["libraryTask"]
+        })
+      : [];
+    const attemptByTaskId = new Map<number, LibraryTaskAttempt>();
+    for (const a of attempts) {
+      const tid = (a as any)?.libraryTask?.id;
+      if (typeof tid === "number") attemptByTaskId.set(tid, a);
+    }
+
+    return res.json({
+      tasks: tasks.map(t => ({
+        ...buildTaskDto(t),
+        attempt: buildAttemptSummary(attemptByTaskId.get(t.id) ?? null)
+      })),
+      total,
+      page,
+      pageSize,
+    });
+  } catch (error: any) {
+    logger.error("[library] GET /tasks error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Stable fetch by problemCode or slug.
+libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: Response) => {
+  try {
+    const key = String(req.params.key ?? "").trim();
+    if (!key) return res.status(400).json({ message: "INVALID_KEY" });
+
+    const task = await libraryRepo().findOne({
+      where: [{ problemCode: key } as any, { slug: key } as any],
+      relations: ["author", "theory"],
+    });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const tests = await testDataRepo().find({
+      where: { libraryTask: { id: task.id } } as any,
+      order: { id: "ASC" },
+    });
+
+    const isPrivileged = req.userRole === "SYSTEM_ADMIN" || (req.userId && task.author?.id === req.userId);
+    const visibleTests = isPrivileged
+      ? tests
+      : tests.filter(t => {
+          const kind = (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
+          return kind === "SAMPLE";
+        });
+
+    return res.json({
+      task: buildTaskDto(task),
+      theory: task.theory?.content ?? null,
+      tests: visibleTests.map(t => ({
+        id: t.id,
+        input: t.input,
+        expectedOutput: t.expectedOutput,
+        isHidden: !!t.isHidden,
+        kind: ((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any,
+        points: t.points,
+      })),
+    });
+  } catch (error: any) {
+    logger.error("[library] GET /tasks/by/:key error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.get("/tasks/mine", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (user.userMode !== "EDUCATIONAL" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+
+    const tasks = await libraryRepo().find({
+      where: { author: { id: user.id } } as any,
+      relations: ["author"],
+      order: { updatedAt: "DESC" },
+      take: 200,
+    });
+
+    const ids = tasks.map(t => t.id);
+    const attempts = ids.length
+      ? await attemptRepo().find({
+          where: {
+            user: { id: user.id },
+            libraryTask: { id: In(ids) }
+          } as any,
+          relations: ["libraryTask"]
+        })
+      : [];
+    const attemptByTaskId = new Map<number, LibraryTaskAttempt>();
+    for (const a of attempts) {
+      const tid = (a as any)?.libraryTask?.id;
+      if (typeof tid === "number") attemptByTaskId.set(tid, a);
+    }
+
+    return res.json({
+      tasks: tasks.map(t => ({
+        ...buildTaskDto(t),
+        attempt: buildAttemptSummary(attemptByTaskId.get(t.id) ?? null)
+      }))
+    });
+  } catch (error: any) {
+    logger.error("[library] GET /tasks/mine error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({
+      where: { id } as any,
+      relations: ["author", "theory"],
+    });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const tests = await testDataRepo().find({
+      where: { libraryTask: { id: task.id } } as any,
+      order: { id: "ASC" },
+    });
+
+    const isPrivileged = req.userRole === "SYSTEM_ADMIN" || (req.userId && task.author?.id === req.userId);
+    const visibleTests = isPrivileged
+      ? tests
+      : tests.filter(t => {
+          const kind = (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
+          return kind === "SAMPLE";
+        });
+
+    return res.json({
+      task: buildTaskDto(task),
+      theory: task.theory?.content ?? null,
+      tests: visibleTests.map(t => ({
+        id: t.id,
+        input: t.input,
+        expectedOutput: t.expectedOutput,
+        isHidden: !!t.isHidden,
+        kind: ((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any,
+        points: t.points,
+      })),
+    });
+  } catch (error: any) {
+    logger.error("[library] GET /tasks/:id error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.get("/tasks/:id/attempt", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    const principalId = req.userId ?? req.studentId ?? null;
+    if (!principalId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    // EDU students currently do not have a User record, so we cannot persist attempts in DB
+    // without a separate student-specific attempt table. For now, the frontend stores drafts locally.
+    if (!req.userId) {
+      return res.json({ attempt: null });
+    }
+
+    const attempt = await attemptRepo().findOne({
+      where: {
+        user: { id: req.userId },
+        libraryTask: { id: task.id }
+      } as any
+    });
+
+    const requestedLang = normalizeJudgeLanguage(req.query.language);
+    const lang = requestedLang ?? defaultJudgeLanguageFromTask(task);
+    const draftByLang = attempt?.draftCodeByLanguage ?? null;
+    const submittedByLang = attempt?.lastSubmittedCodeByLanguage ?? null;
+    const selectedDraft = draftByLang && typeof draftByLang === "object" ? (draftByLang as any)[lang] : null;
+    const selectedSubmitted = submittedByLang && typeof submittedByLang === "object" ? (submittedByLang as any)[lang] : null;
+
+    const draftDecoded = decodeMultiFileSubmissionV1(selectedDraft ?? attempt?.draftCode ?? "");
+    const submittedDecoded = decodeMultiFileSubmissionV1(selectedSubmitted ?? attempt?.lastSubmittedCode ?? null);
+
+    const draftEntryContent = draftDecoded ? pickEntryContent(draftDecoded) : (selectedDraft ?? attempt?.draftCode ?? "");
+    const submittedEntryContent = submittedDecoded ? pickEntryContent(submittedDecoded) : (selectedSubmitted ?? attempt?.lastSubmittedCode ?? null);
+
+    return res.json({
+      attempt: attempt
+        ? {
+            draftCode: draftEntryContent ?? "",
+            draftFiles: draftDecoded?.files ?? undefined,
+            draftEntryFile: draftDecoded?.entry ?? undefined,
+            lastSubmittedCode: submittedEntryContent ?? null,
+            lastSubmittedFiles: submittedDecoded?.files ?? undefined,
+            lastSubmittedEntryFile: submittedDecoded?.entry ?? undefined,
+            lastVerdict: attempt.lastVerdict ?? null,
+            lastScore: attempt.lastScore ?? null,
+            lastMaxScore: attempt.lastMaxScore ?? null,
+            lastTestsPassed: attempt.lastTestsPassed ?? null,
+            lastTestsTotal: attempt.lastTestsTotal ?? null,
+            submissionsCount: attempt.submissionsCount ?? 0,
+            lastCheckedAt: attempt.lastCheckedAt ?? null,
+            updatedAt: attempt.updatedAt
+          }
+        : null
+    });
+  } catch (error: any) {
+    logger.error("[library] GET /tasks/:id/attempt error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    const principalId = req.userId ?? req.studentId ?? null;
+    if (!principalId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const schema = z
+      .object({
+        draftCode: z.string().max(200_000).optional(),
+        files: z
+          .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+          .max(64)
+          .optional(),
+        language: z.string().optional(),
+      })
+      .refine(v => (typeof v.draftCode === "string" && v.draftCode.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
+        message: "draftCode or files required",
+      });
+    const validated = schema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    // For EDU students we accept the request (so UI auto-save works), but do not persist in DB.
+    if (!req.userId) {
+      return res.json({ ok: true });
+    }
+
+    let attempt = await attemptRepo().findOne({
+      where: {
+        user: { id: req.userId },
+        libraryTask: { id: task.id }
+      } as any
+    });
+
+    const lang = normalizeJudgeLanguage(validated.data.language) ?? defaultJudgeLanguageFromTask(task);
+    const allowedLangs = getAllowedJudgeLanguages(task);
+    if (!allowedLangs.includes(lang)) {
+      return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
+    }
+
+    const normalizedFiles = normalizeApiFiles((validated.data as any).files);
+    const entryFile = entryFileForJudgeLanguage(lang);
+    const persistedDraft = normalizedFiles.length
+      ? encodeMultiFileSubmissionV1({ entry: entryFile, files: normalizedFiles })
+      : String((validated.data as any).draftCode ?? "");
+    if (!attempt) {
+      attempt = attemptRepo().create({
+        user: { id: req.userId } as any,
+        libraryTask: { id: task.id } as any,
+        draftCode: persistedDraft
+      });
+    } else {
+      attempt.draftCode = persistedDraft;
+    }
+
+    const nextMap: Record<string, string> = { ...(attempt.draftCodeByLanguage ?? {}) };
+    nextMap[lang] = persistedDraft;
+    attempt.draftCodeByLanguage = nextMap;
+
+    await attemptRepo().save(attempt);
+    return res.json({ ok: true });
+  } catch (error: any) {
+    logger.error("[library] PUT /tasks/:id/attempt error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    const principalId = req.userId ?? req.studentId ?? null;
+    if (!principalId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const schema = z
+      .object({
+        code: z.string().min(1).max(200_000).optional(),
+        files: z
+          .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+          .max(64)
+          .optional(),
+        input: z.string().optional(),
+        language: z.string().optional(),
+      })
+      .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
+        message: "code or files required",
+      });
+    const validated = schema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const selectedLang = normalizeJudgeLanguage(validated.data.language) ?? defaultJudgeLanguageFromTask(task);
+    const allowedLangs = getAllowedJudgeLanguages(task);
+    if (!allowedLangs.includes(selectedLang)) {
+      return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
+    }
+
+    const normalizedFiles = normalizeApiFiles((validated.data as any).files);
+    const entryFile = entryFileForJudgeLanguage(selectedLang);
+    const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
+    const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+    let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
+    const isMultiFile = effectiveFiles.length > 0;
+    if (isMultiFile && !effectiveFiles.some(f => f.path === entryFile)) {
+      effectiveFiles = [...effectiveFiles, { path: entryFile, content: providedCode }];
+    }
+    const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : providedCode;
+    const persistedDraft = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
+
+    // Persist as draft for convenience (does not affect grades).
+    if (req.userId) {
+      try {
+        let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
+        if (!attempt) {
+          attempt = attemptRepo().create({ user: { id: req.userId } as any, libraryTask: { id: task.id } as any, draftCode: persistedDraft });
+        } else {
+          attempt.draftCode = persistedDraft;
+        }
+
+        const nextMap: Record<string, string> = { ...(attempt.draftCodeByLanguage ?? {}) };
+        nextMap[selectedLang] = persistedDraft;
+        attempt.draftCodeByLanguage = nextMap;
+        await attemptRepo().save(attempt);
+      } catch {}
+    }
+
+    // For Java/Python we can run locally for single-file submissions; for multi-file always use judge worker.
+    if (!isMultiFile && (selectedLang === "java" || selectedLang === "python")) {
+      const localLang = selectedLang === "java" ? "JAVA" : "PYTHON";
+      const r = await executeCodeWithInput(sourceText, localLang as any, validated.data.input ?? "", 10000);
+      return res.json({
+        stdout: r.stdout,
+        stderr: filterStderrWithLang(r.stderr, localLang as any),
+        exitCode: r.exitCode,
+        success: r.success
+      });
+    }
+
+    const principalTag = req.userType === "STUDENT" ? `student_${req.studentId}` : `user_${req.userId}`;
+    const workerReq: WorkerJudgeRequest = {
+      submission_id: `library_run_${principalTag}_${task.id}_${Date.now()}`,
+      language: selectedLang,
+      source: sourceText,
+      ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
+      tests: [
+        {
+          id: "custom",
+          input: validated.data.input ?? "",
+          output: "",
+          hidden: false,
+          group: "custom",
+          weight: 1
+        }
+      ],
+      limits: {
+        time_limit_ms: Number.isFinite((task as any).timeLimitMs) && (task as any).timeLimitMs > 0 ? (task as any).timeLimitMs : 5000,
+        memory_limit_mb:
+          Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0
+            ? (task as any).memoryLimitMb
+            : DEFAULT_LIMITS_BY_LANG[selectedLang].memory_limit_mb,
+        output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : 256,
+      },
+      checker: { type: "exact" },
+      debug: true,
+      run_all: true,
+      rerun_failed_once: false,
+    };
+
+    let workerRes: WorkerJudgeResponse;
+    try {
+      workerRes = await judgeWithSemaphore(workerReq);
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      throw new HttpError(503, "Judge unavailable", {
+        code: "JUDGE_UNAVAILABLE",
+        expose: true,
+        cause: e
+      });
+    }
+
+    if (workerRes.verdict === "CE" && workerRes.compile) {
+      const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
+      const fallbackHint =
+        "Compilation error. If the message is empty, the compiler/toolchain is likely missing in the sandbox rootfs (e.g. /usr/bin/gcc, /usr/bin/g++, /usr/bin/dotnet, /usr/bin/kotlinc).";
+      return res.json({ stdout: "", stderr: truncateText(combined || fallbackHint, 40_000), exitCode: 1, success: false });
+    }
+    const t0 = workerRes.tests?.[0];
+    const stdout = (t0 as any)?.actual ?? "";
+    const stderr = (t0 as any)?.stderr ?? "";
+    const success = workerRes.verdict === "AC" || workerRes.verdict === "WA";
+    return res.json({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode: success ? 0 : 1, success });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ error: error.message, status: error.statusCode });
+    }
+    logger.error("[library] POST /tasks/:id/run error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ error: "INTERNAL_SERVER_ERROR", status: 500 });
+  }
+});
+
+libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    const principalId = req.userId ?? req.studentId ?? null;
+    if (!principalId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const schema = z
+      .object({
+        code: z.string().min(1).max(200_000).optional(),
+        files: z
+          .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+          .max(64)
+          .optional(),
+        language: z.string().optional(),
+      })
+      .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
+        message: "code or files required",
+      });
+    const validated = schema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const tests = await testDataRepo().find({
+      where: { libraryTask: { id: task.id } } as any,
+      order: { id: "ASC" }
+    });
+    if (!tests.length) return res.status(400).json({ message: "NO_TESTS_DEFINED_FOR_THIS_TASK" });
+
+    const isSample = (t: TestData): boolean => {
+      const kind = (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
+      return kind === "SAMPLE";
+    };
+    const isJudge = (t: TestData): boolean => !isSample(t);
+    const publicTestsTotal = tests.filter(isSample).length;
+
+    const requested = normalizeJudgeLanguage(validated.data.language);
+    const allowedLangs = getAllowedJudgeLanguages(task);
+    const judgeLang: JudgeLanguage = (requested ?? defaultJudgeLanguageFromTask(task));
+    if (!allowedLangs.includes(judgeLang)) {
+      return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
+    }
+    const taskLimits = {
+      time_limit_ms: Number.isFinite((task as any).timeLimitMs) && (task as any).timeLimitMs > 0 ? (task as any).timeLimitMs : undefined,
+      memory_limit_mb: Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0 ? (task as any).memoryLimitMb : undefined,
+      output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : undefined,
+    };
+    const effectiveLimits = {
+      time_limit_ms: taskLimits.time_limit_ms ?? DEFAULT_LIMITS_BY_LANG[judgeLang].time_limit_ms,
+      memory_limit_mb: taskLimits.memory_limit_mb ?? DEFAULT_LIMITS_BY_LANG[judgeLang].memory_limit_mb,
+      output_limit_kb: taskLimits.output_limit_kb ?? DEFAULT_LIMITS_BY_LANG[judgeLang].output_limit_kb,
+    };
+
+    const explicitChecker = (task as any).checkerSpec as CheckerSpec | null | undefined;
+    const effectiveChecker = explicitChecker ?? chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || ""));
+
+    const maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
+
+    const normalizedFiles = normalizeApiFiles((validated.data as any).files);
+    const entryFile = entryFileForJudgeLanguage(judgeLang);
+    const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
+    const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+    let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
+    const isMultiFile = effectiveFiles.length > 0;
+    if (isMultiFile && !effectiveFiles.some(f => f.path === entryFile)) {
+      effectiveFiles = [...effectiveFiles, { path: entryFile, content: providedCode }];
+    }
+    const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : providedCode;
+    const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
+
+    const principalTag = req.userType === "STUDENT" ? `student_${req.studentId}` : `user_${req.userId}`;
+    const workerReq: WorkerJudgeRequest = {
+      submission_id: `library_${principalTag}_${task.id}_${Date.now()}`,
+      language: judgeLang,
+      source: sourceText,
+      ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
+      tests: tests.map(t => ({
+        id: t.id,
+        input: t.input || "",
+        output: t.expectedOutput || "",
+        hidden: t.isHidden === true,
+        group: t.isHidden === true ? "hidden" : "public",
+        weight: t.points || 1
+      })),
+      limits: effectiveLimits,
+      checker: effectiveChecker,
+      debug: false,
+      rerun_failed_once: true,
+      run_all: true
+    };
+
+    let workerRes: WorkerJudgeResponse | null = null;
+    let totalPassed = 0;
+    let totalScore = 0;
+    let hiddenPassed = 0;
+    let compileError: string | null = null;
+    let compileErrorKind: string | null = null;
+    // Detailed results are intentionally capped to keep HTTP response small.
+    const publicResultsLimit = Math.max(0, Math.min(200, parseInt(String(process.env.LIBRARY_CHECK_PUBLIC_RESULTS_LIMIT ?? "25"), 10) || 25));
+    // Compact results contain only statuses (no large input/output) and can safely include many tests.
+    const publicCompactLimit = Math.max(0, Math.min(20000, parseInt(String(process.env.LIBRARY_CHECK_PUBLIC_COMPACT_LIMIT ?? "5000"), 10) || 5000));
+    const publicResults: Array<{ testId: number; input: string; actualOutput: string; passed: boolean; verdict?: string | null; error?: string | null; errorKind?: string | null }> = [];
+    const publicResultsCompact: Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null }> = [];
+
+    try {
+      workerRes = await judgeWithSemaphore(workerReq);
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      const errMsg = e instanceof Error ? e.message : String(e);
+      logger.error("[judge] worker failed (library check)", {
+        requestId: req.requestId,
+        submission: workerReq.submission_id,
+        error: errMsg,
+        err: e
+      });
+      throw new HttpError(503, "Judge unavailable", {
+        code: "JUDGE_UNAVAILABLE",
+        expose: true,
+        cause: e
+      });
+    }
+
+    if (workerRes) {
+      if (workerRes.verdict === "CE" && workerRes.compile) {
+        // IMPORTANT: Do not duplicate huge compile stderr for every test.
+        // Return compile error once and keep per-test list empty.
+        compileErrorKind = workerRes.compile.error_kind ?? null;
+        const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
+        const fallbackHint =
+          "Compilation error. If the message is empty, the compiler/toolchain is likely missing in the sandbox rootfs (e.g. /usr/bin/gcc, /usr/bin/g++, /usr/bin/dotnet, /usr/bin/kotlinc).";
+        compileError = truncateText(combined || fallbackHint, 40_000);
+      } else {
+        const byId = new Map<string, (typeof workerRes.tests)[number]>();
+        for (const r of workerRes.tests) byId.set(String(r.test_id), r);
+        for (const t of tests) {
+          const r = byId.get(String(t.id));
+          const passed = r?.verdict === "AC";
+          if (passed) {
+            totalPassed++;
+            totalScore += t.points || 1;
+            if (isJudge(t)) hiddenPassed++;
+          }
+          if (isJudge(t)) continue;
+          if (publicResultsCompact.length < publicCompactLimit) {
+            publicResultsCompact.push({
+              testId: t.id,
+              passed,
+              verdict: r?.verdict ?? null,
+              errorKind: (r as any)?.error_kind ?? null
+            });
+          }
+
+          if (publicResults.length < publicResultsLimit) {
+            publicResults.push({
+              testId: t.id,
+              // OJ-style: do not expose judge test I/O.
+              input: "",
+              actualOutput: "",
+              passed,
+              verdict: r?.verdict ?? null,
+              error: passed ? null : (r?.stderr ? truncateText(r.stderr, 20_000) : null),
+              errorKind: (r as any)?.error_kind ?? null
+            });
+          }
+        }
+        if (typeof workerRes.score === "number") totalScore = workerRes.score;
+      }
+    }
+
+    const scoringScore = typeof workerRes?.score === "number" ? workerRes.score : totalScore;
+    const scoringMaxScore = typeof workerRes?.max_score === "number" ? workerRes.max_score : maxScore;
+
+    // Upsert attempt (draft + last check summary).
+    if (req.userId) {
+      try {
+        let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
+        if (!attempt) {
+          attempt = attemptRepo().create({
+            user: { id: req.userId } as any,
+            libraryTask: { id: task.id } as any,
+            draftCode: persistedSubmitted
+          });
+        } else {
+          attempt.draftCode = persistedSubmitted;
+        }
+        attempt.lastSubmittedCode = persistedSubmitted;
+
+        const nextDraftMap: Record<string, string> = { ...(attempt.draftCodeByLanguage ?? {}) };
+        nextDraftMap[judgeLang] = persistedSubmitted;
+        attempt.draftCodeByLanguage = nextDraftMap;
+
+        const nextSubMap: Record<string, string> = { ...(attempt.lastSubmittedCodeByLanguage ?? {}) };
+        nextSubMap[judgeLang] = persistedSubmitted;
+        attempt.lastSubmittedCodeByLanguage = nextSubMap;
+
+        attempt.lastVerdict = workerRes?.verdict ?? null;
+        attempt.lastScore = scoringScore;
+        attempt.lastMaxScore = scoringMaxScore;
+        attempt.lastTestsPassed = totalPassed;
+        attempt.lastTestsTotal = tests.length;
+        attempt.submissionsCount = (attempt.submissionsCount ?? 0) + 1;
+        attempt.lastCheckedAt = new Date();
+        await attemptRepo().save(attempt);
+      } catch {}
+    }
+
+    return res.json({
+      verdict: workerRes?.verdict ?? null,
+      testsPassed: totalPassed,
+      testsTotal: tests.length,
+      score: scoringScore,
+      maxScore: scoringMaxScore,
+      compileError,
+      compileErrorKind,
+      publicTestResultsTotal: publicTestsTotal,
+      publicTestResultsTruncated: publicTestsTotal > publicResults.length,
+      publicTestResultsDetailedLimit: publicResultsLimit,
+      publicTestResultsCompact: publicResultsCompact,
+      publicTestResultsCompactTruncated: publicTestsTotal > publicResultsCompact.length,
+      publicTestResultsCompactLimit: publicCompactLimit,
+      hidden: {
+        passed: hiddenPassed,
+        total: tests.filter(isJudge).length
+      },
+      publicTestResults: publicResults
+    });
+  } catch (error: any) {
+    logger.error("[library] POST /tasks/:id/check error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const validated = createLibraryTaskSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (user.userMode !== "EDUCATIONAL" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+
+    const data = validated.data;
+
+    if (Array.isArray((data as any).allowedLanguages) && (data as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+      return res.status(400).json({
+        message: "LANGUAGE_DISABLED",
+        disabledLanguages: Array.from(DISABLED_JUDGE_LANGS)
+      });
+    }
+    const task = libraryRepo().create({
+      author: { id: user.id } as any,
+      title: data.title.trim(),
+      problemCode: data.problemCode?.trim() ?? null,
+      slug: data.slug?.trim() ?? null,
+      difficulty: data.difficulty ?? null,
+      tags: data.tags ?? null,
+      section: data.section?.trim() ?? null,
+      description: data.description.trim(),
+      template: data.template,
+      lang: normalizeLang(data.lang),
+      maxAttempts: data.maxAttempts ?? 3,
+      timeLimitMs: data.timeLimitMs ?? null,
+      memoryLimitMb: data.memoryLimitMb ?? null,
+      outputLimitKb: data.outputLimitKb ?? null,
+      checkerSpec: (data.checkerSpec as any) ?? null,
+      allowedLanguages: data.allowedLanguages ?? null,
+      status: "DRAFT",
+      rejectionReason: null,
+      submittedAt: null,
+      publishedAt: null,
+    });
+
+    await libraryRepo().save(task);
+
+    // Auto-generate stable identifiers if not provided.
+    let dirty = false;
+    if (!(task as any).problemCode) {
+      (task as any).problemCode = `LIB${task.id}`;
+      dirty = true;
+    }
+    if (!(task as any).slug) {
+      const base = String(task.title || "task").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "task";
+      (task as any).slug = `${base}-${task.id}`;
+      dirty = true;
+    }
+    if (dirty) await libraryRepo().save(task);
+
+    if (data.theory && data.theory.trim()) {
+      const th = theoryRepo().create({
+        libraryTask: { id: task.id } as any,
+        content: data.theory.trim(),
+      });
+      await theoryRepo().save(th);
+    }
+
+    if (Array.isArray(data.tests) && data.tests.length > 0) {
+      const rows = data.tests.map(t =>
+        testDataRepo().create({
+          libraryTask: { id: task.id } as any,
+          input: String(t.input ?? ""),
+          expectedOutput: String(t.expectedOutput ?? ""),
+          isHidden: !!t.isHidden,
+          kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+          points: t.points ?? 1,
+        })
+      );
+      await testDataRepo().save(rows);
+    }
+
+    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author", "theory"] });
+
+    return res.status(201).json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
+  } catch (error: any) {
+    logger.error("[library] POST /tasks error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.patch("/tasks/:id", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const validated = updateLibraryTaskSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author", "theory"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    const isOwner = task.author?.id === req.userId;
+    if (!isAdmin && !isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    if (task.status === "APPROVED" || task.status === "PENDING") {
+      return res.status(400).json({ message: "CANNOT_EDIT_IN_STATUS", status: task.status });
+    }
+
+    const data = validated.data;
+
+    if ((data as any).allowedLanguages !== undefined && Array.isArray((data as any).allowedLanguages) && (data as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+      return res.status(400).json({
+        message: "LANGUAGE_DISABLED",
+        disabledLanguages: Array.from(DISABLED_JUDGE_LANGS)
+      });
+    }
+
+    if (typeof data.title === "string") task.title = data.title.trim();
+    if (typeof (data as any).problemCode === "string") (task as any).problemCode = (data as any).problemCode.trim();
+    if (typeof (data as any).slug === "string") (task as any).slug = (data as any).slug.trim();
+    if ((data as any).difficulty !== undefined) (task as any).difficulty = (data as any).difficulty ?? null;
+    if ((data as any).tags !== undefined) (task as any).tags = (data as any).tags ?? null;
+    if ((data as any).section !== undefined) (task as any).section = String((data as any).section ?? "").trim() || null;
+    if (typeof data.description === "string") task.description = data.description.trim();
+    if (typeof data.template === "string") task.template = data.template;
+    if (data.lang) task.lang = normalizeLang(data.lang);
+    if (typeof data.maxAttempts === "number") task.maxAttempts = data.maxAttempts;
+    if ((data as any).timeLimitMs !== undefined) (task as any).timeLimitMs = (data as any).timeLimitMs ?? null;
+    if ((data as any).memoryLimitMb !== undefined) (task as any).memoryLimitMb = (data as any).memoryLimitMb ?? null;
+    if ((data as any).outputLimitKb !== undefined) (task as any).outputLimitKb = (data as any).outputLimitKb ?? null;
+    if ((data as any).checkerSpec !== undefined) (task as any).checkerSpec = (data as any).checkerSpec ?? null;
+    if ((data as any).allowedLanguages !== undefined) (task as any).allowedLanguages = (data as any).allowedLanguages ?? null;
+
+    // Editing resets rejection reason.
+    task.rejectionReason = null;
+
+    await libraryRepo().save(task);
+
+    if (data.theory !== undefined) {
+      const existing = await theoryRepo().findOne({ where: { libraryTask: { id: task.id } } as any });
+      const next = String(data.theory ?? "").trim();
+      if (!next) {
+        if (existing) await theoryRepo().remove(existing);
+      } else {
+        if (existing) {
+          existing.content = next;
+          await theoryRepo().save(existing);
+        } else {
+          await theoryRepo().save(
+            theoryRepo().create({ libraryTask: { id: task.id } as any, content: next })
+          );
+        }
+      }
+    }
+
+    if (data.tests !== undefined) {
+      // Replace all tests.
+      await AppDataSource.query("DELETE FROM test_data WHERE library_task_id = ?", [task.id]);
+      if (Array.isArray(data.tests) && data.tests.length > 0) {
+        const rows = data.tests.map(t =>
+          testDataRepo().create({
+            libraryTask: { id: task.id } as any,
+            input: String(t.input ?? ""),
+            expectedOutput: String(t.expectedOutput ?? ""),
+            isHidden: !!t.isHidden,
+            kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+            points: t.points ?? 1,
+          })
+        );
+        await testDataRepo().save(rows);
+      }
+    }
+
+    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author", "theory"] });
+    return res.json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
+  } catch (error: any) {
+    logger.error("[library] PATCH /tasks/:id error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.post("/tasks/:id/submit", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    const isOwner = task.author?.id === req.userId;
+    if (!isAdmin && !isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    if (task.status !== "DRAFT" && task.status !== "REJECTED") {
+      return res.status(400).json({ message: "CANNOT_SUBMIT_IN_STATUS", status: task.status });
+    }
+
+    // Auto-fill judge configuration defaults (limits + checker) so moderation always sees a fully configured task.
+    // If the author explicitly set values, we keep them.
+    const tests = await testDataRepo().find({
+      where: { libraryTask: { id: task.id } } as any,
+      order: { id: "ASC" } as any,
+    });
+    if (ensureJudgeConfigDefaults(task, tests)) {
+      await libraryRepo().save(task);
+    }
+
+    task.status = "PENDING";
+    task.submittedAt = new Date();
+    task.rejectionReason = null;
+    await libraryRepo().save(task);
+
+    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author"] });
+    return res.json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
+  } catch (error: any) {
+    logger.error("[library] POST /tasks/:id/submit error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+const copyToTopicSchema = z.object({
+  topicId: z.number().int().positive(),
+});
+
+libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const libraryTaskId = parseInt(req.params.id, 10);
+    if (isNaN(libraryTaskId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const validated = copyToTopicSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (user.userMode !== "EDUCATIONAL" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+
+    const topic = await topicRepo().findOne({
+      where: { id: validated.data.topicId } as any,
+      relations: ["class", "class.teacher"],
+    });
+    if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
+    if (topic.class && topic.class.teacher?.id !== user.id && req.userRole !== "SYSTEM_ADMIN") {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    const libTask = await libraryRepo().findOne({
+      where: { id: libraryTaskId } as any,
+      relations: ["author", "theory"],
+    });
+    if (!libTask) return res.status(404).json({ message: "LIBRARY_TASK_NOT_FOUND" });
+    if (libTask.status !== "APPROVED" && req.userRole !== "SYSTEM_ADMIN" && libTask.author?.id !== user.id) {
+      return res.status(403).json({ message: "ONLY_APPROVED_TASKS" });
+    }
+
+    const newTopicTask = topicTaskRepo().create({
+      topic: { id: topic.id } as any,
+      title: libTask.title,
+      description: libTask.description,
+      template: libTask.template,
+      type: "PRACTICE",
+      order: 0,
+      maxAttempts: libTask.maxAttempts ?? 3,
+      deadline: null,
+    });
+    await topicTaskRepo().save(newTopicTask);
+
+    if (libTask.theory?.content) {
+      const th = theoryRepo().create({
+        topicTask: { id: newTopicTask.id } as any,
+        content: libTask.theory.content,
+      });
+      await theoryRepo().save(th);
+    }
+
+    const tests = await testDataRepo().find({
+      where: { libraryTask: { id: libTask.id } } as any,
+      order: { id: "ASC" },
+    });
+
+    if (tests.length > 0) {
+      const rows = tests.map(t =>
+        testDataRepo().create({
+          topicTask: { id: newTopicTask.id } as any,
+          input: t.input,
+          expectedOutput: t.expectedOutput,
+          isHidden: !!t.isHidden,
+          kind: (((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any),
+          points: t.points,
+        })
+      );
+      await testDataRepo().save(rows);
+    }
+
+    return res.status(201).json({
+      ok: true,
+      topicTask: { id: newTopicTask.id, title: newTopicTask.title },
+    });
+  } catch (error: any) {
+    logger.error("[library] POST /tasks/:id/copy-to-topic error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+function readZipJson<T>(zip: AdmZip, path: string): T {
+  const entry = zip.getEntry(path);
+  if (!entry) throw new Error(`Missing ${path}`);
+  const raw = entry.getData().toString("utf-8");
+  return JSON.parse(raw) as T;
+}
+
+/**
+ * Archive format is the same as topics import/export:
+ * - task.json (required)
+ * - tests.json (optional)
+ * - theory.md (optional)
+ */
+libraryRouter.post("/tasks/import-archive", authRequired, teacherOrAdminGuard, archiveUpload.single("archive"), async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (user.userMode !== "EDUCATIONAL" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+
+    const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
+    if (!file?.buffer) return res.status(400).json({ message: "ARCHIVE_REQUIRED" });
+
+    const zip = new AdmZip(file.buffer);
+
+    type TaskJson = {
+      title: string;
+      description: string;
+      template: string;
+      lang?: "JAVA" | "PYTHON";
+      maxAttempts?: number;
+    };
+
+    const taskJson = readZipJson<TaskJson>(zip, "task.json");
+    const title = String(taskJson.title ?? "").trim();
+    const description = String(taskJson.description ?? "").trim();
+    const template = String(taskJson.template ?? "").trim();
+    const lang = normalizeLang(taskJson.lang);
+    const maxAttempts = Number.isFinite(Number(taskJson.maxAttempts)) ? Math.max(1, Math.floor(Number(taskJson.maxAttempts))) : 3;
+
+    if (!title || !description || !template) {
+      return res.status(400).json({ message: "INVALID_TASK_JSON" });
+    }
+
+    const task = libraryRepo().create({
+      author: { id: user.id } as any,
+      title,
+      description,
+      template,
+      lang,
+      maxAttempts,
+      status: "DRAFT",
+      rejectionReason: null,
+      submittedAt: null,
+      publishedAt: null,
+    });
+
+    await libraryRepo().save(task);
+
+    const theoryEntry = zip.getEntry("theory.md");
+    if (theoryEntry) {
+      const content = theoryEntry.getData().toString("utf-8").trim();
+      if (content) {
+        await theoryRepo().save(theoryRepo().create({ libraryTask: { id: task.id } as any, content }));
+      }
+    }
+
+    const testsEntry = zip.getEntry("tests.json");
+    if (testsEntry) {
+      const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>>(zip, "tests.json");
+      if (Array.isArray(tests) && tests.length > 0) {
+        const rows = tests.map(t =>
+          testDataRepo().create({
+            libraryTask: { id: task.id } as any,
+            input: String(t.input ?? ""),
+            expectedOutput: String(t.expectedOutput ?? ""),
+            isHidden: !!t.isHidden,
+            kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+            points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
+          })
+        );
+        await testDataRepo().save(rows);
+      }
+    }
+
+    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author"] });
+    return res.status(201).json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
+  } catch (error: any) {
+    logger.error("[library] import archive failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author", "theory"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const tests = await testDataRepo().find({ where: { libraryTask: { id: task.id } } as any, order: { id: "ASC" } });
+
+    const zip = new AdmZip();
+    zip.addFile(
+      "manifest.json",
+      Buffer.from(
+        JSON.stringify(
+          {
+            format: "studycod-task-archive",
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            kind: "library-task",
+          },
+          null,
+          2
+        ),
+        "utf-8"
+      )
+    );
+    zip.addFile(
+      "task.json",
+      Buffer.from(
+        JSON.stringify(
+          {
+            title: task.title,
+            description: task.description,
+            template: task.template,
+            lang: task.lang,
+            maxAttempts: task.maxAttempts,
+          },
+          null,
+          2
+        ),
+        "utf-8"
+      )
+    );
+
+    if (tests.length > 0) {
+      zip.addFile(
+        "tests.json",
+        Buffer.from(
+          JSON.stringify(
+            tests.map(t => ({
+              input: t.input,
+              expectedOutput: t.expectedOutput,
+              isHidden: !!t.isHidden,
+              points: t.points,
+            })),
+            null,
+            2
+          ),
+          "utf-8"
+        )
+      );
+    }
+
+    if (task.theory?.content) {
+      zip.addFile("theory.md", Buffer.from(task.theory.content, "utf-8"));
+    }
+
+    const desiredFilename = `library_task_${task.id}.zip`;
+    const fallbackFilename = `library_task_${task.id}.zip`;
+    const encoded = encodeURIComponent(desiredFilename).replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+    const buffer = zip.toBuffer();
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename=\"${fallbackFilename}\"; filename*=UTF-8''${encoded}`);
+    return res.send(buffer);
+  } catch (error: any) {
+    logger.error("[library] export archive failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+export default libraryRouter;

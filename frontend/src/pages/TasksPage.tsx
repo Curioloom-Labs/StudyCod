@@ -6,6 +6,7 @@ import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
 import { CodeEditor } from "../components/CodeEditor";
+import { MultiFileEditor, type CodeFile } from "../components/MultiFileEditor";
 import type { Task, User } from "../types";
 import { Play, CheckCircle2, ChevronLeft, ChevronRight, Plus, Save, PlayCircle, Code2 } from "lucide-react";
 import { tr } from "../i18n";
@@ -39,7 +40,33 @@ export const TasksPage: React.FC<Props> = ({
   const formatApiError = (err: any) => {
     const status = err?.response?.status;
     const data = err?.response?.data;
-    const msg = safeServerMessage(err?.message ?? data?.message ?? data ?? "");
+
+    const retryAfterHeader = err?.response?.headers?.["retry-after"];
+    const retryAfterSecondsFromHeader = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+    const retryAfterMsFromBody = Number(data?.details?.retryAfterMs ?? NaN);
+    const retryAfterSeconds = Number.isFinite(retryAfterSecondsFromHeader) ? retryAfterSecondsFromHeader : Number.isFinite(retryAfterMsFromBody) ? Math.ceil(retryAfterMsFromBody / 1000) : null;
+
+    if (status === 429) {
+      const wait = retryAfterSeconds && retryAfterSeconds > 0 ? tr(`Спробуйте ще раз через ${retryAfterSeconds} с.`, `Try again in ${retryAfterSeconds}s.`) : tr("Спробуйте ще раз трохи пізніше.", "Please try again a bit later.");
+      const isAi429 = !!data?.details?.mode;
+      const isGlobalRateLimit = String(data?.message ?? "") === "RATE_LIMIT";
+      if (isGlobalRateLimit) {
+        return tr("Занадто багато запитів до сервера. ", "Too many requests to the server. ") + wait;
+      }
+      if (isAi429) {
+        return tr("Занадто багато запитів (обмеження AI). ", "Too many requests (AI rate limit). ") + wait;
+      }
+      return tr("Занадто багато запитів. ", "Too many requests. ") + wait;
+    }
+
+    // Prefer server-provided message; Axios' default message is usually unhelpful.
+    const serverMsg = safeServerMessage(data?.message ?? data?.error ?? "").trim();
+    if (serverMsg.toUpperCase().includes("AI_GENERATION_FAILED")) {
+      return tr("AI тимчасово недоступний. Спробуйте ще раз трохи пізніше.", "AI is temporarily unavailable. Please try again a bit later.");
+    }
+    const axiosMsg = safeServerMessage(err?.message ?? "").trim();
+    const cleanedAxiosMsg = /^request failed with status code\s+\d+$/i.test(axiosMsg) ? "" : axiosMsg;
+    const msg = serverMsg || cleanedAxiosMsg || safeServerMessage(data ?? "");
     const statusText = status ? `HTTP ${status}` : "";
     if (msg && statusText) return `${statusText}: ${msg}`;
     return msg || statusText || tr("Невідома помилка", "Unknown error");
@@ -119,10 +146,14 @@ export const TasksPage: React.FC<Props> = ({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [active, setActive] = useState<Task | null>(null);
   const [code, setCode] = useState("");
+  const [useFiles, setUseFiles] = useState(false);
+  const [files, setFiles] = useState<CodeFile[]>([]);
   const [consoleOutput, setConsoleOutput] = useState("");
   const [stdin, setStdin] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [generateCooldownUntilMs, setGenerateCooldownUntilMs] = useState<number>(0);
+  const [clockMs, setClockMs] = useState<number>(() => Date.now());
   const [editorOpen, setEditorOpen] = useState<boolean>(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("studycod_tasks_editor_open") : null;
     if (saved === "1") return true;
@@ -172,6 +203,38 @@ export const TasksPage: React.FC<Props> = ({
   const canGenerateNew = lessonStatus === "COMPLETED";
   const canGenerateFirst = lessonStatus === "NOT_STARTED";
   const canGenerate = canGenerateFirst || canGenerateNew;
+  const cooldownSecondsLeft = Math.max(0, Math.ceil((generateCooldownUntilMs - clockMs) / 1000));
+
+  const entryFile = user.course === "JAVA" ? "Main.java" : "main.py";
+  const entryContentFromFiles = (fs: CodeFile[]): string => {
+    const hit = fs.find(f => f.path === entryFile);
+    return hit?.content ?? "";
+  };
+
+  const deriveEditorFromTask = (t: Task): { useFiles: boolean; files: CodeFile[]; code: string } => {
+    const f = (Array.isArray(t.userFiles) && t.userFiles.length ? t.userFiles : Array.isArray(t.starterFiles) && t.starterFiles.length ? t.starterFiles : []) as CodeFile[];
+    const codeSingle = t.status === "GRADED" && t.finalCode ? t.finalCode : t.userCode && t.userCode.trim() ? t.userCode : t.starterCode;
+    const resolvedUseFiles = f.length > 0;
+    const resolvedCode = resolvedUseFiles ? entryContentFromFiles(f) : codeSingle;
+    return { useFiles: resolvedUseFiles, files: f, code: resolvedCode };
+  };
+
+  const currentCodeText = useFiles ? entryContentFromFiles(files) : code;
+
+  useEffect(() => {
+    if (cooldownSecondsLeft <= 0) return;
+    const id = setInterval(() => setClockMs(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [cooldownSecondsLeft]);
+
+  const getRetryAfterSeconds = (err: any): number | null => {
+    const header = err?.response?.headers?.["retry-after"];
+    const sHeader = header ? Number(header) : NaN;
+    if (Number.isFinite(sHeader) && sHeader > 0) return Math.ceil(sHeader);
+    const msBody = Number(err?.response?.data?.details?.retryAfterMs ?? NaN);
+    if (Number.isFinite(msBody) && msBody > 0) return Math.ceil(msBody / 1000);
+    return null;
+  };
   const blockedReason = (() => {
     if (lessonStatus !== "IN_PROGRESS") return null;
     const unfinished = tasks.find(t => t.status !== "GRADED");
@@ -193,7 +256,10 @@ export const TasksPage: React.FC<Props> = ({
     if (selectLast && filtered.length) {
       const latest = filtered[0];
       setActive(latest);
-      setCode(latest.starterCode);
+      const next = deriveEditorFromTask(latest);
+      setUseFiles(next.useFiles);
+      setFiles(next.files);
+      setCode(next.code);
       setAiResult(null);
       setRevealedHints(0);
       setConsoleOutput("");
@@ -204,17 +270,16 @@ export const TasksPage: React.FC<Props> = ({
       if (updated) {
         setActive(updated);
         if (!currentAiResult || currentAiResult.total >= 6) {
-          if (updated.status === "GRADED" && updated.finalCode) {
-            setCode(updated.finalCode);
-          } else if (updated.userCode && updated.userCode.trim()) {
-            setCode(updated.userCode);
-          } else {
-            setCode(updated.starterCode);
-          }
+          const next = deriveEditorFromTask(updated);
+          setUseFiles(next.useFiles);
+          setFiles(next.files);
+          setCode(next.code);
         }
       } else {
         setActive(null);
         setCode("");
+        setUseFiles(false);
+        setFiles([]);
         setAiResult(null);
         setRevealedHints(0);
       }
@@ -231,13 +296,10 @@ export const TasksPage: React.FC<Props> = ({
           if (filtered.length > 0 && !active) {
             const firstTask = filtered[0];
             setActive(firstTask);
-            if (firstTask.status === "GRADED" && firstTask.finalCode) {
-              setCode(firstTask.finalCode);
-            } else if (firstTask.userCode && firstTask.userCode.trim()) {
-              setCode(firstTask.userCode);
-            } else {
-              setCode(firstTask.starterCode);
-            }
+            const next = deriveEditorFromTask(firstTask);
+            setUseFiles(next.useFiles);
+            setFiles(next.files);
+            setCode(next.code);
             const hasTheory = computeHasTheory(firstTask);
             setTheoryAcknowledged(!hasTheory);
           }
@@ -267,13 +329,10 @@ export const TasksPage: React.FC<Props> = ({
         sessionStorage.removeItem("openTaskId");
       }
       setActive(taskToOpen);
-      if (taskToOpen.status === "GRADED" && taskToOpen.finalCode) {
-        setCode(taskToOpen.finalCode);
-      } else if (taskToOpen.userCode && taskToOpen.userCode.trim()) {
-        setCode(taskToOpen.userCode);
-      } else {
-        setCode(taskToOpen.starterCode);
-      }
+      const next = deriveEditorFromTask(taskToOpen);
+      setUseFiles(next.useFiles);
+      setFiles(next.files);
+      setCode(next.code);
       const hasTheory = computeHasTheory(taskToOpen);
       setTheoryAcknowledged(!hasTheory);
     }
@@ -300,17 +359,23 @@ export const TasksPage: React.FC<Props> = ({
     });
   }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, theoryAcknowledged, isTheoryOpen, openTheory]);
   useEffect(() => {
-    if (!active || !theoryAcknowledged || code.trim() === "") return;
+    if (!active || !theoryAcknowledged || currentCodeText.trim() === "") return;
     const isEditable = active.status !== "GRADED" || aiResult && aiResult.total < 6;
     if (!isEditable) return;
     const interval = setInterval(() => {
-      if (active && code.trim() !== "" && (active.status !== "GRADED" || aiResult && aiResult.total < 6)) {
-        saveDraft(active.id, code).catch(() => undefined);
+      if (active && currentCodeText.trim() !== "" && (active.status !== "GRADED" || aiResult && aiResult.total < 6)) {
+        const payload = useFiles ? { files } : currentCodeText;
+        saveDraft(active.id, payload).catch(() => undefined);
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [active, code, theoryAcknowledged, aiResult]);
+  }, [active, currentCodeText, theoryAcknowledged, aiResult, useFiles, files]);
   const handleGenerate = async () => {
+    if (cooldownSecondsLeft > 0) {
+      setConsoleOutput(tr(`Зачекай ${cooldownSecondsLeft} с і спробуй ще раз.`, `Wait ${cooldownSecondsLeft}s and try again.`));
+      setUIState("logic-warning");
+      return;
+    }
     if (!canGenerate) {
       setConsoleOutput(blockedReason ?? tr("Спочатку заверши поточне завдання.", "Finish the current task first."));
       setUIState("logic-warning");
@@ -360,6 +425,14 @@ export const TasksPage: React.FC<Props> = ({
         setUIState("error");
         return;
       }
+      if (error?.response?.status === 429) {
+        const retryAfterSeconds = getRetryAfterSeconds(error) ?? 10;
+        setGenerateCooldownUntilMs(Date.now() + Math.max(1, retryAfterSeconds) * 1000);
+        const text = formatApiError(error);
+        setConsoleOutput(`${tr("Помилка генерації завдання:", "Task generation error:")} ${text}`);
+        setUIState("logic-warning");
+        return;
+      }
       if (errorResponse?.status === "blocked") {
         setBlockState({
           mode: "low",
@@ -384,7 +457,8 @@ export const TasksPage: React.FC<Props> = ({
     setUIState("evaluating");
     setConsoleOutput(tr("Оцінювання...", "Evaluating..."));
     try {
-      const res = await submitTask(active.id, code);
+      const payload = useFiles ? { files } : code;
+      const res = await submitTask(active.id, payload);
       let result: {
         gradingMode?: "TESTS" | "AI";
         total: number;
@@ -462,9 +536,10 @@ export const TasksPage: React.FC<Props> = ({
   };
   const canEdit = active && theoryAcknowledged && (active.status !== "GRADED" || aiResult && aiResult.total < 6);
   const handleSaveDraft = async () => {
-    if (!active || !code.trim()) return;
+    if (!active || !currentCodeText.trim()) return;
     try {
-      await saveDraft(active.id, code);
+      const payload = useFiles ? { files } : currentCodeText;
+      await saveDraft(active.id, payload);
       setConsoleOutput(tr("Чернетку збережено", "Draft saved"));
     } catch (err: any) {
       const raw = safeServerMessage(err?.response?.data?.message ?? err?.message ?? String(err));
@@ -472,11 +547,12 @@ export const TasksPage: React.FC<Props> = ({
     }
   };
   const handleRun = async () => {
-    if (!active || !code.trim()) return;
+    if (!active || !currentCodeText.trim()) return;
     setUIState("evaluating");
     setConsoleOutput(tr("Запуск...", "Running..."));
     try {
-      const res = await runTask(active.id, code, stdin || "");
+      const payload = useFiles ? { files } : currentCodeText;
+      const res = await runTask(active.id, payload, stdin || "");
       setConsoleOutput(res.output || res.stderr || tr("Вивід відсутній", "No output"));
       setUIState("idle");
     } catch (err: any) {
@@ -503,23 +579,23 @@ export const TasksPage: React.FC<Props> = ({
                     <div className="text-xs text-text-muted font-mono text-center py-4">
                       {tr("Немає завдань", "No tasks")}
                     </div>
-                    <Button variant="primary" onClick={handleGenerate} disabled={loading || !canGenerate} className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2" title={!canGenerate ? blockedReason ?? undefined : undefined}>
+                    <Button variant="primary" onClick={handleGenerate} disabled={loading || !canGenerate || cooldownSecondsLeft > 0} className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2" title={!canGenerate ? blockedReason ?? undefined : cooldownSecondsLeft > 0 ? tr(`Зачекай ${cooldownSecondsLeft} с`, `Wait ${cooldownSecondsLeft}s`) : undefined}>
                       <Plus className="w-4 h-4" />
                       {tr("Згенерувати завдання", "Generate task")}
                     </Button>
+                    {cooldownSecondsLeft > 0 && <div className="mt-2 text-[10px] font-mono text-text-muted text-center">
+                        {tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)}
+                      </div>}
                     {lessonStatus !== "NOT_STARTED" && <div className="text-[10px] font-mono text-text-muted text-center">
                         {tr(`Статус уроку: ${lessonStatus}`, `Lesson status: ${lessonStatus}`)}
                       </div>}
                   </div>}
         {tasks.length > 0 && tasks.map(t => <div key={t.id} className={`p-3 cursor-pointer border transition-fast bg-bg-surface ${active?.id === t.id ? "border-primary bg-bg-hover" : "border-border hover:border-primary/50"}`} onClick={() => {
               setActive(t);
-              if (t.status === "GRADED" && t.finalCode) {
-                setCode(t.finalCode);
-              } else if (t.userCode && t.userCode.trim()) {
-                setCode(t.userCode);
-              } else {
-                setCode(t.starterCode);
-              }
+              const next = deriveEditorFromTask(t);
+              setUseFiles(next.useFiles);
+              setFiles(next.files);
+              setCode(next.code);
               setAiResult(null);
               setConsoleOutput("");
               setUIState("idle");
@@ -541,13 +617,14 @@ export const TasksPage: React.FC<Props> = ({
               </div>
               {}
               {active && <div className="p-3 border-t border-border">
-                  <Button variant="primary" onClick={handleGenerate} disabled={loading || !canGenerateNew} className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2" title={!canGenerateNew ? blockedReason ?? tr("Заборонено: урок ще не завершено", "Disabled: lesson is not completed") : undefined}>
+                  <Button variant="primary" onClick={handleGenerate} disabled={loading || !canGenerateNew || cooldownSecondsLeft > 0} className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2" title={!canGenerateNew ? blockedReason ?? tr("Заборонено: урок ще не завершено", "Disabled: lesson is not completed") : cooldownSecondsLeft > 0 ? tr(`Зачекай ${cooldownSecondsLeft} с`, `Wait ${cooldownSecondsLeft}s`) : undefined}>
                     <Plus className="w-4 h-4" />
                     {tr("Згенерувати нове", "Generate new")}
                   </Button>
                   <div className="mt-2 text-[10px] font-mono text-text-muted text-center">
                     {tr(`Статус уроку: ${lessonStatus}`, `Lesson status: ${lessonStatus}`)}
                     {blockedReason ? <div className="mt-1">{blockedReason}</div> : null}
+                    {cooldownSecondsLeft > 0 ? <div className="mt-1">{tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)}</div> : null}
                   </div>
                 </div>}
             </div>}
@@ -598,7 +675,7 @@ export const TasksPage: React.FC<Props> = ({
                       return;
                     }
                     handleSaveDraft();
-                  }} disabled={!active || !code.trim() || !theoryAcknowledged} className="text-sm px-4 py-2">
+                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2">
                           <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")}
                         </Button>
                         <Button variant="secondary" onClick={() => {
@@ -607,7 +684,7 @@ export const TasksPage: React.FC<Props> = ({
                       return;
                     }
                     handleRun();
-                  }} disabled={!active || !code.trim() || !theoryAcknowledged} className="text-sm px-4 py-2">
+                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2">
                           <PlayCircle className="w-4 h-4 mr-2" /> {tr("Запустити", "Run")}
                         </Button>
                         <Button variant="primary" onClick={() => {
@@ -616,12 +693,12 @@ export const TasksPage: React.FC<Props> = ({
                       return;
                     }
                     handleSubmit();
-                  }} disabled={!canEdit || submitting || !theoryAcknowledged || !code.trim()} className="text-sm px-6 py-2">
+                  }} disabled={!canEdit || submitting || !theoryAcknowledged || !currentCodeText.trim()} className="text-sm px-6 py-2">
                           <CheckCircle2 className="w-4 h-4 mr-2" />{" "}
                           {tr("Перевірити", "Check")}
                         </Button>
                       </> : aiResult.total < 6 ? <>
-                        <Button variant="secondary" onClick={handleSaveDraft} disabled={!active || !code.trim()} className="text-sm px-4 py-2">
+                        <Button variant="secondary" onClick={handleSaveDraft} disabled={!active || !currentCodeText.trim()} className="text-sm px-4 py-2">
                           <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")}
                         </Button>
                         <Button variant="primary" onClick={() => {
@@ -666,7 +743,23 @@ export const TasksPage: React.FC<Props> = ({
               {}
               <div className="flex-1 min-h-0 overflow-hidden bg-bg-base">
                 {editorOpen ? <div className="h-full min-h-0 bg-bg-code border-t border-border">
-                    <CodeEditor language={user.course} value={code} onChange={canEdit ? setCode : undefined} readOnly={!canEdit} />
+                    {useFiles ? <MultiFileEditor language={user.course} entryFile={entryFile} files={files.length ? files : [{
+                  path: entryFile,
+                  content: code
+                }]} onChange={setFiles} readOnly={!canEdit} /> : <div className="h-full min-h-0 flex flex-col">
+                        <div className="p-2 border-b border-border flex items-center justify-end gap-2">
+                          {!canEdit ? null : <Button variant="ghost" size="sm" onClick={() => {
+                  setUseFiles(true);
+                  setFiles([{ path: entryFile, content: code }]);
+                }}>
+                              <Plus className="w-4 h-4 mr-1" />
+                              {tr("Додати файл", "Add file")}
+                            </Button>}
+                        </div>
+                        <div className="flex-1 min-h-0">
+                          <CodeEditor language={user.course} value={code} onChange={canEdit ? setCode : undefined} readOnly={!canEdit} />
+                        </div>
+                      </div>}
                   </div> : <div className="h-full min-h-0 flex flex-col">
                     <div className="p-4 border-t border-border bg-bg-surface flex items-center justify-between">
                       <div className="text-sm font-mono text-text-secondary">

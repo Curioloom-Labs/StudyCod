@@ -1,27 +1,35 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Logo } from "../components/Logo";
 import { register, login, resendVerificationEmail, requestPasswordReset, resetPassword } from "../lib/api/auth";
 import { registerTeacher, studentLogin } from "../lib/api/edu";
 import type { User, CourseLanguage } from "../types";
 import { applyTheme, getCurrentTheme } from "../theme";
-interface Props {
-  onAuth: (user: User) => void;
-}
 type Mode = "login" | "register";
 type UserMode = "PERSONAL" | "EDUCATIONAL";
+interface Props {
+  onAuth: (user: User) => void;
+  initialMode?: Mode;
+  initialUserMode?: UserMode;
+  showBackToLanding?: boolean;
+}
 export const AuthPage: React.FC<Props> = ({
-  onAuth
+  onAuth,
+  initialMode,
+  initialUserMode,
+  showBackToLanding
 }) => {
   const {
     t,
     i18n
   } = useTranslation();
+  const navigate = useNavigate();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const [theme, setTheme] = useState<"dark" | "light">(() => getCurrentTheme());
-  const [userMode, setUserMode] = useState<UserMode>("PERSONAL");
-  const [mode, setMode] = useState<Mode>("login");
+  const [userMode, setUserMode] = useState<UserMode>(() => initialUserMode ?? "PERSONAL");
+  const [mode, setMode] = useState<Mode>(() => initialMode ?? "login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -181,6 +189,11 @@ export const AuthPage: React.FC<Props> = ({
   }}>
       <div className="w-full max-w-md bg-bg-surface border border-border p-8">
         <div className="flex justify-end gap-2 mb-2">
+          {showBackToLanding ? <button type="button" onClick={() => navigate("/", {
+          replace: true
+        })} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={t("toHome")}>
+              {t("toHome")}
+            </button> : null}
           <button type="button" onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
             {i18n.language === "uk" ? "EN" : "UA"}
           </button>
@@ -213,8 +226,16 @@ export const AuthPage: React.FC<Props> = ({
           setError(null);
           setSuccess(null);
         }} className={`flex-1 py-2 text-xs font-mono transition-fast ${userMode === "EDUCATIONAL" ? "bg-bg-hover text-text-primary border border-border" : "text-text-secondary hover:text-text-primary"}`}>
-            EDU
+            EDU ({t("teacher")})
           </button>
+        </div>
+        <div className="mb-4 border border-border bg-bg-code px-3 py-2">
+          <div className="text-xs font-mono text-text-primary">
+            {t("authEduForTeachersTitle")}
+          </div>
+          <div className="mt-1 text-[11px] font-mono text-text-muted leading-relaxed">
+            {t("authEduForTeachersBody")}
+          </div>
         </div>
         {emailSent ? <div className="space-y-4">
             <div className="text-xs font-mono text-text-primary border border-primary bg-bg-code px-3 py-2">

@@ -7,6 +7,7 @@ import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
 import { TestData } from "../entities/TestData";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
+import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
 import { In } from "typeorm";
 import { generateTaskWithAI, generateTheoryWithAI, generateQuizWithAI } from "../services/openRouterService";
 import { safeAICall, sendAIError } from "../services/ai/safeAICall";
@@ -16,14 +17,37 @@ import { getStableDifus } from "../utils/adaptiveDifficulty";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
 import { judgeWithSemaphore } from "../services/judgeWorker";
-import { JudgeBusyError } from "../services/judgeWorker/Semaphore";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { normalizeMarkdownText } from "../utils/markdownNormalize";
+import { inferNeedsInput } from "../utils/inferNeedsInput";
+import { logger } from "../utils/logger";
+import { HttpError } from "../utils/httpError";
+import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
 const tasksRouter = Router();
+
+type ApiCodeFile = { path: string; content: string };
+function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ApiCodeFile[] = [];
+  for (const f of raw) {
+    if (!f || typeof f !== "object") continue;
+    const p = typeof (f as any).path === "string" ? (f as any).path.trim() : "";
+    const c = typeof (f as any).content === "string" ? (f as any).content : "";
+    if (!p) continue;
+    // Keep it simple (no folders) – matches judge validation.
+    if (p.includes("/") || p.includes("\\") || p.includes("..") || p.startsWith(".")) continue;
+    out.push({ path: p, content: c });
+  }
+  const byPath = new Map<string, ApiCodeFile>();
+  for (const f of out) byPath.set(f.path, f);
+  return [...byPath.values()];
+}
 function taskNeedsInput(taskDesc: string): boolean {
-  const s = String(taskDesc ?? "");
-  if (/Немає\s+вхідних\s+даних/i.test(s)) return false;
-  return /\binput\b/i.test(s) || /\bstdin\b/i.test(s) || /вхідн\s*і\s*дан\s*і/i.test(s) || /введенн/i.test(s) || /читат/i.test(s) || /зчитат/i.test(s);
+  // Kept for backwards compatibility inside this file.
+  return inferNeedsInput({
+    taskDescription: taskDesc,
+    aiInputFormat: null
+  });
 }
 function tryExtractFixedAdditionSumNoInput(taskText: string): number | null {
   const s = String(taskText ?? "");
@@ -76,6 +100,19 @@ function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec
     type: "whitespace"
   };
 }
+
+function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null; error?: string | null }> {
+  if (!Array.isArray(results)) return [];
+  return results
+    .map((r: any) => ({
+      testId: Number(r?.testId ?? r?.test_id ?? 0),
+      passed: !!r?.passed,
+      verdict: r?.verdict ?? null,
+      errorKind: r?.errorKind ?? r?.error_kind ?? null,
+      error: r?.error ?? null
+    }))
+    .filter(r => Number.isFinite(r.testId) && r.testId > 0);
+}
 const taskRepo = () => AppDataSource.getRepository(Task);
 const topicRepo = () => AppDataSource.getRepository(Topic);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
@@ -120,14 +157,30 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>) {
   const theoryMarkdown = getTopicTheoryMarkdown(task) || "";
   const practiceText = stripPracticeHeader(rawPractice);
   const normalizedDescription = `${theoryMarkdown}\n\n### Практика\n\n${practiceText || "_Практичне завдання ще не додано._"}`.trim();
+
+  const starterDecoded = decodeMultiFileSubmissionV1(task.template);
+  const starterFiles = starterDecoded?.files ?? null;
+  const starterEntry = starterDecoded?.entry ?? null;
+  const starterCode = starterDecoded ? pickEntryContent(starterDecoded) : task.template;
+
+  const codeRaw = status === "GRADED" ? task.finalCode || "" : task.draftCode || "";
+  const userDecoded = decodeMultiFileSubmissionV1(codeRaw);
+  const userFiles = userDecoded?.files ?? null;
+  const userEntry = userDecoded?.entry ?? null;
+  const userCode = userDecoded ? pickEntryContent(userDecoded) : codeRaw;
+
   return {
     id: task.id,
     title: task.title,
     descriptionMarkdown: normalizedDescription,
     theoryMarkdown,
     practiceText,
-    starterCode: task.template,
-    userCode: status === "GRADED" ? task.finalCode || "" : task.draftCode || "",
+    starterCode,
+    starterFiles: starterFiles ?? undefined,
+    starterEntryFile: starterEntry ?? undefined,
+    userCode,
+    userFiles: userFiles ?? undefined,
+    userEntryFile: userEntry ?? undefined,
     finalCode: task.finalCode || null,
     status,
     lessonInTopic: task.numInTopic ?? 1,
@@ -179,7 +232,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
     }
     return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds)));
   } catch (error) {
-    console.error("GET /tasks error:", error);
+    logger.error("[tasks] GET /tasks error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "Internal server error"
     });
@@ -229,8 +282,12 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
 });
 tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    const requestStartedAt = Date.now();
+    // nginx default proxy_read_timeout is often 60s; keep some buffer.
+    const REQUEST_BUDGET_MS = 55_000;
     const userId = req.userId!;
     const lang = req.lang as "JAVA" | "PYTHON" || "JAVA";
+    const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
     const user = await userRepo().findOne({
       where: {
         id: userId
@@ -327,6 +384,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     let description = "";
     let template = lang === "PYTHON" ? "# write code here\n" : ["public class Main {", "  public static void main(String[] args) {", "  }", "}"].join("\n");
     const topicTheory = stripPracticeLikeSectionsFromTheory(String((topic as any).theoryBlock?.content ?? (topic as any).theoryMarkdown ?? ""));
+
+    const remainingBeforeTask = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
+    // Keep some budget for test-data generation + DB writes.
+    const taskBudgetMs = Math.max(12_000, Math.min(35_000, remainingBeforeTask - 15_000));
+
     const aiTaskResult = await safeAICall('generateTask', {
       topicTitle: topic.title,
       theory: topicTheory,
@@ -335,7 +397,13 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       isFirstTask: numInTopic === 1,
       difus,
       userId,
-      topicId: topic.id
+      topicId: topic.id,
+      semanticRetries: 0
+    }, {
+      language: userLanguage,
+      requestId: req.requestId,
+      maxAttempts: 1,
+      totalTimeoutMs: taskBudgetMs
     });
     if (!aiTaskResult.success) {
       return sendAIError(res, aiTaskResult.error);
@@ -363,9 +431,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       type: "TOPIC" as TaskType
     });
     const saved = await taskRepo().save(task);
-    const needsInput = taskNeedsInput(description);
+    const needsInput = inferNeedsInput({
+      taskDescription: description,
+      aiInputFormat: (aiTask as any)?.inputFormat
+    });
     const REQUIRED_TEST_COUNT = needsInput ? 12 : 1;
-    const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
     let testExamples: Array<{
       input: string;
       output: string;
@@ -384,30 +454,84 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       }];
     }
     if (testExamples.length === 0) {
+      const taskDescriptionForTests = [
+        description,
+        (aiTask as any)?.inputFormat ? `\n\nФормат вхідних даних:\n${String((aiTask as any).inputFormat).trim()}` : ""
+      ].join("").trim();
+
+      const remainingBeforeTests = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
+      const testsBudgetMs = Math.max(8_000, Math.min(18_000, remainingBeforeTests - 2000));
+
       const testDataResult = await safeAICall('generateTestData', {
-        taskDescription: description,
+        taskDescription: taskDescriptionForTests || description,
         taskTitle: topic.title,
         lang,
         count: REQUIRED_TEST_COUNT,
         userId
       }, {
         expectedCount: REQUIRED_TEST_COUNT,
-        language: userLanguage
+        language: userLanguage,
+        requestId: req.requestId,
+        maxAttempts: 1,
+        totalTimeoutMs: testsBudgetMs
       });
       if (!testDataResult.success) {
-        await taskRepo().remove(saved);
-        return sendAIError(res, testDataResult.error);
+        // If upstream AI is rate-limited/unavailable, fall back to examples produced by the task generation itself.
+        // This avoids failing the whole task generation flow under provider pressure.
+        const status = Number(testDataResult.error?.statusCode ?? 0);
+        const canFallback = status === 429 || status === 503 || status === 504;
+        if (!canFallback) {
+          await taskRepo().remove(saved);
+          return sendAIError(res, testDataResult.error);
+        }
+
+        const examples = Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [];
+        const fallbackExamples = examples
+          .map((ex: any) => ({
+            input: String(ex?.input ?? ""),
+            output: String(ex?.output ?? "")
+          }))
+          .filter((ex: { output: string }) => typeof ex.output === "string" && ex.output.trim().length > 0);
+
+        if (fallbackExamples.length === 0) {
+          // Should not happen because generateTask validator requires examples, but keep a safe fallback.
+          await taskRepo().remove(saved);
+          return sendAIError(res, testDataResult.error);
+        }
+
+        logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
+          requestId: req.requestId,
+          userId,
+          topicId: topic.id,
+          lang,
+          status,
+          retryAfterMs: testDataResult.error?.details?.retryAfterMs
+        });
+
+        testExamples = fallbackExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, fallbackExamples.length)));
+      } else {
+        testExamples = (testDataResult.data || []).map((ex: any) => ({
+          input: String(ex?.input ?? ""),
+          output: String(ex?.output ?? "")
+        }));
       }
-      testExamples = (testDataResult.data || []).map((ex: any) => ({
-        input: String(ex?.input ?? ""),
-        output: String(ex?.output ?? "")
-      }));
     }
-    const POINTS_PER_TEST = needsInput ? 1 : 12;
-    const newTestData = testExamples.map(ex => testDataRepo().create({
+    // Keep max grade scale (12) stable even if we had to fall back to fewer tests.
+    const pointsByIndex: number[] = (() => {
+      const n = Math.max(1, testExamples.length);
+      const totalPoints = needsInput ? 12 : 12;
+      if (n === 1) return [totalPoints];
+      const base = Math.floor(totalPoints / n);
+      const rem = totalPoints % n;
+      const arr = new Array(n).fill(base);
+      for (let i = 0; i < rem; i++) arr[i] = arr[i] + 1;
+      return arr;
+    })();
+
+    const newTestData = testExamples.map((ex, idx) => testDataRepo().create({
       input: ex.input || "",
       expectedOutput: ex.output || "",
-      points: POINTS_PER_TEST,
+      points: pointsByIndex[idx] ?? 1,
       personalTask: {
         id: saved.id
       }
@@ -418,7 +542,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       task: mapTaskToDto(saved)
     });
   } catch (error: any) {
-    console.error("[tasks] POST /generate error:", error);
+    logger.error("[tasks] POST /generate error", { requestId: req.requestId, userId: req.userId, error });
     if (error.statusCode) {
       return res.status(error.statusCode).json({
         message: error.message,
@@ -473,23 +597,32 @@ tasksRouter.post("/reset-topic", authMiddleware, async (req: AuthRequest, res: R
       message: "Topic reset successfully"
     });
   } catch (error: any) {
-    console.error("[tasks] POST /reset-topic error:", error);
+    logger.error("[tasks] POST /reset-topic error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "Internal server error"
     });
   }
 });
-tasksRouter.post("/:id/save-draft", authMiddleware, [body("code").isString()], async (req: AuthRequest, res: Response) => {
+tasksRouter.post(
+  "/:id/save-draft",
+  authMiddleware,
+  [
+    body("code").optional().isString(),
+    body("files").optional().isArray(),
+    body().custom(v => {
+      const hasCode = typeof (v as any)?.code === "string" && (v as any).code.length > 0;
+      const hasFiles = Array.isArray((v as any)?.files) && (v as any).files.length > 0;
+      if (!hasCode && !hasFiles) throw new Error("code or files required");
+      return true;
+    })
+  ],
+  async (req: AuthRequest, res: Response) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({
     errors: errors.array()
   });
   const id = Number(req.params.id);
-  const {
-    code
-  } = req.body as {
-    code: string;
-  };
+  const { code, files } = req.body as { code?: string; files?: unknown };
   if (!req.userId) {
     return res.status(401).json({
       message: "UNAUTHORIZED"
@@ -508,29 +641,57 @@ tasksRouter.post("/:id/save-draft", authMiddleware, [body("code").isString()], a
       message: "Task not found"
     });
   }
-  task.draftCode = code;
+
+  const normalizedFiles = normalizeApiFiles(files);
+  const persisted = normalizedFiles.length
+    ? encodeMultiFileSubmissionV1({ entry: task.lang === "PYTHON" ? "main.py" : "Main.java", files: normalizedFiles })
+    : String(code ?? "");
+
+  task.draftCode = persisted;
   await taskRepo().save(task);
   return res.json({
     success: true
   });
-});
-tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("mode").optional().isIn(["TESTS", "AI"])], async (req: AuthRequest, res: Response) => {
+}
+);
+tasksRouter.post(
+  "/:id/submit",
+  authMiddleware,
+  submissionRateLimitMiddleware,
+  [
+    body("code").optional().isString(),
+    body("files").optional().isArray(),
+    body("mode").optional().isIn(["TESTS", "AI"]),
+    body().custom(v => {
+      const hasCode = typeof (v as any)?.code === "string" && (v as any).code.length > 0;
+      const hasFiles = Array.isArray((v as any)?.files) && (v as any).files.length > 0;
+      if (!hasCode && !hasFiles) throw new Error("code or files required");
+      return true;
+    })
+  ],
+  async (req: AuthRequest, res: Response) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({
-    errors: errors.array()
-  });
+  if (!errors.isEmpty()) {
+    throw new HttpError(400, "VALIDATION_ERROR", {
+      code: "VALIDATION_ERROR",
+      expose: true
+    });
+  }
   const id = Number(req.params.id);
   const {
     code,
+    files,
     mode
   } = req.body as {
-    code: string;
+    code?: string;
+    files?: unknown;
     mode?: "TESTS" | "AI";
   };
   const submitMode: "TESTS" | "AI" = mode ?? "TESTS";
   if (!req.userId) {
-    return res.status(401).json({
-      message: "UNAUTHORIZED"
+    throw new HttpError(401, "UNAUTHORIZED", {
+      code: "UNAUTHORIZED",
+      expose: true
     });
   }
   const task = await taskRepo().findOne({
@@ -542,12 +703,27 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     },
     relations: ["testData"]
   });
-  if (!task) return res.status(404).json({
-    message: "Task not found"
-  });
+  if (!task) {
+    throw new HttpError(404, "Task not found", {
+      code: "TASK_NOT_FOUND",
+      expose: true
+    });
+  }
+
+  const normalizedFiles = normalizeApiFiles(files);
+  const entryFile = task.lang === "PYTHON" ? "main.py" : "Main.java";
+  const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(code) : null;
+  const effectiveFiles = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
+  const isMultiFile = effectiveFiles.length > 0;
+  const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : String(code ?? "");
+  const persistedSubmission = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : String(code ?? "");
+
+  // For AI grading, concatenate all files for better context.
+  const aiCodeText = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
   if (submitMode === "TESTS" && (!task.testData || task.testData.length === 0)) {
-    return res.status(400).json({
-      message: "Test data is required for personal tasks. Please regenerate the task."
+    throw new HttpError(400, "Test data is required for personal tasks. Please regenerate the task.", {
+      code: "TEST_DATA_REQUIRED",
+      expose: true
     });
   }
   const MIN_GRADE = 1;
@@ -569,7 +745,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
       relations: ["task"]
     });
     const ai = await evaluateCodeWithAI({
-      code,
+      code: aiCodeText,
       language: task.lang,
       task,
       previousCode: previous?.codeSnapshot ?? undefined,
@@ -591,7 +767,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
       const line = c.codeLine ? ` (рядок ${c.codeLine})` : "";
       return `${category}: ${sign}${c.delta}${line} — ${c.reason}`;
     }).join("\n") : null;
-    task.finalCode = code;
+    task.finalCode = persistedSubmission;
     task.completed = TASK_COMPLETED_FLAG;
     await taskRepo().save(task);
     const grade = gradeRepo().create({
@@ -606,7 +782,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
       optimizationScore: ai.optimization,
       integrityScore: ai.integrity,
       aiFeedback: ai.feedback,
-      codeSnapshot: code,
+      codeSnapshot: persistedSubmission,
       previousGradeId: previous?.id ?? null,
       comparisonFeedback: comparisonFeedback ?? null
     });
@@ -630,7 +806,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
   let total = 0;
   let passedTests = 0;
   let hintsForUser: string[] = [];
-  const testResults: Array<{
+  const testResultsDetailed: Array<{
     testId: number;
     input: string;
     expectedOutput?: string;
@@ -670,7 +846,8 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
   const workerReq: WorkerJudgeRequest = {
     submission_id: `personal_${req.userId}_${task.id}_${Date.now()}`,
     language: judgeLang,
-    source: code,
+    source: sourceText,
+    ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
     tests,
     limits: defaultLimitsByLang[judgeLang],
     checker: chooseDefaultCheckerFromExpectedOutputs(sorted.map(t => t.expectedOutput || "")),
@@ -678,66 +855,12 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     rerun_failed_once: true
   };
   let workerRes: WorkerJudgeResponse | null = null;
-  try {
-    workerRes = await judgeWithSemaphore(workerReq);
-  } catch (e) {
-    if (e instanceof JudgeBusyError) {
-      return res.status(429).json({
-        message: "JUDGE_BUSY"
-      });
-    }
-    const allowFallback = process.env.NODE_ENV !== "production" || process.env.JUDGE_ALLOW_FALLBACK === "1" || process.env.JUDGE_ALLOW_FALLBACK === "true";
-    const errMsg = e instanceof Error ? e.message : String(e);
-    console.error(`[judge] worker failed (tasks submit). allowFallback=${allowFallback} submission=${workerReq.submission_id} error=${errMsg}`, e);
-    if (!allowFallback) {
-      return res.status(503).json({
-        message: "JUDGE_UNAVAILABLE"
-      });
-    }
-    const {
-      compareOutput,
-      filterStderrWithLang
-    } = await import("../services/codeExecutionService");
-    const CODE_EXECUTION_TIMEOUT_MS = 8000;
-    for (const test of sorted) {
-      try {
-        const inputValue = test.input || "";
-        const result = await executeCodeWithInput(code, task.lang, inputValue, CODE_EXECUTION_TIMEOUT_MS);
-        const actual = (result.stdout ?? "").trim();
-        const expected = (test.expectedOutput ?? "").trim();
-        const passed = !!(result.success && compareOutput(actual, expected));
-        if (passed) {
-          passedTests++;
-          total += test.points;
-        }
-        const langForErr = task.lang === "JAVA" || task.lang === "PYTHON" ? task.lang : undefined;
-        const err = filterStderrWithLang(result.stderr || "", langForErr);
-        testResults.push({
-          testId: test.id,
-          input: inputValue,
-          expectedOutput: expected,
-          actualOutput: actual,
-          passed,
-          error: err ? err : null
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        testResults.push({
-          testId: test.id,
-          input: test.input || "",
-          expectedOutput: (test.expectedOutput ?? "").toString(),
-          actualOutput: "",
-          passed: false,
-          error: errorMessage
-        });
-      }
-    }
-  }
+  workerRes = await judgeWithSemaphore(workerReq);
   if (workerRes) {
     if (workerRes.verdict === "CE" && workerRes.compile) {
       const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
       for (const t of sorted) {
-        testResults.push({
+        testResultsDetailed.push({
           testId: t.id,
           input: t.input || "",
           expectedOutput: (t.expectedOutput ?? "").toString(),
@@ -760,7 +883,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
           passedTests++;
           total += t.points;
         }
-        testResults.push({
+        testResultsDetailed.push({
           testId: t.id,
           input: t.input || "",
           expectedOutput: (r?.expected ?? t.expectedOutput ?? "").toString(),
@@ -779,7 +902,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
   const feedbackLines: string[] = [];
   feedbackLines.push(`Пройдено тестів: ${passedTests}/${(task.testData || []).length}`);
   feedbackLines.push("");
-  for (const r of testResults) {
+  for (const r of testResultsDetailed) {
     if (r.passed) {
       feedbackLines.push(`✓ Тест ${r.testId}: пройдено`);
     } else if (r.error) {
@@ -792,7 +915,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     try {
       const expectedById = new Map<number, string>();
       for (const t of sorted) expectedById.set(t.id, (t.expectedOutput || "").toString());
-      const failuresForHints = testResults.filter(r => !r.passed).slice(0, 3).map(r => ({
+      const failuresForHints = testResultsDetailed.filter(r => !r.passed).slice(0, 3).map(r => ({
         testId: r.testId,
         input: r.input || "",
         expected: expectedById.get(r.testId) ?? "",
@@ -804,7 +927,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
         taskTitle: task.title,
         taskText: task.descriptionMarkdown || task.description,
         language: task.lang,
-        code,
+        code: aiCodeText,
         failures: failuresForHints,
         maxHints: 4
       });
@@ -831,7 +954,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     maxScore: scoringMaxScore
   }];
 
-  task.finalCode = code;
+  task.finalCode = persistedSubmission;
   task.completed = TASK_COMPLETED_FLAG;
   await taskRepo().save(task);
   const grade = gradeRepo().create({
@@ -846,7 +969,7 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
     optimizationScore: 0,
     integrityScore: 0,
     aiFeedback: feedback,
-    codeSnapshot: code,
+    codeSnapshot: persistedSubmission,
     comparisonFeedback: null,
     previousGradeId: null
   });
@@ -863,28 +986,50 @@ tasksRouter.post("/:id/submit", authMiddleware, [body("code").isString(), body("
       score: scoringScore,
       maxScore: scoringMaxScore,
       groupScores: scoringGroupScores,
-      testResults,
+      testResults: sanitizeTestResultsForStudent(testResultsDetailed),
       hints: hintsForUser,
       createdAt: savedGrade.createdAt
     }
   });
-});
-tasksRouter.post("/:id/run", authMiddleware, [body("code").isString()], async (req: AuthRequest, res: Response) => {
+}
+);
+tasksRouter.post(
+  "/:id/run",
+  authMiddleware,
+  submissionRateLimitMiddleware,
+  [
+    body("code").optional().isString(),
+    body("files").optional().isArray(),
+    body("input").optional().isString(),
+    body().custom(v => {
+      const hasCode = typeof (v as any)?.code === "string" && (v as any).code.length > 0;
+      const hasFiles = Array.isArray((v as any)?.files) && (v as any).files.length > 0;
+      if (!hasCode && !hasFiles) throw new Error("code or files required");
+      return true;
+    })
+  ],
+  async (req: AuthRequest, res: Response) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({
-    errors: errors.array()
-  });
+  if (!errors.isEmpty()) {
+    throw new HttpError(400, "VALIDATION_ERROR", {
+      code: "VALIDATION_ERROR",
+      expose: true
+    });
+  }
   const id = Number(req.params.id);
   const {
     code,
+    files,
     input
   } = req.body as {
-    code: string;
+    code?: string;
+    files?: unknown;
     input?: string;
   };
   if (!req.userId) {
-    return res.status(401).json({
-      message: "UNAUTHORIZED"
+    throw new HttpError(401, "UNAUTHORIZED", {
+      code: "UNAUTHORIZED",
+      expose: true
     });
   }
   const task = await taskRepo().findOne({
@@ -896,24 +1041,62 @@ tasksRouter.post("/:id/run", authMiddleware, [body("code").isString()], async (r
     }
   });
   if (!task) {
-    return res.status(404).json({
-      message: "Task not found"
+    throw new HttpError(404, "Task not found", {
+      code: "TASK_NOT_FOUND",
+      expose: true
     });
   }
+
+  const normalizedFiles = normalizeApiFiles(files);
+  const entryFile = task.lang === "PYTHON" ? "main.py" : "Main.java";
+  const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(code) : null;
+  const effectiveFiles = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
+  const isMultiFile = effectiveFiles.length > 0;
+  const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : String(code ?? "");
+
   const CODE_RUN_TIMEOUT_MS = 5000;
-  try {
-    const result = await executeCodeWithInput(code, task.lang, input || "", CODE_RUN_TIMEOUT_MS);
-    return res.json({
-      output: result.stdout,
-      stderr: result.stderr,
-      success: result.success
-    });
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Execution error";
-    return res.status(500).json({
-      message: errorMessage
-    });
+  if (isMultiFile) {
+    const judgeLang = task.lang === "JAVA" ? "java" : "python";
+    const workerReq: WorkerJudgeRequest = {
+      submission_id: `personal_run_${req.userId}_${task.id}_${Date.now()}`,
+      language: judgeLang,
+      source: sourceText,
+      files: effectiveFiles,
+      entry: entryFile,
+      tests: [
+        {
+          id: "custom",
+          input: input || "",
+          output: "",
+          hidden: false,
+          group: "custom",
+          weight: 1
+        }
+      ],
+      limits: {
+        time_limit_ms: CODE_RUN_TIMEOUT_MS,
+        memory_limit_mb: judgeLang === "python" ? 128 : 256,
+        output_limit_kb: 256
+      },
+      checker: { type: "exact" },
+      debug: true,
+      run_all: true,
+      rerun_failed_once: false
+    };
+    const workerRes = await judgeWithSemaphore(workerReq);
+    if (workerRes.verdict === "CE" && workerRes.compile) {
+      const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
+      return res.json({ output: "", stderr: combined || "Compilation error", success: false });
+    }
+    const t0 = workerRes.tests?.[0] as any;
+    const stdout = String(t0?.actual ?? "");
+    const stderr = String(t0?.stderr ?? "");
+    return res.json({ output: stdout, stderr, success: true });
   }
-});
+
+  const result = await executeCodeWithInput(sourceText, task.lang, input || "", CODE_RUN_TIMEOUT_MS);
+  return res.json({ output: result.stdout, stderr: result.stderr, success: result.success });
+}
+);
 export { tasksRouter };
 export default tasksRouter;

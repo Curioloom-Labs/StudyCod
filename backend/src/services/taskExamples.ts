@@ -1,5 +1,6 @@
 import { AppDataSource } from '../data-source';
 import { Task } from '../entities/Task';
+import { logger } from '../utils/logger';
 const taskRepo = () => AppDataSource.getRepository(Task);
 export interface TaskExample {
   topic: string;
@@ -64,8 +65,8 @@ function extractTaskExample(task: Task, topicTitle: string): TaskExample | null 
       }],
       codeTemplate: task.template
     };
-  } catch (err) {
-    console.error('Failed to extract task example', err);
+  } catch (err: any) {
+    logger.warn('[task-examples] extract failed', { message: err?.message });
     return null;
   }
 }
@@ -103,8 +104,8 @@ export async function getTaskExamples(params: {
       }
     }
     return examples;
-  } catch (err) {
-    console.error('Failed to get task examples', err);
+  } catch (err: any) {
+    logger.warn('[task-examples] query failed', { message: err?.message });
     return [];
   }
 }

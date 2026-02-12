@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { TopicTask } from "./TopicTask";
 import { EduTask } from "./EduTask";
+import { LibraryTask } from "./LibraryTask";
 @Entity("task_theories")
 export class TaskTheory {
   @PrimaryGeneratedColumn()
@@ -21,6 +22,15 @@ export class TaskTheory {
     name: "edu_task_id"
   })
   eduTask?: EduTask | null;
+
+  @OneToOne(() => LibraryTask, task => task.theory, {
+    onDelete: "CASCADE",
+    nullable: true
+  })
+  @JoinColumn({
+    name: "library_task_id"
+  })
+  libraryTask?: LibraryTask | null;
   @Column({
     type: "text"
   })

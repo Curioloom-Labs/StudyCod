@@ -1,5 +1,6 @@
 import { Task } from "../entities/Task";
 import { getLLMProvider } from "../services/llm/provider";
+import { logger } from "../utils/logger";
 interface AiScoreResult {
   work: number;
   optimization: number;
@@ -145,7 +146,7 @@ ${params.code}
     }
     return result;
   } catch (error: any) {
-    console.error("LLM evaluation error", error);
+    logger.warn('[ai-eval] failed', { message: error?.message });
     return {
       work: 2,
       optimization: 2,

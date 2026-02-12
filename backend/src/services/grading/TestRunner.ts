@@ -1,5 +1,13 @@
 import { CodeSubmission, TestRunnerResult } from './interfaces';
-import { executeCodeWithInput } from '../codeExecutionService';
+import { compareOutput, filterStderrWithLang } from '../codeExecutionService';
+import { judgeWithSemaphore } from '../judgeWorker';
+import type { JudgeLanguage, JudgeRequest, JudgeResponse } from '../judgeWorker/types';
+
+function mapToJudgeLanguage(language: CodeSubmission["language"]): JudgeLanguage {
+  return language === "JAVA" ? "java" : "python";
+}
+
+const SENTINEL_EXPECTED = "__STUDYCOD_SENTINEL_EXPECTED__";
 export interface ITestRunner {
   runTests(submission: CodeSubmission): Promise<TestRunnerResult>;
 }
@@ -12,33 +20,116 @@ export class TestRunner implements ITestRunner {
     } = submission;
     const testResults: TestRunnerResult['testResults'] = [];
     let passedCount = 0;
-    for (let i = 0; i < testData.length; i++) {
-      const test = testData[i];
-      try {
-        const exec = await executeCodeWithInput(code, language, test.input, 10000);
-        const actualOutput = exec.stdout ?? "";
-        const normalizedExpected = this.normalizeOutput(test.output);
-        const normalizedActual = this.normalizeOutput(actualOutput);
-        const passed = normalizedExpected === normalizedActual;
-        if (passed) passedCount++;
+
+    if (!testData || testData.length === 0) {
+      return {
+        passed: true,
+        passedCount: 0,
+        totalCount: 0,
+        testResults: [],
+        correctnessScore: 0
+      };
+    }
+
+    const judgeLang = mapToJudgeLanguage(language);
+    const req: JudgeRequest = {
+      submission_id: `grading_${submission.userId}_${submission.taskId}_${Date.now()}`,
+      language: judgeLang,
+      source: code,
+      tests: testData.map((t, i) => ({
+        id: i + 1,
+        input: t.input ?? "",
+        // Use sentinel output to force WA for successful runs, so we always get `actual`.
+        output: SENTINEL_EXPECTED,
+        hidden: false,
+        group: "grading",
+        weight: 1
+      })),
+      limits: {
+        time_limit_ms: 10_000,
+        memory_limit_mb: judgeLang === "python" ? 256 : 384,
+        output_limit_kb: 256
+      },
+      checker: { type: "exact" },
+      debug: true,
+      run_all: true,
+      rerun_failed_once: false
+    };
+
+    let res: JudgeResponse;
+    try {
+      res = await judgeWithSemaphore(req);
+    } catch (e: any) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      for (let i = 0; i < testData.length; i++) {
         testResults.push({
           testIndex: i + 1,
-          input: test.input,
-          expectedOutput: test.output,
-          actualOutput,
-          passed
-        });
-      } catch (error: any) {
-        testResults.push({
-          testIndex: i + 1,
-          input: test.input,
-          expectedOutput: test.output,
-          actualOutput: '',
+          input: testData[i]?.input ?? "",
+          expectedOutput: testData[i]?.output ?? "",
+          actualOutput: "",
           passed: false,
-          error: error.message || 'Execution error'
+          error: `JUDGE_UNAVAILABLE: ${errMsg}`
         });
       }
+      return {
+        passed: false,
+        passedCount: 0,
+        totalCount: testData.length,
+        testResults,
+        correctnessScore: 0
+      };
     }
+
+    if (res.verdict === "CE" && res.compile) {
+      const compileErr = [res.compile.stderr, res.compile.stdout].filter(Boolean).join("\n").trim() || "Compilation error";
+      for (let i = 0; i < testData.length; i++) {
+        testResults.push({
+          testIndex: i + 1,
+          input: testData[i]?.input ?? "",
+          expectedOutput: testData[i]?.output ?? "",
+          actualOutput: "",
+          passed: false,
+          error: compileErr
+        });
+      }
+      return {
+        passed: false,
+        passedCount: 0,
+        totalCount: testData.length,
+        testResults,
+        correctnessScore: 0
+      };
+    }
+
+    const byId = new Map<number, (JudgeResponse["tests"][number] & any)>();
+    for (const t of res.tests || []) {
+      const n = Number((t as any).test_id);
+      if (Number.isFinite(n)) byId.set(n, t as any);
+    }
+
+    for (let i = 0; i < testData.length; i++) {
+      const expected = testData[i]?.output ?? "";
+      const input = testData[i]?.input ?? "";
+      const r: any = byId.get(i + 1);
+      const verdict = String(r?.verdict ?? "");
+      const actualOutput = String(r?.actual ?? "");
+      const ranOk = verdict === "WA" || verdict === "AC";
+      const passed = ranOk && compareOutput(actualOutput ?? "", expected);
+      if (passed) passedCount++;
+      const stderr = String(r?.stderr ?? "");
+      const error = passed
+        ? undefined
+        : (stderr ? filterStderrWithLang(stderr, language) : (ranOk ? "Wrong answer" : verdict || "Execution failed"));
+      testResults.push({
+        testIndex: i + 1,
+        input,
+        expectedOutput: expected,
+        actualOutput: actualOutput ?? "",
+        passed,
+        ...(error ? { error } : {})
+      });
+    }
+
     const correctnessScore = testData.length > 0 ? passedCount / testData.length : 0;
     return {
       passed: passedCount === testData.length,
@@ -47,8 +138,5 @@ export class TestRunner implements ITestRunner {
       testResults,
       correctnessScore
     };
-  }
-  private normalizeOutput(output: string): string {
-    return output.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\s+/g, ' ').toLowerCase();
   }
 }

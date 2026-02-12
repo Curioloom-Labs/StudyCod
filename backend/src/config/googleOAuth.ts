@@ -12,16 +12,5 @@ export const isGoogleOAuthEnabled = () => {
   const clientSecret = getGoogleClientSecret();
   const hasClientId = clientId.length > 0;
   const hasClientSecret = clientSecret.length > 0;
-  if (process.env.NODE_ENV !== "production") {
-    if (!hasClientId || !hasClientSecret) {
-      console.warn("Google OAuth not configured");
-      if (!hasClientId) {
-        console.warn("GOOGLE_CLIENT_ID is missing or empty");
-      }
-      if (!hasClientSecret) {
-        console.warn("GOOGLE_CLIENT_SECRET is missing or empty");
-      }
-    }
-  }
   return hasClientId && hasClientSecret;
 };

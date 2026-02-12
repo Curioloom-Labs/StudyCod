@@ -2,6 +2,7 @@ import { CodeSubmission, HybridGradingResult, GradingConfig, TestRunnerResult, A
 import { TestRunner, ITestRunner } from './TestRunner';
 import { ASTAnalyzer, IASTAnalyzer } from './ASTAnalyzer';
 import { LLMCodeCritic, ILLMCodeCritic } from './LLMCodeCritic';
+import { logger } from '../../utils/logger';
 export interface IHybridGradingPipeline {
   grade(submission: CodeSubmission, config: GradingConfig, taskDescription?: string): Promise<HybridGradingResult>;
 }
@@ -21,7 +22,7 @@ export class HybridGradingPipeline implements IHybridGradingPipeline {
         if (error instanceof Error && error.message.includes("not yet implemented")) {
           astAnalysis = this.createNeutralASTResult();
         } else {
-          console.error("AST Analysis failed:", error);
+          logger.warn('[grading] ast analysis failed', { message: (error as any)?.message });
           astAnalysis = this.createNeutralASTResult();
         }
       }
@@ -33,7 +34,7 @@ export class HybridGradingPipeline implements IHybridGradingPipeline {
         try {
           llmCritique = await this.llmCritic.critique(submission, taskDescription);
         } catch (error: any) {
-          console.error("LLM Critique failed:", error);
+          logger.warn('[grading] llm critique failed', { message: error?.message });
           llmCritique = this.createNeutralLLMResult();
         }
       }

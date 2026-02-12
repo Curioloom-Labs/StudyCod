@@ -1,6 +1,7 @@
 import { AppDataSource } from '../data-source';
 import { Task } from '../entities/Task';
 import { Grade } from '../entities/Grade';
+import { logger } from '../utils/logger';
 const taskRepo = () => AppDataSource.getRepository(Task);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
 export interface TrainingExample {
@@ -111,8 +112,8 @@ ${theoryMarkdown.slice(0, 3000)}
         content: JSON.stringify(expectedResponse, null, 2)
       }]
     };
-  } catch (err) {
-    console.error('Failed to extract training example', err);
+  } catch (err: any) {
+    logger.warn('[dataset] extract failed', { message: err?.message });
     return null;
   }
 }
@@ -175,7 +176,7 @@ export async function collectTrainingDataset(options: {
   }
   for (const lang of languages) {
     if (tasksByLang[lang].length < minTasks) {
-      console.warn(`Warning: Only ${tasksByLang[lang].length} tasks for ${lang}, minimum is ${minTasks}`);
+      logger.warn('[dataset] low volume', { lang, count: tasksByLang[lang].length, minTasks });
     }
     examples.push(...tasksByLang[lang]);
   }

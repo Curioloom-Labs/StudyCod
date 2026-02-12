@@ -1,8 +1,10 @@
+import { hasCyrillic, normalizeForWhitespaceCompare } from "./normalize";
+
 export function checkWhitespace(actual: string, expected: string): boolean {
-  const a = normalize(actual);
-  const e = normalize(expected);
+  const expectedBase = String(expected ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const expectedHasCyr = hasCyrillic(expectedBase);
+
+  const a = normalizeForWhitespaceCompare(actual, expectedHasCyr);
+  const e = normalizeForWhitespaceCompare(expected, expectedHasCyr);
   return a === e;
-}
-function normalize(s: string): string {
-  return String(s ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split(/\s+/).join(" ");
 }

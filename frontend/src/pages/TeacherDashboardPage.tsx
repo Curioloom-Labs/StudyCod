@@ -94,6 +94,10 @@ export const TeacherDashboardPage: React.FC = () => {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-mono text-text-primary">{t('myClasses')}</h1>
           <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => navigate("/edu/library")}>
+              <BookOpen className="w-4 h-4 mr-2" />
+              {tr("Бібліотека завдань", "Task library")}
+            </Button>
             {pendingReviews.length > 0 && <Button variant="ghost" onClick={() => setShowPendingReviews(true)} className="relative">
                 <Clock className="w-4 h-4 mr-2" />
                 {t('reviewTasks')}

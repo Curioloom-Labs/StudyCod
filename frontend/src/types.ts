@@ -22,6 +22,11 @@ export interface User {
   placementScore?: number | null;
   placementMasteredUntilTopicIndexJava?: number | null;
   placementMasteredUntilTopicIndexPython?: number | null;
+  placementCodingPassed?: boolean;
+  placementCodingLevel?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | null;
+  placementCodingTaskId?: string | null;
+  placementCodingScore?: number | null;
+  placementCodingDoneAt?: string | null;
 }
 export interface Topic {
   id: number;
@@ -36,7 +41,11 @@ export interface Task {
   theoryMarkdown?: string;
   practiceText?: string;
   starterCode: string;
+  starterFiles?: Array<{ path: string; content: string }>;
+  starterEntryFile?: string;
   userCode: string;
+  userFiles?: Array<{ path: string; content: string }>;
+  userEntryFile?: string;
   finalCode?: string | null;
   status: "OPEN" | "SUBMITTED" | "GRADED";
   lessonInTopic: number;

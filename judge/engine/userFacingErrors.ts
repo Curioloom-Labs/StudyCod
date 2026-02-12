@@ -291,8 +291,14 @@ export function explainStderr(language: LanguageId, stderr: string): ExplainedEr
       return explainPython(s);
     case "java":
       return explainJava(s);
+    case "kotlin":
+      return explainJava(s);
     case "cpp":
       return explainCpp(s);
+    case "c":
+      return explainCpp(s);
+    case "csharp":
+      return null;
   }
 }
 

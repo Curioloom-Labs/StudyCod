@@ -1,5 +1,6 @@
 import { CodeSubmission, LLMCodeCritiqueResult } from './interfaces';
 import { getLLMOrchestrator } from '../llm/LLMOrchestrator';
+import { logger } from '../../utils/logger';
 export interface ILLMCodeCritic {
   critique(submission: CodeSubmission, taskDescription?: string): Promise<LLMCodeCritiqueResult>;
 }
@@ -130,7 +131,7 @@ ${code}
         }
       };
     } catch (error: any) {
-      console.error("LLM Code Critique failed:", error);
+      logger.warn('[grading] llm code critique failed', { message: error?.message });
       return {
         styleScore: 0.5,
         feedback: {

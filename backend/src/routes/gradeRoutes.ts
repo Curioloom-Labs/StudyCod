@@ -4,6 +4,7 @@ import { Grade } from "../entities/Grade";
 import { Task } from "../entities/Task";
 import { Topic } from "../entities/Topic";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
+import { logger } from "../utils/logger";
 const router = Router();
 const gradeRepo = () => AppDataSource.getRepository(Grade);
 function mapTaskToDto(task: Task | null | undefined) {
@@ -71,7 +72,7 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
     });
     return res.json(data);
   } catch (err) {
-    console.error("GET /grades error", err);
+    logger.error("GET /grades error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "Internal server error"
     });

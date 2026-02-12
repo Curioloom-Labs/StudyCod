@@ -23,10 +23,25 @@ export interface TestCase {
   group?: string;
   weight?: number;
 }
+
+export interface JudgeFile {
+  // Relative path inside the submission workdir (e.g. "Main.java", "src/Foo.java").
+  // Must not be absolute and must not contain ".." segments.
+  path: string;
+  content: string;
+}
 export interface JudgeRequest {
   submission_id: string;
-  language: "java" | "python" | "cpp";
-  source: string;
+  language: "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
+  // Backwards-compatible single-file source.
+  // When `files` is provided, `source` may be omitted.
+  source?: string;
+  // Optional multi-file submission.
+  // When present, the judge will write these files into the sandbox workdir.
+  files?: JudgeFile[];
+  // Optional hint about the entry file (e.g. "Main.java", "main.py").
+  // If omitted, defaults are inferred by language.
+  entry?: string;
   tests: TestCase[];
   limits: JudgeLimits;
   checker?: CheckerSpec;

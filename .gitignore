@@ -43,6 +43,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 .cursor/
+/package-lock.json
 studycod_taskgen_service/
 backend/.env
 backend/add_task_fields.sql
@@ -75,3 +76,6 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Uploads (user files)
+**/uploads/

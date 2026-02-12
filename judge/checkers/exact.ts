@@ -1,8 +1,10 @@
+import { hasCyrillic, normalizeForExactCompare } from "./normalize";
+
 export function checkExact(actual: string, expected: string): boolean {
-  const a = normalize(actual);
-  const e = normalize(expected);
+  const expectedBase = String(expected ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const expectedHasCyr = hasCyrillic(expectedBase);
+
+  const a = normalizeForExactCompare(actual, expectedHasCyr);
+  const e = normalizeForExactCompare(expected, expectedHasCyr);
   return a === e;
-}
-function normalize(s: string): string {
-  return String(s ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trimEnd();
 }

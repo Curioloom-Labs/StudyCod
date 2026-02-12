@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
-import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle, Upload, Download } from "lucide-react";
 import { api } from "../lib/api/client";
 import { getMe } from "../lib/api/profile";
 import type { User } from "../types";
@@ -92,6 +92,7 @@ export const TopicDetailsPage: React.FC = () => {
   const [showTestDataModal, setShowTestDataModal] = useState(false);
   const [testDataTaskId, setTestDataTaskId] = useState<number | null>(null);
   const [testDataList, setTestDataList] = useState<TestData[]>([]);
+  const [testDataDisplayLimit, setTestDataDisplayLimit] = useState<20 | 50 | 100 | "ALL">(20);
   const [editingTestIndex, setEditingTestIndex] = useState<number | null>(null);
   const [editingTest, setEditingTest] = useState<{
     input: string;
@@ -106,6 +107,8 @@ export const TopicDetailsPage: React.FC = () => {
   const [importIsHidden, setImportIsHidden] = useState(false);
   const [importingFiles, setImportingFiles] = useState(false);
   const [importInputKey, setImportInputKey] = useState(0);
+  const [importArchiveKey, setImportArchiveKey] = useState(0);
+  const [importingArchive, setImportingArchive] = useState(false);
   useEffect(() => {
     loadUser();
   }, []);
@@ -352,6 +355,7 @@ export const TopicDetailsPage: React.FC = () => {
   const handleOpenTestData = async (taskId: number) => {
     setTestDataTaskId(taskId);
     setShowTestDataModal(true);
+    setTestDataDisplayLimit(20);
     try {
       const data = await getTestData(taskId);
       setTestDataList(data.testData || []);
@@ -459,6 +463,61 @@ export const TopicDetailsPage: React.FC = () => {
       alert(error.response?.data?.message || tr("Не вдалося видалити завдання", "Failed to delete task"));
     }
   };
+
+  function parseFilenameFromContentDisposition(v: string | undefined): string | null {
+    if (!v) return null;
+    const m = v.match(/filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i);
+    const raw = (m?.[1] || m?.[2] || m?.[3] || "").trim();
+    if (!raw) return null;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  const handleExportTaskArchive = async (taskId: number) => {
+    if (!topicId) return;
+    try {
+      const res = await api.get(`/topics/${topicId}/tasks/${taskId}/export-archive`, {
+        responseType: "blob"
+      });
+      const cd = (res.headers as any)?.["content-disposition"] as string | undefined;
+      const filename = parseFilenameFromContentDisposition(cd) || `task_${taskId}.zip`;
+      const blob = res.data as Blob;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error("Failed to export archive:", error);
+      alert(error.response?.data?.message || tr("Не вдалося експортувати архів", "Failed to export archive"));
+    }
+  };
+
+  const handleImportTaskArchiveFile = async (file: File | null) => {
+    if (!topicId) return;
+    if (!file) return;
+    if (importingArchive) return;
+    setImportingArchive(true);
+    try {
+      const form = new FormData();
+      form.append("archive", file);
+      await api.post(`/topics/${topicId}/tasks/import-archive`, form);
+      await loadTopic();
+      alert(tr("Завдання імпортовано", "Task imported"));
+    } catch (error: any) {
+      console.error("Failed to import archive:", error);
+      alert(error.response?.data?.message || tr("Не вдалося імпортувати архів", "Failed to import archive"));
+    } finally {
+      setImportingArchive(false);
+      setImportArchiveKey(k => k + 1);
+    }
+  };
   const handleDeleteControlWork = async (controlWorkId: number) => {
     try {
       await api.delete(`/topics/control-works/${controlWorkId}`);
@@ -498,10 +557,23 @@ export const TopicDetailsPage: React.FC = () => {
         <Card className="p-4 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-mono text-text-primary">{t('practicalTasks')} ({practiceTasks.length})</h2>
-            {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => setShowCreateTask(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('addTask')}
-              </Button>}
+            {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex items-center gap-2">
+                <input key={importArchiveKey} id="import-task-archive" type="file" accept=".zip" className="hidden" onChange={e => {
+              const f = e.target.files?.[0] || null;
+              handleImportTaskArchiveFile(f);
+            }} />
+                <Button variant="ghost" onClick={() => {
+              const el = document.getElementById("import-task-archive") as HTMLInputElement | null;
+              el?.click();
+            }} disabled={importingArchive} title={tr("Імпорт архіву завдання (.zip)", "Import task archive (.zip)")}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  {tr("Імпорт", "Import")}
+                </Button>
+                <Button onClick={() => setShowCreateTask(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('addTask')}
+                </Button>
+              </div>}
           </div>
 
           <div className="space-y-2">
@@ -572,6 +644,14 @@ export const TopicDetailsPage: React.FC = () => {
                   }} className="text-xs">
                             <Edit2 className="w-3 h-3 mr-1" />
                             {t('theory')}
+                          </Button>
+                          <Button variant="ghost" onClick={e => {
+                    e.stopPropagation();
+                    handleExportTaskArchive(task.id);
+                  }} className="text-xs" title={tr("Експортувати архів завдання", "Export task archive")}
+                  >
+                            <Download className="w-3 h-3 mr-1" />
+                            {tr("Експорт", "Export")}
                           </Button>
                         </div>
                         <Button variant="ghost" onClick={e => {
@@ -983,6 +1063,7 @@ export const TopicDetailsPage: React.FC = () => {
         setShowTestDataModal(false);
         setTestDataTaskId(null);
         setTestDataList([]);
+        setTestDataDisplayLimit(20);
         setEditingTestIndex(null);
         setEditingTest(null);
         setImportFiles([]);
@@ -1030,10 +1111,34 @@ export const TopicDetailsPage: React.FC = () => {
                 </p>
               </Card>
 
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-mono text-text-secondary">
+                  {testDataList.length > 0
+                    ? tr(
+                        `Показано ${testDataDisplayLimit === "ALL" ? testDataList.length : Math.min(testDataList.length, testDataDisplayLimit)} з ${testDataList.length}`,
+                        `Showing ${testDataDisplayLimit === "ALL" ? testDataList.length : Math.min(testDataList.length, testDataDisplayLimit)} of ${testDataList.length}`
+                      )
+                    : ""}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-text-secondary">{tr("Показувати", "Show")}</span>
+                  <select
+                    value={testDataDisplayLimit}
+                    onChange={(e) => setTestDataDisplayLimit((e.target.value as any) === "ALL" ? "ALL" : (parseInt(e.target.value, 10) as any))}
+                    className="px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs focus:outline-none"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value="ALL">{tr("Усі", "All")}</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 {testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
                     {tr("Немає тестових даних. Згенеруйте або додайте вручну.", "No test data. Generate or add manually.")}
-                  </p> : testDataList.map((test, index) => <Card key={test.id} className="p-3">
+                  </p> : (testDataDisplayLimit === "ALL" ? testDataList : testDataList.slice(0, testDataDisplayLimit)).map((test, index) => <Card key={test.id} className="p-3">
                       {editingTestIndex === index ? <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-mono text-text-secondary">

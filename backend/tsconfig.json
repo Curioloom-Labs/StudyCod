@@ -18,6 +18,7 @@
     "useDefineForClassFields": false,
 
     "skipLibCheck": true,
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["../shared/*"]

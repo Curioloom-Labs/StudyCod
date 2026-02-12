@@ -2,6 +2,7 @@ import { CloudflareAIProvider } from './CloudflareAIProvider';
 import { OpenRouterProvider } from './OpenRouterProvider';
 import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
 import { AIResponseValidator, AIValidationError } from './AIResponseValidator';
+import { logger } from '../../utils/logger';
 export interface AiTaskGenerationResult {
   title: string;
   topic: string;
@@ -45,7 +46,32 @@ function shouldFallbackToOpenRouter(error: any): boolean {
   if (!error) return false;
   if (error.shouldFallback) return true;
   const message = error.message || String(error);
-  return message.includes('502') || message.includes('Bad Gateway');
+  // Fall back when Cloudflare worker is down, overloaded or temporarily refusing.
+  return message.includes('502') || message.includes('Bad Gateway') || message.includes('HTTP 429') || message.includes('429 Too') || message.toLowerCase().includes('too many requests');
+}
+
+function shouldFallbackToCloudflare(error: any): boolean {
+  if (!error) return false;
+  const message = (error.message || String(error)).toLowerCase();
+  // Fall back when OpenRouter is rate-limited or temporarily unavailable.
+  return message.includes('rate limit') || message.includes('temporarily rate-limited') || message.includes('too many requests') || /\b429\b/.test(message) || message.includes('timeout') || message.includes('timed out');
+}
+
+function isCloudflareConfigured(): boolean {
+  return !!String(process.env.CLOUDFLARE_AI_URL || '').trim();
+}
+
+function isOpenRouterConfigured(): boolean {
+  const primary = String(process.env.OPENROUTER_API_KEY || '').trim();
+  const backups = String(process.env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return !!primary || backups.length > 0;
+}
+
+function preferredProvider(): 'cloudflare' | 'openrouter' | 'auto' {
+  const raw = String(process.env.LLM_PROVIDER || 'auto').toLowerCase().trim();
+  if (raw === 'cloudflare') return 'cloudflare';
+  if (raw === 'openrouter') return 'openrouter';
+  return 'auto';
 }
 function isRetryableError(error: any): boolean {
   if (!error) return false;
@@ -114,16 +140,64 @@ export class LLMOrchestrator {
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
+    /** Optional request cancellation/deadline. */
+    signal?: AbortSignal;
+    /** Semantic-gate retries inside generateTaskFromAnchor (0..2). */
+    semanticRetries?: number;
   }): Promise<AiTaskGenerationResult> {
-    console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-    const result = await this.generateTaskWithAI_OpenRouter(params);
-    return result;
+    const pref = preferredProvider();
+    const canCf = isCloudflareConfigured();
+    const canOr = isOpenRouterConfigured();
+
+    const tryCloudflare = async () => {
+      const raw = await this.cloudflareProvider.generateTaskWithAI({
+        topicTitle: params.topicTitle,
+        theory: params.theory,
+        lang: params.lang,
+        numInTopic: params.numInTopic,
+        isFirstTask: params.isFirstTask,
+        difus: params.difus,
+        isControl: params.isControl,
+        prevTopics: params.prevTopics,
+        userId: params.userId,
+        topicId: params.topicId
+      });
+      return AIResponseValidator.validateGenerateTask(raw);
+    };
+
+    const tryOpenRouter = async () => {
+      return await this.generateTaskWithAI_OpenRouter(params);
+    };
+
+    if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
+      if (!canCf && canOr) return await tryOpenRouter();
+      try {
+        return await tryCloudflare();
+      } catch (e: any) {
+        if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
+
+    // OpenRouter preferred.
+    if (!canOr && canCf) return await tryCloudflare();
+    try {
+      return await tryOpenRouter();
+    } catch (e: any) {
+      if (canCf && shouldFallbackToCloudflare(e)) {
+        return await tryCloudflare();
+      }
+      throw e;
+    }
   }
   private async generateTaskAnchor(params: {
     topicTitle: string;
     lang: "JAVA" | "PYTHON";
     userId?: number;
     topicId?: number;
+    signal?: AbortSignal;
   }): Promise<{
     topic: string;
     coreOperation: string;
@@ -179,6 +253,7 @@ export class LLMOrchestrator {
       maxRetries: 0,
       userId: params.userId,
       topicId: params.topicId,
+      signal: params.signal,
       temperature: 0.2,
       maxTokens: 500
     });
@@ -203,6 +278,8 @@ export class LLMOrchestrator {
     difus?: number;
     userId?: number;
     topicId?: number;
+    signal?: AbortSignal;
+    semanticRetries?: number;
   }): Promise<AiTaskGenerationResult> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
     const difficultyPrompt = getDifficultyPrompt(params.difus ?? 0);
@@ -301,7 +378,11 @@ ${params.theory.slice(0, 2000)}
 
 Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
 `.trim();
-    const maxRetries = 2;
+    const maxRetries = (() => {
+      const v = params.semanticRetries;
+      if (typeof v !== 'number' || !Number.isFinite(v)) return 2;
+      return Math.max(0, Math.min(2, Math.floor(v)));
+    })();
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -310,6 +391,7 @@ ${params.theory.slice(0, 2000)}
           maxRetries: 0,
           userId: params.userId,
           topicId: params.topicId,
+          signal: params.signal,
           temperature: 0.2,
           maxTokens: 4000
         });
@@ -340,7 +422,7 @@ ${params.theory.slice(0, 2000)}
         lastError = err;
         if (err.message && (err.message.includes('TOPIC_MISMATCH_HARD_FAIL') || err.message.includes('CORE_OPERATION_MISSING') || err.message.includes('FORBIDDEN_SCOPE_VIOLATION') || err.message.includes('MULTI_TASK_NOT_ALLOWED'))) {
           if (attempt < maxRetries) {
-            console.log(`[LLMOrchestrator] Retrying due to semantic gate failure (attempt ${attempt + 1}/${maxRetries}): ${err.message}`);
+            logger.debug('[llm] semantic retry', { attempt: attempt + 1, maxRetries, error: err.message });
             await new Promise(r => setTimeout(r, 1000));
             continue;
           }
@@ -366,12 +448,15 @@ ${params.theory.slice(0, 2000)}
     prevTopics?: string;
     userId?: number;
     topicId?: number;
+    signal?: AbortSignal;
+    semanticRetries?: number;
   }): Promise<AiTaskGenerationResult> {
     const anchor = await this.generateTaskAnchor({
       topicTitle: params.topicTitle,
       lang: params.lang,
       userId: params.userId,
-      topicId: params.topicId
+      topicId: params.topicId,
+      signal: params.signal
     });
     const result = await this.generateTaskFromAnchor({
       topicTitle: params.topicTitle,
@@ -380,7 +465,9 @@ ${params.theory.slice(0, 2000)}
       anchor: anchor,
       difus: params.difus,
       userId: params.userId,
-      topicId: params.topicId
+      topicId: params.topicId,
+      signal: params.signal,
+      semanticRetries: params.semanticRetries
     });
     return result;
   }
@@ -393,10 +480,52 @@ ${params.theory.slice(0, 2000)}
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
+    signal?: AbortSignal;
   }): Promise<AiTheoryResult> {
-    console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-    const result = await this.generateTheoryWithAI_OpenRouter(params);
-    return result;
+    const pref = preferredProvider();
+    const canCf = isCloudflareConfigured();
+    const canOr = isOpenRouterConfigured();
+
+    const tryCloudflare = async () => {
+      const raw = await this.cloudflareProvider.generateTheoryWithAI({
+        topicTitle: params.topicTitle,
+        lang: params.lang,
+        taskDescription: params.taskDescription,
+        taskType: params.taskType,
+        difficulty: params.difficulty,
+        userId: params.userId,
+        topicId: params.topicId
+      }, {
+        language: params.language
+      } as any);
+      return AIResponseValidator.validateGenerateTheory(raw);
+    };
+
+    const tryOpenRouter = async () => {
+      return await this.generateTheoryWithAI_OpenRouter(params);
+    };
+
+    if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
+      if (!canCf && canOr) return await tryOpenRouter();
+      try {
+        return await tryCloudflare();
+      } catch (e: any) {
+        if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
+
+    if (!canOr && canCf) return await tryCloudflare();
+    try {
+      return await tryOpenRouter();
+    } catch (e: any) {
+      if (canCf && shouldFallbackToCloudflare(e)) {
+        return await tryCloudflare();
+      }
+      throw e;
+    }
   }
   private async generateTheoryWithAI_OpenRouter(params: {
     topicTitle: string;
@@ -406,6 +535,7 @@ ${params.theory.slice(0, 2000)}
     difficulty?: number;
     userId?: number;
     topicId?: number;
+    signal?: AbortSignal;
   }): Promise<AiTheoryResult> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
     const systemPrompt = `Ти досвідчений викладач програмування. Відповідай українською мовою у форматі Markdown.`;
@@ -425,6 +555,7 @@ ${params.theory.slice(0, 2000)}
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
+        signal: params.signal,
         temperature: 0.7,
         maxTokens: 3000
       });
@@ -443,10 +574,50 @@ ${params.theory.slice(0, 2000)}
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
+    signal?: AbortSignal;
   }): Promise<AiQuizResult> {
-    console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-    const result = await this.generateQuizWithAI_OpenRouter(params);
-    return result;
+    const pref = preferredProvider();
+    const canCf = isCloudflareConfigured();
+    const canOr = isOpenRouterConfigured();
+
+    const tryCloudflare = async () => {
+      const raw = await this.cloudflareProvider.generateQuizWithAI({
+        lang: params.lang,
+        prevTopics: params.prevTopics,
+        count: params.count,
+        userId: params.userId,
+        topicId: params.topicId
+      }, {
+        language: params.language
+      } as any);
+      return AIResponseValidator.validateGenerateQuiz(raw, params.count || 12);
+    };
+
+    const tryOpenRouter = async () => {
+      return await this.generateQuizWithAI_OpenRouter(params);
+    };
+
+    if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
+      if (!canCf && canOr) return await tryOpenRouter();
+      try {
+        return await tryCloudflare();
+      } catch (e: any) {
+        if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
+
+    if (!canOr && canCf) return await tryCloudflare();
+    try {
+      return await tryOpenRouter();
+    } catch (e: any) {
+      if (canCf && shouldFallbackToCloudflare(e)) {
+        return await tryCloudflare();
+      }
+      throw e;
+    }
   }
   private async generateQuizWithAI_OpenRouter(params: {
     lang: "JAVA" | "PYTHON";
@@ -454,6 +625,7 @@ ${params.theory.slice(0, 2000)}
     count?: number;
     userId?: number;
     topicId?: number;
+    signal?: AbortSignal;
   }): Promise<AiQuizResult> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
     const questionCount = params.count || 12;
@@ -473,6 +645,7 @@ ${params.theory.slice(0, 2000)}
           timeout: 30000,
           userId: params.userId,
           topicId: params.topicId,
+          signal: params.signal,
           temperature: 0.7,
           maxTokens: 3000
         });
@@ -586,12 +759,53 @@ ${params.theory.slice(0, 2000)}
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
+    signal?: AbortSignal;
   }): Promise<{
     description: string;
   }> {
-    console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-    const result = await this.generateTaskCondition_OpenRouter(params);
-    return result;
+    const pref = preferredProvider();
+    const canCf = isCloudflareConfigured();
+    const canOr = isOpenRouterConfigured();
+
+    const tryCloudflare = async () => {
+      const raw = await this.cloudflareProvider.generateTaskCondition({
+        topicTitle: params.topicTitle,
+        taskType: params.taskType,
+        difficulty: params.difficulty,
+        language: params.language,
+        userId: params.userId,
+        topicId: params.topicId
+      }, {
+        language: params.userLanguage
+      } as any);
+      return AIResponseValidator.validateGenerateTaskCondition(raw);
+    };
+
+    const tryOpenRouter = async () => {
+      return await this.generateTaskCondition_OpenRouter(params);
+    };
+
+    if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
+      if (!canCf && canOr) return await tryOpenRouter();
+      try {
+        return await tryCloudflare();
+      } catch (e: any) {
+        if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
+
+    if (!canOr && canCf) return await tryCloudflare();
+    try {
+      return await tryOpenRouter();
+    } catch (e: any) {
+      if (canCf && shouldFallbackToCloudflare(e)) {
+        return await tryCloudflare();
+      }
+      throw e;
+    }
   }
   private async generateTaskCondition_OpenRouter(params: {
     topicTitle: string;
@@ -602,6 +816,7 @@ ${params.theory.slice(0, 2000)}
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
+    signal?: AbortSignal;
   }): Promise<{
     description: string;
   }> {
@@ -660,6 +875,7 @@ ${difficultyPrompt}
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
+        signal: params.signal,
         temperature: 0.7,
         maxTokens: 1500,
         language: params.userLanguage || "uk"
@@ -680,12 +896,62 @@ ${difficultyPrompt}
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
+    signal?: AbortSignal;
   }): Promise<{
     template: string;
   }> {
-    console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-    const result = await this.generateTaskTemplate_OpenRouter(params);
-    return result;
+    const pref = preferredProvider();
+    const canCf = isCloudflareConfigured();
+    const canOr = isOpenRouterConfigured();
+
+    const tryCloudflare = async () => {
+      const raw = await this.cloudflareProvider.generateTaskTemplate({
+        topicTitle: params.topicTitle,
+        language: params.language,
+        description: params.description,
+        userId: params.userId,
+        topicId: params.topicId
+      }, {
+        language: params.userLanguage
+      } as any);
+
+      // Cloudflare returns the template as-is; normalize TODO line for consistency.
+      const isEnglish = params.userLanguage === 'en';
+      const todoText = isEnglish ? 'implement the solution according to the statement' : 'реалізуйте рішення задачі згідно з умовою';
+      const normalized = this.normalizeTemplateTodoComments({
+        template: raw.template,
+        language: params.language,
+        todoText
+      });
+
+      return AIResponseValidator.validateGenerateTaskTemplate({ template: normalized });
+    };
+
+    const tryOpenRouter = async () => {
+      return await this.generateTaskTemplate_OpenRouter(params);
+    };
+
+    if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
+      if (!canCf && canOr) return await tryOpenRouter();
+      try {
+        return await tryCloudflare();
+      } catch (e: any) {
+        if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
+
+    if (!canOr && canCf) return await tryCloudflare();
+    try {
+      return await tryOpenRouter();
+    } catch (e: any) {
+      if (canCf && shouldFallbackToCloudflare(e)) {
+        return await tryCloudflare();
+      }
+      throw e;
+    }
   }
   private async generateTaskTemplate_OpenRouter(params: {
     topicTitle: string;
@@ -695,6 +961,7 @@ ${difficultyPrompt}
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
+    signal?: AbortSignal;
   }): Promise<{
     template: string;
   }> {
@@ -823,6 +1090,7 @@ public class Main {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
+        signal: params.signal,
         temperature: 0.3,
         maxTokens: 1000,
         language: params.userLanguage || 'uk'
@@ -849,10 +1117,48 @@ public class Main {
     lang: "JAVA" | "PYTHON";
     count: number;
     userId?: number;
+    signal?: AbortSignal;
   }): Promise<TestDataExample[]> {
-    console.log('[LLMOrchestrator] CloudflareAI temporarily disabled, using OpenRouter directly');
-    const result = await this.generateTestDataWithAI_OpenRouter(params);
-    return result;
+    const pref = preferredProvider();
+    const canCf = isCloudflareConfigured();
+    const canOr = isOpenRouterConfigured();
+
+    const tryCloudflare = async () => {
+      const raw = await this.cloudflareProvider.generateTestDataWithAI({
+        taskDescription: params.taskDescription,
+        taskTitle: params.taskTitle,
+        lang: params.lang,
+        count: params.count,
+        userId: params.userId
+      });
+      return AIResponseValidator.validateGenerateTestData(raw, params.count);
+    };
+
+    const tryOpenRouter = async () => {
+      return await this.generateTestDataWithAI_OpenRouter(params);
+    };
+
+    if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
+      if (!canCf && canOr) return await tryOpenRouter();
+      try {
+        return await tryCloudflare();
+      } catch (e: any) {
+        if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
+
+    if (!canOr && canCf) return await tryCloudflare();
+    try {
+      return await tryOpenRouter();
+    } catch (e: any) {
+      if (canCf && shouldFallbackToCloudflare(e)) {
+        return await tryCloudflare();
+      }
+      throw e;
+    }
   }
   private async generateTestDataWithAI_OpenRouter(params: {
     taskDescription: string;
@@ -860,6 +1166,7 @@ public class Main {
     lang: "JAVA" | "PYTHON";
     count: number;
     userId?: number;
+    signal?: AbortSignal;
   }): Promise<TestDataExample[]> {
     const langName = params.lang === "JAVA" ? "Java" : "Python";
     const taskDesc = params.taskDescription.slice(0, 2000);
@@ -951,13 +1258,14 @@ ${JSON.stringify(jsonSchema, null, 2)}
         timeout: 30000,
         maxRetries: 1,
         userId: params.userId,
+        signal: params.signal,
         temperature: 0.4,
         maxTokens: 2000
       });
       const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount);
       return validated;
     } catch (error: any) {
-      console.error("Error generating test data with AI:", error);
+      logger.warn('[llm] test data generation failed', { message: error?.message });
       throw error;
     }
   }

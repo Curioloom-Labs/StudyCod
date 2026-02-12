@@ -1,4 +1,6 @@
 import { api } from "./client";
+
+export type CodeFile = { path: string; content: string };
 export interface StudentLoginResponse {
   token: string;
   student: {
@@ -107,11 +109,15 @@ export interface Lesson {
       testsTotal: number;
       isCompleted?: boolean;
       testResults?: Array<{
-        input: string;
-        expected: string;
-        actual: string;
-        stderr?: string;
         passed: boolean;
+        testId?: number;
+        verdict?: string | null;
+        errorKind?: string | null;
+        // legacy / optional detailed fields
+        input?: string;
+        expected?: string;
+        actual?: string;
+        stderr?: string;
       }> | null;
     };
   }>;
@@ -160,6 +166,8 @@ export interface TaskWithGrade {
     isCompleted?: boolean;
     createdAt?: string;
     submittedCode?: string;
+    submittedEntryFile?: string;
+    submittedFiles?: CodeFile[];
     score?: number | null;
     maxScore?: number | null;
     groupScores?: Array<{
@@ -168,12 +176,15 @@ export interface TaskWithGrade {
       maxScore: number;
     }> | null;
     testResults?: Array<{
-      input: string;
-      expected: string;
-      actual: string;
-      stderr?: string;
       passed: boolean;
+      testId?: number;
+      verdict?: string | null;
       errorKind?: string | null;
+      // legacy / optional detailed fields
+      input?: string;
+      expected?: string;
+      actual?: string;
+      stderr?: string;
     }> | null;
   };
 }
@@ -205,22 +216,27 @@ export interface Grade {
   } | null;
   submittedCode?: string | null;
   testResults?: Array<{
-    input: string;
-    expected: string;
-    actual: string;
-    stderr?: string;
     passed: boolean;
+    testId?: number;
+    verdict?: string | null;
     errorKind?: string | null;
+    // legacy / optional detailed fields
+    input?: string;
+    expected?: string;
+    actual?: string;
+    stderr?: string;
   }> | null;
 }
 export interface TestResult {
   testId?: number;
-  input: string;
-  actual: string;
-  stderr?: string;
   passed: boolean;
   verdict?: string | null;
   errorKind?: string | null;
+  // legacy / optional detailed fields (students no longer receive IO)
+  input?: string;
+  expected?: string;
+  actual?: string;
+  stderr?: string;
 }
 export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON"): Promise<{
   token?: string;
@@ -402,10 +418,12 @@ export async function runCode(taskId: number, code: string, input?: string): Pro
   output: string;
   stderr?: string;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/run`, {
-    code,
-    input
-  });
+  const res = await api.post(`/edu/tasks/${taskId}/run`, { code, input });
+  return res.data;
+}
+export async function runCodeFiles(taskId: number, files: CodeFile[], input?: string): Promise<{ output: string; stderr?: string }>
+{
+  const res = await api.post(`/edu/tasks/${taskId}/run`, { files, input });
   return res.data;
 }
 export async function submitCode(taskId: number, code: string): Promise<{
@@ -435,6 +453,11 @@ export async function submitCode(taskId: number, code: string): Promise<{
   });
   return res.data;
 }
+
+export async function submitCodeFiles(taskId: number, files: CodeFile[]): Promise<any> {
+  const res = await api.post(`/edu/tasks/${taskId}/submit`, { files });
+  return res.data;
+}
 export async function completeTask(taskId: number, code: string): Promise<{
   message?: string;
   grade: {
@@ -461,6 +484,11 @@ export async function completeTask(taskId: number, code: string): Promise<{
   const res = await api.post(`/edu/tasks/${taskId}/complete`, {
     code
   });
+  return res.data;
+}
+
+export async function completeTaskFiles(taskId: number, files: CodeFile[]): Promise<any> {
+  const res = await api.post(`/edu/tasks/${taskId}/complete`, { files });
   return res.data;
 }
 export async function generateTestData(taskId: number, count: number): Promise<{

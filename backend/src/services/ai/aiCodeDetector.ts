@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { callOpenRouter } from "../openRouterClient";
+import { getLLMProvider } from "../llm/provider";
 
 export type AIDetectorLikelihood = "unlikely" | "possible" | "likely";
 
@@ -69,35 +69,29 @@ export async function detectAICode(params: {
 
   const user = `Мова: ${params.language}\n\nНазва задачі: ${taskTitle}\n\nУмова (скорочено):\n${taskDescription}\n\nШаблон (скорочено):\n${template}\n\nКод учня (скорочено):\n${code}\n\nПоверни JSON цього формату:\n{\n  "likelihood": "unlikely"|"possible"|"likely",\n  "score": number (0..1),\n  "reasons": string[] (короткі маркери),\n  "caveats": string[] (чому це може бути хибно-позитивно),\n  "suggestedChecks": string[] (що вчителю перевірити, напр. усне пояснення, історія комітів тощо)\n}\n\nПравила:\n- Якщо впевненість низька — став score <= 0.4 та likelihood="unlikely" або "possible".\n- Для простих задач або коли шаблон задає багато — не став "likely" без дуже сильних ознак.\n- Не вигадуй факти (наприклад, не кажи, що є бібліотеки, якщо їх нема).`;
 
-  const resp = await callOpenRouter({
-    model,
-    messages: [{
-      role: "system",
-      content: system
-    }, {
-      role: "user",
-      content: user
-    }],
-    response_format: {
-      type: "json_object"
-    },
-    temperature: 0.1,
-    max_tokens: 450
-  }, {
+  const provider = getLLMProvider();
+  const jsonSchema = {
+    type: "object",
+    additionalProperties: false,
+    required: ["likelihood", "score", "reasons", "caveats", "suggestedChecks"],
+    properties: {
+      likelihood: { type: "string", enum: ["unlikely", "possible", "likely"] },
+      score: { type: "number", minimum: 0, maximum: 1 },
+      reasons: { type: "array", items: { type: "string" }, maxItems: 10 },
+      caveats: { type: "array", items: { type: "string" }, maxItems: 10 },
+      suggestedChecks: { type: "array", items: { type: "string" }, maxItems: 10 }
+    }
+  };
+
+  const parsed: unknown = await provider.generateJSON(user, jsonSchema, system, {
     timeout: 25_000,
     maxRetries: 1,
     userId: params.userId,
     topicId: params.topicTaskId,
-    traceId: params.requestId
+    traceId: params.requestId,
+    temperature: 0.1,
+    maxTokens: 450
   });
-
-  const content = resp.choices?.[0]?.message?.content || "";
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch (e) {
-    throw new Error(`AI_DETECT_FAILED: Invalid JSON from model: ${content.slice(0, 200)}`);
-  }
 
   const validated = detectionSchema.parse(parsed);
 

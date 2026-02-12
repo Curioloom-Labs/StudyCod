@@ -8,9 +8,14 @@ import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { systemAdminGuard } from "../middleware/rolesGuard";
 import adminSupportRouter from "./adminSupport";
 import adminMaintenanceRouter from "./adminMaintenance";
+import adminLibraryRouter from "./adminLibrary";
+import adminMaterialsRouter from "./adminMaterials";
+import { logger } from "../utils/logger";
 const adminRouter = Router();
 adminRouter.use("/support", adminSupportRouter);
 adminRouter.use("/maintenance", adminMaintenanceRouter);
+adminRouter.use("/library", adminLibraryRouter);
+adminRouter.use("/materials", adminMaterialsRouter);
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
 function normalizeLang(input?: string | null): UserLang {
@@ -66,7 +71,7 @@ adminRouter.post("/users", authRequired, systemAdminGuard, async (req: AuthReque
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const data = validated.data;
@@ -116,7 +121,7 @@ adminRouter.post("/users", authRequired, systemAdminGuard, async (req: AuthReque
       user: buildUserDto(user)
     });
   } catch (error: any) {
-    console.error("[admin] POST /users error:", error);
+    logger.error("[admin] POST /users error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -153,7 +158,7 @@ adminRouter.get("/users", authRequired, systemAdminGuard, async (req: AuthReques
       }
     });
   } catch (error: any) {
-    console.error("[admin] GET /users error:", error);
+    logger.error("[admin] GET /users error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -181,7 +186,7 @@ adminRouter.get("/users/:id", authRequired, systemAdminGuard, async (req: AuthRe
       user: buildUserDto(user)
     });
   } catch (error: any) {
-    console.error("[admin] GET /users/:id error:", error);
+    logger.error("[admin] GET /users/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -204,7 +209,7 @@ adminRouter.patch("/users/:id/role", authRequired, systemAdminGuard, async (req:
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const user = await userRepo().findOne({
@@ -225,7 +230,7 @@ adminRouter.patch("/users/:id/role", authRequired, systemAdminGuard, async (req:
       user: buildUserDto(user)
     });
   } catch (error: any) {
-    console.error("[admin] PATCH /users/:id/role error:", error);
+    logger.error("[admin] PATCH /users/:id/role error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -291,7 +296,7 @@ adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: Auth
       user: buildUserDto(user)
     });
   } catch (error: any) {
-    console.error("[admin] PATCH /users/:id error:", error);
+    logger.error("[admin] PATCH /users/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -325,7 +330,7 @@ adminRouter.delete("/users/:id", authRequired, systemAdminGuard, async (req: Aut
       message: "User deleted successfully"
     });
   } catch (error: any) {
-    console.error("[admin] DELETE /users/:id error:", error);
+    logger.error("[admin] DELETE /users/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -337,7 +342,7 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const data = validated.data;
@@ -369,7 +374,7 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
       }
     });
   } catch (error: any) {
-    console.error("[admin] POST /classes error:", error);
+    logger.error("[admin] POST /classes error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -395,7 +400,7 @@ adminRouter.get("/classes", authRequired, systemAdminGuard, async (req: AuthRequ
       }))
     });
   } catch (error: any) {
-    console.error("[admin] GET /classes error:", error);
+    logger.error("[admin] GET /classes error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -413,7 +418,7 @@ adminRouter.patch("/classes/:id", authRequired, systemAdminGuard, async (req: Au
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
-        errors: validated.error.errors
+        errors: validated.error.issues
       });
     }
     const data = validated.data;
@@ -456,7 +461,7 @@ adminRouter.patch("/classes/:id", authRequired, systemAdminGuard, async (req: Au
       }
     });
   } catch (error: any) {
-    console.error("[admin] PATCH /classes/:id error:", error);
+    logger.error("[admin] PATCH /classes/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -485,7 +490,7 @@ adminRouter.delete("/classes/:id", authRequired, systemAdminGuard, async (req: A
       message: "Class deleted successfully"
     });
   } catch (error: any) {
-    console.error("[admin] DELETE /classes/:id error:", error);
+    logger.error("[admin] DELETE /classes/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -524,7 +529,7 @@ adminRouter.get("/stats", authRequired, systemAdminGuard, async (req: AuthReques
       }
     });
   } catch (error: any) {
-    console.error("[admin] GET /stats error:", error);
+    logger.error("[admin] GET /stats error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });

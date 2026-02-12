@@ -3,7 +3,7 @@ import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } fr
 import { AnimatePresence, motion } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { Code2, User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle } from "lucide-react";
+import { Code2, User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library } from "lucide-react";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,7 @@ import MaintenancePage, { type MaintenancePayload } from "./pages/MaintenancePag
 import { getMaintenanceStatus } from "./lib/api/maintenance";
 import { getAdminMaintenance } from "./lib/api/admin";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
+import { PublicLandingPage } from "./pages/PublicLandingPage";
 const AuthPage = React.lazy(() => import("./pages/AuthPage").then(mod => ({
   default: mod.AuthPage
 })));
@@ -87,6 +88,12 @@ const AdminDashboardPage = React.lazy(() => import("./pages/AdminDashboardPage")
 const SupportPage = React.lazy(() => import("./pages/SupportPage").then(mod => ({
   default: mod.SupportPage
 })));
+const TaskLibraryPage = React.lazy(() => import("./pages/TaskLibraryPage").then(mod => ({
+  default: mod.TaskLibraryPage
+})));
+const LibraryTaskSolvePage = React.lazy(() => import("./pages/LibraryTaskSolvePage").then(mod => ({
+  default: mod.LibraryTaskSolvePage
+})));
 const DevEditorPage = React.lazy(() => import("./pages/DevEditorPage").then(mod => ({
   default: mod.DevEditorPage
 })));
@@ -105,6 +112,8 @@ const AppContent: React.FC = React.memo(() => {
     i18n
   } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState<Page>("home");
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
@@ -306,10 +315,24 @@ const AppContent: React.FC = React.memo(() => {
         window.location.reload();
       }} />;
     }
+
+    const authIntent = searchParams.get("auth");
+    const wantsAuth = authIntent === "login" || authIntent === "register";
+    const showLanding = location.pathname === "/" && !wantsAuth;
+    if (showLanding) {
+      return <PublicLandingPage />;
+    }
+
+    const nextAfterAuth = searchParams.get("next");
     return <Suspense fallback={<PageLoader />}>
-        <AuthPage onAuth={(u: any) => {
+        <AuthPage initialMode={authIntent === "register" ? "register" : "login"} showBackToLanding={location.pathname === "/"} onAuth={(u: any) => {
         setUser(u);
         sessionStorage.setItem("fromAuth", "true");
+        if (nextAfterAuth) {
+          navigate(nextAfterAuth, {
+            replace: true
+          });
+        }
       }} />
       </Suspense>;
   }
@@ -356,6 +379,10 @@ const AppContent: React.FC = React.memo(() => {
                 <FileText className="w-4 h-4" />
                 {t('grades')}
               </button>
+              <button onClick={() => navigate("/library")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+                <Library className="w-4 h-4" />
+                {t("library")}
+              </button>
             </>}
 
           <button onClick={() => navigate("/docs")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
@@ -384,6 +411,10 @@ const AppContent: React.FC = React.memo(() => {
               <button onClick={() => handleSetPage("student")} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <BookOpen className="w-4 h-4" />
                 {t('myJournal')}
+              </button>
+              <button onClick={() => navigate("/edu/library")} className="px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+                <Library className="w-4 h-4" />
+                {t("library")}
               </button>
               <button onClick={() => {
             window.location.href = "/edu/lessons";
@@ -494,6 +525,16 @@ export const App: React.FC = () => {
                   <SupportPage />
                 </AnimatedPage>
               </Suspense>} />
+          <Route path="/library" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <TaskLibraryPage />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/library/solve/:taskKey" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <LibraryTaskSolvePage />
+                </AnimatedPage>
+              </Suspense>} />
           <Route path="/edu/*" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <EduRoutes />
@@ -503,6 +544,23 @@ export const App: React.FC = () => {
         </Routes>
       </AnimatePresence>
     </TheoryModalProvider>;
+};
+
+const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+  const token = (() => {
+    try {
+      return localStorage.getItem("token");
+    } catch {
+      return null;
+    }
+  })();
+
+  if (!token) {
+    const next = encodeURIComponent(`${location.pathname}${location.search}`);
+    return <Navigate to={`/?auth=login&next=${next}`} replace />;
+  }
+  return <>{children}</>;
 };
 const EduRoutes: React.FC = React.memo(() => {
   const {
@@ -595,6 +653,8 @@ const EduRoutes: React.FC = React.memo(() => {
               <Route path="classes/:classId/lessons/new" element={<AnimatedPage><CreateLessonPage /></AnimatedPage>} />
               <Route path="classes/:classId/topics/new" element={<AnimatedPage><CreateTopicPage /></AnimatedPage>} />
               <Route path="topics/:topicId" element={<AnimatedPage><TopicDetailsPage /></AnimatedPage>} />
+              <Route path="library" element={<AnimatedPage><TaskLibraryPage /></AnimatedPage>} />
+              <Route path="library/solve/:taskKey" element={<AnimatedPage><LibraryTaskSolvePage /></AnimatedPage>} />
               <Route path="control-works/:controlWorkId" element={<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>} />
               <Route path="/classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
               <Route path="/classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />

@@ -3,6 +3,7 @@ import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
 import { emailService } from "../services/emailService";
 import { Not, IsNull } from "typeorm";
+import { logger } from "../utils/logger";
 const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 router.post("/check", async (req: Request, res: Response) => {
@@ -37,7 +38,12 @@ router.post("/check", async (req: Request, res: Response) => {
           await emailService.sendStreakBreakNotification(user.email, user.username, user.currentStreak);
           notified++;
         } catch (err) {
-          console.error(`Failed to send streak break email to ${user.email}:`, err);
+          logger.error("[streak] failed to send streak break email", {
+            requestId: (req as any).requestId,
+            email: user.email,
+            userId: user.id,
+            err,
+          });
         }
       }
     }
@@ -46,7 +52,7 @@ router.post("/check", async (req: Request, res: Response) => {
       notified
     });
   } catch (err) {
-    console.error("POST /streak/check error", err);
+    logger.error("[streak] POST /streak/check error", { requestId: (req as any).requestId, err });
     return res.status(500).json({
       message: "Internal server error"
     });

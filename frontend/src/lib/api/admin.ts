@@ -69,6 +69,32 @@ export interface AdminSupportTicket {
   createdAt: string;
   answeredAt: string | null;
 }
+
+export type AdminSupportConversationStatus = "OPEN" | "CLOSED";
+
+export type AdminSupportChatConversation = {
+  id: number;
+  userEmail: string;
+  subject: string;
+  status: AdminSupportConversationStatus;
+  createdAt: string;
+  lastMessageAt: string;
+};
+
+export type AdminSupportChatAttachment = {
+  id: number;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export type AdminSupportChatMessage = {
+  id: number;
+  senderType: "USER" | "ADMIN" | "SYSTEM";
+  text: string;
+  createdAt: string;
+  attachments: AdminSupportChatAttachment[];
+};
 export interface CreateUserData {
   username: string;
   email?: string;
@@ -168,6 +194,35 @@ export async function replyAdminSupportTicket(id: number, data: {
   const res = await api.post(`/admin/support/${id}/reply`, data);
   return res.data;
 }
+
+export async function getAdminSupportConversations(): Promise<{ conversations: AdminSupportChatConversation[] }> {
+  const res = await api.get("/admin/support/conversations");
+  return res.data;
+}
+
+export async function getAdminSupportConversation(conversationId: number): Promise<{
+  conversation: AdminSupportChatConversation;
+  messages: AdminSupportChatMessage[];
+}> {
+  const res = await api.get(`/admin/support/conversations/${conversationId}`);
+  return res.data;
+}
+
+export async function postAdminSupportConversationMessage(conversationId: number, data: {
+  text: string;
+  sendEmail?: boolean;
+}): Promise<{
+  ok: boolean;
+  message: {
+    id: number;
+    senderType: "ADMIN";
+    text: string;
+    createdAt: string;
+  };
+}> {
+  const res = await api.post(`/admin/support/conversations/${conversationId}/messages`, data);
+  return res.data;
+}
 export async function getAdminMaintenance(): Promise<{
   state: MaintenanceState;
 }> {
@@ -190,5 +245,168 @@ export async function disableAdminMaintenance(): Promise<{
   state: MaintenanceState;
 }> {
   const res = await api.post("/admin/maintenance/disable");
+  return res.data;
+}
+
+export type AdminLibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
+
+export type AdminLibraryTask = {
+  id: number;
+  title: string;
+  description: string;
+  template: string;
+  lang: "JAVA" | "PYTHON";
+  maxAttempts: number;
+  status: AdminLibraryTaskStatus;
+  rejectionReason: string | null;
+  submittedAt: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  author: { id: number; username: string; email: string | null } | null;
+};
+
+export type AdminTheoryBlock = {
+  id: number;
+  title: string;
+  content: string;
+  version: number;
+  level: number | null;
+  tags: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminMaterialTopic = {
+  id: number;
+  title: string;
+  description: string | null;
+  order: number;
+  language: "JAVA" | "PYTHON";
+  theoryBlock: AdminTheoryBlock | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminMaterialsDiagnostics = {
+  language: "JAVA" | "PYTHON";
+  topicsNewGlobal: number;
+  topicsNewClass: number;
+  legacyTopics: number;
+};
+
+export async function getAdminMaterialTopics(params?: { language?: "JAVA" | "PYTHON" }): Promise<{ topics: AdminMaterialTopic[] }> {
+  const res = await api.get("/admin/materials/topics", { params });
+  return res.data;
+}
+
+export async function getAdminMaterialsDiagnostics(params: { language: "JAVA" | "PYTHON" }): Promise<AdminMaterialsDiagnostics> {
+  const res = await api.get("/admin/materials/diagnostics", { params });
+  return res.data;
+}
+
+export async function createAdminMaterialTopic(data: {
+  title: string;
+  description?: string | null;
+  order?: number;
+  language: "JAVA" | "PYTHON";
+  theory?: { title?: string; content: string; level?: number | null; tags?: any } | null;
+}): Promise<{ topic: AdminMaterialTopic }> {
+  const res = await api.post("/admin/materials/topics", data);
+  return res.data;
+}
+
+export async function updateAdminMaterialTopic(
+  id: number,
+  data: {
+    title?: string;
+    description?: string | null;
+    order?: number;
+    language?: "JAVA" | "PYTHON";
+    theory?: { title?: string; content: string; level?: number | null; tags?: any } | null;
+    clearTheory?: boolean;
+    theoryRevisionAction?: "UPDATE" | "AUTO";
+    theoryRevisionComment?: string;
+  }
+): Promise<{ topic: AdminMaterialTopic }> {
+  const res = await api.patch(`/admin/materials/topics/${id}`, data);
+  return res.data;
+}
+
+export async function deleteAdminMaterialTopic(id: number): Promise<{ ok: boolean }> {
+  const res = await api.delete(`/admin/materials/topics/${id}`);
+  return res.data;
+}
+
+export async function reorderAdminMaterialTopics(data: {
+  language: "JAVA" | "PYTHON";
+  orderedIds: number[];
+}): Promise<{ topics: AdminMaterialTopic[] }> {
+  const res = await api.patch("/admin/materials/topics/reorder", data);
+  return res.data;
+}
+
+export async function importAdminMaterialTopicsYaml(data: {
+  language: "JAVA" | "PYTHON";
+  yaml: string;
+  mode?: "merge" | "replace";
+}): Promise<{ created: number; updated: number; skipped: number; topics: AdminMaterialTopic[] }> {
+  const res = await api.post("/admin/materials/import/yaml", data);
+  return res.data;
+}
+
+export async function importAdminMaterialTopicsLegacy(data: {
+  language: "JAVA" | "PYTHON";
+  mode?: "merge" | "replace";
+}): Promise<{ created: number; updated: number; skipped: number; topics: AdminMaterialTopic[] }> {
+  const res = await api.post("/admin/materials/import/legacy-topics", data);
+  return res.data;
+}
+
+export type AdminTheoryBlockRevisionAction = "CREATE" | "UPDATE" | "ROLLBACK" | "AUTO";
+
+export type AdminTheoryBlockRevision = {
+  id: number;
+  version: number;
+  action: AdminTheoryBlockRevisionAction;
+  comment: string | null;
+  createdAt: string;
+  createdByUserId: number | null;
+};
+
+export async function getAdminTheoryBlockRevisions(theoryBlockId: number): Promise<{ revisions: AdminTheoryBlockRevision[] }> {
+  const res = await api.get(`/admin/materials/theory-blocks/${theoryBlockId}/revisions`);
+  return res.data;
+}
+
+export async function getAdminTheoryBlockRevision(
+  theoryBlockId: number,
+  version: number
+): Promise<{ revision: AdminTheoryBlockRevision; snapshot: { title: string; content: string; level: number | null; tags: any } | null }> {
+  const res = await api.get(`/admin/materials/theory-blocks/${theoryBlockId}/revisions/${version}`);
+  return res.data;
+}
+
+export async function rollbackAdminTheoryBlockRevision(
+  theoryBlockId: number,
+  version: number,
+  data?: { comment?: string }
+): Promise<{ ok: boolean; theoryBlock: AdminTheoryBlock }> {
+  const res = await api.post(`/admin/materials/theory-blocks/${theoryBlockId}/revisions/${version}/rollback`, data ?? {});
+  return res.data;
+}
+
+export async function getAdminLibraryTasks(params?: { status?: AdminLibraryTaskStatus }): Promise<{ tasks: AdminLibraryTask[] }> {
+  const res = await api.get("/admin/library/tasks", { params });
+  return res.data;
+}
+
+export async function approveAdminLibraryTask(id: number): Promise<{ task: AdminLibraryTask }> {
+  const res = await api.post(`/admin/library/tasks/${id}/approve`, {});
+  return res.data;
+}
+
+export async function rejectAdminLibraryTask(id: number, reason: string): Promise<{ task: AdminLibraryTask }> {
+  const res = await api.post(`/admin/library/tasks/${id}/reject`, { reason });
   return res.data;
 }

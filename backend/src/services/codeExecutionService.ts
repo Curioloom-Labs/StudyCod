@@ -1,273 +1,130 @@
-import { spawn } from "child_process";
-import * as fs from "fs/promises";
-import * as path from "path";
-import * as os from "os";
-import iconv from "iconv-lite";
-function getPythonExecutable(): string {
-  const fromEnv = (process.env.PYTHON_PATH ?? "").trim();
-  if (fromEnv) return fromEnv;
-  return process.platform === "win32" ? "python" : "python3";
+import { env } from "../env";
+import { judgeWithSemaphore } from "./judgeWorker";
+import type { JudgeLanguage, JudgeRequest, JudgeResponse } from "./judgeWorker/types";
+import { logger } from "../utils/logger";
+import { HttpError } from "../utils/httpError";
+
+function truncateText(s: string, max: number): string {
+  const v = String(s ?? "");
+  if (v.length <= max) return v;
+  return v.slice(0, max);
 }
-const PYTHON = getPythonExecutable();
+
+function judgeUnavailable(err: unknown): HttpError {
+  const msg = err instanceof Error ? err.message : String(err);
+  // Some failures are request-size / validation issues. Those should not be surfaced as 503.
+  const tooLarge =
+    /INPUT_TOO_LARGE/i.test(msg) ||
+    /INVALID_REQUEST: (source too large|files too large|too many tests|test\.input too large|test\.output too large|too many files)/i.test(msg) ||
+    /JUDGE_(STDOUT|STDERR)_TOO_LARGE/i.test(msg);
+  if (tooLarge) {
+    return new HttpError(413, "JUDGE_REQUEST_TOO_LARGE", {
+      code: "JUDGE_REQUEST_TOO_LARGE",
+      details: truncateText(msg, 2000),
+      expose: true,
+      cause: err
+    });
+  }
+  return new HttpError(503, "Judge unavailable", {
+    code: "JUDGE_UNAVAILABLE",
+    details: env.__isProduction ? undefined : truncateText(msg, 2000),
+    expose: true,
+    cause: err
+  });
+}
 export interface CodeExecutionResult {
   stdout: string;
   stderr: string;
   exitCode: number;
   success: boolean;
 }
-async function runProcess(command: string, args: string[], options: {
-  timeout: number;
-  input?: string;
-  cwd: string;
-}): Promise<{
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}> {
-  return new Promise(resolve => {
-    const env = {
-      ...process.env,
-      NODE_ENV: "production",
-      PYTHONIOENCODING: "utf-8",
-      JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8 -Duser.language=en -Duser.country=US"
-    };
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env,
-      shell: false,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    let killedByTimeout = false;
-    let inputWritten = false;
-    const timeoutTrigger = setTimeout(() => {
-      killedByTimeout = true;
-      child.kill("SIGKILL");
-    }, options.timeout);
-    if (options.input && child.stdin) {
-      const inputData = options.input.endsWith('\n') ? options.input : options.input + '\n';
-      const writeInput = () => {
-        if (child.stdin && !child.killed && !inputWritten) {
-          try {
-            if (!child.stdin.destroyed && child.stdin.writable) {
-              child.stdin.write(inputData, 'utf8', err => {
-                if (!err) {
-                  inputWritten = true;
-                  if (child.stdin && !child.stdin.destroyed) {
-                    child.stdin.end();
-                  }
-                }
-              });
-            }
-          } catch (err) {}
-        }
-      };
-      if (command === 'java' || command === 'cmd') {
-        setTimeout(writeInput, 100);
-      } else {
-        process.nextTick(writeInput);
-      }
-    }
-    child.stdout?.on("data", (data: Buffer) => {
-      if (stdoutChunks.reduce((sum, chunk) => sum + chunk.length, 0) < 5 * 1024 * 1024) {
-        stdoutChunks.push(data);
-      }
-    });
-    child.stderr?.on("data", (data: Buffer) => {
-      if (stderrChunks.reduce((sum, chunk) => sum + chunk.length, 0) < 5 * 1024 * 1024) {
-        stderrChunks.push(data);
-      }
-    });
-    child.on("close", code => {
-      clearTimeout(timeoutTrigger);
-      const stdoutBuffer = Buffer.concat(stdoutChunks);
-      const stderrBuffer = Buffer.concat(stderrChunks);
-      const stdout = stdoutBuffer.toString('utf8').trim();
-      const stderr = stderrBuffer.toString('utf8').trim();
-      resolve({
-        stdout,
-        stderr: killedByTimeout ? "Execution timed out" : stderr,
-        exitCode: killedByTimeout ? 124 : code ?? 1
-      });
-    });
-    child.on("error", err => {
-      clearTimeout(timeoutTrigger);
-      const stdoutBuffer = Buffer.concat(stdoutChunks);
-      const stderrBuffer = Buffer.concat(stderrChunks);
-      const stdout = stdoutBuffer.toString('utf8').trim();
-      const stderr = stderrBuffer.toString('utf8').trim();
-      const isEnoent = (err as any)?.code === "ENOENT";
-      const enoentMessage = isEnoent ? `Executable not found: ${command}. ` + (command === PYTHON ? `Install Python (python3) or set PYTHON_PATH to a valid interpreter path.` : `Make sure it is installed and available in PATH.`) : null;
-      const errMessage = enoentMessage ?? err.message ?? "Unknown error";
-      resolve({
-        stdout,
-        stderr: (stderr ? `${stderr}\n` : "") + errMessage,
-        exitCode: 1
-      });
-    });
-  });
+
+export type ExecuteCodeMode = "auto" | "judge";
+
+export interface ExecuteCodeOptions {
+  /**
+   * Legacy option kept for backwards-compatibility.
+   * Execution is always routed through the judge sandbox.
+   */
+  mode?: ExecuteCodeMode;
 }
-async function runProcessWithShell(command: string, args: string[], options: {
-  timeout: number;
-  input?: string;
-  cwd: string;
-}): Promise<{
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}> {
-  return new Promise(resolve => {
-    const env = {
-      ...process.env,
-      NODE_ENV: "production",
-      PYTHONIOENCODING: "utf-8",
-      JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8 -Duser.language=en -Duser.country=US"
-    };
-    const child = spawn(command, [], {
-      cwd: options.cwd,
-      env,
-      shell: true,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    let killedByTimeout = false;
-    let inputWritten = false;
-    const timeoutTrigger = setTimeout(() => {
-      killedByTimeout = true;
-      child.kill("SIGKILL");
-    }, options.timeout);
-    if (options.input && child.stdin) {
-      const inputData = options.input.endsWith('\n') ? options.input : options.input + '\n';
-      const writeInput = () => {
-        if (child.stdin && !child.killed && !inputWritten) {
-          try {
-            if (!child.stdin.destroyed && child.stdin.writable) {
-              child.stdin.write(inputData, 'utf8', err => {
-                if (!err) {
-                  inputWritten = true;
-                  if (child.stdin && !child.stdin.destroyed) {
-                    child.stdin.end();
-                  }
-                }
-              });
-            }
-          } catch (err) {}
-        }
-      };
-      setTimeout(writeInput, 100);
-    }
-    child.stdout?.on("data", (data: Buffer) => {
-      if (stdoutChunks.reduce((sum, chunk) => sum + chunk.length, 0) < 5 * 1024 * 1024) {
-        stdoutChunks.push(data);
-      }
-    });
-    child.stderr?.on("data", (data: Buffer) => {
-      if (stderrChunks.reduce((sum, chunk) => sum + chunk.length, 0) < 5 * 1024 * 1024) {
-        stderrChunks.push(data);
-      }
-    });
-    child.on("close", code => {
-      clearTimeout(timeoutTrigger);
-      const stdoutBuffer = Buffer.concat(stdoutChunks);
-      const stderrBuffer = Buffer.concat(stderrChunks);
-      const stdout = iconv.decode(stdoutBuffer, 'win1251').trim();
-      const stderr = iconv.decode(stderrBuffer, 'win1251').trim();
-      resolve({
-        stdout,
-        stderr: killedByTimeout ? "Execution timed out" : stderr,
-        exitCode: killedByTimeout ? 124 : code ?? 1
-      });
-    });
-    child.on("error", err => {
-      clearTimeout(timeoutTrigger);
-      const stdoutBuffer = Buffer.concat(stdoutChunks);
-      const stderrBuffer = Buffer.concat(stderrChunks);
-      const stdout = iconv.decode(stdoutBuffer, 'win1251').trim();
-      const stderr = iconv.decode(stderrBuffer, 'win1251').trim();
-      resolve({
-        stdout,
-        stderr: stderr + (err.message || "Unknown error"),
-        exitCode: 1
-      });
-    });
-  });
+
+function mapToJudgeLanguage(lang: "JAVA" | "PYTHON"): JudgeLanguage {
+  return lang === "JAVA" ? "java" : "python";
 }
-export async function executeCodeWithInput(code: string, language: "JAVA" | "PYTHON", input: string, timeout: number = 10000): Promise<CodeExecutionResult> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-exec-"));
+
+async function executeViaJudge(code: string, language: "JAVA" | "PYTHON", input: string, timeout: number): Promise<CodeExecutionResult> {
+  const judgeLang = mapToJudgeLanguage(language);
+  const req: JudgeRequest = {
+    submission_id: `exec_${judgeLang}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    language: judgeLang,
+    source: code,
+    tests: [
+      {
+        id: 1,
+        input: input ?? "",
+        // We don't know the expected output here; use empty string and rely on debug output.
+        output: "",
+        hidden: false,
+        group: "exec",
+        weight: 1
+      }
+    ],
+    limits: {
+      time_limit_ms: Math.max(200, timeout),
+      memory_limit_mb: language === "PYTHON" ? 256 : 384,
+      output_limit_kb: 256
+    },
+    checker: { type: "exact" },
+    debug: true,
+    run_all: true,
+    rerun_failed_once: false
+  };
+
+  let res: JudgeResponse;
   try {
-    if (language === "PYTHON") {
-      const filePath = path.join(tmpDir, "main.py");
-      await fs.writeFile(filePath, code, "utf-8");
-      const {
-        stdout,
-        stderr,
-        exitCode
-      } = await runProcess(PYTHON, [filePath], {
-        timeout,
-        input,
-        cwd: tmpDir
-      });
-      return {
-        stdout,
-        stderr,
-        exitCode,
-        success: exitCode === 0
-      };
-    } else {
-      const filePath = path.join(tmpDir, "Main.java");
-      await fs.writeFile(filePath, code, "utf-8");
-      const compileRes = await runProcess("javac", ["-encoding", "UTF-8", "Main.java"], {
-        timeout: 5000,
-        cwd: tmpDir
-      });
-      if (compileRes.exitCode !== 0) {
-        return {
-          stdout: "",
-          stderr: compileRes.stderr || "Compilation failed",
-          exitCode: compileRes.exitCode,
-          success: false
-        };
-      }
-      const hasInput = input && input.trim().length > 0;
-      const runTimeout = hasInput ? Math.max(30000, timeout - 5000) : Math.max(5000, timeout - 5000);
-      let runRes;
-      if (process.platform === 'win32') {
-        const cmd = `chcp 65001 >nul && java -Dfile.encoding=UTF-8 -cp . Main`;
-        runRes = await runProcessWithShell(`cmd /c "${cmd}"`, [], {
-          timeout: runTimeout,
-          input: input || "",
-          cwd: tmpDir
-        });
-      } else {
-        runRes = await runProcess("java", ["-Dfile.encoding=UTF-8", "-cp", ".", "Main"], {
-          timeout: runTimeout,
-          input: input || "",
-          cwd: tmpDir
-        });
-      }
-      return {
-        stdout: runRes.stdout,
-        stderr: runRes.stderr,
-        exitCode: runRes.exitCode,
-        success: runRes.exitCode === 0
-      };
-    }
-  } catch (error: any) {
-    return {
-      stdout: "",
-      stderr: error.message || "Execution error",
-      exitCode: 1,
-      success: false
-    };
-  } finally {
-    try {
-      await fs.rm(tmpDir, {
-        recursive: true,
-        force: true
-      });
-    } catch {}
+    res = await judgeWithSemaphore(req);
+  } catch (e: any) {
+    if (e instanceof HttpError) throw e;
+    throw judgeUnavailable(e);
+  }
+  if (res.verdict === "CE" && res.compile) {
+    const combined = [res.compile.stderr, res.compile.stdout].filter(Boolean).join("\n").trim();
+    return { stdout: "", stderr: combined || "Compilation error", exitCode: 1, success: false };
+  }
+  const t0: any = res.tests?.[0];
+  const stdout = String(t0?.actual ?? "");
+  const stderr = String(t0?.stderr ?? "");
+  const verdict = String(t0?.verdict ?? "");
+  // Treat WA as success: the program ran, output just doesn't match expected (we used empty expected).
+  const success = verdict === "AC" || verdict === "WA";
+  const exitCode = success ? 0 : 1;
+  return { stdout, stderr, exitCode, success };
+}
+
+export async function executeCodeWithInput(
+  code: string,
+  language: "JAVA" | "PYTHON",
+  input: string,
+  timeout: number = 10000,
+  options: ExecuteCodeOptions = {}
+): Promise<CodeExecutionResult> {
+  // Backwards compatibility: "auto" and "judge" both mean judge-only.
+  // Any host/local execution path has been intentionally removed.
+  const mode: ExecuteCodeMode = options.mode ?? "auto";
+  if (mode !== "auto" && mode !== "judge") {
+    throw new HttpError(400, "INVALID_EXECUTION_MODE", {
+      code: "INVALID_EXECUTION_MODE",
+      expose: true
+    });
+  }
+  try {
+    return await executeViaJudge(code, language, input, timeout);
+  } catch (e: any) {
+    if (e instanceof HttpError) throw e;
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error("executeCodeWithInput judge failed", { language, timeout, err: msg });
+    throw judgeUnavailable(e);
   }
 }
 export function filterStderr(stderr: string, language?: "JAVA" | "PYTHON"): string {
@@ -359,8 +216,136 @@ export function filterStderrWithLang(stderr: string, language?: "JAVA" | "PYTHON
   return filterStderrWithLanguage(stderr, language);
 }
 export function compareOutput(actual: string, expected: string): boolean {
+  const hasCyrillic = (s: string) => /[\u0400-\u04FF]/.test(s);
+  const safeNfc = (s: string) => {
+    try {
+      return s.normalize("NFC");
+    } catch {
+      return s;
+    }
+  };
+  const normalizeApostrophes = (s: string) => s.replace(/[\u2018\u2019\u201B\u2032\u02BC]/g, "'");
+  const normalizeInvisibles = (s: string) => s.replace(/\u00A0/g, " ").replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "");
+  const toConfusableSkeleton = (s: string) => {
+    let out = "";
+    for (const ch of s) {
+      switch (ch) {
+        case "A":
+        case "А":
+          out += "A";
+          break;
+        case "a":
+        case "а":
+          out += "a";
+          break;
+        case "B":
+        case "В":
+          out += "B";
+          break;
+        case "C":
+        case "С":
+          out += "C";
+          break;
+        case "c":
+        case "с":
+          out += "c";
+          break;
+        case "E":
+        case "Е":
+          out += "E";
+          break;
+        case "e":
+        case "е":
+          out += "e";
+          break;
+        case "H":
+        case "Н":
+          out += "H";
+          break;
+        case "h":
+        case "н":
+          out += "h";
+          break;
+        case "I":
+        case "І":
+          out += "I";
+          break;
+        case "i":
+        case "і":
+          out += "i";
+          break;
+        case "K":
+        case "К":
+          out += "K";
+          break;
+        case "k":
+        case "к":
+          out += "k";
+          break;
+        case "M":
+        case "М":
+          out += "M";
+          break;
+        case "m":
+        case "м":
+          out += "m";
+          break;
+        case "O":
+        case "О":
+          out += "O";
+          break;
+        case "o":
+        case "о":
+          out += "o";
+          break;
+        case "P":
+        case "Р":
+          out += "P";
+          break;
+        case "p":
+        case "р":
+          out += "p";
+          break;
+        case "T":
+        case "Т":
+          out += "T";
+          break;
+        case "t":
+        case "т":
+          out += "t";
+          break;
+        case "X":
+        case "Х":
+          out += "X";
+          break;
+        case "x":
+        case "х":
+          out += "x";
+          break;
+        case "Y":
+        case "У":
+          out += "Y";
+          break;
+        case "y":
+        case "у":
+          out += "y";
+          break;
+        default:
+          out += ch;
+      }
+    }
+    return out;
+  };
+
+  const expectedHasCyr = hasCyrillic(String(expected ?? ""));
   const normalize = (str: string) => {
-    const normalized = str.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    let normalized = String(str ?? "");
+    normalized = normalized.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    normalized = normalizeInvisibles(normalized);
+    normalized = normalizeApostrophes(normalized);
+    normalized = safeNfc(normalized);
+    if (expectedHasCyr) normalized = toConfusableSkeleton(normalized);
+    normalized = normalized.trim();
     const lines = normalized.split("\n").map(l => l.trim()).filter(l => l.length > 0);
     return lines.join("\n");
   };

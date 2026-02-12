@@ -11,7 +11,12 @@ export function stripSandboxNoise(stderr: string): string {
     if (!trimmed) continue;
     if (/^[IWEF]\d{4}\s/.test(trimmed)) continue;
     if (/^\[[IWEF]\]\s*/.test(trimmed)) continue;
-    if (/\bnsjail\b/i.test(trimmed)) continue;
+    // NsJail often prefixes useful exec errors (e.g. missing compiler) with "nsjail".
+    // Keep lines that look actionable, strip the rest of the nsjail noise.
+    if (/\bnsjail\b/i.test(trimmed)) {
+      const actionable = /execve|no such file|not found|failed|cannot|can't|permission denied|seccomp|violation|sigsys|killed|denied|forbidden/i.test(trimmed);
+      if (!actionable) continue;
+    }
     if (/\b(mount|bindmount|uid|gid|chroot|cgroup|rlimit)\b/i.test(trimmed) && /\bnsjail\b/i.test(s)) continue;
     kept.push(trimmed);
   }

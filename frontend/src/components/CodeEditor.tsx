@@ -3,8 +3,14 @@ import loader from "@monaco-editor/loader";
 import { useTranslation } from "react-i18next";
 import { getCurrentTheme, type AppTheme } from "../theme";
 
+// Monaco's base CSS is required to correctly position/hide internal elements
+// like the hidden input <textarea>. Without it, the editor can render with a
+// big, resizable textarea overlay (browser default styles).
+import "monaco-editor/min/vs/editor/editor.main.css";
+
 let javaStdlibCompletionRegistered = false;
 let studycodMonacoThemesRegistered = false;
+let kotlinLanguageRegistered = false;
 
 const ensureStudyCodMonacoThemes = (monaco: any) => {
   if (!monaco || studycodMonacoThemesRegistered) return;
@@ -146,6 +152,183 @@ const registerJavaStdlibCompletions = (monaco: any) => {
     // ignore
   }
 };
+
+const registerKotlinHighlighting = (monaco: any) => {
+  if (!monaco || kotlinLanguageRegistered) return;
+  kotlinLanguageRegistered = true;
+
+  try {
+    const existing = (monaco.languages?.getLanguages?.() ?? []).some((l: any) => l?.id === "kotlin");
+    if (!existing) {
+      monaco.languages.register({ id: "kotlin", extensions: [".kt", ".kts"], aliases: ["Kotlin", "kotlin"] });
+    }
+
+    // A pragmatic Monarch tokenizer: good-enough highlighting without a full Kotlin LSP.
+    const keywords = [
+      "as",
+      "break",
+      "class",
+      "continue",
+      "do",
+      "else",
+      "false",
+      "for",
+      "fun",
+      "if",
+      "in",
+      "interface",
+      "is",
+      "null",
+      "object",
+      "package",
+      "return",
+      "super",
+      "this",
+      "throw",
+      "true",
+      "try",
+      "typealias",
+      "val",
+      "var",
+      "when",
+      "while",
+      "catch",
+      "finally",
+      "import",
+      "constructor",
+      "init",
+      "where",
+      "by",
+      "get",
+      "set"
+    ];
+
+    const modifiers = [
+      "public",
+      "private",
+      "protected",
+      "internal",
+      "open",
+      "final",
+      "abstract",
+      "override",
+      "lateinit",
+      "data",
+      "sealed",
+      "inline",
+      "noinline",
+      "crossinline",
+      "reified",
+      "suspend",
+      "tailrec",
+      "operator",
+      "infix",
+      "const",
+      "companion",
+      "annotation",
+      "enum"
+    ];
+
+    const types = ["Int", "Long", "Short", "Byte", "Float", "Double", "Boolean", "Char", "String", "Unit", "Any", "Nothing"];
+
+    monaco.languages.setMonarchTokensProvider("kotlin", {
+      defaultToken: "",
+      tokenPostfix: ".kt",
+      keywords,
+      modifiers,
+      types,
+      tokenizer: {
+        root: [
+          [/\b\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?(?:[eE][+-]?\d+)?[fFdD]?\b/, "number"],
+          [/0[xX][0-9a-fA-F_]+/, "number.hex"],
+          [/0[bB][01_]+/, "number.binary"],
+
+          [/\b(?:@)[A-Za-z_][\w$]*\b/, "annotation"],
+
+          [/"""/, { token: "string.quote", next: "@rawString" }],
+          [/"([^"\\]|\\.)*$/, "string.invalid"],
+          [/"/, { token: "string.quote", next: "@string" }],
+          [/'([^'\\]|\\.)*$/, "string.invalid"],
+          [/'/, { token: "string.quote", next: "@char" }],
+
+          [/\/\*.*\*\//, "comment"],
+          [/\/\*/, { token: "comment", next: "@comment" }],
+          [/\/\/.*$/, "comment"],
+
+          [/`[^`]+`/, "identifier"],
+
+          [/\b[A-Z][\w$]*\b/, "type.identifier"],
+          [/\b([a-zA-Z_][\w$]*)\b/, {
+            cases: {
+              "@keywords": "keyword",
+              "@modifiers": "keyword.modifier",
+              "@types": "type",
+              "@default": "identifier"
+            }
+          }],
+
+          [/\{\{|\}\}|\{|\}|\(|\)|\[|\]/, "delimiter.bracket"],
+          [/[,.;]/, "delimiter"],
+          [/\+|\-|\*|\/|%|=|!|<|>|\?|:|\.|\|\||&&|\+\+|--|\+=|-=|\*=|\/=|%=/, "operator"],
+          [/\s+/, "white"]
+        ],
+        comment: [
+          [/[^/*]+/, "comment"],
+          [/\*\//, { token: "comment", next: "@pop" }],
+          [/[/\*]/, "comment"]
+        ],
+        string: [
+          [/[^\\"$]+/, "string"],
+          [/\\./, "string.escape"],
+          [/\$\{[^}]*\}/, "string.interpolate"],
+          [/\$[A-Za-z_][\w$]*/, "string.interpolate"],
+          [/"/, { token: "string.quote", next: "@pop" }]
+        ],
+        rawString: [
+          [/[^$]+/, "string"],
+          [/\$\{[^}]*\}/, "string.interpolate"],
+          [/\$[A-Za-z_][\w$]*/, "string.interpolate"],
+          [/"""/, { token: "string.quote", next: "@pop" }]
+        ],
+        char: [
+          [/[^\\']+/, "string"],
+          [/\\./, "string.escape"],
+          [/'/, { token: "string.quote", next: "@pop" }]
+        ]
+      }
+    });
+
+    monaco.languages.setLanguageConfiguration("kotlin", {
+      comments: {
+        lineComment: "//",
+        blockComment: ["/*", "*/"]
+      },
+      brackets: [
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"]
+      ],
+      autoClosingPairs: [
+        { open: "{", close: "}" },
+        { open: "[", close: "]" },
+        { open: "(", close: ")" },
+        { open: "\"", close: "\"" },
+        { open: "'", close: "'" },
+        { open: "`", close: "`" }
+      ],
+      surroundingPairs: [
+        { open: "{", close: "}" },
+        { open: "[", close: "]" },
+        { open: "(", close: ")" },
+        { open: "\"", close: "\"" },
+        { open: "'", close: "'" },
+        { open: "`", close: "`" }
+      ]
+    });
+  } catch {
+    // ignore
+  }
+};
 if (typeof window !== "undefined") {
   loader.config({
     paths: {
@@ -157,11 +340,33 @@ const Editor = React.lazy(() => import("@monaco-editor/react").then(mod => ({
   default: mod.default
 })));
 interface Props {
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
   value: string;
   onChange?: (code: string) => void;
   readOnly?: boolean;
 }
+
+const toMonacoLanguage = (language: Props["language"]) => {
+  switch (language) {
+    case "JAVA":
+    case "java":
+      return "java";
+    case "PYTHON":
+    case "python":
+      return "python";
+    case "cpp":
+      return "cpp";
+    case "c":
+      // Monaco usually highlights C well under the shared C/C++ grammar.
+      return "cpp";
+    case "csharp":
+      return "csharp";
+    case "kotlin":
+      return "kotlin";
+    default:
+      return "plaintext";
+  }
+};
 const createEditorOptions = (readOnly: boolean) => ({
   fontSize: 14,
   fontFamily: "JetBrains Mono, Fira Code, Consolas, Monaco, 'Courier New', monospace",
@@ -225,7 +430,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
-  const monacoLang = useMemo(() => language === "JAVA" ? "java" : "python", [language]);
+  const monacoLang = useMemo(() => toMonacoLanguage(language), [language]);
   const editorOptions = useMemo(() => createEditorOptions(readOnly), [readOnly]);
   const editorRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -272,6 +477,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
 
         // Ensure our customizations exist as soon as Monaco is available.
         ensureStudyCodMonacoThemes(monaco);
+        registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
       })
       .catch(err => {
@@ -406,6 +612,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
 
         // (Safety) ensure theme/completions exist even if editor mounts before beforeMount fires.
         ensureStudyCodMonacoThemes(monaco);
+        registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
 
         try {

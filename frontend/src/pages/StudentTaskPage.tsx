@@ -6,8 +6,21 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
 import { CodeEditor } from "../components/CodeEditor";
+import { MultiFileEditor } from "../components/MultiFileEditor";
 import { MarkdownView } from "../components/MarkdownView";
-import { getTask, submitCode, runCode, submitQuizAnswers, completeTask, getTestData, type TaskWithGrade, type TestResult } from "../lib/api/edu";
+import {
+  getTask,
+  submitCode,
+  runCode,
+  submitQuizAnswers,
+  completeTask,
+  runCodeFiles,
+  submitCodeFiles,
+  completeTaskFiles,
+  type CodeFile,
+  type TaskWithGrade,
+  type TestResult
+} from "../lib/api/edu";
 import { ArrowLeft, Play, Send, Save, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload } from "lucide-react";
 import { isDeadlineExpired } from "../utils/timezone";
 import { getMe } from "../lib/api/profile";
@@ -25,6 +38,8 @@ export const StudentTaskPage: React.FC = () => {
   const navigate = useNavigate();
   const [task, setTask] = useState<TaskWithGrade | null>(null);
   const [code, setCode] = useState("");
+  const [useFiles, setUseFiles] = useState(false);
+  const [files, setFiles] = useState<CodeFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [running, setRunning] = useState(false);
@@ -59,11 +74,49 @@ export const StudentTaskPage: React.FC = () => {
   const tr = useCallback((uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk, [i18n.language]);
   const taskRef = useRef(task);
   const codeRef = useRef(code);
+  const filesRef = useRef(files);
+  const useFilesRef = useRef(useFiles);
   const handleSubmitRef = useRef<() => Promise<void>>();
   useEffect(() => {
     taskRef.current = task;
-    codeRef.current = code;
-  }, [task, code]);
+    filesRef.current = files;
+    useFilesRef.current = useFiles;
+    const entryFile = task?.language === "JAVA" ? "Main.java" : "main.py";
+    const entryContent = useFiles ? (files.find(f => f.path === entryFile)?.content ?? "") : code;
+    codeRef.current = entryContent;
+  }, [task, code, files, useFiles]);
+
+  const entryFile = useMemo(() => (task?.language === "JAVA" ? "Main.java" : "main.py"), [task?.language]);
+  const normalizeFiles = useCallback((raw: CodeFile[]): CodeFile[] => {
+    const safe = (p: string) => {
+      if (!p) return false;
+      if (p.length > 128) return false;
+      if (p.includes("/") || p.includes("\\")) return false;
+      if (p.includes("..")) return false;
+      if (p.startsWith(".")) return false;
+      return true;
+    };
+    const m = new Map<string, string>();
+    for (const f of raw || []) {
+      const path = String((f as any)?.path ?? "").trim();
+      if (!safe(path)) continue;
+      m.set(path, String((f as any)?.content ?? ""));
+    }
+    return Array.from(m.entries())
+      .map(([path, content]) => ({ path, content }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }, []);
+
+  const ensureEntryFile = useCallback((entry: string, raw: CodeFile[], fallbackContent: string): CodeFile[] => {
+    const fs = normalizeFiles(raw);
+    if (fs.some(f => f.path === entry)) return fs;
+    return [...fs, { path: entry, content: fallbackContent }].sort((a, b) => a.path.localeCompare(b.path));
+  }, [normalizeFiles]);
+
+  const currentCodeText = useMemo(() => {
+    if (!useFiles) return code;
+    return files.find(f => f.path === entryFile)?.content ?? "";
+  }, [useFiles, files, entryFile, code]);
   useEffect(() => {
     const init = async () => {
       try {
@@ -81,19 +134,38 @@ export const StudentTaskPage: React.FC = () => {
     }
   }, [taskId]);
   useEffect(() => {
-    if (!taskId || !code) return;
+    if (!taskId) return;
+    const codeKey = `task_draft_${taskId}`;
+    const filesKey = `task_draft_files_${taskId}`;
     const timeoutId = setTimeout(() => {
-      localStorage.setItem(`task_draft_${taskId}`, code);
+      try {
+        if (useFiles) {
+          localStorage.setItem(filesKey, JSON.stringify(files));
+          localStorage.removeItem(codeKey);
+        } else {
+          localStorage.setItem(codeKey, code);
+          localStorage.removeItem(filesKey);
+        }
+      } catch {}
     }, 1000);
     return () => clearTimeout(timeoutId);
-  }, [code, taskId]);
+  }, [code, files, useFiles, taskId]);
   useEffect(() => {
     return () => {
-      if (taskId && code) {
-        localStorage.setItem(`task_draft_${taskId}`, code);
-      }
+      if (!taskId) return;
+      const codeKey = `task_draft_${taskId}`;
+      const filesKey = `task_draft_files_${taskId}`;
+      try {
+        if (useFilesRef.current) {
+          localStorage.setItem(filesKey, JSON.stringify(filesRef.current));
+          localStorage.removeItem(codeKey);
+        } else {
+          localStorage.setItem(codeKey, codeRef.current);
+          localStorage.removeItem(filesKey);
+        }
+      } catch {}
     };
-  }, [taskId, code]);
+  }, [taskId]);
 
   const handleImportSolutionFile = async (file: File | null) => {
     if (!file) return;
@@ -112,13 +184,18 @@ export const StudentTaskPage: React.FC = () => {
 
     try {
       const text = (await file.text()).replace(/\r\n/g, "\n");
-      const hasExisting = (code || "").trim().length > 0;
+      const hasExisting = (currentCodeText || "").trim().length > 0;
       const hasNew = text.trim().length > 0;
-      if (hasExisting && hasNew && text !== code) {
+      if (hasExisting && hasNew && text !== currentCodeText) {
         const ok = confirm(tr("Замінити поточний код на код з файлу?", "Replace current code with file contents?"));
         if (!ok) return;
       }
-      setCode(text);
+      if (useFilesRef.current) {
+        const next = ensureEntryFile(entryFile, filesRef.current, "").map(f => (f.path === entryFile ? { ...f, content: text } : f));
+        setFiles(next);
+      } else {
+        setCode(text);
+      }
     } catch (e: any) {
       console.error("Failed to import solution file:", e);
       alert(tr("Не вдалося прочитати файл", "Failed to read file"));
@@ -201,15 +278,40 @@ export const StudentTaskPage: React.FC = () => {
         }
       }
       const submittedCode = data.grade?.submittedCode;
+      const submittedFiles = (data.grade as any)?.submittedFiles as CodeFile[] | undefined;
+      const draftFilesRaw = (() => {
+        try {
+          const s = localStorage.getItem(`task_draft_files_${taskId}`);
+          return s ? (JSON.parse(s) as any) : null;
+        } catch {
+          return null;
+        }
+      })();
+      const draftFiles = Array.isArray(draftFilesRaw) ? (draftFilesRaw as CodeFile[]) : null;
       const draftCode = localStorage.getItem(`task_draft_${taskId}`);
       const savedCode = (data as any).savedCode;
-      setCode(submittedCode || draftCode || savedCode || data.template);
+
+      const entryFromData = data.language === "JAVA" ? "Main.java" : "main.py";
+
+      if (Array.isArray(submittedFiles) && submittedFiles.length > 0) {
+        const effective = ensureEntryFile(entryFromData, submittedFiles, submittedCode || savedCode || data.template);
+        setUseFiles(true);
+        setFiles(effective);
+        setCode(effective.find(f => f.path === (data.grade as any)?.submittedEntryFile || f.path === entryFromData)?.content ?? (submittedCode || ""));
+      } else if (draftFiles && draftFiles.length > 0) {
+        const effective = ensureEntryFile(entryFromData, draftFiles, submittedCode || savedCode || data.template);
+        setUseFiles(true);
+        setFiles(effective);
+        setCode(effective.find(f => f.path === entryFromData)?.content ?? "");
+      } else {
+        setUseFiles(false);
+        setFiles([]);
+        setCode(submittedCode || draftCode || savedCode || data.template);
+      }
       if (data.grade && submittedCode) {
         if (data.grade.testResults && Array.isArray(data.grade.testResults) && data.grade.testResults.length > 0) {
           const testResults: TestResult[] = data.grade.testResults.map((result: any) => ({
             testId: typeof result.testId === "number" ? result.testId : undefined,
-            input: result.input || "",
-            actual: result.actual ?? result.actualOutput ?? "",
             stderr: result.stderr ?? result.error ?? undefined,
             passed: result.passed === true,
             verdict: result.verdict ?? null,
@@ -290,14 +392,16 @@ export const StudentTaskPage: React.FC = () => {
     }
   };
   const handleRun = async () => {
-    if (!taskId || !code.trim()) {
+    if (!taskId || !currentCodeText.trim()) {
       setConsoleOutput(t("enterCodeToRun"));
       return;
     }
     setRunning(true);
     setConsoleOutput(t("runningCode"));
     try {
-      const result = await runCode(parseInt(taskId, 10), code, testInput || undefined);
+      const result = useFiles
+        ? await runCodeFiles(parseInt(taskId, 10), files, testInput || undefined)
+        : await runCode(parseInt(taskId, 10), code, testInput || undefined);
       let output = "";
       let filteredStderr = result.stderr || "";
       filteredStderr = filteredStderr.split('\n').filter(line => !line.includes('Picked up JAVA_TOOL_OPTIONS')).filter(line => !line.includes('Picked up _JAVA_OPTIONS')).join('\n').trim();
@@ -348,7 +452,7 @@ export const StudentTaskPage: React.FC = () => {
     }
   };
   const handleSubmit = useCallback(async () => {
-    if (!taskId || !code.trim()) {
+    if (!taskId || !currentCodeText.trim()) {
       alert(t("enterCode"));
       return;
     }
@@ -371,53 +475,18 @@ export const StudentTaskPage: React.FC = () => {
     setTestResults([]);
     setConsoleOutput(t("checkingCode"));
     try {
-      let visibleTests: Array<{
-        id: number;
-        input: string;
-      }> = [];
-      try {
-        const {
-          testData
-        } = await getTestData(parseInt(taskId, 10));
-        visibleTests = (testData || []).map((td: any) => ({
-          id: td.id,
-          input: td.input || ""
-        }));
-        const initialProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
-        visibleTests.forEach(t => {
-          initialProgress[t.id] = 'pending';
-        });
-        setTestProgress(initialProgress);
-      } catch {
-        setTestProgress({});
-      }
-      const result = await submitCode(parseInt(taskId, 10), code);
+      const result = useFiles
+        ? await submitCodeFiles(parseInt(taskId, 10), files)
+        : await submitCode(parseInt(taskId, 10), code);
       if (taskId) {
         localStorage.removeItem(`task_draft_${taskId}`);
+        localStorage.removeItem(`task_draft_files_${taskId}`);
       }
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(finalTestResults);
       setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
       setLastScoring((result as any).scoring ?? null);
       setRevealedHints(0);
-      const updatedProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
-      for (const r of finalTestResults as any[]) {
-        const id = typeof r.testId === 'number' ? r.testId : undefined;
-        if (typeof id === 'number') {
-          updatedProgress[id] = r.passed ? 'passed' : 'failed';
-          continue;
-        }
-        const byInput = visibleTests.find(t => t.input === (r.input || ""));
-        if (byInput) {
-          updatedProgress[byInput.id] = r.passed ? 'passed' : 'failed';
-        }
-      }
-      if (Object.keys(updatedProgress).length > 0) {
-        setTestProgress(prev => ({
-          ...prev,
-          ...updatedProgress
-        }));
-      }
       setShowResults(true);
       if (result.requiresManualReview) {
         setConsoleOutput(t('taskSubmittedForReview'));
@@ -445,9 +514,9 @@ export const StudentTaskPage: React.FC = () => {
       setSubmitting(false);
       setIsRunningTests(false);
     }
-  }, [taskId, code, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, loadTask, t]);
+  }, [taskId, code, files, useFiles, currentCodeText, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, loadTask, t]);
   const handleComplete = useCallback(async () => {
-    if (!taskId || !code.trim()) {
+    if (!taskId || !currentCodeText.trim()) {
       alert(t("enterCode"));
       return;
     }
@@ -475,53 +544,18 @@ export const StudentTaskPage: React.FC = () => {
     setTestResults([]);
     setConsoleOutput(t("completingTaskRunningFinalTest"));
     try {
-      let visibleTests: Array<{
-        id: number;
-        input: string;
-      }> = [];
-      try {
-        const {
-          testData
-        } = await getTestData(parseInt(taskId, 10));
-        visibleTests = (testData || []).map((td: any) => ({
-          id: td.id,
-          input: td.input || ""
-        }));
-        const initialProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
-        visibleTests.forEach(t => {
-          initialProgress[t.id] = 'pending';
-        });
-        setTestProgress(initialProgress);
-      } catch {
-        setTestProgress({});
-      }
-      const result = await completeTask(parseInt(taskId, 10), code);
+      const result = useFiles
+        ? await completeTaskFiles(parseInt(taskId, 10), files)
+        : await completeTask(parseInt(taskId, 10), code);
       if (taskId) {
         localStorage.removeItem(`task_draft_${taskId}`);
+        localStorage.removeItem(`task_draft_files_${taskId}`);
       }
       const finalTestResults: TestResult[] = Array.isArray((result as any).testResults) ? (result as any).testResults : [];
       setTestResults(finalTestResults);
       setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
       setLastScoring((result as any).scoring ?? null);
       setRevealedHints(0);
-      const updatedProgress: Record<number, 'pending' | 'running' | 'passed' | 'failed'> = {};
-      for (const r of finalTestResults as any[]) {
-        const id = typeof r.testId === 'number' ? r.testId : undefined;
-        if (typeof id === 'number') {
-          updatedProgress[id] = r.passed ? 'passed' : 'failed';
-          continue;
-        }
-        const byInput = visibleTests.find(t => t.input === (r.input || ""));
-        if (byInput) {
-          updatedProgress[byInput.id] = r.passed ? 'passed' : 'failed';
-        }
-      }
-      if (Object.keys(updatedProgress).length > 0) {
-        setTestProgress(prev => ({
-          ...prev,
-          ...updatedProgress
-        }));
-      }
       setShowResults(true);
       if (result.requiresManualReview) {
         setConsoleOutput(t("taskCompletedEarlySent"));
@@ -553,7 +587,7 @@ export const StudentTaskPage: React.FC = () => {
       setSubmitting(false);
       setIsRunningTests(false);
     }
-  }, [taskId, code, task?.isClosed, task?.deadline, task?.grade?.isManuallyGraded, task?.grade?.isCompleted, loadTask, t]);
+  }, [taskId, code, files, useFiles, currentCodeText, task?.isClosed, task?.deadline, task?.grade?.isManuallyGraded, task?.grade?.isCompleted, loadTask, t]);
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
@@ -749,6 +783,17 @@ export const StudentTaskPage: React.FC = () => {
                   <Button variant="ghost" onClick={() => importInputRef.current?.click()} disabled={!canEdit} className="text-xs" title={tr("Імпорт коду з файлу", "Import code from file")}>
                     <Upload className="w-3 h-3 mr-1" /> {tr("Імпорт", "Import")}
                   </Button>
+                  {!useFiles && canEdit && <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setUseFiles(true);
+                      setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: code }], code));
+                    }}
+                    className="text-xs"
+                    title={tr("Додати файл (multi-file)", "Add file (multi-file)")}
+                  >
+                    {tr("Додати файл", "Add file")}
+                  </Button>}
                   <Button variant="ghost" onClick={handleRun} disabled={!canEdit || running} className="text-xs">
                   <Play className="w-3 h-3 mr-1" /> {tr("Запустити", "Run")}
                   </Button>
@@ -911,7 +956,17 @@ export const StudentTaskPage: React.FC = () => {
 
             {}
             <Panel defaultSize={50} minSize={20} maxSize={70} className="flex flex-col overflow-hidden bg-bg-code">
-              <CodeEditor value={code} onChange={canEdit ? setCode : undefined} language={task.language} readOnly={!canEdit} />
+              {useFiles ? (
+                <MultiFileEditor
+                  language={task.language}
+                  entryFile={entryFile}
+                  files={files}
+                  onChange={(next) => setFiles(ensureEntryFile(entryFile, next, currentCodeText))}
+                  readOnly={!canEdit}
+                />
+              ) : (
+                <CodeEditor value={code} onChange={canEdit ? setCode : undefined} language={task.language} readOnly={!canEdit} />
+              )}
             </Panel>
 
             <Separator className="w-2 bg-border hover:bg-primary transition-colors cursor-col-resize flex-shrink-0 relative group">
@@ -1033,16 +1088,13 @@ export const StudentTaskPage: React.FC = () => {
             <div className="space-y-3">
               {testResults.map((result, index) => <Card key={index} className="p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-mono text-text-primary">{tr("Тест", "Test")} {index + 1}</span>
+                    <span className="text-sm font-mono text-text-primary">
+                      {tr("Тест", "Test")} {index + 1}
+                      {typeof result.testId === "number" ? <span className="text-text-muted"> (#{result.testId})</span> : null}
+                    </span>
                     {result.passed ? <span className="text-xs text-accent-success">{tr("✓ Пройдено", "✓ Passed")}</span> : <span className="text-xs text-accent-error">{tr("✗ Не пройдено", "✗ Failed")}</span>}
                   </div>
                   <div className="text-xs text-text-secondary space-y-1">
-                    <div>
-                      <strong>{tr("Вхід", "Input")}:</strong> {result.input}
-                    </div>
-                    <div>
-                      <strong>{tr("Отримано", "Actual")}:</strong> {result.actual}
-                    </div>
                     {!result.passed && (result.verdict || result.errorKind) && <div className="text-text-muted">
                         <strong>{tr("Тип", "Type")}:</strong> {[result.verdict, result.errorKind].filter(Boolean).join(" · ")}
                       </div>}

@@ -1,6 +1,7 @@
 import { AppDataSource } from "../data-source";
 import { Topic } from "../entities/Topic";
 import { TheoryBlock } from "../entities/TheoryBlock";
+import { logger } from "./logger";
 import * as fs from "fs";
 import * as path from "path";
 async function readJsonFile(filePath: string): Promise<any> {
@@ -8,8 +9,9 @@ async function readJsonFile(filePath: string): Promise<any> {
     const fullPath = path.resolve(process.cwd(), filePath);
     const content = await fs.promises.readFile(fullPath, "utf-8");
     return JSON.parse(content);
-  } catch (err) {
-    console.error(`Failed to read ${filePath}:`, err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.debug('[seed-topics] read failed', { filePath, message });
     return null;
   }
 }
@@ -22,7 +24,7 @@ export async function seedTopicsIfNeeded(): Promise<void> {
     const javaTheory = await readJsonFile("theories/java_theory.json");
     const pythonTheory = await readJsonFile("theories/python_theory.json");
     if (!javaTopics || !pythonTopics) {
-      console.warn("Topics files not found, skipping seed");
+      logger.debug('[seed-topics] topics files missing, skip');
       return;
     }
     const items: Array<{
@@ -118,9 +120,9 @@ export async function seedTopicsIfNeeded(): Promise<void> {
       }
     }
     if (added > 0 || updated > 0) {
-      console.log(`Topics seeded: ${added} added, ${updated} updated`);
+      logger.info('[seed-topics] updated', { added, updated });
     }
-  } catch (err) {
-    console.error("Error seeding topics:", err);
+  } catch (err: any) {
+    logger.error('[seed-topics] failed', { message: err?.message });
   }
 }

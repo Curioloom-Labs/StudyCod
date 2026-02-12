@@ -2,12 +2,18 @@ import { Response } from 'express';
 import { getLLMOrchestrator } from '../llm/LLMOrchestrator';
 import { AIResponseValidator, AIValidationError } from '../llm/AIResponseValidator';
 import type { AiTaskGenerationResult, AiTheoryResult, AiQuizResult, TestDataExample } from '../llm/LLMOrchestrator';
+import { logger } from '../../utils/logger';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIError {
   statusCode: number;
   message: string;
   error?: string;
   details?: any;
+}
+
+function computeDefaultRetryAfterMs(statusCode: number): number {
+  if (statusCode === 429) return 10_000;
+  return 0;
 }
 
 type CircuitState = {
@@ -103,8 +109,9 @@ function sanitizeParams(mode: AIMode, params: any): any {
 
 function classifyAIProviderStatus(errorMessage: string): number {
   const msg = (errorMessage || '').toLowerCase();
-  if (msg.includes('rate limit') || msg.includes('429')) return 429;
-  if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('30s exceeded')) return 504;
+  // Be careful: random numeric strings can contain '429' (e.g., 429496...), so match more precisely.
+  if (msg.includes('rate limit') || msg.includes('too many requests') || /\b429\b/.test(msg) || msg.includes('http 429') || msg.includes('status 429')) return 429;
+  if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('30s exceeded') || msg.includes('deadline exceeded') || msg.includes('request aborted')) return 504;
   if (msg.includes('no openrouter api keys') || msg.includes('all api keys exhausted') || msg.includes('api key')) return 503;
   if (msg.includes('invalid request') || msg.includes('400')) return 400;
   return 503;
@@ -246,6 +253,10 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
   logRawResponse?: boolean;
   language?: "uk" | "en";
   requestId?: string;
+  /** Override default retry attempts (default: 4). */
+  maxAttempts?: number;
+  /** Hard deadline for this AI call (in milliseconds). Aborts upstream fetches when supported. */
+  totalTimeoutMs?: number;
 }): Promise<{
   success: true;
   data: T;
@@ -276,28 +287,49 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
     const language: "uk" | "en" = options?.language === "en" ? "en" : "uk";
     let result: any;
     const startedAt = getNowMs();
-    const maxAttempts = 2;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        switch (mode) {
+
+    const maxAttempts = typeof options?.maxAttempts === 'number' && Number.isFinite(options.maxAttempts)
+      ? Math.max(1, Math.min(6, Math.floor(options.maxAttempts)))
+      : 4;
+
+    const totalTimeoutMs = typeof options?.totalTimeoutMs === 'number' && Number.isFinite(options.totalTimeoutMs)
+      ? Math.max(500, Math.floor(options.totalTimeoutMs))
+      : null;
+
+    const AbortControllerCtor = (globalThis as any).AbortController as (new () => { abort: () => void; signal: any }) | undefined;
+    const controller = totalTimeoutMs && AbortControllerCtor ? new AbortControllerCtor() : null;
+    const timeoutId = totalTimeoutMs && controller ? setTimeout(() => controller.abort(), totalTimeoutMs) : null;
+    // For rate limiting (429), a short retry often hits the same window.
+    // Be slightly more patient to reduce user-visible 429s.
+    let lastRetryAfterMs = 0;
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          if (totalTimeoutMs !== null && getNowMs() - startedAt >= totalTimeoutMs) {
+            throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
+          }
+          switch (mode) {
           case 'generateTask':
             result = await orchestrator.generateTaskWithAI({
               ...sanitizedParams,
-              language
+              language,
+              signal: controller?.signal
             });
             result = AIResponseValidator.validateGenerateTask(result);
             break;
           case 'generateTheory':
             result = await orchestrator.generateTheoryWithAI({
               ...sanitizedParams,
-              language
+              language,
+              signal: controller?.signal
             });
             result = AIResponseValidator.validateGenerateTheory(result);
             break;
           case 'generateQuiz':
             result = await orchestrator.generateQuizWithAI({
               ...sanitizedParams,
-              language
+              language,
+              signal: controller?.signal
             });
             const expectedCount = options?.expectedCount || sanitizedParams.count || 12;
             result = AIResponseValidator.validateGenerateQuiz(result, expectedCount);
@@ -305,21 +337,24 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           case 'generateTaskCondition':
             result = await orchestrator.generateTaskCondition({
               ...sanitizedParams,
-              userLanguage: language
+              userLanguage: language,
+              signal: controller?.signal
             });
             result = AIResponseValidator.validateGenerateTaskCondition(result);
             break;
           case 'generateTaskTemplate':
             result = await orchestrator.generateTaskTemplate({
               ...sanitizedParams,
-              userLanguage: language
+              userLanguage: language,
+              signal: controller?.signal
             });
             result = AIResponseValidator.validateGenerateTaskTemplate(result);
             break;
           case 'generateTestData':
             result = await orchestrator.generateTestDataWithAI({
               ...sanitizedParams,
-              language
+              language,
+              signal: controller?.signal
             });
             const expectedTestCount = options?.expectedCount || sanitizedParams.count || 12;
             result = AIResponseValidator.validateGenerateTestData(result, expectedTestCount);
@@ -329,11 +364,15 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
         }
         recordCircuitSuccess(mode);
         break;
-      } catch (error: any) {
+        } catch (error: any) {
         if (error instanceof AIValidationError) {
-          console.error(`[safeAICall] Validation failed for ${mode}:`, error.message);
+          logger.warn('[ai] invalid response', { mode, requestId: options?.requestId ?? null, error: error.message });
           if (options?.logRawResponse && error.rawResponse) {
-            console.error(`[safeAICall] Raw AI response:`, error.rawResponse);
+            logger.debug('[ai] raw response', {
+              mode,
+              requestId: options?.requestId ?? null,
+              raw: String(error.rawResponse).slice(0, 4000)
+            });
           }
           return {
             success: false,
@@ -355,12 +394,53 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
         const retryable = statusCode === 429 || statusCode === 503 || statusCode === 504;
         const canRetry = attempt < maxAttempts && retryable;
 
-        console.error(`[safeAICall] AI provider error for ${mode} (attempt ${attempt}/${maxAttempts}):`, errorMessage);
-        recordCircuitFailure(mode);
+        logger.warn('[ai] provider error', {
+          mode,
+          requestId: options?.requestId ?? null,
+          attempt,
+          maxAttempts,
+          statusCode,
+          retryable,
+          error: errorMessage
+        });
+        if (retryable) {
+          recordCircuitFailure(mode);
+        }
 
         if (canRetry) {
-          const backoff = Math.min(2500, 250 * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 150);
-          await sleep(backoff);
+          // Exponential backoff with jitter; for rate limiting, lean a bit more conservative.
+          const base = statusCode === 429 ? 1000 : 250;
+          const cap = statusCode === 429 ? 12_000 : 2500;
+          const expBackoff = Math.min(cap, base * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 250);
+          // If we got rate-limited, the provider often needs a full cool-down.
+          // On the first retry, prefer waiting close to our default Retry-After.
+          const backoff = statusCode === 429 && attempt === 1
+            ? computeDefaultRetryAfterMs(429) + Math.floor(Math.random() * 500)
+            : expBackoff;
+          lastRetryAfterMs = backoff;
+          if (totalTimeoutMs !== null) {
+            const remaining = totalTimeoutMs - (getNowMs() - startedAt);
+            const sleepMs = Math.max(0, Math.min(backoff, remaining - 50));
+            if (sleepMs > 0) await sleep(sleepMs);
+            else {
+              return {
+                success: false,
+                error: {
+                  statusCode: 504,
+                  message: 'AI_GENERATION_FAILED: AI provider error',
+                  error: 'AI_GENERATION_FAILED: Request aborted (deadline exceeded)',
+                  details: {
+                    mode,
+                    requestId: options?.requestId || null,
+                    attempt,
+                    elapsedMs: getNowMs() - startedAt
+                  }
+                }
+              };
+            }
+          } else {
+            await sleep(backoff);
+          }
           continue;
         }
 
@@ -374,11 +454,17 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               mode,
               requestId: options?.requestId || null,
               attempt,
-              elapsedMs: getNowMs() - startedAt
+              elapsedMs: getNowMs() - startedAt,
+              ...(statusCode === 429 ? {
+                retryAfterMs: Math.max(lastRetryAfterMs || 0, computeDefaultRetryAfterMs(statusCode))
+              } : {})
             }
           }
         };
+        }
       }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
 
     if (result === undefined) {
@@ -397,7 +483,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
     }
 
     if (result && typeof result === 'object' && 'error' in result && result.error) {
-      console.error(`[safeAICall] AI returned error for ${mode}:`, result.error);
+      logger.error('[ai] error result', { mode, requestId: options?.requestId ?? null, error: String(result.error) });
       return {
         success: false,
         error: {
@@ -414,7 +500,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
     try {
       validateResultBeforeSave(mode, result);
     } catch (validationError: any) {
-      console.error(`[safeAICall] Pre-save validation failed for ${mode}:`, validationError.message);
+      logger.warn('[ai] invalid result', { mode, requestId: options?.requestId ?? null, error: validationError.message });
       return {
         success: false,
         error: {
@@ -434,7 +520,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
     };
   } catch (error: any) {
     const errorMessage = error.message || String(error);
-    console.error(`[safeAICall] Unexpected error for ${mode}:`, errorMessage);
+    logger.error('[ai] unexpected error', { mode, requestId: options?.requestId ?? null, error: errorMessage });
     let statusCode = 400;
     if (errorMessage.includes('AI_GENERATION_FAILED') || errorMessage.includes('timeout') || errorMessage.includes('network')) {
       statusCode = classifyAIProviderStatus(errorMessage);
@@ -454,6 +540,12 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
   }
 }
 export function sendAIError(res: Response, error: AIError): void {
+  if (error.statusCode === 429) {
+    const retryAfterMs = Number(error?.details?.retryAfterMs ?? computeDefaultRetryAfterMs(429));
+    const retryAfterSeconds = Math.max(1, Math.ceil((Number.isFinite(retryAfterMs) ? retryAfterMs : 10_000) / 1000));
+    // Standard hint for clients/proxies.
+    res.setHeader('Retry-After', String(retryAfterSeconds));
+  }
   res.status(error.statusCode).json({
     message: error.message,
     error: error.error,

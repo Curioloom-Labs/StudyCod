@@ -11,8 +11,8 @@ export const cppLanguage: LanguageAdapter = {
   },
   getCompilePlan() {
     return {
-      display: "g++ main.cpp -o app",
-      argv: ["/usr/bin/g++", "-O2", "-pipe", "-std=gnu++17", "-fno-omit-frame-pointer", "main.cpp", "-o", "app"]
+      display: "g++ -B/usr/bin main.cpp -o app",
+      argv: ["/usr/bin/g++", "-B/usr/bin", "-O2", "-pipe", "-std=gnu++17", "-fno-omit-frame-pointer", "main.cpp", "-o", "app"]
     };
   },
   getRunPlan() {

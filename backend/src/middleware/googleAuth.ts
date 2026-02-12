@@ -3,6 +3,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
 import { getGoogleClientId, getGoogleClientSecret, getGoogleCallbackUrl, isGoogleOAuthEnabled } from "../config/googleOAuth";
+import { logger } from "../utils/logger";
 const getUserRepository = () => AppDataSource.getRepository(User);
 export function setupGoogleStrategy() {
   if (!isGoogleOAuthEnabled()) {
@@ -11,12 +12,6 @@ export function setupGoogleStrategy() {
   const clientId = getGoogleClientId();
   const clientSecret = getGoogleClientSecret();
   const callbackUrl = getGoogleCallbackUrl();
-  console.log("Google OAuth configured");
-  if (process.env.NODE_ENV !== "production") {
-    console.log("  Client ID:", clientId.substring(0, 20) + "...");
-    console.log("  Callback URL:", callbackUrl);
-    console.log("  Client Secret:", clientSecret.length > 0 ? "***" : "MISSING");
-  }
   passport.use(new GoogleStrategy({
     clientID: clientId,
     clientSecret: clientSecret,
@@ -72,8 +67,8 @@ export function setupGoogleStrategy() {
         birthMonth,
         isNewUser: true
       });
-    } catch (error) {
-      console.error("Google OAuth error:", error);
+    } catch (error: any) {
+      logger.error('[auth] google oauth error', { message: error?.message });
       return done(error, false);
     }
   }));

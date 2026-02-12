@@ -1,6 +1,14 @@
 import { api } from "./client";
 import type { Task } from "../../types";
 
+export type CodeFile = { path: string; content: string };
+type CodeOrFiles = string | { code?: string; files?: CodeFile[] };
+
+function toPayload(input: CodeOrFiles): { code?: string; files?: CodeFile[] } {
+  if (typeof input === "string") return { code: input };
+  return { code: input.code, files: input.files };
+}
+
 export type PersonalTaskTestResult = {
   testId: number;
   passed: boolean;
@@ -79,39 +87,32 @@ export async function resetTopic(topicId: number): Promise<void> {
     topicId
   });
 }
-export async function saveDraft(id: number, code: string): Promise<void> {
-  await api.post(`/tasks/${id}/save-draft`, {
-    code
-  });
+export async function saveDraft(id: number, codeOrFiles: CodeOrFiles): Promise<void> {
+  await api.post(`/tasks/${id}/save-draft`, toPayload(codeOrFiles));
 }
-export async function submitTask(id: number, code: string): Promise<SubmitTaskResponse> {
-  if (!code || typeof code !== "string") {
-    throw new Error("Code is required and must be a string");
+export async function submitTask(id: number, codeOrFiles: CodeOrFiles): Promise<SubmitTaskResponse> {
+  const payload = toPayload(codeOrFiles);
+  if (!payload.code && (!Array.isArray(payload.files) || payload.files.length === 0)) {
+    throw new Error("Code or files are required");
   }
-  const res = await api.post(`/tasks/${id}/submit`, {
-    code
-  });
+  const res = await api.post(`/tasks/${id}/submit`, payload);
   return res.data as SubmitTaskResponse;
 }
-export async function submitTaskWithMode(id: number, code: string, mode: "TESTS" | "AI"): Promise<SubmitTaskResponse> {
-  if (!code || typeof code !== "string") {
-    throw new Error("Code is required and must be a string");
+export async function submitTaskWithMode(id: number, codeOrFiles: CodeOrFiles, mode: "TESTS" | "AI"): Promise<SubmitTaskResponse> {
+  const payload = { ...toPayload(codeOrFiles), mode };
+  if (!payload.code && (!Array.isArray(payload.files) || payload.files.length === 0)) {
+    throw new Error("Code or files are required");
   }
-  const res = await api.post(`/tasks/${id}/submit`, {
-    code,
-    mode
-  });
+  const res = await api.post(`/tasks/${id}/submit`, payload);
   return res.data as SubmitTaskResponse;
 }
-export async function runTask(id: number, code: string, input?: string): Promise<{
+export async function runTask(id: number, codeOrFiles: CodeOrFiles, input?: string): Promise<{
   output: string;
   stderr?: string;
   success?: boolean;
 }> {
-  const res = await api.post(`/tasks/${id}/run`, {
-    code,
-    input
-  });
+  const payload = { ...toPayload(codeOrFiles), input };
+  const res = await api.post(`/tasks/${id}/run`, payload);
   return res.data as {
     output: string;
     stderr?: string;

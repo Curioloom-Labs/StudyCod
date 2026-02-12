@@ -1,4 +1,4 @@
-export type LanguageId = "java" | "python" | "cpp";
+export type LanguageId = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
 export interface CompilePlan {
   argv: string[];
   display: string;
