@@ -10,12 +10,14 @@ import adminSupportRouter from "./adminSupport";
 import adminMaintenanceRouter from "./adminMaintenance";
 import adminLibraryRouter from "./adminLibrary";
 import adminMaterialsRouter from "./adminMaterials";
+import adminBroadcastRouter from "./adminBroadcast";
 import { logger } from "../utils/logger";
 const adminRouter = Router();
 adminRouter.use("/support", adminSupportRouter);
 adminRouter.use("/maintenance", adminMaintenanceRouter);
 adminRouter.use("/library", adminLibraryRouter);
 adminRouter.use("/materials", adminMaterialsRouter);
+adminRouter.use("/emails", adminBroadcastRouter);
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
 function normalizeLang(input?: string | null): UserLang {

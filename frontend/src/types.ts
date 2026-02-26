@@ -1,4 +1,4 @@
-export type CourseLanguage = "JAVA" | "PYTHON";
+export type CourseLanguage = "JAVA" | "PYTHON" | "CPP";
 export type UserMode = "PERSONAL" | "EDUCATIONAL";
 export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
 export interface User {
@@ -7,6 +7,7 @@ export interface User {
   course: CourseLanguage;
   difus: number;
   avatarUrl: string | null;
+  timezone?: string | null;
   userMode?: UserMode;
   role?: UserRole;
   googleId?: string | null;
@@ -17,6 +18,7 @@ export interface User {
   lastName?: string;
   middleName?: string;
   email?: string;
+  marketingEmailsEnabled?: boolean;
   placementDone?: boolean;
   placementLevel?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | null;
   placementScore?: number | null;
@@ -37,6 +39,8 @@ export interface Topic {
 export interface Task {
   id: number;
   title: string;
+  topicId?: number | null;
+  topicTitle?: string | null;
   descriptionMarkdown: string;
   theoryMarkdown?: string;
   practiceText?: string;
@@ -52,7 +56,7 @@ export interface Task {
   repeatAttempt: number;
   kind: "INTRO" | "TOPIC" | "CONTROL";
   createdAt: string;
-  language?: "JAVA" | "PYTHON";
+  language?: CourseLanguage;
 }
 export interface Grade {
   id: number;

@@ -2,7 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColum
 import { User } from "./User";
 import { Student } from "./Student";
 import { EduLesson } from "./EduLesson";
-export type ClassLanguage = "JAVA" | "PYTHON";
+export type ClassLanguage = "JAVA" | "PYTHON" | "CPP";
 @Entity("classes")
 export class Class {
   @PrimaryGeneratedColumn()
@@ -18,7 +18,7 @@ export class Class {
   name!: string;
   @Column({
     type: "enum",
-    enum: ["JAVA", "PYTHON"]
+    enum: ["JAVA", "PYTHON", "CPP"]
   })
   language!: ClassLanguage;
   @OneToMany(() => Student, s => s.class)

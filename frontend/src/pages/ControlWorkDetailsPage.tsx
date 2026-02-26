@@ -769,7 +769,13 @@ export const ControlWorkDetailsPage: React.FC = () => {
                                 {letters[optIdx]}: {opt}
                               </div>;
                   }) : Object.entries(q.options || {}).map(([key, value]) => <div key={key}>
-                              {key}: {value}
+                              {key}: {typeof value === "string" ? value : typeof value === "number" ? value : value === null ? "null" : typeof value === "boolean" ? String(value) : (() => {
+                      try {
+                        return JSON.stringify(value);
+                      } catch {
+                        return String(value);
+                      }
+                    })()}
                             </div>)}
                       </div>
                       <div className="text-xs text-text-secondary mt-2">

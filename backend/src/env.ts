@@ -3,18 +3,37 @@ import fs from "fs";
 import path from "path";
 import { z } from "zod";
 (() => {
-  const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
-  const envPath = envCandidates.find(p => {
-    try {
-      return fs.existsSync(p);
-    } catch {
-      return false;
+  // IMPORTANT: Load env only from the backend package folder.
+  // We intentionally do NOT search parent folders to avoid “external .env” surprises.
+  const findBackendRoot = (startDir: string): string | null => {
+    let dir = startDir;
+    for (let i = 0; i < 20; i++) {
+      const pkgPath = path.join(dir, "package.json");
+      if (fs.existsSync(pkgPath)) {
+        try {
+          const raw = fs.readFileSync(pkgPath, "utf8");
+          const pkg = JSON.parse(raw);
+          if (pkg?.name === "studycod-backend") {
+            return dir;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
     }
-  });
+    return null;
+  };
+
+  const backendRoot = findBackendRoot(__dirname) ?? process.cwd();
+  const envPath = path.join(backendRoot, ".env");
   dotenv.config({
-    path: envPath,
+    path: fs.existsSync(envPath) ? envPath : undefined,
     encoding: "utf8",
-    override: false
+    override: false,
   });
 })();
 const isProduction = process.env.NODE_ENV === "production";
@@ -49,6 +68,7 @@ const EnvSchema = z.object({
   NODE_ENV: z.string().optional(),
   PORT: optionalInt(4000),
   FRONTEND_URL: nonEmptyString("http://localhost:5173"),
+  BACKEND_PUBLIC_URL: nonEmptyString("http://localhost:4000"),
   CORS_ORIGIN: nonEmptyString("http://localhost:5173"),
   JWT_SECRET: requiredInProduction("JWT_SECRET").optional().transform(v => (v ?? "").trim()),
   SESSION_SECRET: requiredInProduction("SESSION_SECRET").optional().transform(v => (v ?? "").trim()),
@@ -65,6 +85,14 @@ const EnvSchema = z.object({
   OPENROUTER_MODEL: z.string().optional(),
   OPENROUTER_URL: z.string().optional(),
   OPENROUTER_REFERER: z.string().optional(),
+
+  // Cloudflare AI worker base URL (used by LLM provider and can be reused for translation)
+  CLOUDFLARE_AI_URL: z.string().optional(),
+
+  // Free uk->en translator for theory blocks (optional overrides)
+  TRANSLATE_UK_EN_URL: z.string().optional(),
+  TRANSLATE_UK_EN_TIMEOUT_MS: z.string().optional(),
+  TRANSLATE_UK_EN_MAX_CHUNK_CHARS: z.string().optional(),
   JUDGE_WORKER_ENTRY: z.string().optional(),
   NSJAIL_PATH: z.string().optional(),
   NSJAIL_CONFIG: z.string().optional(),
@@ -92,10 +120,25 @@ const EnvSchema = z.object({
   OVERLOAD_RETRY_AFTER_SECONDS: z.string().optional(),
 }).transform(env => {
   const corsOrigins = normalizeOrigins(env.CORS_ORIGIN);
+  const cfBase = String(env.CLOUDFLARE_AI_URL ?? "").trim();
+  const cfTranslate = cfBase ? `${cfBase.replace(/\/$/, "")}/translate` : "";
   return {
     ...env,
     __isProduction: isProduction,
     __corsOrigins: corsOrigins,
+    __translateUkEnUrl: ((env.TRANSLATE_UK_EN_URL ?? "") || cfTranslate || "https://libretranslate.de/translate").trim(),
+    __translateUkEnTimeoutMs: (() => {
+      const raw = (env.TRANSLATE_UK_EN_TIMEOUT_MS ?? "").trim();
+      if (!raw) return 15_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 15_000;
+    })(),
+    __translateUkEnMaxChunkChars: (() => {
+      const raw = (env.TRANSLATE_UK_EN_MAX_CHUNK_CHARS ?? "").trim();
+      if (!raw) return 1800;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 200 ? n : 1800;
+    })(),
     __trustProxy: (() => {
       const raw = (env.TRUST_PROXY ?? "").trim();
       if (raw === "") return isProduction ? 1 : 0;
@@ -205,126 +248,14 @@ const EnvSchema = z.object({
         });
       }
     }
-    if (!env.__judgeWorkerEntry) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["JUDGE_WORKER_ENTRY"],
-        message: "JUDGE_WORKER_ENTRY must be set in production"
-      });
-    } else if (enforcePathExistence) {
-      try {
-        if (!fs.existsSync(env.__judgeWorkerEntry)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["JUDGE_WORKER_ENTRY"],
-            message: `JUDGE_WORKER_ENTRY does not exist: ${env.__judgeWorkerEntry}`
-          });
-        }
-      } catch {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["JUDGE_WORKER_ENTRY"],
-          message: "Unable to access JUDGE_WORKER_ENTRY path"
-        });
-      }
-    }
-    if (!env.__nsjailConfig) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["NSJAIL_CONFIG"],
-        message: "NSJAIL_CONFIG must be set in production"
-      });
-    } else if (enforcePathExistence) {
-      try {
-        if (!fs.existsSync(env.__nsjailConfig)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["NSJAIL_CONFIG"],
-            message: `NSJAIL_CONFIG does not exist: ${env.__nsjailConfig}`
-          });
-        }
-      } catch {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["NSJAIL_CONFIG"],
-          message: "Unable to access NSJAIL_CONFIG path"
-        });
-      }
-    }
-
-    if (!env.__nsjailUseConfig) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["NSJAIL_USE_CONFIG"],
-        message: "NSJAIL_USE_CONFIG must be set to '1' in production"
-      });
-    }
-
-    if (!env.__nsjailPath) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["NSJAIL_PATH"],
-        message: "NSJAIL_PATH must be set in production"
-      });
-    } else if (enforcePathExistence) {
-      try {
-        if (!fs.existsSync(env.__nsjailPath)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["NSJAIL_PATH"],
-            message: `NSJAIL_PATH does not exist: ${env.__nsjailPath}`
-          });
-        }
-      } catch {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["NSJAIL_PATH"],
-          message: "Unable to access NSJAIL_PATH path"
-        });
-      }
-    }
-    const wantsConfig = parseBoolEnv(process.env.NSJAIL_USE_CONFIG);
-    if (!wantsConfig && enforcePathExistence) {
-      const resolveChroot = (lang: "java" | "cpp" | "python"): string => {
-        const byLang = lang === "java" ? env.__nsjailChrootJava : lang === "cpp" ? env.__nsjailChrootCpp : env.__nsjailChrootPython;
-        return (byLang || env.__nsjailChroot || "").trim();
-      };
-      for (const lang of ["java", "cpp", "python"] as const) {
-        const ch = resolveChroot(lang);
-        if (!ch) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [lang === "java" ? "NSJAIL_CHROOT_JAVA" : lang === "cpp" ? "NSJAIL_CHROOT_CPP" : "NSJAIL_CHROOT_PYTHON"],
-            message: `NSJAIL chroot must be set for ${lang} in production (set NSJAIL_CHROOT_${lang.toUpperCase()} or NSJAIL_CHROOT)`
-          });
-          continue;
-        }
-        try {
-          if (!fs.existsSync(ch)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: [lang === "java" ? "NSJAIL_CHROOT_JAVA" : lang === "cpp" ? "NSJAIL_CHROOT_CPP" : "NSJAIL_CHROOT_PYTHON"],
-              message: `NSJAIL chroot directory does not exist: ${ch} (for ${lang})`
-            });
-            continue;
-          }
-          const st = fs.statSync(ch);
-          if (!st.isDirectory()) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: [lang === "java" ? "NSJAIL_CHROOT_JAVA" : lang === "cpp" ? "NSJAIL_CHROOT_CPP" : "NSJAIL_CHROOT_PYTHON"],
-              message: `NSJAIL chroot path is not a directory: ${ch} (for ${lang})`
-            });
-          }
-        } catch {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [lang === "java" ? "NSJAIL_CHROOT_JAVA" : lang === "cpp" ? "NSJAIL_CHROOT_CPP" : "NSJAIL_CHROOT_PYTHON"],
-            message: `Unable to access NSJAIL chroot directory: ${ch} (for ${lang})`
-          });
-        }
-      }
-    }
+    // NOTE: Judge/nsjail environment variables are intentionally NOT hard-required
+    // for the whole backend process to boot.
+    //
+    // Rationale:
+    // - A misconfigured judge should not take down auth/admin/maintenance endpoints.
+    // - Judge endpoints will surface a clear configuration error at runtime.
+    //
+    // We still keep strict checks for core security/runtime settings above.
   }
 });
 export type AppEnv = z.infer<typeof EnvSchema>;

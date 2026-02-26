@@ -287,7 +287,8 @@ export const TopicDetailsPage: React.FC = () => {
         description: "",
         template: "",
         type: "PRACTICE",
-        maxAttempts: 3
+        maxAttempts: 3,
+        theory: ""
       });
     } catch (error: any) {
       console.error("Failed to update task:", error);
@@ -629,7 +630,8 @@ export const TopicDetailsPage: React.FC = () => {
                       description: task.description,
                       template: task.template,
                       type: task.type,
-                      maxAttempts: task.maxAttempts
+                      maxAttempts: task.maxAttempts,
+                      theory: task.theory?.content || ""
                     });
                     setShowEditTask(true);
                   }} className="text-xs">
@@ -862,7 +864,8 @@ export const TopicDetailsPage: React.FC = () => {
           description: "",
           template: "",
           type: "PRACTICE",
-          maxAttempts: 3
+          maxAttempts: 3,
+          theory: ""
         });
       }} title={tr("Редагувати завдання", "Edit task")}>
             <div className="space-y-4">
@@ -937,7 +940,8 @@ export const TopicDetailsPage: React.FC = () => {
                 description: "",
                 template: "",
                 type: "PRACTICE",
-                maxAttempts: 3
+                maxAttempts: 3,
+                theory: ""
               });
             }}>
                   {t("cancel")}

@@ -9,9 +9,44 @@ export class TheoryBlock {
   })
   title!: string;
   @Column({
-    type: "text"
+    type: "mediumtext"
   })
   content!: string;
+
+  // Stored uk -> en translation (generated on-demand for users with English UI)
+  @Column({
+    type: "varchar",
+    length: 255,
+    nullable: true,
+    name: "title_en",
+    select: false
+  })
+  titleEn?: string | null;
+
+  @Column({
+    type: "mediumtext",
+    nullable: true,
+    name: "content_en",
+    select: false
+  })
+  contentEn?: string | null;
+
+  // Version of the source (uk) content that was translated into contentEn/titleEn.
+  @Column({
+    type: "int",
+    nullable: true,
+    name: "translation_version_en",
+    select: false
+  })
+  translationVersionEn?: number | null;
+
+  @Column({
+    type: "datetime",
+    nullable: true,
+    name: "translated_at_en",
+    select: false
+  })
+  translatedAtEn?: Date | null;
   @Column({
     type: "int",
     default: 1

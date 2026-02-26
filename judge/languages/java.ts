@@ -18,7 +18,20 @@ export const javaLanguage: LanguageAdapter = {
   getRunPlan() {
     return {
       display: "java Main",
-      argv: ["/usr/bin/java", "-Xms64m", "-Xmx128m", "-XX:+UseSerialGC", "-Dfile.encoding=UTF-8", "-Duser.language=en", "-Duser.country=US", "-cp", ".", "Main"]
+      argv: [
+        "/usr/bin/java",
+        "-Xms64m",
+        "-Xmx128m",
+        "-XX:+UseSerialGC",
+        "-Dfile.encoding=UTF-8",
+        "-Dsun.stdout.encoding=UTF-8",
+        "-Dsun.stderr.encoding=UTF-8",
+        "-Duser.language=en",
+        "-Duser.country=US",
+        "-cp",
+        ".",
+        "Main"
+      ]
     };
   }
 };

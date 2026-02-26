@@ -10,12 +10,13 @@ const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
 function normalizeLang(input?: string | null): UserLang {
-  const raw = (input || "").toUpperCase().trim();
+  const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
+  if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
 function buildUserDto(user: User) {
-  const difusValue = user.lang === "JAVA" ? user.difusJava : user.difusPython;
+  const difusValue = user.lang === "PYTHON" ? user.difusPython : user.difusJava;
   return {
     id: user.id,
     username: user.username,
@@ -23,6 +24,8 @@ function buildUserDto(user: User) {
     lang: user.lang,
     difus: difusValue ?? 0,
     avatarUrl: user.avatarUrl ?? null,
+    email: user.email ?? null,
+    marketingEmailsEnabled: Boolean(user.marketingEmailsEnabled),
     userMode: user.userMode,
     role: user.role || null,
     googleId: user.googleId ?? null,
@@ -387,7 +390,8 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
           firstName: student.firstName,
           lastName: student.lastName,
           middleName: student.middleName,
-          email: student.email
+          email: student.email,
+          marketingEmailsEnabled: Boolean(student.marketingEmailsEnabled)
         });
       }
 
@@ -460,7 +464,8 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         firstName: student.firstName,
         lastName: student.lastName,
         middleName: student.middleName,
-        email: student.email
+        email: student.email,
+        marketingEmailsEnabled: Boolean(student.marketingEmailsEnabled)
       });
     }
 
@@ -510,6 +515,47 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
     return res.status(500).json({
       message: "Internal server error"
     });
+  }
+});
+
+router.get("/email-subscription", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" && req.studentId) {
+      const student = await studentRepo().findOne({ where: { id: req.studentId } });
+      if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+      return res.json({ enabled: Boolean(student.marketingEmailsEnabled), email: student.email });
+    }
+    if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ message: "USER_NOT_FOUND" });
+    return res.json({ enabled: Boolean(user.marketingEmailsEnabled), email: user.email ?? null });
+  } catch (err) {
+    logger.error("[profile] GET /profile/email-subscription error", { requestId: req.requestId, principalId: req.principalId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.put("/email-subscription", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const enabled = Boolean((req.body as any)?.enabled);
+
+    if (req.userType === "STUDENT" && req.studentId) {
+      const student = await studentRepo().findOne({ where: { id: req.studentId } });
+      if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+      student.marketingEmailsEnabled = enabled;
+      await studentRepo().save(student);
+      return res.json({ enabled: Boolean(student.marketingEmailsEnabled) });
+    }
+
+    if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ message: "USER_NOT_FOUND" });
+    user.marketingEmailsEnabled = enabled;
+    await userRepo().save(user);
+    return res.json({ enabled: Boolean(user.marketingEmailsEnabled) });
+  } catch (err) {
+    logger.error("[profile] PUT /profile/email-subscription error", { requestId: req.requestId, principalId: req.principalId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 router.post("/milestone-shown", authMiddleware, async (req: AuthRequest, res: Response) => {

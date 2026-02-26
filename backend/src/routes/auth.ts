@@ -23,12 +23,13 @@ authRouter.get("/maintenance", async (_req: Request, res: Response) => {
   });
 });
 function normalizeLang(input?: string | null): UserLang {
-  const raw = (input || "").toUpperCase().trim();
+  const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
+  if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
 function buildUserDto(user: User) {
-  const difusValue = user.lang === "JAVA" ? user.difusJava : user.difusPython;
+  const difusValue = user.lang === "PYTHON" ? user.difusPython : user.difusJava;
   return {
     id: user.id,
     username: user.username,
@@ -176,6 +177,19 @@ authRouter.post("/login", async (req: AuthRequest, res: Response) => {
         requiresEmailVerification: true
       });
     }
+
+    // During maintenance we allow SYSTEM_ADMIN to log in (so they can disable maintenance),
+    // but block regular users.
+    const state = await maintenanceService.getStateCached();
+    if (state.enabled && user.role !== "SYSTEM_ADMIN") {
+      return res.status(503).json({
+        maintenance: true,
+        title: state.title,
+        message: state.message,
+        until: state.until
+      });
+    }
+
     const token = jwt.sign({
       userId: user.id,
       lang: user.lang,

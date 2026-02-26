@@ -49,11 +49,11 @@ export interface ExecuteCodeOptions {
   mode?: ExecuteCodeMode;
 }
 
-function mapToJudgeLanguage(lang: "JAVA" | "PYTHON"): JudgeLanguage {
-  return lang === "JAVA" ? "java" : "python";
+function mapToJudgeLanguage(lang: "JAVA" | "PYTHON" | "CPP"): JudgeLanguage {
+  return lang === "JAVA" ? "java" : lang === "PYTHON" ? "python" : "cpp";
 }
 
-async function executeViaJudge(code: string, language: "JAVA" | "PYTHON", input: string, timeout: number): Promise<CodeExecutionResult> {
+async function executeViaJudge(code: string, language: "JAVA" | "PYTHON" | "CPP", input: string, timeout: number): Promise<CodeExecutionResult> {
   const judgeLang = mapToJudgeLanguage(language);
   const req: JudgeRequest = {
     submission_id: `exec_${judgeLang}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -104,7 +104,7 @@ async function executeViaJudge(code: string, language: "JAVA" | "PYTHON", input:
 
 export async function executeCodeWithInput(
   code: string,
-  language: "JAVA" | "PYTHON",
+  language: "JAVA" | "PYTHON" | "CPP",
   input: string,
   timeout: number = 10000,
   options: ExecuteCodeOptions = {}

@@ -6,6 +6,77 @@ import "katex/dist/katex.min.css";
 import "./i18n";
 import { App } from "./App";
 import { initTheme } from "./theme";
+
+const CHUNK_RELOAD_KEY = "studycod.chunkReloadAttempted";
+const CHUNK_LOAD_ERROR_RE = /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk [\w-]+ failed/i;
+
+function extractErrorMessage(reason: unknown): string {
+  if (typeof reason === "string") return reason;
+  if (reason instanceof Error) return reason.message || "";
+  if (reason && typeof reason === "object" && "message" in reason) {
+    const msg = (reason as any).message;
+    return typeof msg === "string" ? msg : "";
+  }
+  return "";
+}
+
+function isChunkLoadError(reason: unknown): boolean {
+  const message = extractErrorMessage(reason);
+  return CHUNK_LOAD_ERROR_RE.test(message);
+}
+
+function reloadWithCacheBustOnce(): boolean {
+  try {
+    const attempted = sessionStorage.getItem(CHUNK_RELOAD_KEY) === "1";
+    if (attempted) return false;
+
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("__chunk_reload", String(Date.now()));
+    window.location.replace(url.toString());
+    return true;
+  } catch {
+    window.location.reload();
+    return true;
+  }
+}
+
+// If the previous load succeeded after an auto-reload, clear the guard eventually
+// so future deployments can recover once again in this session.
+try {
+  if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === "1") {
+    window.setTimeout(() => {
+      try {
+        sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+      } catch {
+        // ignore
+      }
+    }, 15000);
+  }
+} catch {
+  // ignore
+}
+
+window.addEventListener("unhandledrejection", event => {
+  if (!isChunkLoadError(event.reason)) return;
+  event.preventDefault();
+  reloadWithCacheBustOnce();
+});
+
+window.addEventListener("error", event => {
+  // Script tag load errors may not always populate event.error.
+  if (isChunkLoadError((event as ErrorEvent).error) || CHUNK_LOAD_ERROR_RE.test((event as ErrorEvent).message || "")) {
+    reloadWithCacheBustOnce();
+    return;
+  }
+
+  const target = event.target as HTMLScriptElement | null;
+  if (target && target.tagName === "SCRIPT" && target.src && target.src.includes("/assets/")) {
+    reloadWithCacheBustOnce();
+  }
+}, true);
+
 initTheme();
 const ErrorDisplay: React.FC<{
   error?: Error;
@@ -65,7 +136,7 @@ class ErrorBoundary extends React.Component<{
 }, {
   hasError: boolean;
   error?: Error;
-  errorInfo?: string;
+  errorInfo?: string | null;
 }> {
   constructor(props: {
     children: React.ReactNode;
@@ -82,11 +153,15 @@ class ErrorBoundary extends React.Component<{
     };
   }
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    if (isChunkLoadError(error)) {
+      const handled = reloadWithCacheBustOnce();
+      if (handled) return;
+    }
     if (import.meta.env.DEV) {
       console.error("App error:", error, errorInfo);
     }
     this.setState({
-      errorInfo: errorInfo.componentStack
+      errorInfo: errorInfo.componentStack ?? null
     });
   }
   render() {

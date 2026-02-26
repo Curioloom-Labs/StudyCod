@@ -41,7 +41,7 @@ function clampText(input: unknown, maxLen: number): string {
 
 export async function detectAICode(params: {
   gradeId: number;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   taskTitle: string;
   taskDescription: string;
   template: string;

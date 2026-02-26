@@ -1,8 +1,9 @@
 import { Response } from 'express';
 import { getLLMOrchestrator } from '../llm/LLMOrchestrator';
-import { AIResponseValidator, AIValidationError } from '../llm/AIResponseValidator';
+import { AIResponseValidator, AIValidationError, makeAIValidationError } from '../llm/AIResponseValidator';
 import type { AiTaskGenerationResult, AiTheoryResult, AiQuizResult, TestDataExample } from '../llm/LLMOrchestrator';
 import { logger } from '../../utils/logger';
+import { getCurriculumPolicyViolationForGeneratedTask } from './curriculumPolicy';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -79,6 +80,57 @@ function sanitizeText(input: unknown, maxLen: number): string {
   return trimmed.slice(0, maxLen);
 }
 
+function stripNumericTitlePrefix(title: string): string {
+  // Matches titles like "(2/3) Something".
+  return String(title ?? '').replace(/^\(\s*\d+\s*\/\s*\d+\s*\)\s*/i, '').trim();
+}
+
+function normalizeForUniqueness(text: string): string {
+  const s = String(text ?? '');
+  // Remove code blocks to focus on semantics.
+  const noCode = s.replace(/```[\s\S]*?```/g, ' ');
+  // Remove numbers so "same task with different constants" is still treated as similar.
+  const noDigits = noCode.replace(/\d+/g, ' ');
+  // Keep letters/numbers for UA/EN; avoid unicode property escapes for older Node runtimes.
+  const asciiUa = noDigits
+    .toLowerCase()
+    .replace(/[^a-zа-яіїєґ0-9\s]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return asciiUa;
+}
+
+function tokenizeForUniqueness(text: string): string[] {
+  const norm = normalizeForUniqueness(text);
+  if (!norm) return [];
+  const stop = new Set([
+    'виведіть', 'вивести', 'виводьте', 'вивід', 'вихідні', 'дані', 'формат', 'вхідні',
+    'зчитати', 'зчитайте', 'введіть', 'ввести', 'ввід',
+    'print', 'output', 'input', 'stdin', 'stdout',
+    'program', 'write', 'read', 'given', 'calculate', 'compute'
+  ]);
+  return norm
+    .split(' ')
+    .map(t => t.trim())
+    .filter(t => t.length >= 4)
+    .filter(t => !stop.has(t));
+}
+
+function setSimilarityMetrics(aTokens: string[], bTokens: string[]): { jaccard: number; overlap: number; intersection: number; aSize: number; bSize: number } {
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
+  if (aSet.size === 0 || bSet.size === 0) {
+    return { jaccard: 0, overlap: 0, intersection: 0, aSize: aSet.size, bSize: bSet.size };
+  }
+  let inter = 0;
+  for (const t of aSet) if (bSet.has(t)) inter++;
+  const union = aSet.size + bSet.size - inter;
+  const jaccard = union > 0 ? inter / union : 0;
+  const denom = Math.min(aSet.size, bSet.size);
+  const overlap = denom > 0 ? inter / denom : 0;
+  return { jaccard, overlap, intersection: inter, aSize: aSet.size, bSize: bSet.size };
+}
+
 function sanitizeParams(mode: AIMode, params: any): any {
   const p = params && typeof params === 'object' ? {
     ...params
@@ -93,7 +145,34 @@ function sanitizeParams(mode: AIMode, params: any): any {
 
   if (mode === 'generateTask') {
     p.numInTopic = typeof p.numInTopic === 'number' ? Math.max(1, Math.floor(p.numInTopic)) : p.numInTopic;
+    if (typeof p.topicIndex === 'number') p.topicIndex = Math.max(0, Math.floor(p.topicIndex));
     if (typeof p.difus === 'number') p.difus = Math.max(0, Math.min(1, p.difus));
+
+    if (typeof p.previousTasks === 'string') p.previousTasks = sanitizeText(p.previousTasks, 4000);
+
+    if (Array.isArray(p.previousTaskPractices)) {
+      p.previousTaskPractices = p.previousTaskPractices
+        .map((s: any) => sanitizeText(s, 2000))
+        .filter((s: string) => s.trim().length > 0)
+        .slice(0, 8);
+      if (p.previousTaskPractices.length === 0) delete p.previousTaskPractices;
+    }
+    if (Array.isArray(p.previousTaskTitles)) {
+      p.previousTaskTitles = p.previousTaskTitles
+        .map((s: any) => sanitizeText(s, 200))
+        .filter((s: string) => s.trim().length > 0)
+        .slice(0, 12);
+      if (p.previousTaskTitles.length === 0) delete p.previousTaskTitles;
+    }
+
+    if (Array.isArray(p.allowedIoTypes)) {
+      const allowed = new Set(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]);
+      p.allowedIoTypes = p.allowedIoTypes
+        .map((s: any) => typeof s === 'string' ? s.trim() : '')
+        .filter((s: string) => allowed.has(s))
+        .slice(0, 3);
+      if (p.allowedIoTypes.length === 0) delete p.allowedIoTypes;
+    }
   }
   if (mode === 'generateQuiz') {
     if (typeof p.count === 'number') p.count = Math.max(1, Math.min(50, Math.floor(p.count)));
@@ -125,8 +204,8 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.theory || typeof params.theory !== 'string' || !params.theory.trim()) {
         throw new Error('theory is required and must be a non-empty string');
       }
-      if (!params.lang || !['JAVA', 'PYTHON'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON"');
+      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (typeof params.numInTopic !== 'number' || params.numInTopic < 1) {
         throw new Error('numInTopic is required and must be a positive number');
@@ -134,18 +213,24 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (typeof params.isFirstTask !== 'boolean') {
         throw new Error('isFirstTask is required and must be a boolean');
       }
+      if (params.topicIndex !== undefined) {
+        const v = Number(params.topicIndex);
+        if (!Number.isFinite(v) || v < 0) {
+          throw new Error('topicIndex must be a non-negative number if provided');
+        }
+      }
       break;
     case 'generateTheory':
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
         throw new Error('topicTitle is required and must be a non-empty string');
       }
-      if (!params.lang || !['JAVA', 'PYTHON'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON"');
+      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       break;
     case 'generateQuiz':
-      if (!params.lang || !['JAVA', 'PYTHON'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON"');
+      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (!params.prevTopics || typeof params.prevTopics !== 'string' || !params.prevTopics.trim()) {
         throw new Error('prevTopics is required and must be a non-empty string');
@@ -161,8 +246,8 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.taskType || !['PRACTICE', 'CONTROL'].includes(params.taskType)) {
         throw new Error('taskType is required and must be "PRACTICE" or "CONTROL"');
       }
-      if (!params.language || !['JAVA', 'PYTHON'].includes(params.language)) {
-        throw new Error('language is required and must be "JAVA" or "PYTHON"');
+      if (!params.language || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
+        throw new Error('language is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (params.difficulty !== undefined && (typeof params.difficulty !== 'number' || params.difficulty < 1 || params.difficulty > 5)) {
         throw new Error('difficulty must be a number between 1 and 5 if provided');
@@ -172,8 +257,8 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
         throw new Error('topicTitle is required and must be a non-empty string');
       }
-      if (!params.language || !['JAVA', 'PYTHON'].includes(params.language)) {
-        throw new Error('language is required and must be "JAVA" or "PYTHON"');
+      if (!params.language || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
+        throw new Error('language is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       break;
     case 'generateTestData':
@@ -183,8 +268,8 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.taskTitle || typeof params.taskTitle !== 'string' || !params.taskTitle.trim()) {
         throw new Error('taskTitle is required and must be a non-empty string');
       }
-      if (!params.lang || !['JAVA', 'PYTHON'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON"');
+      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (typeof params.count !== 'number' || params.count < 1) {
         throw new Error('count is required and must be a positive number');
@@ -316,6 +401,92 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               signal: controller?.signal
             });
             result = AIResponseValidator.validateGenerateTask(result);
+
+            // Curriculum stage policy enforcement (e.g., prevent tasks requiring concepts not taught yet).
+            {
+              const violation = getCurriculumPolicyViolationForGeneratedTask({
+                lang: (sanitizedParams as any).lang,
+                topicIndex: (sanitizedParams as any).topicIndex,
+                title: (result as any)?.title,
+                practicalTask: (result as any)?.practicalTask
+              });
+              if (violation) {
+                throw makeAIValidationError('generateTask', `Task generation validation failed: ${violation}`, {
+                  topicIndex: (sanitizedParams as any).topicIndex,
+                  lang: (sanitizedParams as any).lang,
+                  title: (result as any)?.title,
+                  practicalTask: (result as any)?.practicalTask
+                });
+              }
+            }
+
+            // Optional policy enforcement (e.g., forbid stdin before it's taught).
+            if (Array.isArray((sanitizedParams as any).allowedIoTypes) && (sanitizedParams as any).allowedIoTypes.length > 0) {
+              const allowed = new Set((sanitizedParams as any).allowedIoTypes as string[]);
+              const ioType = typeof (result as any)?.ioType === 'string' ? String((result as any).ioType).trim() : 'STDIN_STDOUT';
+              if (!allowed.has(ioType)) {
+                throw makeAIValidationError('generateTask', `Task generation validation failed: ioType "${ioType}" is not allowed for this stage`, result);
+              }
+            }
+
+            // Optional policy enforcement: ensure tasks within a topic are meaningfully different.
+            // This is best-effort and bounded by safeAICall retries.
+            {
+              const prevPractices = Array.isArray((sanitizedParams as any).previousTaskPractices)
+                ? ((sanitizedParams as any).previousTaskPractices as string[])
+                : [];
+              const prevTitles = Array.isArray((sanitizedParams as any).previousTaskTitles)
+                ? ((sanitizedParams as any).previousTaskTitles as string[])
+                : [];
+
+              const candPractice = typeof (result as any)?.practicalTask === 'string' ? String((result as any).practicalTask) : '';
+              const candTitle = typeof (result as any)?.title === 'string' ? String((result as any).title) : '';
+
+              const candTitleNorm = stripNumericTitlePrefix(candTitle).toLowerCase();
+              const prevTitleNorms = prevTitles.map(t => stripNumericTitlePrefix(t).toLowerCase()).filter(Boolean);
+              const exactTitleDuplicate = candTitleNorm.length > 0 && prevTitleNorms.includes(candTitleNorm);
+
+              if (exactTitleDuplicate) {
+                throw makeAIValidationError('generateTask', `Task generation validation failed: duplicate title within topic ("${candTitleNorm}")`, {
+                  title: candTitle,
+                  practicalTask: candPractice
+                });
+              }
+
+              const candTokens = tokenizeForUniqueness(candPractice);
+              if (candTokens.length > 0 && prevPractices.length > 0) {
+                let best = { score: 0, jaccard: 0, overlap: 0, intersection: 0, prevSnippet: '' };
+                for (const prev of prevPractices) {
+                  const prevTokens = tokenizeForUniqueness(prev);
+                  const m = setSimilarityMetrics(candTokens, prevTokens);
+                  const score = Math.max(m.jaccard, m.overlap);
+                  if (score > best.score) {
+                    best = {
+                      score,
+                      jaccard: m.jaccard,
+                      overlap: m.overlap,
+                      intersection: m.intersection,
+                      prevSnippet: sanitizeText(prev, 280)
+                    };
+                  }
+                }
+
+                // Heuristic: if overlap is very high with a meaningful intersection, treat as a duplicate.
+                const tooSimilar = best.score >= 0.82 && best.intersection >= 10;
+                if (tooSimilar) {
+                  throw makeAIValidationError(
+                    'generateTask',
+                    `Task generation validation failed: task is too similar to a previous task in this topic (similarity=${best.score.toFixed(2)}, overlap=${best.overlap.toFixed(2)}, jaccard=${best.jaccard.toFixed(2)})`,
+                    {
+                      title: candTitle,
+                      practicalTask: candPractice,
+                      similarity: best,
+                      note: 'Regenerate with a different plot/data/wording and different examples.'
+                    }
+                  );
+                }
+              }
+            }
             break;
           case 'generateTheory':
             result = await orchestrator.generateTheoryWithAI({
@@ -365,7 +536,13 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
         recordCircuitSuccess(mode);
         break;
         } catch (error: any) {
-        if (error instanceof AIValidationError) {
+        const errorMsg = String(error?.message ?? error ?? '');
+        const looksLikeValidationError =
+          error instanceof AIValidationError ||
+          String(error?.name ?? '') === 'AIValidationError' ||
+          /validation failed/i.test(errorMsg);
+
+        if (looksLikeValidationError) {
           logger.warn('[ai] invalid response', { mode, requestId: options?.requestId ?? null, error: error.message });
           if (options?.logRawResponse && error.rawResponse) {
             logger.debug('[ai] raw response', {
@@ -374,6 +551,40 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               raw: String(error.rawResponse).slice(0, 4000)
             });
           }
+
+          // Some validation errors are transient/model-specific. For generation modes, retry a few times
+          // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
+          const canRetryValidation = (mode === 'generateTask' || mode === 'generateTestData') && attempt < maxAttempts;
+          if (canRetryValidation) {
+            const backoff = Math.min(2000, 250 * attempt) + Math.floor(Math.random() * 250);
+            lastRetryAfterMs = backoff;
+            if (totalTimeoutMs !== null) {
+              const remaining = totalTimeoutMs - (getNowMs() - startedAt);
+              const sleepMs = Math.max(0, Math.min(backoff, remaining - 50));
+              if (sleepMs > 0) await sleep(sleepMs);
+              else {
+                return {
+                  success: false,
+                  error: {
+                    statusCode: 504,
+                    message: 'AI_GENERATION_FAILED: Invalid response structure',
+                    error: 'AI_GENERATION_FAILED: Request aborted (deadline exceeded)',
+                    details: {
+                      mode,
+                      requestId: options?.requestId || null,
+                      attempt,
+                      elapsedMs: getNowMs() - startedAt,
+                      validationError: error.message
+                    }
+                  }
+                };
+              }
+            } else {
+              await sleep(backoff);
+            }
+            continue;
+          }
+
           return {
             success: false,
             error: {
@@ -389,7 +600,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           };
         }
 
-        const errorMessage = error?.message || String(error);
+        const errorMessage = errorMsg;
         const statusCode = classifyAIProviderStatus(errorMessage);
         const retryable = statusCode === 429 || statusCode === 503 || statusCode === 504;
         const canRetry = attempt < maxAttempts && retryable;

@@ -340,10 +340,11 @@ const Editor = React.lazy(() => import("@monaco-editor/react").then(mod => ({
   default: mod.default
 })));
 interface Props {
-  language: "JAVA" | "PYTHON" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
+  language: "JAVA" | "PYTHON" | "CPP" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
   value: string;
   onChange?: (code: string) => void;
   readOnly?: boolean;
+  height?: string | number;
 }
 
 const toMonacoLanguage = (language: Props["language"]) => {
@@ -354,6 +355,7 @@ const toMonacoLanguage = (language: Props["language"]) => {
     case "PYTHON":
     case "python":
       return "python";
+    case "CPP":
     case "cpp":
       return "cpp";
     case "c":
@@ -424,7 +426,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   language,
   value,
   onChange,
-  readOnly = false
+  readOnly = false,
+  height
 }) => {
   const {
     i18n
@@ -566,7 +569,9 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   const handleChange = useMemo(() => (v: string | undefined) => {
     onChange?.(v ?? "");
   }, [onChange]);
-  return <div ref={containerRef} className="h-full min-h-0 w-full relative">
+  return <div ref={containerRef} className={`${height != null ? "" : "h-full "}min-h-0 w-full relative`} style={height != null ? {
+    height
+  } : undefined}>
       {import.meta.env.DEV && mountTimedOut && !didMount && <div className="absolute inset-0 z-10 flex items-start justify-end p-2 pointer-events-none">
           <div className="pointer-events-none rounded border border-accent-warn/50 bg-bg-surface/80 px-3 py-2 text-xs font-mono text-text-secondary">
             Monaco did not mount (5s). Check console/network for <span className="text-text-primary">/monaco-editor/min/vs/</span>

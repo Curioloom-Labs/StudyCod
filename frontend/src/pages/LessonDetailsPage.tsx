@@ -12,6 +12,8 @@ import { MarkdownView } from "../components/MarkdownView";
 import type { User } from "../types";
 import { isDeadlineExpired } from "../utils/timezone";
 import { importTestsFromInOutFiles } from "../utils/testInOutImport";
+import { useWorkspaceViewport } from "../components/interface/WorkspaceViewport";
+import { buildResumeState, loadResumeState, saveResumeState } from "../lib/resumeState";
 export const LessonDetailsPage: React.FC = () => {
   const {
     t,
@@ -24,6 +26,7 @@ export const LessonDetailsPage: React.FC = () => {
     lessonId: string;
   }>();
   const navigate = useNavigate();
+  const { element: viewportEl } = useWorkspaceViewport();
   const [searchParams] = useSearchParams();
   const [lesson, setLesson] = useState<Lesson & {
     tasks: Task[];
@@ -86,6 +89,79 @@ export const LessonDetailsPage: React.FC = () => {
   const [studentQuizReview, setStudentQuizReview] = useState<any | null>(null);
   const [hasAutoRedirected, setHasAutoRedirected] = useState(false);
   const [controlWorkStatus, setControlWorkStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | null>(null);
+
+  const lessonIdNum = React.useMemo(() => {
+    const n = Number(lessonId);
+    return Number.isFinite(n) ? n : null;
+  }, [lessonId]);
+
+  const resumeStep = React.useMemo(() => {
+    if (selectedTaskId != null) return "task";
+    if (showGrades) return "grades";
+    if (showCreateTask) return "create";
+    return "overview";
+  }, [selectedTaskId, showGrades, showCreateTask]);
+
+  const restoredRef = React.useRef(false);
+
+  const saveResume = React.useCallback(
+    (scrollTop?: number) => {
+      if (!user) return;
+      if (lessonIdNum == null) return;
+      saveResumeState(
+        buildResumeState({
+          userId: user.id,
+          kind: "edu_lesson",
+          lessonId: lessonIdNum,
+          step: resumeStep,
+          scrollTop
+        })
+      );
+    },
+    [user?.id, lessonIdNum, resumeStep]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    if (lessonIdNum == null) return;
+    if (!viewportEl) return;
+    if (restoredRef.current) return;
+    const state = loadResumeState(user.id);
+    if (!state || state.kind !== "edu_lesson" || state.lessonId !== lessonIdNum) return;
+    restoredRef.current = true;
+    if (typeof state.scrollTop === "number") {
+      requestAnimationFrame(() => {
+        try {
+          viewportEl.scrollTop = state.scrollTop ?? 0;
+        } catch {
+          // ignore
+        }
+      });
+    }
+  }, [user?.id, lessonIdNum, viewportEl]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (lessonIdNum == null) return;
+    if (!viewportEl) return;
+
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => saveResume(viewportEl.scrollTop));
+    };
+    viewportEl.addEventListener("scroll", onScroll, { passive: true } as any);
+    saveResume(viewportEl.scrollTop);
+    return () => {
+      viewportEl.removeEventListener("scroll", onScroll as any);
+      if (raf) cancelAnimationFrame(raf);
+      saveResume(viewportEl.scrollTop);
+    };
+  }, [user?.id, lessonIdNum, viewportEl, saveResume]);
+
+  useEffect(() => {
+    saveResume(viewportEl?.scrollTop);
+  }, [user?.id, lessonIdNum, resumeStep]);
   useEffect(() => {
     const initialize = async () => {
       await loadUser();

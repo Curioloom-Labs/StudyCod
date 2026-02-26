@@ -20,7 +20,7 @@
       "services/*": ["backend/src/services/*"],
       "utils/*": ["backend/src/utils/*"]
     },
-    "types": []
+    "types": ["node"]
   },
   "include": [
     "../backend/src/services/llm/**/*",

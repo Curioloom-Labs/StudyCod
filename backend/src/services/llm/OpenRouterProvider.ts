@@ -1,7 +1,69 @@
-import fetch from 'node-fetch';
 import { logger } from '../../utils/logger';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
+
+type KeyHealthState = {
+  cooldownUntilMs: number;
+  disabledUntilMs: number;
+  consecutiveFailures: number;
+  lastStatus?: number;
+  lastErrorMessage?: string;
+};
+
+const keyHealthByKey = new Map<string, KeyHealthState>();
+let didWarnSuspiciousKeyPrefix = false;
+
+function nowMs(): number {
+  return Date.now();
+}
+
+function getKeyHealth(key: string): KeyHealthState {
+  const existing = keyHealthByKey.get(key);
+  if (existing) return existing;
+  const st: KeyHealthState = {
+    cooldownUntilMs: 0,
+    disabledUntilMs: 0,
+    consecutiveFailures: 0
+  };
+  keyHealthByKey.set(key, st);
+  return st;
+}
+
+function parseRetryAfterMs(response: Response): number {
+  const raw = response.headers.get('retry-after');
+  if (!raw) return 0;
+  const s = raw.trim();
+  if (!s) return 0;
+  // numeric = seconds
+  if (/^\d+$/.test(s)) {
+    const sec = Number.parseInt(s, 10);
+    if (!Number.isFinite(sec) || sec <= 0) return 0;
+    return sec * 1000;
+  }
+  // date = HTTP date
+  const t = Date.parse(s);
+  if (!Number.isFinite(t)) return 0;
+  const delta = t - nowMs();
+  return delta > 0 ? delta : 0;
+}
+
+function normalizeAndDeduplicateKeys(primary: string, backups: string[]): string[] {
+  const raw = [primary, ...backups].map(s => String(s ?? '').trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of raw) {
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
+  }
+  return out;
+}
+
+function looksLikeOpenRouterKey(key: string): boolean {
+  const k = String(key ?? '').trim();
+  // OpenRouter keys typically start with sk-or- (including sk-or-v1-)
+  return /^sk-or-/.test(k);
+}
 interface OpenRouterRequest {
   model: string;
   messages: Array<{
@@ -25,6 +87,11 @@ interface OpenRouterResponse {
     message?: string;
     type?: string;
   };
+}
+
+function isRateLimitLike(message: string): boolean {
+  const m = String(message ?? '').toLowerCase();
+  return m.includes('rate limit') || m.includes('rate-limited') || m.includes('temporarily rate-limited') || /\b429\b/.test(m);
 }
 function modelsWithoutSystemSupport(): string[] {
   // Some routed providers (e.g., Google AI Studio) reject system/developer instructions for certain Gemma models.
@@ -110,12 +177,76 @@ export class OpenRouterProvider implements LLMProvider {
     }
     const primary = (process.env.OPENROUTER_API_KEY || '').trim();
     const backups = (process.env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
-    const allKeys = [primary, ...backups].filter(Boolean);
+    const allKeys = normalizeAndDeduplicateKeys(primary, backups);
     if (allKeys.length === 0) {
       throw new Error('AI_GENERATION_FAILED: No OpenRouter API keys configured');
     }
+
+    // Non-blocking hint: if a key doesn't look like OpenRouter key, warn once and still try.
+    // This helps catch “User not found” issues caused by accidental wrong tokens in env.
+    if (!didWarnSuspiciousKeyPrefix) {
+      for (const k of allKeys) {
+        if (!looksLikeOpenRouterKey(k)) {
+          didWarnSuspiciousKeyPrefix = true;
+          logger.warn('OpenRouter API key looks suspicious (unexpected prefix). It may be invalid or from a different provider.', {
+            traceId,
+            userId,
+            topicId
+          });
+          break;
+        }
+      }
+    }
+
     let lastError: Error | null = null;
-    for (const apiKey of allKeys) {
+
+    const errorsSummary: Array<{ keyIndex: number; status?: number; message: string }> = [];
+    const keyDisableMs = (() => {
+      const raw = String(process.env.OPENROUTER_KEY_DISABLE_MS || '').trim();
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 24 * 60 * 60 * 1000;
+    })();
+    const defaultRateLimitCooldownMs = (() => {
+      const raw = String(process.env.OPENROUTER_RATE_LIMIT_COOLDOWN_MS || '').trim();
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 10_000;
+    })();
+    const defaultServerErrorCooldownMs = (() => {
+      const raw = String(process.env.OPENROUTER_SERVER_ERROR_COOLDOWN_MS || '').trim();
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 2_000;
+    })();
+
+    for (let keyIdx = 0; keyIdx < allKeys.length; keyIdx++) {
+      const apiKey = allKeys[keyIdx];
+      const keyIndex = keyIdx + 1;
+      const keyHealth = getKeyHealth(apiKey);
+      const now = nowMs();
+      if (keyHealth.disabledUntilMs > now) {
+        logger.info('OpenRouter key skipped (disabled)', {
+          traceId,
+          userId,
+          topicId,
+          keyIndex,
+          keysAvailable: allKeys.length,
+          disabledForMs: keyHealth.disabledUntilMs - now,
+          model
+        });
+        continue;
+      }
+      if (keyHealth.cooldownUntilMs > now) {
+        logger.info('OpenRouter key skipped (cooldown)', {
+          traceId,
+          userId,
+          topicId,
+          keyIndex,
+          keysAvailable: allKeys.length,
+          cooldownForMs: keyHealth.cooldownUntilMs - now,
+          model
+        });
+        continue;
+      }
+
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           const controller = new AbortController();
@@ -131,7 +262,8 @@ export class OpenRouterProvider implements LLMProvider {
             topicId,
             attempt: attempt + 1,
             maxRetries: maxRetries + 1,
-            keyIndex: allKeys.indexOf(apiKey) + 1,
+            keyIndex,
+            keysAvailable: allKeys.length,
             model
           };
           logger.info("OpenRouter request started", logContext);
@@ -159,6 +291,17 @@ export class OpenRouterProvider implements LLMProvider {
               status: response.status,
               error: errorText
             });
+
+            keyHealth.consecutiveFailures += 1;
+            keyHealth.lastStatus = response.status;
+            keyHealth.lastErrorMessage = String(errorText ?? '');
+
+            errorsSummary.push({
+              keyIndex,
+              status: response.status,
+              message: String(errorText ?? '').slice(0, 400)
+            });
+
             let parsedError: any = null;
             try {
               parsedError = JSON.parse(errorText);
@@ -167,7 +310,7 @@ export class OpenRouterProvider implements LLMProvider {
             }
             const errorMessage = parsedError?.error?.message || errorText;
             const isInvalidArgument = response.status === 400 && (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('Developer instruction is not enabled') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled'));
-            const isRateLimit = response.status === 429 || errorMessage.includes('rate limit') || errorMessage.includes('rate-limited') || errorMessage.toLowerCase().includes('temporarily rate-limited');
+            const isRateLimit = response.status === 429 || isRateLimitLike(errorMessage);
             if (isInvalidArgument) {
               throw new Error(`AI_GENERATION_FAILED: Invalid request for model ${model}. ${errorText}`);
             }
@@ -175,10 +318,19 @@ export class OpenRouterProvider implements LLMProvider {
               throw new Error(`AI_GENERATION_FAILED: Invalid request for model ${model}. ${errorText}`);
             }
             if (response.status === 401 || response.status === 403) {
+              // Invalid/unauthorized key – disable it for a while so we stop burning it on every request.
+              keyHealth.disabledUntilMs = nowMs() + keyDisableMs;
               lastError = error;
               break;
             }
             if (isRateLimit || response.status >= 500) {
+              const retryAfterMs = parseRetryAfterMs(response);
+              if (isRateLimit) {
+                // Cool down this key; try other keys for this request.
+                keyHealth.cooldownUntilMs = nowMs() + (retryAfterMs > 0 ? retryAfterMs : defaultRateLimitCooldownMs);
+              } else {
+                keyHealth.cooldownUntilMs = nowMs() + defaultServerErrorCooldownMs;
+              }
               if (attempt < maxRetries) {
                 lastError = error;
                 const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
@@ -194,9 +346,8 @@ export class OpenRouterProvider implements LLMProvider {
                 continue;
               }
               lastError = error;
-              if (isRateLimit) {
-                throw new Error(`AI_GENERATION_FAILED: Rate limit exceeded for model ${model}. ${errorText}`);
-              }
+              // Rate limited on this key: move on to the next configured key.
+              if (isRateLimit) break;
             }
             throw error;
           }
@@ -204,16 +355,27 @@ export class OpenRouterProvider implements LLMProvider {
           if (data.error) {
             const errorMessage = data.error.message || data.error.type || 'Unknown error';
             const isInvalidArgument = errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('Developer instruction is not enabled') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled');
-            const isRateLimit = errorMessage.includes('rate limit') || errorMessage.includes('rate-limited') || errorMessage.includes('429') || errorMessage.toLowerCase().includes('temporarily rate-limited');
+            const isRateLimit = isRateLimitLike(errorMessage);
             const error = new Error(`OpenRouter API error: ${errorMessage}`);
             logger.warn("OpenRouter API error", {
               ...logContext,
               error: data.error
             });
+
+            keyHealth.consecutiveFailures += 1;
+            keyHealth.lastStatus = keyHealth.lastStatus ?? 500;
+            keyHealth.lastErrorMessage = errorMessage;
+            errorsSummary.push({
+              keyIndex,
+              status: keyHealth.lastStatus,
+              message: String(errorMessage ?? '').slice(0, 400)
+            });
+
             if (isInvalidArgument) {
               throw new Error(`AI_GENERATION_FAILED: Invalid request for model ${model}. ${errorMessage}`);
             }
             if (isRateLimit) {
+              keyHealth.cooldownUntilMs = nowMs() + defaultRateLimitCooldownMs;
               if (attempt < maxRetries) {
                 lastError = error;
                 const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
@@ -227,7 +389,9 @@ export class OpenRouterProvider implements LLMProvider {
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue;
               }
-              throw new Error(`AI_GENERATION_FAILED: Rate limit exceeded for model ${model}. ${errorMessage}`);
+              // Rate limited on this key: move on to the next configured key.
+              lastError = error;
+              break;
             }
             if (attempt < maxRetries) {
               lastError = error;
@@ -236,6 +400,13 @@ export class OpenRouterProvider implements LLMProvider {
             throw error;
           }
           const responseId = data.id || 'unknown';
+
+          // Success: reset health counters.
+          keyHealth.consecutiveFailures = 0;
+          keyHealth.lastStatus = 200;
+          keyHealth.lastErrorMessage = undefined;
+          keyHealth.cooldownUntilMs = 0;
+
           logger.info("OpenRouter request succeeded", {
             ...logContext,
             responseId
@@ -254,13 +425,16 @@ export class OpenRouterProvider implements LLMProvider {
               topicId,
               attempt: attempt + 1
             });
-            throw new Error('AI_GENERATION_FAILED: Request timeout (30s exceeded)');
+            const timeoutSeconds = Math.max(1, Math.round(timeout / 1000));
+            throw new Error(`AI_GENERATION_FAILED: Request timeout (${timeoutSeconds}s exceeded)`);
           }
           if (err.message?.includes('Invalid request for model')) {
             throw err;
           }
-          if (err.message?.includes('Rate limit exceeded')) {
-            throw err;
+          if (isRateLimitLike(err?.message || '')) {
+            // Try the next key (if any) instead of failing fast.
+            lastError = err;
+            break;
           }
           if (err.message?.includes('AI_GENERATION_FAILED')) {
             throw err;
@@ -286,7 +460,26 @@ export class OpenRouterProvider implements LLMProvider {
     if (lastError?.message?.includes('Rate limit exceeded')) {
       throw lastError;
     }
-    throw new Error(`AI_GENERATION_FAILED: All API keys exhausted. Last error: ${lastError?.message || 'Unknown error'}`);
+
+    if (errorsSummary.length > 0) {
+      const countsByStatus = new Map<number, number>();
+      for (const e of errorsSummary) {
+        const st = typeof e.status === 'number' ? e.status : 0;
+        countsByStatus.set(st, (countsByStatus.get(st) ?? 0) + 1);
+      }
+      const statusSummary = Array.from(countsByStatus.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([st, cnt]) => `${st || 'unknown'}x${cnt}`)
+        .join(', ');
+
+      throw new Error(
+        `AI_GENERATION_FAILED: All API keys exhausted for model ${model}. ` +
+        `Errors: ${statusSummary}. ` +
+        `Last error: ${lastError?.message || 'Unknown error'}`
+      );
+    }
+
+    throw new Error(`AI_GENERATION_FAILED: All API keys exhausted for model ${model}. Last error: ${lastError?.message || 'Unknown error'}`);
   }
   async generateText(prompt: string, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<string> {
     const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';

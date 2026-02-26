@@ -1,5 +1,5 @@
 import { getLLMProvider } from "../llm/provider";
-export type HintLanguage = "JAVA" | "PYTHON";
+export type HintLanguage = "JAVA" | "PYTHON" | "CPP";
 export interface FailureCase {
   testId?: number | string;
   input: string;
@@ -38,7 +38,7 @@ export async function generateAlgorithmicHints(params: {
     const lower = `${stderrAll}\n${verdictAll}`.toLowerCase();
 
     const looksLikeTimeout = /\b(timeout|time\s*limit|tl|killed|timelimit)\b/i.test(lower);
-    const looksLikeCE = /\b(compile|compilation|cannot\s+find\s+symbol|syntax\s+error|error:|javac|kotlinc|type\s+error)\b/i.test(lower);
+    const looksLikeCE = /\b(compile|compilation|cannot\s+find\s+symbol|syntax\s+error|error:|javac|kotlinc|g\+\+|clang\+\+|type\s+error)\b/i.test(lower);
     const looksLikePythonTrace = /traceback \(most recent call last\)/i.test(stderrAll);
 
     const hasAnyInput = failures.some(f => (f.input ?? "").toString().trim().length > 0);
@@ -65,11 +65,22 @@ export async function generateAlgorithmicHints(params: {
         if (/eoferror/i.test(stderrAll)) {
           push("Схоже, програма очікує більше вводу, ніж реально подається. Перевір, скільки рядків/значень ти зчитуєш.");
         }
+      } else if (params.language === "CPP") {
+        push("Є помилка компіляції C++. Перевір синтаксис, типи, дужки/крапки з комою та підключені заголовки (#include)." );
+        if (/undefined\s+reference|ld:|linker/i.test(stderrAll)) {
+          push("Схоже на помилку лінкування: переконайся, що всі функції оголошені та визначені, і немає помилок у сигнатурах.");
+        }
+        if (/no\s+matching\s+function|ambiguous|invalid\s+conversion/i.test(stderrAll)) {
+          push("Перевір відповідність типів у викликах функцій та перетвореннях: C++ часто падає на неявних/невірних конверсіях.");
+        }
+        if (/cin|getline/i.test(params.code)) {
+          push("Якщо читаєш рядки: памʼятай про різницю між operator>> і getline (після >> може лишитись '\\n' у буфері)." );
+        }
       } else {
         // JAVA
         push("Є помилка компіляції. Перевір синтаксис, імена класів/методів і чи імпорти потрібні/коректні.");
         if (/class\s+main\b|public\s+class\s+main\b/i.test(stderrAll) || /class\s+Main\s+is\s+public/i.test(stderrAll)) {
-          push("Переконайся, що точка входу оформлена правильно (наприклад, public class Main і main-method).");
+          push("Переконайся, що точка входу оформлена правильно (наприклад, public class Main і main-method). ");
         }
         if (/cannot\s+find\s+symbol/i.test(stderrAll)) {
           push("Помилка 'cannot find symbol' зазвичай означає: змінна/метод не оголошені або помилка в назві.");

@@ -9,7 +9,7 @@ export function calculateAdaptiveDifus(averageGrade: number, last3Grades: number
   }
   return baseDifus;
 }
-export async function getStableDifus(userId: number, lang: "JAVA" | "PYTHON", topicIndex: number, userRepo: () => any, gradeRepo: () => any): Promise<number> {
+export async function getStableDifus(userId: number, lang: "JAVA" | "PYTHON" | "CPP", topicIndex: number, userRepo: () => any, gradeRepo: () => any): Promise<number> {
   const user = await userRepo().findOne({
     where: {
       id: userId
@@ -25,23 +25,20 @@ export async function getStableDifus(userId: number, lang: "JAVA" | "PYTHON", to
   }).orderBy("grade.createdAt", "DESC").take(5).getMany();
   const validGrades = grades.filter((g: any) => g.total !== null && g.total !== undefined);
   if (validGrades.length < 3) {
-    const currentDifus = lang === "JAVA" ? user.difusJava : user.difusPython;
+    const currentDifus = lang === "PYTHON" ? user.difusPython : user.difusJava;
     return currentDifus;
   }
   const last5Grades = validGrades.slice(0, 5).map((g: any) => g.total ?? 0);
   const last3Grades = last5Grades.slice(0, 3);
   const averageGrade = last5Grades.reduce((sum: number, g: number) => sum + g, 0) / last5Grades.length;
   const newDifus = calculateAdaptiveDifus(averageGrade, last3Grades, topicIndex);
-  const currentDifus = lang === "JAVA" ? user.difusJava : user.difusPython;
+  const currentDifus = lang === "PYTHON" ? user.difusPython : user.difusJava;
   if (Math.abs(newDifus - currentDifus) >= 0.3) {
     const lastChange = (user as any).lastDifusChange || new Date(0);
     const daysSinceChange = Math.floor((new Date().getTime() - new Date(lastChange).getTime()) / (1000 * 60 * 60 * 24));
     if (daysSinceChange >= 1 || validGrades.length < 3) {
-      if (lang === "JAVA") {
-        user.difusJava = newDifus;
-      } else {
-        user.difusPython = newDifus;
-      }
+      if (lang === "PYTHON") user.difusPython = newDifus;
+      else user.difusJava = newDifus;
       (user as any).lastDifusChange = new Date();
       await userRepo().save(user);
       return newDifus;

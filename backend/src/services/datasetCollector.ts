@@ -17,6 +17,7 @@ export interface DatasetStats {
   byLanguage: {
     JAVA: number;
     PYTHON: number;
+    CPP: number;
   };
   byDifficulty: {
     easy: number;
@@ -31,7 +32,7 @@ function extractTrainingExample(task: Task): TrainingExample | null {
       return null;
     }
     const topicTitle = task.topic?.title || 'Unknown Topic';
-    const langName = task.lang === 'JAVA' ? 'Java' : 'Python';
+    const langName = task.lang === 'JAVA' ? 'Java' : task.lang === 'PYTHON' ? 'Python' : 'C++';
     const difus = task.difus || 0;
     const theoryMatch = desc.match(/^(.*?)(?:\n\n###\s*Практик|$)/s);
     const theoryMarkdown = theoryMatch ? theoryMatch[1].trim() : '';
@@ -120,7 +121,7 @@ ${theoryMarkdown.slice(0, 3000)}
 export async function collectTrainingDataset(options: {
   minGrade?: number;
   minTasks?: number;
-  languages?: ('JAVA' | 'PYTHON')[];
+  languages?: ('JAVA' | 'PYTHON' | 'CPP')[];
 } = {}): Promise<{
   examples: TrainingExample[];
   stats: DatasetStats;
@@ -145,7 +146,8 @@ export async function collectTrainingDataset(options: {
     mediumQualityTasks: 0,
     byLanguage: {
       JAVA: 0,
-      PYTHON: 0
+      PYTHON: 0,
+      CPP: 0
     },
     byDifficulty: {
       easy: 0,
@@ -158,7 +160,8 @@ export async function collectTrainingDataset(options: {
     [key: string]: TrainingExample[];
   } = {
     JAVA: [],
-    PYTHON: []
+    PYTHON: [],
+    CPP: []
   };
   for (const task of tasks) {
     const grades = task.grades || [];

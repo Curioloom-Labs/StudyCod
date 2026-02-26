@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Task } from "./Task";
 import { Grade } from "./Grade";
-export type UserLang = "JAVA" | "PYTHON";
+export type UserLang = "JAVA" | "PYTHON" | "CPP";
 export type UserMode = "PERSONAL" | "EDUCATIONAL";
 export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
 export type PlacementLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
@@ -26,6 +26,17 @@ export class User {
     name: "email_verified"
   })
   emailVerified!: boolean;
+
+  /**
+   * Global broadcast/marketing emails subscription.
+   * Default: true (all registered users are subscribed by default).
+   */
+  @Column({
+    type: "boolean",
+    default: true,
+    name: "marketing_emails_enabled"
+  })
+  marketingEmailsEnabled!: boolean;
   @Column({
     type: "varchar",
     length: 255,
@@ -125,6 +136,18 @@ export class User {
     name: "birth_month"
   })
   birthMonth?: number | null;
+
+  /**
+   * Tracks the year when the last birthday greeting email was sent.
+   * Used to ensure idempotency (send at most once per year).
+   */
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "birthday_greeted_year"
+  })
+  birthdayGreetedYear?: number | null;
   @Column({
     type: "timestamp",
     nullable: true,

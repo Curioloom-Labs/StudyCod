@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import { spawnSync } from "child_process";
 import { Runner } from "./engine/runner";
 import type { JudgeRequest, JudgeResponse } from "./engine/result";
 
@@ -69,7 +70,8 @@ function buildHealthPayload(params: {
   if (!params.nsjailPath || !nsjailExists) problems.push(`NSJAIL_NOT_FOUND: ${params.nsjailPath || "(empty)"}`);
   if (params.nsjailPath && nsjailExists && !nsjailExecutable) problems.push(`NSJAIL_NOT_EXECUTABLE: ${params.nsjailPath}`);
   if (params.useConfig && !configExists) problems.push(`NSJAIL_CONFIG_NOT_FOUND: ${params.nsjailConfigPath}`);
-  if (isProduction && !params.useConfig) problems.push("INVALID_CONFIGURATION: production requires NSJAIL_USE_CONFIG=1");
+  // In production we require config-mode, but it is inferred automatically when NSJAIL_CONFIG exists.
+  if (isProduction && !params.useConfig) problems.push("INVALID_CONFIGURATION: production requires NSJAIL_CONFIG (config-mode)");
 
   const tempCheck = (() => {
     try {
@@ -84,6 +86,48 @@ function buildHealthPayload(params: {
     }
   })();
   if (!tempCheck.ok) problems.push(`TMP_WRITE_FAILED: ${tempCheck.error}`);
+
+  type NsJailConfigCheck =
+    | { skipped: true }
+    | { ok: true }
+    | { ok: false; error: string };
+
+  const nsjailConfigCheck: NsJailConfigCheck = (() => {
+    // Only run the real nsjail check in production. In local/dev environments nsjail is
+    // often unavailable or unprivileged, and we don't want health to become noisy.
+    if (!isProduction) return { skipped: true as const };
+    if (process.platform === "win32") return { skipped: true as const };
+    if (!params.useConfig) return { skipped: true as const };
+    if (!nsjailExecutable) return { skipped: true as const };
+    if (!configExists) return { skipped: true as const };
+
+    try {
+      const r = spawnSync(params.nsjailPath, ["--config", params.nsjailConfigPath, "--", "/bin/true"], {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 1500
+      });
+      const stderr = String(r.stderr ?? "").trim();
+      const stdout = String(r.stdout ?? "").trim();
+      const out = (stderr || stdout).trim();
+      if (r.error) {
+        return { ok: false as const, error: r.error.message || String(r.error) };
+      }
+      if (r.status === 0) {
+        return { ok: true as const };
+      }
+      return {
+        ok: false as const,
+        error: out || `exit ${r.status ?? "(null)"}${r.signal ? ` (signal ${r.signal})` : ""}`
+      };
+    } catch (e: any) {
+      return { ok: false as const, error: e?.message || String(e) };
+    }
+  })();
+
+  if ("ok" in nsjailConfigCheck && nsjailConfigCheck.ok === false) {
+    problems.push(`NSJAIL_RUNTIME_CHECK_FAILED: ${nsjailConfigCheck.error || "unknown"}`);
+  }
 
   const chrootChecks: Record<string, { path: string; ok: boolean; error?: string }> = {};
   const chrootEntries = (() => {
@@ -133,6 +177,7 @@ function buildHealthPayload(params: {
     chrootByLanguage: params.chrootByLanguage,
     runtimeChecks: {
       tmp: tempCheck,
+      nsjailConfig: nsjailConfigCheck,
       chrootByLanguage: chrootChecks
     },
     limits: params.limits,
@@ -146,17 +191,22 @@ function buildHealthPayload(params: {
 async function main() {
   const nsjailPath = process.env.NSJAIL_PATH || "/usr/bin/nsjail";
   const nsjailConfigPath = process.env.NSJAIL_CONFIG || path.join(__dirname, "..", "sandbox", "nsjail.cfg");
-  const useConfig = String(process.env.NSJAIL_USE_CONFIG ?? "").trim() === "1";
-
   const isProduction = String(process.env.NODE_ENV ?? "").trim() === "production";
+  const configExists = safeExists(nsjailConfigPath);
+  const useConfigFromEnv = String(process.env.NSJAIL_USE_CONFIG ?? "").trim() === "1";
+  // Production should always use config-mode. We infer it automatically when NSJAIL_CONFIG exists,
+  // so production does not depend on NSJAIL_USE_CONFIG being set.
+  const useConfig = useConfigFromEnv || (isProduction && configExists);
+
   if (isProduction && !useConfig) {
-    // Fail-fast: production must never run in weakened CLI-mode.
-    logStderr("[judge] FATAL: NSJAIL_USE_CONFIG must be '1' in production", {
+    logStderr("[judge] FATAL: production requires NSJAIL_CONFIG (config-mode)", {
       nodeEnv: process.env.NODE_ENV,
-      nsjailUseConfig: String(process.env.NSJAIL_USE_CONFIG ?? "")
+      nsjailUseConfig: String(process.env.NSJAIL_USE_CONFIG ?? ""),
+      nsjailConfigPath,
+      nsjailConfigExists: configExists
     });
     writeJson({
-      error: "INVALID_CONFIGURATION: production requires NSJAIL_USE_CONFIG=1"
+      error: "INVALID_CONFIGURATION: production requires NSJAIL_CONFIG (config-mode)"
     });
     process.exit(1);
   }
@@ -172,11 +222,12 @@ async function main() {
   const warnCli = !useConfig;
   logStderr("[judge] sandbox mode", {
     mode,
-    warn: warnCli ? "CLI mode is weaker; use NSJAIL_USE_CONFIG=1" : undefined,
+    warn: warnCli ? "CLI mode is weaker; provide NSJAIL_CONFIG or set NSJAIL_USE_CONFIG=1" : undefined,
     nsjailPath,
     nsjailExists: safeExists(nsjailPath),
     nsjailConfigPath,
     nsjailConfigExists: safeExists(nsjailConfigPath),
+    nsjailUseConfigEnv: String(process.env.NSJAIL_USE_CONFIG ?? ""),
     limits: {
       maxInputBytes,
       maxTests,

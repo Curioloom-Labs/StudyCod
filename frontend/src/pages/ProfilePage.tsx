@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { User, CourseLanguage } from "../types";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { updateProfile } from "../lib/api/profile";
+import { getEmailSubscription, updateEmailSubscription, updateProfile } from "../lib/api/profile";
 import { linkGoogleAccount } from "../lib/api/auth";
+import { useUIMode } from "../components/interface/UIModeProvider";
 interface Props {
   user: User;
   onUserChange: (u: User) => void;
@@ -17,6 +18,7 @@ export const ProfilePage: React.FC<Props> = ({
     t,
     i18n
   } = useTranslation();
+  const ui = useUIMode();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const isStudent = !!user.studentId;
   const isEducational = user.userMode === "EDUCATIONAL";
@@ -26,6 +28,30 @@ export const ProfilePage: React.FC<Props> = ({
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [linkingGoogle, setLinkingGoogle] = useState(false);
+
+  const [emailPrefLoading, setEmailPrefLoading] = useState(false);
+  const [emailPrefEnabled, setEmailPrefEnabled] = useState<boolean>(user.marketingEmailsEnabled ?? true);
+  const [emailPrefEmail, setEmailPrefEmail] = useState<string | null>(user.email ?? null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setEmailPrefLoading(true);
+        const pref = await getEmailSubscription();
+        if (!mounted) return;
+        setEmailPrefEnabled(Boolean(pref.enabled));
+        setEmailPrefEmail(pref.email ?? null);
+      } catch {
+        // ignore: not critical for profile page rendering
+      } finally {
+        if (mounted) setEmailPrefLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const handleFile = useCallback((file: File | null) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -111,6 +137,9 @@ export const ProfilePage: React.FC<Props> = ({
                   <button className={`flex-1 py-2 px-4 border font-mono text-xs transition-fast ${course === "PYTHON" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`} onClick={() => setCourse("PYTHON")}>
                     Python
                   </button>
+                  <button className={`flex-1 py-2 px-4 border font-mono text-xs transition-fast ${course === "CPP" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`} onClick={() => setCourse("CPP")}>
+                    C++
+                  </button>
                 </div>
                 <p className="text-xs font-mono text-text-muted mt-2">
                   {t('taskHistorySaved')}
@@ -142,6 +171,99 @@ export const ProfilePage: React.FC<Props> = ({
               <div onDrop={onDrop} onDragOver={e => e.preventDefault()} className="border border-dashed border-border bg-bg-code p-6 text-center cursor-pointer hover:border-primary transition-fast">
                 <p className="text-xs font-mono text-text-primary mb-1">{t('dragOrChooseFile')}</p>
                 <input type="file" accept="image/*" className="mt-2 text-xs font-mono" onChange={onSelectFile} />
+              </div>
+            </div>
+
+            {emailPrefEmail && <div>
+                <h2 className="text-sm font-mono text-text-primary mb-3">{tr("Email-розсилка", "Email updates")}</h2>
+                <div className="border border-border bg-bg-code p-4 rounded-md">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="text-xs font-mono text-text-primary">
+                        {tr("Отримувати інформаційні листи від StudyCod", "Receive StudyCod informational emails")}
+                      </div>
+                      <div className="text-[11px] font-mono text-text-secondary mt-1">
+                        {emailPrefEmail}
+                      </div>
+                    </div>
+                    <button
+                      disabled={emailPrefLoading}
+                      onClick={async () => {
+                        const next = !emailPrefEnabled;
+                        setEmailPrefEnabled(next);
+                        try {
+                          setEmailPrefLoading(true);
+                          await updateEmailSubscription(next);
+                          onUserChange({ ...user, marketingEmailsEnabled: next });
+                        } catch (e: any) {
+                          setEmailPrefEnabled(!next);
+                          alert(e?.response?.data?.message || tr("Не вдалося оновити налаштування", "Failed to update setting"));
+                        } finally {
+                          setEmailPrefLoading(false);
+                        }
+                      }}
+                      className={`px-3 py-2 border font-mono text-xs transition-fast ${emailPrefEnabled ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary hover:border-primary/50"} disabled:opacity-50`}
+                    >
+                      {emailPrefLoading ? tr("Збереження…", "Saving…") : emailPrefEnabled ? tr("Увімкнено", "On") : tr("Вимкнено", "Off")}
+                    </button>
+                  </div>
+                  <p className="text-[11px] font-mono text-text-muted mt-3">
+                    {tr("Ви можете відписатися будь-коли — також є посилання у листах.", "You can unsubscribe anytime — there is also a link in emails.")}
+                  </p>
+                </div>
+              </div>}
+
+            <div>
+              <h2 className="text-sm font-mono text-text-primary mb-3">{tr("Інтерфейс", "Interface")}</h2>
+              <div className="border border-border bg-bg-code p-4 rounded-md">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-xs font-mono text-text-primary">
+                      {tr("Режим інтерфейсу", "UI mode")}
+                    </div>
+                    <div className="text-[11px] font-mono text-text-secondary mt-1">
+                      {tr(
+                        "Focus — робочий режим із ‘Продовжити навчання’ на старті. Classic — попередній вигляд.",
+                        "Focus is a workspace-first mode with ‘Continue studying’ up front. Classic is the previous look."
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => ui.setMode("classic")}
+                      className={
+                        "px-3 py-2 border font-mono text-xs transition-fast " +
+                        (ui.mode === "classic" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50")
+                      }
+                    >
+                      Classic
+                    </button>
+                    <button
+                      onClick={() => ui.setMode("focus")}
+                      className={
+                        "px-3 py-2 border font-mono text-xs transition-fast " +
+                        (ui.mode === "focus" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50")
+                      }
+                    >
+                      Focus
+                    </button>
+                  </div>
+                </div>
+
+                {ui.override ? (
+                  <div className="mt-3 flex items-center justify-between gap-3 border border-border bg-bg-surface px-3 py-2">
+                    <div className="text-[11px] font-mono text-text-secondary">
+                      {tr("Тимчасовий режим до кінця дня", "Temporary mode until end of day")}: <span className="text-text-primary">{ui.override.mode === "classic" ? "Classic" : "Focus"}</span>
+                    </div>
+                    <button
+                      onClick={() => ui.clearOverride()}
+                      className="px-2 py-1 text-[11px] font-mono border border-border text-text-secondary hover:bg-bg-hover transition-fast"
+                    >
+                      {tr("Очистити", "Clear")}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
 

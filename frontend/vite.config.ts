@@ -5,6 +5,15 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // DEV: proxy API calls to the backend to keep frontend <-> backend working out of the box.
+    // Frontend API client defaults to window.location.origin + /api
+    // so without a proxy it would hit the Vite dev server instead of the backend.
+    proxy: {
+      "/api": {
+        target: "http://localhost:4000",
+        changeOrigin: true,
+      },
+    },
     // Зменшуємо кількість воркерів у dev для економії пам'яті
     hmr: {
       overlay: true,

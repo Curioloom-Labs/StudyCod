@@ -60,7 +60,7 @@ export const Sidebar: React.FC<Props> = ({
           <div>
             <div className="font-medium text-text-primary text-xs">{user.username}</div>
             <div className="text-[10px] text-text-muted">
-              {user.course === "JAVA" ? t("javaCourse") : t("pythonCourse")}
+              {user.course === "JAVA" ? t("javaCourse") : user.course === "PYTHON" ? t("pythonCourse") : t("cppCourse")}
             </div>
           </div>
         </div>

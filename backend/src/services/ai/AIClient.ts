@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIRequest {
   mode: AIMode;

@@ -1,4 +1,5 @@
 import { api } from "./client";
+import i18n from "../../i18n";
 
 export type LibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
 export type LibraryTaskLang = "JAVA" | "PYTHON";
@@ -225,7 +226,8 @@ export type LibraryCheckResult = {
 };
 
 export async function listApprovedLibraryTasks(params?: { lang?: LibraryTaskLang; judgeLanguage?: JudgeLanguage; q?: string; page?: number; pageSize?: number }) {
-  const res = await api.get("/library/tasks", { params });
+  const fullParams: any = { ...(params || {}), uiLang: (i18n.language || "uk").toLowerCase() };
+  const res = await api.get("/library/tasks", { params: fullParams });
   const data = res.data as { tasks: LibraryTaskListItem[]; total?: number; page?: number; pageSize?: number };
   if (isStudentToken()) {
     data.tasks = (data.tasks || []).map(t => ({
@@ -237,17 +239,17 @@ export async function listApprovedLibraryTasks(params?: { lang?: LibraryTaskLang
 }
 
 export async function listMyLibraryTasks() {
-  const res = await api.get("/library/tasks/mine");
+  const res = await api.get("/library/tasks/mine", { params: { uiLang: (i18n.language || "uk").toLowerCase() } });
   return res.data as { tasks: LibraryTaskListItem[] };
 }
 
 export async function getLibraryTask(id: number) {
-  const res = await api.get(`/library/tasks/${id}`);
+  const res = await api.get(`/library/tasks/${id}`, { params: { uiLang: (i18n.language || "uk").toLowerCase() } });
   return res.data as { task: LibraryTaskListItem; theory: string | null; tests: LibraryTaskTest[] };
 }
 
 export async function getLibraryTaskByKey(key: string) {
-  const res = await api.get(`/library/tasks/by/${encodeURIComponent(key)}`);
+  const res = await api.get(`/library/tasks/by/${encodeURIComponent(key)}`, { params: { uiLang: (i18n.language || "uk").toLowerCase() } });
   return res.data as { task: LibraryTaskListItem; theory: string | null; tests: LibraryTaskTest[] };
 }
 
@@ -336,6 +338,7 @@ export async function createLibraryTask(payload: {
   section?: string;
   description: string;
   template: string;
+  templatesByLanguage?: Record<string, string>;
   timeLimitMs?: number;
   memoryLimitMb?: number;
   outputLimitKb?: number;
@@ -361,6 +364,7 @@ export async function updateLibraryTask(
     section: string | null;
     description: string;
     template: string;
+    templatesByLanguage: Record<string, string> | null;
     lang: LibraryTaskLang;
     maxAttempts: number;
     timeLimitMs: number | null;
@@ -376,14 +380,20 @@ export async function updateLibraryTask(
   return res.data as { task: LibraryTaskListItem };
 }
 
+export async function deleteLibraryTask(id: number) {
+  const res = await api.delete(`/library/tasks/${id}`);
+  return res.data as { ok: true };
+}
+
 export async function submitLibraryTask(id: number) {
   const res = await api.post(`/library/tasks/${id}/submit`, {});
   return res.data as { task: LibraryTaskListItem };
 }
 
-export async function importLibraryTaskArchive(file: File) {
+export async function importLibraryTaskArchive(file: File, options?: { hideFromLibrary?: boolean }) {
   const form = new FormData();
   form.append("archive", file);
+  if (options?.hideFromLibrary) form.append("hideFromLibrary", "true");
   const res = await api.post("/library/tasks/import-archive", form);
   return res.data as { task: LibraryTaskListItem };
 }

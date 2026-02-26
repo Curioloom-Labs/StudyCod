@@ -10,11 +10,14 @@ export interface CheckerSpecExact {
 export interface CheckerSpecWhitespace {
   type: "whitespace";
 }
+export interface CheckerSpecNonEmpty {
+  type: "nonempty";
+}
 export interface CheckerSpecFloat {
   type: "float";
   epsilon: number;
 }
-export type CheckerSpec = CheckerSpecExact | CheckerSpecWhitespace | CheckerSpecFloat;
+export type CheckerSpec = CheckerSpecExact | CheckerSpecWhitespace | CheckerSpecNonEmpty | CheckerSpecFloat;
 export interface TestCase {
   id: number | string;
   input?: string;

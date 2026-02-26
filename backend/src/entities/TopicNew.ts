@@ -4,7 +4,7 @@ import { ControlWork } from "./ControlWork";
 import { TopicProgress } from "./TopicProgress";
 import { Class } from "./Class";
 import { TheoryBlock } from "./TheoryBlock";
-export type TopicLanguage = "JAVA" | "PYTHON";
+export type TopicLanguage = "JAVA" | "PYTHON" | "CPP";
 @Entity("topics_new")
 export class TopicNew {
   @PrimaryGeneratedColumn()
@@ -23,7 +23,7 @@ export class TopicNew {
   order!: number;
   @Column({
     type: "enum",
-    enum: ["JAVA", "PYTHON"]
+    enum: ["JAVA", "PYTHON", "CPP"]
   })
   language!: TopicLanguage;
   @ManyToOne(() => Class, {

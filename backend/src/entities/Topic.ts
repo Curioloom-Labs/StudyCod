@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, RelationId } from "typeorm";
 import { TheoryBlock } from "./TheoryBlock";
-export type TopicLanguage = "JAVA" | "PYTHON";
+export type TopicLanguage = "JAVA" | "PYTHON" | "CPP";
 @Entity("topics")
 export class Topic {
   @PrimaryGeneratedColumn()
@@ -9,7 +9,7 @@ export class Topic {
   title!: string;
   @Column({
     type: "enum",
-    enum: ["JAVA", "PYTHON"]
+    enum: ["JAVA", "PYTHON", "CPP"]
   })
   lang!: TopicLanguage;
   @Column({
@@ -18,7 +18,7 @@ export class Topic {
   })
   topicIndex!: number;
   @Column({
-    type: "text",
+    type: "mediumtext",
     name: "theory_markdown",
     nullable: true
   })

@@ -1,4 +1,5 @@
 import { api } from "./client";
+import i18n from "../../i18n";
 
 export type TheoryTopic = {
   id: number;
@@ -18,7 +19,8 @@ export type TheoryTopic = {
 export async function getTheoryTopics(language: "JAVA" | "PYTHON"): Promise<TheoryTopic[]> {
   const res = await api.get("/theory", {
     params: {
-      language
+      language,
+      uiLang: (i18n.language || "uk").toLowerCase()
     }
   });
   return res.data.topics || [];

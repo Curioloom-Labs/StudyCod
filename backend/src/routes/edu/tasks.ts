@@ -23,6 +23,8 @@ import { HttpError } from "../../utils/httpError";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { submissionRateLimitMiddleware } from "../../middleware/submissionRateLimit";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../../utils/multiFileSubmission";
+import { TopicNew } from "../../entities/TopicNew";
+import { IsNull } from "typeorm";
 
 const router = Router();
 
@@ -140,16 +142,17 @@ function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; pa
     .filter(r => Number.isFinite(r.testId) && r.testId > 0);
 }
 
-router.get("/tasks/:taskId(\\d+)", authRequired, async (req: AuthRequest, res: Response) => {
+router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const taskId = parseInt(req.params.taskId, 10);
-    if (isNaN(taskId)) {
-      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    const taskId = Number(req.params.taskId);
+    if (!Number.isInteger(taskId)) {
+      throw new HttpError(400, "Invalid taskId");
     }
 
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
       .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topic.theoryBlock", "topicTheoryBlock")
       .leftJoinAndSelect("topicTask.controlWork", "controlWork")
       .leftJoinAndSelect("topic.class", "class")
       .leftJoinAndSelect("class.teacher", "teacher")
@@ -253,10 +256,99 @@ router.get("/tasks/:taskId(\\d+)", authRequired, async (req: AuthRequest, res: R
       .where("theory.topic_task_id = :taskId", { taskId })
       .getOne();
 
-    if (taskTheory) {
-      hasTheory = true;
-      theory = taskTheory.content;
+    const debugTheoryRequested = ["1", "true", "yes"].includes(String((req.query as any)?.debugTheory ?? "").toLowerCase());
+
+    // Load global (admin) materials for the same language+order.
+    // Student tasks are class-scoped (topic.class != null) but the source-of-truth materials are global (topic.class == null).
+    // We use global materials as a fallback and also as the default when they are newer than stale class snapshots.
+    const globalRepo = AppDataSource.getRepository(TopicNew);
+    const classTopic = (topicTask as any)?.topic as any;
+    const classLang = classTopic?.language;
+    const classOrder = classTopic?.order;
+    const classTitleNorm = String(classTopic?.title ?? "").trim().toLowerCase();
+
+    let globalMatchStrategy: "language+order" | "language+title" | null = null;
+
+    let globalTopic = await globalRepo.findOne({
+      where: {
+        language: classLang,
+        order: classOrder,
+        class: IsNull() as any
+      } as any,
+      relations: ["theoryBlock"] as any
+    });
+
+    if (globalTopic) globalMatchStrategy = "language+order";
+
+    if (!globalTopic && classTitleNorm) {
+      // Fallback: match by title (in case class topics were reordered).
+      const globals = await globalRepo.find({
+        where: {
+          language: classLang,
+          class: IsNull() as any
+        } as any,
+        relations: ["theoryBlock"] as any
+      });
+      globalTopic = globals.find(t => String((t as any)?.title ?? "").trim().toLowerCase() === classTitleNorm) as any;
+      if (globalTopic) globalMatchStrategy = "language+title";
     }
+
+    const classTheoryBlock = (topicTask as any)?.topic?.theoryBlock as any;
+    const classTheory = typeof classTheoryBlock?.content === "string" ? String(classTheoryBlock.content) : "";
+    const classTheoryUpdatedAt = classTheoryBlock?.updatedAt instanceof Date ? classTheoryBlock.updatedAt : (classTheoryBlock?.updatedAt ? new Date(classTheoryBlock.updatedAt) : null);
+
+    const globalTheoryBlock = (globalTopic as any)?.theoryBlock as any;
+    const globalTheory = typeof globalTheoryBlock?.content === "string" ? String(globalTheoryBlock.content) : "";
+    const globalTheoryUpdatedAt = globalTheoryBlock?.updatedAt instanceof Date ? globalTheoryBlock.updatedAt : (globalTheoryBlock?.updatedAt ? new Date(globalTheoryBlock.updatedAt) : null);
+    const taskTheoryUpdatedAt = taskTheory?.updatedAt instanceof Date ? taskTheory.updatedAt : (taskTheory?.updatedAt ? new Date(taskTheory.updatedAt) : null);
+
+    const taskTheoryContent = taskTheory && typeof (taskTheory as any).content === "string" ? String((taskTheory as any).content) : "";
+
+    type TheoryPickSource = "classTopic" | "globalTopic" | "taskSnapshot" | "none";
+    const pickFromMaterials = (): { content: string; updatedAt: Date | null; source: TheoryPickSource } => {
+      const classOk = classTheory.trim().length > 0;
+      const globalOk = globalTheory.trim().length > 0;
+      if (!classOk && !globalOk) return { content: "", updatedAt: null, source: "none" };
+      if (classOk && !globalOk) return { content: classTheory, updatedAt: classTheoryUpdatedAt, source: "classTopic" };
+      if (!classOk && globalOk) return { content: globalTheory, updatedAt: globalTheoryUpdatedAt, source: "globalTopic" };
+
+      // Both exist: prefer the newer one; if timestamps missing, prefer class (as explicit override).
+      if (classTheoryUpdatedAt && globalTheoryUpdatedAt) {
+        return classTheoryUpdatedAt >= globalTheoryUpdatedAt
+          ? { content: classTheory, updatedAt: classTheoryUpdatedAt, source: "classTopic" }
+          : { content: globalTheory, updatedAt: globalTheoryUpdatedAt, source: "globalTopic" };
+      }
+      if (classTheoryUpdatedAt && !globalTheoryUpdatedAt) return { content: classTheory, updatedAt: classTheoryUpdatedAt, source: "classTopic" };
+      if (!classTheoryUpdatedAt && globalTheoryUpdatedAt) return { content: globalTheory, updatedAt: globalTheoryUpdatedAt, source: "globalTopic" };
+      return { content: classTheory, updatedAt: classTheoryUpdatedAt, source: "classTopic" };
+    };
+
+    const materialsPick = pickFromMaterials();
+    const snapshotPick = { content: taskTheoryContent, updatedAt: taskTheoryUpdatedAt, source: "taskSnapshot" as TheoryPickSource };
+
+    const finalPick = (() => {
+      if (materialsPick.content.trim().length > 0) {
+        if (!snapshotPick.content.trim()) return materialsPick;
+        if (materialsPick.updatedAt && snapshotPick.updatedAt && materialsPick.updatedAt > snapshotPick.updatedAt) return materialsPick;
+        return snapshotPick;
+      }
+      if (snapshotPick.content.trim().length > 0) return snapshotPick;
+      return { content: "", updatedAt: null as Date | null, source: "none" as TheoryPickSource };
+    })();
+
+    if (finalPick.source !== "none") {
+      hasTheory = true;
+      theory = finalPick.content;
+    }
+
+    const includeTheoryDebug = await (async () => {
+      if (!debugTheoryRequested) return false;
+      if (!req.userId) return false;
+      const u = await userRepo().findOne({ where: { id: req.userId } });
+      return u?.role === "SYSTEM_ADMIN";
+    })();
+
+    if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
 
     res.json({
       task: {
@@ -280,13 +372,51 @@ router.get("/tasks/:taskId(\\d+)", authRequired, async (req: AuthRequest, res: R
           type: lessonType,
           hasTheory,
           theory: theory || undefined,
+          ...(includeTheoryDebug
+            ? {
+                theoryDebug: {
+                  pickedSource: finalPick.source,
+                  pickedUpdatedAt: finalPick.updatedAt ? finalPick.updatedAt.toISOString() : null,
+                  globalMatchStrategy,
+                  classTopic: {
+                    id: typeof classTopic?.id === "number" ? classTopic.id : null,
+                    language: classLang ?? null,
+                    order: typeof classOrder === "number" ? classOrder : null,
+                    title: typeof classTopic?.title === "string" ? classTopic.title : null
+                  },
+                  globalTopic: {
+                    id: typeof (globalTopic as any)?.id === "number" ? (globalTopic as any).id : null,
+                    title: typeof (globalTopic as any)?.title === "string" ? (globalTopic as any).title : null
+                  },
+                  classTheoryBlock: {
+                    id: typeof classTheoryBlock?.id === "number" ? classTheoryBlock.id : null,
+                    updatedAt: classTheoryUpdatedAt ? classTheoryUpdatedAt.toISOString() : null,
+                    length: classTheory.length
+                  },
+                  globalTheoryBlock: {
+                    id: typeof globalTheoryBlock?.id === "number" ? globalTheoryBlock.id : null,
+                    updatedAt: globalTheoryUpdatedAt ? globalTheoryUpdatedAt.toISOString() : null,
+                    length: globalTheory.length
+                  },
+                  taskTheorySnapshot: {
+                    id: typeof (taskTheory as any)?.id === "number" ? (taskTheory as any).id : null,
+                    updatedAt: taskTheoryUpdatedAt ? taskTheoryUpdatedAt.toISOString() : null,
+                    length: taskTheoryContent.length
+                  },
+                  serverTime: new Date().toISOString()
+                }
+              }
+            : {}),
           timeLimitMinutes: timeLimitMinutes || undefined
         }
       }
     });
   } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     logger.error("Error getting task", { requestId: req.requestId, err: error });
-    res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

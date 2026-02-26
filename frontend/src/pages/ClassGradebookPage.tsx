@@ -692,10 +692,10 @@ export const ClassGradebookPage: React.FC = () => {
                   </div>
                   <div className="text-xs text-text-muted">{tr("з 12", "out of 12")}</div>
                 </div>
-                {controlWorkDetails.controlWork.hasTheory && controlWorkDetails.summaryGrade?.theoryGrade !== null && <div className="p-3 border border-border bg-bg-surface">
+                {controlWorkDetails.controlWork.hasTheory && controlWorkDetails.summaryGrade?.theoryGrade != null && <div className="p-3 border border-border bg-bg-surface">
                     <div className="text-sm text-text-secondary mb-1">{tr("Оцінка за тест", "Quiz grade")}</div>
                     <div className="text-2xl font-mono font-bold text-text-primary">
-                      {controlWorkDetails.summaryGrade.theoryGrade}
+                      {controlWorkDetails.summaryGrade?.theoryGrade ?? "—"}
                     </div>
                     <div className="text-xs text-text-muted">{tr("з 12", "out of 12")}</div>
                   </div>}

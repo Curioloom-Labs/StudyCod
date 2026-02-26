@@ -5,6 +5,13 @@ export interface Env {
   ENVIRONMENT?: string;
 }
 type Language = "uk" | "en";
+
+type LibreTranslateRequest = {
+  q: string;
+  source?: string;
+  target?: string;
+  format?: string;
+};
 interface WorkerRequest {
   mode: string;
   language?: Language;
@@ -136,6 +143,9 @@ export default {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type"
     };
+
+    const url = new URL(req.url);
+
     if (req.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
@@ -153,6 +163,53 @@ export default {
         }
       });
     }
+
+    // LibreTranslate-compatible endpoint: POST /translate
+    // Input: { q: string, source?: string, target?: string }
+    // Output: { translatedText: string }
+    if (url.pathname === "/translate") {
+      try {
+        const body = (await req.json()) as LibreTranslateRequest;
+        const q = String(body?.q ?? "");
+        const source = String(body?.source ?? "uk").trim().toLowerCase() || "uk";
+        const target = String(body?.target ?? "en").trim().toLowerCase() || "en";
+        if (!q.trim()) {
+          return new Response(JSON.stringify({ error: "q is required" }), {
+            status: 400,
+            headers: { ...cors, "Content-Type": "application/json" }
+          });
+        }
+        if (!env?.AI?.run) {
+          return new Response(JSON.stringify({ error: "Workers AI binding is missing" }), {
+            status: 500,
+            headers: { ...cors, "Content-Type": "application/json" }
+          });
+        }
+
+        const result = await env.AI.run("@cf/meta/m2m100-1.2b", {
+          text: q,
+          source_lang: source,
+          target_lang: target,
+        });
+        const translatedText = String((result as any)?.translated_text ?? "");
+        if (!translatedText) {
+          return new Response(JSON.stringify({ error: "Empty translation" }), {
+            status: 502,
+            headers: { ...cors, "Content-Type": "application/json" }
+          });
+        }
+        return new Response(JSON.stringify({ translatedText }), {
+          status: 200,
+          headers: { ...cors, "Content-Type": "application/json" }
+        });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err?.message ?? "Internal error" }), {
+          status: 500,
+          headers: { ...cors, "Content-Type": "application/json" }
+        });
+      }
+    }
+
     try {
       const body = (await req.json()) as WorkerRequest;
       if (!body?.params?.prompt) {

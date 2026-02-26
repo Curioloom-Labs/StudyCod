@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { body, validationResult } from "express-validator";
 import { AppDataSource } from "../data-source";
 import { Task, TaskType } from "../entities/Task";
+import type { TaskIoType } from "../entities/Task";
 import { Topic } from "../entities/Topic";
 import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
@@ -101,6 +102,27 @@ function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec
   };
 }
 
+function inferEffectiveIoTypeForPersonalTask(task: Task, tests: Array<{ input?: string | null; expectedOutput?: string | null }>): TaskIoType {
+  // Respect explicit NO_INPUT_* values. Only override legacy/backfilled STDIN_STDOUT when the stored tests clearly indicate no-input.
+  if (task.ioType === "NO_INPUT_FIXED_OUTPUT" || task.ioType === "NO_INPUT_FREE_OUTPUT") return task.ioType;
+
+  const normalizedInputs = tests.map(t => String(t?.input ?? "").trim());
+  const hasAnyInput = normalizedInputs.some(s => s.length > 0);
+  if (hasAnyInput) return "STDIN_STDOUT";
+
+  // No-input tests: decide whether output is fixed/deterministic (has meaningful expected output)
+  // or free-output (expected output blank / placeholder).
+  const outputs = tests.map(t => String(t?.expectedOutput ?? "").trim());
+  const hasAnyExpected = outputs.some(s => s.length > 0);
+  const looksLikePlaceholder = outputs.every(s => {
+    if (!s) return true;
+    return /(any\s+non-?empty\s+output|non-?empty\s+output|будь-як\w*\s+непорожн\w*\s+вивід|будь-як\w*\s+текст)/i.test(s);
+  });
+
+  if (hasAnyExpected && !looksLikePlaceholder) return "NO_INPUT_FIXED_OUTPUT";
+  return "NO_INPUT_FREE_OUTPUT";
+}
+
 function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null; error?: string | null }> {
   if (!Array.isArray(results)) return [];
   return results
@@ -119,6 +141,102 @@ const gradeRepo = () => AppDataSource.getRepository(Grade);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 type TaskStatus = "OPEN" | "SUBMITTED" | "GRADED";
+
+// Personal mode: after each 5 fully completed topics (since placement), generate a control work:
+// 1 quiz task (15 questions) + 3 practical coding tasks.
+const PERSONAL_CONTROL_BATCH_SIZE = 5;
+const PERSONAL_CONTROL_QUIZ_COUNT = 15;
+const PERSONAL_CONTROL_PRACTICE_COUNT = 3;
+const PERSONAL_CONTROL_PRACTICE_COEFF = 1.3;
+const PERSONAL_CONTROL_PASS_GRADE = 7;
+
+function buildPersonalControlBatchPrefix(params: { lang: "JAVA" | "PYTHON" | "CPP"; startTopicIndex: number; endTopicIndex: number }): string {
+  return `PCW:${params.lang}:${params.startTopicIndex}-${params.endTopicIndex}`;
+}
+
+function parsePersonalControlBatchPrefix(subtitle: unknown): string | null {
+  if (typeof subtitle !== "string") return null;
+  const s = subtitle.trim();
+  if (!s.startsWith("PCW:")) return null;
+  const prefix = s.split("|")[0] || "";
+  return prefix.startsWith("PCW:") ? prefix : null;
+}
+
+function isPersonalControlQuizTask(task: Pick<Task, "type" | "subtitle">): boolean {
+  if (task.type !== "CONTROL") return false;
+  return typeof (task as any).subtitle === "string" && String((task as any).subtitle).includes("|QUIZ|");
+}
+
+function clampGrade0to12Int(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(12, Math.round(v)));
+}
+
+function computePersonalControlFinalGrade(params: { quizGrade: number | null; practiceGrades: Array<number | null> }): {
+  practiceAvg: number | null;
+  practiceAdjusted: number | null;
+  finalGrade: number | null;
+  passed: boolean;
+} {
+  const quiz = typeof params.quizGrade === "number" && Number.isFinite(params.quizGrade) ? params.quizGrade : null;
+  const practiceNumbers = params.practiceGrades.filter((g): g is number => typeof g === "number" && Number.isFinite(g));
+  const practiceAvg = practiceNumbers.length === PERSONAL_CONTROL_PRACTICE_COUNT
+    ? practiceNumbers.reduce((a, b) => a + b, 0) / practiceNumbers.length
+    : null;
+  const practiceAdjusted = practiceAvg === null ? null : (practiceAvg * PERSONAL_CONTROL_PRACTICE_COEFF);
+
+  const finalRaw = (quiz !== null && practiceAdjusted !== null)
+    ? ((quiz + practiceAdjusted) / 2)
+    : null;
+  const finalGrade = finalRaw === null ? null : clampGrade0to12Int(finalRaw);
+  const passed = typeof finalGrade === "number" ? finalGrade >= PERSONAL_CONTROL_PASS_GRADE : false;
+  return { practiceAvg, practiceAdjusted, finalGrade, passed };
+}
+
+function buildTopicsRangeLabel(params: { startTopicIndex: number; endTopicIndex: number }): string {
+  // Human-friendly 1-based indexes in UI.
+  return `${params.startTopicIndex + 1}-${params.endTopicIndex + 1}`;
+}
+
+function buildPrevTopicsTextFromRange(params: { topics: Topic[]; startTopicIndex: number; endTopicIndex: number }): string {
+  const selected = params.topics.filter(t => t.topicIndex >= params.startTopicIndex && t.topicIndex <= params.endTopicIndex);
+  const titles = selected.map(t => String(t.title || "").trim()).filter(Boolean);
+  return titles.join("\n");
+}
+
+function getSequentialCompletedTopicCount(params: {
+  topics: Topic[];
+  countByTopicIndex: Map<number, number>;
+  baseStartTopicIndex: number;
+}): number {
+  let completed = 0;
+  for (const t of params.topics) {
+    if (t.topicIndex < params.baseStartTopicIndex) continue;
+    const required = t.topicIndex === 0 ? 1 : 3;
+    const count = params.countByTopicIndex.get(t.topicIndex) ?? 0;
+    if (count >= required) completed++;
+    else break;
+  }
+  return completed;
+}
+
+async function getLatestGradesByTaskId(params: { userId: number; taskIds: number[] }): Promise<Map<number, Grade>> {
+  const out = new Map<number, Grade>();
+  if (!params.taskIds.length) return out;
+  const grades = await gradeRepo()
+    .createQueryBuilder("grade")
+    .where("grade.user_id = :userId", { userId: params.userId })
+    .andWhere("grade.task_id IN (:...taskIds)", { taskIds: params.taskIds })
+    .orderBy("grade.created_at", "DESC")
+    .getMany();
+  for (const g of grades) {
+    const taskId = typeof (g as any)?.task?.id === "number" ? (g as any).task.id : (g as any)?.task_id;
+    const id = Number(taskId);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    if (!out.has(id)) out.set(id, g);
+  }
+  return out;
+}
 function stripPracticeLikeSectionsFromTheory(rawTheory: string): string {
   const t = normalizeMarkdownText(rawTheory).trim();
   if (!t) return "";
@@ -137,6 +255,48 @@ function stripPracticeHeader(rawPractice: string): string {
   if (!s) return "";
   return s.replace(/^###\s*(Практика|Practice)\b\s*/i, "").replace(/^###\s*(Практичне\s+завдання|Practical\s+task)\b\s*/i, "").trim();
 }
+
+function composeTaskStatementMarkdown(params: {
+  practicalTask: string;
+  inputFormat?: string | null;
+  outputFormat?: string | null;
+  constraints?: string | null;
+}): string {
+  const practical = normalizeMarkdownText(String(params.practicalTask ?? "")).trim();
+  const inputFormat = normalizeMarkdownText(String(params.inputFormat ?? "")).trim();
+  const outputFormat = normalizeMarkdownText(String(params.outputFormat ?? "")).trim();
+  const constraints = normalizeMarkdownText(String(params.constraints ?? "")).trim();
+
+  const sections: string[] = [];
+  if (practical) sections.push(practical);
+
+  // Always include formats so students see the same contract that tests use.
+  sections.push("#### Формат вхідних даних");
+  sections.push(inputFormat || "Вхідних даних немає. (stdin порожній)");
+
+  sections.push("#### Формат вихідних даних");
+  sections.push(outputFormat || "Виведіть результат згідно умови.");
+
+  if (constraints) {
+    sections.push("#### Обмеження");
+    sections.push(constraints);
+  }
+
+  return sections.join("\n\n").trim();
+}
+
+function pickNoInputFixedExpectedOutput(params: {
+  examples?: Array<{ input?: unknown; output?: unknown }>;
+  outputFormat?: unknown;
+}): string | null {
+  const examples = Array.isArray(params.examples) ? params.examples : [];
+  const first = examples.length ? examples[0] : null;
+  const fromExample = first && typeof (first as any).output === "string" ? String((first as any).output).trim() : "";
+  if (fromExample) return fromExample;
+  const fromOutputFormat = typeof params.outputFormat === "string" ? String(params.outputFormat).trim() : "";
+  if (fromOutputFormat) return fromOutputFormat;
+  return null;
+}
 function getTopicTheoryMarkdown(task: Task): string {
   const fromBlock = (task.topic as any)?.theoryBlock?.content;
   const theory = stripPracticeLikeSectionsFromTheory(String(fromBlock ?? ""));
@@ -145,18 +305,134 @@ function getTopicTheoryMarkdown(task: Task): string {
   if (legacy) return legacy;
   return "## Теорія\n\n_Теорія для цієї теми ще не додана. Повідом викладачу або відкрий довідку._";
 }
+
+type TopicTheorySource = "topic.theoryBlock" | "topic.theoryMarkdown" | "fallback";
+function getTopicTheoryInfo(task: Task): {
+  markdown: string;
+  source: TopicTheorySource;
+  theoryBlockId: number | null;
+  theoryBlockUpdatedAt: string | null;
+  blockLength: number;
+  legacyLength: number;
+} {
+  const block = (task.topic as any)?.theoryBlock;
+  const blockContent = stripPracticeLikeSectionsFromTheory(String(block?.content ?? ""));
+  if (blockContent) {
+    return {
+      markdown: blockContent,
+      source: "topic.theoryBlock",
+      theoryBlockId: typeof block?.id === "number" ? block.id : null,
+      theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
+      blockLength: blockContent.length,
+      legacyLength: stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? "")).length
+    };
+  }
+
+  const legacyContent = stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? ""));
+  if (legacyContent) {
+    return {
+      markdown: legacyContent,
+      source: "topic.theoryMarkdown",
+      theoryBlockId: typeof block?.id === "number" ? block.id : null,
+      theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
+      blockLength: stripPracticeLikeSectionsFromTheory(String(block?.content ?? "")).length,
+      legacyLength: legacyContent.length
+    };
+  }
+
+  const fallback = "## Теорія\n\n_Теорія для цієї теми ще не додана. Повідом викладачу або відкрий довідку._";
+  return {
+    markdown: fallback,
+    source: "fallback",
+    theoryBlockId: typeof block?.id === "number" ? block.id : null,
+    theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
+    blockLength: stripPracticeLikeSectionsFromTheory(String(block?.content ?? "")).length,
+    legacyLength: stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? "")).length
+  };
+}
 function computeTaskStatus(task: Task, hasGrade: boolean): TaskStatus {
   if (hasGrade || !!task.completed) return "GRADED";
   if (task.finalCode) return "SUBMITTED";
   return "OPEN";
 }
-function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>) {
+
+function shouldIncludeTheoryInStatement(task: Task): boolean {
+  // Show topic theory only once per topic (on the first task in the topic).
+  // numInTopic is 1-based.
+  const n = typeof task.numInTopic === "number" && Number.isFinite(task.numInTopic) ? task.numInTopic : 1;
+  // For non-topic tasks (e.g., control) keep existing behavior conservative: include theory only when topic exists and it's the first in topic.
+  return !!task.topic && n === 1;
+}
+
+function theoryLooksLikeInputIsTaught(theory: string, lang: "JAVA" | "PYTHON" | "CPP"): boolean {
+  const t = String(theory ?? "");
+  if (!t.trim()) return false;
+  // Detect when stdin/input has been introduced in the curriculum.
+  // We intentionally look for explicit API mentions to avoid false positives.
+  if (lang === "PYTHON") {
+    return /\binput\s*\(/i.test(t) || /\bsys\.stdin\b/i.test(t) || /\breadline\s*\(/i.test(t);
+  }
+  if (lang === "CPP") {
+    return /\bstd::cin\b/i.test(t) || /\bcin\s*>>/i.test(t) || /\bgetline\s*\(/i.test(t);
+  }
+  // JAVA
+  return /\bSystem\.in\b/.test(t) || /\bScanner\s*\(/.test(t) || /\bBufferedReader\b/.test(t) || /\bInputStreamReader\b/.test(t);
+}
+
+function titleLooksLikeInputIsTaught(title: string, lang: "JAVA" | "PYTHON" | "CPP"): boolean {
+  const s = String(title ?? "").toLowerCase();
+  if (!s.trim()) return false;
+  // Titles are much shorter than theory; keep the checks simple and forgiving.
+  if (lang === "PYTHON") return s.includes("input") || s.includes("ввід") || s.includes("вход");
+  if (lang === "CPP") return s.includes("cin") || s.includes("getline") || s.includes("ввід") || s.includes("вивід") || s.includes("вход") || s.includes("вывод");
+  return s.includes("scanner") || s.includes("system.in") || s.includes("bufferedreader") || s.includes("ввід") || s.includes("вход");
+}
+
+function isStdinAllowedForTopic(params: { allTopics: Topic[]; lang: "JAVA" | "PYTHON" | "CPP"; topicIndex: number }): boolean {
+  for (const t of params.allTopics) {
+    if (t.topicIndex > params.topicIndex) break;
+    const theory = String((t as any)?.theoryBlock?.content ?? (t as any)?.theoryMarkdown ?? "");
+    if (theoryLooksLikeInputIsTaught(theory, params.lang)) return true;
+    // When we only fetched topic metadata (no theory) we still want stdin policy to work.
+    if (titleLooksLikeInputIsTaught(String((t as any)?.title ?? ""), params.lang)) return true;
+  }
+  return false;
+}
+
+function sanitizeMetaOutputFormatInStatement(statementMarkdown: string, ioType: TaskIoType | null | undefined): string {
+  const s = String(statementMarkdown ?? "");
+  if (!s) return s;
+  const re = /(Програма\s+скомпілювал[а-яіїє]*\s+та\s+виконал[а-яіїє]*\s+без\s+помилок\.)|(Program\s+compiled\s+and\s+ran\s+without\s+errors\.?)/gi;
+  if (!re.test(s)) return s;
+
+  const replacement = (() => {
+    if (ioType === "NO_INPUT_FREE_OUTPUT") return "Виведіть будь-який непорожній рядок (без підказок типу \"Відповідь:\").";
+    if (ioType === "NO_INPUT_FIXED_OUTPUT") return "Виведіть точний результат згідно умови (stdout має збігатися символ у символ).";
+    return "Виведіть результат згідно умови (без додаткових пояснювальних фраз у виводі).";
+  })();
+
+  // Replace only the meta message itself; keep the rest of the statement intact.
+  return s.replace(re, replacement);
+}
+
+function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: { includeTheoryDebug?: boolean }) {
   const hasGrade = gradeTaskIds ? gradeTaskIds.has(task.id) : !!task.completed;
   const status: TaskStatus = computeTaskStatus(task, hasGrade);
-  const rawPractice = (task.descriptionMarkdown || task.description || "").toString();
-  const theoryMarkdown = getTopicTheoryMarkdown(task) || "";
-  const practiceText = stripPracticeHeader(rawPractice);
-  const normalizedDescription = `${theoryMarkdown}\n\n### Практика\n\n${practiceText || "_Практичне завдання ще не додано._"}`.trim();
+  const rawPractice = sanitizeMetaOutputFormatInStatement((task.descriptionMarkdown || task.description || "").toString(), (task as any).ioType);
+  const isControlStandalone = task.type === "CONTROL" && !task.topic;
+
+  const includeTheory = isControlStandalone ? false : shouldIncludeTheoryInStatement(task);
+  const theoryInfo = includeTheory ? getTopicTheoryInfo(task) : null;
+  const theoryMarkdown = includeTheory ? (theoryInfo?.markdown || "") : "";
+  const practiceText = isControlStandalone ? normalizeMarkdownText(rawPractice).trim() : stripPracticeHeader(rawPractice);
+  const normalizedDescription = isControlStandalone
+    ? (practiceText || "_Контрольне завдання ще не додано._")
+    : (includeTheory
+        ? `${theoryMarkdown}\n\n### Практика\n\n${practiceText || "_Практичне завдання ще не додано._"}`.trim()
+        : `### Практика\n\n${practiceText || "_Практичне завдання ще не додано._"}`.trim());
+
+  const topicId = typeof (task.topic as any)?.id === "number" ? (task.topic as any).id : null;
+  const topicTitle = typeof (task.topic as any)?.title === "string" ? (task.topic as any).title : null;
 
   const starterDecoded = decodeMultiFileSubmissionV1(task.template);
   const starterFiles = starterDecoded?.files ?? null;
@@ -172,8 +448,25 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>) {
   return {
     id: task.id,
     title: task.title,
+    topicId,
+    topicTitle,
     descriptionMarkdown: normalizedDescription,
-    theoryMarkdown,
+    theoryMarkdown: theoryMarkdown || undefined,
+    ...(opts?.includeTheoryDebug
+      ? {
+          theoryDebug: {
+            included: includeTheory,
+            topicId,
+            topicTitle,
+            source: theoryInfo?.source ?? null,
+            theoryBlockId: theoryInfo?.theoryBlockId ?? null,
+            theoryBlockUpdatedAt: theoryInfo?.theoryBlockUpdatedAt ?? null,
+            blockLength: theoryInfo?.blockLength ?? 0,
+            legacyLength: theoryInfo?.legacyLength ?? 0,
+            serverTime: new Date().toISOString()
+          }
+        }
+      : {}),
     practiceText,
     starterCode,
     starterFiles: starterFiles ?? undefined,
@@ -190,6 +483,336 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>) {
     language: task.lang
   };
 }
+
+async function generateAndPersistPersonalProgrammingTask(params: {
+  requestStartedAt: number;
+  requestBudgetMs: number;
+  requestId?: string;
+  userLanguage: "uk" | "en";
+  userId: number;
+  lang: "JAVA" | "PYTHON" | "CPP";
+  difus: number;
+  type: TaskType;
+  topic: Topic | null;
+  topicIndex: number;
+  numInTopic: number;
+  requiredTasksInThisGroup: number;
+  // Prompt context
+  topicTitleForAi: string;
+  theoryForAi: string;
+  prevTopicsText?: string;
+  subtitle?: string;
+  // Uniqueness context
+  existingTasksForContext: Array<{ id: number; title?: string | null; description?: string | null; numInTopic?: number | null }>;
+  allTopics: Topic[];
+  stdinPolicyTopicIndex: number;
+}): Promise<Task> {
+  const stdinAllowed = isStdinAllowedForTopic({
+    allTopics: params.allTopics,
+    lang: params.lang,
+    topicIndex: params.stdinPolicyTopicIndex
+  });
+  const generationAllowedIoTypes = stdinAllowed
+    ? (undefined)
+    : (["NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
+
+  const previousTasksBrief = params.existingTasksForContext
+    .map(t => {
+      const practice = stripPracticeHeader(String((t as any).description || "")).replace(/\s+/g, " ").trim();
+      const short = practice.length > 240 ? practice.slice(0, 240) + "…" : practice;
+      return `- ${String((t as any).title || "(без назви)").trim()}: ${short}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  const previousTaskPracticesForUniq = params.existingTasksForContext
+    .map(t => stripPracticeHeader(String((t as any).description || "")).trim())
+    .filter(s => s.length > 0)
+    .slice(0, 8);
+  const previousTaskTitlesForUniq = params.existingTasksForContext
+    .map(t => String((t as any).title || "").trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
+  const remainingBeforeTask = params.requestBudgetMs - (Date.now() - params.requestStartedAt);
+  const disableDeadlines = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
+  // Allow increasing task-generation budget when proxy timeout is higher.
+  // Default: ~75% of the total request budget, capped to a reasonable ceiling.
+  const TASK_BUDGET_CAP_MS = (() => {
+    const raw = Number(process.env.TASKS_GENERATE_TASK_BUDGET_MS);
+    const fallback = Math.floor(params.requestBudgetMs * 0.75);
+    const v = Number.isFinite(raw) ? raw : fallback;
+    return Math.max(10_000, Math.min(50_000, Math.floor(v)));
+  })();
+  const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
+
+  const aiTaskResult = await safeAICall('generateTask', {
+    topicTitle: params.topicTitleForAi,
+    theory: String(params.theoryForAi || "Контрольна робота. Теорії не потрібно.").trim() || "Контрольна робота.",
+    lang: params.lang,
+    topicIndex: params.topicIndex,
+    numInTopic: params.numInTopic,
+    isFirstTask: params.numInTopic === 1,
+    difus: params.difus,
+    userId: params.userId,
+    topicId: params.topic?.id,
+    semanticRetries: 1,
+    allowedIoTypes: generationAllowedIoTypes,
+    previousTasks: previousTasksBrief,
+    previousTaskPractices: previousTaskPracticesForUniq,
+    previousTaskTitles: previousTaskTitlesForUniq,
+    ...(params.prevTopicsText ? { prevTopics: params.prevTopicsText, isControl: params.type === "CONTROL" } : {})
+  } as any, {
+    language: params.userLanguage,
+    requestId: params.requestId,
+    maxAttempts: 2,
+    ...(disableDeadlines ? {} : { totalTimeoutMs: taskBudgetMs })
+  });
+  if (!aiTaskResult.success) {
+    // Let caller translate to HTTP.
+    throw aiTaskResult.error;
+  }
+  const aiTask = aiTaskResult.data;
+  const practicalOnly = String((aiTask as any).practicalTask ?? "").trim();
+  // Use a single, stable template per language (AI templates often drift and can break expectations).
+  const template = (() => {
+    if (params.lang === "PYTHON") {
+      return [
+        "def main():",
+        "    # TODO: implement the solution according to the statement",
+        "    pass",
+        "",
+        "if __name__ == \"__main__\":",
+        "    main()"
+      ].join("\n");
+    }
+    if (params.lang === "CPP") {
+      return [
+        "#include <bits/stdc++.h>",
+        "using namespace std;",
+        "",
+        "int main() {",
+        "    ios::sync_with_stdio(false);",
+        "    cin.tie(nullptr);",
+        "",
+        "    // TODO: implement the solution according to the statement",
+        "",
+        "    return 0;",
+        "}"
+      ].join("\n");
+    }
+    return [
+      "public class Main {",
+      "  public static void main(String[] args) {",
+      "    // TODO: implement the solution according to the statement",
+      "  }",
+      "}"
+    ].join("\n");
+  })();
+
+  const knownIoTypes = new Set(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
+  const aiIoRaw = typeof (aiTask as any)?.ioType === "string" ? String((aiTask as any).ioType).trim() : "";
+  const inferredNeedsInput = inferNeedsInput({
+    taskDescription: practicalOnly,
+    aiInputFormat: (aiTask as any)?.inputFormat
+  });
+  const deterministicNoInput = (params.lang === "PYTHON" && params.topic && isIntroPythonFixedSumTask(practicalOnly, params.topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
+  const inferred = (knownIoTypes.has(aiIoRaw as any)
+    ? (aiIoRaw as any)
+    : (inferredNeedsInput
+        ? "STDIN_STDOUT"
+        : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT"))) as TaskIoType;
+
+  const ioType: TaskIoType = (!stdinAllowed && inferred === "STDIN_STDOUT")
+    ? (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
+    : inferred;
+
+  const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
+    examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
+    outputFormat: (aiTask as any)?.outputFormat
+  }) : null;
+
+  const statementMarkdown = composeTaskStatementMarkdown({
+    practicalTask: practicalOnly,
+    inputFormat: ioType === "STDIN_STDOUT" ? (aiTask as any)?.inputFormat : "Вхідних даних немає.",
+    outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
+    constraints: (aiTask as any)?.constraints
+  });
+
+  const aiTitleRaw = typeof (aiTask as any)?.title === "string" ? String((aiTask as any).title).trim() : "";
+  const baseTitle = aiTitleRaw || (params.type === "CONTROL" ? `Контрольна практика` : `Практика: ${params.topicTitleForAi}`);
+  const titlePrefix = params.requiredTasksInThisGroup > 1 ? `(${params.numInTopic}/${params.requiredTasksInThisGroup}) ` : "";
+  const uniqueTitle = `${titlePrefix}${baseTitle}`.trim();
+
+  const task = taskRepo().create({
+    user: { id: params.userId } as any,
+    topic: params.topic ? ({ id: params.topic.id } as any) : null,
+    title: uniqueTitle,
+    subtitle: typeof params.subtitle === "string" ? params.subtitle : "",
+    description: statementMarkdown,
+    descriptionMarkdown: statementMarkdown,
+    template,
+    draftCode: "",
+    finalCode: "",
+    completed: 0,
+    lang: params.lang,
+    difus: params.difus,
+    numInTopic: params.numInTopic,
+    topicIndex: params.topicIndex,
+    type: params.type,
+    ioType
+  });
+  const saved = await taskRepo().save(task);
+
+  const needsInput = ioType === "STDIN_STDOUT";
+  const REQUIRED_TEST_COUNT = needsInput ? 12 : 1;
+  let testExamples: Array<{ input: string; output: string }> = [];
+
+  if (ioType === "NO_INPUT_FREE_OUTPUT") {
+    testExamples = [{ input: "", output: "(any non-empty output)" }];
+  }
+  if (testExamples.length === 0 && ioType === "NO_INPUT_FIXED_OUTPUT") {
+    if (fixedNoInputExpected && fixedNoInputExpected.trim().length > 0) {
+      testExamples = [{ input: "", output: fixedNoInputExpected.trim() }];
+    }
+  }
+  const deterministicIntro = params.lang === "PYTHON" && params.topic && isIntroPythonFixedSumTask(practicalOnly, params.topic.title);
+  if (testExamples.length === 0 && deterministicIntro) {
+    testExamples = [{ input: "", output: "8" }];
+  } else {
+    const expected = computeDeterministicNoInputExpectedOutput(practicalOnly);
+    if (testExamples.length === 0 && expected !== null) testExamples = [{ input: "", output: expected }];
+  }
+
+  const aiExamples = Array.isArray((aiTask as any)?.examples)
+    ? (aiTask as any).examples
+        .map((ex: any) => ({
+          input: needsInput ? String(ex?.input ?? "") : "",
+          output: String(ex?.output ?? "")
+        }))
+        .filter((ex: { input: string; output: string }) => {
+          if (typeof ex.output !== "string" || ex.output.trim().length === 0) return false;
+          if (needsInput && String(ex.input ?? "").trim().length === 0) return false;
+          return true;
+        })
+    : [];
+
+  if (testExamples.length === 0 && aiExamples.length > 0) {
+    testExamples = aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length)));
+  }
+
+  if (testExamples.length < REQUIRED_TEST_COUNT) {
+    const remainingBeforeTests = params.requestBudgetMs - (Date.now() - params.requestStartedAt);
+    const testsBudgetMs = Math.max(4_000, Math.min(10_000, remainingBeforeTests - 1500));
+    const remainingCount = REQUIRED_TEST_COUNT - testExamples.length;
+
+    // Same protection as /tasks/generate: if we're near the nginx timeout, do not start test generation.
+    // Use task examples instead so we can return a task quickly.
+    const SHOULD_SKIP_TESTDATA_MS = 6_000;
+    if (remainingBeforeTests < SHOULD_SKIP_TESTDATA_MS) {
+      if (aiExamples.length === 0 && testExamples.length === 0) {
+        await taskRepo().remove(saved);
+        throw {
+          statusCode: 504,
+          message: "AI_GENERATION_FAILED: Not enough time budget remaining to generate tests",
+          error: "REQUEST_DEADLINE_EXCEEDED",
+          details: {
+            remainingBeforeTests,
+            lang: params.lang,
+            mode: "generateTestData"
+          }
+        };
+      }
+
+      logger.warn("[tasks] skipping generateTestData (control) due to low remaining request budget", {
+        requestId: params.requestId,
+        userId: params.userId,
+        lang: params.lang,
+        remainingBeforeTests
+      });
+
+      const merged = [...testExamples, ...aiExamples];
+      const seen = new Set<string>();
+      const deduped: typeof testExamples = [];
+      for (const ex of merged) {
+        const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(ex);
+      }
+      testExamples = deduped.length ? deduped : aiExamples.slice(0, 1);
+    } else {
+
+    const testDataResult = await safeAICall('generateTestData', {
+      taskDescription: statementMarkdown || practicalOnly,
+      taskTitle: params.topicTitleForAi,
+      lang: params.lang,
+      count: remainingCount,
+      userId: params.userId
+    }, {
+      expectedCount: remainingCount,
+      language: params.userLanguage,
+      requestId: params.requestId,
+      maxAttempts: 1,
+      ...(disableDeadlines ? {} : { totalTimeoutMs: testsBudgetMs })
+    });
+    if (!testDataResult.success) {
+      const status = Number(testDataResult.error?.statusCode ?? 0);
+      const canFallback = status === 429 || status === 503 || status === 504;
+      if (!canFallback) {
+        await taskRepo().remove(saved);
+        throw testDataResult.error;
+      }
+      if (aiExamples.length === 0) {
+        await taskRepo().remove(saved);
+        throw testDataResult.error;
+      }
+      logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
+        requestId: params.requestId,
+        userId: params.userId,
+        lang: params.lang,
+        status
+      });
+      testExamples = aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length)));
+    } else {
+      const additional = (testDataResult.data || []).map((ex: any) => ({
+        input: String(ex?.input ?? ""),
+        output: String(ex?.output ?? "")
+      }));
+      const seen = new Set<string>();
+      const merged: typeof testExamples = [];
+      for (const ex of [...testExamples, ...additional]) {
+        const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(ex);
+        if (merged.length >= REQUIRED_TEST_COUNT) break;
+      }
+      testExamples = merged;
+    }
+    }
+  }
+
+  const pointsByIndex: number[] = (() => {
+    const n = Math.max(1, testExamples.length);
+    const totalPoints = 12;
+    if (n === 1) return [totalPoints];
+    const base = Math.floor(totalPoints / n);
+    const rem = totalPoints % n;
+    const arr = new Array(n).fill(base);
+    for (let i = 0; i < rem; i++) arr[i] = arr[i] + 1;
+    return arr;
+  })();
+
+  const newTestData = testExamples.map((ex, idx) => testDataRepo().create({
+    input: ex.input || "",
+    expectedOutput: ex.output || "",
+    points: pointsByIndex[idx] ?? 1,
+    personalTask: { id: saved.id } as any
+  }));
+  await testDataRepo().save(newTestData);
+  return saved;
+}
 tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId) {
@@ -197,6 +820,13 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
         message: "UNAUTHORIZED"
       });
     }
+    const debugTheoryRequested = ["1", "true", "yes"].includes(String((req.query as any)?.debugTheory ?? "").toLowerCase());
+    const includeTheoryDebug = await (async () => {
+      if (!debugTheoryRequested) return false;
+      const u = await userRepo().findOne({ where: { id: req.userId } });
+      return u?.role === "SYSTEM_ADMIN";
+    })();
+
     const tasks = await taskRepo().find({
       where: {
         user: {
@@ -230,7 +860,8 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
         if (typeof tid === "number") gradeTaskIds.add(tid);
       }
     }
-    return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds)));
+    if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
+    return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds, { includeTheoryDebug })));
   } catch (error) {
     logger.error("[tasks] GET /tasks error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
@@ -249,6 +880,14 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
         message: "UNAUTHORIZED"
       });
     }
+
+    const debugTheoryRequested = ["1", "true", "yes"].includes(String((req.query as any)?.debugTheory ?? "").toLowerCase());
+    const includeTheoryDebug = await (async () => {
+      if (!debugTheoryRequested) return false;
+      const u = await userRepo().findOne({ where: { id: req.userId } });
+      return u?.role === "SYSTEM_ADMIN";
+    })();
+
     const task = await taskRepo().findOne({
       where: {
         id,
@@ -273,20 +912,310 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
     });
     const gradeTaskIds = new Set<number>();
     if (grade) gradeTaskIds.add(task.id);
-    return res.json(mapTaskToDto(task, gradeTaskIds));
+    if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
+    return res.json(mapTaskToDto(task, gradeTaskIds, { includeTheoryDebug }));
   } catch {
     return res.status(500).json({
       message: "Internal server error"
     });
   }
 });
+
+// Personal control work: quiz task helpers
+tasksRouter.get("/:id/quiz", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const task = await taskRepo().findOne({
+      where: { id, user: { id: req.userId } },
+      select: ["id", "title", "type", "subtitle", "template", "completed"] as any
+    });
+    if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    if (!isPersonalControlQuizTask(task)) return res.status(400).json({ message: "TASK_IS_NOT_QUIZ" });
+
+    let quiz: any[];
+    try {
+      quiz = JSON.parse(String(task.template || ""));
+    } catch {
+      return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
+    }
+    if (!Array.isArray(quiz) || quiz.length === 0) return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
+
+    const questions = quiz.map((q, i) => {
+      const rawOptions = Array.isArray((q as any).options)
+        ? {
+            А: (q as any).options[0] || "",
+            Б: (q as any).options[1] || "",
+            В: (q as any).options[2] || "",
+            Г: (q as any).options[3] || "",
+            Д: (q as any).options[4] || ""
+          }
+        : ((q as any).options || { А: "", Б: "", В: "", Г: "", Д: "" });
+      return {
+        index: i,
+        question: (q as any).question || (q as any).q || "",
+        options: rawOptions
+      };
+    });
+
+    return res.json({
+      taskId: task.id,
+      title: task.title,
+      count: questions.length,
+      questions
+    });
+  } catch (error: any) {
+    logger.error("[tasks] GET /:id/quiz error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const answers = Array.isArray((req.body as any)?.answers) ? (req.body as any).answers : null;
+    if (!answers || !Array.isArray(answers)) {
+      return res.status(400).json({ message: "ANSWERS_REQUIRED" });
+    }
+
+    const task = await taskRepo().findOne({
+      where: { id, user: { id: req.userId } },
+      select: ["id", "title", "type", "subtitle", "template", "completed", "lang"] as any
+    });
+    if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    if (!isPersonalControlQuizTask(task)) return res.status(400).json({ message: "TASK_IS_NOT_QUIZ" });
+
+    const existingGrade = await gradeRepo().findOne({
+      where: { user: { id: req.userId }, task: { id: task.id } },
+      order: { createdAt: "DESC" }
+    });
+    if (existingGrade) return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
+
+    let quiz: any[];
+    try {
+      quiz = JSON.parse(String(task.template || ""));
+    } catch {
+      return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
+    }
+    if (!Array.isArray(quiz) || quiz.length === 0) return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
+
+    let correctAnswers = 0;
+    const totalQuestions = quiz.length;
+    const reviewQuestions: any[] = [];
+
+    const answerAt = (i: number) => (answers as any[])[i];
+
+    for (let i = 0; i < quiz.length; i++) {
+      const question = quiz[i];
+      const studentAnswer = answerAt(i);
+      const correctAnswer = (question as any).correct;
+
+      let normalizedCorrect: string;
+      if (typeof correctAnswer === "number") {
+        normalizedCorrect = ["А", "Б", "В", "Г", "Д"][correctAnswer] || "А";
+      } else {
+        normalizedCorrect = String(correctAnswer).toUpperCase();
+      }
+
+      const normalizedStudent = String(studentAnswer || "").toUpperCase().trim();
+      const isCorrect = normalizedStudent === normalizedCorrect;
+      if (isCorrect) correctAnswers++;
+
+      const rawOptions = Array.isArray((question as any).options)
+        ? {
+            А: (question as any).options[0] || "",
+            Б: (question as any).options[1] || "",
+            В: (question as any).options[2] || "",
+            Г: (question as any).options[3] || "",
+            Д: (question as any).options[4] || ""
+          }
+        : ((question as any).options || { А: "", Б: "", В: "", Г: "", Д: "" });
+
+      reviewQuestions.push({
+        index: i,
+        question: (question as any).question || (question as any).q || "",
+        options: rawOptions,
+        correct: normalizedCorrect,
+        student: normalizedStudent || null,
+        isCorrect
+      });
+    }
+
+    const quizGrade = clampGrade0to12Int(Math.round(correctAnswers / totalQuestions * 12));
+
+    // Persist submission
+    await taskRepo().update({ id: task.id } as any, {
+      completed: 1,
+      finalCode: JSON.stringify(answers)
+    } as any);
+
+    const reviewJson = (() => {
+      try {
+        return JSON.stringify({
+          version: 1,
+          correctAnswers,
+          totalQuestions,
+          questions: reviewQuestions
+        });
+      } catch {
+        return null;
+      }
+    })();
+
+    const grade = gradeRepo().create({
+      user: { id: req.userId } as any,
+      task: { id: task.id } as any,
+      total: quizGrade,
+      workScore: 0,
+      optimizationScore: 0,
+      integrityScore: 0,
+      aiFeedback: `Тест: правильних відповідей ${correctAnswers}/${totalQuestions}. Оцінка: ${quizGrade}/12.`,
+      codeSnapshot: JSON.stringify(answers),
+      comparisonFeedback: reviewJson,
+      previousGradeId: null
+    });
+    const savedGrade = await gradeRepo().save(grade);
+
+    // If this quiz belongs to a control batch, compute current summary.
+    const batchPrefix = parsePersonalControlBatchPrefix((task as any).subtitle);
+    let summary: any = null;
+    if (batchPrefix) {
+      const batchTasks = await taskRepo()
+        .createQueryBuilder("t")
+        .where("t.user_id = :userId", { userId: req.userId })
+        .andWhere("t.lang = :lang", { lang: task.lang })
+        .andWhere("t.type = :type", { type: "CONTROL" })
+        .andWhere("t.subtitle LIKE :pref", { pref: `${batchPrefix}%` })
+        .getMany();
+      const practice = batchTasks.filter(t => typeof (t as any).subtitle === "string" && String((t as any).subtitle).includes("|PRACTICE|"));
+
+      const practiceGrades: Array<number | null> = [];
+      for (const pt of practice) {
+        const g = await gradeRepo().findOne({
+          where: { user: { id: req.userId }, task: { id: pt.id } },
+          order: { createdAt: "DESC" }
+        });
+        practiceGrades.push(g?.total ?? null);
+      }
+      // Pad to exact length for formula.
+      while (practiceGrades.length < PERSONAL_CONTROL_PRACTICE_COUNT) practiceGrades.push(null);
+
+      const calc = computePersonalControlFinalGrade({ quizGrade, practiceGrades: practiceGrades.slice(0, PERSONAL_CONTROL_PRACTICE_COUNT) });
+      summary = {
+        quizGrade,
+        practiceAvg: calc.practiceAvg,
+        practiceAdjusted: calc.practiceAdjusted,
+        finalGrade: calc.finalGrade,
+        passed: calc.passed,
+        passGrade: PERSONAL_CONTROL_PASS_GRADE,
+        maxGrade: 12
+      };
+    }
+
+    return res.json({
+      message: "QUIZ_SUBMITTED",
+      grade: {
+        id: (savedGrade as any).id,
+        total: quizGrade,
+        correctAnswers,
+        totalQuestions
+      },
+      review: {
+        version: 1,
+        correctAnswers,
+        totalQuestions,
+        questions: reviewQuestions
+      },
+      summary
+    });
+  } catch (error: any) {
+    logger.error("[tasks] POST /:id/submit-quiz error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+tasksRouter.get("/:id/control-summary", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const task = await taskRepo().findOne({
+      where: { id, user: { id: req.userId } },
+      select: ["id", "type", "subtitle", "lang"] as any
+    });
+    if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
+
+    const batchPrefix = parsePersonalControlBatchPrefix((task as any).subtitle);
+    if (!batchPrefix) return res.status(400).json({ message: "TASK_IS_NOT_CONTROL_BATCH" });
+
+    const batchTasks = await taskRepo()
+      .createQueryBuilder("t")
+      .where("t.user_id = :userId", { userId: req.userId })
+      .andWhere("t.lang = :lang", { lang: task.lang })
+      .andWhere("t.type = :type", { type: "CONTROL" })
+      .andWhere("t.subtitle LIKE :pref", { pref: `${batchPrefix}%` })
+      .orderBy("t.createdAt", "ASC")
+      .getMany();
+
+    const quizTask = batchTasks.find(t => isPersonalControlQuizTask(t));
+    const practice = batchTasks.filter(t => typeof (t as any).subtitle === "string" && String((t as any).subtitle).includes("|PRACTICE|"));
+
+    const quizGradeRow = quizTask
+      ? await gradeRepo().findOne({ where: { user: { id: req.userId }, task: { id: quizTask.id } }, order: { createdAt: "DESC" } })
+      : null;
+    const quizGrade = quizGradeRow?.total ?? null;
+
+    const practiceGrades: Array<number | null> = [];
+    for (const pt of practice) {
+      const g = await gradeRepo().findOne({ where: { user: { id: req.userId }, task: { id: pt.id } }, order: { createdAt: "DESC" } });
+      practiceGrades.push(g?.total ?? null);
+    }
+    while (practiceGrades.length < PERSONAL_CONTROL_PRACTICE_COUNT) practiceGrades.push(null);
+
+    const calc = computePersonalControlFinalGrade({ quizGrade: typeof quizGrade === "number" ? quizGrade : null, practiceGrades: practiceGrades.slice(0, PERSONAL_CONTROL_PRACTICE_COUNT) });
+
+    const isCompleted = typeof calc.finalGrade === "number";
+    return res.json({
+      batch: batchPrefix,
+      quizTaskId: quizTask?.id ?? null,
+      practiceTaskIds: practice.map(t => t.id),
+      quizGrade,
+      practiceGrades: practiceGrades.slice(0, PERSONAL_CONTROL_PRACTICE_COUNT),
+      practiceAvg: calc.practiceAvg,
+      practiceAdjusted: calc.practiceAdjusted,
+      finalGrade: calc.finalGrade,
+      passed: calc.passed,
+      passGrade: PERSONAL_CONTROL_PASS_GRADE,
+      maxGrade: 12,
+      completed: isCompleted
+    });
+  } catch (error: any) {
+    logger.error("[tasks] GET /:id/control-summary error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const requestStartedAt = Date.now();
-    // nginx default proxy_read_timeout is often 60s; keep some buffer.
-    const REQUEST_BUDGET_MS = 55_000;
+    // nginx proxy_read_timeout is often 30s..60s.
+    // Keep backend budgets below that so we return JSON instead of nginx HTML 504.
+    // Override with env TASKS_GENERATE_BUDGET_MS when you control the proxy timeout.
+    const REQUEST_BUDGET_MS = (() => {
+      const raw = Number(process.env.TASKS_GENERATE_BUDGET_MS);
+      const v = Number.isFinite(raw) ? raw : 45_000;
+      return Math.max(10_000, Math.min(55_000, Math.floor(v)));
+    })();
+    const DISABLE_AI_DEADLINES = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
     const userId = req.userId!;
-    const lang = req.lang as "JAVA" | "PYTHON" || "JAVA";
+    const rawLang = String(req.lang ?? "").toUpperCase().trim();
+    const lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
     const user = await userRepo().findOne({
       where: {
@@ -298,48 +1227,42 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     });
 
     const masteredUntilTopicIndex = (() => {
-      const raw = lang === "JAVA" ? (user as any).placementMasteredUntilTopicIndexJava : (user as any).placementMasteredUntilTopicIndexPython;
+      const raw = lang === "JAVA"
+        ? (user as any).placementMasteredUntilTopicIndexJava
+        : lang === "PYTHON"
+          ? (user as any).placementMasteredUntilTopicIndexPython
+          : null;
       const v = raw === null || raw === undefined ? -1 : Number(raw);
       if (!Number.isFinite(v)) return -1;
       return Math.max(-1, Math.floor(v));
     })();
-    const tasks = await taskRepo().find({
-      where: {
-        user: {
-          id: userId
-        },
-        lang
-      },
-      relations: ["user", "topic"]
-    });
-    for (const t of tasks) {
-      if (t.completed) continue;
-      const g = await gradeRepo().findOne({
-        where: {
-          user: {
-            id: userId
-          },
-          task: {
-            id: t.id
-          }
-        }
+    // Fast blocking check: if there exists an unfinished task without a grade, do not generate a new one.
+    // Avoid N+1 queries over tasks/grades.
+    const blocking = await taskRepo()
+      .createQueryBuilder("task")
+      .leftJoin("task.grades", "grade")
+      .where("task.user_id = :userId", { userId })
+      .andWhere("task.lang = :lang", { lang })
+      .andWhere("task.completed = 0")
+      .andWhere("grade.id IS NULL")
+      .orderBy("task.createdAt", "ASC")
+      .select(["task.id", "task.type", "task.subtitle"])
+      .getOne();
+    if (blocking) {
+      const isControlBatch = blocking.type === "CONTROL" && !!parsePersonalControlBatchPrefix((blocking as any).subtitle);
+      return res.status(400).json({
+        status: "blocked",
+        message: isControlBatch ? "COMPLETE_CONTROL_WORK" : "COMPLETE_PREVIOUS_TASK",
+        taskId: blocking.id
       });
-      if (!g) {
-        return res.status(400).json({
-          status: "blocked",
-          message: "COMPLETE_PREVIOUS_TASK",
-          taskId: t.id
-        });
-      }
     }
+    // IMPORTANT: do NOT eagerly load theory blocks for all topics here.
+    // For large curricula this can become a heavy query and slow down /generate enough to hit nginx timeouts.
+    // We only need topic metadata for sequencing/selection; theory is loaded only for the chosen topic.
     const topics = await topicRepo().find({
-      where: {
-        lang
-      },
-      order: {
-        topicIndex: "ASC"
-      },
-      relations: ["theoryBlock"]
+      where: { lang },
+      order: { topicIndex: "ASC" },
+      select: ["id", "title", "topicIndex", "lang"] as any
     });
     if (!topics.length) return res.status(404).json({
       status: "error",
@@ -347,19 +1270,162 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     });
     const REQUIRED_TASKS_FOR_INTRO_TOPIC = 1;
     const REQUIRED_TASKS_FOR_REGULAR_TOPIC = 3;
+    // Count tasks per topicIndex in one query (avoids per-topic COUNT()).
+    const rawCounts = await taskRepo()
+      .createQueryBuilder("task")
+      .select("task.topic_index", "topicIndex")
+      .addSelect("COUNT(task.id)", "cnt")
+      .where("task.user_id = :userId", { userId })
+      .andWhere("task.lang = :lang", { lang })
+      .andWhere("task.type = :type", { type: "TOPIC" })
+      .groupBy("task.topic_index")
+      .getRawMany();
+    const countByTopicIndex = new Map<number, number>();
+    for (const row of rawCounts) {
+      const idx = Number((row as any)?.topicIndex);
+      const cnt = Number((row as any)?.cnt);
+      if (Number.isFinite(idx) && Number.isFinite(cnt)) countByTopicIndex.set(idx, cnt);
+    }
+
+    // Personal control work insertion: after each 5 fully completed topics (since placement), generate/continue a control work.
+    const baseStartTopicIndex = masteredUntilTopicIndex + 1;
+    const sequentialCompletedTopics = getSequentialCompletedTopicCount({
+      topics,
+      countByTopicIndex,
+      baseStartTopicIndex
+    });
+    const controlDue = sequentialCompletedTopics > 0 && sequentialCompletedTopics % PERSONAL_CONTROL_BATCH_SIZE === 0;
+    if (controlDue) {
+      const segmentIndex = Math.floor(sequentialCompletedTopics / PERSONAL_CONTROL_BATCH_SIZE) - 1;
+      const startTopicIndex = baseStartTopicIndex + segmentIndex * PERSONAL_CONTROL_BATCH_SIZE;
+      const endTopicIndex = startTopicIndex + PERSONAL_CONTROL_BATCH_SIZE - 1;
+      const batchPrefix = buildPersonalControlBatchPrefix({ lang, startTopicIndex, endTopicIndex });
+      const batchTasks = await taskRepo()
+        .createQueryBuilder("task")
+        .where("task.user_id = :userId", { userId })
+        .andWhere("task.lang = :lang", { lang })
+        .andWhere("task.type = :type", { type: "CONTROL" })
+        .andWhere("task.subtitle LIKE :pref", { pref: `${batchPrefix}%` })
+        .orderBy("task.createdAt", "ASC")
+        .select(["task.id", "task.title", "task.subtitle", "task.description", "task.numInTopic", "task.topicIndex", "task.type", "task.lang", "task.difus", "task.ioType", "task.template", "task.completed"])
+        .getMany();
+
+      const quizTask = (batchTasks as Task[]).find(t => isPersonalControlQuizTask(t));
+      const practiceTasks = (batchTasks as Task[]).filter(t => typeof (t as any).subtitle === "string" && String((t as any).subtitle).includes("|PRACTICE|"));
+
+      const rangeLabel = buildTopicsRangeLabel({ startTopicIndex, endTopicIndex });
+      const prevTopicsText = buildPrevTopicsTextFromRange({ topics, startTopicIndex, endTopicIndex });
+
+      if (!quizTask) {
+        const remainingBeforeQuiz = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
+        const quizBudgetMs = Math.max(6_000, Math.min(12_000, remainingBeforeQuiz - 6_000));
+        const quizResult = await safeAICall('generateQuiz', {
+          lang,
+          prevTopics: prevTopicsText,
+          count: PERSONAL_CONTROL_QUIZ_COUNT,
+          userId
+        }, {
+          expectedCount: PERSONAL_CONTROL_QUIZ_COUNT,
+          language: userLanguage,
+          requestId: req.requestId,
+          maxAttempts: 2,
+          ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: quizBudgetMs })
+        });
+        if (!quizResult.success) {
+          return sendAIError(res, quizResult.error);
+        }
+
+        const quizTitle = `Контрольна (${rangeLabel}): Тест (${PERSONAL_CONTROL_QUIZ_COUNT} питань)`;
+        const quizDescription = [
+          "### Тест",
+          "",
+          `Ця контрольна охоплює теми ${rangeLabel}:`,
+          prevTopicsText ? prevTopicsText.split("\n").map((t, i) => `${i + 1}. ${t}`).join("\n") : "(теми не визначені)",
+          "",
+          "Оберіть правильну відповідь для кожного питання (А/Б/В/Г/Д)."
+        ].join("\n");
+
+        const quizSaved = await taskRepo().save(taskRepo().create({
+          user: { id: userId } as any,
+          topic: null,
+          title: quizTitle,
+          subtitle: `${batchPrefix}|QUIZ|v1`,
+          description: quizDescription,
+          descriptionMarkdown: quizDescription,
+          template: String(quizResult.data.quizJson),
+          draftCode: "",
+          finalCode: "",
+          completed: 0,
+          lang,
+          difus: 0,
+          numInTopic: 1,
+          topicIndex: endTopicIndex,
+          type: "CONTROL" as TaskType,
+          ioType: "NO_INPUT_FREE_OUTPUT" as TaskIoType
+        })) as any;
+
+        return res.json({
+          status: "ok",
+          task: mapTaskToDto(quizSaved)
+        });
+      }
+
+      if (practiceTasks.length < PERSONAL_CONTROL_PRACTICE_COUNT) {
+        const difus = await getStableDifus(userId, lang, endTopicIndex, userRepo, gradeRepo);
+        const nextPracticeNum = practiceTasks.length + 1;
+        const controlTheoryForAi = [
+          `Контрольна робота (персонал) за темами ${rangeLabel}.`,
+          "Не використовуй поняття, яких ще не було у цих темах.",
+          "Не роби multi-task структур (завдання 1/2/3 в одному).",
+          "Одна задача — одна умова.",
+          "",
+          "Перелік тем:",
+          prevTopicsText
+        ].join("\n").trim();
+
+        try {
+          const saved = await generateAndPersistPersonalProgrammingTask({
+            requestStartedAt,
+            requestBudgetMs: REQUEST_BUDGET_MS,
+            requestId: req.requestId,
+            userLanguage,
+            userId,
+            lang,
+            difus,
+            type: "CONTROL",
+            topic: null,
+            topicIndex: endTopicIndex,
+            numInTopic: nextPracticeNum,
+            requiredTasksInThisGroup: PERSONAL_CONTROL_PRACTICE_COUNT,
+            topicTitleForAi: `Контрольна (${rangeLabel}): Практика`,
+            theoryForAi: controlTheoryForAi,
+            prevTopicsText,
+            subtitle: `${batchPrefix}|PRACTICE|${nextPracticeNum}`,
+            existingTasksForContext: practiceTasks.map(t => ({
+              id: t.id,
+              title: t.title,
+              description: t.description,
+              numInTopic: t.numInTopic
+            })),
+            allTopics: topics,
+            stdinPolicyTopicIndex: endTopicIndex
+          });
+          return res.json({
+            status: "ok",
+            task: mapTaskToDto(saved)
+          });
+        } catch (err: any) {
+          if (err && err.statusCode) return sendAIError(res, err);
+          throw err;
+        }
+      }
+      // If quiz + all practice tasks already exist, /generate can continue to the next topic.
+    }
+
     let topic: Topic | null = null;
     for (const t of topics) {
       if (t.topicIndex <= masteredUntilTopicIndex) continue;
-      const count = await taskRepo().count({
-        where: {
-          user: {
-            id: userId
-          },
-          topic: {
-            id: t.id
-          }
-        }
-      });
+      const count = countByTopicIndex.get(t.topicIndex) ?? 0;
       const required = t.topicIndex === 0 ? REQUIRED_TASKS_FOR_INTRO_TOPIC : REQUIRED_TASKS_FOR_REGULAR_TOPIC;
       if (count < required) {
         topic = t;
@@ -371,7 +1437,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       message: "ALL_TOPICS_COMPLETED"
     });
     const difus = await getStableDifus(userId, lang, topic.topicIndex, userRepo, gradeRepo);
-    const numInTopic = (await taskRepo().count({
+
+    const existingTasksInTopic = await taskRepo().find({
       where: {
         user: {
           id: userId
@@ -379,44 +1446,153 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         topic: {
           id: topic.id
         }
-      }
-    })) + 1;
+      },
+      order: {
+        numInTopic: "ASC"
+      },
+      select: ["id", "title", "description", "numInTopic"] as any
+    });
+    const numInTopic = existingTasksInTopic.length + 1;
     let description = "";
-    let template = lang === "PYTHON" ? "# write code here\n" : ["public class Main {", "  public static void main(String[] args) {", "  }", "}"].join("\n");
-    const topicTheory = stripPracticeLikeSectionsFromTheory(String((topic as any).theoryBlock?.content ?? (topic as any).theoryMarkdown ?? ""));
+    let template = (() => {
+      if (lang === "PYTHON") return "# write code here\n";
+      if (lang === "CPP") {
+        return [
+          "#include <iostream>",
+          "using namespace std;",
+          "",
+          "int main() {",
+          "    ios::sync_with_stdio(false);",
+          "    cin.tie(nullptr);",
+          "",
+          "    // TODO: implement the solution according to the statement",
+          "",
+          "    return 0;",
+          "}"
+        ].join("\n");
+      }
+      return ["public class Main {", "  public static void main(String[] args) {", "  }", "}"].join("\n");
+    })();
+    // Load theory lazily for just this topic.
+    const topicWithTheory = await topicRepo().findOne({
+      where: { id: topic.id } as any,
+      relations: ["theoryBlock"]
+    });
+    const topicTheory = stripPracticeLikeSectionsFromTheory(String((topicWithTheory as any)?.theoryBlock?.content ?? (topicWithTheory as any)?.theoryMarkdown ?? ""));
+
+    const requiredTasksInThisTopic = topic.topicIndex === 0 ? 1 : 3;
+    const stdinAllowed = isStdinAllowedForTopic({
+      allTopics: topics,
+      lang,
+      topicIndex: topic.topicIndex
+    });
+    const generationAllowedIoTypes = stdinAllowed
+      ? (undefined)
+      : (["NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
+
+    const previousTasksBrief = existingTasksInTopic
+      .map(t => {
+        const practice = stripPracticeHeader(String((t as any).description || "")).replace(/\s+/g, " ").trim();
+        const short = practice.length > 240 ? practice.slice(0, 240) + "…" : practice;
+        return `- ${String(t.title || "(без назви)").trim()}: ${short}`;
+      })
+      .filter(Boolean)
+      .join("\n");
+
+    // Structured previous-task context (used for deterministic uniqueness checks in the AI wrapper).
+    const previousTaskPracticesForUniq = existingTasksInTopic
+      .map(t => stripPracticeHeader(String((t as any).description || "")).trim())
+      .filter(s => s.length > 0)
+      .slice(0, 8);
+    const previousTaskTitlesForUniq = existingTasksInTopic
+      .map(t => String((t as any).title || "").trim())
+      .filter(Boolean)
+      .slice(0, 12);
 
     const remainingBeforeTask = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
+    // Allow increasing task-generation budget when proxy timeout is higher.
+    // Default: ~75% of the total request budget, capped to a reasonable ceiling.
+    const TASK_BUDGET_CAP_MS = (() => {
+      const raw = Number(process.env.TASKS_GENERATE_TASK_BUDGET_MS);
+      const fallback = Math.floor(REQUEST_BUDGET_MS * 0.75);
+      const v = Number.isFinite(raw) ? raw : fallback;
+      return Math.max(10_000, Math.min(50_000, Math.floor(v)));
+    })();
     // Keep some budget for test-data generation + DB writes.
-    const taskBudgetMs = Math.max(12_000, Math.min(35_000, remainingBeforeTask - 15_000));
+    // Cap low to avoid nginx 504; generation retries still happen inside this budget.
+    const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
     const aiTaskResult = await safeAICall('generateTask', {
       topicTitle: topic.title,
       theory: topicTheory,
       lang,
+      topicIndex: topic.topicIndex,
       numInTopic,
       isFirstTask: numInTopic === 1,
       difus,
       userId,
       topicId: topic.id,
-      semanticRetries: 0
+      semanticRetries: 1,
+      allowedIoTypes: generationAllowedIoTypes,
+      previousTasks: previousTasksBrief,
+      previousTaskPractices: previousTaskPracticesForUniq,
+      previousTaskTitles: previousTaskTitlesForUniq
     }, {
       language: userLanguage,
       requestId: req.requestId,
-      maxAttempts: 1,
-      totalTimeoutMs: taskBudgetMs
+      maxAttempts: 2,
+      ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: taskBudgetMs })
     });
     if (!aiTaskResult.success) {
       return sendAIError(res, aiTaskResult.error);
     }
     const aiTask = aiTaskResult.data;
-    description = String(aiTask.practicalTask ?? "").trim();
-    template = aiTask.codeTemplate;
+    const practicalOnly = String(aiTask.practicalTask ?? "").trim();
+    // Keep a single stable template per language; ignore AI-provided code templates.
+    // (AI templates often include implementation or drift in structure.)
+    // We still keep codeTemplate restrictions in prompts, but runtime uses our template.
+    // template remains as computed above.
+    const knownIoTypes = new Set(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
+    const aiIoRaw = typeof (aiTask as any)?.ioType === "string" ? String((aiTask as any).ioType).trim() : "";
+    const inferredNeedsInput = inferNeedsInput({
+      taskDescription: practicalOnly,
+      aiInputFormat: (aiTask as any)?.inputFormat
+    });
+    const deterministicNoInput = (lang === "PYTHON" && isIntroPythonFixedSumTask(practicalOnly, topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
+    const inferred = (knownIoTypes.has(aiIoRaw as any)
+      ? (aiIoRaw as any)
+      : (inferredNeedsInput
+          ? "STDIN_STDOUT"
+          : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT"))) as "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
+
+    // If stdin isn't allowed for this topic, never select STDIN_STDOUT.
+    const ioType = (!stdinAllowed && inferred === "STDIN_STDOUT")
+      ? (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
+      : inferred;
+
+    const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
+      examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
+      outputFormat: (aiTask as any)?.outputFormat
+    }) : null;
+    const statementMarkdown = composeTaskStatementMarkdown({
+      practicalTask: practicalOnly,
+      inputFormat: ioType === "STDIN_STDOUT" ? (aiTask as any)?.inputFormat : "Вхідних даних немає.",
+      // For NO_INPUT_FIXED_OUTPUT we want the visible output section to match the exact expected output.
+      outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
+      constraints: (aiTask as any)?.constraints
+    });
+    description = statementMarkdown;
+
+    const aiTitleRaw = typeof (aiTask as any)?.title === "string" ? String((aiTask as any).title).trim() : "";
+    const baseTitle = aiTitleRaw || `Практика: ${topic.title}`;
+    const titlePrefix = requiredTasksInThisTopic > 1 ? `(${numInTopic}/${requiredTasksInThisTopic}) ` : "";
+    const uniqueTitle = `${titlePrefix}${baseTitle}`.trim();
     const task = taskRepo().create({
       user: {
         id: userId
       },
       topic,
-      title: topic.title,
+      title: uniqueTitle,
       subtitle: "",
       description,
       descriptionMarkdown: description,
@@ -428,52 +1604,113 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       difus,
       numInTopic,
       topicIndex: topic.topicIndex,
-      type: "TOPIC" as TaskType
+      type: "TOPIC" as TaskType,
+      ioType
     });
     const saved = await taskRepo().save(task);
-    const needsInput = inferNeedsInput({
-      taskDescription: description,
-      aiInputFormat: (aiTask as any)?.inputFormat
-    });
+    const needsInput = ioType === "STDIN_STDOUT";
     const REQUIRED_TEST_COUNT = needsInput ? 12 : 1;
     let testExamples: Array<{
       input: string;
       output: string;
     }> = [];
-    const deterministicIntro = lang === "PYTHON" && isIntroPythonFixedSumTask(description, topic.title);
-    if (deterministicIntro) {
+    if (ioType === "NO_INPUT_FREE_OUTPUT") {
+      // Free-output tasks: judge will only require non-empty stdout.
+      // We still store a human-friendly placeholder as expected output.
+      testExamples = [{ input: "", output: "(any non-empty output)" }];
+    }
+    if (testExamples.length === 0 && ioType === "NO_INPUT_FIXED_OUTPUT") {
+      // Fixed-output no-input tasks: generate tests deterministically from the exact expected output.
+      // This prevents statement/test mismatches caused by test-data generation hallucinating different constants.
+      if (fixedNoInputExpected && fixedNoInputExpected.trim().length > 0) {
+        testExamples = [{ input: "", output: fixedNoInputExpected.trim() }];
+      }
+    }
+    const deterministicIntro = lang === "PYTHON" && isIntroPythonFixedSumTask(practicalOnly, topic.title);
+    if (testExamples.length === 0 && deterministicIntro) {
       testExamples = [{
         input: "",
         output: "8"
       }];
     } else {
-      const expected = computeDeterministicNoInputExpectedOutput(description);
-      if (expected !== null) testExamples = [{
+      const expected = computeDeterministicNoInputExpectedOutput(practicalOnly);
+      if (testExamples.length === 0 && expected !== null) testExamples = [{
         input: "",
         output: expected
       }];
     }
-    if (testExamples.length === 0) {
-      const taskDescriptionForTests = [
-        description,
-        (aiTask as any)?.inputFormat ? `\n\nФормат вхідних даних:\n${String((aiTask as any).inputFormat).trim()}` : ""
-      ].join("").trim();
+    // Reuse AI-provided examples when possible (can reduce or avoid a separate test-generation call).
+    const aiExamples = Array.isArray((aiTask as any)?.examples)
+      ? (aiTask as any).examples
+          .map((ex: any) => ({
+            // Never allow non-empty stdin for NO_INPUT_* tasks.
+            input: needsInput ? String(ex?.input ?? "") : "",
+            output: String(ex?.output ?? "")
+          }))
+          .filter((ex: { input: string; output: string }) => {
+            if (typeof ex.output !== "string" || ex.output.trim().length === 0) return false;
+            if (needsInput && String(ex.input ?? "").trim().length === 0) return false;
+            return true;
+          })
+      : [];
+
+    // If we still don't have tests, seed from examples.
+    if (testExamples.length === 0 && aiExamples.length > 0) {
+      testExamples = aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length)));
+    }
+
+    if (testExamples.length < REQUIRED_TEST_COUNT) {
+      const taskDescriptionForTests = statementMarkdown || practicalOnly;
 
       const remainingBeforeTests = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
-      const testsBudgetMs = Math.max(8_000, Math.min(18_000, remainingBeforeTests - 2000));
+      const testsBudgetMs = Math.max(4_000, Math.min(10_000, remainingBeforeTests - 1500));
 
+      // If we're close to the nginx timeout, skip test-data generation to guarantee a timely response.
+      // We'll fall back to examples produced by the task generation itself.
+      const SHOULD_SKIP_TESTDATA_MS = 6_000;
+      if (remainingBeforeTests < SHOULD_SKIP_TESTDATA_MS) {
+        const fallbackExamples = aiExamples;
+        if (fallbackExamples.length === 0 && testExamples.length === 0) {
+          await taskRepo().remove(saved);
+          return res.status(503).json({
+            message: "AI_GENERATION_FAILED",
+            error: "Not enough time budget remaining to generate tests, and no examples were available for fallback"
+          });
+        }
+        logger.warn("[tasks] skipping generateTestData due to low remaining request budget", {
+          requestId: req.requestId,
+          userId,
+          topicId: topic.id,
+          lang,
+          remainingBeforeTests
+        });
+
+        // Merge any existing tests with AI examples, then cap to whatever we have.
+        const merged = [...testExamples, ...fallbackExamples];
+        const seen = new Set<string>();
+        const deduped: typeof testExamples = [];
+        for (const ex of merged) {
+          const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          deduped.push(ex);
+        }
+        testExamples = deduped.length ? deduped : (fallbackExamples.slice(0, 1));
+      } else {
+
+      const remainingCount = REQUIRED_TEST_COUNT - testExamples.length;
       const testDataResult = await safeAICall('generateTestData', {
         taskDescription: taskDescriptionForTests || description,
         taskTitle: topic.title,
         lang,
-        count: REQUIRED_TEST_COUNT,
+        count: remainingCount,
         userId
       }, {
-        expectedCount: REQUIRED_TEST_COUNT,
+        expectedCount: remainingCount,
         language: userLanguage,
         requestId: req.requestId,
         maxAttempts: 1,
-        totalTimeoutMs: testsBudgetMs
+        ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: testsBudgetMs })
       });
       if (!testDataResult.success) {
         // If upstream AI is rate-limited/unavailable, fall back to examples produced by the task generation itself.
@@ -485,13 +1722,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           return sendAIError(res, testDataResult.error);
         }
 
-        const examples = Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [];
-        const fallbackExamples = examples
-          .map((ex: any) => ({
-            input: String(ex?.input ?? ""),
-            output: String(ex?.output ?? "")
-          }))
-          .filter((ex: { output: string }) => typeof ex.output === "string" && ex.output.trim().length > 0);
+        const fallbackExamples = aiExamples;
 
         if (fallbackExamples.length === 0) {
           // Should not happen because generateTask validator requires examples, but keep a safe fallback.
@@ -510,10 +1741,21 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
         testExamples = fallbackExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, fallbackExamples.length)));
       } else {
-        testExamples = (testDataResult.data || []).map((ex: any) => ({
+        const additional = (testDataResult.data || []).map((ex: any) => ({
           input: String(ex?.input ?? ""),
           output: String(ex?.output ?? "")
         }));
+        const seen = new Set<string>();
+        const merged: typeof testExamples = [];
+        for (const ex of [...testExamples, ...additional]) {
+          const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(ex);
+          if (merged.length >= REQUIRED_TEST_COUNT) break;
+        }
+        testExamples = merged;
+      }
       }
     }
     // Keep max grade scale (12) stable even if we had to fall back to fewer tests.
@@ -710,8 +1952,15 @@ tasksRouter.post(
     });
   }
 
+  if (isPersonalControlQuizTask(task)) {
+    throw new HttpError(400, "QUIZ_TASK_USE_SUBMIT_QUIZ", {
+      code: "QUIZ_TASK_USE_SUBMIT_QUIZ",
+      expose: true
+    });
+  }
+
   const normalizedFiles = normalizeApiFiles(files);
-  const entryFile = task.lang === "PYTHON" ? "main.py" : "Main.java";
+  const entryFile = task.lang === "PYTHON" ? "main.py" : task.lang === "CPP" ? "main.cpp" : "Main.java";
   const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(code) : null;
   const effectiveFiles = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
   const isMultiFile = effectiveFiles.length > 0;
@@ -817,13 +2066,19 @@ tasksRouter.post(
     errorKind?: string | null;
   }> = [];
   const sorted = [...(task.testData || [])].sort((a, b) => a.id - b.id);
-  const tests = sorted.map(t => ({
+  const effectiveIoType = inferEffectiveIoTypeForPersonalTask(task, sorted);
+  const maxScore = sorted.reduce((sum, t) => sum + (t.points || 1), 0);
+
+  // For free-output tasks we only need to ensure non-empty stdout once.
+  // Collapse to a single test to reduce judge load and keep grading scale (12) stable via weight.
+  const judgedTests = effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? sorted.slice(0, 1) : sorted;
+  const tests = judgedTests.map(t => ({
     id: t.id,
     input: t.input || "",
     output: t.expectedOutput || "",
     hidden: false,
     group: "public",
-    weight: t.points || 1
+    weight: effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (t.points || 1)
   }));
   const judgeLang = task.lang === "JAVA" ? "java" : task.lang === "PYTHON" ? "python" : "cpp";
   const defaultLimitsByLang = {
@@ -843,6 +2098,9 @@ tasksRouter.post(
       output_limit_kb: 64
     }
   } as const;
+  const checker: CheckerSpec = effectiveIoType === "NO_INPUT_FREE_OUTPUT"
+    ? { type: "nonempty" }
+    : chooseDefaultCheckerFromExpectedOutputs(sorted.map(t => t.expectedOutput || ""));
   const workerReq: WorkerJudgeRequest = {
     submission_id: `personal_${req.userId}_${task.id}_${Date.now()}`,
     language: judgeLang,
@@ -850,7 +2108,7 @@ tasksRouter.post(
     ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
     tests,
     limits: defaultLimitsByLang[judgeLang],
-    checker: chooseDefaultCheckerFromExpectedOutputs(sorted.map(t => t.expectedOutput || "")),
+    checker,
     debug: false,
     rerun_failed_once: true
   };
@@ -859,7 +2117,7 @@ tasksRouter.post(
   if (workerRes) {
     if (workerRes.verdict === "CE" && workerRes.compile) {
       const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
-      for (const t of sorted) {
+      for (const t of judgedTests) {
         testResultsDetailed.push({
           testId: t.id,
           input: t.input || "",
@@ -876,12 +2134,17 @@ tasksRouter.post(
       for (const r of workerRes.tests) {
         resultsById.set(String(r.test_id), r);
       }
-      for (const t of sorted) {
+      for (const t of judgedTests) {
         const r = resultsById.get(String(t.id));
-        const passed = r?.verdict === "AC";
+        const actualTrimmed = typeof r?.actual === "string" ? r.actual.trim() : "";
+        const passed = r?.verdict === "AC" || (
+          effectiveIoType === "NO_INPUT_FREE_OUTPUT" &&
+          r?.verdict === "WA" &&
+          actualTrimmed.length > 0
+        );
         if (passed) {
           passedTests++;
-          total += t.points;
+          total += effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (t.points || 1);
         }
         testResultsDetailed.push({
           testId: t.id,
@@ -894,13 +2157,15 @@ tasksRouter.post(
           errorKind: (r as any)?.error_kind ?? null
         });
       }
-      if (typeof workerRes.score === "number" && typeof workerRes.max_score === "number") {
+      // For NO_INPUT_FREE_OUTPUT we deliberately ignore judge score/max_score because older judge builds
+      // may not support the nonempty checker yet and would report WA/0 even for valid non-empty output.
+      if (effectiveIoType !== "NO_INPUT_FREE_OUTPUT" && typeof workerRes.score === "number" && typeof workerRes.max_score === "number") {
         total = workerRes.score;
       }
     }
   }
   const feedbackLines: string[] = [];
-  feedbackLines.push(`Пройдено тестів: ${passedTests}/${(task.testData || []).length}`);
+  feedbackLines.push(`Пройдено тестів: ${passedTests}/${judgedTests.length}`);
   feedbackLines.push("");
   for (const r of testResultsDetailed) {
     if (r.passed) {
@@ -911,10 +2176,25 @@ tasksRouter.post(
       feedbackLines.push(`✗ Тест ${r.testId}: не пройдено`);
     }
   }
-  if (passedTests < (task.testData || []).length) {
+
+  if (effectiveIoType === "NO_INPUT_FIXED_OUTPUT" && passedTests < judgedTests.length) {
+    const firstFail = testResultsDetailed.find(r => !r.passed);
+    if (firstFail) {
+      const expected = String(firstFail.expectedOutput ?? "").trim();
+      const actual = String(firstFail.actualOutput ?? "").trim();
+      const clip = (s: string) => s.length > 1200 ? s.slice(0, 1200) + "\n…(truncated)" : s;
+      feedbackLines.push("");
+      feedbackLines.push("Очікуваний вивід (точно):");
+      feedbackLines.push(clip(expected || "(порожньо)"));
+      feedbackLines.push("");
+      feedbackLines.push("Ваш вивід:");
+      feedbackLines.push(clip(actual || "(порожньо)"));
+    }
+  }
+  if (passedTests < judgedTests.length) {
     try {
       const expectedById = new Map<number, string>();
-      for (const t of sorted) expectedById.set(t.id, (t.expectedOutput || "").toString());
+      for (const t of judgedTests) expectedById.set(t.id, (t.expectedOutput || "").toString());
       const failuresForHints = testResultsDetailed.filter(r => !r.passed).slice(0, 3).map(r => ({
         testId: r.testId,
         input: r.input || "",
@@ -941,10 +2221,13 @@ tasksRouter.post(
   }
   const feedback = feedbackLines.join("\n");
 
-  const maxScore = sorted.reduce((sum, t) => sum + (t.points || 1), 0);
-  const scoringScore = typeof workerRes?.score === "number" ? workerRes.score : total;
-  const scoringMaxScore = typeof workerRes?.max_score === "number" ? workerRes.max_score : maxScore;
-  const scoringGroupScores = Array.isArray(workerRes?.group_scores) ? workerRes.group_scores.map(gs => ({
+  const scoringScore = effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? total : (typeof workerRes?.score === "number" ? workerRes.score : total);
+  const scoringMaxScore = effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (typeof workerRes?.max_score === "number" ? workerRes.max_score : maxScore);
+  const scoringGroupScores = effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? [{
+    group: "public",
+    score: scoringScore,
+    maxScore: scoringMaxScore
+  }] : (Array.isArray(workerRes?.group_scores) ? workerRes.group_scores.map(gs => ({
     group: String((gs as any).group ?? ""),
     score: Number((gs as any).score ?? 0),
     maxScore: Number((gs as any).max_score ?? 0)
@@ -952,7 +2235,7 @@ tasksRouter.post(
     group: "public",
     score: scoringScore,
     maxScore: scoringMaxScore
-  }];
+  }]);
 
   task.finalCode = persistedSubmission;
   task.completed = TASK_COMPLETED_FLAG;
@@ -982,7 +2265,7 @@ tasksRouter.post(
       total: savedGrade.total,
       aiFeedback: savedGrade.aiFeedback,
       testsPassed: passedTests,
-      testsTotal: (task.testData || []).length,
+      testsTotal: judgedTests.length,
       score: scoringScore,
       maxScore: scoringMaxScore,
       groupScores: scoringGroupScores,
@@ -1048,7 +2331,7 @@ tasksRouter.post(
   }
 
   const normalizedFiles = normalizeApiFiles(files);
-  const entryFile = task.lang === "PYTHON" ? "main.py" : "Main.java";
+  const entryFile = task.lang === "PYTHON" ? "main.py" : task.lang === "CPP" ? "main.cpp" : "Main.java";
   const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(code) : null;
   const effectiveFiles = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
   const isMultiFile = effectiveFiles.length > 0;
@@ -1056,7 +2339,7 @@ tasksRouter.post(
 
   const CODE_RUN_TIMEOUT_MS = 5000;
   if (isMultiFile) {
-    const judgeLang = task.lang === "JAVA" ? "java" : "python";
+    const judgeLang = task.lang === "JAVA" ? "java" : task.lang === "PYTHON" ? "python" : "cpp";
     const workerReq: WorkerJudgeRequest = {
       submission_id: `personal_run_${req.userId}_${task.id}_${Date.now()}`,
       language: judgeLang,

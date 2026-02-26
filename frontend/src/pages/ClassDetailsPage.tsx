@@ -310,7 +310,7 @@ export const ClassDetailsPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-mono text-text-primary">{topic.title}</div>
                       <span className="text-xs text-text-muted px-2 py-1 border border-border">
-                        {topic.language === "JAVA" ? "Java" : "Python"}
+                        {topic.language === "JAVA" ? "Java" : topic.language === "PYTHON" ? "Python" : "C++"}
                       </span>
                     </div>
                     {topic.description && <div className="text-xs text-text-secondary mt-1 line-clamp-2">

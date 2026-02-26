@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { logger } from '../../utils/logger';
 interface CloudflareWorkerRequest {
@@ -22,6 +21,107 @@ interface ExpressServiceResponse {
   error?: string;
 }
 export class CloudflareAIProvider implements LLMProvider {
+  private buildTaskConditionPrompt(params: {
+    topicTitle: string;
+    taskType: "PRACTICE" | "CONTROL";
+    difficulty?: number;
+    language: "JAVA" | "PYTHON" | "CPP";
+  }, lang: "uk" | "en"): { prompt: string; systemPrompt: string } {
+    const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
+    const isEnglish = lang === "en";
+    const taskTypeText = params.taskType === "CONTROL" ? (isEnglish ? "control" : "контрольне") : (isEnglish ? "practice" : "практичне");
+    const systemPrompt = isEnglish
+      ? "You create judgeable programming tasks with deterministic stdin/stdout. Output must be strictly specified."
+      : "Ти створюєш задачі для судді: детермінований stdin/stdout, строгий формат виводу без зайвих слів.";
+
+    const prompt = isEnglish
+      ? `Write a detailed ${taskTypeText} programming task about topic "${params.topicTitle}" for ${langName}.
+
+CRITICAL FOR AUTO-TESTS:
+- Use stdin/stdout.
+- For any input there is exactly one correct output.
+- Output must NOT contain prompts/labels.
+- No randomness, time/date, files, or network.
+
+FORMAT (Markdown headings required):
+## Problem
+## Input
+## Output
+## Examples (at least 3; each example contains raw Input/Output blocks)
+
+Return ONLY the Markdown statement.`
+      : `Створи детальну умову ${taskTypeText} задачі по темі "${params.topicTitle}" для мови ${langName}.
+
+КРИТИЧНО ДЛЯ АВТОТЕСТІВ:
+- stdin/stdout.
+- Для будь-якого input існує рівно один правильний output.
+- У виводі НЕМАЄ зайвих слів/міток ("Введіть", "Відповідь:" тощо).
+- Без випадковості, часу/дати, файлів або мережі.
+
+ФОРМАТ (обов'язково Markdown-заголовки):
+## Умова
+## Вхідні дані
+## Вихідні дані
+## Приклади (мінімум 3; кожен приклад має «Input» і «Output» у code-block)
+
+Поверни ТІЛЬКИ Markdown-текст умови.`;
+
+    return { prompt, systemPrompt };
+  }
+
+  private buildTestDataPrompt(params: {
+    taskDescription: string;
+    taskTitle: string;
+    lang: "JAVA" | "PYTHON" | "CPP";
+    count: number;
+  }): { prompt: string; systemPrompt: string; schema: object } {
+    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const taskDesc = String(params.taskDescription || "").slice(0, 2500);
+
+    const schema = {
+      type: "object",
+      properties: {
+        tests: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              input: { type: "string" },
+              output: { type: "string" },
+              explanation: { type: "string" }
+            },
+            required: ["input", "output"]
+          },
+          minItems: params.count,
+          maxItems: params.count
+        }
+      },
+      required: ["tests"]
+    } as const;
+
+    const systemPrompt = `Ти генеруєш тестові дані для перевірки розв'язків. Відповідай ТІЛЬКИ JSON-об'єктом за схемою. Заборонено markdown.`;
+    const prompt = `Згенеруй РІВНО ${params.count} тестів для задачі.
+
+Заголовок: ${params.taskTitle}
+Мова: ${langName}
+
+Опис задачі:
+${taskDesc}
+
+ВИМОГИ:
+- Кожен тест має мати НЕПОРОЖНІ output.
+- input має бути у форматі stdin (як у прикладах умови).
+- Заборонено дублікати input/output.
+- Без плейсхолдерів типу input="1" output="1" якщо це не випливає з умови.
+
+СХЕМА JSON:
+${JSON.stringify(schema, null, 2)}
+
+Поверни лише JSON.`;
+
+    return { prompt, systemPrompt, schema };
+  }
+
   private async callCloudflareWorker(mode: string, params: CloudflareWorkerRequest['params'], options: LLMGenerateOptions = {}): Promise<CloudflareWorkerResponse> {
     const {
       timeout = 20000,
@@ -280,21 +380,29 @@ export class CloudflareAIProvider implements LLMProvider {
   async generateTaskWithAI(params: {
     topicTitle: string;
     theory: string;
-    lang: "JAVA" | "PYTHON";
+    lang: "JAVA" | "PYTHON" | "CPP";
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
     isControl?: boolean;
     prevTopics?: string;
+    previousTasks?: string;
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     userId?: number;
     topicId?: number;
   }): Promise<any> {
+    const taskTimeoutMs = (() => {
+      const raw = String(process.env.LLM_TASK_TIMEOUT_MS ?? '').trim();
+      const n = raw ? Number(raw) : NaN;
+      const v = Number.isFinite(n) ? Math.floor(n) : 45_000;
+      return Math.max(10_000, Math.min(120_000, v));
+    })();
     const response = await this.callCloudflareWorker('generate-task', {
       prompt: JSON.stringify(params)
     }, {
       userId: params.userId,
       topicId: params.topicId,
-      timeout: 30000
+      timeout: taskTimeoutMs
     });
     if (!response.content) {
       throw new Error('AI_GENERATION_FAILED: Empty response from CloudflareAI');
@@ -307,7 +415,7 @@ export class CloudflareAIProvider implements LLMProvider {
   }
   async generateTheoryWithAI(params: {
     topicTitle: string;
-    lang: "JAVA" | "PYTHON";
+    lang: "JAVA" | "PYTHON" | "CPP";
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
@@ -332,7 +440,7 @@ export class CloudflareAIProvider implements LLMProvider {
     };
   }
   async generateQuizWithAI(params: {
-    lang: "JAVA" | "PYTHON";
+    lang: "JAVA" | "PYTHON" | "CPP";
     prevTopics: string;
     count?: number;
     userId?: number;
@@ -359,14 +467,22 @@ export class CloudflareAIProvider implements LLMProvider {
     topicTitle: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
-    language: "JAVA" | "PYTHON";
+    language: "JAVA" | "PYTHON" | "CPP";
     userId?: number;
     topicId?: number;
   }, options?: LLMGenerateOptions): Promise<{
     description: string;
   }> {
+    const lang: "uk" | "en" = options?.language === "en" ? "en" : "uk";
+    const built = this.buildTaskConditionPrompt({
+      topicTitle: params.topicTitle,
+      taskType: params.taskType,
+      difficulty: params.difficulty,
+      language: params.language
+    }, lang);
     const response = await this.callCloudflareWorker('generate-task-condition', {
-      prompt: JSON.stringify(params)
+      prompt: built.prompt,
+      systemPrompt: built.systemPrompt
     }, {
       userId: params.userId,
       topicId: params.topicId,
@@ -382,7 +498,7 @@ export class CloudflareAIProvider implements LLMProvider {
   }
   async generateTaskTemplate(params: {
     topicTitle: string;
-    language: "JAVA" | "PYTHON";
+    language: "JAVA" | "PYTHON" | "CPP";
     description?: string;
     userId?: number;
     topicId?: number;
@@ -411,7 +527,7 @@ export class CloudflareAIProvider implements LLMProvider {
   async generateTestDataWithAI(params: {
     taskDescription: string;
     taskTitle: string;
-    lang: "JAVA" | "PYTHON";
+    lang: "JAVA" | "PYTHON" | "CPP";
     count: number;
     userId?: number;
   }, options?: LLMGenerateOptions): Promise<Array<{
@@ -419,8 +535,16 @@ export class CloudflareAIProvider implements LLMProvider {
     output: string;
     explanation?: string;
   }>> {
+    const built = this.buildTestDataPrompt({
+      taskDescription: params.taskDescription,
+      taskTitle: params.taskTitle,
+      lang: params.lang,
+      count: params.count
+    });
     const response = await this.callCloudflareWorker('generate-test-data', {
-      prompt: JSON.stringify(params)
+      prompt: built.prompt,
+      systemPrompt: built.systemPrompt,
+      schema: built.schema
     }, {
       userId: params.userId,
       timeout: 30000,
@@ -430,8 +554,8 @@ export class CloudflareAIProvider implements LLMProvider {
       throw new Error('AI_GENERATION_FAILED: Empty response from CloudflareAI');
     }
     try {
-      const parsed = JSON.parse(response.content);
-      const tests = parsed.tests || parsed || [];
+      const parsed = typeof response.content === 'string' ? JSON.parse(response.content) : response.content;
+      const tests = (parsed as any)?.tests || parsed || [];
       const taskDescLower = String(params.taskDescription ?? "").toLowerCase();
       const explicitlyNoInput = /нема(є)?\s+вхідн/i.test(taskDescLower) || /без\s+вхідн/i.test(taskDescLower) || /відсутн/i.test(taskDescLower) || /no\s+input/i.test(taskDescLower) || /does\s+not\s+take\s+input/i.test(taskDescLower);
       const allowEmptyInput = explicitlyNoInput || params.count <= 1;

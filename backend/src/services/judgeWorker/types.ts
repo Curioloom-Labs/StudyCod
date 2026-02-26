@@ -3,6 +3,8 @@ export type JudgeVerdict = "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE";
 export type CheckerSpec = {
   type: "exact";
 } | {
+  type: "nonempty";
+} | {
   type: "whitespace";
 } | {
   type: "float";

@@ -16,23 +16,60 @@ export interface JudgeWithSemaphoreOptions {
 
 function toJudgeUnavailable(err: unknown): HttpError {
   const msg = err instanceof Error ? err.message : String(err);
+  const isJudgeClientError = err instanceof Error && err.name === "JudgeClientError";
+  const judgeClientDetails = (() => {
+    if (!isJudgeClientError) return undefined;
+    const anyErr = err as any;
+    if (typeof anyErr?.toDebugJSON === "function") {
+      try {
+        return anyErr.toDebugJSON();
+      } catch {
+        return { name: anyErr?.name, message: msg };
+      }
+    }
+    return { name: anyErr?.name, message: msg };
+  })();
   const tooLarge =
     /INPUT_TOO_LARGE/i.test(msg) ||
     /INVALID_REQUEST: (source too large|files too large|too many tests|test\.input too large|test\.output too large|too many files)/i.test(msg) ||
     /JUDGE_(STDOUT|STDERR)_TOO_LARGE/i.test(msg);
+
+  // Configuration errors are not transient outages.
+  if (
+    /INVALID_CONFIGURATION/i.test(msg) ||
+    /production requires NSJAIL_USE_CONFIG=1/i.test(msg) ||
+    /production requires NSJAIL_CONFIG/i.test(msg)
+  ) {
+    logger.error("[judge] invalid configuration", {
+      error: msg,
+      details: judgeClientDetails
+    });
+    return new HttpError(500, "JUDGE_INVALID_CONFIGURATION", {
+      code: "JUDGE_INVALID_CONFIGURATION",
+      expose: true,
+      details: process.env.NODE_ENV === "production"
+        ? { kind: (judgeClientDetails as any)?.kind, exitCode: (judgeClientDetails as any)?.exitCode }
+        : (judgeClientDetails ?? msg.slice(0, 2000)),
+      cause: err
+    });
+  }
+
   if (tooLarge) {
     logger.warn("[judge] request rejected (too large)", { error: msg });
     return new HttpError(413, "JUDGE_REQUEST_TOO_LARGE", {
       code: "JUDGE_REQUEST_TOO_LARGE",
       expose: true,
-      details: msg.slice(0, 2000),
+      details: judgeClientDetails ?? msg.slice(0, 2000),
       cause: err
     });
   }
   return new HttpError(503, "Judge unavailable", {
     code: "JUDGE_UNAVAILABLE",
     expose: true,
-    details: process.env.NODE_ENV === "production" ? undefined : msg.slice(0, 2000),
+    // Keep public surface small in production, but include structured kind/exitCode to aid support.
+    details: process.env.NODE_ENV === "production"
+      ? (judgeClientDetails ? { kind: (judgeClientDetails as any).kind, exitCode: (judgeClientDetails as any).exitCode } : undefined)
+      : (judgeClientDetails ?? msg.slice(0, 2000)),
     cause: err
   });
 }

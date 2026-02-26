@@ -46,6 +46,17 @@ export class Student {
     length: 255
   })
   email!: string;
+
+  /**
+   * Global broadcast/marketing emails subscription.
+   * Default: true (all registered students are subscribed by default).
+   */
+  @Column({
+    type: "boolean",
+    default: true,
+    name: "marketing_emails_enabled"
+  })
+  marketingEmailsEnabled!: boolean;
   @Column({
     type: "varchar",
     length: 100,

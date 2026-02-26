@@ -1,12 +1,36 @@
 import "reflect-metadata";
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
 import bcrypt from "bcryptjs";
 import { logger } from "../utils/logger";
-const envPath = path.resolve(process.cwd(), ".env");
-dotenv.config({ path: envPath, override: true });
+
+// IMPORTANT: load env only from backend/.env, independent of current working directory.
+const findBackendRoot = (startDir: string): string | null => {
+  let dir = startDir;
+  for (let i = 0; i < 20; i++) {
+    const pkgPath = path.join(dir, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const raw = fs.readFileSync(pkgPath, "utf8");
+        const pkg = JSON.parse(raw);
+        if (pkg?.name === "studycod-backend") return dir;
+      } catch {
+        // ignore
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+};
+
+const backendRoot = findBackendRoot(__dirname) ?? process.cwd();
+const envPath = path.join(backendRoot, ".env");
+dotenv.config({ path: fs.existsSync(envPath) ? envPath : undefined, override: true });
 
 const adminEmail = process.env.ADMIN_EMAIL || "admin@studycod.com";
 const adminPassword = process.env.ADMIN_PASSWORD || "ChangeMe123!";

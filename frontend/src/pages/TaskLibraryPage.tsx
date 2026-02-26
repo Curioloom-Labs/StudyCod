@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronUp, Download, Edit2, Play, Plus, Search, Send, Star, Upload, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Download, Edit2, Play, Plus, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
@@ -11,6 +11,7 @@ import { Skeleton } from "../components/ui/Skeleton";
 import { getMe } from "../lib/api/profile";
 import {
   createLibraryTask,
+  deleteLibraryTask,
   downloadLibraryTaskArchive,
   getLibraryTask,
   importLibraryTaskArchive,
@@ -41,6 +42,8 @@ type EditorState = {
   section: string;
   description: string;
   template: string;
+  templatesByLanguage: Partial<Record<JudgeLanguage, string>>;
+  templateLang: JudgeLanguage;
   allowedLanguages: JudgeLanguage[];
   timeLimitMs: number | "";
   memoryLimitMb: number | "";
@@ -163,6 +166,7 @@ export const TaskLibraryPage: React.FC = () => {
   const hydratedFromUrlRef = useRef(false);
 
   const [showEditor, setShowEditor] = useState(false);
+  const autoEditHandledRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [importKey, setImportKey] = useState(0);
   const [importing, setImporting] = useState(false);
@@ -213,6 +217,8 @@ export const TaskLibraryPage: React.FC = () => {
       section: "",
       description: "",
       template: "",
+      templatesByLanguage: {},
+      templateLang: "java",
       allowedLanguages: ALL_JUDGE_LANGS,
       timeLimitMs: "",
       memoryLimitMb: "",
@@ -229,8 +235,8 @@ export const TaskLibraryPage: React.FC = () => {
   const [editor, setEditor] = useState<EditorState>(emptyEditor);
 
   useEffect(() => {
-    // In PERSONAL mode (and for EDU students), this page is read-only.
-    // We only enable "Mine"/create/import/edit/submit for EDU teachers/admins.
+    // This page is read-only for student tokens.
+    // For regular authenticated users we enable "Mine"/create/import/edit/submit.
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
       setCanManage(false);
@@ -238,8 +244,7 @@ export const TaskLibraryPage: React.FC = () => {
     }
     getMe()
       .then((u) => {
-        const allowed = u.userMode === "EDUCATIONAL" && !u.studentId && (u.role === "TEACHER" || u.role === "SYSTEM_ADMIN");
-        setCanManage(!!allowed);
+        setCanManage(!u.studentId);
       })
       .catch(() => {
         setCanManage(false);
@@ -388,6 +393,21 @@ export const TaskLibraryPage: React.FC = () => {
   }, [selectedId]);
 
   useEffect(() => {
+    if (autoEditHandledRef.current) return;
+    if (!canManage) return;
+    if (!selectedId) return;
+
+    const sp = new URLSearchParams(location.search || "");
+    const editRaw = String(sp.get("edit") ?? "").trim().toLowerCase();
+    const shouldAutoEdit = editRaw === "1" || editRaw === "true" || editRaw === "yes" || editRaw === "on";
+    if (!shouldAutoEdit) return;
+
+    autoEditHandledRef.current = true;
+    void openEdit(selectedId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage, selectedId, location.search]);
+
+  useEffect(() => {
     // Keep preview consistent when switching between list items / views.
     setDetailsTab("description");
   }, [selectedId, view]);
@@ -449,6 +469,8 @@ export const TaskLibraryPage: React.FC = () => {
         section: String(d.task.section ?? ""),
         description: d.task.description,
         template: d.task.template,
+        templatesByLanguage: (d.task.templatesByLanguage ?? {}) as any,
+        templateLang: (((Array.isArray(d.task.allowedLanguages) && d.task.allowedLanguages.length ? d.task.allowedLanguages : ALL_JUDGE_LANGS)[0] ?? "java") as JudgeLanguage),
         allowedLanguages: (Array.isArray(d.task.allowedLanguages) && d.task.allowedLanguages.length ? d.task.allowedLanguages : ALL_JUDGE_LANGS) as JudgeLanguage[],
         timeLimitMs: typeof d.task.timeLimitMs === "number" ? d.task.timeLimitMs : "",
         memoryLimitMb: typeof d.task.memoryLimitMb === "number" ? d.task.memoryLimitMb : "",
@@ -479,8 +501,8 @@ export const TaskLibraryPage: React.FC = () => {
 
   const saveEditor = async () => {
     if (!canManage) return;
-    if (!editor.title.trim() || !editor.description.trim() || !editor.template.trim()) {
-      alert(tr("Заповніть назву, опис і шаблон", "Fill title, description and template"));
+    if (!editor.title.trim() || !editor.description.trim()) {
+      alert(tr("Заповніть назву та опис", "Fill title and description"));
       return;
     }
 
@@ -505,6 +527,26 @@ export const TaskLibraryPage: React.FC = () => {
         ? editor.allowedLanguages
         : ALL_JUDGE_LANGS;
 
+      const templatesByLanguage: Record<string, string> = {};
+      for (const l of allowedLanguages) {
+        const raw = (editor.templatesByLanguage as any)?.[l];
+        const v = typeof raw === "string" ? raw : "";
+        templatesByLanguage[l] = (v.trim() ? v : editor.template).toString();
+      }
+      const missing = allowedLanguages.filter(l => !String(templatesByLanguage[l] ?? "").trim());
+      if (missing.length > 0) {
+        alert(
+          tr(
+            `Заповніть шаблон для мов: ${missing.join(", ")}`,
+            `Fill templates for languages: ${missing.join(", ")}`
+          )
+        );
+        return;
+      }
+
+      // Keep a non-empty base template for legacy UI/exports.
+      const baseTemplate = String(templatesByLanguage[allowedLanguages[0]] ?? editor.template ?? "");
+
       const checkerSpec: LibraryCheckerSpec | undefined = (() => {
         if (!editor.checkerType) return undefined;
         if (editor.checkerType === "float") {
@@ -520,6 +562,23 @@ export const TaskLibraryPage: React.FC = () => {
         outputLimitKb: editor.outputLimitKb === "" ? undefined : Number(editor.outputLimitKb),
       };
 
+      // Frontend guardrails: backend validates these strictly.
+      const nTime = limits.timeLimitMs;
+      if (nTime !== undefined && (!Number.isFinite(nTime) || nTime < 100 || nTime > 60000)) {
+        alert(tr("Ліміт часу має бути в діапазоні 100..60000 ms", "Time limit must be in range 100..60000 ms"));
+        return;
+      }
+      const nMem = limits.memoryLimitMb;
+      if (nMem !== undefined && (!Number.isFinite(nMem) || nMem < 16 || nMem > 2048)) {
+        alert(tr("Пам'ять має бути в діапазоні 16..2048 MB", "Memory must be in range 16..2048 MB"));
+        return;
+      }
+      const nOut = limits.outputLimitKb;
+      if (nOut !== undefined && (!Number.isFinite(nOut) || nOut < 4 || nOut > 1024)) {
+        alert(tr("Вивід має бути в діапазоні 4..1024 KB", "Output must be in range 4..1024 KB"));
+        return;
+      }
+
       if (editor.id == null) {
         await createLibraryTask({
           title: editor.title,
@@ -529,7 +588,8 @@ export const TaskLibraryPage: React.FC = () => {
           tags: tags.length ? tags : undefined,
           section: editor.section.trim() || undefined,
           description: editor.description,
-          template: editor.template,
+          template: baseTemplate,
+          templatesByLanguage,
           allowedLanguages,
           ...limits,
           checkerSpec,
@@ -546,7 +606,8 @@ export const TaskLibraryPage: React.FC = () => {
           tags: tags.length ? tags : null,
           section: editor.section.trim() || null,
           description: editor.description,
-          template: editor.template,
+          template: baseTemplate,
+          templatesByLanguage,
           allowedLanguages,
           timeLimitMs: editor.timeLimitMs === "" ? null : Number(editor.timeLimitMs),
           memoryLimitMb: editor.memoryLimitMb === "" ? null : Number(editor.memoryLimitMb),
@@ -561,7 +622,20 @@ export const TaskLibraryPage: React.FC = () => {
       await reload();
     } catch (e: any) {
       console.error("Failed to save library task", e);
-      alert(e?.response?.data?.message || tr("Не вдалося зберегти", "Failed to save"));
+      const msg = e?.response?.data?.message;
+      const issues = e?.response?.data?.errors;
+      if (msg === "INVALID_INPUT" && Array.isArray(issues) && issues.length > 0) {
+        const lines = issues
+          .map((it: any) => {
+            const path = Array.isArray(it?.path) ? it.path.join(".") : "";
+            const p = path ? `${path}: ` : "";
+            return p + String(it?.message ?? "Invalid input");
+          })
+          .slice(0, 20);
+        alert(tr("Помилка валідації:\n", "Validation error:\n") + lines.join("\n"));
+      } else {
+        alert(msg || tr("Не вдалося зберегти", "Failed to save"));
+      }
     } finally {
       setSaving(false);
     }
@@ -583,6 +657,22 @@ export const TaskLibraryPage: React.FC = () => {
     }
   };
 
+  const handleDeleteDraft = async (taskId: number) => {
+    if (!canManage) return;
+    if (!confirm(tr("Видалити чернетку без можливості відновлення?", "Delete this draft permanently?"))) return;
+    try {
+      await deleteLibraryTask(taskId);
+      if (selectedId === taskId) {
+        setSelectedId(null);
+        setDetails(null);
+      }
+      await reload();
+    } catch (e: any) {
+      console.error("Failed to delete library task", e);
+      alert(e?.response?.data?.message || tr("Не вдалося видалити", "Failed to delete"));
+    }
+  };
+
   const handleImportArchive = async (file: File | null) => {
     if (!canManage) return;
     if (!file) return;
@@ -597,7 +687,20 @@ export const TaskLibraryPage: React.FC = () => {
       setSelectedId(null);
     } catch (e: any) {
       console.error("Failed to import archive", e);
-      alert(e?.response?.data?.message || tr("Не вдалося імпортувати", "Failed to import"));
+      const msg = e?.response?.data?.message;
+      const issues = e?.response?.data?.errors;
+      if ((msg === "INVALID_TASK_JSON" || msg === "INVALID_INPUT") && Array.isArray(issues) && issues.length > 0) {
+        const lines = issues
+          .map((it: any) => {
+            const path = Array.isArray(it?.path) ? it.path.join(".") : "";
+            const p = path ? `${path}: ` : "";
+            return p + String(it?.message ?? "Invalid input");
+          })
+          .slice(0, 30);
+        alert(tr("Помилка імпорту:\n", "Import error:\n") + lines.join("\n"));
+      } else {
+        alert(msg || tr("Не вдалося імпортувати", "Failed to import"));
+      }
     } finally {
       setImporting(false);
       setImportKey((k: number) => k + 1);
@@ -1087,6 +1190,20 @@ export const TaskLibraryPage: React.FC = () => {
                               {tr("На модерацію", "Submit")}
                             </Button>
                           ) : null}
+                          {task.status === "DRAFT" && canManage ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteDraft(task.id);
+                              }}
+                              title={tr("Видалити чернетку", "Delete draft")}
+                            >
+                              <Trash2 className="w-3 h-3 mr-2" />
+                              {tr("Видалити", "Delete")}
+                            </Button>
+                          ) : null}
                           {task.status === "APPROVED" ? (
                             <Button
                               variant="ghost"
@@ -1475,9 +1592,58 @@ export const TaskLibraryPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Шаблон коду", "Code template")} *</label>
+              <div className="flex items-center gap-2 mb-2">
+                <select
+                  value={editor.templateLang}
+                  onChange={(e) => {
+                    const nextLang = e.target.value as JudgeLanguage;
+                    setEditor((s) => {
+                      const cur = (s.templatesByLanguage as any)?.[nextLang];
+                      const next = typeof cur === "string" && cur.trim() ? cur : (s.template || "");
+                      return {
+                        ...s,
+                        templateLang: nextLang,
+                        templatesByLanguage: { ...(s.templatesByLanguage || {}), [nextLang]: next },
+                      };
+                    });
+                  }}
+                  className="px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
+                  title={tr("Мова шаблону", "Template language")}
+                >
+                  {(Array.isArray(editor.allowedLanguages) && editor.allowedLanguages.length ? editor.allowedLanguages : ALL_JUDGE_LANGS).map((l) => (
+                    <option key={l} value={l}>
+                      {FRIENDLY_JUDGE_LANG[l] || l}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const allowed = (Array.isArray(editor.allowedLanguages) && editor.allowedLanguages.length ? editor.allowedLanguages : ALL_JUDGE_LANGS) as JudgeLanguage[];
+                    const cur = String((editor.templatesByLanguage as any)?.[editor.templateLang] ?? editor.template ?? "");
+                    setEditor((s) => {
+                      const next: any = { ...(s.templatesByLanguage || {}) };
+                      for (const l of allowed) next[l] = cur;
+                      return { ...s, templatesByLanguage: next, template: cur };
+                    });
+                  }}
+                  title={tr("Скопіювати поточний шаблон на всі мови", "Copy current template to all languages")}
+                >
+                  {tr("На всі", "To all")}
+                </Button>
+              </div>
               <textarea
-                value={editor.template}
-                onChange={(e) => setEditor((s) => ({ ...s, template: e.target.value }))}
+                value={String((editor.templatesByLanguage as any)?.[editor.templateLang] ?? editor.template ?? "")}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setEditor((s) => ({
+                    ...s,
+                    template: v,
+                    templatesByLanguage: { ...(s.templatesByLanguage || {}), [s.templateLang]: v },
+                  }));
+                }}
                 className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none min-h-[140px]"
               />
             </div>

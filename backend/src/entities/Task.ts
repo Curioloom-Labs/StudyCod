@@ -5,7 +5,8 @@ import { Topic } from "./Topic";
 import { TestData } from "./TestData";
 export type TaskType = "INTRO" | "TOPIC" | "CONTROL";
 export type TaskStatus = "OPEN" | "SUBMITTED" | "GRADED";
-export type TaskLang = "JAVA" | "PYTHON";
+export type TaskLang = "JAVA" | "PYTHON" | "CPP";
+export type TaskIoType = "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
 @Entity("tasks")
 export class Task {
   @PrimaryGeneratedColumn()
@@ -38,6 +39,18 @@ export class Task {
     type: "text"
   })
   description!: string;
+
+  /**
+   * Machine-only task IO type. Not shown in the statement.
+   * Helps generate tests and pick a judge checker deterministically.
+   */
+  @Column({
+    type: "enum",
+    enum: ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"],
+    default: "STDIN_STDOUT",
+    name: "io_type"
+  })
+  ioType!: TaskIoType;
   descriptionMarkdown?: string;
   @Column({
     type: "text"

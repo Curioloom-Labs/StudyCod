@@ -2,11 +2,14 @@ name = "studycod-ai-worker"
 main = "src/index.ts"
 compatibility_date = "2025-12-24"
 
+# Workers AI binding
+ai = { binding = "AI" }
+
 [vars]
 ENVIRONMENT = "development"
 
 [env.production]
-ai = { binding = "AI" }
+
 
 [env.production.vars]
 ENVIRONMENT = "production"

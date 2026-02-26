@@ -4,15 +4,21 @@ import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { TopicNew, TopicLanguage } from "../entities/TopicNew";
 import { IsNull } from "typeorm";
 import { logger } from "../utils/logger";
+import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
+import { TheoryBlock } from "../entities/TheoryBlock";
+import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
 
 export const theoryRouter = Router();
 
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
+const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
 
 theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const language = String(req.query.language || "").toUpperCase().trim();
-    if (language !== "JAVA" && language !== "PYTHON") {
+    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const wantsEn = uiLang.startsWith("en");
+    if (language !== "JAVA" && language !== "PYTHON" && language !== "CPP") {
       return res.status(400).json({ message: "INVALID_LANGUAGE" });
     }
 
@@ -25,6 +31,74 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
       relations: ["theoryBlock"]
     });
 
+    // Lazily translate theory blocks for English UI and store once in DB.
+    // Translation columns are marked select:false, so we explicitly select them.
+    const localizedEnById = new Map<number, TheoryBlock>();
+    if (wantsEn) {
+      const hasCols = await hasTheoryBlockEnTranslationColumns();
+      if (hasCols) {
+        const ids = Array.from(
+          new Set(
+            topics
+              .map(t => (t.theoryBlock ? t.theoryBlock.id : null))
+              .filter((x): x is number => typeof x === "number")
+          )
+        );
+
+        if (ids.length > 0) {
+          const blocks = await theoryBlockRepo()
+            .createQueryBuilder("b")
+            .where("b.id IN (:...ids)", { ids })
+            .addSelect(["b.titleEn", "b.contentEn", "b.translationVersionEn", "b.translatedAtEn"])
+            .getMany();
+
+          for (const b of blocks) localizedEnById.set(b.id, b);
+
+          // Translate missing/stale ones (sequential to be gentle to free API)
+          for (const id of ids) {
+            const b = localizedEnById.get(id);
+            if (!b) continue;
+            const titleEn = String(b.titleEn ?? "");
+            const contentEn = String(b.contentEn ?? "");
+            const isFresh =
+              titleEn.trim().length > 0 &&
+              contentEn.trim().length > 0 &&
+              !looksLikeTranslationProviderErrorText(titleEn) &&
+              !looksLikeTranslationProviderErrorText(contentEn) &&
+              Number(b.translationVersionEn ?? 0) === Number(b.version ?? 0);
+            if (isFresh) continue;
+
+            try {
+              const [titleEn, contentEn] = await Promise.all([
+                translateTextUkToEn(b.title),
+                translateMarkdownUkToEn(b.content)
+              ]);
+
+              b.titleEn = titleEn;
+              b.contentEn = contentEn;
+              b.translationVersionEn = Number(b.version ?? 1);
+              b.translatedAtEn = new Date();
+              await theoryBlockRepo().save(b);
+              localizedEnById.set(b.id, b);
+            } catch (error: any) {
+              logger.warn("[theory] translate uk->en failed", {
+                requestId: req.requestId,
+                userId: req.userId,
+                theoryBlockId: b.id,
+                error: error?.message ?? String(error)
+              });
+              // Best-effort: fall back to Ukrainian content.
+            }
+          }
+        }
+      } else {
+        logger.warn("[theory] EN translation requested but DB columns are missing; serving uk content", {
+          requestId: req.requestId,
+          userId: req.userId
+        });
+      }
+    }
+
     // DTO optimized for theory reading.
     return res.json({
       topics: topics.map(t => ({
@@ -36,8 +110,26 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
         theory: t.theoryBlock
           ? {
               id: t.theoryBlock.id,
-              title: t.theoryBlock.title,
-              content: t.theoryBlock.content,
+              title: (() => {
+                if (!wantsEn) return t.theoryBlock!.title;
+                const b = localizedEnById.get(t.theoryBlock!.id);
+                const ok =
+                  b &&
+                  Number(b.translationVersionEn ?? 0) === Number(b.version ?? 0) &&
+                  String(b.titleEn ?? "").trim() &&
+                  !looksLikeTranslationProviderErrorText(String(b.titleEn ?? ""));
+                return ok ? (b!.titleEn as string) : t.theoryBlock!.title;
+              })(),
+              content: (() => {
+                if (!wantsEn) return t.theoryBlock!.content;
+                const b = localizedEnById.get(t.theoryBlock!.id);
+                const ok =
+                  b &&
+                  Number(b.translationVersionEn ?? 0) === Number(b.version ?? 0) &&
+                  String(b.contentEn ?? "").trim() &&
+                  !looksLikeTranslationProviderErrorText(String(b.contentEn ?? ""));
+                return ok ? (b!.contentEn as string) : t.theoryBlock!.content;
+              })(),
               version: t.theoryBlock.version,
               updatedAt: t.theoryBlock.updatedAt
             }

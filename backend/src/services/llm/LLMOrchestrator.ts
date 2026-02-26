@@ -1,14 +1,24 @@
 import { CloudflareAIProvider } from './CloudflareAIProvider';
 import { OpenRouterProvider } from './OpenRouterProvider';
+import { LocalLLMProvider } from './LocalLLMProvider';
+import type { LLMProvider } from './LLMProvider';
 import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
 import { AIResponseValidator, AIValidationError } from './AIResponseValidator';
 import { logger } from '../../utils/logger';
+
+export type LLMTaskLanguage = "JAVA" | "PYTHON" | "CPP";
+
 export interface AiTaskGenerationResult {
   title: string;
   topic: string;
   difficulty: number;
   theoryMarkdown: string;
   practicalTask: string;
+  /**
+   * Machine-only task IO type (not meant to be shown in the statement).
+   * Used to generate tests and pick a judge checker.
+   */
+  ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
   inputFormat: string;
   outputFormat: string;
   constraints: string;
@@ -30,6 +40,17 @@ export interface TestDataExample {
   output: string;
   explanation?: string;
 }
+
+function parseEnvTimeoutMs(envVar: string, fallbackMs: number, minMs: number, maxMs: number): number {
+  const raw = String(process.env[envVar] ?? '').trim();
+  const n = raw ? Number(raw) : NaN;
+  const v = Number.isFinite(n) ? Math.floor(n) : fallbackMs;
+  return Math.max(minMs, Math.min(maxMs, v));
+}
+
+// Default is intentionally above 30s to reduce 504s from upstream on slower generations.
+// NOTE: ensure your reverse proxy (e.g., nginx proxy_read_timeout) is >= this value.
+const LLM_TASK_TIMEOUT_MS = parseEnvTimeoutMs('LLM_TASK_TIMEOUT_MS', 45_000, 10_000, 120_000);
 function getDifficultyPrompt(difus: number): string {
   if (difus < 0.2) return "Рівень: ПОЧАТКОВИЙ (Дуже легко). Завдання має бути максимально простим, лише на відпрацювання синтаксису. Жодних складних алгоритмів.";
   if (difus < 0.4) return "Рівень: ЛЕГКИЙ. Просте завдання, мінімум умов. Фокус на розумінні теми.";
@@ -67,10 +88,15 @@ function isOpenRouterConfigured(): boolean {
   return !!primary || backups.length > 0;
 }
 
-function preferredProvider(): 'cloudflare' | 'openrouter' | 'auto' {
+function isLocalConfigured(): boolean {
+  return !!String(process.env.LOCAL_LLM_URL || '').trim();
+}
+
+function preferredProvider(): 'cloudflare' | 'openrouter' | 'local' | 'auto' {
   const raw = String(process.env.LLM_PROVIDER || 'auto').toLowerCase().trim();
   if (raw === 'cloudflare') return 'cloudflare';
   if (raw === 'openrouter') return 'openrouter';
+  if (raw === 'local' || raw === 'local-llm' || raw === 'selfhosted') return 'local';
   return 'auto';
 }
 function isRetryableError(error: any): boolean {
@@ -81,14 +107,16 @@ function isRetryableError(error: any): boolean {
 export class LLMOrchestrator {
   private cloudflareProvider: CloudflareAIProvider;
   private openRouterProvider: OpenRouterProvider;
+  private localProvider: LocalLLMProvider;
   constructor() {
     this.cloudflareProvider = new CloudflareAIProvider();
     this.openRouterProvider = new OpenRouterProvider();
+    this.localProvider = new LocalLLMProvider();
   }
 
   private normalizeTemplateTodoComments(params: {
     template: string;
-    language: "JAVA" | "PYTHON";
+    language: LLMTaskLanguage;
     todoText: string;
   }): string {
     const original = params.template ?? '';
@@ -131,12 +159,16 @@ export class LLMOrchestrator {
   async generateTaskWithAI(params: {
     topicTitle: string;
     theory: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
     isControl?: boolean;
     prevTopics?: string;
+    /** Optional brief list of previously generated tasks in the same topic (to enforce uniqueness). */
+    previousTasks?: string;
+    /** Optional IO-type allowlist (e.g., disallow STDIN before input is taught). */
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
@@ -148,6 +180,7 @@ export class LLMOrchestrator {
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
+    const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
       const raw = await this.cloudflareProvider.generateTaskWithAI({
@@ -159,6 +192,8 @@ export class LLMOrchestrator {
         difus: params.difus,
         isControl: params.isControl,
         prevTopics: params.prevTopics,
+        previousTasks: params.previousTasks,
+        allowedIoTypes: params.allowedIoTypes,
         userId: params.userId,
         topicId: params.topicId
       });
@@ -168,6 +203,29 @@ export class LLMOrchestrator {
     const tryOpenRouter = async () => {
       return await this.generateTaskWithAI_OpenRouter(params);
     };
+
+    const tryLocal = async () => {
+      return await this.generateTaskWithAI_OpenRouter(params, this.localProvider);
+    };
+
+    if (pref === 'local') {
+      if (!canLocal) {
+        if (canCf) return await tryCloudflare();
+        if (canOr) return await tryOpenRouter();
+        throw new Error('AI_GENERATION_FAILED: LOCAL_LLM_URL not configured');
+      }
+      try {
+        return await tryLocal();
+      } catch (e: any) {
+        if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryCloudflare();
+        }
+        if (canOr && isRetryableError(e)) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
 
     if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
       if (!canCf && canOr) return await tryOpenRouter();
@@ -194,17 +252,18 @@ export class LLMOrchestrator {
   }
   private async generateTaskAnchor(params: {
     topicTitle: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     userId?: number;
     topicId?: number;
     signal?: AbortSignal;
-  }): Promise<{
+  }, providerOverride?: LLMProvider): Promise<{
     topic: string;
     coreOperation: string;
     allowedScope: string[];
     forbiddenScope: string[];
   }> {
-    const langName = params.lang === "JAVA" ? "Java" : "Python";
+    const provider = providerOverride ?? this.openRouterProvider;
+    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
     const anchorSchema = {
       type: "object",
       properties: {
@@ -243,13 +302,13 @@ export class LLMOrchestrator {
 - forbiddenScope: що категорично заборонено робити (інші теми, інші операції)
 
 Поверни ТІЛЬКИ JSON без пояснень.`;
-    const parsed = await this.openRouterProvider.generateJSON<{
+    const parsed = await provider.generateJSON<{
       topic: string;
       coreOperation: string;
       allowedScope: string[];
       forbiddenScope: string[];
     }>(userPrompt, anchorSchema, systemPrompt, {
-      timeout: 30000,
+      timeout: LLM_TASK_TIMEOUT_MS,
       maxRetries: 0,
       userId: params.userId,
       topicId: params.topicId,
@@ -268,20 +327,23 @@ export class LLMOrchestrator {
   private async generateTaskFromAnchor(params: {
     topicTitle: string;
     theory: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     anchor: {
       topic: string;
       coreOperation: string;
       allowedScope: string[];
       forbiddenScope: string[];
     };
+    previousTasks?: string;
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     difus?: number;
     userId?: number;
     topicId?: number;
     signal?: AbortSignal;
     semanticRetries?: number;
-  }): Promise<AiTaskGenerationResult> {
-    const langName = params.lang === "JAVA" ? "Java" : "Python";
+  }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
+    const provider = providerOverride ?? this.openRouterProvider;
+    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
     const difficultyPrompt = getDifficultyPrompt(params.difus ?? 0);
     const jsonSchema = {
       type: "object",
@@ -305,6 +367,11 @@ export class LLMOrchestrator {
         practicalTask: {
           type: "string",
           description: "Практичне завдання"
+        },
+        ioType: {
+          type: "string",
+          description: "ТИП ВВОДУ/ВИВОДУ (machine-only; НЕ показувати у statement). Один з: STDIN_STDOUT | NO_INPUT_FIXED_OUTPUT | NO_INPUT_FREE_OUTPUT",
+          enum: ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]
         },
         inputFormat: {
           type: "string",
@@ -341,11 +408,19 @@ export class LLMOrchestrator {
           description: "Шаблон коду"
         }
       },
-      required: ["title", "topic", "difficulty", "theoryMarkdown", "practicalTask", "inputFormat", "outputFormat", "constraints", "examples", "codeTemplate"]
+      required: ["title", "topic", "difficulty", "theoryMarkdown", "practicalTask", "ioType", "inputFormat", "outputFormat", "constraints", "examples", "codeTemplate"]
     };
     const systemPrompt = `Ти досвідчений викладач програмування. Створюй якісні завдання з теорією та практикою. Відповідай українською мовою у форматі JSON згідно з наданою схемою.
 
 КРИТИЧНО: Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}". НЕ змінюй anchor.`;
+    const allowedIoTypes = Array.isArray(params.allowedIoTypes) && params.allowedIoTypes.length
+      ? params.allowedIoTypes
+      : ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
+    const stdinAllowed = allowedIoTypes.includes("STDIN_STDOUT");
+    const uniquenessBlock = params.previousTasks && params.previousTasks.trim().length > 0
+      ? `\n\nВЖЕ ЗГЕНЕРОВАНІ ЗАВДАННЯ У ЦІЙ ТЕМІ (щоб уникнути повторів):\n${params.previousTasks.trim()}\n\nТвоє нове завдання має бути СУТТЄВО ІНШИМ: інший сюжет/дані/формулювання, інші приклади та інші числа.`
+      : '';
+
     const userPrompt = `
 SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
 - Тема: ${params.anchor.topic}
@@ -364,17 +439,64 @@ ${difficultyPrompt}
 5. ЗАБОРОНЕНО створювати multi-task структури (Завдання 1, Завдання 2, Контрольна робота з кількома завданнями)
 6. Одне завдання = одна операція "${params.anchor.coreOperation}"
 
+ПЛАТФОРМА / АВТОПЕРЕВІРКА (обов'язково):
+- Завдання має бути перевірюваним автотестом через stdout (та stdin лише якщо дозволено).
+- Студент пише рішення в ОДНОМУ файлі (Main.java / main.py / main.cpp).
+- ЗАБОРОНЕНО: просити створювати файли/папки/проєкти, налаштовувати IDE/компілятор, CMake/Makefile, структуру src/include тощо.
+- Якщо тема про структуру проєкту — перетвори це на програмне завдання (наприклад: вивести текст/схему структури), але все одно лише через stdout.
+
+ЯКІСТЬ УМОВИ (важливо для студентів):
+- practicalTask має бути РОЗГОРНУТИЙ: мінімум 4–6 речень або структуровані маркери (що зробити, які саме дані/значення використати, що саме вивести, як форматувати).
+- Заборонено робити умову «в 1 рядок» типу “Оголосіть змінну ...”. Додай контекст і чіткий критерій перевірки.
+- Якщо завдання про змінні/типи/операції — вимагай ВИВЕСТИ результат (print) так, щоб автотест міг перевірити (детермінований stdout).
+
+ДОЗВОЛЕНІ IO-ТИПИ (allowedIoTypes): ${allowedIoTypes.join(' | ')}
+- Якщо STDIN_STDOUT НЕ дозволено — ЗАБОРОНЕНО просити введення даних, читати stdin або згадувати input()/Scanner/System.in/std::cin/cin/getline.
+- Якщо STDIN_STDOUT дозволено — можна робити задачі зі stdin.
+
 Теорія з теми (для контексту):
 ${params.theory.slice(0, 2000)}
+${uniquenessBlock}
 
 ШАБЛОН КОДУ (codeTemplate) - ЗАБОРОНЕНО писати реалізацію:
 - Для Java: ТІЛЬКИ порожній клас Main з методом main та TODO-коментарем
 - Для Python: ТІЛЬКИ порожня функція main() з if __name__ == "__main__" та TODO-коментарем
+- Для C++: ТІЛЬКИ порожній int main() з TODO-коментарем (можна з #include <iostream> та швидким I/O)
 - ЗАБОРОНЕНО: писати реалізацію, готовий код
 
 ВХІДНІ ДАНІ (inputFormat):
-- Якщо завдання потребує читання з консолі: "Програма читає з консолі: [опис]"
-- Якщо НЕ потребує: "Немає вхідних даних. Використовуйте значення, які ви вкажете в коді."
+
+ТИП ЗАВДАННЯ (ioType) — ОКРЕМО ВІД ТЕКСТУ:
+- Ти ОБОВ'ЯЗКОВО маєш заповнити поле ioType, але НЕ згадуй його у practicalTask/inputFormat/outputFormat (це machine-only).
+- STDIN_STDOUT: стандартне завдання з stdin і єдиним правильним output для кожного input.
+- NO_INPUT_FIXED_OUTPUT: немає вводу; output строго визначений (наприклад, вивести конкретний рядок/число).
+- NO_INPUT_FREE_OUTPUT: немає вводу; дозволено вивести будь-який НЕПОРОЖНІЙ результат (перевірка буде лише на "не порожній stdout").
+
+КРИТИЧНО ДЛЯ АВТОТЕСТІВ:
+- Якщо ioType = STDIN_STDOUT або NO_INPUT_FIXED_OUTPUT: за заданим input існує ЄДИНИЙ правильний output.
+- Якщо ioType = NO_INPUT_FREE_OUTPUT: явно напиши в outputFormat, що можна вивести будь-який НЕПОРОЖНІЙ рядок (без зайвих слів/міток).
+- Заборонені будь-які підказки/тексти у виводі типу "Введіть число" або "Відповідь:".
+
+ВИМОГА ПРО ВВІД:
+- Якщо ioType = NO_INPUT_FIXED_OUTPUT або NO_INPUT_FREE_OUTPUT: inputFormat ОБОВ'ЯЗКОВО має явно сказати, що вхідних даних немає.
+- ${stdinAllowed ? 'STDIN_STDOUT дозволено.' : 'STDIN_STDOUT ЗАБОРОНЕНО — обери NO_INPUT_*.'}
+
+ВИХІДНІ ДАНІ (outputFormat):
+- outputFormat — це контракт для автоперевірки. Опиши РІВНО те, що треба вивести, включно з усіма пробілами/двокрапками/переносами рядків, якщо вони важливі.
+- Якщо ioType = NO_INPUT_FIXED_OUTPUT: outputFormat МАЄ бути ТОЧНИМ текстом, який програма має вивести в stdout (як готовий expected output), а не описом.
+- КАТЕГОРИЧНО ЗАБОРОНЕНО писати у outputFormat або examples.output мета-фрази на кшталт:
+  "Програма скомпілювалася та виконалась без помилок.", "Program compiled and ran without errors", "Success" тощо.
+- Мітки/префікси (наприклад "integer: ") ДОЗВОЛЕНІ лише якщо вони є частиною expected output. Якщо використовуєш мітки — вони мають бути:
+  (a) явно прописані в outputFormat (дослівно),
+  (b) узгоджені з examples.output,
+  (c) згадані в practicalTask як вимога "виведіть у такому форматі".
+
+КРИТИЧНО ПРО ДЕТЕРМІНОВАНІСТЬ:
+- Заборонено формулювати NO_INPUT_FIXED_OUTPUT задачі так, щоб значення або формат були "як завгодно".
+  Якщо немає вводу, ти МАЄШ задати конкретні значення в умові (наприклад: integer=10, float=3.14, ...)
+  і вимагати точний формат виводу (наприклад 4 рядки з мітками).
+- Якщо ти хочеш перевіряти оголошення/присвоєння змінних, але не хочеш фіксувати значення — обирай STDIN_STDOUT і читай значення зі stdin.
+- NO_INPUT_FREE_OUTPUT використовуй ТІЛЬКИ для завдань, де за задумом приймається будь-який непорожній stdout (наприклад: "виведіть будь-яке привітання").
 
 Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
 `.trim();
@@ -386,8 +508,8 @@ ${params.theory.slice(0, 2000)}
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const parsed = await this.openRouterProvider.generateJSON<any>(userPrompt, jsonSchema, systemPrompt, {
-          timeout: 30000,
+        const parsed = await provider.generateJSON<any>(userPrompt, jsonSchema, systemPrompt, {
+          timeout: LLM_TASK_TIMEOUT_MS,
           maxRetries: 0,
           userId: params.userId,
           topicId: params.topicId,
@@ -440,40 +562,45 @@ ${params.theory.slice(0, 2000)}
   private async generateTaskWithAI_OpenRouter(params: {
     topicTitle: string;
     theory: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
     isControl?: boolean;
     prevTopics?: string;
+    previousTasks?: string;
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     userId?: number;
     topicId?: number;
     signal?: AbortSignal;
     semanticRetries?: number;
-  }): Promise<AiTaskGenerationResult> {
+  }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
+    const provider = providerOverride ?? this.openRouterProvider;
     const anchor = await this.generateTaskAnchor({
       topicTitle: params.topicTitle,
       lang: params.lang,
       userId: params.userId,
       topicId: params.topicId,
       signal: params.signal
-    });
+    }, provider);
     const result = await this.generateTaskFromAnchor({
       topicTitle: params.topicTitle,
       theory: params.theory,
       lang: params.lang,
       anchor: anchor,
+      previousTasks: params.previousTasks,
+      allowedIoTypes: params.allowedIoTypes,
       difus: params.difus,
       userId: params.userId,
       topicId: params.topicId,
       signal: params.signal,
       semanticRetries: params.semanticRetries
-    });
+    }, provider);
     return result;
   }
   async generateTheoryWithAI(params: {
     topicTitle: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
@@ -485,6 +612,7 @@ ${params.theory.slice(0, 2000)}
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
+    const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
       const raw = await this.cloudflareProvider.generateTheoryWithAI({
@@ -504,6 +632,29 @@ ${params.theory.slice(0, 2000)}
     const tryOpenRouter = async () => {
       return await this.generateTheoryWithAI_OpenRouter(params);
     };
+
+    const tryLocal = async () => {
+      return await this.generateTheoryWithAI_OpenRouter(params, this.localProvider);
+    };
+
+    if (pref === 'local') {
+      if (!canLocal) {
+        if (canCf) return await tryCloudflare();
+        if (canOr) return await tryOpenRouter();
+        throw new Error('AI_GENERATION_FAILED: LOCAL_LLM_URL not configured');
+      }
+      try {
+        return await tryLocal();
+      } catch (e: any) {
+        if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryCloudflare();
+        }
+        if (canOr && isRetryableError(e)) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
 
     if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
       if (!canCf && canOr) return await tryOpenRouter();
@@ -529,15 +680,16 @@ ${params.theory.slice(0, 2000)}
   }
   private async generateTheoryWithAI_OpenRouter(params: {
     topicTitle: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
     userId?: number;
     topicId?: number;
     signal?: AbortSignal;
-  }): Promise<AiTheoryResult> {
-    const langName = params.lang === "JAVA" ? "Java" : "Python";
+  }, providerOverride?: LLMProvider): Promise<AiTheoryResult> {
+    const provider = providerOverride ?? this.openRouterProvider;
+    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
     const systemPrompt = `Ти досвідчений викладач програмування. Відповідай українською мовою у форматі Markdown.`;
     let userPrompt: string;
     const context = params.taskDescription && params.taskType ? `\n\nКОНТЕКСТ (НЕ ПЕРЕПОВІДАЙ, НЕ ФОРМУЛЮЙ УМОВУ, НЕ ДОДАВАЙ ЗАВДАННЯ):\n${params.taskDescription}` : "";
@@ -551,7 +703,7 @@ ${params.theory.slice(0, 2000)}
 - МОЖНА: пояснення понять, синтаксис, короткі приклади коду (як ілюстрація).
 - Формат: Markdown. Без вступів на кшталт "Ось теорія".`;
     try {
-      const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
+      const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
@@ -568,7 +720,7 @@ ${params.theory.slice(0, 2000)}
     }
   }
   async generateQuizWithAI(params: {
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     prevTopics: string;
     count?: number;
     userId?: number;
@@ -579,6 +731,7 @@ ${params.theory.slice(0, 2000)}
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
+    const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
       const raw = await this.cloudflareProvider.generateQuizWithAI({
@@ -596,6 +749,29 @@ ${params.theory.slice(0, 2000)}
     const tryOpenRouter = async () => {
       return await this.generateQuizWithAI_OpenRouter(params);
     };
+
+    const tryLocal = async () => {
+      return await this.generateQuizWithAI_OpenRouter(params, this.localProvider);
+    };
+
+    if (pref === 'local') {
+      if (!canLocal) {
+        if (canCf) return await tryCloudflare();
+        if (canOr) return await tryOpenRouter();
+        throw new Error('AI_GENERATION_FAILED: LOCAL_LLM_URL not configured');
+      }
+      try {
+        return await tryLocal();
+      } catch (e: any) {
+        if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryCloudflare();
+        }
+        if (canOr && isRetryableError(e)) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
 
     if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
       if (!canCf && canOr) return await tryOpenRouter();
@@ -620,13 +796,14 @@ ${params.theory.slice(0, 2000)}
     }
   }
   private async generateQuizWithAI_OpenRouter(params: {
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     prevTopics: string;
     count?: number;
     userId?: number;
     topicId?: number;
     signal?: AbortSignal;
-  }): Promise<AiQuizResult> {
+  }, providerOverride?: LLMProvider): Promise<AiQuizResult> {
+    const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.lang === "JAVA" ? "Java" : "Python";
     const questionCount = params.count || 12;
     const systemPrompt = `Ти екзаменатор з програмування. Створюй тестові питання з правильними відповідями. Відповідай ТІЛЬКИ у форматі JSON масиву без додаткових пояснень, коментарів або тексту до або після JSON.`;
@@ -641,7 +818,7 @@ ${params.theory.slice(0, 2000)}
     const maxRetries = 2;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
+        const content = await provider.generateText(userPrompt, systemPrompt, {
           timeout: 30000,
           userId: params.userId,
           topicId: params.topicId,
@@ -755,7 +932,7 @@ ${params.theory.slice(0, 2000)}
     taskTitle?: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
-    language: "JAVA" | "PYTHON";
+    language: LLMTaskLanguage;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
@@ -766,6 +943,7 @@ ${params.theory.slice(0, 2000)}
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
+    const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
       const raw = await this.cloudflareProvider.generateTaskCondition({
@@ -784,6 +962,29 @@ ${params.theory.slice(0, 2000)}
     const tryOpenRouter = async () => {
       return await this.generateTaskCondition_OpenRouter(params);
     };
+
+    const tryLocal = async () => {
+      return await this.generateTaskCondition_OpenRouter(params, this.localProvider);
+    };
+
+    if (pref === 'local') {
+      if (!canLocal) {
+        if (canCf) return await tryCloudflare();
+        if (canOr) return await tryOpenRouter();
+        throw new Error('AI_GENERATION_FAILED: LOCAL_LLM_URL not configured');
+      }
+      try {
+        return await tryLocal();
+      } catch (e: any) {
+        if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryCloudflare();
+        }
+        if (canOr && isRetryableError(e)) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
 
     if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
       if (!canCf && canOr) return await tryOpenRouter();
@@ -812,28 +1013,38 @@ ${params.theory.slice(0, 2000)}
     taskTitle?: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
-    language: "JAVA" | "PYTHON";
+    language: LLMTaskLanguage;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
     signal?: AbortSignal;
-  }): Promise<{
+  }, providerOverride?: LLMProvider): Promise<{
     description: string;
   }> {
-    const langName = params.language === "JAVA" ? "Java" : "Python";
+    const provider = providerOverride ?? this.openRouterProvider;
+    const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
     const difficulty = params.difficulty ?? 3;
     const difficultyPrompt = getDifficultyPrompt(difficulty / 5);
     const taskTypeText = params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
     const isEnglish = params.userLanguage === "en";
     const teacherTaskTitle = (params.taskTitle || "").trim();
     const effectiveTitle = teacherTaskTitle || params.topicTitle;
-    const systemPrompt = isEnglish ? `You are an experienced programming teacher. Create clear, detailed task descriptions with examples.` : `Ти досвідчений викладач програмування. Створюй чіткі, детальні умови завдань з прикладами.`;
-    const userPrompt = isEnglish ? `Create a detailed task description for ${taskTypeText.toLowerCase()} titled "${effectiveTitle}" for ${langName} language.
+    const systemPrompt = isEnglish
+      ? `You are an experienced programming teacher. Create judgeable programming tasks with deterministic I/O. Output must be strictly specified.`
+      : `Ти досвідчений викладач програмування. Створюй задачі, які можна перевірити суддею: детермінований ввід/вивід, строгий формат.`;
+    const userPrompt = isEnglish ? `Create a detailed task statement for a ${taskTypeText.toLowerCase()} titled "${effectiveTitle}" for ${langName}.
 
   Topic: "${params.topicTitle}"
   ${teacherTaskTitle ? `Teacher-provided task title: "${teacherTaskTitle}"\nCRITICAL: Use the teacher title as the MAIN theme and do not invent another title.` : ""}
 
 CRITICAL: The task MUST be specifically about the topic "${params.topicTitle}". If the topic is "harmonic mean of array" - the task must be about harmonic mean of array, not about other topics.
+
+CRITICAL FOR AUTO-TESTS (judge):
+- The task MUST be solvable via standard input (stdin) and output to stdout.
+- For any given input there MUST be exactly one correct output.
+- Output MUST NOT contain extra words/labels like "Enter N" / "Answer:".
+- Do NOT allow “choose any values”, “print any message”, or other open-ended output.
+- No randomness, no current date/time, no external files, no network.
 
 ${difficultyPrompt}
 
@@ -843,10 +1054,14 @@ REQUIREMENTS:
 - The practical task must directly relate to the topic "${params.topicTitle}"
 - The task description must be detailed and comprehensive
 - Include a clear problem statement
-- Provide input/output format specifications
-- Include at least 2-3 examples with input and expected output
-- Explain what the program should do step by step
-- Format: Markdown with proper headings and code blocks
+- Provide STRICT input/output format specifications (stdin/stdout)
+- Include at least 3 examples with input and expected output (as raw blocks)
+- Explain the required transformation from input to output (briefly, not as code)
+- Format: Markdown with headings:
+  - "Problem"
+  - "Input"
+  - "Output"
+  - "Examples" (each example has an Input block and an Output block)
 - The task should be related to the topic "${params.topicTitle}"
 
 Return ONLY the task description in Markdown format without additional comments.` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${effectiveTitle}" для мови ${langName}.
@@ -856,6 +1071,13 @@ ${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTa
 
 КРИТИЧНО ВАЖЛИВО: Завдання МАЄ бути саме про тему "${params.topicTitle}". Якщо тема "середнє гармонічне масиву" - завдання має бути про середнє гармонічне масиву, а не про інші теми.
 
+КРИТИЧНО ДЛЯ АВТОТЕСТІВ (суддя):
+- Рішення має працювати через stdin/stdout.
+- Для будь-якого input існує рівно один правильний output.
+- Заборонено додавати у вивід будь-які слова/мітки типу "Введіть...", "Відповідь:".
+- Заборонено формулювання, де учень обирає значення сам ("вкажіть будь-які", "задайте в коді").
+- Без випадковості, без поточної дати/часу, без файлів/мережі.
+
 ${difficultyPrompt}
 
 ВИМОГИ:
@@ -864,14 +1086,22 @@ ${difficultyPrompt}
 - Практичне завдання має безпосередньо стосуватися теми "${params.topicTitle}"
 - Умова має бути детальною та повною
 - Включи чітке формулювання задачі
-- Вкажи формат вводу/виводу
-- Додай принаймні 2-3 приклади з вхідними даними та очікуваним результатом
-- Поясни, що має робити програма покроково
-- Формат: Markdown з правильними заголовками та код-блоками
+- Вкажи СТРОГИЙ формат вводу/виводу (stdin/stdout)
+- Додай принаймні 3 приклади з вхідними даними та очікуваним результатом (як «сирий» input/output у code-block)
+- Коротко поясни перетворення з input у output (без коду)
+- Формат: Markdown з заголовками:
+  - "Умова"
+  - "Вхідні дані"
+  - "Вихідні дані"
+  - "Приклади" (кожен приклад має блоки Input та Output)
+
+ВИВІД:
+- В output виводь лише потрібні значення (числа/рядки) у вказаному порядку.
+- НЕ використовуй мітки на кшталт "Ціле число:", "Рядок:".
 
 Поверни ТІЛЬКИ умову завдання у форматі Markdown без додаткових коментарів.`;
     try {
-      const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
+      const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
@@ -891,7 +1121,7 @@ ${difficultyPrompt}
   async generateTaskTemplate(params: {
     topicTitle: string;
     taskTitle?: string;
-    language: "JAVA" | "PYTHON";
+    language: LLMTaskLanguage;
     description?: string;
     userId?: number;
     topicId?: number;
@@ -903,6 +1133,7 @@ ${difficultyPrompt}
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
+    const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
       const raw = await this.cloudflareProvider.generateTaskTemplate({
@@ -931,6 +1162,29 @@ ${difficultyPrompt}
       return await this.generateTaskTemplate_OpenRouter(params);
     };
 
+    const tryLocal = async () => {
+      return await this.generateTaskTemplate_OpenRouter(params, this.localProvider);
+    };
+
+    if (pref === 'local') {
+      if (!canLocal) {
+        if (canCf) return await tryCloudflare();
+        if (canOr) return await tryOpenRouter();
+        throw new Error('AI_GENERATION_FAILED: LOCAL_LLM_URL not configured');
+      }
+      try {
+        return await tryLocal();
+      } catch (e: any) {
+        if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryCloudflare();
+        }
+        if (canOr && isRetryableError(e)) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
+
     if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
       if (!canCf && canOr) return await tryOpenRouter();
       try {
@@ -956,16 +1210,17 @@ ${difficultyPrompt}
   private async generateTaskTemplate_OpenRouter(params: {
     topicTitle: string;
     taskTitle?: string;
-    language: "JAVA" | "PYTHON";
+    language: LLMTaskLanguage;
     description?: string;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
     signal?: AbortSignal;
-  }): Promise<{
+  }, providerOverride?: LLMProvider): Promise<{
     template: string;
   }> {
-    const langName = params.language === "JAVA" ? "Java" : "Python";
+    const provider = providerOverride ?? this.openRouterProvider;
+    const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
     const isEnglish = params.userLanguage === 'en';
     const todoText = isEnglish ? 'implement the solution according to the statement' : 'реалізуйте рішення задачі згідно з умовою';
     const teacherTaskTitle = (params.taskTitle || '').trim();
@@ -997,6 +1252,7 @@ ALLOWED:
 REQUIREMENTS:
 - Java: ONLY empty class Main with main method and a TODO comment
 - Python: ONLY empty main() function with if __name__ == "__main__" and a TODO comment
+- C++: ONLY empty int main() with a TODO comment (you may include <iostream> and fast I/O lines)
 - No implementation
 - No markdown code fences
 
@@ -1016,6 +1272,17 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+Correct C++ example:
+#include <iostream>
+
+int main() {
+  std::ios::sync_with_stdio(false);
+  std::cin.tie(nullptr);
+
+  // TODO: ${todoText}
+  return 0;
+}
 
 Return ONLY the code, no explanations.` : `Створи порожній шаблон коду для завдання "${effectiveTitle}" на мові ${langName}.
 
@@ -1045,6 +1312,7 @@ ${params.description ? `Опис завдання:\n${params.description}\n\n` :
 ВИМОГИ:
 - Для Java: ТІЛЬКИ порожній клас Main з методом main та TODO-коментарем
 - Для Python: ТІЛЬКИ порожня функція main() з if __name__ == "__main__" та TODO-коментарем
+- Для C++: ТІЛЬКИ порожній int main() з TODO-коментарем (можна з #include <iostream> та швидким I/O)
 - Без реалізації логіки
 - Без markdown блоків
 
@@ -1069,6 +1337,19 @@ if __name__ == "__main__":
     main()
 \`\`\`
 
+Приклад ПРАВИЛЬНОГО шаблону для C++:
+\`\`\`cpp
+#include <iostream>
+
+int main() {
+  std::ios::sync_with_stdio(false);
+  std::cin.tie(nullptr);
+
+  // TODO: ${todoText}
+  return 0;
+}
+\`\`\`
+
 Приклад НЕПРАВИЛЬНОГО шаблону (ЗАБОРОНЕНО):
 \`\`\`java
 public class Main {
@@ -1086,7 +1367,7 @@ public class Main {
 
 Поверни ТІЛЬКИ код без markdown блоків та пояснень.`;
     try {
-      const content = await this.openRouterProvider.generateText(userPrompt, systemPrompt, {
+      const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
@@ -1114,7 +1395,7 @@ public class Main {
   async generateTestDataWithAI(params: {
     taskDescription: string;
     taskTitle: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     count: number;
     userId?: number;
     signal?: AbortSignal;
@@ -1122,6 +1403,7 @@ public class Main {
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
+    const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
       const raw = await this.cloudflareProvider.generateTestDataWithAI({
@@ -1137,6 +1419,29 @@ public class Main {
     const tryOpenRouter = async () => {
       return await this.generateTestDataWithAI_OpenRouter(params);
     };
+
+    const tryLocal = async () => {
+      return await this.generateTestDataWithAI_OpenRouter(params, this.localProvider);
+    };
+
+    if (pref === 'local') {
+      if (!canLocal) {
+        if (canCf) return await tryCloudflare();
+        if (canOr) return await tryOpenRouter();
+        throw new Error('AI_GENERATION_FAILED: LOCAL_LLM_URL not configured');
+      }
+      try {
+        return await tryLocal();
+      } catch (e: any) {
+        if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
+          return await tryCloudflare();
+        }
+        if (canOr && isRetryableError(e)) {
+          return await tryOpenRouter();
+        }
+        throw e;
+      }
+    }
 
     if (pref === 'cloudflare' || (pref === 'auto' && canCf)) {
       if (!canCf && canOr) return await tryOpenRouter();
@@ -1163,12 +1468,13 @@ public class Main {
   private async generateTestDataWithAI_OpenRouter(params: {
     taskDescription: string;
     taskTitle: string;
-    lang: "JAVA" | "PYTHON";
+    lang: LLMTaskLanguage;
     count: number;
     userId?: number;
     signal?: AbortSignal;
-  }): Promise<TestDataExample[]> {
-    const langName = params.lang === "JAVA" ? "Java" : "Python";
+  }, providerOverride?: LLMProvider): Promise<TestDataExample[]> {
+    const provider = providerOverride ?? this.openRouterProvider;
+    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
     const taskDesc = params.taskDescription.slice(0, 2000);
     const taskDescLower = taskDesc.toLowerCase();
     const explicitlyNoInput = /нема(є)?\s+вхідн/i.test(taskDesc) || /без\s+вхідн/i.test(taskDesc) || /no\s+input/i.test(taskDesc) || /does\s+not\s+take\s+input/i.test(taskDesc);
@@ -1252,7 +1558,7 @@ ${JSON.stringify(jsonSchema, null, 2)}
 - Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень
 `.trim();
     try {
-      const parsed = await this.openRouterProvider.generateJSON<{
+      const parsed = await provider.generateJSON<{
         tests: TestDataExample[];
       }>(userPrompt, jsonSchema, systemPrompt, {
         timeout: 30000,

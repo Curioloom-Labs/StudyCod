@@ -21,10 +21,13 @@ import {
   type TaskWithGrade,
   type TestResult
 } from "../lib/api/edu";
+import { recordSuccessfulStudySession } from "../lib/uiMode";
 import { ArrowLeft, Play, Send, Save, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload } from "lucide-react";
 import { isDeadlineExpired } from "../utils/timezone";
 import { getMe } from "../lib/api/profile";
 import type { User } from "../types";
+import { useWorkspaceViewport } from "../components/interface/WorkspaceViewport";
+import { buildResumeState, loadResumeState, saveResumeState } from "../lib/resumeState";
 export const StudentTaskPage: React.FC = () => {
   const {
     t,
@@ -36,6 +39,7 @@ export const StudentTaskPage: React.FC = () => {
     taskId: string;
   }>();
   const navigate = useNavigate();
+  const { element: viewportEl } = useWorkspaceViewport();
   const [task, setTask] = useState<TaskWithGrade | null>(null);
   const [code, setCode] = useState("");
   const [useFiles, setUseFiles] = useState(false);
@@ -71,22 +75,41 @@ export const StudentTaskPage: React.FC = () => {
   const [deadlineRemaining, setDeadlineRemaining] = useState<number | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importSolutionKey, setImportSolutionKey] = useState(0);
+  const [taskPaneEl, setTaskPaneEl] = useState<HTMLDivElement | null>(null);
+  const [theoryPaneEl, setTheoryPaneEl] = useState<HTMLDivElement | null>(null);
+
+  const restoredStepRef = useRef(false);
+  const restoredViewportScrollRef = useRef(false);
+  const restoredTaskPaneScrollRef = useRef(false);
+  const restoredTheoryPaneScrollRef = useRef(false);
+  const restoredQuizAnchorRef = useRef(false);
+  const resumeExtrasRef = useRef<{
+    questionIndex?: number;
+    anchorId?: string;
+    cursor?: {
+      field?: string;
+      start?: number;
+      end?: number;
+    };
+    scrollContainer?: string;
+    scrollTopByContainer?: Record<string, number>;
+  }>({});
   const tr = useCallback((uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk, [i18n.language]);
   const taskRef = useRef(task);
   const codeRef = useRef(code);
   const filesRef = useRef(files);
   const useFilesRef = useRef(useFiles);
-  const handleSubmitRef = useRef<() => Promise<void>>();
+  const handleSubmitRef = useRef<(() => Promise<void>) | null>(null);
   useEffect(() => {
     taskRef.current = task;
     filesRef.current = files;
     useFilesRef.current = useFiles;
-    const entryFile = task?.language === "JAVA" ? "Main.java" : "main.py";
+    const entryFile = task?.language === "JAVA" ? "Main.java" : task?.language === "CPP" ? "main.cpp" : "main.py";
     const entryContent = useFiles ? (files.find(f => f.path === entryFile)?.content ?? "") : code;
     codeRef.current = entryContent;
   }, [task, code, files, useFiles]);
 
-  const entryFile = useMemo(() => (task?.language === "JAVA" ? "Main.java" : "main.py"), [task?.language]);
+  const entryFile = useMemo(() => (task?.language === "JAVA" ? "Main.java" : task?.language === "CPP" ? "main.cpp" : "main.py"), [task?.language]);
   const normalizeFiles = useCallback((raw: CodeFile[]): CodeFile[] => {
     const safe = (p: string) => {
       if (!p) return false;
@@ -128,6 +151,241 @@ export const StudentTaskPage: React.FC = () => {
     };
     init();
   }, []);
+
+  const taskIdNum = useMemo(() => {
+    const n = Number(taskId);
+    return Number.isFinite(n) ? n : null;
+  }, [taskId]);
+
+  const resumeStep = useMemo(() => {
+    if (showResults) return "results";
+    const hasTheory = Boolean(task?.lesson?.hasTheory && task.lesson.theory && task.lesson.theory.trim().length > 0);
+    if (hasTheory && !theoryAcknowledged) return "theory";
+    return "solve";
+  }, [showResults, task?.lesson?.hasTheory, task?.lesson?.theory, theoryAcknowledged]);
+
+  const currentDraftKey = useMemo(() => {
+    if (!taskIdNum) return undefined;
+    return useFiles ? `task_draft_files_${taskIdNum}` : `task_draft_${taskIdNum}`;
+  }, [taskIdNum, useFiles]);
+
+  const saveResume = useCallback(
+    (scrollTop?: number) => {
+      if (!user) return;
+      if (taskIdNum == null) return;
+      const extras = resumeExtrasRef.current || {};
+      saveResumeState(
+        buildResumeState({
+          userId: user.id,
+          kind: "edu_task",
+          taskId: taskIdNum,
+          step: resumeStep,
+          scrollTop,
+          draftKey: currentDraftKey,
+          questionIndex: extras.questionIndex,
+          anchorId: extras.anchorId,
+          cursor: extras.cursor,
+          scrollContainer: extras.scrollContainer,
+          scrollTopByContainer: extras.scrollTopByContainer
+        })
+      );
+    },
+    [user?.id, taskIdNum, resumeStep, currentDraftKey]
+  );
+
+  // Restore step and seed any resume extras once when the task loads.
+  useEffect(() => {
+    if (!user) return;
+    if (taskIdNum == null) return;
+    if (restoredStepRef.current) return;
+
+    const state = loadResumeState(user.id);
+    if (!state || state.kind !== "edu_task" || state.taskId !== taskIdNum) return;
+
+    restoredStepRef.current = true;
+    resumeExtrasRef.current = {
+      ...resumeExtrasRef.current,
+      questionIndex: state.questionIndex,
+      anchorId: state.anchorId,
+      cursor: state.cursor,
+      scrollContainer: state.scrollContainer,
+      scrollTopByContainer: state.scrollTopByContainer
+    };
+    if (state.step === "results") setShowResults(true);
+    if (state.step === "theory") setTheoryAcknowledged(false);
+    if (state.step === "solve") setTheoryAcknowledged(true);
+  }, [user?.id, taskIdNum]);
+
+  // Restore workspace viewport scroll when available.
+  useEffect(() => {
+    if (!user) return;
+    if (taskIdNum == null) return;
+    if (!viewportEl) return;
+    if (restoredViewportScrollRef.current) return;
+
+    const state = loadResumeState(user.id);
+    if (!state || state.kind !== "edu_task" || state.taskId !== taskIdNum) return;
+
+    if (typeof state.scrollTop === "number") {
+      restoredViewportScrollRef.current = true;
+      requestAnimationFrame(() => {
+        try {
+          viewportEl.scrollTop = state.scrollTop ?? 0;
+        } catch {
+          // ignore
+        }
+      });
+    }
+  }, [user?.id, taskIdNum, viewportEl]);
+
+  // Restore the internal scroll panes (theory/task panel) when they mount.
+  useEffect(() => {
+    if (!user) return;
+    if (taskIdNum == null) return;
+    if (!taskPaneEl) return;
+    if (restoredTaskPaneScrollRef.current) return;
+
+    const state = loadResumeState(user.id);
+    if (!state || state.kind !== "edu_task" || state.taskId !== taskIdNum) return;
+
+    const y = state.scrollTopByContainer?.taskPane;
+    if (typeof y !== "number") return;
+    restoredTaskPaneScrollRef.current = true;
+    requestAnimationFrame(() => {
+      try {
+        taskPaneEl.scrollTop = y;
+      } catch {
+        // ignore
+      }
+    });
+  }, [user?.id, taskIdNum, taskPaneEl]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (taskIdNum == null) return;
+    if (!theoryPaneEl) return;
+    if (restoredTheoryPaneScrollRef.current) return;
+
+    const state = loadResumeState(user.id);
+    if (!state || state.kind !== "edu_task" || state.taskId !== taskIdNum) return;
+
+    const y = state.scrollTopByContainer?.theoryPane;
+    if (typeof y !== "number") return;
+    restoredTheoryPaneScrollRef.current = true;
+    requestAnimationFrame(() => {
+      try {
+        theoryPaneEl.scrollTop = y;
+      } catch {
+        // ignore
+      }
+    });
+  }, [user?.id, taskIdNum, theoryPaneEl]);
+
+  useEffect(() => {
+    if (!viewportEl) return;
+    if (!user) return;
+    if (taskIdNum == null) return;
+
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => saveResume(viewportEl.scrollTop));
+    };
+
+    viewportEl.addEventListener("scroll", onScroll, { passive: true } as any);
+    saveResume(viewportEl.scrollTop);
+    return () => {
+      viewportEl.removeEventListener("scroll", onScroll as any);
+      if (raf) cancelAnimationFrame(raf);
+      saveResume(viewportEl.scrollTop);
+    };
+  }, [viewportEl, user?.id, taskIdNum, saveResume]);
+
+  useEffect(() => {
+    if (!taskPaneEl) return;
+    if (!user) return;
+    if (taskIdNum == null) return;
+
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const prev = resumeExtrasRef.current.scrollTopByContainer || {};
+        resumeExtrasRef.current.scrollTopByContainer = {
+          ...prev,
+          taskPane: taskPaneEl.scrollTop
+        };
+        resumeExtrasRef.current.scrollContainer = "taskPane";
+        saveResume(viewportEl?.scrollTop);
+      });
+    };
+
+    taskPaneEl.addEventListener("scroll", onScroll, { passive: true } as any);
+    onScroll();
+    return () => {
+      taskPaneEl.removeEventListener("scroll", onScroll as any);
+      if (raf) cancelAnimationFrame(raf);
+      onScroll();
+    };
+  }, [taskPaneEl, user?.id, taskIdNum, saveResume, viewportEl]);
+
+  useEffect(() => {
+    if (!theoryPaneEl) return;
+    if (!user) return;
+    if (taskIdNum == null) return;
+
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const prev = resumeExtrasRef.current.scrollTopByContainer || {};
+        resumeExtrasRef.current.scrollTopByContainer = {
+          ...prev,
+          theoryPane: theoryPaneEl.scrollTop
+        };
+        resumeExtrasRef.current.scrollContainer = "theoryPane";
+        saveResume(viewportEl?.scrollTop);
+      });
+    };
+
+    theoryPaneEl.addEventListener("scroll", onScroll, { passive: true } as any);
+    onScroll();
+    return () => {
+      theoryPaneEl.removeEventListener("scroll", onScroll as any);
+      if (raf) cancelAnimationFrame(raf);
+      onScroll();
+    };
+  }, [theoryPaneEl, user?.id, taskIdNum, saveResume, viewportEl]);
+
+  useEffect(() => {
+    // When a quiz exists, restore the last interacted question as an anchor.
+    if (!user) return;
+    if (taskIdNum == null) return;
+    if (!taskPaneEl) return;
+    if (restoredQuizAnchorRef.current) return;
+    if (!task || task.lesson?.type !== "CONTROL") return;
+    if (!quizQuestions.length) return;
+
+    const state = loadResumeState(user.id);
+    if (!state || state.kind !== "edu_task" || state.taskId !== taskIdNum) return;
+    if (typeof state.questionIndex !== "number") return;
+    if (state.questionIndex < 0 || state.questionIndex >= quizQuestions.length) return;
+
+    restoredQuizAnchorRef.current = true;
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`quiz-q-${state.questionIndex}`);
+      try {
+        el?.scrollIntoView({ block: "center" });
+      } catch {
+        // ignore
+      }
+    });
+  }, [user?.id, taskIdNum, task, quizQuestions.length, taskPaneEl]);
+
+  useEffect(() => {
+    // Save when step/draft changes even if scroll doesn't.
+    saveResume(viewportEl?.scrollTop);
+  }, [user?.id, taskIdNum, resumeStep, currentDraftKey]);
   useEffect(() => {
     if (taskId) {
       loadTask();
@@ -291,7 +549,7 @@ export const StudentTaskPage: React.FC = () => {
       const draftCode = localStorage.getItem(`task_draft_${taskId}`);
       const savedCode = (data as any).savedCode;
 
-      const entryFromData = data.language === "JAVA" ? "Main.java" : "main.py";
+      const entryFromData = data.language === "JAVA" ? "Main.java" : data.language === "CPP" ? "main.cpp" : "main.py";
 
       if (Array.isArray(submittedFiles) && submittedFiles.length > 0) {
         const effective = ensureEntryFile(entryFromData, submittedFiles, submittedCode || savedCode || data.template);
@@ -576,6 +834,12 @@ export const StudentTaskPage: React.FC = () => {
         alert(t("taskCompletedEarly"));
       }
       await loadTask();
+
+      // Count as a successful study session (used for the interface switch suggestion).
+      recordSuccessfulStudySession({
+        kind: "edu_task_complete",
+        taskId: taskId
+      });
     } catch (error: any) {
       if (import.meta.env.DEV) {
         console.error("Failed to complete task:", error);
@@ -828,7 +1092,7 @@ export const StudentTaskPage: React.FC = () => {
               <h1 className="text-lg font-mono text-text-primary">{task.title}</h1>
             </div>
           </div>
-              <div className="flex-1 overflow-y-auto p-8 pb-24">
+              <div className="flex-1 overflow-y-auto p-8 pb-24" ref={setTheoryPaneEl}>
                 <div className="max-w-4xl mx-auto">
                   <h2 className="text-2xl font-mono text-text-primary mb-6">{t("theory")}</h2>
                   <div className="prose prose-invert max-w-none text-text-secondary font-mono">
@@ -858,7 +1122,7 @@ export const StudentTaskPage: React.FC = () => {
                   {task.lesson.type === "CONTROL" && quizQuestions.length > 0 ? tr("Теоретична частина", "Theory part") : t("task")}
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 bg-bg-base">
+              <div className="flex-1 overflow-y-auto p-4 bg-bg-base" ref={setTaskPaneEl}>
                 {task.lesson.type === "CONTROL" && quizQuestions.length > 0 ? <div className="space-y-4">
                     <div className="mb-4 pb-3 border-b border-border">
                       <h3 className="text-lg font-mono text-text-primary mb-1">{tr("Теоретична частина", "Theory part")}</h3>
@@ -870,7 +1134,7 @@ export const StudentTaskPage: React.FC = () => {
                         {tr("питань", "questions")}
                       </div>
                     </div>
-                    {quizQuestions.map((q: any, index: number) => <Card key={index} className={`p-4 transition-all ${quizAnswers[index] ? "border-primary/50 bg-bg-code/50" : "border-border"} ${quizSubmitted && quizAnswers[index] === q.correct ? "border-accent-success bg-accent-success/10" : quizSubmitted && quizAnswers[index] && quizAnswers[index] !== q.correct ? "border-accent-error bg-accent-error/10" : ""}`}>
+                    {quizQuestions.map((q: any, index: number) => <Card id={`quiz-q-${index}`} key={index} className={`p-4 transition-all ${quizAnswers[index] ? "border-primary/50 bg-bg-code/50" : "border-border"} ${quizSubmitted && quizAnswers[index] === q.correct ? "border-accent-success bg-accent-success/10" : quizSubmitted && quizAnswers[index] && quizAnswers[index] !== q.correct ? "border-accent-error bg-accent-error/10" : ""}`}>
                         <div className="mb-4">
                           <div className="flex items-start gap-2 mb-2">
                             <span className="text-xs font-mono text-text-secondary bg-bg-surface px-2 py-1 rounded">
@@ -896,6 +1160,11 @@ export const StudentTaskPage: React.FC = () => {
                         };
                         setQuizAnswers(newAnswers);
                         localStorage.setItem(`quiz_answers_${taskId}`, JSON.stringify(newAnswers));
+
+                        // Persist last interacted quiz question for resume.
+                        resumeExtrasRef.current.questionIndex = index;
+                        resumeExtrasRef.current.anchorId = `quiz-q-${index}`;
+                        saveResume(viewportEl?.scrollTop);
                       }
                     }} disabled={quizSubmitted} className="mt-1 mr-3 flex-shrink-0" />
                                 <div className="flex-1">

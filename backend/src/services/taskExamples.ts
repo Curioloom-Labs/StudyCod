@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 const taskRepo = () => AppDataSource.getRepository(Task);
 export interface TaskExample {
   topic: string;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   difficulty: number;
   theoryMarkdown: string;
   practicalTask: string;
@@ -72,7 +72,7 @@ function extractTaskExample(task: Task, topicTitle: string): TaskExample | null 
 }
 export async function getTaskExamples(params: {
   topicTitle: string;
-  lang: "JAVA" | "PYTHON";
+  lang: "JAVA" | "PYTHON" | "CPP";
   difus: number;
   numExamples?: number;
 }): Promise<TaskExample[]> {
@@ -132,7 +132,7 @@ ${ex.practicalTask.substring(0, 300)}...
 Вихід: ${ex.examples[0]?.output || 'N/A'}
 
 Код-шаблон:
-\`\`\`${ex.language === 'JAVA' ? 'java' : 'python'}
+\`\`\`${ex.language === 'JAVA' ? 'java' : ex.language === 'PYTHON' ? 'python' : 'cpp'}
 ${ex.codeTemplate.substring(0, 200)}...
 \`\`\`
 `).join('\n---\n')}`;

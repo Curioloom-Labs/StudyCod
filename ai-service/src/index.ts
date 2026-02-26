@@ -1,18 +1,36 @@
 import './module-resolver';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-const rootEnvPath = path.resolve(process.cwd(), '../.env');
-const backendEnvPath = path.resolve(process.cwd(), '../backend/.env');
-dotenv.config({
-  path: rootEnvPath
-});
-dotenv.config({
-  path: backendEnvPath,
-  override: false
-});
+
+// IMPORTANT: Load env only from ai-service/.env.
+// We intentionally do NOT load ../.env or ../backend/.env to avoid “external .env” surprises.
+const findAIServiceRoot = (startDir: string): string | null => {
+  let dir = startDir;
+  for (let i = 0; i < 20; i++) {
+    const pkgPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const raw = fs.readFileSync(pkgPath, 'utf8');
+        const pkg = JSON.parse(raw);
+        if (pkg?.name === 'studycod-ai-service') return dir;
+      } catch {
+        // ignore
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+};
+
+const aiServiceRoot = findAIServiceRoot(__dirname) ?? process.cwd();
+const envPath = path.join(aiServiceRoot, '.env');
+dotenv.config({ path: fs.existsSync(envPath) ? envPath : undefined, override: false });
 import { getLLMOrchestrator } from '../../backend/src/services/llm/LLMOrchestrator';
 const PORT = process.env.AI_SERVICE_PORT ? parseInt(process.env.AI_SERVICE_PORT, 10) : 3001;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';

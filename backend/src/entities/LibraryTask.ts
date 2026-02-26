@@ -14,7 +14,7 @@ import { TaskTheory } from "./TaskTheory";
 import { TestData } from "./TestData";
 
 export type LibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
-export type LibraryTaskLang = "JAVA" | "PYTHON";
+export type LibraryTaskLang = "JAVA" | "PYTHON" | "CPP";
 export type LibraryTaskDifficulty = "EASY" | "MEDIUM" | "HARD";
 
 @Entity("library_tasks")
@@ -33,6 +33,52 @@ export class LibraryTask {
 
   @Column({ type: "text" })
   description!: string;
+
+  // Stored uk -> en translation (generated on-demand for users with English UI)
+  @Column({
+    type: "varchar",
+    length: 255,
+    nullable: true,
+    name: "title_en",
+    select: false,
+  })
+  titleEn?: string | null;
+
+  @Column({
+    type: "text",
+    nullable: true,
+    name: "description_en",
+    select: false,
+  })
+  descriptionEn?: string | null;
+
+  // Hash of the source (uk) fields used to generate titleEn/descriptionEn.
+  // Used to detect staleness without relying on updated_at.
+  @Column({
+    type: "varchar",
+    length: 64,
+    nullable: true,
+    name: "translation_source_hash_en",
+    select: false,
+  })
+  translationSourceHashEn?: string | null;
+
+  // Version of the translation algorithm/output format.
+  @Column({
+    type: "int",
+    nullable: true,
+    name: "translation_version_en",
+    select: false,
+  })
+  translationVersionEn?: number | null;
+
+  @Column({
+    type: "datetime",
+    nullable: true,
+    name: "translated_at_en",
+    select: false,
+  })
+  translatedAtEn?: Date | null;
 
   @Column({ type: "text" })
   template!: string;
@@ -55,7 +101,11 @@ export class LibraryTask {
   })
   difficulty?: LibraryTaskDifficulty | null;
 
-  @Column({ type: "text", name: "tags", nullable: true })
+  // Stored as JSON in TEXT column (TypeORM simple-json).
+  // Important: storing string[] in a plain TEXT column can cause the MySQL driver
+  // to expand the array into multiple SQL values and trigger
+  // "Column count doesn't match value count at row 1".
+  @Column({ type: "simple-json", name: "tags", nullable: true })
   tags?: string[] | null;
 
   @Column({ type: "varchar", length: 80, name: "section", nullable: true })
@@ -81,13 +131,16 @@ export class LibraryTask {
 
   @Column({
     type: "enum",
-    enum: ["JAVA", "PYTHON"],
+    enum: ["JAVA", "PYTHON", "CPP"],
     default: "JAVA",
   })
   lang!: LibraryTaskLang;
 
   @Column({ type: "int", default: 3, name: "max_attempts" })
   maxAttempts!: number;
+
+  @Column({ type: "tinyint", width: 1, name: "is_hidden_from_library", default: false })
+  isHiddenFromLibrary!: boolean;
 
   @Column({
     type: "enum",

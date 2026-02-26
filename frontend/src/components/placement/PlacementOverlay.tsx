@@ -17,6 +17,12 @@ function levelLabel(level: PlacementLevel, lang: "uk" | "en") {
   return isUk ? "Просунутий" : "Advanced";
 }
 
+function courseLabel(course: CourseLanguage) {
+  if (course === "JAVA") return "Java";
+  if (course === "PYTHON") return "Python";
+  return "C++";
+}
+
 export const PlacementOverlay: React.FC<{
   open: boolean;
   user: User;
@@ -145,7 +151,7 @@ export const PlacementOverlay: React.FC<{
                 {lang === "uk" ? "Мова" : "Language"}
               </div>
               <div className="flex flex-wrap gap-2">
-                {(["JAVA", "PYTHON"] as CourseLanguage[]).map(c => (
+                {(["JAVA", "PYTHON", "CPP"] as CourseLanguage[]).map(c => (
                   <Button
                     key={c}
                     variant={c === pickedCourse ? "primary" : "ghost"}
@@ -159,7 +165,7 @@ export const PlacementOverlay: React.FC<{
                     }}
                     disabled={submitting}
                   >
-                    {c === "JAVA" ? "Java" : "Python"}
+                    {courseLabel(c)}
                   </Button>
                 ))}
               </div>
@@ -253,7 +259,7 @@ export const PlacementOverlay: React.FC<{
             <Card className="p-3">
               <div className="text-xs font-mono text-text-secondary mb-2">
                 {lang === "uk" ? "Код" : "Code"}
-                {codingChallenge?.language ? <span className="text-text-muted"> ({codingChallenge.language === "JAVA" ? "Java" : "Python"})</span> : null}
+                {codingChallenge?.language ? <span className="text-text-muted"> ({courseLabel(codingChallenge.language)})</span> : null}
               </div>
               <div className="border border-border h-[52vh] min-h-[360px] max-h-[720px]">
                 <CodeEditor language={codingChallenge?.language || pickedCourse} value={codingCode} onChange={setCodingCode} />

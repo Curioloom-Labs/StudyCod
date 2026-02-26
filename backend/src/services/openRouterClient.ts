@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { logger } from '../utils/logger';
 export interface OpenRouterRequest {
   model: string;

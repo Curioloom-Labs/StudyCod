@@ -20,7 +20,7 @@ interface AiScoreResult {
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 export async function evaluateCodeWithAI(params: {
   code: string;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   task: Task;
   previousCode?: string;
   previousGrade?: number;

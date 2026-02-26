@@ -64,6 +64,21 @@ export class NsJailExecutor {
     }
     nsArgs.push("--time_limit", String(timeLimitSec), "--rlimit_cpu", String(cpuLimitSec), "--rlimit_as", String(rlimitAs), "--rlimit_fsize", String(rlimitFsize));
     nsArgs.push("--bindmount", `${opts.hostWorkDir}:/work`);
+
+    // Ensure a UTF-8 locale inside the jail.
+    // Without this, some runtimes (notably Java when locale is C/POSIX) may fall back to US-ASCII
+    // and replace non-ASCII (e.g., Cyrillic) output with '?'.
+    nsArgs.push(
+      "--env",
+      "LANG=C.UTF-8",
+      "--env",
+      "LC_ALL=C.UTF-8",
+      "--env",
+      "LANGUAGE=C.UTF-8",
+      // Helpful for Python when locale is misconfigured.
+      "--env",
+      "PYTHONIOENCODING=UTF-8"
+    );
     nsArgs.push("--", ...opts.argv);
     if (opts.extraNsJailArgs?.length) {
       const idx = nsArgs.indexOf("--");

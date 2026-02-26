@@ -7,13 +7,14 @@ const TaskGenerationSchema = z.object({
   difficulty: z.number().int().min(1).max(5, 'difficulty must be between 1 and 5'),
   theoryMarkdown: z.string().min(1, 'theoryMarkdown must be a non-empty string'),
   practicalTask: z.string().min(1, 'practicalTask must be a non-empty string'),
+  ioType: z.enum(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]).optional().default("STDIN_STDOUT"),
   inputFormat: z.string(),
   outputFormat: z.string(),
   constraints: z.string(),
   examples: z
     .array(
       z.object({
-        input: z.string().min(1, 'example input must be a non-empty string'),
+        input: z.string(),
         output: z.string().min(1, 'example output must be a non-empty string'),
         explanation: z.string().min(1, 'example explanation must be a non-empty string'),
       })
@@ -21,6 +22,54 @@ const TaskGenerationSchema = z.object({
     .min(1, 'examples array must contain at least one example'),
   codeTemplate: z.string().min(1, 'codeTemplate must be a non-empty string'),
 });
+
+function looksLikeEmptyOutputTemplate(text: string): boolean {
+  const s = String(text ?? '').trim();
+  if (!s) return true;
+  const lines = s.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return true;
+  // Template-like output such as:
+  // "Ціле число:" (no value) / "integer:" (no value)
+  const templateLines = lines.filter(l => /[:：]\s*$/.test(l));
+  return templateLines.length === lines.length;
+}
+
+function mentionsNoInput(text: string): boolean {
+  const s = String(text ?? '').toLowerCase();
+  return /вхідн(их|і)\s+дан(их|і)\s+нема|вхідні\s+дані\s+відсутн|не\s+потрібно\s+вводити|нічого\s+не\s+ввод(ити|иться)|без\s+введенн(я|я\s+даних)|дані\s+не\s+пода(ю|ю)ться|stdin\s*(?:is\s*)?empty|no\s+input|without\s+input|input\s+is\s+not\s+provided|there\s+is\s+no\s+input/.test(s);
+}
+
+function defaultNoInputFormat(preferUkrainian: boolean): string {
+  return preferUkrainian
+    ? 'Вхідні дані відсутні (нічого не вводиться).'
+    : 'There is no input (stdin is empty).';
+}
+
+function looksLikeJudgeSuccessMessage(text: string): boolean {
+  const s = String(text ?? '').trim().toLowerCase();
+  if (!s) return false;
+  // Common “meta output” that occasionally leaks into outputFormat/examples.
+  // UA
+  if (/програма\s+скомпілювал/i.test(s) && /виконал/i.test(s) && /без\s+помил/i.test(s)) return true;
+  if (/програм[а-яіїє]+\s+(?:завершил|завершил|завершила|завершилас|завершилась)\s+робот/i.test(s) && /без\s+помил/i.test(s)) return true;
+  // EN
+  if (/(compiled|build)\s+(successfully|ok)/i.test(s) && /(executed|ran|run)/i.test(s)) return true;
+  if (/program\s+(?:has\s+)?(?:compiled|executed|ran)\s+(?:successfully|without\s+errors)/i.test(s)) return true;
+  if (/successfully\s+(?:compiled|executed|ran)/i.test(s)) return true;
+  return false;
+}
+
+function looksTooShortOrVaguePracticalTask(text: string): boolean {
+  const s = String(text ?? '').trim();
+  if (!s) return true;
+  // Heuristic: we want more expanded conditions; single-line stubs are not helpful.
+  const compact = s.replace(/\s+/g, ' ');
+  if (compact.length < 180) return true;
+  const sentences = (compact.match(/[.!?…]+/g) || []).length;
+  const hasBullets = /\n\s*[-*]\s+/.test(s);
+  if (sentences >= 2 || hasBullets) return false;
+  return true;
+}
 
 const TheoryResponseSchema = z.object({
   theory: z.string().min(1, 'theory must be a non-empty string'),
@@ -69,6 +118,10 @@ export class AIValidationError extends Error {
     this.rawResponse = rawResponse;
   }
 }
+
+export function makeAIValidationError(mode: string, message: string, rawResponse?: unknown): AIValidationError {
+  return new AIValidationError(mode, emptyZod(), message, rawResponse);
+}
 export class AIResponseValidator {
   private static assertTheoryIsPure(theory: string): void {
     const t = String(theory ?? "").trim();
@@ -92,6 +145,73 @@ export class AIResponseValidator {
     try {
       const fixed = this.fixTaskGenerationData(data);
       const validated = TaskGenerationSchema.parse(fixed);
+
+      // Conditional IO semantics validation.
+      const ioType = (validated as any).ioType as ("STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT");
+      const firstExample = Array.isArray(validated.examples) && validated.examples.length ? validated.examples[0] : null;
+      const exInput = String((firstExample as any)?.input ?? '').trim();
+      const exOutput = String((firstExample as any)?.output ?? '').trim();
+
+      const practical = String(validated.practicalTask ?? '').trim();
+      const outFmt = String(validated.outputFormat ?? '').trim();
+
+      // Quality gates: expand the condition and prevent meta “success” messages.
+      if (looksTooShortOrVaguePracticalTask(practical)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask is too short/vague; must be more detailed (multi-sentence or with clear bullet steps)', data);
+      }
+      if (looksLikeJudgeSuccessMessage(outFmt)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat looks like judge meta message (e.g., "program compiled/executed without errors")', data);
+      }
+      if (looksLikeJudgeSuccessMessage(exOutput)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: examples[0].output looks like judge meta message (e.g., "program compiled/executed without errors")', data);
+      }
+
+      if (ioType === 'STDIN_STDOUT') {
+        if (!exInput) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: STDIN_STDOUT requires non-empty examples[0].input', data);
+        }
+      } else {
+        // No-input tasks should show empty input in examples.
+        if (exInput) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_* requires empty examples[0].input', data);
+        }
+        // Models often forget to state “no input” explicitly. Instead of failing generation,
+        // we normalize inputFormat to a canonical phrase.
+        if (!mentionsNoInput(validated.inputFormat)) {
+          const practicalHasCyrillic = /[а-яіїєґ]/i.test(practical);
+          (validated as any).inputFormat = defaultNoInputFormat(practicalHasCyrillic);
+        }
+
+        // Avoid contradictions: no-input IO type must not ask to read from stdin.
+        const practicalLower = practical.toLowerCase();
+        const mentionsInput = /\b(input\s*\(|stdin|system\.in|scanner\b|bufferedreader\b|зчитай|прочитай|введіть|введи)\b/i.test(practicalLower);
+        if (mentionsInput) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_* task statement must not require reading input', data);
+        }
+      }
+
+      if (ioType === 'NO_INPUT_FIXED_OUTPUT') {
+        if (!outFmt || looksLikeEmptyOutputTemplate(outFmt)) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT requires outputFormat to contain the exact expected stdout (not just labels/templates)', data);
+        }
+        if (looksLikeJudgeSuccessMessage(outFmt)) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT outputFormat must be exact expected output, not a meta success message', data);
+        }
+        if (!exOutput || looksLikeEmptyOutputTemplate(exOutput)) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT requires examples[0].output with concrete values', data);
+        }
+        if (looksLikeJudgeSuccessMessage(exOutput)) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT examples[0].output must be exact expected output, not a meta success message', data);
+        }
+      }
+
+      // For non-fixed-output tasks, outputFormat must be an actual contract description.
+      if (ioType !== 'NO_INPUT_FIXED_OUTPUT') {
+        if (!outFmt || outFmt.length < 12) {
+          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat is too short; must describe the output contract clearly', data);
+        }
+      }
+
       if (expectedTopic) {
         const expectedTopicLower = expectedTopic.toLowerCase().trim();
         let out: any = validated;
@@ -134,6 +254,9 @@ export class AIResponseValidator {
 
     const fixed = { ...data };
 
+    const ioTypeHint = typeof fixed.ioType === 'string' ? String(fixed.ioType).trim() : '';
+    const isNoInputIoType = ioTypeHint === 'NO_INPUT_FIXED_OUTPUT' || ioTypeHint === 'NO_INPUT_FREE_OUTPUT';
+
     // difficulty is often the first thing models get "creative" about.
     if (typeof fixed.difficulty === 'number') {
       fixed.difficulty = Math.max(1, Math.min(5, Math.round(fixed.difficulty)));
@@ -145,7 +268,7 @@ export class AIResponseValidator {
     }
 
     const defaultExample = {
-      input: '1',
+      input: isNoInputIoType ? '' : '1',
       output: '1',
       explanation: 'Default example',
     };
@@ -154,14 +277,15 @@ export class AIResponseValidator {
       fixed.examples = fixed.examples
         .filter((ex: any) => {
           if (!ex || typeof ex !== 'object') return false;
-          const input = String(ex.input || '').trim();
           const output = String(ex.output || '').trim();
-          return input.length > 0 && output.length > 0;
+          // For NO_INPUT_* tasks, empty input is required and must be preserved.
+          // For STDIN_STDOUT tasks, input may still be empty in broken model outputs; let semantic validator handle it.
+          return output.length > 0;
         })
         .map((ex: any) => ({
-          input: String(ex.input || '').trim(),
+          input: String(ex.input ?? '').trim(),
           output: String(ex.output || '').trim(),
-          explanation: String(ex.explanation || '').trim(),
+          explanation: String(ex.explanation || '').trim() || 'Example',
         }));
 
       if (fixed.examples.length === 0) {

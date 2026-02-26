@@ -126,7 +126,8 @@ export const AuthPage: React.FC<Props> = ({
             setError(tr("Email обов'язковий для реєстрації вчителя", "Email is required for teacher registration"));
             return;
           }
-          const result = await registerTeacher(username.trim(), email.trim(), password, course);
+          const eduLang: "JAVA" | "PYTHON" = course === "PYTHON" ? "PYTHON" : "JAVA";
+          const result = await registerTeacher(username.trim(), email.trim(), password, eduLang);
           if (result.requiresEmailVerification) {
             setEmailSent(true);
             setSuccess(tr("Реєстрація вчителя успішна! Перевірте вашу пошту для підтвердження email. Після підтвердження ви зможете увійти.", "Teacher registration successful! Check your email to verify it. After verification you can log in."));
@@ -184,9 +185,7 @@ export const AuthPage: React.FC<Props> = ({
       setLoading(false);
     }
   };
-  return <div className="min-h-screen flex items-center justify-center bg-bg-base" style={{
-    minWidth: "1280px"
-  }}>
+  return <div className="min-h-screen flex items-center justify-center bg-bg-base">
       <div className="w-full max-w-md bg-bg-surface border border-border p-8">
         <div className="flex justify-end gap-2 mb-2">
           {showBackToLanding ? <button type="button" onClick={() => navigate("/", {
@@ -222,6 +221,7 @@ export const AuthPage: React.FC<Props> = ({
           </button>
           <button onClick={() => {
           setUserMode("EDUCATIONAL");
+          if (course === "CPP") setCourse("JAVA");
           setMode("login");
           setError(null);
           setSuccess(null);
@@ -302,6 +302,11 @@ export const AuthPage: React.FC<Props> = ({
                 <button type="button" onClick={() => setCourse("PYTHON")} className={`flex-1 py-2 px-4 border text-xs font-mono transition-fast ${course === "PYTHON" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`}>
                   Python
                 </button>
+                {userMode === "PERSONAL" && (
+                  <button type="button" onClick={() => setCourse("CPP")} className={`flex-1 py-2 px-4 border text-xs font-mono transition-fast ${course === "CPP" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`}>
+                    C++
+                  </button>
+                )}
               </div>
             </div>}
           {mode === "login" && <div className="text-center space-y-2 mt-4">

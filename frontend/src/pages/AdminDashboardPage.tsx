@@ -4,14 +4,16 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
 import { Input } from "../components/ui/Input";
-import { getAdminUsers, getAdminUser, createAdminUser, updateAdminUser, updateUserRole, deleteAdminUser, getAdminClasses, createAdminClass, updateAdminClass, deleteAdminClass, getAdminStats, getAdminSupportTickets, replyAdminSupportTicket, getAdminMaintenance, enableAdminMaintenance, disableAdminMaintenance, getAdminSupportConversations, getAdminSupportConversation, postAdminSupportConversationMessage, getAdminLibraryTasks, approveAdminLibraryTask, rejectAdminLibraryTask, getAdminMaterialTopics, getAdminMaterialsDiagnostics, createAdminMaterialTopic, updateAdminMaterialTopic, deleteAdminMaterialTopic, reorderAdminMaterialTopics, importAdminMaterialTopicsYaml, importAdminMaterialTopicsLegacy, getAdminTheoryBlockRevisions, getAdminTheoryBlockRevision, rollbackAdminTheoryBlockRevision, type AdminTheoryBlockRevision, type MaintenanceState, type AdminUser, type AdminClass, type AdminStats, type AdminSupportTicket, type CreateUserData, type UpdateUserData, type CreateClassData, type AdminSupportChatConversation, type AdminSupportChatMessage, type AdminLibraryTask, type AdminLibraryTaskStatus, type AdminMaterialTopic, type AdminMaterialsDiagnostics } from "../lib/api/admin";
+import { getAdminUsers, getAdminUser, createAdminUser, updateAdminUser, updateUserRole, deleteAdminUser, getAdminClasses, createAdminClass, updateAdminClass, deleteAdminClass, getAdminStats, getAdminSupportTickets, replyAdminSupportTicket, getAdminMaintenance, enableAdminMaintenance, disableAdminMaintenance, getAdminSupportConversations, getAdminSupportConversation, postAdminSupportConversationMessage, getAdminLibraryTasks, approveAdminLibraryTask, rejectAdminLibraryTask, getAdminMaterialTopics, getAdminMaterialsDiagnostics, createAdminMaterialTopic, updateAdminMaterialTopic, deleteAdminMaterialTopic, reorderAdminMaterialTopics, importAdminMaterialTopicsYaml, syncAdminMaterialTopicsFromRepo, importAdminMaterialTopicsLegacy, exportAdminMaterialTopicsYaml, sendAdminBroadcastEmail, type AdminBroadcastDryRunResult, type AdminBroadcastSendResult, getAdminTheoryBlockRevisions, getAdminTheoryBlockRevision, rollbackAdminTheoryBlockRevision, translateAdminTheoryBlockToEn, type AdminTheoryBlockRevision, type MaintenanceState, type AdminUser, type AdminClass, type AdminStats, type AdminSupportTicket, type CreateUserData, type UpdateUserData, type CreateClassData, type AdminSupportChatConversation, type AdminSupportChatMessage, type AdminLibraryTask, type AdminLibraryTaskStatus, type AdminMaterialTopic, type AdminMaterialsDiagnostics, type AdminMaterialsLanguage } from "../lib/api/admin";
 import { downloadSupportChatAttachment } from "../lib/api/support";
 import { MarkdownView } from "../components/MarkdownView";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Users, BookOpen, BarChart3, Plus, Edit, Trash2, Shield, User as UserIcon, GraduationCap, Search, Wrench, CheckCircle, XCircle, Library, FileText, Save, GripVertical, History } from "lucide-react";
-type Tab = "stats" | "users" | "classes" | "materials" | "library" | "support" | "maintenance";
+import { Users, BookOpen, BarChart3, Plus, Edit, Trash2, Shield, User as UserIcon, GraduationCap, Search, Wrench, CheckCircle, XCircle, Library, FileText, Save, GripVertical, History, Mail, RefreshCcw, Languages } from "lucide-react";
+type Tab = "stats" | "users" | "classes" | "materials" | "library" | "emails" | "support" | "maintenance";
+
+type MaterialsLanguage = AdminMaterialsLanguage;
 function toDatetimeLocalValue(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -102,13 +104,15 @@ export const AdminDashboardPage: React.FC = () => {
   const [classToDelete, setClassToDelete] = useState<number | null>(null);
 
   // Materials (global topics & theory by language)
-  const [materialsLanguage, setMaterialsLanguage] = useState<"JAVA" | "PYTHON">("JAVA");
+  const [materialsLanguage, setMaterialsLanguage] = useState<MaterialsLanguage>("JAVA");
   const [materialsTopics, setMaterialsTopics] = useState<AdminMaterialTopic[]>([]);
   const [materialsSelectedTopicId, setMaterialsSelectedTopicId] = useState<number | null>(null);
   const [materialsSelectedTopic, setMaterialsSelectedTopic] = useState<AdminMaterialTopic | null>(null);
   const [materialsSaving, setMaterialsSaving] = useState(false);
+  const [materialsTranslatingEn, setMaterialsTranslatingEn] = useState(false);
   const [materialsDirty, setMaterialsDirty] = useState(false);
   const [materialsReordering, setMaterialsReordering] = useState(false);
+  const [materialsRepoSyncing, setMaterialsRepoSyncing] = useState(false);
 
   const [materialsDiagnostics, setMaterialsDiagnostics] = useState<AdminMaterialsDiagnostics | null>(null);
   const [materialsLegacyImporting, setMaterialsLegacyImporting] = useState(false);
@@ -131,7 +135,7 @@ export const AdminDashboardPage: React.FC = () => {
     title: "",
     description: "",
     order: "",
-    language: "JAVA" as "JAVA" | "PYTHON",
+    language: "JAVA" as MaterialsLanguage,
     theoryContent: ""
   });
   const [showDeleteMaterialConfirm, setShowDeleteMaterialConfirm] = useState(false);
@@ -140,7 +144,7 @@ export const AdminDashboardPage: React.FC = () => {
     title: string;
     description: string;
     order: string;
-    language: "JAVA" | "PYTHON";
+    language: MaterialsLanguage;
     theoryTitle: string;
     theoryContent: string;
   } | null>(null);
@@ -176,6 +180,23 @@ export const AdminDashboardPage: React.FC = () => {
   const [maintenanceMessage, setMaintenanceMessage] = useState("Ми тимчасово виконуємо оновлення. Спробуйте трохи пізніше.");
   const [maintenanceUntil, setMaintenanceUntil] = useState<string>("");
   const [maintenanceSaving, setMaintenanceSaving] = useState(false);
+
+  // Emails (admin broadcast)
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailTitle, setEmailTitle] = useState("");
+  const [emailContent, setEmailContent] = useState("");
+  const [emailDelivery, setEmailDelivery] = useState<"MARKETING" | "NOTIFICATION">("MARKETING");
+  const [emailAudience, setEmailAudience] = useState<"ALL" | "USERS" | "STUDENTS">("ALL");
+  const [emailIncludeSubscribed, setEmailIncludeSubscribed] = useState(true);
+  const [emailNotifyAllUsers, setEmailNotifyAllUsers] = useState(false);
+  const [emailNotifyAllUsersConfirm, setEmailNotifyAllUsersConfirm] = useState("");
+  const [emailRecipientUserIds, setEmailRecipientUserIds] = useState("");
+  const [emailRecipientEmails, setEmailRecipientEmails] = useState("");
+  const [emailSelectedClassIds, setEmailSelectedClassIds] = useState<number[]>([]);
+  const [emailDryRun, setEmailDryRun] = useState(true);
+  const [emailLimit, setEmailLimit] = useState("5000");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailLastResult, setEmailLastResult] = useState<AdminBroadcastDryRunResult | AdminBroadcastSendResult | null>(null);
   const [newUser, setNewUser] = useState<CreateUserData>({
     username: "",
     email: "",
@@ -198,8 +219,73 @@ export const AdminDashboardPage: React.FC = () => {
     loadData();
   }, [activeTab, usersPage, usersFilter, supportView, libraryStatus, materialsLanguage]);
 
+  const syncMaterialsFromRepoMenu = async () => {
+    if (materialsRepoSyncing) return;
+
+    if ((materialsDirty || materialsTheoryDirty) && activeTab === "materials") {
+      const ok = window.confirm("You have unsaved changes in the materials editor. Sync will reload topics from the repo menu and may overwrite your draft. Continue?");
+      if (!ok) return;
+    }
+
+    setMaterialsRepoSyncing(true);
+    try {
+      const res = await syncAdminMaterialTopicsFromRepo({
+        language: materialsLanguage,
+        mode: "merge"
+      });
+
+      const list = res.topics || [];
+      setMaterialsTopics(list);
+
+      const selected = materialsSelectedTopicId ? list.find(t => t.id === materialsSelectedTopicId) : list[0];
+      setMaterialsSelectedTopic(selected || null);
+      setMaterialsSelectedTopicId(selected?.id ?? null);
+      setMaterialDraft(selected ? {
+        title: selected.title,
+        description: selected.description || "",
+        order: String(selected.order ?? 0),
+        language: selected.language,
+        theoryTitle: selected.theoryBlock?.title || selected.title,
+        theoryContent: selected.theoryBlock?.content || ""
+      } : null);
+      setMaterialsDirty(false);
+      setMaterialsTheoryDirty(false);
+      setMaterialsAutoSaveState("idle");
+
+      try {
+        const diag = await getAdminMaterialsDiagnostics({ language: materialsLanguage });
+        setMaterialsDiagnostics(diag);
+      } catch {
+        // ignore
+      }
+
+      const src = (res as any)?.source?.filePath ? ` (${(res as any).source.filePath})` : "";
+      alert(`Synced from repo menu${src}. created=${res.created}, updated=${res.updated}, skipped=${res.skipped}`);
+    } catch (error: any) {
+      const data = error?.response?.data;
+      const msg = data?.message || "Failed to sync from repo menu";
+      const hint = data?.hint ? `\n\nHint: ${String(data.hint)}` : "";
+      const detail = data?.detail ? `\n\nDetail: ${String(data.detail)}` : "";
+      const details = data?.details
+        ? `\n\nDetails: ${typeof data.details === "string" ? String(data.details) : JSON.stringify(data.details)}`
+        : "";
+      const fp = data?.filePath ? `\n\nFile: ${String(data.filePath)}` : "";
+      const code = data?.code ? `\n\nCode: ${String(data.code)}` : "";
+      const issues = Array.isArray(data?.errors) && data.errors.length
+        ? `\n\nErrors: ${data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(", ")}`
+        : "";
+      alert(String(msg) + hint + detail + details + fp + code + issues);
+    } finally {
+      setMaterialsRepoSyncing(false);
+    }
+  };
+
   const importMaterialsFromLegacyDb = async () => {
     if (materialsLegacyImporting) return;
+    if (materialsLanguage === "CPP") {
+      alert("Legacy import is only available for JAVA/PYTHON (EDU tables). For CPP, use 'Sync from repo' or 'Import YAML'.");
+      return;
+    }
     setMaterialsLegacyImporting(true);
     try {
       const res = await importAdminMaterialTopicsLegacy({
@@ -373,6 +459,10 @@ export const AdminDashboardPage: React.FC = () => {
         setMaintenanceTitle(data.state.title || "Технічне обслуговування");
         setMaintenanceMessage(data.state.message || "");
         setMaintenanceUntil(toDatetimeLocalValue(data.state.until));
+      } else if (activeTab === "emails") {
+        // Need classes list for class-targeted emails.
+        const classesData = await getAdminClasses();
+        setClasses(classesData.classes);
       }
     } catch (error: any) {
       console.error("Failed to load data:", error);
@@ -995,7 +1085,19 @@ export const AdminDashboardPage: React.FC = () => {
       setShowImportMaterialsYaml(false);
       alert(`Imported: created=${res.created}, updated=${res.updated}, skipped=${res.skipped}`);
     } catch (error: any) {
-      alert(error.response?.data?.message || "Failed to import YAML");
+      const data = error?.response?.data;
+      const msg = data?.message || "Failed to import YAML";
+      const hint = data?.hint ? `\n\nHint: ${String(data.hint)}` : "";
+      const detail = data?.detail ? `\n\nDetail: ${String(data.detail)}` : "";
+      const details = data?.details
+        ? `\n\nDetails: ${typeof data.details === "string" ? String(data.details) : JSON.stringify(data.details)}`
+        : "";
+      const fp = data?.filePath ? `\n\nFile: ${String(data.filePath)}` : "";
+      const code = data?.code ? `\n\nCode: ${String(data.code)}` : "";
+      const issues = Array.isArray(data?.errors) && data.errors.length
+        ? `\n\nErrors: ${data.errors.map((e: any) => e?.message || e?.code || JSON.stringify(e)).join(", ")}`
+        : "";
+      alert(String(msg) + hint + detail + details + fp + code + issues);
     } finally {
       setMaterialsYamlImporting(false);
     }
@@ -1015,6 +1117,118 @@ export const AdminDashboardPage: React.FC = () => {
       setMaterialToDelete(null);
     } catch (error: any) {
       alert(error.response?.data?.message || "Failed to delete topic");
+    }
+  };
+
+  const parseEmailList = (raw: string): string[] => {
+    // People often paste `\n` literally (from JSON, docs, etc.). Treat it like a newline.
+    const normalized = String(raw || "").replace(/\\n/g, "\n");
+    const items = normalized
+      .split(/[\s,;]+/g)
+      .map(s => s.trim())
+      .filter(Boolean);
+    const uniq = new Map<string, string>();
+    for (const e of items) {
+      const key = e.toLowerCase();
+      if (!uniq.has(key)) uniq.set(key, e);
+    }
+    return Array.from(uniq.values());
+  };
+
+  const parseIdList = (raw: string): number[] => {
+    const normalized = String(raw || "").replace(/\\n/g, "\n");
+    const items = normalized
+      .split(/[\s,;]+/g)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => Number(s))
+      .filter(n => Number.isFinite(n) && Number.isInteger(n) && n > 0) as number[];
+
+    const uniq = new Set<number>();
+    for (const n of items) uniq.add(n);
+    return Array.from(uniq.values());
+  };
+
+  const toggleEmailClassId = (classId: number) => {
+    setEmailSelectedClassIds(prev => (prev.includes(classId) ? prev.filter(id => id !== classId) : [...prev, classId]));
+  };
+
+  const runAdminBroadcastEmail = async (dryRun: boolean) => {
+    if (emailSending) return;
+
+    const subject = emailSubject.trim();
+    const title = (emailTitle.trim() || subject).trim();
+    const content = emailContent.trim();
+
+    if (!subject) {
+      alert("Subject is required");
+      return;
+    }
+    if (!title) {
+      alert("Title is required");
+      return;
+    }
+    if (!content) {
+      alert("Email content is required");
+      return;
+    }
+
+    const parsedEmails = parseEmailList(emailRecipientEmails);
+    const parsedUserIds = parseIdList(emailRecipientUserIds);
+    const classIds = emailSelectedClassIds;
+    const includeSubscribed = emailDelivery === "NOTIFICATION" ? false : !!emailIncludeSubscribed;
+    const includeAllUsers = emailDelivery === "NOTIFICATION" && !!emailNotifyAllUsers;
+
+    const hasTargets = includeAllUsers || parsedEmails.length > 0 || classIds.length > 0 || parsedUserIds.length > 0;
+    if (!includeSubscribed && !hasTargets) {
+      alert("No recipients selected. Enable subscribed audience and/or add class recipients/emails/user IDs.");
+      return;
+    }
+
+    if (emailDelivery === "NOTIFICATION" && !hasTargets) {
+      alert("Notification mode requires explicit recipients (classes and/or emails and/or user IDs).");
+      return;
+    }
+
+    if (includeAllUsers && !dryRun) {
+      const expected = "ALL USERS";
+      if (emailNotifyAllUsersConfirm.trim() !== expected) {
+        alert(`To send a mass notification to all users, type '${expected}' in the confirmation field.`);
+        return;
+      }
+    }
+
+    const limitNum = Number(emailLimit);
+    const limit = Number.isFinite(limitNum) && limitNum > 0 ? Math.min(Math.floor(limitNum), 5000) : undefined;
+
+    setEmailSending(true);
+    setEmailLastResult(null);
+    try {
+      const res = await sendAdminBroadcastEmail({
+        subject,
+        title,
+        delivery: emailDelivery,
+        includeAllUsers,
+        confirm: includeAllUsers ? emailNotifyAllUsersConfirm.trim() : undefined,
+        content,
+        includeSubscribed,
+        audience: emailAudience,
+        targets: {
+          userIds: parsedUserIds.length ? parsedUserIds : undefined,
+          classIds: classIds.length ? classIds : undefined,
+          emails: parsedEmails.length ? parsedEmails : undefined,
+        },
+        dryRun,
+        limit,
+      });
+      setEmailLastResult(res);
+      if (!dryRun && res?.ok) {
+        alert(`Email broadcast completed. recipients=${res.recipients}, sent=${res.sent}, failed=${res.failed}`);
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to send email");
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -1058,6 +1272,11 @@ export const AdminDashboardPage: React.FC = () => {
         <Button variant={activeTab === "library" ? "primary" : "secondary"} onClick={() => setActiveTab("library")} className="flex items-center gap-2">
           <Library className="w-4 h-4" />
           Library
+        </Button>
+
+        <Button variant={activeTab === "emails" ? "primary" : "secondary"} onClick={() => setActiveTab("emails")} className="flex items-center gap-2">
+          <Mail className="w-4 h-4" />
+          Emails
         </Button>
 
         <Button variant={activeTab === "support" ? "primary" : "secondary"} onClick={() => setActiveTab("support")} className="flex items-center gap-2">
@@ -1272,6 +1491,7 @@ export const AdminDashboardPage: React.FC = () => {
               }} className="px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono text-sm">
                     <option value="JAVA">JAVA</option>
                     <option value="PYTHON">PYTHON</option>
+                    <option value="CPP">CPP</option>
                   </select>
 
                   <Button variant="secondary" onClick={() => {
@@ -1288,8 +1508,39 @@ export const AdminDashboardPage: React.FC = () => {
                 setMaterialsYamlMode("merge");
                 setMaterialsYamlFileKey(k => k + 1);
                 setShowImportMaterialsYaml(true);
-              }}>
+              }} disabled={materialsRepoSyncing || materialsSaving || materialsReordering}>
                     Import YAML
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onClick={syncMaterialsFromRepoMenu}
+                    disabled={materialsRepoSyncing || materialsSaving || materialsReordering}
+                    className="flex items-center gap-2"
+                    title="Sync topics/theory from repo menu (theories/*_theory.yml)"
+                  >
+                    <RefreshCcw className={`w-4 h-4 ${materialsRepoSyncing ? "animate-spin" : ""}`} />
+                    {materialsRepoSyncing ? "Syncing…" : "Sync from repo"}
+                  </Button>
+
+                  <Button variant="secondary" onClick={async () => {
+                try {
+                  const { blob, filename } = await exportAdminMaterialTopicsYaml({
+                    language: materialsLanguage
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                } catch (error: any) {
+                  alert(error.response?.data?.message || "Failed to export YAML");
+                }
+              }} disabled={materialsRepoSyncing || materialsSaving || materialsReordering}>
+                    Export YAML
                   </Button>
 
                   <Button onClick={() => {
@@ -1426,6 +1677,38 @@ export const AdminDashboardPage: React.FC = () => {
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="text-sm font-mono font-semibold text-text-primary">Theory (Markdown)</div>
                         <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={async () => {
+                              const theoryBlockId = materialsSelectedTopic?.theoryBlock?.id;
+                              if (!theoryBlockId) {
+                                alert("This topic has no theory yet");
+                                return;
+                              }
+                              if (materialsTheoryDirty || materialsDirty) {
+                                alert("Save your changes first, then translate.");
+                                return;
+                              }
+
+                              const ok = confirm("Translate this theory to English and store it in DB?");
+                              if (!ok) return;
+
+                              setMaterialsTranslatingEn(true);
+                              try {
+                                await translateAdminTheoryBlockToEn(theoryBlockId, { force: false });
+                                alert("Saved EN translation.");
+                              } catch (error: any) {
+                                alert(error.response?.data?.message || "Failed to translate");
+                              } finally {
+                                setMaterialsTranslatingEn(false);
+                              }
+                            }}
+                            disabled={!materialsSelectedTopic?.theoryBlock || materialsTranslatingEn || materialsSaving || materialsReordering}
+                          >
+                            <Languages className="w-4 h-4 mr-2" />
+                            {materialsTranslatingEn ? "Translating…" : "Translate → EN"}
+                          </Button>
                           <Button variant="secondary" size="sm" onClick={openTheoryHistoryModal} disabled={!materialsSelectedTopic.theoryBlock}>
                             <History className="w-4 h-4 mr-2" />
                             History
@@ -1634,6 +1917,209 @@ export const AdminDashboardPage: React.FC = () => {
                   </div>}
               </Card>
             </div>
+          </div>}
+
+        {}
+        {activeTab === "emails" && <div className="space-y-4">
+            <Card className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-mono font-semibold text-text-primary">Email announcements</div>
+                  <div className="mt-1 text-xs font-mono text-text-secondary">
+                    Send a newsletter to subscribers (Marketing) or send a targeted announcement (Notification/Updates).
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-[11px] font-mono text-text-secondary mr-2">
+                    Mode: <span className="text-text-primary">{emailDryRun ? "Dry run" : "Send"}</span>
+                  </div>
+                  <Button variant="secondary" onClick={() => setEmailLastResult(null)} disabled={emailSending || !emailLastResult}>
+                    Clear result
+                  </Button>
+                  <Button variant="secondary" onClick={() => {
+                setEmailDryRun(true);
+                runAdminBroadcastEmail(true);
+              }} disabled={emailSending}>
+                    {emailSending ? "Working…" : "Dry run"}
+                  </Button>
+                  <Button variant="primary" onClick={() => {
+                setEmailDryRun(false);
+                runAdminBroadcastEmail(false);
+              }} disabled={emailSending}>
+                    {emailSending ? "Sending…" : "Send"}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <Card className="p-4 lg:col-span-2">
+                <div className="text-sm font-mono font-semibold text-text-primary">Message</div>
+
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-mono text-text-secondary mb-1">Delivery</label>
+                    <select value={emailDelivery} onChange={e => {
+                  const v = e.target.value as "MARKETING" | "NOTIFICATION";
+                  setEmailDelivery(v);
+                  if (v === "NOTIFICATION") {
+                    setEmailIncludeSubscribed(false);
+                    setEmailAudience("ALL");
+                    // keep existing targets; but mass-notify is off by default
+                    setEmailNotifyAllUsers(false);
+                    setEmailNotifyAllUsersConfirm("");
+                  } else {
+                    setEmailNotifyAllUsers(false);
+                    setEmailNotifyAllUsersConfirm("");
+                  }
+                }} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono text-sm">
+                      <option value="MARKETING">Marketing (subscribers, has unsubscribe)</option>
+                      <option value="NOTIFICATION">Notification (targeted, no unsubscribe)</option>
+                    </select>
+                    <div className="mt-1 text-[11px] font-mono text-text-secondary">
+                      {emailDelivery === "MARKETING" ? "For subscribed recipients (may land in Promotions)." : "For specific classes/emails (aims for Updates/Notifications tab)."}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-text-secondary mb-1">Subject</label>
+                    <Input value={emailSubject} onChange={e => setEmailSubject(e.target.value)} placeholder="Subject line" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-text-secondary mb-1">Title (headline inside email)</label>
+                    <Input value={emailTitle} onChange={e => setEmailTitle(e.target.value)} placeholder="Defaults to subject" />
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="block text-xs font-mono text-text-secondary mb-1">Content</label>
+                  <textarea value={emailContent} onChange={e => setEmailContent(e.target.value)} rows={10} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="Write the email body (plain text)." />
+                  <div className="mt-2 text-[11px] font-mono text-text-secondary">
+                    Tip: plain text will be converted to safe HTML (paragraphs split by blank lines).
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <div className="text-sm font-mono font-semibold text-text-primary">Recipients</div>
+
+                <div className="mt-3 space-y-3">
+                  {emailDelivery === "NOTIFICATION" && <div className="space-y-2 rounded-md border border-border bg-bg-code p-3">
+                      <div className="flex items-start gap-2">
+                        <input type="checkbox" checked={emailNotifyAllUsers} onChange={e => {
+                    const checked = e.target.checked;
+                    setEmailNotifyAllUsers(checked);
+                    if (checked) {
+                      setEmailAudience("USERS");
+                    }
+                  }} className="mt-0.5" />
+                        <div className="min-w-0">
+                          <div className="text-xs font-mono text-text-primary">Notify all users</div>
+                          <div className="text-[11px] font-mono text-text-secondary">Sends to all verified USERS (ignores marketing subscription). Requires confirmation on Send.</div>
+                        </div>
+                      </div>
+
+                      {emailNotifyAllUsers && <div>
+                          <div className="text-[11px] font-mono text-text-secondary mb-1">Confirmation (type exactly: <span className="text-text-primary">ALL USERS</span>)</div>
+                          <Input value={emailNotifyAllUsersConfirm} onChange={e => setEmailNotifyAllUsersConfirm(e.target.value)} placeholder="ALL USERS" />
+                        </div>}
+                    </div>}
+
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" checked={emailDelivery === "NOTIFICATION" ? false : emailIncludeSubscribed} onChange={e => setEmailIncludeSubscribed(e.target.checked)} disabled={emailDelivery === "NOTIFICATION"} className="mt-0.5" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-mono text-text-primary">Include subscribed recipients</div>
+                      <div className="text-[11px] font-mono text-text-secondary">Respects marketing emails subscription flag.</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-mono text-text-secondary mb-1">Subscribed audience</div>
+                    <select value={emailAudience} onChange={e => setEmailAudience(e.target.value as any)} disabled={emailDelivery === "NOTIFICATION" || !emailIncludeSubscribed} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono text-sm disabled:opacity-50">
+                      <option value="ALL">USERS + STUDENTS</option>
+                      <option value="USERS">USERS only</option>
+                      <option value="STUDENTS">STUDENTS only</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-mono text-text-secondary mb-1">Add specific emails (comma / space / newline separated)</div>
+                    <textarea value={emailRecipientEmails} onChange={e => setEmailRecipientEmails(e.target.value)} rows={4} className="w-full border border-border bg-bg-code px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="alice@example.com\nbob@example.com" />
+                    <div className="mt-1 text-[11px] font-mono text-text-secondary">
+                      Parsed: {parseEmailList(emailRecipientEmails).length}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-mono text-text-secondary mb-1">Add specific user IDs (comma / space / newline separated)</div>
+                    <textarea value={emailRecipientUserIds} onChange={e => setEmailRecipientUserIds(e.target.value)} rows={2} className="w-full border border-border bg-bg-code px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="123\n456" />
+                    <div className="mt-1 text-[11px] font-mono text-text-secondary">
+                      Parsed: {parseIdList(emailRecipientUserIds).length}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-mono text-text-secondary mb-1">Add class recipients</div>
+                    <div className="max-h-[220px] overflow-auto rounded-md border border-border bg-bg-code p-2">
+                      {classes.length === 0 ? <div className="text-[11px] font-mono text-text-secondary">No classes loaded.</div> : <div className="space-y-1">
+                          {classes
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(c => {
+                        const checked = emailSelectedClassIds.includes(c.id);
+                        return <label key={c.id} className="flex items-start gap-2 text-xs font-mono text-text-primary cursor-pointer select-none">
+                                <input type="checkbox" checked={checked} onChange={() => toggleEmailClassId(c.id)} className="mt-0.5" />
+                                <span className="min-w-0">
+                                  <span className="truncate">{c.name}</span>
+                                  <span className="ml-2 text-[11px] text-text-secondary">#{c.id} · {c.language}</span>
+                                </span>
+                              </label>;
+                      })}
+                        </div>}
+                    </div>
+                    <div className="mt-1 text-[11px] font-mono text-text-secondary">Selected classes: {emailSelectedClassIds.length}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-mono text-text-secondary mb-1">Recipient limit (max 5000)</div>
+                    <Input value={emailLimit} onChange={e => setEmailLimit(e.target.value)} placeholder="5000" />
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {emailLastResult && <Card className="p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm font-mono font-semibold text-text-primary">Result</div>
+                  <div className="text-xs font-mono text-text-secondary">{emailLastResult.dryRun ? "Dry run" : "Sent"}</div>
+                </div>
+
+                {emailLastResult.dryRun ? <div className="mt-3 space-y-3">
+                    <div className="text-xs font-mono text-text-secondary">Recipients: <span className="text-text-primary">{emailLastResult.count}</span></div>
+                    <div>
+                      <div className="text-xs font-mono text-text-secondary mb-1">Sample (up to 20)</div>
+                      <div className="rounded-md border border-border bg-bg-code p-3 text-xs font-mono text-text-primary overflow-auto">
+                        {(emailLastResult.sample || []).map((r: any) => <div key={`${r.kind}:${r.id}`}>{r.email} <span className="text-text-secondary">({r.kind} #{r.id})</span></div>)}
+                        {(emailLastResult.sample || []).length === 0 && <div className="text-text-secondary">(empty)</div>}
+                      </div>
+                    </div>
+                  </div> : <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-md border border-border bg-bg-code p-3">
+                      <div className="text-xs font-mono text-text-secondary">Recipients</div>
+                      <div className="mt-1 text-lg font-mono font-semibold text-text-primary">{(emailLastResult as any).recipients}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-bg-code p-3">
+                      <div className="text-xs font-mono text-text-secondary">Sent</div>
+                      <div className="mt-1 text-lg font-mono font-semibold text-text-primary">{(emailLastResult as any).sent}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-bg-code p-3">
+                      <div className="text-xs font-mono text-text-secondary">Failed</div>
+                      <div className="mt-1 text-lg font-mono font-semibold text-text-primary">{(emailLastResult as any).failed}</div>
+                    </div>
+                  </div>}
+              </Card>}
           </div>}
 
         {}

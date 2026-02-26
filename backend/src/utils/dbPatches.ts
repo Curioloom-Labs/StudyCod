@@ -10,6 +10,7 @@ const console = {
 } as const;
 
 export async function applyDbPatches(): Promise<void> {
+  await ensureCppLanguageEnums();
   await ensureTestDataIsHiddenColumn();
   await ensureTestDataKindColumn();
   await backfillTestDataKindFromIsHidden();
@@ -17,11 +18,15 @@ export async function applyDbPatches(): Promise<void> {
   await ensureEduGradesScoringColumns();
   await ensureEduPerformanceIndexes();
   await ensureUsersPlacementColumns();
+  await ensureMarketingEmailsEnabledColumns();
+  await ensureUsersBirthdayGreetedYearColumn();
+  await ensureTasksIoTypeColumn();
   await fixIntroPythonFixedSumTaskTests();
   await ensureMaintenanceStateTable();
   await ensureMaintenanceStateSingletonRow();
   await ensureTheoryBlocksTable();
-  await ensureTheoryBlockRevisionsTable();
+  await ensureTheoryBlocksContentColumn();
+  await dropTheoryBlockRevisionsTableIfExists();
   await ensureSupportTicketsTable();
   await ensureSupportChatTables();
   await migrateLegacySupportTicketsToChatIfNeeded();
@@ -32,39 +37,349 @@ export async function applyDbPatches(): Promise<void> {
   await ensureLibraryTaskAttemptsMultiLangColumns();
   await ensureTaskTheoriesLibraryTaskColumn();
   await ensureTestDataLibraryTaskColumn();
+  await ensureContestTables();
   await ensureTopicsTheoryBlockIdColumn();
+  await ensureTopicsTheoryMarkdownColumn();
   await ensureTopicsNewTheoryBlockIdColumn();
   await migrateLegacyTopicTheoryMarkdownToTheoryBlocks();
   await normalizeAndSanitizeTheoryBlocks();
   await fixNoInputFixedExampleTaskTests();
 }
 
-async function ensureTheoryBlockRevisionsTable(): Promise<void> {
-  try {
-    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'theory_block_revisions'")) as Array<any>;
-    if (Array.isArray(rows) && rows.length > 0) return;
+async function ensureContestTables(): Promise<void> {
+  await ensureContestsTable();
+  await ensureContestProblemsTable();
+  await ensureContestParticipantsTable();
+  await ensureContestSubmissionsTable();
+}
 
-    logger.warn("[DB Patch] Table theory_block_revisions is missing. Creating...");
+async function ensureContestsTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'contests'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const col = (await AppDataSource.query("SHOW COLUMNS FROM `contests` LIKE 'allow_upsolve'")) as Array<any>;
+      if (!Array.isArray(col) || col.length === 0) {
+        logger.warn("[DB Patch] Column contests.allow_upsolve is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contests` ADD COLUMN allow_upsolve TINYINT(1) NOT NULL DEFAULT 1");
+        logger.info("[DB Patch] Added column contests.allow_upsolve");
+      }
+      return;
+    }
+
+    logger.warn("[DB Patch] Table contests is missing. Creating...");
     await AppDataSource.query(`
-      CREATE TABLE theory_block_revisions (
+      CREATE TABLE contests (
         id INT NOT NULL AUTO_INCREMENT,
-        theory_block_id INT NOT NULL,
-        version INT NOT NULL,
-        action ENUM('CREATE','UPDATE','ROLLBACK','AUTO') NOT NULL DEFAULT 'UPDATE',
-        comment VARCHAR(255) NULL,
-        snapshot MEDIUMTEXT NOT NULL,
-        created_by_user_id INT NULL,
+        created_by_user_id INT NOT NULL,
+        class_id INT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        visibility ENUM('PUBLIC','PRIVATE_CODE','CLASS') NOT NULL DEFAULT 'PUBLIC',
+        join_code VARCHAR(64) NULL,
+        starts_at DATETIME NULL,
+        ends_at DATETIME NULL,
+        is_published TINYINT(1) NOT NULL DEFAULT 1,
+        allow_upsolve TINYINT(1) NOT NULL DEFAULT 1,
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (id),
-        UNIQUE KEY uq_theory_block_revisions_block_version (theory_block_id, version),
-        INDEX idx_theory_block_revisions_block_created (theory_block_id, created_at),
-        CONSTRAINT fk_theory_block_revisions_block FOREIGN KEY (theory_block_id) REFERENCES theory_blocks(id) ON DELETE CASCADE,
-        CONSTRAINT fk_theory_block_revisions_user FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        INDEX idx_contests_created_by (created_by_user_id),
+        INDEX idx_contests_visibility_published (visibility, is_published),
+        INDEX idx_contests_starts_at (starts_at),
+        INDEX idx_contests_ends_at (ends_at),
+        CONSTRAINT fk_contests_created_by_user FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT fk_contests_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
-    logger.info("[DB Patch] Created table theory_block_revisions");
+    logger.info("[DB Patch] Created table contests");
   } catch (err: any) {
-    logger.error("[DB Patch] Failed to ensure theory_block_revisions table:", {
+    logger.error("[DB Patch] Failed to ensure contests table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureContestProblemsTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'contest_problems'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const pointsCol = (await AppDataSource.query("SHOW COLUMNS FROM `contest_problems` LIKE 'points'")) as Array<any>;
+      if (!Array.isArray(pointsCol) || pointsCol.length === 0) {
+        logger.warn("[DB Patch] Column contest_problems.points is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contest_problems` ADD COLUMN points INT NULL AFTER label");
+        logger.info("[DB Patch] Added column contest_problems.points");
+      }
+      return;
+    }
+
+    logger.warn("[DB Patch] Table contest_problems is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE contest_problems (
+        id INT NOT NULL AUTO_INCREMENT,
+        contest_id INT NOT NULL,
+        library_task_id INT NOT NULL,
+        \`order\` INT NOT NULL DEFAULT 0,
+        label VARCHAR(8) NULL,
+        points INT NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_contest_problems_contest_order (contest_id, \`order\`),
+        INDEX idx_contest_problems_contest_order (contest_id, \`order\`),
+        INDEX idx_contest_problems_task (library_task_id),
+        CONSTRAINT fk_contest_problems_contest FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE,
+        CONSTRAINT fk_contest_problems_library_task FOREIGN KEY (library_task_id) REFERENCES library_tasks(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table contest_problems");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure contest_problems table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureContestParticipantsTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'contest_participants'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const dqCol = (await AppDataSource.query("SHOW COLUMNS FROM `contest_participants` LIKE 'is_disqualified'")) as Array<any>;
+      if (!Array.isArray(dqCol) || dqCol.length === 0) {
+        logger.warn("[DB Patch] Column contest_participants.is_disqualified is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contest_participants` ADD COLUMN is_disqualified TINYINT(1) NOT NULL DEFAULT 0 AFTER display_name");
+        logger.info("[DB Patch] Added column contest_participants.is_disqualified");
+      }
+
+      const reasonCol = (await AppDataSource.query("SHOW COLUMNS FROM `contest_participants` LIKE 'disqualification_reason'")) as Array<any>;
+      if (!Array.isArray(reasonCol) || reasonCol.length === 0) {
+        logger.warn("[DB Patch] Column contest_participants.disqualification_reason is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contest_participants` ADD COLUMN disqualification_reason TEXT NULL AFTER is_disqualified");
+        logger.info("[DB Patch] Added column contest_participants.disqualification_reason");
+      }
+
+      const atCol = (await AppDataSource.query("SHOW COLUMNS FROM `contest_participants` LIKE 'disqualified_at'")) as Array<any>;
+      if (!Array.isArray(atCol) || atCol.length === 0) {
+        logger.warn("[DB Patch] Column contest_participants.disqualified_at is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contest_participants` ADD COLUMN disqualified_at DATETIME NULL AFTER disqualification_reason");
+        logger.info("[DB Patch] Added column contest_participants.disqualified_at");
+      }
+      return;
+    }
+
+    logger.warn("[DB Patch] Table contest_participants is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE contest_participants (
+        id INT NOT NULL AUTO_INCREMENT,
+        contest_id INT NOT NULL,
+        user_id INT NULL,
+        student_id INT NULL,
+        principal_type ENUM('USER','STUDENT') NOT NULL,
+        display_name VARCHAR(180) NOT NULL,
+        is_disqualified TINYINT(1) NOT NULL DEFAULT 0,
+        disqualification_reason TEXT NULL,
+        disqualified_at DATETIME NULL,
+        joined_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_contest_participants_contest_user (contest_id, user_id),
+        UNIQUE KEY uq_contest_participants_contest_student (contest_id, student_id),
+        INDEX idx_contest_participants_contest (contest_id),
+        INDEX idx_contest_participants_user (user_id),
+        INDEX idx_contest_participants_student (student_id),
+        CONSTRAINT fk_contest_participants_contest FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE,
+        CONSTRAINT fk_contest_participants_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT fk_contest_participants_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table contest_participants");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure contest_participants table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureContestSubmissionsTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'contest_submissions'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const col = (await AppDataSource.query("SHOW COLUMNS FROM `contest_submissions` LIKE 'phase'")) as Array<any>;
+      if (!Array.isArray(col) || col.length === 0) {
+        logger.warn("[DB Patch] Column contest_submissions.phase is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contest_submissions` ADD COLUMN phase ENUM('CONTEST','UPSOLVE') NOT NULL DEFAULT 'CONTEST'");
+        logger.info("[DB Patch] Added column contest_submissions.phase");
+      }
+      return;
+    }
+
+    logger.warn("[DB Patch] Table contest_submissions is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE contest_submissions (
+        id INT NOT NULL AUTO_INCREMENT,
+        contest_id INT NOT NULL,
+        problem_id INT NOT NULL,
+        participant_id INT NOT NULL,
+        language VARCHAR(16) NOT NULL,
+        submitted_code MEDIUMTEXT NOT NULL,
+        verdict VARCHAR(16) NULL,
+        score INT NULL,
+        max_score INT NULL,
+        tests_passed INT NULL,
+        tests_total INT NULL,
+        compile_error_kind VARCHAR(64) NULL,
+        phase ENUM('CONTEST','UPSOLVE') NOT NULL DEFAULT 'CONTEST',
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        INDEX idx_contest_submissions_contest_created_at (contest_id, created_at),
+        INDEX idx_contest_submissions_contest_problem (contest_id, problem_id),
+        INDEX idx_contest_submissions_participant_problem (participant_id, problem_id),
+        INDEX idx_contest_submissions_language (language),
+        INDEX idx_contest_submissions_phase (phase),
+        CONSTRAINT fk_contest_submissions_contest FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE,
+        CONSTRAINT fk_contest_submissions_problem FOREIGN KEY (problem_id) REFERENCES contest_problems(id) ON DELETE CASCADE,
+        CONSTRAINT fk_contest_submissions_participant FOREIGN KEY (participant_id) REFERENCES contest_participants(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table contest_submissions");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure contest_submissions table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureEnumColumnHasValues(params: {
+  table: string;
+  column: string;
+  values: string[];
+}): Promise<void> {
+  try {
+    const tables = (await AppDataSource.query(`SHOW TABLES LIKE ?`, [params.table])) as Array<any>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const col = (await AppDataSource.query(`SHOW COLUMNS FROM \`${params.table}\` LIKE ?`, [params.column])) as Array<any>;
+    if (!Array.isArray(col) || col.length === 0) return;
+
+    const type = String(col?.[0]?.Type ?? "");
+    const nullFlag = String(col?.[0]?.Null ?? "YES").toUpperCase();
+    const currentDefault = col?.[0]?.Default;
+
+    const want = params.values;
+    const hasAll = want.every(v => type.includes(`'${v}'`));
+    if (hasAll) return;
+
+    const nullable = nullFlag === "YES";
+    const enumSql = `ENUM(${want.map(v => `'${v}'`).join(',')})`;
+    const nullSql = nullable ? "NULL" : "NOT NULL";
+    const defStr = currentDefault !== undefined && currentDefault !== null ? String(currentDefault) : null;
+    const defaultSql = defStr && want.includes(defStr)
+      ? `DEFAULT '${defStr}'`
+      : (nullable ? "DEFAULT NULL" : `DEFAULT '${want[0]}'`);
+
+    logger.warn("[DB Patch] Widening enum column to include values...", { table: params.table, column: params.column, from: type, to: enumSql });
+    await AppDataSource.query(`ALTER TABLE \`${params.table}\` MODIFY COLUMN \`${params.column}\` ${enumSql} ${nullSql} ${defaultSql}`);
+    logger.info("[DB Patch] Enum column updated", { table: params.table, column: params.column });
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to widen enum column", {
+      table: params.table,
+      column: params.column,
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureCppLanguageEnums(): Promise<void> {
+  // C++ support: widen legacy language enums to include 'CPP'.
+  const values = ["JAVA", "PYTHON", "CPP"];
+  await ensureEnumColumnHasValues({ table: "users", column: "lang", values });
+  await ensureEnumColumnHasValues({ table: "tasks", column: "lang", values });
+  await ensureEnumColumnHasValues({ table: "topics", column: "lang", values });
+  await ensureEnumColumnHasValues({ table: "classes", column: "language", values });
+  await ensureEnumColumnHasValues({ table: "topics_new", column: "language", values });
+  await ensureEnumColumnHasValues({ table: "library_tasks", column: "lang", values });
+}
+
+async function ensureTheoryBlocksContentColumn(): Promise<void> {
+  // Theory content can easily exceed MySQL TEXT limit (64KB) when importing full course materials.
+  // Use MEDIUMTEXT (~16MB) for stability.
+  try {
+    const tables = (await AppDataSource.query("SHOW TABLES LIKE 'theory_blocks'")) as Array<any>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const col = (await AppDataSource.query("SHOW COLUMNS FROM `theory_blocks` LIKE 'content'")) as Array<any>;
+    const type = String(col?.[0]?.Type ?? "").toLowerCase();
+    if (!type) return;
+    if (type.includes("mediumtext") || type.includes("longtext")) return;
+
+    logger.warn("[DB Patch] Widening theory_blocks.content to MEDIUMTEXT...");
+    await AppDataSource.query("ALTER TABLE `theory_blocks` MODIFY COLUMN `content` MEDIUMTEXT NOT NULL");
+    logger.info("[DB Patch] theory_blocks.content is MEDIUMTEXT");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to widen theory_blocks.content:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureTopicsTheoryMarkdownColumn(): Promise<void> {
+  // Keep legacy mirror in sync: topics.theory_markdown may also exceed TEXT limit.
+  try {
+    const tables = (await AppDataSource.query("SHOW TABLES LIKE 'topics'")) as Array<any>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const col = (await AppDataSource.query("SHOW COLUMNS FROM `topics` LIKE 'theory_markdown'")) as Array<any>;
+    if (!Array.isArray(col) || col.length === 0) return;
+
+    const type = String(col?.[0]?.Type ?? "").toLowerCase();
+    const nullable = String(col?.[0]?.Null ?? "YES").toUpperCase() === "YES";
+    if (!type) return;
+    if (type.includes("mediumtext") || type.includes("longtext")) return;
+
+    logger.warn("[DB Patch] Widening topics.theory_markdown to MEDIUMTEXT...");
+    await AppDataSource.query(
+      `ALTER TABLE \`topics\` MODIFY COLUMN \`theory_markdown\` MEDIUMTEXT ${nullable ? "NULL" : "NOT NULL"}`
+    );
+    logger.info("[DB Patch] topics.theory_markdown is MEDIUMTEXT");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to widen topics.theory_markdown:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function dropTheoryBlockRevisionsTableIfExists(): Promise<void> {
+  // We intentionally drop this table to prevent serving stale snapshots/rollback data.
+  // See: admin theory history feature (now disabled).
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'theory_block_revisions'")) as Array<any>;
+    if (!Array.isArray(rows) || rows.length === 0) return;
+
+    logger.warn("[DB Patch] Dropping table theory_block_revisions (obsolete)...");
+    await AppDataSource.query("DROP TABLE `theory_block_revisions`");
+    logger.info("[DB Patch] Dropped table theory_block_revisions");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to drop theory_block_revisions table:", {
       message: err?.message,
       code: err?.code,
       errno: err?.errno,
@@ -166,6 +481,51 @@ async function ensureLibraryTasksOjColumns(): Promise<void> {
     await addColumn("ALTER TABLE `library_tasks` ADD COLUMN `checker_spec` TEXT NULL AFTER `output_limit_kb`", "checker_spec");
     await addColumn("ALTER TABLE `library_tasks` ADD COLUMN `allowed_languages` TEXT NULL AFTER `checker_spec`", "allowed_languages");
     await addColumn("ALTER TABLE `library_tasks` ADD COLUMN `templates_by_language` MEDIUMTEXT NULL AFTER `allowed_languages`", "templates_by_language");
+    await addColumn("ALTER TABLE `library_tasks` ADD COLUMN `is_hidden_from_library` TINYINT(1) NOT NULL DEFAULT 0 AFTER `max_attempts`", "is_hidden_from_library");
+
+    // Backfill and sanitize stable identifiers for existing tasks.
+    // This also resolves historical duplicate problem_code values before adding a UNIQUE index.
+    try {
+      const rows = (await AppDataSource.query("SELECT id, problem_code FROM `library_tasks` ORDER BY id ASC")) as Array<{
+        id: number;
+        problem_code: string | null;
+      }>;
+      const used = new Set<string>();
+      let changed = 0;
+
+      const fit64 = (s: string): string => String(s ?? "").slice(0, 64);
+
+      for (const r of rows || []) {
+        const id = Number((r as any)?.id);
+        if (!Number.isFinite(id) || id <= 0) continue;
+
+        const raw = String((r as any)?.problem_code ?? "").trim();
+        const base = fit64(raw || `LIB${id}`) || `LIB${id}`;
+
+        let candidate = base;
+        let i = 1;
+        while (used.has(candidate)) {
+          const suffix = `_${i}`;
+          candidate = `${base.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+          i += 1;
+          if (i > 100000) break;
+        }
+
+        used.add(candidate);
+        if (candidate !== raw) {
+          await AppDataSource.query("UPDATE `library_tasks` SET `problem_code` = ? WHERE `id` = ?", [candidate, id]);
+          changed += 1;
+        }
+      }
+
+      await AppDataSource.query("UPDATE `library_tasks` SET `slug` = CONCAT('task-', `id`) WHERE (`slug` IS NULL OR `slug` = '')");
+      if (changed > 0) {
+        logger.warn(`[DB Patch] Reconciled duplicate/empty library_tasks.problem_code values for ${changed} row(s)`);
+      }
+      logger.info("[DB Patch] Backfilled library_tasks problem_code/slug");
+    } catch (e: any) {
+      logger.warn("[DB Patch] Failed to backfill/sanitize library_tasks problem_code/slug", { message: e?.message, code: e?.code });
+    }
 
     // Indexes (best-effort; ignore errors for duplicate names, etc.)
     try {
@@ -186,15 +546,6 @@ async function ensureLibraryTasksOjColumns(): Promise<void> {
       }
     } catch (e: any) {
       logger.warn("[DB Patch] Failed to ensure index idx_library_tasks_slug", { message: e?.message, code: e?.code });
-    }
-
-    // Backfill stable identifiers for existing tasks.
-    try {
-      await AppDataSource.query("UPDATE `library_tasks` SET `problem_code` = CONCAT('LIB', `id`) WHERE (`problem_code` IS NULL OR `problem_code` = '')");
-      await AppDataSource.query("UPDATE `library_tasks` SET `slug` = CONCAT('task-', `id`) WHERE (`slug` IS NULL OR `slug` = '')");
-      logger.info("[DB Patch] Backfilled library_tasks problem_code/slug");
-    } catch (e: any) {
-      logger.warn("[DB Patch] Failed to backfill library_tasks problem_code/slug", { message: e?.message, code: e?.code });
     }
   } catch (err: any) {
     logger.error("[DB Patch] Failed to ensure library_tasks OJ columns:", {
@@ -308,8 +659,9 @@ async function ensureLibraryTasksTable(): Promise<void> {
         difficulty ENUM('EASY','MEDIUM','HARD') NULL,
         tags TEXT NULL,
         section VARCHAR(80) NULL,
-        lang ENUM('JAVA','PYTHON') NOT NULL DEFAULT 'JAVA',
+        lang ENUM('JAVA','PYTHON','CPP') NOT NULL DEFAULT 'JAVA',
         max_attempts INT NOT NULL DEFAULT 3,
+        is_hidden_from_library TINYINT(1) NOT NULL DEFAULT 0,
         time_limit_ms INT NULL,
         memory_limit_mb INT NULL,
         output_limit_kb INT NULL,
@@ -485,6 +837,90 @@ async function ensureUsersPlacementColumns(): Promise<void> {
     }
   } catch (err: any) {
     console.error("[DB Patch] Failed to ensure users placement columns:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureMarketingEmailsEnabledColumns(): Promise<void> {
+  try {
+    const ensure = async (table: "users" | "students"): Promise<void> => {
+      const tableRows = (await AppDataSource.query(`SHOW TABLES LIKE '${table}'`)) as Array<any>;
+      if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+      const col = (await AppDataSource.query(`SHOW COLUMNS FROM \`${table}\` LIKE 'marketing_emails_enabled'`)) as Array<any>;
+      if (Array.isArray(col) && col.length > 0) return;
+
+      logger.warn(`[DB Patch] Column ${table}.marketing_emails_enabled is missing. Applying ALTER TABLE...`);
+      await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`marketing_emails_enabled\` TINYINT(1) NOT NULL DEFAULT 1`);
+
+      // Best-effort backfill for rows inserted before the column existed.
+      try {
+        await AppDataSource.query(`UPDATE \`${table}\` SET \`marketing_emails_enabled\` = 1 WHERE \`marketing_emails_enabled\` IS NULL`);
+      } catch {
+        // Ignore: column is NOT NULL so this may be a no-op depending on DB.
+      }
+
+      logger.info(`[DB Patch] Added column ${table}.marketing_emails_enabled`);
+    };
+
+    await ensure("users");
+    await ensure("students");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure marketing_emails_enabled columns:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureUsersBirthdayGreetedYearColumn(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'users'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const col = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE 'birthday_greeted_year'")) as Array<any>;
+    if (Array.isArray(col) && col.length > 0) return;
+
+    logger.warn("[DB Patch] Column users.birthday_greeted_year is missing. Applying ALTER TABLE...");
+    await AppDataSource.query("ALTER TABLE `users` ADD COLUMN `birthday_greeted_year` INT NULL DEFAULT NULL");
+    logger.info("[DB Patch] Added column users.birthday_greeted_year");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure users.birthday_greeted_year column:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureTasksIoTypeColumn(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'tasks'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const col = (await AppDataSource.query("SHOW COLUMNS FROM `tasks` LIKE 'io_type'")) as Array<any>;
+    if (Array.isArray(col) && col.length > 0) return;
+
+    logger.warn("[DB Patch] Column tasks.io_type is missing. Applying ALTER TABLE...");
+    await AppDataSource.query("ALTER TABLE `tasks` ADD COLUMN `io_type` ENUM('STDIN_STDOUT','NO_INPUT_FIXED_OUTPUT','NO_INPUT_FREE_OUTPUT') NOT NULL DEFAULT 'STDIN_STDOUT'");
+
+    // Backfill for legacy rows (best-effort; default covers it, but keep it explicit).
+    try {
+      await AppDataSource.query("UPDATE `tasks` SET `io_type` = 'STDIN_STDOUT' WHERE `io_type` IS NULL OR `io_type` = ''");
+    } catch {
+      // ignore
+    }
+
+    logger.info("[DB Patch] Added column tasks.io_type");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure tasks.io_type column:", {
       message: err?.message,
       code: err?.code,
       errno: err?.errno,

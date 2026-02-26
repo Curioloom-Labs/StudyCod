@@ -1,7 +1,9 @@
 import nodemailer from "nodemailer";
 import * as https from "https";
 import type { IncomingMessage } from "http";
+import jwt from "jsonwebtoken";
 import { logger } from "../utils/logger";
+import { BACKEND_PUBLIC_URL, JWT_SECRET } from "../config";
 
 /**
  * Production Email Service
@@ -14,11 +16,15 @@ class EmailService {
   private provider: "smtp" | "brevo-api" | "log" = "smtp";
 
   private readonly fromEmail: string;
+  private readonly notificationsFromEmail: string;
   private readonly supportFromEmail: string;
 
   constructor() {
     this.fromEmail =
       process.env.EMAIL_FROM || "StudyCod <noreply@studycod.space>";
+
+    this.notificationsFromEmail =
+      process.env.EMAIL_FROM_NOTIFICATIONS || this.fromEmail;
 
     this.supportFromEmail =
       "StudyCod Support <support@studycod.space>";
@@ -92,6 +98,37 @@ class EmailService {
     return process.env.FRONTEND_URL || "http://localhost:5173";
   }
 
+  private getBackendPublicUrl(): string {
+    return process.env.BACKEND_PUBLIC_URL || BACKEND_PUBLIC_URL || "http://localhost:4000";
+  }
+
+  private buildEmailPreferenceToken(params: {
+    action: "unsubscribe" | "subscribe";
+    kind: "user" | "student";
+    id: number;
+    email: string;
+  }): string {
+    // JWT_SECRET can be empty in non-production setups; still allow token generation.
+    const secret = JWT_SECRET || process.env.JWT_SECRET || "dev-secret-change-me";
+    return jwt.sign({
+      t: "email-pref",
+      action: params.action,
+      kind: params.kind,
+      id: params.id,
+      email: params.email,
+    }, secret, { expiresIn: "180d" });
+  }
+
+  private buildUnsubscribeUrl(params: { kind: "user" | "student"; id: number; email: string }): string {
+    const token = this.buildEmailPreferenceToken({
+      action: "unsubscribe",
+      kind: params.kind,
+      id: params.id,
+      email: params.email,
+    });
+    return `${this.getBackendPublicUrl().replace(/\/$/, "")}/api/emails/unsubscribe?token=${encodeURIComponent(token)}`;
+  }
+
   async sendAnnouncementEmail(email: string, username: string, className: string, title: string | null, preview: string) {
     const html = this.buildBaseEmail({
       title: title ? `Оголошення: ${title}` : "Оголошення",
@@ -151,6 +188,101 @@ class EmailService {
       text
     });
   }
+
+  async sendBroadcastEmail(opts: {
+    to: string;
+    subject: string;
+    title: string;
+    contentHtml: string;
+    text?: string;
+    recipient: { kind: "user" | "student"; id: number; email: string };
+  }): Promise<void> {
+    const unsubscribeUrl = this.buildUnsubscribeUrl(opts.recipient);
+
+    const html = this.buildBaseEmail({
+      title: opts.title,
+      preheader: opts.subject,
+      contentHtml: `${opts.contentHtml}
+
+<hr style="border:none;border-top:1px solid #233043;margin:18px 0;" />
+<p style="margin:0;font-size:12px;color:#9fb3c8;line-height:1.6;">
+  Ви отримали цей лист, бо підписані на розсилку StudyCod.
+  <br />
+  Відписатися: <a href="${unsubscribeUrl}" style="color:#7ab7ff;text-decoration:underline;word-break:break-all;">${unsubscribeUrl}</a>
+</p>`,
+      footer: "Розсилка StudyCod"
+    });
+
+    const text = (opts.text?.trim().length ? opts.text.trim() : "") + `\n\nВідписатися: ${unsubscribeUrl}`;
+
+    await this.sendEmail({
+      to: opts.to,
+      subject: opts.subject,
+      html,
+      text
+    });
+  }
+
+  async sendNotificationEmail(opts: {
+    to: string;
+    subject: string;
+    title: string;
+    contentHtml: string;
+    text?: string;
+  }): Promise<void> {
+    const html = this.buildBaseEmail({
+      title: opts.title,
+      preheader: opts.subject,
+      contentHtml: opts.contentHtml,
+      footer: "Оповіщення StudyCod"
+    });
+
+    const text = (opts.text?.trim().length ? opts.text.trim() : "");
+
+    await this.sendEmail({
+      to: opts.to,
+      subject: opts.subject,
+      html,
+      text,
+      fromOverride: this.notificationsFromEmail,
+      headers: {
+        "X-StudyCod-Category": "notification",
+      },
+    });
+  }
+
+  async sendBirthdayGreetingEmail(opts: {
+    to: string;
+    username: string;
+    firstName?: string | null;
+  }): Promise<void> {
+    const name = (opts.firstName ?? "").trim() || opts.username;
+
+    const html = this.buildBaseEmail({
+      title: "З Днем народження!",
+      preheader: "StudyCod вітає вас та бажає успіхів у навчанні.",
+      greeting: `Привіт, ${name}!`,
+      contentHtml: `<p style="margin:0 0 12px 0;">Вітаємо з Днем народження! 🎉</p>
+<p style="margin:0 0 12px 0;">Бажаємо натхнення, стабільної серії (streak) і крутого прогресу в програмуванні.</p>
+<p style="margin:0;">Заходьте в StudyCod — сьогодні гарний день, щоб розв’язати ще одне завдання 😉</p>`,
+      cta: { label: "Відкрити StudyCod", url: this.getFrontendUrl() },
+      footer: "Автоматичне привітання від StudyCod"
+    });
+
+    const text = `Привіт, ${name}!
+
+Вітаємо з Днем народження!
+Бажаємо натхнення та прогресу в програмуванні.
+
+StudyCod: ${this.getFrontendUrl()}`;
+
+    await this.sendEmail({
+      to: opts.to,
+      subject: "З Днем народження!",
+      html,
+      text,
+    });
+  }
   private escapeHtml(input: unknown): string {
     const s = String(input ?? "");
     return s
@@ -183,6 +315,7 @@ class EmailService {
     html: string;
     text: string;
     fromOverride?: string;
+    headers?: Record<string, string>;
   }): Promise<void> {
     const apiKey = String(process.env.BREVO_API_KEY || "").trim();
     if (!apiKey) {
@@ -201,6 +334,10 @@ class EmailService {
       // Brevo docs recommend using only one body type. We use htmlContent.
       htmlContent: opts.html,
     };
+
+    if (opts.headers && Object.keys(opts.headers).length) {
+      payload.headers = opts.headers;
+    }
 
     const data = JSON.stringify(payload);
 
@@ -249,6 +386,7 @@ class EmailService {
     html: string;
     text: string;
     fromOverride?: string;
+    headers?: Record<string, string>;
   }): Promise<void> {
     if (this.provider === "brevo-api") {
       await this.sendViaBrevoApi(opts);
@@ -272,6 +410,7 @@ class EmailService {
         subject: opts.subject,
         html: opts.html,
         text: opts.text,
+        headers: opts.headers,
       });
     } catch (err: any) {
       logger.error('[email] send failed', { message: err?.message });

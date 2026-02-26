@@ -1,16 +1,21 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { listTasks, generateTask, saveDraft, submitTask, resetTopic, runTask } from "../lib/api/tasks";
+import { recordSuccessfulStudySession } from "../lib/uiMode";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
 import { CodeEditor } from "../components/CodeEditor";
 import { MultiFileEditor, type CodeFile } from "../components/MultiFileEditor";
+import { MarkdownView } from "../components/MarkdownView";
 import type { Task, User } from "../types";
-import { Play, CheckCircle2, ChevronLeft, ChevronRight, Plus, Save, PlayCircle, Code2 } from "lucide-react";
+import { Play, CheckCircle2, ChevronLeft, ChevronRight, Plus, Save, PlayCircle } from "lucide-react";
 import { tr } from "../i18n";
 import { useTheoryModal } from "../components/theory/TheoryModalProvider";
+import { TaskGenerationOverlay } from "../components/TaskGenerationOverlay";
+import { useWorkspaceViewport } from "../components/interface/WorkspaceViewport";
+import { buildResumeState, loadResumeState, saveResumeState } from "../lib/resumeState";
 interface Props {
   user: User;
 }
@@ -30,6 +35,7 @@ export const TasksPage: React.FC<Props> = ({
     i18n
   } = useTranslation();
   const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
+  const { element: viewportEl } = useWorkspaceViewport();
   const {
     openTheory,
     isOpen: isTheoryOpen
@@ -148,6 +154,7 @@ export const TasksPage: React.FC<Props> = ({
   const [code, setCode] = useState("");
   const [useFiles, setUseFiles] = useState(false);
   const [files, setFiles] = useState<CodeFile[]>([]);
+  const [mfAddToken, setMfAddToken] = useState(0);
   const [consoleOutput, setConsoleOutput] = useState("");
   const [stdin, setStdin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -205,7 +212,7 @@ export const TasksPage: React.FC<Props> = ({
   const canGenerate = canGenerateFirst || canGenerateNew;
   const cooldownSecondsLeft = Math.max(0, Math.ceil((generateCooldownUntilMs - clockMs) / 1000));
 
-  const entryFile = user.course === "JAVA" ? "Main.java" : "main.py";
+  const entryFile = user.course === "JAVA" ? "Main.java" : user.course === "PYTHON" ? "main.py" : "main.cpp";
   const entryContentFromFiles = (fs: CodeFile[]): string => {
     const hit = fs.find(f => f.path === entryFile);
     return hit?.content ?? "";
@@ -220,6 +227,78 @@ export const TasksPage: React.FC<Props> = ({
   };
 
   const currentCodeText = useFiles ? entryContentFromFiles(files) : code;
+
+  const activeId = active?.id ?? null;
+  const resumeStep = useMemo(() => {
+    if (!active) return undefined;
+    const hasTheory = computeHasTheory(active);
+    if (hasTheory && !theoryAcknowledged) return "theory";
+    return "solve";
+  }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, theoryAcknowledged]);
+
+  const saveResume = useCallback(
+    (scrollTop?: number) => {
+      if (activeId == null) return;
+      saveResumeState(
+        buildResumeState({
+          userId: user.id,
+          kind: "personal_task",
+          taskId: activeId,
+          step: resumeStep,
+          scrollTop,
+          draftKey: `personal_task_${activeId}`
+        })
+      );
+    },
+    [user.id, activeId, resumeStep]
+  );
+
+  const restoredForTaskRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!viewportEl) return;
+    if (!active) return;
+    if (restoredForTaskRef.current === active.id) return;
+    const state = loadResumeState(user.id);
+    if (state?.kind !== "personal_task" || state.taskId !== active.id) return;
+    if (typeof state.scrollTop !== "number") return;
+
+    restoredForTaskRef.current = active.id;
+    requestAnimationFrame(() => {
+      try {
+        viewportEl.scrollTop = state.scrollTop ?? 0;
+      } catch {
+        // ignore
+      }
+    });
+  }, [viewportEl, user.id, activeId]);
+
+  useEffect(() => {
+    if (!viewportEl) return;
+    if (!active) return;
+
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        saveResume(viewportEl.scrollTop);
+      });
+    };
+
+    viewportEl.addEventListener("scroll", onScroll, { passive: true } as any);
+    // save once on attach (captures active + step even if user doesn't scroll)
+    saveResume(viewportEl.scrollTop);
+    return () => {
+      viewportEl.removeEventListener("scroll", onScroll as any);
+      if (raf) cancelAnimationFrame(raf);
+      saveResume(viewportEl.scrollTop);
+    };
+  }, [viewportEl, activeId, saveResume]);
+
+  useEffect(() => {
+    // Save when cognitive step changes even if scroll doesn't.
+    saveResume(viewportEl?.scrollTop);
+  }, [activeId, resumeStep]);
 
   useEffect(() => {
     if (cooldownSecondsLeft <= 0) return;
@@ -320,14 +399,25 @@ export const TasksPage: React.FC<Props> = ({
     if (tasks.length > 0 && !active) {
       const openTaskId = sessionStorage.getItem("openTaskId");
       let taskToOpen = tasks[0];
-      if (openTaskId) {
-        const taskId = parseInt(openTaskId, 10);
-        const foundTask = tasks.find(t => t.id === taskId);
-        if (foundTask) {
-          taskToOpen = foundTask;
+
+      const resume = loadResumeState(user.id);
+      const preferredId = (() => {
+        if (openTaskId) {
+          const v = parseInt(openTaskId, 10);
+          return Number.isFinite(v) ? v : null;
         }
-        sessionStorage.removeItem("openTaskId");
+        if (resume?.kind === "personal_task" && typeof resume.taskId === "number") {
+          return resume.taskId;
+        }
+        return null;
+      })();
+
+      if (preferredId != null) {
+        const foundTask = tasks.find(t => t.id === preferredId);
+        if (foundTask) taskToOpen = foundTask;
       }
+      if (openTaskId) sessionStorage.removeItem("openTaskId");
+
       setActive(taskToOpen);
       const next = deriveEditorFromTask(taskToOpen);
       setUseFiles(next.useFiles);
@@ -513,6 +603,14 @@ export const TasksPage: React.FC<Props> = ({
         setAiResult(result);
         setRevealedHints(0);
         setUIState(result.total >= 9 ? "success" : result.total >= 6 ? "idle" : "error");
+
+        // Count as a successful study session when the user reaches a passing grade.
+        if (result.total >= 6) {
+          recordSuccessfulStudySession({
+            kind: "personal_task_submit",
+            taskId: active.id
+          });
+        }
         if (res.milestone) {
           setMilestone(res.milestone);
         }
@@ -534,7 +632,57 @@ export const TasksPage: React.FC<Props> = ({
       setSubmitting(false);
     }
   };
+
+  const handleFixErrorRetryTopic = async () => {
+    // Match GradesPage “Перепройти тему”: reset the whole topic, then navigate/reload tasks.
+    const topicIdRaw = (active as any)?.topicId ?? (active as any)?.topic?.id ?? null;
+    const topicId = typeof topicIdRaw === "number" ? topicIdRaw : typeof topicIdRaw === "string" ? Number(topicIdRaw) : null;
+    if (!topicId || !Number.isFinite(topicId)) {
+      // Fallback to old behavior when topic info is unavailable.
+      setAiResult(null);
+      setConsoleOutput("");
+      setUIState("idle");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      setUIState("evaluating");
+      setConsoleOutput(tr("Перезапуск теми...", "Retrying topic..."));
+      await resetTopic(topicId);
+      setAiResult(null);
+      setRevealedHints(0);
+      setConsoleOutput("");
+      setUIState("idle");
+      setEditorOpen(true);
+      await reloadTasks(true);
+    } catch (err) {
+      console.error("Failed to reset topic from Fix error:", err);
+      setConsoleOutput(tr("Не вдалося перепройти тему. Спробуйте ще раз.", "Failed to retry the topic. Please try again."));
+      setUIState("error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const canEdit = active && theoryAcknowledged && (active.status !== "GRADED" || aiResult && aiResult.total < 6);
+
+  const requestCreateFile = () => {
+    if (!active) return;
+    if (!canEdit) {
+      setConsoleOutput(tr("Завдання зараз недоступне для редагування.", "Task is read-only right now."));
+      setUIState("logic-warning");
+      return;
+    }
+
+    if (!editorOpen) setEditorOpen(true);
+
+    if (!useFiles) {
+      setUseFiles(true);
+      setFiles([{ path: entryFile, content: code }]);
+    }
+
+    // Trigger opening the "Add file" modal inside MultiFileEditor.
+    setMfAddToken(v => v + 1);
+  };
   const handleSaveDraft = async () => {
     if (!active || !currentCodeText.trim()) return;
     try {
@@ -562,6 +710,8 @@ export const TasksPage: React.FC<Props> = ({
     }
   };
   return <div className="flex-1 min-h-0 flex flex-col bg-bg-base">
+
+      <TaskGenerationOverlay open={loading} />
 
       {}
       <div className="flex-1 min-h-0 flex overflow-x-hidden">
@@ -663,12 +813,12 @@ export const TasksPage: React.FC<Props> = ({
                         </Button>;
                 })()}
 
-                    <Button variant="ghost" onClick={() => setEditorOpen(v => !v)} className="text-sm px-3 py-2" title={editorOpen ? tr("Сховати редактор", "Hide editor") : tr("Відкрити редактор", "Open editor")}>
-                      <Code2 className="w-4 h-4 mr-2" />
-                      {editorOpen ? tr("Редактор", "Editor") : tr("Відкрити", "Open")}
-                    </Button>
-
                     {!aiResult ? <>
+                        {!canEdit ? null : <Button variant="ghost" onClick={() => {
+                    requestCreateFile();
+                  }} className="text-sm px-3 py-2" title={tr("Створити додатковий файл (multi-file)", "Create an additional file (multi-file)")}>
+                          <Plus className="w-4 h-4 mr-2" /> {tr("Створити файл", "Create file")}
+                        </Button>}
                         <Button variant="secondary" onClick={() => {
                     if (!editorOpen) {
                       setEditorOpen(true);
@@ -701,11 +851,7 @@ export const TasksPage: React.FC<Props> = ({
                         <Button variant="secondary" onClick={handleSaveDraft} disabled={!active || !currentCodeText.trim()} className="text-sm px-4 py-2">
                           <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")}
                         </Button>
-                        <Button variant="primary" onClick={() => {
-                    setAiResult(null);
-                    setConsoleOutput("");
-                    setUIState("idle");
-                  }} className="text-sm px-6 py-2">
+                        <Button variant="primary" onClick={handleFixErrorRetryTopic} disabled={submitting} className="text-sm px-6 py-2">
                           {tr("Виправити помилку", "Fix the error")}
                         </Button>
                       </> : null}
@@ -731,7 +877,9 @@ export const TasksPage: React.FC<Props> = ({
                                 {tr("Спочатку прочитай теорію у модальному вікні.", "Read the theory in the modal first.")}
                               </div>;
                     }
-                    return practice ? <div className="whitespace-pre-wrap">{practice}</div> : <div className="text-xs font-mono text-text-secondary">
+                    return practice ? <div className="prose prose-invert max-w-none text-text-primary">
+                              <MarkdownView content={practice} />
+                            </div> : <div className="text-xs font-mono text-text-secondary">
                               {tr("Практика знаходиться у редакторі коду нижче (дивись TODO у шаблоні).", "Practice is in the code editor below (see TODO in the template).")}
                             </div>;
                   })()}
@@ -746,11 +894,10 @@ export const TasksPage: React.FC<Props> = ({
                     {useFiles ? <MultiFileEditor language={user.course} entryFile={entryFile} files={files.length ? files : [{
                   path: entryFile,
                   content: code
-                }]} onChange={setFiles} readOnly={!canEdit} /> : <div className="h-full min-h-0 flex flex-col">
+                }]} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /> : <div className="h-full min-h-0 flex flex-col">
                         <div className="p-2 border-b border-border flex items-center justify-end gap-2">
                           {!canEdit ? null : <Button variant="ghost" size="sm" onClick={() => {
-                  setUseFiles(true);
-                  setFiles([{ path: entryFile, content: code }]);
+                  requestCreateFile();
                 }}>
                               <Plus className="w-4 h-4 mr-1" />
                               {tr("Додати файл", "Add file")}
@@ -838,77 +985,20 @@ export const TasksPage: React.FC<Props> = ({
                     · {tr("Оцінка:", "Grade:")}{" "}
                     <span className="text-text-primary">{aiResult.total ?? 0}</span>
                     {(() => {
-                      const score = aiResult.score;
-                      const maxScore = aiResult.maxScore;
-                      if (typeof score !== "number" || typeof maxScore !== "number" || maxScore <= 0) return null;
-                      const pct = Math.max(0, Math.min(100, Math.round(score / maxScore * 100)));
-                      const groups = Array.isArray(aiResult.groupScores) ? aiResult.groupScores : null;
-                      const segments = (() => {
-                        if (!groups || groups.length === 0) return null;
-                        const totalMax = maxScore;
-                        const normalized = groups.map(g => ({
-                          group: String((g as any)?.group ?? ""),
-                          score: Number((g as any)?.score ?? 0),
-                          maxScore: Number((g as any)?.maxScore ?? 0)
-                        })).filter(g => Number.isFinite(g.score) && g.score > 0);
-                        const order = ["public", "hidden"];
-                        normalized.sort((a, b) => {
-                          const ia = order.indexOf(a.group);
-                          const ib = order.indexOf(b.group);
-                          if (ia === -1 && ib === -1) return a.group.localeCompare(b.group);
-                          if (ia === -1) return 1;
-                          if (ib === -1) return -1;
-                          return ia - ib;
-                        });
-                        return normalized.map(g => {
-                          const raw = totalMax > 0 ? g.score / totalMax * 100 : 0;
-                          const segPct = Math.max(0, Math.min(100, raw));
-                          const className = g.group === "public" ? "bg-primary" : g.group === "hidden" ? "bg-violet-500" : "bg-slate-500";
-                          const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
-                          return {
-                            key: g.group,
-                            pct: segPct,
-                            className,
-                            label,
-                            title: `${label}: ${g.score}/${g.maxScore}`
-                          };
-                        });
-                      })();
-                      const showLegend = Array.isArray(segments) && segments.some(s => s.key === "public" || s.key === "hidden");
+                      const passed = aiResult.testsPassed;
+                      const total = aiResult.testsTotal;
+                      if (typeof passed !== "number" || typeof total !== "number" || total <= 0) return null;
+                      const pct = Math.max(0, Math.min(100, Math.round(passed / total * 100)));
                       return <div className="mt-2">
                           <div className="h-2 w-full bg-border rounded overflow-hidden">
-                            {Array.isArray(segments) && segments.length > 0 ? <div className="h-2 w-full flex">
-                                {segments.map(seg => <div key={seg.key} className={`h-2 ${seg.className}`} title={seg.title} style={{
-                                width: `${seg.pct}%`
-                              }} />)}
-                              </div> : <div className="h-2 bg-primary" style={{
-                                width: `${pct}%`
-                              }} />}
+                            <div className="h-2 bg-primary" style={{
+                              width: `${pct}%`
+                            }} />
                           </div>
                           <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center justify-between">
-                            <span>{tr("Бал:", "Score:")} <span className="text-text-secondary">{score}/{maxScore}</span></span>
+                            <span>{tr("Тести:", "Tests:")} <span className="text-text-secondary">{passed}/{total}</span></span>
                             <span>{pct}%</span>
                           </div>
-                          {showLegend && <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center gap-3">
-                              <span className="inline-flex items-center gap-1" title={tr("Публічні тести", "Public tests")}>
-                                <span className="inline-block w-2 h-2 rounded-sm bg-primary" />
-                                <span>{tr("публічні", "public")}</span>
-                              </span>
-                              <span className="inline-flex items-center gap-1" title={tr("Приховані тести", "Hidden tests")}>
-                                <span className="inline-block w-2 h-2 rounded-sm bg-violet-500" />
-                                <span>{tr("приховані", "hidden")}</span>
-                              </span>
-                            </div>}
-                          {groups && groups.length > 0 && <div className="mt-1 space-y-1">
-                              {groups.map((g, idx) => {
-                              const gpct = g.maxScore > 0 ? Math.round(g.score / g.maxScore * 100) : 0;
-                              const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
-                              return <div key={`${g.group}-${idx}`} className="text-[10px] font-mono text-text-muted flex items-center justify-between">
-                                    <span>{label}</span>
-                                    <span className="text-text-secondary">{g.score}/{g.maxScore} ({gpct}%)</span>
-                                  </div>;
-                            })}
-                            </div>}
                         </div>;
                     })()}
                   </div>}

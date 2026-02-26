@@ -17,6 +17,66 @@ export type PlacementQuestion = {
 // We can expand this later and/or move to backend.
 export const PLACEMENT_QUESTIONS: PlacementQuestion[] = [
   {
+    id: "cpp-t0-1",
+    course: "CPP",
+    topicIndex: 0,
+    promptUk: "C++: Що виведе цей код?\nstd::cout << (2 + 3 * 4);",
+    promptEn: "C++: What will this print?\nstd::cout << (2 + 3 * 4);",
+    optionsUk: ["14", "20", "24", "Помилка"],
+    optionsEn: ["14", "20", "24", "Error"],
+    correctIndex: 0
+  },
+  {
+    id: "cpp-t0-2",
+    course: "CPP",
+    topicIndex: 0,
+    promptUk: "C++: Як правильно оголосити ціле число?",
+    promptEn: "C++: How do you declare an integer variable?",
+    optionsUk: ["int a = 10;", "integer a = 10;", "Int a = 10;", "num a = 10;"],
+    optionsEn: ["int a = 10;", "integer a = 10;", "Int a = 10;", "num a = 10;"],
+    correctIndex: 0
+  },
+  {
+    id: "cpp-t1-1",
+    course: "CPP",
+    topicIndex: 1,
+    promptUk: "C++: Що виведе цей код?\nint a = 5;\nstd::cout << a++;",
+    promptEn: "C++: What will this print?\nint a = 5;\nstd::cout << a++;",
+    optionsUk: ["5", "6", "Помилка компіляції", "Нічого"],
+    optionsEn: ["5", "6", "Compilation error", "Nothing"],
+    correctIndex: 0
+  },
+  {
+    id: "cpp-t1-2",
+    course: "CPP",
+    topicIndex: 1,
+    promptUk: "C++: Який тип підходить для true/false?",
+    promptEn: "C++: Which type is used for true/false?",
+    optionsUk: ["int", "std::string", "bool", "char"],
+    optionsEn: ["int", "std::string", "bool", "char"],
+    correctIndex: 2
+  },
+  {
+    id: "cpp-t2-1",
+    course: "CPP",
+    topicIndex: 2,
+    promptUk: "C++: Яка умова істинна? (a = 3)",
+    promptEn: "C++: Which condition is true? (a = 3)",
+    optionsUk: ["a == 3", "a = 3", "a === 3", "a != 3"],
+    optionsEn: ["a == 3", "a = 3", "a === 3", "a != 3"],
+    correctIndex: 0
+  },
+  {
+    id: "cpp-t2-2",
+    course: "CPP",
+    topicIndex: 2,
+    promptUk: "C++: Що виведе цей код?\nint a = 2;\nif (a > 3) std::cout << \"A\"; else std::cout << \"B\";",
+    promptEn: "C++: What will this print?\nint a = 2;\nif (a > 3) std::cout << \"A\"; else std::cout << \"B\";",
+    optionsUk: ["A", "B", "Нічого", "Помилка"],
+    optionsEn: ["A", "B", "Nothing", "Error"],
+    correctIndex: 1
+  },
+  {
     id: "java-t0-1",
     course: "JAVA",
     topicIndex: 0,

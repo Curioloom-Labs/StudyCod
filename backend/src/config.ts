@@ -3,6 +3,7 @@ export const IS_PRODUCTION = env.__isProduction;
 export const JWT_SECRET = env.JWT_SECRET;
 export const SESSION_SECRET = env.SESSION_SECRET;
 export const FRONTEND_URL = env.FRONTEND_URL;
+export const BACKEND_PUBLIC_URL = env.BACKEND_PUBLIC_URL;
 export const CORS_ORIGIN = env.CORS_ORIGIN;
 export const PORT = env.PORT;
 export const CORS_ORIGINS = env.__corsOrigins;

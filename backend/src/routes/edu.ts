@@ -74,7 +74,8 @@ function clampGradeToInt(raw: unknown): number {
   return Math.max(0, Math.min(12, Math.round(n)));
 }
 function normalizeLang(input?: string | null): UserLang {
-  const raw = (input || "").toUpperCase().trim();
+  const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
+  if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }

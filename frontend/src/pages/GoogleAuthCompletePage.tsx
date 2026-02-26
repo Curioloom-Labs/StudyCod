@@ -189,6 +189,9 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({
               <button type="button" onClick={() => setCourse("PYTHON")} className={`flex-1 py-2 px-4 border text-xs font-mono transition-fast ${course === "PYTHON" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`}>
                 Python
               </button>
+              <button type="button" onClick={() => setCourse("CPP")} className={`flex-1 py-2 px-4 border text-xs font-mono transition-fast ${course === "CPP" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`}>
+                C++
+              </button>
             </div>
           </div>
 

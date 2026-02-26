@@ -8,6 +8,7 @@ import { CheckerSpec, GroupScore, JudgeRequest, JudgeResponse, TestRunResult, Ve
 import { cleanPythonRuntimeError, filterNsJailStderr } from "./stderr";
 import { buildUserFacingStderr } from "./userFacingErrors";
 import { checkExact } from "../checkers/exact";
+import { checkNonEmpty } from "../checkers/nonempty";
 import { checkWhitespace } from "../checkers/whitespace";
 import { checkFloat } from "../checkers/float";
 import { cppLanguage } from "../languages/cpp";
@@ -491,6 +492,7 @@ function normalizeChecker(spec?: CheckerSpec): CheckerSpec {
   if (!spec) return {
     type: "whitespace"
   };
+  if (spec.type === "nonempty") return { type: "nonempty" };
   if (spec.type === "float") {
     const eps = Number((spec as any).epsilon);
     if (!Number.isFinite(eps) || eps <= 0 || eps > 1) return {
@@ -510,6 +512,8 @@ function checkOutput(spec: CheckerSpec, actual: string, expected: string): boole
       return checkExact(actual, expected);
     case "whitespace":
       return checkWhitespace(actual, expected);
+    case "nonempty":
+      return checkNonEmpty(actual);
     case "float":
       return checkFloat(actual, expected, spec.epsilon);
   }

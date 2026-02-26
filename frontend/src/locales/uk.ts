@@ -113,6 +113,7 @@ export default {
   backToHome: 'Повернутись на головну',
   javaCourse: 'Курс Java',
   pythonCourse: 'Курс Python',
+  cppCourse: 'Курс C++',
   onboardingQuickTour: 'Швидкий тур',
   onboardingNewHere: 'Новачок? Тур',
   onboardingStepOf: 'Крок {{current}} з {{total}}',

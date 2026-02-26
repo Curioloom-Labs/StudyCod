@@ -4,15 +4,32 @@ import { JWT_SECRET } from "../config";
 import type { AuthRequest } from "./authMiddleware";
 import type { UserRole } from "../entities/User";
 import { maintenanceService } from "../services/maintenanceService";
-function isAllowedPath(pathname: string): boolean {
-  if (pathname.startsWith("/api/auth/")) return true;
-  if (pathname === "/api/auth") return true;
-  if (pathname.startsWith("/auth/")) return true;
-  if (pathname === "/auth") return true;
+
+/**
+ * Paths that should remain reachable during maintenance.
+ *
+ * Goals:
+ * - Users should see maintenance instead of broken UX.
+ * - Frontend must still be able to read the maintenance state.
+ * - Admins must be able to log in and disable maintenance.
+ */
+export function isMaintenanceBypassPath(pathname: string): boolean {
+  // Allow health checks.
+  if (pathname === "/health" || pathname === "/api/health") return true;
+
+  // Allow reading maintenance state (frontend banner/page).
+  if (pathname === "/api/auth/maintenance" || pathname === "/auth/maintenance") return true;
+
+  // Allow login so SYSTEM_ADMIN can authenticate and disable maintenance.
+  // Non-admins will still be blocked inside the login handler once credentials are verified.
+  if (pathname === "/api/auth/login" || pathname === "/auth/login") return true;
+
+  // Allow admin API/UI routes.
   if (pathname.startsWith("/api/admin/")) return true;
   if (pathname === "/api/admin") return true;
   if (pathname.startsWith("/admin/")) return true;
   if (pathname === "/admin") return true;
+
   return false;
 }
 function tryGetRoleFromBearer(req: AuthRequest): UserRole | null {
@@ -31,7 +48,7 @@ function tryGetRoleFromBearer(req: AuthRequest): UserRole | null {
 export async function maintenanceMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const originalUrl = (req.originalUrl || req.url || "").toString();
   const pathname = originalUrl.split("?")[0] || "";
-  if (isAllowedPath(pathname)) return next();
+  if (isMaintenanceBypassPath(pathname)) return next();
   const state = await maintenanceService.getStateCached();
   if (!state.enabled) return next();
   const role = tryGetRoleFromBearer(req);

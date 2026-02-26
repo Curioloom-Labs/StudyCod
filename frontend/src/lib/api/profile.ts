@@ -70,3 +70,13 @@ export async function submitPlacementCoding(data: {
   const res = await api.post("/profile/placement/coding-submit", data);
   return res.data as PlacementCodingSubmitResult;
 }
+
+export async function getEmailSubscription(): Promise<{ enabled: boolean; email: string | null }> {
+  const res = await api.get("/profile/email-subscription");
+  return res.data as { enabled: boolean; email: string | null };
+}
+
+export async function updateEmailSubscription(enabled: boolean): Promise<{ enabled: boolean }> {
+  const res = await api.put("/profile/email-subscription", { enabled });
+  return res.data as { enabled: boolean };
+}

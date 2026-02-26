@@ -20,7 +20,6 @@ import { ControlWork } from "./entities/ControlWork";
 import { TopicProgress } from "./entities/TopicProgress";
 import { ClassAnnouncement } from "./entities/ClassAnnouncement";
 import { TheoryBlock } from "./entities/TheoryBlock";
-import { TheoryBlockRevision } from "./entities/TheoryBlockRevision";
 import { SupportTicket } from "./entities/SupportTicket";
 import { SupportConversation } from "./entities/SupportConversation";
 import { SupportMessage } from "./entities/SupportMessage";
@@ -29,6 +28,10 @@ import { MaintenanceState } from "./entities/MaintenanceState";
 import { LibraryTask } from "./entities/LibraryTask";
 import { LibraryTaskAttempt } from "./entities/LibraryTaskAttempt";
 import { LibraryTaskRevision } from "./entities/LibraryTaskRevision";
+import { Contest } from "./entities/Contest";
+import { ContestProblem } from "./entities/ContestProblem";
+import { ContestParticipant } from "./entities/ContestParticipant";
+import { ContestSubmission } from "./entities/ContestSubmission";
 const dbPort = env.DB_PORT != null ? parseInt(env.DB_PORT, 10) : 3306;
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -41,10 +44,10 @@ export const AppDataSource = new DataSource({
     password: env.DB_PASS || "",
     database: env.DB_NAME || "studycod"
   }),
-  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, TheoryBlockRevision, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision],
+  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission],
   synchronize: false,
   logging: false,
-  migrations: ["dist/migrations/*.js"],
+  migrations: ["dist/backend/src/migrations/*.js", "dist/migrations/*.js"],
   extra: {
     connectionLimit: parseInt(env.DB_POOL_SIZE || "10", 10),
     connectTimeout: 5000,

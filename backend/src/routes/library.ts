@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { z } from "zod";
 import AdmZip from "adm-zip";
 import multer from "multer";
+import { createHash } from "crypto";
 import { AppDataSource } from "../data-source";
 import { authOptional, authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
@@ -17,10 +18,12 @@ import { executeCodeWithInput, compareOutput, filterStderrWithLang } from "../se
 import { judgeWithSemaphore } from "../services/judgeWorker";
 import { JudgeBusyError } from "../services/judgeWorker/Semaphore";
 import type { CheckerSpec, JudgeLanguage, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
-import { In } from "typeorm";
+import { In, Not } from "typeorm";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
+import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
+import { hasLibraryTaskEnTranslationColumns } from "../services/translation/translationSchema";
 
 const libraryRouter = Router();
 
@@ -73,6 +76,30 @@ const testDataRepo = () => AppDataSource.getRepository(TestData);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 
+function isProblemCodeDuplicateError(error: any): boolean {
+  const msg = String(error?.message ?? "");
+  return error?.code === "ER_DUP_ENTRY" && (msg.includes("uq_library_tasks_problem_code") || msg.includes("problem_code"));
+}
+
+async function allocateUniqueProblemCode(base: string, excludeTaskId?: number): Promise<string> {
+  const rawBase = String(base ?? "").trim();
+  const baseCode = (rawBase || "LIB").slice(0, 64);
+  let candidate = baseCode;
+  let i = 1;
+  while (i <= 2000) {
+    const where = excludeTaskId
+      ? ({ problemCode: candidate, id: Not(excludeTaskId) } as any)
+      : ({ problemCode: candidate } as any);
+    const existing = await libraryRepo().findOne({ where });
+    if (!existing) return candidate;
+    const suffix = `_${i}`;
+    candidate = `${baseCode.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+    i += 1;
+  }
+  // Fallback (extremely unlikely)
+  return `${baseCode.slice(0, 56)}_${Date.now().toString().slice(-7)}`;
+}
+
 const ALL_JUDGE_LANGS: JudgeLanguage[] = ["java", "python", "cpp", "c", "csharp", "kotlin"];
 
 function parseDisabledJudgeLanguagesEnv(): Set<JudgeLanguage> {
@@ -120,6 +147,7 @@ function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec
 
 function normalizeLang(input: any): LibraryTaskLang {
   const raw = String(input ?? "").toUpperCase().trim();
+  if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   return raw.startsWith("PY") ? "PYTHON" : "JAVA";
 }
 
@@ -225,6 +253,110 @@ function buildTaskDto(task: LibraryTask) {
   };
 }
 
+const LIBRARY_TASK_EN_TRANSLATION_VERSION = 1;
+
+function computeLibraryTaskEnSourceHash(task: Pick<LibraryTask, "title" | "description">): string {
+  // Include the translation version in the hash so we can invalidate cached translations
+  // after changing our Markdown-masking/translation behavior.
+  const src = `v${LIBRARY_TASK_EN_TRANSLATION_VERSION}\nTITLE\n${task.title}\nDESC\n${task.description}`;
+  return createHash("sha256").update(src, "utf8").digest("hex");
+}
+
+function isLibraryTaskEnFresh(taskWithEn: LibraryTask, expectedSourceHash: string): boolean {
+  const titleEn = String((taskWithEn as any).titleEn ?? "");
+  const descEn = String((taskWithEn as any).descriptionEn ?? "");
+  const okTitle = titleEn.trim().length > 0 && !looksLikeTranslationProviderErrorText(titleEn);
+  const okDesc = descEn.trim().length > 0 && !looksLikeTranslationProviderErrorText(descEn);
+  const okHash = String((taskWithEn as any).translationSourceHashEn ?? "").trim() === expectedSourceHash;
+  const okVer = Number((taskWithEn as any).translationVersionEn ?? 0) === LIBRARY_TASK_EN_TRANSLATION_VERSION;
+  return okTitle && okDesc && okHash && okVer;
+}
+
+async function localizeLibraryTasksToEn(
+  tasks: LibraryTask[],
+  req: AuthRequest
+): Promise<Map<number, { title: string; description: string }>> {
+  const out = new Map<number, { title: string; description: string }>();
+  const ids = Array.from(new Set(tasks.map(t => t.id).filter((x): x is number => typeof x === "number")));
+  if (ids.length === 0) return out;
+
+  const hasCols = await hasLibraryTaskEnTranslationColumns();
+  if (!hasCols) {
+    logger.warn("[library] EN translation requested but DB columns are missing; serving uk content", {
+      requestId: req.requestId,
+      userId: (req as any).userId ?? null
+    });
+    return out;
+  }
+
+  // Translation columns are marked select:false, so we explicitly select them.
+  const rows = await libraryRepo()
+    .createQueryBuilder("t")
+    .where("t.id IN (:...ids)", { ids })
+    .addSelect([
+      "t.titleEn",
+      "t.descriptionEn",
+      "t.translationSourceHashEn",
+      "t.translationVersionEn",
+      "t.translatedAtEn",
+    ])
+    .getMany();
+
+  const byId = new Map<number, LibraryTask>();
+  for (const r of rows) byId.set(r.id, r);
+
+  // Translate missing/stale ones sequentially to be gentle to free API.
+  for (const id of ids) {
+    const t = byId.get(id);
+    if (!t) continue;
+
+    const sourceHash = computeLibraryTaskEnSourceHash(t);
+    if (isLibraryTaskEnFresh(t, sourceHash)) {
+      out.set(id, {
+        title: (t as any).titleEn as string,
+        description: (t as any).descriptionEn as string,
+      });
+      continue;
+    }
+
+    try {
+      const [titleEn, descriptionEn] = await Promise.all([
+        translateTextUkToEn(t.title),
+        translateMarkdownUkToEn(t.description)
+      ]);
+
+      await AppDataSource.query(
+        `UPDATE \`library_tasks\`
+           SET \`title_en\` = ?,
+               \`description_en\` = ?,
+               \`translation_source_hash_en\` = ?,
+               \`translation_version_en\` = ?,
+               \`translated_at_en\` = ?,
+               \`updated_at\` = \`updated_at\`
+         WHERE \`id\` = ?`,
+        [titleEn, descriptionEn, sourceHash, LIBRARY_TASK_EN_TRANSLATION_VERSION, new Date(), id]
+      );
+
+      (t as any).titleEn = titleEn;
+      (t as any).descriptionEn = descriptionEn;
+      (t as any).translationSourceHashEn = sourceHash;
+      (t as any).translationVersionEn = LIBRARY_TASK_EN_TRANSLATION_VERSION;
+      (t as any).translatedAtEn = new Date();
+      out.set(id, { title: titleEn, description: descriptionEn });
+    } catch (error: any) {
+      logger.warn("[library] translate uk->en failed", {
+        requestId: req.requestId,
+        userId: (req as any).userId ?? null,
+        libraryTaskId: id,
+        error: error?.message ?? String(error)
+      });
+      // Best-effort: fall back to Ukrainian content.
+    }
+  }
+
+  return out;
+}
+
 function buildAttemptSummary(attempt: LibraryTaskAttempt | null) {
   if (!attempt) return null;
   const passed = attempt.lastTestsPassed;
@@ -247,6 +379,42 @@ function truncateText(s: string, max: number): string {
   return v.slice(0, max) + `\n…(truncated, ${v.length - max} more chars)`;
 }
 
+const JUDGE_LANGS = ["java", "python", "cpp", "c", "csharp", "kotlin"] as const;
+type JudgeLangId = typeof JUDGE_LANGS[number];
+const JUDGE_LANG_SET = new Set<string>(JUDGE_LANGS as readonly string[]);
+
+function normalizeTemplatesByLanguage(params: {
+  baseTemplate: string;
+  allowedLanguages?: JudgeLangId[] | null;
+  raw?: unknown;
+}): Record<string, string> | null {
+  const base = String(params.baseTemplate ?? "");
+  const allowed = Array.isArray(params.allowedLanguages) ? params.allowedLanguages : null;
+  const obj = params.raw && typeof params.raw === "object" && !Array.isArray(params.raw) ? (params.raw as Record<string, unknown>) : null;
+
+  // If allowed languages are specified, ensure each has a template.
+  if (allowed && allowed.length > 0) {
+    const out: Record<string, string> = {};
+    for (const l of allowed) {
+      const v = typeof obj?.[l] === "string" ? String(obj?.[l] ?? "") : "";
+      out[l] = (v.trim() ? v : base);
+    }
+    return out;
+  }
+
+  // Otherwise keep only known language keys, if any were provided.
+  if (!obj) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (!JUDGE_LANG_SET.has(k)) continue;
+    if (typeof v !== "string") continue;
+    const s = String(v ?? "");
+    if (!s.trim()) continue;
+    out[k] = s;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 const createLibraryTaskSchema = z.object({
   title: z.string().min(1).max(255),
   problemCode: z
@@ -266,6 +434,10 @@ const createLibraryTaskSchema = z.object({
   section: z.string().min(1).max(80).optional(),
   description: z.string().min(1),
   template: z.string().min(1),
+  templatesByLanguage: z.preprocess(
+    (v) => (v == null ? undefined : v),
+    z.record(z.string(), z.string().max(200_000))
+  ).optional(),
   lang: z.enum(["JAVA", "PYTHON"]).optional(),
   maxAttempts: z.number().int().min(1).max(100).optional(),
   timeLimitMs: z.number().int().min(100).max(60000).optional(),
@@ -303,6 +475,8 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
     const lang = req.query.lang ? normalizeLang(req.query.lang) : null;
     const judgeLanguage = req.query.judgeLanguage ? normalizeJudgeLanguage(req.query.judgeLanguage) : null;
     const q = String(req.query.q ?? "").trim();
+    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const wantsEn = uiLang.startsWith("en");
 
     const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
     const pageSizeRaw = parseInt(String(req.query.pageSize ?? "20"), 10);
@@ -329,6 +503,8 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
       .take(pageSize)
       .getManyAndCount();
 
+    const enById = wantsEn ? await localizeLibraryTasksToEn(tasks, req) : new Map<number, { title: string; description: string }>();
+
     const ids = tasks.map(t => t.id);
     const attempts = ids.length && req.userId
       ? await attemptRepo().find({
@@ -346,10 +522,16 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
     }
 
     return res.json({
-      tasks: tasks.map(t => ({
-        ...buildTaskDto(t),
-        attempt: buildAttemptSummary(attemptByTaskId.get(t.id) ?? null)
-      })),
+      tasks: tasks.map(t => {
+        const dto: any = buildTaskDto(t);
+        const en = enById.get(t.id);
+        if (en) {
+          dto.title = en.title;
+          dto.description = en.description;
+        }
+        dto.attempt = buildAttemptSummary(attemptByTaskId.get(t.id) ?? null);
+        return dto;
+      }),
       total,
       page,
       pageSize,
@@ -365,6 +547,8 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
   try {
     const key = String(req.params.key ?? "").trim();
     if (!key) return res.status(400).json({ message: "INVALID_KEY" });
+    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const wantsEn = uiLang.startsWith("en");
 
     const task = await libraryRepo().findOne({
       where: [{ problemCode: key } as any, { slug: key } as any],
@@ -388,8 +572,16 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
           return kind === "SAMPLE";
         });
 
+    const enById = wantsEn ? await localizeLibraryTasksToEn([task], req) : new Map<number, { title: string; description: string }>();
+    const dto: any = buildTaskDto(task);
+    const en = enById.get(task.id);
+    if (en) {
+      dto.title = en.title;
+      dto.description = en.description;
+    }
+
     return res.json({
-      task: buildTaskDto(task),
+      task: dto,
       theory: task.theory?.content ?? null,
       tests: visibleTests.map(t => ({
         id: t.id,
@@ -406,16 +598,16 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
   }
 });
 
-libraryRouter.get("/tasks/mine", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+libraryRouter.get("/tasks/mine", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
     const user = await userRepo().findOne({ where: { id: req.userId } });
     if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
-    if (user.userMode !== "EDUCATIONAL" || req.studentId) {
-      return res.status(403).json({ message: "ONLY_TEACHERS" });
-    }
+    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const wantsEn = uiLang.startsWith("en");
 
     const tasks = await libraryRepo().find({
-      where: { author: { id: user.id } } as any,
+      where: { author: { id: user.id }, isHiddenFromLibrary: false } as any,
       relations: ["author"],
       order: { updatedAt: "DESC" },
       take: 200,
@@ -437,11 +629,19 @@ libraryRouter.get("/tasks/mine", authRequired, teacherOrAdminGuard, async (req: 
       if (typeof tid === "number") attemptByTaskId.set(tid, a);
     }
 
+    const enById = wantsEn ? await localizeLibraryTasksToEn(tasks, req) : new Map<number, { title: string; description: string }>();
+
     return res.json({
-      tasks: tasks.map(t => ({
-        ...buildTaskDto(t),
-        attempt: buildAttemptSummary(attemptByTaskId.get(t.id) ?? null)
-      }))
+      tasks: tasks.map(t => {
+        const dto: any = buildTaskDto(t);
+        const en = enById.get(t.id);
+        if (en) {
+          dto.title = en.title;
+          dto.description = en.description;
+        }
+        dto.attempt = buildAttemptSummary(attemptByTaskId.get(t.id) ?? null);
+        return dto;
+      })
     });
   } catch (error: any) {
     logger.error("[library] GET /tasks/mine error", { requestId: req.requestId, err: error });
@@ -453,6 +653,8 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const wantsEn = uiLang.startsWith("en");
 
     const task = await libraryRepo().findOne({
       where: { id } as any,
@@ -476,8 +678,16 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
           return kind === "SAMPLE";
         });
 
+    const enById = wantsEn ? await localizeLibraryTasksToEn([task], req) : new Map<number, { title: string; description: string }>();
+    const dto: any = buildTaskDto(task);
+    const en = enById.get(task.id);
+    if (en) {
+      dto.title = en.title;
+      dto.description = en.description;
+    }
+
     return res.json({
-      task: buildTaskDto(task),
+      task: dto,
       theory: task.theory?.content ?? null,
       tests: visibleTests.map(t => ({
         id: t.id,
@@ -1013,8 +1223,9 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
   }
 });
 
-libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
     const validated = createLibraryTaskSchema.safeParse(req.body);
     if (!validated.success) {
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
@@ -1022,9 +1233,6 @@ libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: Auth
 
     const user = await userRepo().findOne({ where: { id: req.userId } });
     if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
-    if (user.userMode !== "EDUCATIONAL" || req.studentId) {
-      return res.status(403).json({ message: "ONLY_TEACHERS" });
-    }
 
     const data = validated.data;
 
@@ -1034,6 +1242,13 @@ libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: Auth
         disabledLanguages: Array.from(DISABLED_JUDGE_LANGS)
       });
     }
+    const allowedLanguages = (Array.isArray((data as any).allowedLanguages) ? ((data as any).allowedLanguages as JudgeLangId[]) : null);
+    const templatesByLanguage = normalizeTemplatesByLanguage({
+      baseTemplate: data.template,
+      allowedLanguages,
+      raw: (data as any).templatesByLanguage,
+    });
+
     const task = libraryRepo().create({
       author: { id: user.id } as any,
       title: data.title.trim(),
@@ -1044,6 +1259,7 @@ libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: Auth
       section: data.section?.trim() ?? null,
       description: data.description.trim(),
       template: data.template,
+      templatesByLanguage,
       lang: normalizeLang(data.lang),
       maxAttempts: data.maxAttempts ?? 3,
       timeLimitMs: data.timeLimitMs ?? null,
@@ -1062,7 +1278,7 @@ libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: Auth
     // Auto-generate stable identifiers if not provided.
     let dirty = false;
     if (!(task as any).problemCode) {
-      (task as any).problemCode = `LIB${task.id}`;
+      (task as any).problemCode = await allocateUniqueProblemCode(`LIB${task.id}`, task.id);
       dirty = true;
     }
     if (!(task as any).slug) {
@@ -1070,7 +1286,18 @@ libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: Auth
       (task as any).slug = `${base}-${task.id}`;
       dirty = true;
     }
-    if (dirty) await libraryRepo().save(task);
+    if (dirty) {
+      try {
+        await libraryRepo().save(task);
+      } catch (err: any) {
+        if (isProblemCodeDuplicateError(err)) {
+          (task as any).problemCode = await allocateUniqueProblemCode(String((task as any).problemCode || `LIB${task.id}`), task.id);
+          await libraryRepo().save(task);
+        } else {
+          throw err;
+        }
+      }
+    }
 
     if (data.theory && data.theory.trim()) {
       const th = theoryRepo().create({
@@ -1103,10 +1330,11 @@ libraryRouter.post("/tasks", authRequired, teacherOrAdminGuard, async (req: Auth
   }
 });
 
-libraryRouter.patch("/tasks/:id", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
 
     const validated = updateLibraryTaskSchema.safeParse(req.body);
     if (!validated.success) {
@@ -1141,6 +1369,27 @@ libraryRouter.patch("/tasks/:id", authRequired, teacherOrAdminGuard, async (req:
     if ((data as any).section !== undefined) (task as any).section = String((data as any).section ?? "").trim() || null;
     if (typeof data.description === "string") task.description = data.description.trim();
     if (typeof data.template === "string") task.template = data.template;
+    if ((data as any).templatesByLanguage !== undefined) {
+      const effectiveAllowed = ((data as any).allowedLanguages !== undefined)
+        ? ((data as any).allowedLanguages ?? null)
+        : ((task as any).allowedLanguages ?? null);
+      const effectiveBaseTemplate = (typeof data.template === "string") ? data.template : task.template;
+      (task as any).templatesByLanguage = normalizeTemplatesByLanguage({
+        baseTemplate: effectiveBaseTemplate,
+        allowedLanguages: Array.isArray(effectiveAllowed) ? (effectiveAllowed as JudgeLangId[]) : null,
+        raw: (data as any).templatesByLanguage,
+      });
+    } else if ((data as any).allowedLanguages !== undefined) {
+      // allowedLanguages changed but templatesByLanguage wasn't explicitly updated: keep existing but ensure every allowed lang has a template.
+      const effectiveAllowed = (data as any).allowedLanguages ?? null;
+      if (Array.isArray(effectiveAllowed) && effectiveAllowed.length > 0) {
+        (task as any).templatesByLanguage = normalizeTemplatesByLanguage({
+          baseTemplate: task.template,
+          allowedLanguages: effectiveAllowed as JudgeLangId[],
+          raw: (task as any).templatesByLanguage,
+        });
+      }
+    }
     if (data.lang) task.lang = normalizeLang(data.lang);
     if (typeof data.maxAttempts === "number") task.maxAttempts = data.maxAttempts;
     if ((data as any).timeLimitMs !== undefined) (task as any).timeLimitMs = (data as any).timeLimitMs ?? null;
@@ -1197,10 +1446,45 @@ libraryRouter.patch("/tasks/:id", authRequired, teacherOrAdminGuard, async (req:
   }
 });
 
-libraryRouter.post("/tasks/:id/submit", authRequired, teacherOrAdminGuard, async (req: AuthRequest, res: Response) => {
+libraryRouter.delete("/tasks/:id", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    const isOwner = task.author?.id === req.userId;
+    if (!isAdmin && !isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    // Allow deleting only non-published drafts. (We also allow deleting REJECTED so authors can clean up.)
+    if (task.status === "APPROVED" || task.status === "PENDING") {
+      return res.status(400).json({ message: "CANNOT_DELETE_IN_STATUS", status: task.status });
+    }
+
+    await AppDataSource.transaction(async (m) => {
+      // Defensive deletes (FKs are expected to CASCADE, but explicit deletes keep it robust across old schemas).
+      try { await m.query("DELETE FROM library_task_revisions WHERE library_task_id = ?", [id]); } catch {}
+      try { await m.query("DELETE FROM library_task_attempts WHERE library_task_id = ?", [id]); } catch {}
+      try { await m.query("DELETE FROM test_data WHERE library_task_id = ?", [id]); } catch {}
+      try { await m.query("DELETE FROM task_theories WHERE library_task_id = ?", [id]); } catch {}
+      await m.query("DELETE FROM library_tasks WHERE id = ?", [id]);
+    });
+
+    return res.json({ ok: true });
+  } catch (error: any) {
+    logger.error("[library] DELETE /tasks/:id error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.post("/tasks/:id/submit", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
 
     const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
@@ -1331,50 +1615,147 @@ function readZipJson<T>(zip: AdmZip, path: string): T {
 }
 
 /**
- * Archive format is the same as topics import/export:
+ * Archive format for library task import/export:
  * - task.json (required)
  * - tests.json (optional)
  * - theory.md (optional)
+ *
+ * NOTE: Library tasks are no longer restricted to a single course language.
+ * Use per-judge-language templates (templatesByLanguage) and/or allowedLanguages
+ * via the API after import. The archive format intentionally does not include a
+ * "lang" field.
  */
-libraryRouter.post("/tasks/import-archive", authRequired, teacherOrAdminGuard, archiveUpload.single("archive"), async (req: AuthRequest, res: Response) => {
+libraryRouter.post("/tasks/import-archive", authRequired, archiveUpload.single("archive"), async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
     const user = await userRepo().findOne({ where: { id: req.userId } });
     if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
-    if (user.userMode !== "EDUCATIONAL" || req.studentId) {
-      return res.status(403).json({ message: "ONLY_TEACHERS" });
-    }
 
     const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
     if (!file?.buffer) return res.status(400).json({ message: "ARCHIVE_REQUIRED" });
+    const hideFromLibraryRaw = String((req.body as any)?.hideFromLibrary ?? "").trim().toLowerCase();
+    const hideFromLibrary = hideFromLibraryRaw === "1" || hideFromLibraryRaw === "true" || hideFromLibraryRaw === "yes";
 
     const zip = new AdmZip(file.buffer);
 
-    type TaskJson = {
-      title: string;
-      description: string;
-      template: string;
-      lang?: "JAVA" | "PYTHON";
-      maxAttempts?: number;
-    };
+    const archiveTaskSchema = z.object({
+      title: z.string().min(1).max(255),
+      description: z.string().min(1),
+      template: z.string().min(1),
+      // optional metadata (same constraints as API schema, but with coercion)
+      problemCode: z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[A-Za-z0-9_-]+$/)
+        .optional(),
+      slug: z
+        .string()
+        .min(1)
+        .max(128)
+        .regex(/^[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?$/)
+        .optional(),
+      difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
+      tags: z
+        .preprocess(
+          (v) => {
+            if (Array.isArray(v)) return v;
+            if (typeof v === "string") {
+              return v
+                .split(",")
+                .map(x => String(x).trim())
+                .filter(Boolean);
+            }
+            return undefined;
+          },
+          z.array(z.string().min(1).max(32)).max(20)
+        )
+        .optional(),
+      section: z.string().min(1).max(80).optional(),
+      maxAttempts: z.coerce.number().int().min(1).max(100).optional(),
+      timeLimitMs: z.coerce.number().int().min(100).max(60000).optional(),
+      memoryLimitMb: z.coerce.number().int().min(16).max(2048).optional(),
+      outputLimitKb: z.coerce.number().int().min(4).max(1024).optional(),
+      checkerSpec: z
+        .discriminatedUnion("type", [
+          z.object({ type: z.literal("exact") }),
+          z.object({ type: z.literal("whitespace") }),
+          z.object({ type: z.literal("float"), epsilon: z.coerce.number().positive().max(1) }),
+        ])
+        .optional(),
+      allowedLanguages: z
+        .preprocess(
+          (v) => {
+            if (v == null) return undefined;
+            if (Array.isArray(v)) return v;
+            if (typeof v === "string") {
+              return v
+                .split(/[\s,]+/g)
+                .map(x => String(x).trim().toLowerCase())
+                .filter(Boolean);
+            }
+            return v;
+          },
+          z.array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
+            .min(1)
+            .max(6)
+        )
+        .optional(),
+      templatesByLanguage: z.record(z.string(), z.string()).optional(),
+    });
 
-    const taskJson = readZipJson<TaskJson>(zip, "task.json");
+    const taskJsonRaw = readZipJson<any>(zip, "task.json");
+    const parsedTaskJson = archiveTaskSchema.safeParse(taskJsonRaw);
+    if (!parsedTaskJson.success) {
+      return res.status(400).json({ message: "INVALID_TASK_JSON", errors: parsedTaskJson.error.issues });
+    }
+
+    const taskJson = parsedTaskJson.data;
+
+    if (Array.isArray((taskJson as any).allowedLanguages) && (taskJson as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+      return res.status(400).json({
+        message: "LANGUAGE_DISABLED",
+        disabledLanguages: Array.from(DISABLED_JUDGE_LANGS)
+      });
+    }
+
     const title = String(taskJson.title ?? "").trim();
     const description = String(taskJson.description ?? "").trim();
     const template = String(taskJson.template ?? "").trim();
-    const lang = normalizeLang(taskJson.lang);
-    const maxAttempts = Number.isFinite(Number(taskJson.maxAttempts)) ? Math.max(1, Math.floor(Number(taskJson.maxAttempts))) : 3;
+    const maxAttempts = typeof taskJson.maxAttempts === "number" && Number.isFinite(taskJson.maxAttempts)
+      ? Math.max(1, Math.floor(taskJson.maxAttempts))
+      : 3;
 
-    if (!title || !description || !template) {
-      return res.status(400).json({ message: "INVALID_TASK_JSON" });
+    const incomingProblemCode = taskJson.problemCode?.trim() ?? null;
+    if (!hideFromLibrary && incomingProblemCode) {
+      const exists = await libraryRepo().findOne({ where: { problemCode: incomingProblemCode } as any });
+      if (exists) return res.status(409).json({ message: "PROBLEM_CODE_TAKEN", problemCode: incomingProblemCode });
     }
+
+    const normalizedTemplatesByLanguage = normalizeTemplatesByLanguage({
+      baseTemplate: template,
+      allowedLanguages: Array.isArray((taskJson as any).allowedLanguages) ? ((taskJson as any).allowedLanguages as JudgeLangId[]) : null,
+      raw: (taskJson as any).templatesByLanguage,
+    });
 
     const task = libraryRepo().create({
       author: { id: user.id } as any,
       title,
+      problemCode: hideFromLibrary ? null : incomingProblemCode,
+      slug: hideFromLibrary ? null : (taskJson.slug?.trim() ?? null),
+      difficulty: (taskJson as any).difficulty ?? null,
+      tags: (taskJson as any).tags ?? null,
+      section: taskJson.section?.trim() ?? null,
       description,
       template,
-      lang,
+      templatesByLanguage: normalizedTemplatesByLanguage,
       maxAttempts,
+      timeLimitMs: (taskJson as any).timeLimitMs ?? null,
+      memoryLimitMb: (taskJson as any).memoryLimitMb ?? null,
+      outputLimitKb: (taskJson as any).outputLimitKb ?? null,
+      checkerSpec: (taskJson as any).checkerSpec ?? null,
+      allowedLanguages: (taskJson as any).allowedLanguages ?? null,
+      isHiddenFromLibrary: hideFromLibrary,
       status: "DRAFT",
       rejectionReason: null,
       submittedAt: null,
@@ -1453,10 +1834,20 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
         JSON.stringify(
           {
             title: task.title,
+            problemCode: (task as any).problemCode ?? undefined,
+            slug: (task as any).slug ?? undefined,
+            difficulty: (task as any).difficulty ?? undefined,
+            tags: (task as any).tags ?? undefined,
+            section: (task as any).section ?? undefined,
             description: task.description,
             template: task.template,
-            lang: task.lang,
             maxAttempts: task.maxAttempts,
+            timeLimitMs: (task as any).timeLimitMs ?? undefined,
+            memoryLimitMb: (task as any).memoryLimitMb ?? undefined,
+            outputLimitKb: (task as any).outputLimitKb ?? undefined,
+            checkerSpec: (task as any).checkerSpec ?? undefined,
+            allowedLanguages: (task as any).allowedLanguages ?? undefined,
+            templatesByLanguage: (task as any).templatesByLanguage ?? undefined,
           },
           null,
           2

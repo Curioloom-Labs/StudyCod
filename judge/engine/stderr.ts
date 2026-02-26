@@ -1,6 +1,20 @@
 export function filterNsJailStderr(stderr: string): string {
   return stripSandboxNoise(stderr);
 }
+
+function isImportantSandboxLogLine(line: string): boolean {
+  const s = line.toLowerCase();
+  // Keep actionable configuration/usage errors. These are often emitted as glog-style
+  // lines (e.g. "F0123 ...") or "[F] ..." and are critical for diagnosing sandbox issues.
+  if (s.includes("failed to parse") && s.includes("config")) return true;
+  if (s.includes("parse") && s.includes("config")) return true;
+  if (s.includes("invalid") && s.includes("config")) return true;
+  if (s.includes("unknown") && (s.includes("flag") || s.includes("option"))) return true;
+  if (s.includes("usage:") && s.includes("nsjail")) return true;
+  if (s.includes("permission denied") && s.includes("nsjail")) return true;
+  return false;
+}
+
 export function stripSandboxNoise(stderr: string): string {
   const s = String(stderr ?? "");
   if (!s.trim()) return "";
@@ -9,8 +23,11 @@ export function stripSandboxNoise(stderr: string): string {
   for (const line of lines) {
     const trimmed = line.trimEnd();
     if (!trimmed) continue;
-    if (/^[IWEF]\d{4}\s/.test(trimmed)) continue;
-    if (/^\[[IWEF]\]\s*/.test(trimmed)) continue;
+    const isGlogPrefix = /^[IWEF]\d{4}\s/.test(trimmed);
+    const isBracketPrefix = /^\[[IWEF]\]\s*/.test(trimmed);
+    if (isGlogPrefix || isBracketPrefix) {
+      if (!isImportantSandboxLogLine(trimmed)) continue;
+    }
     // NsJail often prefixes useful exec errors (e.g. missing compiler) with "nsjail".
     // Keep lines that look actionable, strip the rest of the nsjail noise.
     if (/\bnsjail\b/i.test(trimmed)) {

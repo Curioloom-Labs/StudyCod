@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CodeEditor } from "./CodeEditor";
 import { Button } from "./ui/Button";
 import { Modal } from "./ui/Modal";
 import { Plus, X } from "lucide-react";
+import { tr } from "../i18n";
 
 export type CodeFile = { path: string; content: string };
 
@@ -34,6 +35,11 @@ export interface MultiFileEditorProps {
   onChange: (next: CodeFile[]) => void;
   readOnly?: boolean;
   height?: string;
+  /**
+   * Increment this number to request opening the “Add file” modal.
+   * Useful when the parent triggers file creation from outside the editor.
+   */
+  requestAddToken?: number;
 }
 
 export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
@@ -43,6 +49,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   onChange,
   readOnly,
   height,
+  requestAddToken,
 }) => {
   const normalized = useMemo(() => {
     const n = normalizeFiles(files);
@@ -71,20 +78,35 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   const [newName, setNewName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
 
+  const lastRequestToken = useRef<number | undefined>(undefined);
+
   const openAdd = () => {
     setNameError(null);
     setNewName("");
     setAddOpen(true);
   };
 
+  useEffect(() => {
+    if (readOnly) return;
+    if (typeof requestAddToken !== "number") return;
+    if (lastRequestToken.current === undefined) {
+      // Do not auto-open on first mount.
+      lastRequestToken.current = requestAddToken;
+      return;
+    }
+    if (requestAddToken === lastRequestToken.current) return;
+    lastRequestToken.current = requestAddToken;
+    openAdd();
+  }, [requestAddToken, readOnly]);
+
   const doAdd = () => {
     const p = newName.trim();
     if (!isSafeSimpleFilename(p)) {
-      setNameError("Invalid filename");
+      setNameError(tr("Некоректна назва файлу", "Invalid filename"));
       return;
     }
     if (normalized.some(f => f.path === p)) {
-      setNameError("File already exists");
+      setNameError(tr("Файл вже існує", "File already exists"));
       return;
     }
     const next = normalizeFiles([...normalized, { path: p, content: "" }]);
@@ -142,7 +164,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
         {!readOnly ? (
           <Button variant="ghost" size="sm" onClick={openAdd} className="ml-auto">
             <Plus className="w-4 h-4 mr-1" />
-            Add file
+            {tr("Додати файл", "Add file")}
           </Button>
         ) : null}
       </div>
@@ -153,10 +175,13 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
         </div>
       </div>
 
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add file" showCloseButton={false}>
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title={tr("Додати файл", "Add file")} showCloseButton={false}>
         <div className="space-y-3">
           <div className="text-xs text-text-secondary font-mono">
-            Filenames must be simple (no folders, no <span className="font-mono">..</span>, no dotfiles).
+            {tr(
+              "Назва має бути простою: без папок, без .., без прихованих (dot) файлів. Розширення може бути будь-яке (наприклад: data.txt, input.json).",
+              "Filename must be simple: no folders, no .., no dotfiles. Extension can be anything (e.g. data.txt, input.json)."
+            )}
           </div>
           <input
             value={newName}
@@ -164,15 +189,15 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
               setNewName(e.target.value);
               setNameError(null);
             }}
-            placeholder="e.g. Utils.java"
+            placeholder={tr("наприклад: data.txt або input.json", "e.g. data.txt or input.json")}
             className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
           />
           {nameError ? <div className="text-xs text-accent-error font-mono">{nameError}</div> : null}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setAddOpen(false)}>
-              Cancel
+              {tr("Скасувати", "Cancel")}
             </Button>
-            <Button onClick={doAdd}>Add</Button>
+            <Button onClick={doAdd}>{tr("Додати", "Add")}</Button>
           </div>
         </div>
       </Modal>

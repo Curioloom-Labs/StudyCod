@@ -1,4 +1,6 @@
 import { api } from "./client";
+
+export type AdminMaterialsLanguage = "JAVA" | "PYTHON" | "CPP";
 export interface AdminUser {
   id: number;
   username: string;
@@ -282,25 +284,25 @@ export type AdminMaterialTopic = {
   title: string;
   description: string | null;
   order: number;
-  language: "JAVA" | "PYTHON";
+  language: AdminMaterialsLanguage;
   theoryBlock: AdminTheoryBlock | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type AdminMaterialsDiagnostics = {
-  language: "JAVA" | "PYTHON";
+  language: AdminMaterialsLanguage;
   topicsNewGlobal: number;
   topicsNewClass: number;
   legacyTopics: number;
 };
 
-export async function getAdminMaterialTopics(params?: { language?: "JAVA" | "PYTHON" }): Promise<{ topics: AdminMaterialTopic[] }> {
+export async function getAdminMaterialTopics(params?: { language?: AdminMaterialsLanguage }): Promise<{ topics: AdminMaterialTopic[] }> {
   const res = await api.get("/admin/materials/topics", { params });
   return res.data;
 }
 
-export async function getAdminMaterialsDiagnostics(params: { language: "JAVA" | "PYTHON" }): Promise<AdminMaterialsDiagnostics> {
+export async function getAdminMaterialsDiagnostics(params: { language: AdminMaterialsLanguage }): Promise<AdminMaterialsDiagnostics> {
   const res = await api.get("/admin/materials/diagnostics", { params });
   return res.data;
 }
@@ -309,7 +311,7 @@ export async function createAdminMaterialTopic(data: {
   title: string;
   description?: string | null;
   order?: number;
-  language: "JAVA" | "PYTHON";
+  language: AdminMaterialsLanguage;
   theory?: { title?: string; content: string; level?: number | null; tags?: any } | null;
 }): Promise<{ topic: AdminMaterialTopic }> {
   const res = await api.post("/admin/materials/topics", data);
@@ -322,7 +324,7 @@ export async function updateAdminMaterialTopic(
     title?: string;
     description?: string | null;
     order?: number;
-    language?: "JAVA" | "PYTHON";
+    language?: AdminMaterialsLanguage;
     theory?: { title?: string; content: string; level?: number | null; tags?: any } | null;
     clearTheory?: boolean;
     theoryRevisionAction?: "UPDATE" | "AUTO";
@@ -339,7 +341,7 @@ export async function deleteAdminMaterialTopic(id: number): Promise<{ ok: boolea
 }
 
 export async function reorderAdminMaterialTopics(data: {
-  language: "JAVA" | "PYTHON";
+  language: AdminMaterialsLanguage;
   orderedIds: number[];
 }): Promise<{ topics: AdminMaterialTopic[] }> {
   const res = await api.patch("/admin/materials/topics/reorder", data);
@@ -347,11 +349,19 @@ export async function reorderAdminMaterialTopics(data: {
 }
 
 export async function importAdminMaterialTopicsYaml(data: {
-  language: "JAVA" | "PYTHON";
+  language: AdminMaterialsLanguage;
   yaml: string;
   mode?: "merge" | "replace";
 }): Promise<{ created: number; updated: number; skipped: number; topics: AdminMaterialTopic[] }> {
   const res = await api.post("/admin/materials/import/yaml", data);
+  return res.data;
+}
+
+export async function syncAdminMaterialTopicsFromRepo(data: {
+  language: AdminMaterialsLanguage;
+  mode?: "merge" | "replace";
+}): Promise<{ created: number; updated: number; skipped: number; topics: AdminMaterialTopic[]; source?: any }> {
+  const res = await api.post("/admin/materials/sync/repo", data);
   return res.data;
 }
 
@@ -361,6 +371,32 @@ export async function importAdminMaterialTopicsLegacy(data: {
 }): Promise<{ created: number; updated: number; skipped: number; topics: AdminMaterialTopic[] }> {
   const res = await api.post("/admin/materials/import/legacy-topics", data);
   return res.data;
+}
+
+function parseFilenameFromContentDisposition(v: string | undefined): string | null {
+  if (!v) return null;
+  // content-disposition: attachment; filename="name.ext"
+  const m = v.match(/filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i);
+  const raw = (m?.[1] || m?.[2] || m?.[3] || "").trim();
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw.replace(/^UTF-8''/i, ""));
+  } catch {
+    return raw;
+  }
+}
+
+export async function exportAdminMaterialTopicsYaml(params: {
+  language: AdminMaterialsLanguage;
+}): Promise<{ blob: Blob; filename: string }> {
+  const res = await api.get("/admin/materials/export/yaml", {
+    params,
+    responseType: "blob"
+  });
+
+  const cd = (res.headers as any)?.["content-disposition"] as string | undefined;
+  const filename = parseFilenameFromContentDisposition(cd) || `materials_${params.language}.yaml`;
+  return { blob: res.data as Blob, filename };
 }
 
 export type AdminTheoryBlockRevisionAction = "CREATE" | "UPDATE" | "ROLLBACK" | "AUTO";
@@ -396,6 +432,22 @@ export async function rollbackAdminTheoryBlockRevision(
   return res.data;
 }
 
+export type AdminTheoryBlockEnTranslation = {
+  id: number;
+  titleEn: string | null;
+  contentEn: string | null;
+  translationVersionEn: number | null;
+  translatedAtEn: string | null;
+};
+
+export async function translateAdminTheoryBlockToEn(
+  theoryBlockId: number,
+  data?: { force?: boolean }
+): Promise<{ theoryBlock: AdminTheoryBlockEnTranslation }> {
+  const res = await api.post(`/admin/materials/theory-blocks/${theoryBlockId}/translate/en`, data ?? {});
+  return res.data;
+}
+
 export async function getAdminLibraryTasks(params?: { status?: AdminLibraryTaskStatus }): Promise<{ tasks: AdminLibraryTask[] }> {
   const res = await api.get("/admin/library/tasks", { params });
   return res.data;
@@ -408,5 +460,54 @@ export async function approveAdminLibraryTask(id: number): Promise<{ task: Admin
 
 export async function rejectAdminLibraryTask(id: number, reason: string): Promise<{ task: AdminLibraryTask }> {
   const res = await api.post(`/admin/library/tasks/${id}/reject`, { reason });
+  return res.data;
+}
+
+export type AdminBroadcastRecipient = {
+  kind: "user" | "student";
+  id: number;
+  email: string;
+};
+
+export type AdminBroadcastDryRunResult = {
+  ok: true;
+  dryRun: true;
+  count: number;
+  sample: AdminBroadcastRecipient[];
+};
+
+export type AdminBroadcastSendResult = {
+  ok: true;
+  dryRun: false;
+  recipients: number;
+  sent: number;
+  failed: number;
+};
+
+export async function sendAdminBroadcastEmail(data: {
+  subject: string;
+  title: string;
+  delivery?: "MARKETING" | "NOTIFICATION";
+  // Mass notification option (delivery=NOTIFICATION only): send to all USERS.
+  includeAllUsers?: boolean;
+  // Safety confirmation for mass notification sends.
+  confirm?: string;
+  // Prefer plain text body; backend will convert to safe HTML.
+  content?: string;
+  // Or provide HTML directly.
+  html?: string;
+  text?: string;
+  includeSubscribed?: boolean;
+  audience?: "USERS" | "STUDENTS" | "ALL";
+  targets?: {
+    userIds?: number[];
+    studentIds?: number[];
+    classIds?: number[];
+    emails?: string[];
+  };
+  dryRun?: boolean;
+  limit?: number;
+}): Promise<AdminBroadcastDryRunResult | AdminBroadcastSendResult | any> {
+  const res = await api.post("/admin/emails/broadcast", data);
   return res.data;
 }

@@ -14,12 +14,15 @@ import { profileRouter } from "./routes/profile";
 import { tasksRouter } from "./routes/tasks";
 import { gradeRouter } from "./routes/gradeRoutes";
 import { streakRouter } from "./routes/streak";
+import { birthdayRouter } from "./routes/birthday";
 import eduRouter from "./routes/edu";
 import topicsRouter from "./routes/topics";
 import { theoryRouter } from "./routes/theory";
 import adminRouter from "./routes/admin";
 import supportRouter from "./routes/support";
 import libraryRouter from "./routes/library";
+import contestsRouter from "./routes/contests";
+import emailsRouter from "./routes/emails";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { requestContextMiddleware } from "./middleware/requestContext";
 import { placementGate } from "./middleware/placementGate";
@@ -35,6 +38,28 @@ import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
 import { executionScheduler } from "./services/execution/executionSchedulerSingleton";
 const app = express();
+
+const serverStartedAt = new Date();
+
+// Operational visibility: judge misconfiguration should not prevent the backend from booting,
+// but we must make it obvious in logs so it gets fixed quickly.
+if (IS_PRODUCTION) {
+  const issues: string[] = [];
+  if (!env.__judgeWorkerEntry) issues.push("JUDGE_WORKER_ENTRY is empty");
+  if (!env.__nsjailConfig) issues.push("NSJAIL_CONFIG is empty");
+  if (!env.__nsjailPath) issues.push("NSJAIL_PATH is empty");
+  // NSJAIL_USE_CONFIG is no longer required in production: judge infers config-mode from NSJAIL_CONFIG.
+
+  if (issues.length) {
+    logger.error("[startup] judge is misconfigured; submissions/check endpoints will fail", {
+      issues,
+      nsjailUseConfig: env.__nsjailUseConfig ? "1" : "0",
+      workerEntry: env.__judgeWorkerEntry || null,
+      nsjailPath: env.__nsjailPath || null,
+      nsjailConfig: env.__nsjailConfig || null,
+    });
+  }
+}
 
 function isDisconnectError(err: any): boolean {
   const code = err?.code;
@@ -179,7 +204,12 @@ app.get(["/health", "/api/health"], (_req, res) => {
   res.json({
     status: "ok",
     service: "studycod-backend",
-    version: "1.0.0"
+    version: "1.0.0",
+    startedAt: serverStartedAt.toISOString(),
+    buildSha: process.env.BUILD_SHA || process.env.GIT_SHA || process.env.COMMIT_SHA || null,
+    buildTime: process.env.BUILD_TIME || null,
+    nodeEnv: process.env.NODE_ENV || null,
+    isProduction: IS_PRODUCTION
   });
 });
 
@@ -258,7 +288,7 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
       maxSourceBytes: 1024 * 1024
     };
 
-    const sandboxMode = env.__nsjailUseConfig ? "config" : "cli";
+    const sandboxMode = IS_PRODUCTION ? "config" : (env.__nsjailUseConfig ? "config" : "cli");
 
     const ok = Boolean(workerEntry) && Boolean(configPath) && nsjailExists && nsjailExecutable;
     if (!ok) {
@@ -275,7 +305,7 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
         ...process.env,
         NSJAIL_PATH: nsjailPath,
         NSJAIL_CONFIG: configPath,
-        NSJAIL_USE_CONFIG: env.__nsjailUseConfig ? "1" : "0",
+        NSJAIL_USE_CONFIG: IS_PRODUCTION ? "1" : (env.__nsjailUseConfig ? "1" : "0"),
         NSJAIL_CWD: env.__nsjailCwd || "/work",
         NSJAIL_CHROOT: env.__nsjailChroot || "",
         NSJAIL_CHROOT_JAVA: env.__nsjailChrootJava || "",
@@ -368,9 +398,12 @@ app.use("/edu", eduRouter);
 app.use("/topics", authMiddleware, placementGate, topicsRouter);
 app.use("/theory", authMiddleware, placementGate, theoryRouter);
 app.use("/streak", authMiddleware, placementGate, streakRouter);
+app.use("/birthday", authMiddleware, placementGate, birthdayRouter);
 app.use("/admin", adminRouter);
 app.use("/support", supportRouter);
 app.use("/library", authMiddleware, libraryRouter);
+app.use("/contests", contestsRouter);
+app.use("/emails", emailsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/tasks", authMiddleware, placementGate, tasksRouter);
@@ -379,9 +412,12 @@ app.use("/api/edu", eduRouter);
 app.use("/api/topics", authMiddleware, placementGate, topicsRouter);
 app.use("/api/theory", authMiddleware, placementGate, theoryRouter);
 app.use("/api/streak", authMiddleware, placementGate, streakRouter);
+app.use("/api/birthday", authMiddleware, placementGate, birthdayRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/support", supportRouter);
 app.use("/api/library", authMiddleware, libraryRouter);
+app.use("/api/contests", contestsRouter);
+app.use("/api/emails", emailsRouter);
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error("Unhandled error", { err });
 
@@ -408,7 +444,12 @@ AppDataSource.initialize().then(async () => {
   const {
     seedTopicsIfNeeded
   } = await import("./utils/seedTopics");
-  await seedTopicsIfNeeded();
+  const shouldSeed = String(process.env.SEED_TOPICS_ON_STARTUP ?? "true").toLowerCase() !== "false";
+  if (shouldSeed) {
+    await seedTopicsIfNeeded();
+  } else {
+    logger.info("[seed-topics] skipped (SEED_TOPICS_ON_STARTUP=false)");
+  }
   app.listen(PORT, () => {
     logger.info("Server listening", {
       port: PORT

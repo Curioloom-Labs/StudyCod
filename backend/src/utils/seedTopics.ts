@@ -1,60 +1,161 @@
 import { AppDataSource } from "../data-source";
 import { Topic } from "../entities/Topic";
+import { TopicNew, TopicLanguage } from "../entities/TopicNew";
 import { TheoryBlock } from "../entities/TheoryBlock";
 import { logger } from "./logger";
 import * as fs from "fs";
 import * as path from "path";
+import YAML from "yaml";
+import { IsNull } from "typeorm";
+
+let cachedRepoRoot: string | null | undefined;
+
+function walkUpDirs(startDir: string, maxDepth: number): string[] {
+  const out: string[] = [];
+  let cur = path.resolve(startDir);
+  for (let i = 0; i <= maxDepth; i++) {
+    out.push(cur);
+    const parent = path.dirname(cur);
+    if (!parent || parent === cur) break;
+    cur = parent;
+  }
+  return out;
+}
+
+function findRepoRoot(): string | null {
+  if (cachedRepoRoot !== undefined) return cachedRepoRoot;
+
+  const envRoots = [
+    process.env.REPO_ROOT,
+    process.env.STUDYCOD_REPO_ROOT,
+    process.env.APP_ROOT
+  ].filter(Boolean) as string[];
+
+  const candidates = [
+    ...envRoots.map(r => path.resolve(r)),
+    ...walkUpDirs(process.cwd(), 6),
+    ...walkUpDirs(__dirname, 8)
+  ];
+
+  const seen = new Set<string>();
+  for (const dir of candidates) {
+    const key = dir.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const theoriesDir = path.join(dir, "theories");
+      if (fs.existsSync(theoriesDir) && fs.statSync(theoriesDir).isDirectory()) {
+        cachedRepoRoot = dir;
+        return cachedRepoRoot;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  cachedRepoRoot = null;
+  return null;
+}
+
+function resolveRepoFile(filePath: string): string {
+  if (path.isAbsolute(filePath)) return filePath;
+  const repoRoot = findRepoRoot();
+  if (repoRoot) return path.resolve(repoRoot, filePath);
+  return path.resolve(process.cwd(), filePath);
+}
 async function readJsonFile(filePath: string): Promise<any> {
   try {
-    const fullPath = path.resolve(process.cwd(), filePath);
+    const fullPath = resolveRepoFile(filePath);
     const content = await fs.promises.readFile(fullPath, "utf-8");
     return JSON.parse(content);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.debug('[seed-topics] read failed', { filePath, message });
+    logger.debug('[seed-topics] read failed', { filePath, resolved: resolveRepoFile(filePath), message });
     return null;
   }
+}
+
+async function readYamlFile(filePath: string): Promise<any> {
+  try {
+    const fullPath = resolveRepoFile(filePath);
+    const content = await fs.promises.readFile(fullPath, "utf-8");
+    return YAML.parse(content);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.debug('[seed-topics] read yaml failed', { filePath, resolved: resolveRepoFile(filePath), message });
+    return null;
+  }
+}
+
+async function loadTopicsFromYaml(lang: "JAVA" | "PYTHON" | "CPP"): Promise<Array<{ title: string; theory: string; index: number }> | null> {
+  const name = lang === "JAVA" ? "java" : lang === "PYTHON" ? "python" : "cpp";
+  const parsed = await readYamlFile(`theories/${name}_theory.yml`);
+  const topics = parsed && typeof parsed === "object" ? (parsed.topics as any) : null;
+  if (!Array.isArray(topics)) return null;
+
+  const result: Array<{ title: string; theory: string; index: number }> = [];
+  topics.forEach((t: any, i: number) => {
+    const title = String(t?.title || "").trim();
+    if (!title) return;
+    const content = (typeof t?.theory === "string")
+      ? String(t.theory)
+      : String(t?.theory?.content || "");
+    const order = Number(t?.order);
+    const index = Number.isFinite(order) && order > 0 ? (order - 1) : i;
+    result.push({
+      title,
+      theory: content || "",
+      index
+    });
+  });
+  return result.length > 0 ? result : null;
 }
 export async function seedTopicsIfNeeded(): Promise<void> {
   try {
     const topicRepo = AppDataSource.getRepository(Topic);
+    const topicNewRepo = AppDataSource.getRepository(TopicNew);
     const theoryRepo = AppDataSource.getRepository(TheoryBlock);
-    const javaTopics = await readJsonFile("topics/java_topics.json");
-    const pythonTopics = await readJsonFile("topics/python_topics.json");
-    const javaTheory = await readJsonFile("theories/java_theory.json");
-    const pythonTheory = await readJsonFile("theories/python_theory.json");
-    if (!javaTopics || !pythonTopics) {
-      logger.debug('[seed-topics] topics files missing, skip');
-      return;
-    }
     const items: Array<{
       title: string;
-      lang: "JAVA" | "PYTHON";
+      lang: "JAVA" | "PYTHON" | "CPP";
       theory: string;
       index: number;
     }> = [];
-    if (Array.isArray(javaTopics)) {
-      javaTopics.forEach((title: string, i: number) => {
+
+    const appendLegacyJson = async (lang: "JAVA" | "PYTHON") => {
+      const name = lang === "JAVA" ? "java" : "python";
+      const topics = await readJsonFile(`topics/${name}_topics.json`);
+      const theory = await readJsonFile(`theories/${name}_theory.json`);
+      if (!Array.isArray(topics)) return;
+      topics.forEach((title: string, i: number) => {
         items.push({
           title,
-          lang: "JAVA",
-          theory: javaTheory && typeof javaTheory === "object" && javaTheory[title] || "",
+          lang,
+          theory: theory && typeof theory === "object" && theory[title] || "",
           index: i
         });
       });
+    };
+
+    const langs: Array<"JAVA" | "PYTHON" | "CPP"> = ["JAVA", "PYTHON", "CPP"];
+    for (const lang of langs) {
+      const yamlTopics = await loadTopicsFromYaml(lang);
+      if (yamlTopics) {
+        yamlTopics.forEach(t => items.push({ ...t, lang }));
+        continue;
+      }
+      if (lang === "CPP") continue;
+      await appendLegacyJson(lang);
     }
-    if (Array.isArray(pythonTopics)) {
-      pythonTopics.forEach((title: string, i: number) => {
-        items.push({
-          title,
-          lang: "PYTHON",
-          theory: pythonTheory && typeof pythonTheory === "object" && pythonTheory[title] || "",
-          index: i
-        });
-      });
+
+    if (items.length === 0) {
+      logger.debug('[seed-topics] no topic sources found, skip');
+      return;
     }
     let added = 0;
     let updated = 0;
+    let addedNew = 0;
+    let updatedNew = 0;
     const crypto = await import("crypto");
     const hash = (s: string) => crypto.createHash("sha256").update(s, "utf8").digest("hex");
     const existingBlocks = await theoryRepo.find();
@@ -118,9 +219,50 @@ export async function seedTopicsIfNeeded(): Promise<void> {
         await topicRepo.save(newTopic);
         added++;
       }
+
+      // Keep topics_new (global curriculum) in sync as well.
+      // Many UI pages (admin materials, theory reading) rely on topics_new.
+      // We only touch GLOBAL topics here (class_id IS NULL) to avoid interfering with EDU class-specific content.
+      const desiredOrder = Number.isFinite(item.index) ? (Math.floor(item.index) + 1) : 0;
+      const desiredTheoryContent = String(item.theory || "").trim();
+      const desiredBlock = desiredTheoryContent ? await getOrCreateBlock(item.title, desiredTheoryContent) : null;
+      const existingNew = await topicNewRepo.findOne({
+        where: {
+          title: item.title,
+          language: item.lang as TopicLanguage,
+          class: IsNull() as any
+        } as any,
+        relations: ["theoryBlock"]
+      });
+      if (existingNew) {
+        let changed = false;
+        if (existingNew.order !== desiredOrder) {
+          existingNew.order = desiredOrder;
+          changed = true;
+        }
+        if (desiredBlock && (existingNew.theoryBlockId ?? null) !== desiredBlock.id) {
+          (existingNew as any).theoryBlock = { id: desiredBlock.id };
+          changed = true;
+        }
+        if (changed) {
+          await topicNewRepo.save(existingNew);
+          updatedNew++;
+        }
+      } else {
+        const created = topicNewRepo.create({
+          title: item.title,
+          description: null,
+          order: desiredOrder,
+          language: item.lang as TopicLanguage,
+          class: null,
+          ...(desiredBlock ? { theoryBlock: { id: desiredBlock.id } } : {})
+        } as any);
+        await topicNewRepo.save(created);
+        addedNew++;
+      }
     }
-    if (added > 0 || updated > 0) {
-      logger.info('[seed-topics] updated', { added, updated });
+    if (added > 0 || updated > 0 || addedNew > 0 || updatedNew > 0) {
+      logger.info('[seed-topics] updated', { added, updated, addedNew, updatedNew });
     }
   } catch (err: any) {
     logger.error('[seed-topics] failed', { message: err?.message });

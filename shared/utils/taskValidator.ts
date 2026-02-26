@@ -11,6 +11,7 @@ export interface TaskGenerationSchema {
   difficulty: number;
   theoryMarkdown: string;
   practicalTask: string;
+  ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
   inputFormat: string;
   outputFormat: string;
   constraints: string;
@@ -83,6 +84,7 @@ export function validateTaskGenerationResponse(data: any): TaskGenerationSchema 
     difficulty: Number(data.difficulty),
     theoryMarkdown: String(data.theoryMarkdown).trim(),
     practicalTask: String(data.practicalTask).trim(),
+    ioType: typeof (data as any).ioType === 'string' ? String((data as any).ioType).trim() as any : undefined,
     inputFormat: String(data.inputFormat).trim(),
     outputFormat: String(data.outputFormat).trim(),
     constraints: String(data.constraints).trim(),
