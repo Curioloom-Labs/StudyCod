@@ -1,126 +1,92 @@
 # StudyCod
 
-StudyCod — освітня платформа для навчання програмуванню, у якій головна роль належить практиці: написав код → запустив → пройшов тести → зрозумів помилку → виправив → отримав пояснення. Вона створена як відповідь на поширену проблему формального навчання, коли увага зосереджується на запам’ятовуванні синтаксису, а не на розвитку алгоритмічного та інженерного мислення.
+StudyCod is an educational platform for learning programming in which practice plays the central role: write code → run it → pass tests → identify the mistake → fix it → receive an explanation. It was created in response to the widespread problem of formalized learning, where attention is focused on memorizing syntax rather than developing algorithmic and engineering thinking.
 
-Тут навчання виглядає як реальний робочий процес розробника, тільки адаптований під освіту: з чіткими умовами, тестами, швидким зворотним зв’язком та прозорим оцінюванням.
+Here, learning resembles a real developer workflow, adapted for education: clear requirements, tests, rapid feedback, and transparent assessment.
 
-## Ідея проєкту
+## Project Idea
 
-У програмуванні найважче — не вивчити конструкції мови, а навчитися мислити: розкласти задачу на частини, спроєктувати рішення, врахувати крайові випадки, довести код до коректності та стабільності.
+In programming, the most difficult part is not learning language constructs, but learning how to think: decomposing a problem into parts, designing a solution, considering edge cases, and refining the code to correctness and stability.
 
-StudyCod переносить акцент із «прочитав теорію» на «зробив руками». Платформа допомагає тренувати:
+StudyCod shifts the emphasis from “reading theory” to “doing by hand.” The platform helps train:
 
-- аналіз задач;
-- побудову алгоритмів;
-- акуратну реалізацію;
-- роботу з помилками та тестами;
-- звичку покращувати рішення, а не зупинятися на першій спробі.
+- problem analysis;
+- algorithm construction;
+- careful implementation;
+- working with errors and tests;
+- the habit of improving a solution instead of stopping at the first attempt.
 
-## Що робить StudyCod особливим
+## What Makes StudyCod Distinctive
 
-У центрі платформи — практичне розв’язання задач та об’єктивна автоматична перевірка.
+At the core of the platform are practical problem solving and objective automated evaluation.
 
-- Користувач працює з кодом у зручному інтерфейсі та здає розв’язання.
-- Рішення перевіряється набором тестів, тому результат повторюваний і прозорий.
-- Після перевірки видно, що працює, а що ні: де саме рішення «ламається».
-- Штучний інтелект використовується як навчальний асистент: допомагає з поясненнями та підказками, а не просто «видає відповідь».
+- The user works with code in a convenient interface and submits a solution.
+- The solution is checked against a set of tests, making the result repeatable and transparent.
+- After evaluation, it is clear what works and what does not: exactly where the solution fails.
+- Artificial intelligence is used as a learning assistant: it provides explanations and guidance rather than simply giving the answer.
 
-## Два режими роботи
+## Two Operating Modes
 
-### Персональне навчання
+### Personal Learning
 
-Режим для самостійної практики у власному темпі:
+A mode for independent practice at one’s own pace:
 
-- вибір задач;
-- регулярні спроби та покращення;
-- фіксація прогресу;
-- повернення до складних тем.
+- task selection;
+- repeated attempts and improvements;
+- progress tracking;
+- returning to difficult topics.
 
-Мета — стабільно зростати через системну практику та короткі цикли «спроба → фідбек → виправлення».
+The goal is steady growth through systematic practice and short cycles of “attempt → feedback → correction.”
 
-### Освітній режим (EDU)
+### Educational Mode (EDU)
 
-Режим для організованого навчального процесу в класах/групах:
+A mode for an organized learning process in classes or groups:
 
-- структура навколо тем і уроків;
-- призначення завдань групі;
-- контрольні/самостійні з дедлайнами;
-- журнал оцінок і зрозумілий прогрес кожного учня.
+- structure around topics and lessons;
+- assignment distribution to a group;
+- quizzes and assessments with deadlines;
+- a gradebook and clear progress tracking for each student.
 
-Мета — зробити навчання керованим для викладача й прозорим для учня.
+The goal is to make learning manageable for the instructor and transparent for the student.
 
-## Як виглядає робота з задачами
+## Working with Tasks
 
-Задача в StudyCod — це не лише текст умови, а навчальний «сценарій», який підштовхує до правильного процесу мислення. Типовий шлях виглядає так:
+A task in StudyCod is not merely a textual statement but a learning scenario that guides the correct thinking process. A typical workflow is:
 
-1. Ознайомитися з умовою та прикладами.
-2. Написати рішення.
-3. Запустити перевірку.
-4. Отримати звіт: які тести пройдені, які — ні.
-5. Зрозуміти причину помилки (за результатами тестів та поясненнями).
-6. Виправити код і повторити.
-7. Зафіксувати результат після успішного проходження.
+1. Review the task and examples.
+2. Write a solution.
+3. Run evaluation.
+4. Receive a report: which tests passed and which failed.
+5. Understand the cause of the error (from test results and explanations).
+6. Correct the code and repeat.
+7. Record the result after successful completion.
 
-Цей цикл тренує уважність і звичку доводити рішення до якості.
+This cycle trains attentiveness and the habit of refining solutions to quality.
 
-## Роль штучного інтелекту
+## The Role of Artificial Intelligence
 
-Штучний інтелект у StudyCod — це «підсилювач навчання»:
+Artificial intelligence in StudyCod acts as a learning enhancer:
 
-- допомагає створювати навчальні матеріали й практичні завдання;
-- генерує тестові дані та варіативність, щоб навчання не зводилось до заучування прикладів;
-- пояснює типові помилки та підказує напрямок думки;
-- допомагає розібратися з тим, *чому* рішення впало на тестах.
+- assists in creating learning materials and practical assignments;
+- generates test data and variation so learning does not reduce to memorizing examples;
+- explains typical mistakes and suggests a direction of reasoning;
+- helps understand *why* the solution failed on tests.
 
-Ціль — підвищити якість зворотного зв’язку та зменшити рутинне навантаження на викладача, зберігаючи чесність перевірки.
+The objective is to improve feedback quality and reduce routine instructor workload while preserving fairness of evaluation.
 
-## Автоматична перевірка рішень
+## Automated Solution Evaluation
 
-Оцінювання базується на запуску коду в контрольованому середовищі та прогоні тестів. Це забезпечує:
+Assessment is based on executing code in a controlled environment and running tests. This ensures:
 
-- об’єктивність результатів;
-- однакові умови для всіх;
-- швидкий фідбек;
-- прозорість: видно, що саме не проходить.
+- objective results;
+- equal conditions for all users;
+- rapid feedback;
+- transparency — it is clear what exactly fails.
 
-Перевірка орієнтована, зокрема, на рішення мовами **Java** та **Python**.
+Evaluation is designed, in particular, for solutions written in **Java** and **Python**.
 
-## Для кого цей проєкт
+## Target Audience
 
-- **Учням і студентам** — щоб навчитися не просто писати код, а розв’язувати задачі й мислити алгоритмічно.
-- **Викладачам** — щоб швидше готувати матеріали, давати практику, бачити прогрес та мати прозоре оцінювання.
-- **Освітнім ініціативам** — як база для курсів, гуртків, дистанційного навчання та досліджень у сфері EdTech + AI.
-
-## Підсумок
-
-StudyCod робить навчання програмуванню ближчим до реальної інженерної практики: з кодом, тестами, аналізом помилок і зрозумілим фідбеком. А штучний інтелект використовується як інструмент, що допомагає будувати адаптивні матеріали та пояснення саме тоді, коли вони найбільш потрібні.
-
-## Виконання коду (sandbox) у production
-
-Код користувачів вважається **недовіреним** і виконується тільки через ізольований judge у **nsjail**. Backend не має fallback-пути, який запускає код напряму на хості.
-
-Ланцюжок виконання один:
-
-**Client → Backend → Judge → nsjail**
-
-Ключові гарантії:
-
-- У production judge працює лише в режимі конфігурації: `NSJAIL_USE_CONFIG=1`. Якщо `NODE_ENV=production` і `NSJAIL_USE_CONFIG!=1`, judge завершується з помилкою.
-- Максимальні розміри запитів/тестів контролюються змінними `JUDGE_MAX_*` (див. `.env.example`).
-
-### Health endpoint judge
-
-Backend надає `GET /health/judge` (також `GET /api/health/judge`) з інформацією про:
-
-- `sandboxMode` (`config` або `cli`),
-- наявність `nsjail`,
-- шляхи до worker/config,
-- ліміти запитів (`JUDGE_MAX_*`).
-
-### Smoke tests для лімітів виконання
-
-У backend є smoke-тести, які перевіряють базові ліміти для недовіреного коду (TLE/обмеження stdout/памʼять).
-
-За замовчуванням вони пропущені. Щоб увімкнути (Linux + налаштований nsjail/judge):
-
-- `RUN_JUDGE_SMOKE_TESTS=1`
+- **Pupils and students** — to learn not only to write code but to solve problems and think algorithmically.
+- **Teachers** — to prepare materials faster, provide practice, observe progress, and maintain transparent assessment.
+- **Educational initiatives** — as a foundation for courses, clubs, distance learning, and research in the field of EdTech and AI.
