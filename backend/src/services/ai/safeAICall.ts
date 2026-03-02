@@ -188,12 +188,30 @@ function sanitizeParams(mode: AIMode, params: any): any {
 
 function classifyAIProviderStatus(errorMessage: string): number {
   const msg = (errorMessage || '').toLowerCase();
+  if (
+    msg.includes('core_operation_missing') ||
+    msg.includes('forbidden_scope_violation') ||
+    msg.includes('multi_task_not_allowed') ||
+    msg.includes('anchor_topic_mismatch') ||
+    msg.includes('anchor_too_vague') ||
+    msg.includes('topic_mismatch_hard_fail')
+  ) return 400;
   // Be careful: random numeric strings can contain '429' (e.g., 429496...), so match more precisely.
   if (msg.includes('rate limit') || msg.includes('too many requests') || /\b429\b/.test(msg) || msg.includes('http 429') || msg.includes('status 429')) return 429;
   if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('30s exceeded') || msg.includes('deadline exceeded') || msg.includes('request aborted')) return 504;
   if (msg.includes('no openrouter api keys') || msg.includes('all api keys exhausted') || msg.includes('api key')) return 503;
   if (msg.includes('invalid request') || msg.includes('400')) return 400;
   return 503;
+}
+
+function isSemanticValidationError(errorMessage: string): boolean {
+  const msg = (errorMessage || '').toUpperCase();
+  return msg.includes('CORE_OPERATION_MISSING') ||
+    msg.includes('FORBIDDEN_SCOPE_VIOLATION') ||
+    msg.includes('MULTI_TASK_NOT_ALLOWED') ||
+    msg.includes('ANCHOR_TOPIC_MISMATCH') ||
+    msg.includes('ANCHOR_TOO_VAGUE') ||
+    msg.includes('TOPIC_MISMATCH_HARD_FAIL');
 }
 function validateInputParams(mode: AIMode, params: any): void {
   switch (mode) {
@@ -540,7 +558,8 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
         const looksLikeValidationError =
           error instanceof AIValidationError ||
           String(error?.name ?? '') === 'AIValidationError' ||
-          /validation failed/i.test(errorMsg);
+          /validation failed/i.test(errorMsg) ||
+          isSemanticValidationError(errorMsg);
 
         if (looksLikeValidationError) {
           logger.warn('[ai] invalid response', { mode, requestId: options?.requestId ?? null, error: error.message });

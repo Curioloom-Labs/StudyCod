@@ -105,6 +105,15 @@ const TaskLibraryPage = React.lazy(() => import("./pages/TaskLibraryPage").then(
 const LibraryTaskSolvePage = React.lazy(() => import("./pages/LibraryTaskSolvePage").then(mod => ({
   default: mod.LibraryTaskSolvePage
 })));
+const ContestsPage = React.lazy(() => import("./pages/ContestsPage").then(mod => ({
+  default: mod.ContestsPage
+})));
+const ContestPage = React.lazy(() => import("./pages/ContestPage").then(mod => ({
+  default: mod.ContestPage
+})));
+const ContestProblemSolvePage = React.lazy(() => import("./pages/ContestProblemSolvePage").then(mod => ({
+  default: mod.ContestProblemSolvePage
+})));
 const DevEditorPage = React.lazy(() => import("./pages/DevEditorPage").then(mod => ({
   default: mod.DevEditorPage
 })));
@@ -638,6 +647,14 @@ const AppContent: React.FC = React.memo(() => {
         }
         return;
       }
+      if (target === "support") {
+        navigate("/support");
+        return;
+      }
+      if (target === "contests") {
+        navigate("/contests");
+        return;
+      }
       if (target === "continue") {
         handleGoHomeOrResume();
         return;
@@ -707,6 +724,21 @@ export const App: React.FC = () => {
           <Route path="/library/solve/:taskKey" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <LibraryTaskSolvePage />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/contests" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <ContestsPage />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/contests/:id" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <ContestPage />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/contests/:id/problems/:problemId" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <ContestProblemSolvePage />
                 </AnimatedPage>
               </Suspense>} />
           <Route path="/u/:username" element={<Suspense fallback={<PageLoader />}>
@@ -876,6 +908,14 @@ const EduRoutes: React.FC = React.memo(() => {
       <FocusShell user={user} current={focusCurrent} onNavigate={target => {
       if (target === "library") {
         window.location.href = "/edu/library";
+        return;
+      }
+      if (target === "support") {
+        window.location.href = "/support";
+        return;
+      }
+      if (target === "contests") {
+        window.location.href = "/contests";
         return;
       }
       if (target === "profile") {
