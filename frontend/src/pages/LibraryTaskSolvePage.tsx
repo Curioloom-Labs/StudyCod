@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Play, RotateCcw, Save, CheckCircle2 } from "lucide-react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Play, RotateCcw, Save, CheckCircle2, LayoutDashboard, FolderCode, TerminalSquare, Sparkles } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
+import { StatusChip, type StatusChipTone } from "../components/ui/StatusChip";
 import { CodeEditor } from "../components/CodeEditor";
 import { MultiFileEditor } from "../components/MultiFileEditor";
 import { MarkdownView } from "../components/MarkdownView";
@@ -113,10 +114,80 @@ function entryContentFromFiles(fs: CodeFile[], entryFile: string): string {
   return hit?.content ?? "";
 }
 
+type TrFn = (uk: string, en: string) => string;
+
+function runStatusChip(success: boolean, tr: TrFn) {
+  return success
+    ? {
+        glyph: "▶",
+        label: tr("Успіх", "Success"),
+        tone: "success" as StatusChipTone,
+      }
+    : {
+        glyph: "■",
+        label: tr("Помилка", "Error"),
+        tone: "error" as StatusChipTone,
+      };
+}
+
+function verdictChip(verdictRaw: string | null | undefined, tr: TrFn) {
+  const verdict = String(verdictRaw ?? "").trim().toUpperCase();
+  if (!verdict) {
+    return {
+      glyph: "·",
+      label: tr("Н/Д", "N/A"),
+      tone: "neutral" as StatusChipTone,
+    };
+  }
+
+  if (verdict === "AC") {
+    return {
+      glyph: "✓",
+      label: "AC",
+      tone: "success" as StatusChipTone,
+    };
+  }
+  if (verdict === "WA") {
+    return {
+      glyph: "≈",
+      label: "WA",
+      tone: "warn" as StatusChipTone,
+    };
+  }
+  if (verdict === "TLE") {
+    return {
+      glyph: "⏱",
+      label: "TLE",
+      tone: "warn" as StatusChipTone,
+    };
+  }
+  if (verdict === "CE") {
+    return {
+      glyph: "⚙",
+      label: "CE",
+      tone: "error" as StatusChipTone,
+    };
+  }
+  if (verdict === "RE") {
+    return {
+      glyph: "💥",
+      label: "RE",
+      tone: "error" as StatusChipTone,
+    };
+  }
+
+  return {
+    glyph: "•",
+    label: verdict,
+    tone: "neutral" as StatusChipTone,
+  };
+}
+
 export const LibraryTaskSolvePage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
   const navigate = useNavigate();
+  const location = useLocation();
   const hasToken = useMemo(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -131,6 +202,30 @@ export const LibraryTaskSolvePage: React.FC = () => {
     const v = parseInt(taskKey, 10);
     return taskKey && String(v) === taskKey ? v : null;
   }, [taskKey]);
+
+  const libraryListPath = useMemo(() => (location.pathname.startsWith("/edu/") ? "/edu/library" : "/library"), [location.pathname]);
+  const safeBackPath = useMemo(() => {
+    const fromRaw = new URLSearchParams(location.search || "").get("from");
+    if (!fromRaw) return libraryListPath;
+    try {
+      const decoded = decodeURIComponent(fromRaw).trim();
+      if (decoded.startsWith("/") && !decoded.startsWith("//")) {
+        return decoded;
+      }
+    } catch {
+      // ignore malformed query value
+    }
+    return libraryListPath;
+  }, [location.search, libraryListPath]);
+
+  const goBackToLibrary = () => {
+    navigate(safeBackPath);
+  };
+
+  const redirectToLoginWithNext = () => {
+    const next = encodeURIComponent(`${location.pathname}${location.search || ""}`);
+    navigate(`/?auth=login&next=${next}`);
+  };
 
   const [loading, setLoading] = useState(true);
   const [task, setTask] = useState<Awaited<ReturnType<typeof getLibraryTask>>["task"] | null>(null);
@@ -171,6 +266,98 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const [resultsOpen, setResultsOpen] = useState(false);
   const [resultsTab, setResultsTab] = useState<"run" | "check">("check");
+  const [discussionText, setDiscussionText] = useState("");
+  const [discussionMessages, setDiscussionMessages] = useState<Array<{ id: string; text: string; createdAt: string; author: string }>>([]);
+  const [statementModalOpen, setStatementModalOpen] = useState(false);
+  const [activeRailItem, setActiveRailItem] = useState<"mission" | "task" | "console">("mission");
+  const statementSectionRef = useRef<HTMLDivElement | null>(null);
+  const editorSectionRef = useRef<HTMLDivElement | null>(null);
+  const outputSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const libraryHints = useMemo(() => {
+    const hints: string[] = [];
+    if (checkResult?.compileError) {
+      hints.push(tr("Спочатку виправ компіляцію: перевір назви класів/файлів і сигнатуру main.", "Fix compilation first: verify class/file names and main signature."));
+    }
+    if (checkResult && checkResult.testsTotal > 0 && checkResult.testsPassed < checkResult.testsTotal) {
+      hints.push(tr("Пройдися по крайових кейсах: порожній ввід, 0, 1, мін/макс межі.", "Go through edge cases: empty input, 0, 1, min/max bounds."));
+      hints.push(tr("Звір формат виводу: зайві пробіли або переноси рядків ламають тести.", "Verify output format: extra spaces/newlines often break tests."));
+    }
+    hints.push(tr("Запускай локальні малі тести перед Check, щоб швидше знаходити баги.", "Run small local tests before Check to find bugs faster."));
+    hints.push(tr("Спочатку зроби коректність, потім оптимізацію.", "Lock correctness first, optimize second."));
+    return hints;
+  }, [checkResult, tr]);
+
+  const scrollToSection = (id: "mission" | "task" | "console") => {
+    setActiveRailItem(id);
+    if (id === "mission") {
+      statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (id === "task") {
+      editorSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    outputSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const discussionStorageKey = useMemo(() => {
+    const id = Number(task?.id ?? taskId ?? 0);
+    return id > 0 ? `studycod.library.discussion.${id}` : null;
+  }, [task?.id, taskId]);
+
+  useEffect(() => {
+    if (!discussionStorageKey) {
+      setDiscussionMessages([]);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(discussionStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        setDiscussionMessages(
+          parsed
+            .filter((m) => m && typeof m === "object")
+            .map((m: any) => ({
+              id: String(m.id ?? `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+              text: String(m.text ?? ""),
+              createdAt: String(m.createdAt ?? new Date().toISOString()),
+              author: String(m.author ?? tr("Ти", "You")),
+            }))
+            .filter((m) => m.text.trim().length > 0)
+            .slice(-100)
+        );
+      } else {
+        setDiscussionMessages([]);
+      }
+    } catch {
+      setDiscussionMessages([]);
+    }
+  }, [discussionStorageKey, tr]);
+
+  useEffect(() => {
+    if (!discussionStorageKey) return;
+    try {
+      localStorage.setItem(discussionStorageKey, JSON.stringify(discussionMessages.slice(-100)));
+    } catch {
+      // ignore
+    }
+  }, [discussionStorageKey, discussionMessages]);
+
+  const addDiscussionMessage = () => {
+    const text = discussionText.trim();
+    if (!text) return;
+    setDiscussionMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        text,
+        createdAt: new Date().toISOString(),
+        author: tr("Ти", "You"),
+      },
+    ]);
+    setDiscussionText("");
+  };
 
   useEffect(() => {
     if (!taskKey) {
@@ -377,7 +564,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const doRun = async () => {
     if (!effectiveTaskId || !task) return;
     if (!hasToken) {
-      navigate("/auth");
+      redirectToLoginWithNext();
       return;
     }
     setRunning(true);
@@ -406,7 +593,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const doCheck = async () => {
     if (!effectiveTaskId || !task) return;
     if (!hasToken) {
-      navigate("/auth");
+      redirectToLoginWithNext();
       return;
     }
     setChecking(true);
@@ -442,7 +629,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const manualSave = async () => {
     if (!effectiveTaskId) return;
     if (!hasToken) {
-      navigate("/auth");
+      redirectToLoginWithNext();
       return;
     }
     try {
@@ -485,10 +672,48 @@ export const LibraryTaskSolvePage: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-6xl mx-auto space-y-4">
+    <div className="relative h-[calc(100dvh-3rem)] min-h-[760px] w-full px-3 pb-3">
+      <div className="h-full rounded-3xl bg-[linear-gradient(150deg,#0c0f17_0%,#0f111a_46%,#0b0d14_100%)] border border-border/60 overflow-hidden shadow-[0_24px_70px_rgba(0,0,0,0.48)] flex">
+        <aside className="w-[58px] border-r border-border/60 bg-bg-surface/70 flex flex-col items-center py-3 gap-2">
+          <div className="group relative">
+            <button
+              onClick={goBackToLibrary}
+              title={tr("Назад", "Back")}
+              aria-label={tr("Назад", "Back")}
+              className="w-10 h-10 rounded-xl border border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary transition-fast flex items-center justify-center"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="absolute left-[48px] top-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary opacity-0 pointer-events-none group-hover:opacity-100 transition-fast whitespace-nowrap z-20">
+              {tr("Назад", "Back")}
+            </div>
+          </div>
+
+          {[
+            { id: "mission", label: tr("Місія", "Mission"), Icon: LayoutDashboard },
+            { id: "task", label: tr("Задача", "Task"), Icon: FolderCode },
+            { id: "console", label: tr("Вивід", "Output"), Icon: TerminalSquare }
+          ].map((item) => (
+            <div key={item.id} className="group relative">
+              <button
+                onClick={() => scrollToSection(item.id as "mission" | "task" | "console")}
+                title={item.label}
+                aria-label={item.label}
+                className={`w-10 h-10 rounded-xl border transition-fast flex items-center justify-center ${activeRailItem === item.id ? "border-primary/50 bg-primary/10 text-primary" : "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary"}`}
+              >
+                <item.Icon className="w-4 h-4" />
+              </button>
+              <div className="absolute left-[48px] top-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary opacity-0 pointer-events-none group-hover:opacity-100 transition-fast whitespace-nowrap z-20">
+                {item.label}
+              </div>
+            </div>
+          ))}
+        </aside>
+
+        <div className="flex-1 min-w-0 min-h-0 overflow-auto p-4">
+          <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
+          <Button variant="ghost" onClick={goBackToLibrary}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
@@ -497,6 +722,9 @@ export const LibraryTaskSolvePage: React.FC = () => {
               {tr("Розв'язання: ", "Solve: ")}
               {task?.title || "..."}
             </h1>
+            <div className="mt-1 inline-flex items-center rounded-lg border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-mono text-primary">
+              StudyCod Practice Lab
+            </div>
             <div className="text-xs text-text-secondary mt-1">
               {tr("Це практика для себе — оцінки не змінюються.", "This is practice — it does not affect grades.")}
             </div>
@@ -531,18 +759,27 @@ export const LibraryTaskSolvePage: React.FC = () => {
           </Card>
         ) : (
           <>
-            <Card className="p-4 space-y-3">
-              <div>
-                <div className="text-sm font-mono text-text-primary mb-2">{tr("Умова", "Description")}</div>
+            <div className="h-[calc(100dvh-10rem)] min-h-[640px] grid grid-cols-12 gap-3">
+            <div ref={statementSectionRef} className="col-span-5 min-h-0">
+              <Card className="h-full p-4 space-y-3 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+                <div>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-sm font-mono text-text-primary">{tr("Умова", "Description")}</div>
+                  <Button variant="ghost" size="sm" onClick={() => setStatementModalOpen(true)}>
+                    {tr("Повна умова", "Full statement")}
+                  </Button>
+                </div>
                 <MarkdownView content={task.description || ""} />
-              </div>
-              <div>
-                <div className="text-sm font-mono text-text-primary mb-2">{tr("Теорія", "Theory")}</div>
-                {theory ? <MarkdownView content={theory} /> : <div className="text-sm text-text-secondary">{tr("(немає)", "(none)")}</div>}
-              </div>
-            </Card>
+                </div>
+                <div>
+                  <div className="text-sm font-mono text-text-primary mb-2">{tr("Теорія", "Theory")}</div>
+                  {theory ? <MarkdownView content={theory} /> : <div className="text-sm text-text-secondary">{tr("(немає)", "(none)")}</div>}
+                </div>
+              </Card>
+            </div>
 
-            <Card className="p-4">
+            <div ref={editorSectionRef} className="col-span-7 min-h-0">
+            <Card className="h-full p-4 min-h-0 flex flex-col border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div className="text-sm font-mono text-text-primary">
                   {tr("Код", "Code")} ({FRIENDLY_LANG[judgeLanguage] || judgeLanguage})
@@ -591,16 +828,26 @@ export const LibraryTaskSolvePage: React.FC = () => {
                 <div className="mb-3 p-3 border border-border bg-bg-base rounded flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
                   <div className="text-xs font-mono text-text-secondary flex-1">
                     {runResult ? (
-                      <span>
-                        {tr("Останній запуск", "Last run")}: {runResult.success ? tr("успіх", "success") : tr("помилка", "error")} · exit={runResult.exitCode}
+                      <span className="inline-flex items-center gap-2 mr-2">
+                        <span>{tr("Останній запуск", "Last run")}:</span>
+                        {(() => {
+                          const c = runStatusChip(runResult.success, tr);
+                          return <StatusChip glyph={c.glyph} label={c.label} tone={c.tone} />;
+                        })()}
+                        <span>exit={runResult.exitCode}</span>
                       </span>
                     ) : (
                       <span>{tr("Запуск ще не виконували", "No run yet")}</span>
                     )}
                     <span className="mx-2">·</span>
                     {checkResult ? (
-                      <span>
-                        {tr("Остання перевірка", "Last check")}: {checkResult.verdict || "-"} · {checkResult.testsPassed}/{checkResult.testsTotal}
+                      <span className="inline-flex items-center gap-2">
+                        <span>{tr("Остання перевірка", "Last check")}:</span>
+                        {(() => {
+                          const v = verdictChip(checkResult.verdict, tr);
+                          return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} />;
+                        })()}
+                        <span>{checkResult.testsPassed}/{checkResult.testsTotal}</span>
                       </span>
                     ) : (
                       <span>{tr("Перевірку ще не виконували", "No check yet")}</span>
@@ -656,7 +903,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
                 )}
               </div>
 
-              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="mt-4">
                 <div>
                   <div className="text-sm font-mono text-text-primary mb-2">{tr("Ввід (stdin)", "Input (stdin)")}</div>
                   <textarea
@@ -666,36 +913,39 @@ export const LibraryTaskSolvePage: React.FC = () => {
                     placeholder={tr("Введіть дані для запуску...", "Enter input for running...")}
                   />
                 </div>
-
-                <div>
-                  <div className="text-sm font-mono text-text-primary mb-2">{tr("Результат запуску", "Run output")}</div>
-                  {!runResult ? (
-                    <div className="text-sm text-text-secondary">{tr("Поки що немає", "Nothing yet")}</div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-xs text-text-secondary flex gap-3">
-                        <span>
-                          {tr("Код виходу", "Exit")}: {runResult.exitCode}
-                        </span>
-                        <span>
-                          {tr("Успіх", "Success")}: {runResult.success ? tr("так", "yes") : tr("ні", "no")}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="text-xs font-mono text-text-primary mb-1">stdout</div>
-                        <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[200px]">{runResult.stdout || ""}</pre>
-                      </div>
-                      <div>
-                        <div className="text-xs font-mono text-text-primary mb-1">stderr</div>
-                        <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[200px]">{runResult.stderr || ""}</pre>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
             </Card>
+            </div>
 
-            <Card className="p-4">
+            <div ref={outputSectionRef} className="col-span-7 min-h-0">
+              <Card className="p-4 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+                <div className="text-sm font-mono text-text-primary mb-2">{tr("Результат запуску", "Run output")}</div>
+                {!runResult ? (
+                  <div className="text-sm text-text-secondary">{tr("Поки що немає", "Nothing yet")}</div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-xs text-text-secondary flex gap-3">
+                      <span>
+                        {tr("Код виходу", "Exit")}: {runResult.exitCode}
+                      </span>
+                      <span>
+                        {tr("Успіх", "Success")}: {runResult.success ? tr("так", "yes") : tr("ні", "no")}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-mono text-text-primary mb-1">stdout</div>
+                      <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[220px]">{runResult.stdout || ""}</pre>
+                    </div>
+                    <div>
+                      <div className="text-xs font-mono text-text-primary mb-1">stderr</div>
+                      <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[220px]">{runResult.stderr || ""}</pre>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            <Card className="col-span-7 p-4 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
               <div className="text-sm font-mono text-text-primary mb-2">{tr("Перевірка (тести)", "Check (tests)")}</div>
               {!checkResult ? (
                 <div className="text-sm text-text-secondary">{tr("Натисніть 'Перевірити'", "Click 'Check'")}</div>
@@ -703,7 +953,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
                     <span className="px-2 py-0.5 border border-border">
-                      {tr("Вердикт", "Verdict")}: {checkResult.verdict || "-"}
+                      {tr("Вердикт", "Verdict")}: 
+                      {(() => {
+                        const v = verdictChip(checkResult.verdict, tr);
+                        return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} className="ml-1" />;
+                      })()}
                     </span>
                     <span className="px-2 py-0.5 border border-border">
                       {tr("Тести", "Tests")}: {checkResult.testsPassed}/{checkResult.testsTotal}
@@ -835,6 +1089,52 @@ export const LibraryTaskSolvePage: React.FC = () => {
               )}
             </Card>
 
+            <Card className="col-span-5 p-4 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+              <div className="text-sm font-mono text-text-primary mb-2 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" /> {tr("Hint Center", "Hint Center")}
+              </div>
+              <div className="space-y-2">
+                {libraryHints.map((h, idx) => (
+                  <div key={`${idx}-${h.slice(0, 12)}`} className="rounded-xl border border-border bg-bg-base/80 px-3 py-2 text-xs text-text-primary">
+                    <span className="text-primary mr-2">#{idx + 1}</span>{h}
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="col-span-5 p-4 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+              <div className="text-sm font-mono text-text-primary mb-2">{tr("Discussion", "Discussion")}</div>
+              <div className="text-xs text-text-secondary mb-3">
+                {tr("Обговорення для цієї задачі бібліотеки (локально у твоєму браузері).", "Discussion for this library task (stored locally in your browser).")}
+              </div>
+
+              <div className="space-y-2 mb-3 max-h-[260px] overflow-auto pr-1">
+                {discussionMessages.length === 0 ? (
+                  <div className="text-xs text-text-secondary">{tr("Поки порожньо — напиши перше повідомлення.", "No messages yet — write the first one.")}</div>
+                ) : (
+                  discussionMessages.map((m) => (
+                    <div key={m.id} className="rounded-xl border border-border bg-bg-base/80 px-3 py-2">
+                      <div className="text-[10px] text-text-secondary mb-1">{m.author} · {new Date(m.createdAt).toLocaleString()}</div>
+                      <div className="text-xs text-text-primary whitespace-pre-wrap">{m.text}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <textarea
+                value={discussionText}
+                onChange={(e) => setDiscussionText(e.target.value)}
+                className="w-full min-h-[90px] rounded-xl bg-bg-code border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
+                placeholder={tr("Напиши питання, ідею або коментар до задачі...", "Write a question, idea, or comment about the task...")}
+              />
+              <div className="mt-2 flex justify-end">
+                <Button variant="secondary" onClick={addDiscussionMessage} disabled={!discussionText.trim()}>
+                  {tr("Надіслати", "Post")}
+                </Button>
+              </div>
+            </Card>
+            </div>
+
             {resultsOpen ? (
               <Modal
                 open={resultsOpen}
@@ -876,8 +1176,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
                           <span>
                             {tr("Код виходу", "Exit")}: {runResult.exitCode}
                           </span>
-                          <span>
-                            {tr("Успіх", "Success")}: {runResult.success ? tr("так", "yes") : tr("ні", "no")}
+                          <span className="inline-flex items-center gap-1">
+                            {(() => {
+                              const c = runStatusChip(runResult.success, tr);
+                              return <StatusChip glyph={c.glyph} label={c.label} tone={c.tone} />;
+                            })()}
                           </span>
                         </div>
                         <div>
@@ -899,7 +1202,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
                           <span className="px-2 py-0.5 border border-border">
-                            {tr("Вердикт", "Verdict")}: {checkResult.verdict || "-"}
+                            {tr("Вердикт", "Verdict")}: 
+                            {(() => {
+                              const v = verdictChip(checkResult.verdict, tr);
+                              return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} className="ml-1" />;
+                            })()}
                           </span>
                           <span className="px-2 py-0.5 border border-border">
                             {tr("Тести", "Tests")}: {checkResult.testsPassed}/{checkResult.testsTotal}
@@ -1039,8 +1346,40 @@ export const LibraryTaskSolvePage: React.FC = () => {
                 </div>
               </Modal>
             ) : null}
+
+            <Modal
+              open={statementModalOpen}
+              onClose={() => setStatementModalOpen(false)}
+              title={tr("Повна умова задачі", "Full task statement")}
+              description={tr("Повна версія умови у зручному режимі читання.", "Complete statement in a comfortable reading mode.")}
+            >
+              <div className="space-y-5">
+                <div>
+                  <div className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2">{tr("Умова", "Description")}</div>
+                  {task?.description?.trim() ? (
+                    <div className="prose prose-invert max-w-none text-text-primary">
+                      <MarkdownView content={task.description} />
+                    </div>
+                  ) : (
+                    <div className="text-sm text-text-secondary">{tr("Умова відсутня", "Description is empty")}</div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2">{tr("Теорія", "Theory")}</div>
+                  {theory?.trim() ? (
+                    <div className="prose prose-invert max-w-none text-text-primary">
+                      <MarkdownView content={theory} />
+                    </div>
+                  ) : (
+                    <div className="text-sm text-text-secondary">{tr("Теорія відсутня", "Theory is empty")}</div>
+                  )}
+                </div>
+              </div>
+            </Modal>
           </>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );

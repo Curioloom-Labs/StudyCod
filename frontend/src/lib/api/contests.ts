@@ -45,6 +45,7 @@ export type ContestDetails = {
     isJoined: boolean;
     joinRequired: boolean;
     canManage?: boolean;
+    isPaused?: boolean;
   };
   problems: ContestProblemListItem[];
   serverTime: string;
@@ -139,9 +140,16 @@ export type ContestAdminParticipant = {
   displayName: string;
   principalType: "USER" | "STUDENT";
   joinedAt: string | null;
+  contestAccountHandle?: string | null;
+  contestAccountNote?: string | null;
   isDisqualified: boolean;
   disqualificationReason: string | null;
   disqualifiedAt: string | null;
+};
+
+export type ContestAccount = {
+  handle: string | null;
+  note: string | null;
 };
 
 export type ContestAdminSubmission = {
@@ -183,6 +191,47 @@ export type ContestMyProgressProblem = {
     | null;
 };
 
+export type ContestCommunityQuestion = {
+  id: number;
+  participantId?: number | null;
+  author: string;
+  text: string;
+  createdAt: string;
+  answer: string | null;
+  answeredAt: string | null;
+  status?: "OPEN" | "ANSWERED";
+};
+
+export type ContestCommunityAnnouncement = {
+  id: number;
+  author: string;
+  text: string;
+  createdAt: string;
+};
+
+export type ContestCommunityData = {
+  contestId: number;
+  questions: ContestCommunityQuestion[];
+  announcements: ContestCommunityAnnouncement[];
+};
+
+export type ContestOrganizerListItem = {
+  userId: number;
+  username: string;
+  addedAt: string | null;
+};
+
+export type ContestAnnulmentItem = {
+  id: number;
+  problemId: number;
+  participantId: number | null;
+  reason: string | null;
+  isActive: boolean;
+  createdByUserId: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export async function listContests(): Promise<{ contests: ContestListItem[] }> {
   const res = await api.get("/contests");
   return res.data;
@@ -214,11 +263,13 @@ export async function checkContestProblem(params: {
   language: JudgeLanguage;
   code?: string;
   files?: CodeFile[];
+  turnstileToken?: string;
 }): Promise<ContestCheckResult> {
   const res = await api.post(`/contests/${params.contestId}/problems/${params.problemId}/check`, {
     language: params.language,
     code: params.code,
     files: params.files,
+    turnstileToken: params.turnstileToken,
   });
   return res.data;
 }
@@ -263,8 +314,32 @@ export async function listContestParticipantSubmissionsForAdmin(
   contestId: number,
   participantId: number,
   limit: number = 100
-): Promise<{ contestId: number; participant: { id: number; displayName: string; principalType: "USER" | "STUDENT"; isDisqualified: boolean }; submissions: ContestAdminSubmission[] }> {
+): Promise<{
+  contestId: number;
+  participant: {
+    id: number;
+    displayName: string;
+    principalType: "USER" | "STUDENT";
+    contestAccountHandle?: string | null;
+    contestAccountNote?: string | null;
+    isDisqualified: boolean;
+  };
+  submissions: ContestAdminSubmission[];
+}> {
   const res = await api.get(`/contests/${contestId}/admin/participants/${participantId}/submissions`, { params: { limit } });
+  return res.data;
+}
+
+export async function getContestAccount(contestId: number): Promise<{ contestId: number; account: ContestAccount }> {
+  const res = await api.get(`/contests/${contestId}/account`);
+  return res.data;
+}
+
+export async function updateContestAccount(
+  contestId: number,
+  payload: { handle?: string | null; note?: string | null }
+): Promise<{ contestId: number; account: ContestAccount }> {
+  const res = await api.put(`/contests/${contestId}/account`, payload);
   return res.data;
 }
 
@@ -323,5 +398,73 @@ export async function getContestProblemSubmissions(
 
 export async function getContestMyProgress(contestId: number): Promise<{ contestId: number; participantId: number; problems: ContestMyProgressProblem[] }> {
   const res = await api.get(`/contests/${contestId}/my-progress`);
+  return res.data;
+}
+
+export async function getContestCommunity(contestId: number): Promise<ContestCommunityData> {
+  const res = await api.get(`/contests/${contestId}/community`);
+  return res.data;
+}
+
+export async function postContestCommunityQuestion(
+  contestId: number,
+  text: string
+): Promise<{ question: ContestCommunityQuestion }> {
+  const res = await api.post(`/contests/${contestId}/community/questions`, { text });
+  return res.data;
+}
+
+export async function answerContestCommunityQuestion(
+  contestId: number,
+  questionId: number,
+  answer: string
+): Promise<{ question: ContestCommunityQuestion }> {
+  const res = await api.patch(`/contests/${contestId}/community/questions/${questionId}/answer`, { answer });
+  return res.data;
+}
+
+export async function postContestCommunityAnnouncement(
+  contestId: number,
+  text: string
+): Promise<{ announcement: ContestCommunityAnnouncement }> {
+  const res = await api.post(`/contests/${contestId}/community/announcements`, { text });
+  return res.data;
+}
+
+export async function setContestPaused(contestId: number, paused: boolean): Promise<{ contestId: number; isPaused: boolean }> {
+  const res = await api.patch(`/contests/${contestId}/admin/pause`, { paused });
+  return res.data;
+}
+
+export async function listContestOrganizers(contestId: number): Promise<{
+  contestId: number;
+  isPaused: boolean;
+  owner: { userId: number; username: string } | null;
+  organizers: ContestOrganizerListItem[];
+}> {
+  const res = await api.get(`/contests/${contestId}/admin/organizers`);
+  return res.data;
+}
+
+export async function addContestOrganizer(contestId: number, userId: number): Promise<{ organizer: { userId: number; username: string } }> {
+  const res = await api.post(`/contests/${contestId}/admin/organizers`, { userId });
+  return res.data;
+}
+
+export async function removeContestOrganizer(contestId: number, userId: number): Promise<{ removed: boolean; userId: number }> {
+  const res = await api.delete(`/contests/${contestId}/admin/organizers/${userId}`);
+  return res.data;
+}
+
+export async function listContestAnnulments(contestId: number): Promise<{ contestId: number; annulments: ContestAnnulmentItem[] }> {
+  const res = await api.get(`/contests/${contestId}/admin/annulments`);
+  return res.data;
+}
+
+export async function setContestAnnulment(
+  contestId: number,
+  payload: { problemId: number; participantId?: number | null; annulled: boolean; reason?: string | null }
+): Promise<{ annulment: ContestAnnulmentItem }> {
+  const res = await api.patch(`/contests/${contestId}/admin/annulments`, payload);
   return res.data;
 }

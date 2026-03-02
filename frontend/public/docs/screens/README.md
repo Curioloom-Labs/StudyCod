@@ -1,23 +1,21 @@
-# Docs screenshots
+# StudyCod screenshots
 
-Ця папка для **реальних скріншотів інтерфейсу** StudyCod.
+У цій папці зберігаються **реальні скріншоти інтерфейсу** для Wiki та внутрішньої документації.
 
-## Як додати скріншот у вікі
+## Як швидко додати новий скрін
 
-1) Зроби скрін (Windows: `Win + Shift + S`).  
-2) Збережи файл сюди: `frontend/public/docs/screens/` (можна **.png/.jpg або .svg**)  
-3) Встав у Markdown (у `frontend/src/content/docs.ts`) так:
+1) Зроби скріншот (Windows: `Win + Shift + S`).  
+2) Додай файл у цю папку (підтримуються **.png / .jpg / .svg**).  
+3) Встав посилання у markdown-статтю:
 
 ```md
-![Опис скріну](/docs/screens/my-screenshot.svg)
+![Короткий опис екрана](/docs/screens/my-screenshot.svg)
 ```
 
-## Рекомендації по назвам
+## Іменування файлів
 
-- `edu-student-lessons.png`
-- `edu-topic-page.png`
-- `edu-controlwork-quiz.png`
-- `edu-gradebook.png`
-- `edu-announcements.png`
+- Використовуй короткі, зрозумілі назви у `kebab-case`.
+- Добре: `edu-student-lessons.svg`, `edu-topic-page.svg`, `personal-tasks.svg`.
+- Уникай загальних назв на кшталт `screen1.png`.
 
 

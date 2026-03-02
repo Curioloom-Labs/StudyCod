@@ -511,3 +511,111 @@ export async function sendAdminBroadcastEmail(data: {
   const res = await api.post("/admin/emails/broadcast", data);
   return res.data;
 }
+
+export type AdminMailFolder = {
+  path: string;
+  name: string;
+  specialUse: string | null;
+};
+
+export type AdminMailMessageListItem = {
+  uid: number;
+  subject: string;
+  from: string;
+  to: string;
+  date: string | null;
+  seen: boolean;
+  flagged: boolean;
+  size: number;
+};
+
+export type AdminMailMessageDetails = {
+  uid: number;
+  subject: string;
+  from: string;
+  to: string;
+  cc: string;
+  bcc: string;
+  replyTo: string;
+  date: string | null;
+  seen: boolean;
+  flagged: boolean;
+  text: string;
+  html: string;
+  attachments: Array<{
+    filename: string | null;
+    contentType: string;
+    size: number;
+    contentId: string | null;
+  }>;
+};
+
+export async function getAdminMailStatus(): Promise<{ ok: boolean; issues: string[] }> {
+  const res = await api.get("/admin/mail/status");
+  return res.data;
+}
+
+export async function getAdminMailFolders(): Promise<{ folders: AdminMailFolder[] }> {
+  const res = await api.get("/admin/mail/folders");
+  return res.data;
+}
+
+export async function getAdminMailMessages(params: {
+  folder: string;
+  limit?: number;
+  cursorUid?: number;
+}): Promise<{ folder: string; items: AdminMailMessageListItem[]; nextCursorUid: number | null }> {
+  const res = await api.get("/admin/mail/messages", { params });
+  return res.data;
+}
+
+export async function getAdminMailMessage(folder: string, uid: number): Promise<{ message: AdminMailMessageDetails }> {
+  const res = await api.get(`/admin/mail/messages/${uid}`, { params: { folder } });
+  return res.data;
+}
+
+export async function sendAdminMailMessage(data: {
+  from?: string;
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  text?: string;
+  html?: string;
+  replyTo?: string;
+}): Promise<{ ok: boolean; messageId: string | null }> {
+  const res = await api.post("/admin/mail/messages/send", data);
+  return res.data;
+}
+
+export async function setAdminMailRead(data: {
+  folder: string;
+  uid: number;
+  read: boolean;
+}): Promise<{ ok: boolean }> {
+  const res = await api.post(`/admin/mail/messages/${data.uid}/read`, {
+    folder: data.folder,
+    read: data.read,
+  });
+  return res.data;
+}
+
+export async function moveAdminMailMessage(data: {
+  folder: string;
+  uid: number;
+  destination: string;
+}): Promise<{ ok: boolean }> {
+  const res = await api.post(`/admin/mail/messages/${data.uid}/move`, {
+    folder: data.folder,
+    destination: data.destination,
+  });
+  return res.data;
+}
+
+export async function deleteAdminMailMessage(data: {
+  folder: string;
+  uid: number;
+}): Promise<{ ok: boolean }> {
+  const res = await api.delete(`/admin/mail/messages/${data.uid}`, { params: { folder: data.folder } });
+  return res.data;
+}

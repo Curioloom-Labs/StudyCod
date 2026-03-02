@@ -3,6 +3,7 @@ import type { Task } from "../../types";
 
 export type CodeFile = { path: string; content: string };
 type CodeOrFiles = string | { code?: string; files?: CodeFile[] };
+type SubmitBinding = { clientSubmissionId?: string; codeHash?: string };
 
 function toPayload(input: CodeOrFiles): { code?: string; files?: CodeFile[] } {
   if (typeof input === "string") return { code: input };
@@ -44,8 +45,27 @@ export type PersonalTaskGrade = {
   createdAt?: string;
 };
 
+export type LearningFirstFailure = {
+  testPublicIndex: number;
+  inputPreview: string;
+  expectedPreview: string;
+  actualPreview: string;
+  errorKind: string;
+};
+
+export type LearningFeedback = {
+  verdict?: string | null;
+  firstFailure?: LearningFirstFailure | null;
+};
+
 export type SubmitTaskResponse = {
   grade?: PersonalTaskGrade;
+  learningFeedback?: LearningFeedback;
+  submissionMeta?: {
+    submissionId: string;
+    clientSubmissionId?: string | null;
+    codeHash: string;
+  };
   milestone?: any;
   status?: string;
   message?: string;
@@ -90,16 +110,16 @@ export async function resetTopic(topicId: number): Promise<void> {
 export async function saveDraft(id: number, codeOrFiles: CodeOrFiles): Promise<void> {
   await api.post(`/tasks/${id}/save-draft`, toPayload(codeOrFiles));
 }
-export async function submitTask(id: number, codeOrFiles: CodeOrFiles): Promise<SubmitTaskResponse> {
-  const payload = toPayload(codeOrFiles);
+export async function submitTask(id: number, codeOrFiles: CodeOrFiles, binding?: SubmitBinding): Promise<SubmitTaskResponse> {
+  const payload = { ...toPayload(codeOrFiles), ...(binding ?? {}) };
   if (!payload.code && (!Array.isArray(payload.files) || payload.files.length === 0)) {
     throw new Error("Code or files are required");
   }
   const res = await api.post(`/tasks/${id}/submit`, payload);
   return res.data as SubmitTaskResponse;
 }
-export async function submitTaskWithMode(id: number, codeOrFiles: CodeOrFiles, mode: "TESTS" | "AI"): Promise<SubmitTaskResponse> {
-  const payload = { ...toPayload(codeOrFiles), mode };
+export async function submitTaskWithMode(id: number, codeOrFiles: CodeOrFiles, mode: "TESTS" | "AI", binding?: SubmitBinding): Promise<SubmitTaskResponse> {
+  const payload = { ...toPayload(codeOrFiles), mode, ...(binding ?? {}) };
   if (!payload.code && (!Array.isArray(payload.files) || payload.files.length === 0)) {
     throw new Error("Code or files are required");
   }

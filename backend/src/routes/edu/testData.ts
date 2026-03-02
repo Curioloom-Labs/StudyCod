@@ -17,6 +17,15 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 
+function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxMs = 55_000): number {
+  const raw = Number(process.env[envKey]);
+  const value = Number.isFinite(raw) ? Math.floor(raw) : fallbackMs;
+  return Math.max(minMs, Math.min(maxMs, value));
+}
+
+const EDU_TESTDATA_AI_DISABLE_DEADLINE = String(process.env.EDU_TESTDATA_AI_DISABLE_DEADLINE || "").trim() === "1";
+const EDU_TESTDATA_AI_BUDGET_MS = parseAIBudgetMs("EDU_TESTDATA_AI_BUDGET_MS", 25_000);
+
 // AI-heavy endpoint: protect against bursts.
 const generateTestDataLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 5, message: "RATE_LIMIT" });
 
@@ -224,6 +233,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       String(topicTask.template || "").trim() ||
       `Завдання: ${topicTask.title}`;
 
+    const aiStartedAt = Date.now();
     const testDataResult = await safeAICall(
       "generateTestData",
       {
@@ -233,8 +243,23 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         count: testCount,
         userId: req.userId
       },
-      { expectedCount: testCount }
+      {
+        expectedCount: testCount,
+        requestId: req.requestId,
+        maxAttempts: 1,
+        ...(EDU_TESTDATA_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: EDU_TESTDATA_AI_BUDGET_MS })
+      }
     );
+    const aiElapsedMs = Date.now() - aiStartedAt;
+    logger.info("[edu.test-data] generate AI completed", {
+      requestId: req.requestId,
+      taskId,
+      userId: req.userId,
+      success: testDataResult.success,
+      elapsedMs: aiElapsedMs,
+      budgetMs: EDU_TESTDATA_AI_DISABLE_DEADLINE ? null : EDU_TESTDATA_AI_BUDGET_MS,
+      requestedCount: testCount
+    });
 
     if (!testDataResult.success) {
       return res.status(testDataResult.error?.statusCode || 500).json({

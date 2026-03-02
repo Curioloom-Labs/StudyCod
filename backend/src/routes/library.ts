@@ -438,7 +438,7 @@ const createLibraryTaskSchema = z.object({
     (v) => (v == null ? undefined : v),
     z.record(z.string(), z.string().max(200_000))
   ).optional(),
-  lang: z.enum(["JAVA", "PYTHON"]).optional(),
+  lang: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   maxAttempts: z.number().int().min(1).max(100).optional(),
   timeLimitMs: z.number().int().min(100).max(60000).optional(),
   memoryLimitMb: z.number().int().min(16).max(2048).optional(),

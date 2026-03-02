@@ -2,6 +2,9 @@ import { Router, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { User, UserLang } from "../entities/User";
 import { Student } from "../entities/Student";
+import { LibraryTaskAttempt } from "../entities/LibraryTaskAttempt";
+import { ContestParticipant } from "../entities/ContestParticipant";
+import { ContestSubmission } from "../entities/ContestSubmission";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { logger } from "../utils/logger";
@@ -9,14 +12,194 @@ import { HttpError } from "../utils/httpError";
 const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
+const libraryAttemptRepo = () => AppDataSource.getRepository(LibraryTaskAttempt);
+const contestParticipantRepo = () => AppDataSource.getRepository(ContestParticipant);
+const contestSubmissionRepo = () => AppDataSource.getRepository(ContestSubmission);
 function normalizeLang(input?: string | null): UserLang {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
   if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
+
+type CourseHandleMap = Record<UserLang, string | null>;
+type ContestHandlesByCourse = {
+  codeforces: CourseHandleMap;
+  atcoder: CourseHandleMap;
+  leetcode: CourseHandleMap;
+  codechef: CourseHandleMap;
+};
+
+type ContestPlatform = "codeforces" | "atcoder" | "leetcode" | "codechef";
+
+type PublicProfilePrivacy = {
+  showContestStats: boolean;
+  showSolvedHistory: boolean;
+  showLanguageBreakdown: boolean;
+};
+
+const DEFAULT_PUBLIC_PROFILE_PRIVACY: PublicProfilePrivacy = {
+  showContestStats: true,
+  showSolvedHistory: true,
+  showLanguageBreakdown: true,
+};
+
+const EMPTY_COURSE_HANDLES = (): CourseHandleMap => ({ JAVA: null, PYTHON: null, CPP: null });
+
+function safeDecodeComponent(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function parseCourseHandleMap(rawValue: string | null | undefined): CourseHandleMap {
+  const raw = String(rawValue ?? "").trim();
+  if (!raw) return EMPTY_COURSE_HANDLES();
+
+  if (!raw.startsWith("ctx:")) {
+    // Legacy format: one global handle. Keep backward compatibility by mirroring it to all courses.
+    const legacy = raw.slice(0, 100) || null;
+    return { JAVA: legacy, PYTHON: legacy, CPP: legacy };
+  }
+
+  const map = EMPTY_COURSE_HANDLES();
+  const payload = raw.slice(4);
+  for (const part of payload.split(";")) {
+    const [kRaw, vRaw] = part.split("=", 2);
+    const k = String(kRaw ?? "").trim().toUpperCase();
+    const v = String(vRaw ?? "").trim();
+    const decoded = safeDecodeComponent(v).trim();
+    const normalized = decoded ? decoded.slice(0, 32) : null;
+    if (k === "J") map.JAVA = normalized;
+    else if (k === "P") map.PYTHON = normalized;
+    else if (k === "C") map.CPP = normalized;
+  }
+  return map;
+}
+
+function serializeCourseHandleMap(map: CourseHandleMap): string | null {
+  const j = (map.JAVA ?? "").trim() || null;
+  const p = (map.PYTHON ?? "").trim() || null;
+  const c = (map.CPP ?? "").trim() || null;
+
+  if (!j && !p && !c) return null;
+  if (j && p && c && j === p && p === c) return j.slice(0, 100);
+
+  const enc = (v: string | null) => encodeURIComponent((v ?? "").slice(0, 32));
+  const serialized = `ctx:J=${enc(j)};P=${enc(p)};C=${enc(c)}`;
+  return serialized.slice(0, 100);
+}
+
+function getContestHandlesByCourse(user: User): ContestHandlesByCourse {
+  return {
+    codeforces: parseCourseHandleMap(user.cfHandle ?? null),
+    atcoder: parseCourseHandleMap(user.atcoderHandle ?? null),
+    leetcode: parseCourseHandleMap(user.leetcodeHandle ?? null),
+    codechef: parseCourseHandleMap(user.codechefHandle ?? null),
+  };
+}
+
+function pickContestHandlesForCourse(all: ContestHandlesByCourse, course: UserLang) {
+  return {
+    codeforces: all.codeforces[course] ?? null,
+    atcoder: all.atcoder[course] ?? null,
+    leetcode: all.leetcode[course] ?? null,
+    codechef: all.codechef[course] ?? null,
+  };
+}
+
+function setCourseContestHandle(
+  map: CourseHandleMap,
+  course: UserLang,
+  nextRaw: unknown,
+  platform: ContestPlatform
+): CourseHandleMap {
+  const next = { ...map };
+  const normalized = String(nextRaw ?? "").trim();
+  if (!normalized) {
+    next[course] = null;
+    return next;
+  }
+
+  const safe = normalized.slice(0, 32);
+  if (!/^[A-Za-z0-9._-]{1,32}$/.test(safe)) {
+    throw new HttpError(400, `${platform.toUpperCase()}_HANDLE_INVALID`);
+  }
+
+  next[course] = safe;
+  return next;
+}
+
+function parseUserProfileMeta(rawValue: string | null | undefined): {
+  timezone: string | null;
+  privacy: PublicProfilePrivacy;
+} {
+  const raw = String(rawValue ?? "").trim();
+  if (!raw) {
+    return {
+      timezone: null,
+      privacy: { ...DEFAULT_PUBLIC_PROFILE_PRIVACY },
+    };
+  }
+
+  let timezone: string | null = null;
+  let privacyPart: string | null = null;
+
+  if (raw.startsWith("tz:")) {
+    const payload = raw.slice(3);
+    const [tzRaw, ppRaw] = payload.split("|pp:", 2);
+    timezone = String(tzRaw ?? "").trim() || null;
+    if (ppRaw != null) privacyPart = `pp:${ppRaw}`;
+  } else if (raw.startsWith("pp:")) {
+    privacyPart = raw;
+  } else if (raw.includes("|pp:")) {
+    const [tzRaw, ppRaw] = raw.split("|pp:", 2);
+    timezone = String(tzRaw ?? "").trim() || null;
+    if (ppRaw != null) privacyPart = `pp:${ppRaw}`;
+  } else {
+    timezone = raw.slice(0, 100) || null;
+  }
+
+  const privacy: PublicProfilePrivacy = { ...DEFAULT_PUBLIC_PROFILE_PRIVACY };
+  if (privacyPart && privacyPart.startsWith("pp:")) {
+    const payload = privacyPart.slice(3);
+    for (const part of payload.split(";")) {
+      const [kRaw, vRaw] = part.split("=", 2);
+      const k = String(kRaw ?? "").trim().toLowerCase();
+      const v = String(vRaw ?? "").trim().toLowerCase();
+      const bool = v === "1" || v === "true" || v === "yes";
+      if (k === "c") privacy.showContestStats = bool;
+      else if (k === "h") privacy.showSolvedHistory = bool;
+      else if (k === "l") privacy.showLanguageBreakdown = bool;
+    }
+  }
+
+  return { timezone, privacy };
+}
+
+function serializeUserProfileMeta(meta: {
+  timezone?: string | null;
+  privacy: PublicProfilePrivacy;
+}): string | null {
+  const timezone = String(meta.timezone ?? "").trim() || null;
+  const privacy = meta.privacy;
+  const pp = `pp:c=${privacy.showContestStats ? 1 : 0};h=${privacy.showSolvedHistory ? 1 : 0};l=${privacy.showLanguageBreakdown ? 1 : 0}`;
+  const isDefault =
+    privacy.showContestStats === DEFAULT_PUBLIC_PROFILE_PRIVACY.showContestStats &&
+    privacy.showSolvedHistory === DEFAULT_PUBLIC_PROFILE_PRIVACY.showSolvedHistory &&
+    privacy.showLanguageBreakdown === DEFAULT_PUBLIC_PROFILE_PRIVACY.showLanguageBreakdown;
+
+  if (!timezone && isDefault) return null;
+  if (timezone) return `tz:${timezone}|${pp}`.slice(0, 100);
+  return pp.slice(0, 100);
+}
+
 function buildUserDto(user: User) {
   const difusValue = user.lang === "PYTHON" ? user.difusPython : user.difusJava;
+  const handlesByCourse = getContestHandlesByCourse(user);
+  const profileMeta = parseUserProfileMeta(user.timezone ?? null);
   return {
     id: user.id,
     username: user.username,
@@ -24,6 +207,9 @@ function buildUserDto(user: User) {
     lang: user.lang,
     difus: difusValue ?? 0,
     avatarUrl: user.avatarUrl ?? null,
+    contestHandles: pickContestHandlesForCourse(handlesByCourse, user.lang),
+    contestHandlesByCourse: handlesByCourse,
+    publicProfilePrivacy: profileMeta.privacy,
     email: user.email ?? null,
     marketingEmailsEnabled: Boolean(user.marketingEmailsEnabled),
     userMode: user.userMode,
@@ -41,6 +227,142 @@ function buildUserDto(user: User) {
     placementCodingDoneAt: (user as any).placementCodingDoneAt ?? null
   };
 }
+
+const PROFILE_BADGES: ReadonlyArray<number> = [25, 50, 100, 250, 500, 1000];
+
+router.get("/public/:username", async (req: AuthRequest, res: Response) => {
+  try {
+    const username = String((req.params as any)?.username ?? "").trim();
+    if (!username) {
+      return res.status(400).json({ message: "USERNAME_REQUIRED" });
+    }
+
+    const user = await userRepo()
+      .createQueryBuilder("u")
+      .where("LOWER(u.username) = LOWER(:username)", { username })
+      .andWhere("u.userMode = :mode", { mode: "PERSONAL" })
+      .getOne();
+
+    if (!user) {
+      return res.status(404).json({ message: "PUBLIC_PROFILE_NOT_FOUND" });
+    }
+
+    const solvedByLangRows = await libraryAttemptRepo()
+      .createQueryBuilder("a")
+      .innerJoin("a.libraryTask", "t")
+      .select("t.lang", "lang")
+      .addSelect("COUNT(a.id)", "solved")
+      .where("a.user_id = :userId", { userId: user.id })
+      .andWhere("a.last_tests_total IS NOT NULL")
+      .andWhere("a.last_tests_total > 0")
+      .andWhere("a.last_tests_passed IS NOT NULL")
+      .andWhere("a.last_tests_passed >= a.last_tests_total")
+      .andWhere("t.status = :status", { status: "APPROVED" })
+      .groupBy("t.lang")
+      .getRawMany<{ lang: "JAVA" | "PYTHON" | "CPP"; solved: string | number }>();
+
+    const solvedByLang: Record<"JAVA" | "PYTHON" | "CPP", number> = {
+      JAVA: 0,
+      PYTHON: 0,
+      CPP: 0,
+    };
+    for (const row of solvedByLangRows) {
+      const key = String(row.lang || "").toUpperCase() as "JAVA" | "PYTHON" | "CPP";
+      if (key === "JAVA" || key === "PYTHON" || key === "CPP") {
+        solvedByLang[key] = Number(row.solved ?? 0) || 0;
+      }
+    }
+    const solvedTotal = solvedByLang.JAVA + solvedByLang.PYTHON + solvedByLang.CPP;
+    const profileMeta = parseUserProfileMeta(user.timezone ?? null);
+    const privacy = profileMeta.privacy;
+
+    const recentSolved = await libraryAttemptRepo()
+      .createQueryBuilder("a")
+      .innerJoin("a.libraryTask", "t")
+      .select("t.id", "id")
+      .addSelect("t.title", "title")
+      .addSelect("t.problem_code", "problemCode")
+      .addSelect("t.slug", "slug")
+      .addSelect("t.lang", "lang")
+      .addSelect("a.last_score", "lastScore")
+      .addSelect("a.last_tests_passed", "lastTestsPassed")
+      .addSelect("a.last_tests_total", "lastTestsTotal")
+      .addSelect("a.last_checked_at", "lastCheckedAt")
+      .where("a.user_id = :userId", { userId: user.id })
+      .andWhere("a.last_tests_total IS NOT NULL")
+      .andWhere("a.last_tests_total > 0")
+      .andWhere("a.last_tests_passed IS NOT NULL")
+      .andWhere("a.last_tests_passed >= a.last_tests_total")
+      .andWhere("t.status = :status", { status: "APPROVED" })
+      .orderBy("a.last_checked_at", "DESC")
+      .limit(10)
+      .getRawMany<{
+        id: string | number;
+        title: string;
+        problemCode: string | null;
+        slug: string | null;
+        lang: "JAVA" | "PYTHON" | "CPP";
+        lastScore: string | number | null;
+        lastTestsPassed: string | number | null;
+        lastTestsTotal: string | number | null;
+        lastCheckedAt: string | null;
+      }>();
+
+    const [contestsJoined, contestSubmissionsAgg] = await Promise.all([
+      contestParticipantRepo()
+        .createQueryBuilder("p")
+        .where("p.user_id = :userId", { userId: user.id })
+        .getCount(),
+      contestSubmissionRepo()
+        .createQueryBuilder("s")
+        .innerJoin("s.participant", "p")
+        .select("COUNT(s.id)", "total")
+        .addSelect(
+          "SUM(CASE WHEN s.tests_total IS NOT NULL AND s.tests_total > 0 AND s.tests_passed IS NOT NULL AND s.tests_passed >= s.tests_total THEN 1 ELSE 0 END)",
+          "accepted"
+        )
+        .where("p.user_id = :userId", { userId: user.id })
+        .getRawOne<{ total: string | number | null; accepted: string | number | null }>(),
+    ]);
+
+    return res.json({
+      id: user.id,
+      username: user.username,
+      avatarUrl: user.avatarUrl ?? null,
+      lang: user.lang,
+      difus: user.lang === "PYTHON" ? user.difusPython ?? 0 : user.difusJava ?? 0,
+      joinedAt: user.createdAt,
+      contestHandles: pickContestHandlesForCourse(getContestHandlesByCourse(user), user.lang),
+      privacy,
+      stats: {
+        solvedTotal,
+        solvedByLang: privacy.showLanguageBreakdown ? solvedByLang : { JAVA: 0, PYTHON: 0, CPP: 0 },
+        badgesUnlocked: PROFILE_BADGES.filter((m) => solvedTotal >= m),
+        contestsJoined: privacy.showContestStats ? contestsJoined : null,
+        contestSubmissionsTotal: privacy.showContestStats ? (Number(contestSubmissionsAgg?.total ?? 0) || 0) : null,
+        contestAcceptedLike: privacy.showContestStats ? (Number(contestSubmissionsAgg?.accepted ?? 0) || 0) : null,
+      },
+      recentSolved: (privacy.showSolvedHistory ? recentSolved : []).map((row) => ({
+        id: Number(row.id),
+        title: row.title,
+        problemCode: row.problemCode,
+        slug: row.slug,
+        lang: row.lang,
+        lastScore: row.lastScore == null ? null : Number(row.lastScore),
+        lastTestsPassed: row.lastTestsPassed == null ? null : Number(row.lastTestsPassed),
+        lastTestsTotal: row.lastTestsTotal == null ? null : Number(row.lastTestsTotal),
+        lastCheckedAt: row.lastCheckedAt,
+      })),
+    });
+  } catch (err) {
+    logger.error("[profile] GET /profile/public/:username error", {
+      requestId: req.requestId,
+      username: (req.params as any)?.username,
+      err,
+    });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
 
 type PlacementCodingChallenge = {
   id: string;
@@ -493,12 +815,25 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       course,
       lang,
       avatarUrl,
-      avatarData
+      avatarData,
+      contestHandles,
+      publicProfilePrivacy
     } = req.body as {
       course?: string;
       lang?: string;
       avatarUrl?: string | null;
       avatarData?: string | null;
+      contestHandles?: {
+        codeforces?: string | null;
+        atcoder?: string | null;
+        leetcode?: string | null;
+        codechef?: string | null;
+      };
+      publicProfilePrivacy?: {
+        showContestStats?: boolean;
+        showSolvedHistory?: boolean;
+        showLanguageBreakdown?: boolean;
+      };
     };
     if (course || lang) {
       user.lang = normalizeLang(course || lang);
@@ -508,9 +843,57 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
     } else if (avatarUrl !== undefined) {
       user.avatarUrl = avatarUrl;
     }
+
+    if (contestHandles && typeof contestHandles === "object") {
+      const activeCourse = user.lang;
+      const byCourse = getContestHandlesByCourse(user);
+
+      if (Object.prototype.hasOwnProperty.call(contestHandles, "codeforces")) {
+        byCourse.codeforces = setCourseContestHandle(byCourse.codeforces, activeCourse, (contestHandles as any).codeforces, "codeforces");
+      }
+      if (Object.prototype.hasOwnProperty.call(contestHandles, "atcoder")) {
+        byCourse.atcoder = setCourseContestHandle(byCourse.atcoder, activeCourse, (contestHandles as any).atcoder, "atcoder");
+      }
+      if (Object.prototype.hasOwnProperty.call(contestHandles, "leetcode")) {
+        byCourse.leetcode = setCourseContestHandle(byCourse.leetcode, activeCourse, (contestHandles as any).leetcode, "leetcode");
+      }
+      if (Object.prototype.hasOwnProperty.call(contestHandles, "codechef")) {
+        byCourse.codechef = setCourseContestHandle(byCourse.codechef, activeCourse, (contestHandles as any).codechef, "codechef");
+      }
+
+      user.cfHandle = serializeCourseHandleMap(byCourse.codeforces);
+      user.atcoderHandle = serializeCourseHandleMap(byCourse.atcoder);
+      user.leetcodeHandle = serializeCourseHandleMap(byCourse.leetcode);
+      user.codechefHandle = serializeCourseHandleMap(byCourse.codechef);
+    }
+
+    if (publicProfilePrivacy && typeof publicProfilePrivacy === "object") {
+      const currentMeta = parseUserProfileMeta(user.timezone ?? null);
+      const nextPrivacy: PublicProfilePrivacy = {
+        showContestStats:
+          typeof publicProfilePrivacy.showContestStats === "boolean"
+            ? publicProfilePrivacy.showContestStats
+            : currentMeta.privacy.showContestStats,
+        showSolvedHistory:
+          typeof publicProfilePrivacy.showSolvedHistory === "boolean"
+            ? publicProfilePrivacy.showSolvedHistory
+            : currentMeta.privacy.showSolvedHistory,
+        showLanguageBreakdown:
+          typeof publicProfilePrivacy.showLanguageBreakdown === "boolean"
+            ? publicProfilePrivacy.showLanguageBreakdown
+            : currentMeta.privacy.showLanguageBreakdown,
+      };
+      user.timezone = serializeUserProfileMeta({
+        timezone: currentMeta.timezone,
+        privacy: nextPrivacy,
+      });
+    }
     await userRepo().save(user);
     return res.json(buildUserDto(user));
   } catch (err) {
+    if (err instanceof HttpError) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
     logger.error("[profile] PUT /profile/me error", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({
       message: "Internal server error"

@@ -1,0 +1,29 @@
+.failure-recovery-card {
+  border: 1px solid var(--border);
+  background: var(--bg-code);
+  padding: 12px;
+}
+
+.failure-recovery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.failure-diff-line {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 2px 4px;
+}
+
+.failure-diff-line.same {
+  color: var(--text-secondary);
+}
+
+.failure-diff-line.changed {
+  background: color-mix(in srgb, var(--accent-error) 16%, transparent);
+  color: var(--text-primary);
+}

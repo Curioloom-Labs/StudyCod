@@ -18,7 +18,7 @@ export const TeacherDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [newClassName, setNewClassName] = useState("");
-  const [newClassLanguage, setNewClassLanguage] = useState<"JAVA" | "PYTHON">("JAVA");
+  const [newClassLanguage, setNewClassLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("JAVA");
   const [showPendingReviews, setShowPendingReviews] = useState(false);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [selectedReview, setSelectedReview] = useState<PendingReview | null>(null);
@@ -152,9 +152,10 @@ export const TeacherDashboardPage: React.FC = () => {
               <label className="block text-sm font-mono text-text-secondary mb-2">
                 {t('programmingLanguage')}
               </label>
-              <select value={newClassLanguage} onChange={e => setNewClassLanguage(e.target.value as "JAVA" | "PYTHON")} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
+              <select value={newClassLanguage} onChange={e => setNewClassLanguage(e.target.value as "JAVA" | "PYTHON" | "CPP")} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
                 <option value="JAVA">Java</option>
                 <option value="PYTHON">Python</option>
+                <option value="CPP">C++</option>
               </select>
             </div>
             <div className="flex gap-2 justify-end pt-4">

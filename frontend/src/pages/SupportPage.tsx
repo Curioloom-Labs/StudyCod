@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import {
+  closeSupportChatConversation,
   createSupportChatConversation,
   downloadSupportChatAttachment,
   getSupportChatConversation,
@@ -13,6 +15,7 @@ import {
 } from "../lib/api/support";
 
 export const SupportPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<SupportChatConversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
@@ -24,6 +27,7 @@ export const SupportPage: React.FC = () => {
   const [composerFiles, setComposerFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachmentPreviewUrls, setAttachmentPreviewUrls] = useState<Record<number, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const canCreate = useMemo(() => {
@@ -33,8 +37,34 @@ export const SupportPage: React.FC = () => {
   const canSend = useMemo(() => {
     if (!selectedConversationId) return false;
     if (sending) return false;
+    const selected = conversations.find(c => c.id === selectedConversationId);
+    if (selected?.status === "CLOSED") return false;
     return composerText.trim().length > 0 || composerFiles.length > 0;
-  }, [selectedConversationId, sending, composerText, composerFiles.length]);
+  }, [selectedConversationId, sending, composerText, composerFiles.length, conversations]);
+
+  const selectedConversation = useMemo(
+    () => conversations.find(c => c.id === selectedConversationId) ?? null,
+    [conversations, selectedConversationId]
+  );
+
+  const requestedConversationId = useMemo(() => {
+    const raw = searchParams.get("conversationId");
+    const v = Number(raw);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }, [searchParams]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(attachmentPreviewUrls).forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadConversations = async () => {
     setLoading(true);
@@ -42,9 +72,6 @@ export const SupportPage: React.FC = () => {
     try {
       const data = await listSupportChatConversations();
       setConversations(data.conversations || []);
-      if (!selectedConversationId && data.conversations?.length) {
-        setSelectedConversationId(data.conversations[0].id);
-      }
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || "Не вдалося завантажити звернення";
       setError(String(msg));
@@ -71,6 +98,21 @@ export const SupportPage: React.FC = () => {
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (conversations.length === 0) return;
+
+    if (requestedConversationId && conversations.some(c => c.id === requestedConversationId)) {
+      if (selectedConversationId !== requestedConversationId) {
+        setSelectedConversationId(requestedConversationId);
+      }
+      return;
+    }
+
+    if (!selectedConversationId || !conversations.some(c => c.id === selectedConversationId)) {
+      setSelectedConversationId(conversations[0].id);
+    }
+  }, [conversations, requestedConversationId, selectedConversationId]);
 
   useEffect(() => {
     if (selectedConversationId) {
@@ -153,6 +195,34 @@ export const SupportPage: React.FC = () => {
       URL.revokeObjectURL(url);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || "Не вдалося завантажити файл";
+      setError(String(msg));
+    }
+  };
+
+  const isImageAttachment = (mimeType: string | undefined, filename: string | undefined) => {
+    const mt = String(mimeType || "").toLowerCase();
+    if (mt.startsWith("image/")) return true;
+    const name = String(filename || "").toLowerCase();
+    return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"].some(ext => name.endsWith(ext));
+  };
+
+  const ensureAttachmentPreview = async (attachmentId: number) => {
+    if (attachmentPreviewUrls[attachmentId]) return attachmentPreviewUrls[attachmentId];
+    const { blob } = await downloadSupportChatAttachment(attachmentId);
+    const url = URL.createObjectURL(blob);
+    setAttachmentPreviewUrls(prev => ({ ...prev, [attachmentId]: url }));
+    return url;
+  };
+
+  const closeConversation = async () => {
+    if (!selectedConversationId) return;
+    const reason = window.prompt("Причина закриття (необов'язково)", "") ?? "";
+    try {
+      await closeSupportChatConversation(selectedConversationId, reason);
+      await loadConversations();
+      await loadThread(selectedConversationId);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Не вдалося закрити звернення";
       setError(String(msg));
     }
   };
@@ -262,10 +332,25 @@ export const SupportPage: React.FC = () => {
               <div className="flex flex-col h-[70vh]">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm font-mono font-semibold text-text-primary">Чат</div>
-                  <div className="text-xs font-mono text-text-secondary">
-                    #{selectedConversationId}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs font-mono text-text-secondary">#{selectedConversationId}</div>
+                    {selectedConversation?.status === "OPEN" ? (
+                      <Button variant="secondary" size="sm" onClick={closeConversation}>
+                        Закрити чат
+                      </Button>
+                    ) : (
+                      <div className="text-[11px] font-mono text-text-secondary border border-border px-2 py-1 rounded">
+                        Закрито
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {selectedConversation?.status === "CLOSED" ? (
+                  <div className="mt-2 text-xs font-mono text-text-secondary border border-border bg-bg-secondary/40 px-3 py-2 rounded">
+                    Це звернення закрито. Для нових питань створіть нове звернення.
+                  </div>
+                ) : null}
 
                 <div className="mt-3 flex-1 overflow-auto rounded-md border border-border bg-bg-code p-3">
                   {threadLoading && <div className="text-xs font-mono text-text-secondary">Завантаження…</div>}
@@ -297,6 +382,22 @@ export const SupportPage: React.FC = () => {
                                     <div className="min-w-0">
                                       <div className="text-xs font-mono text-text-primary truncate">{a.originalName}</div>
                                       <div className="text-[11px] font-mono text-text-secondary">{humanSize(a.sizeBytes)}</div>
+                                      {isImageAttachment(a.mimeType, a.originalName) ? (
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            try {
+                                              await ensureAttachmentPreview(a.id);
+                                            } catch (err: any) {
+                                              const msg = err?.response?.data?.message || err?.message || "Не вдалося відкрити прев’ю";
+                                              setError(String(msg));
+                                            }
+                                          }}
+                                          className="mt-1 text-[11px] font-mono text-primary hover:underline"
+                                        >
+                                          Показати прев’ю
+                                        </button>
+                                      ) : null}
                                     </div>
                                     <Button
                                       variant="secondary"
@@ -307,6 +408,16 @@ export const SupportPage: React.FC = () => {
                                     </Button>
                                   </div>
                                 ))}
+
+                                {m.attachments.map(a => {
+                                  const url = attachmentPreviewUrls[a.id];
+                                  if (!url) return null;
+                                  return (
+                                    <div key={`preview-${a.id}`} className="border border-border rounded-md p-2 bg-bg-base">
+                                      <img src={url} alt={a.originalName} className="max-h-64 rounded border border-border" />
+                                    </div>
+                                  );
+                                })}
                               </div>
                             ) : null}
                           </div>

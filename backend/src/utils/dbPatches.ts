@@ -18,6 +18,7 @@ export async function applyDbPatches(): Promise<void> {
   await ensureEduGradesScoringColumns();
   await ensureEduPerformanceIndexes();
   await ensureUsersPlacementColumns();
+  await ensureUsersContestHandleColumns();
   await ensureMarketingEmailsEnabledColumns();
   await ensureUsersBirthdayGreetedYearColumn();
   await ensureTasksIoTypeColumn();
@@ -169,6 +170,20 @@ async function ensureContestParticipantsTable(): Promise<void> {
         await AppDataSource.query("ALTER TABLE `contest_participants` ADD COLUMN disqualified_at DATETIME NULL AFTER disqualification_reason");
         logger.info("[DB Patch] Added column contest_participants.disqualified_at");
       }
+
+      const accountHandleCol = (await AppDataSource.query("SHOW COLUMNS FROM `contest_participants` LIKE 'contest_account_handle'")) as Array<any>;
+      if (!Array.isArray(accountHandleCol) || accountHandleCol.length === 0) {
+        logger.warn("[DB Patch] Column contest_participants.contest_account_handle is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contest_participants` ADD COLUMN contest_account_handle VARCHAR(120) NULL AFTER is_disqualified");
+        logger.info("[DB Patch] Added column contest_participants.contest_account_handle");
+      }
+
+      const accountNoteCol = (await AppDataSource.query("SHOW COLUMNS FROM `contest_participants` LIKE 'contest_account_note'")) as Array<any>;
+      if (!Array.isArray(accountNoteCol) || accountNoteCol.length === 0) {
+        logger.warn("[DB Patch] Column contest_participants.contest_account_note is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contest_participants` ADD COLUMN contest_account_note VARCHAR(255) NULL AFTER contest_account_handle");
+        logger.info("[DB Patch] Added column contest_participants.contest_account_note");
+      }
       return;
     }
 
@@ -182,6 +197,8 @@ async function ensureContestParticipantsTable(): Promise<void> {
         principal_type ENUM('USER','STUDENT') NOT NULL,
         display_name VARCHAR(180) NOT NULL,
         is_disqualified TINYINT(1) NOT NULL DEFAULT 0,
+        contest_account_handle VARCHAR(120) NULL,
+        contest_account_note VARCHAR(255) NULL,
         disqualification_reason TEXT NULL,
         disqualified_at DATETIME NULL,
         joined_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -204,6 +221,33 @@ async function ensureContestParticipantsTable(): Promise<void> {
       code: err?.code,
       errno: err?.errno,
       sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureUsersContestHandleColumns(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'users'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const ensureColumn = async (columnName: string, sql: string): Promise<void> => {
+      const col = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE ?", [columnName])) as Array<any>;
+      if (Array.isArray(col) && col.length > 0) return;
+      logger.warn(`[DB Patch] Column users.${columnName} is missing. Applying ALTER TABLE...`);
+      await AppDataSource.query(sql);
+      logger.info(`[DB Patch] Added column users.${columnName}`);
+    };
+
+    await ensureColumn("cf_handle", "ALTER TABLE `users` ADD COLUMN `cf_handle` VARCHAR(100) NULL DEFAULT NULL");
+    await ensureColumn("atcoder_handle", "ALTER TABLE `users` ADD COLUMN `atcoder_handle` VARCHAR(100) NULL DEFAULT NULL");
+    await ensureColumn("leetcode_handle", "ALTER TABLE `users` ADD COLUMN `leetcode_handle` VARCHAR(100) NULL DEFAULT NULL");
+    await ensureColumn("codechef_handle", "ALTER TABLE `users` ADD COLUMN `codechef_handle` VARCHAR(100) NULL DEFAULT NULL");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure users contest handle columns:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
     });
   }
 }

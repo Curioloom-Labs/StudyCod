@@ -7,7 +7,7 @@ const client = new JudgeClient();
 export interface JudgeWithSemaphoreOptions {
   /**
    * Hard timeout for the backend->judge request. This must stay finite to avoid hangs.
-   * Default: 15_000ms.
+   * Default: auto-calculated from request limits/tests/language, capped.
    */
   timeoutMs?: number;
   /** Optional external cancellation signal (e.g. request aborted). */
@@ -78,12 +78,13 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
   const startedAt = Date.now();
   try {
     const enqueueLabel = `judge submission=${req.submission_id} lang=${req.language} tests=${req.tests?.length ?? 0}`;
-    const timeoutMsRaw = Number(process.env.JUDGE_BACKEND_TIMEOUT_MS || 15_000);
+    const timeoutMsRaw = Number(process.env.JUDGE_BACKEND_TIMEOUT_MS ?? "");
+    const dynamicTimeoutMs = estimateBackendHardTimeoutMs(req);
     const timeoutMs = Number.isFinite(options.timeoutMs) && (options.timeoutMs as number) > 0
       ? (options.timeoutMs as number)
       : Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0
         ? timeoutMsRaw
-        : 15_000;
+        : dynamicTimeoutMs;
 
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => {
@@ -161,4 +162,28 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
     if (e instanceof HttpError) throw e;
     throw toJudgeUnavailable(e);
   }
+}
+
+function estimateBackendHardTimeoutMs(req: JudgeRequest): number {
+  const tests = Math.max(1, req.tests?.length ?? 0);
+  const perTestMs = Math.max(1, req.limits?.time_limit_ms ?? 1000);
+
+  // Backend timeout should exceed expected worker timeout to avoid premature aborts,
+  // especially for compile-heavy languages and larger test suites.
+  const baseMs = tests * (perTestMs + 120);
+  const compileHeadroomMs =
+    req.language === "python" ? 1_000 :
+    req.language === "cpp" || req.language === "c" ? 4_000 :
+    req.language === "java" ? 8_000 :
+    req.language === "kotlin" ? 35_000 :
+    req.language === "csharp" ? 40_000 :
+    5_000;
+
+  // Small fixed margin for scheduler/process overhead.
+  const estimatedMs = baseMs + compileHeadroomMs + 3_000;
+
+  const capRaw = Number.parseInt(String(process.env.JUDGE_BACKEND_TIMEOUT_CAP_MS ?? ""), 10);
+  const capMs = Number.isFinite(capRaw) && capRaw > 0 ? capRaw : 120_000;
+
+  return Math.min(capMs, Math.max(15_000, estimatedMs));
 }

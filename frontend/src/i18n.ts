@@ -30,8 +30,13 @@ i18n.use(initReactI18next).init({
 i18n.on('languageChanged', lng => {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, lng);
+    document.documentElement.lang = lng === 'en' ? 'en' : 'uk';
   }
 });
+
+if (typeof document !== 'undefined') {
+  document.documentElement.lang = savedLanguage === 'en' ? 'en' : 'uk';
+}
 export function tr(uk: string, en: string): string {
   const lng = (i18n.language || 'uk').toLowerCase();
   return lng.startsWith('en') ? en : uk;

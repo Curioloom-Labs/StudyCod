@@ -19,15 +19,18 @@ async function main() {
 
   const baseUrl = normalizeBaseUrl(process.env.SITE_URL || process.env.VITE_SITE_URL);
 
-  // This app is an SPA; a minimal sitemap is enough.
-  const urls = ["/"];
+  // Public crawlable routes for SPA shell.
+  const urls = [
+    { path: "/", changefreq: "daily", priority: "1.0" },
+    { path: "/docs", changefreq: "weekly", priority: "0.8" }
+  ];
   const now = new Date().toISOString();
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map(u => {
-      const loc = `${baseUrl}${u}`;
-      return `  <url><loc>${loc}</loc><lastmod>${now}</lastmod></url>`;
+      const loc = `${baseUrl}${u.path}`;
+      return `  <url><loc>${loc}</loc><lastmod>${now}</lastmod><changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`;
     }).join("\n") +
     `\n</urlset>\n`;
 

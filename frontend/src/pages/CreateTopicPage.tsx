@@ -19,7 +19,7 @@ export const CreateTopicPage: React.FC = () => {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [language, setLanguage] = useState<"JAVA" | "PYTHON">("JAVA");
+  const [language, setLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("JAVA");
   const safeServerMessage = (value: unknown) => {
     const msg = typeof value === "string" ? value : String(value ?? "");
     if (i18n.language === "en" && /[А-Яа-яІіЇїЄєҐґ]/.test(msg)) return "";
@@ -31,7 +31,7 @@ export const CreateTopicPage: React.FC = () => {
       try {
         const classes = await getClasses();
         const classData = classes.find(c => c.id === parseInt(classId, 10));
-        if (classData && (classData.language === "JAVA" || classData.language === "PYTHON")) {
+        if (classData && (classData.language === "JAVA" || classData.language === "PYTHON" || classData.language === "CPP")) {
           setLanguage(classData.language);
         }
       } catch (error) {
@@ -95,6 +95,9 @@ export const CreateTopicPage: React.FC = () => {
               </Button>
               <Button variant={language === "PYTHON" ? "primary" : "ghost"} onClick={() => setLanguage("PYTHON")} className="flex-1">
                 Python
+              </Button>
+              <Button variant={language === "CPP" ? "primary" : "ghost"} onClick={() => setLanguage("CPP")} className="flex-1">
+                C++
               </Button>
             </div>
           </div>

@@ -25,7 +25,7 @@ export const CreateLessonPage: React.FC = () => {
   const [controlHasPractice, setControlHasPractice] = useState(true);
   const [generatingTheory, setGeneratingTheory] = useState(false);
   const [topicTitle, setTopicTitle] = useState("");
-  const [language, setLanguage] = useState<"JAVA" | "PYTHON">("JAVA");
+  const [language, setLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("JAVA");
   const safeServerMessage = (value: unknown) => {
     const msg = typeof value === "string" ? value : String(value ?? "");
     if (i18n.language === "en" && /[А-Яа-яІіЇїЄєҐґ]/.test(msg)) return "";
@@ -37,7 +37,7 @@ export const CreateLessonPage: React.FC = () => {
       try {
         const classes = await getClasses();
         const classData = classes.find(c => c.id === parseInt(classId, 10));
-        if (classData && (classData.language === "JAVA" || classData.language === "PYTHON")) {
+        if (classData && (classData.language === "JAVA" || classData.language === "PYTHON" || classData.language === "CPP")) {
           setLanguage(classData.language);
         }
       } catch (error) {

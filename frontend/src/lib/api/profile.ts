@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { User, CourseLanguage } from "../../types";
+import type { User, CourseLanguage, PublicProfile, PublicProfilePrivacy } from "../../types";
 export async function getMe(): Promise<User> {
   const res = await api.get("/profile/me");
   return res.data as User;
@@ -8,6 +8,13 @@ export async function updateProfile(data: {
   course?: CourseLanguage;
   avatarUrl?: string | null;
   avatarData?: string | null;
+  contestHandles?: {
+    codeforces?: string | null;
+    atcoder?: string | null;
+    leetcode?: string | null;
+    codechef?: string | null;
+  };
+  publicProfilePrivacy?: PublicProfilePrivacy;
 }): Promise<User> {
   const res = await api.put("/profile/me", data);
   return res.data as User;
@@ -79,4 +86,10 @@ export async function getEmailSubscription(): Promise<{ enabled: boolean; email:
 export async function updateEmailSubscription(enabled: boolean): Promise<{ enabled: boolean }> {
   const res = await api.put("/profile/email-subscription", { enabled });
   return res.data as { enabled: boolean };
+}
+
+export async function getPublicProfile(username: string): Promise<PublicProfile> {
+  const safe = encodeURIComponent(String(username ?? "").trim());
+  const res = await api.get(`/profile/public/${safe}`);
+  return res.data as PublicProfile;
 }

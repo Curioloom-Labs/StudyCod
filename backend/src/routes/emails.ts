@@ -20,6 +20,25 @@ type EmailPrefToken = {
   email: string;
 };
 
+function frontendEmailPrefsUrl(params: {
+  action: "subscribe" | "unsubscribe";
+  ok: boolean;
+  email?: string;
+  reason?: string;
+}) {
+  const base = String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
+  const qp = new URLSearchParams();
+  qp.set("action", params.action);
+  qp.set("ok", params.ok ? "1" : "0");
+  if (params.email) qp.set("email", params.email);
+  if (params.reason) qp.set("reason", params.reason);
+  return `${base}/email-preferences?${qp.toString()}`;
+}
+
+function wantsJson(req: Request): boolean {
+  return String(req.query.format || "").toLowerCase() === "json";
+}
+
 function verifyToken(raw: string): EmailPrefToken {
   const decoded = jwt.verify(raw, JWT_SECRET) as any;
   if (!decoded || decoded.t !== "email-pref") throw new Error("INVALID_TOKEN");
@@ -53,37 +72,65 @@ async function applyPreference(token: EmailPrefToken): Promise<{ email: string; 
 router.get("/unsubscribe", async (req: Request, res: Response) => {
   try {
     const tokenRaw = String(req.query.token || "").trim();
-    if (!tokenRaw) return res.status(400).json({ message: "MISSING_TOKEN" });
+    if (!tokenRaw) {
+      if (wantsJson(req)) return res.status(400).json({ message: "MISSING_TOKEN" });
+      return res.redirect(302, frontendEmailPrefsUrl({ action: "unsubscribe", ok: false, reason: "MISSING_TOKEN" }));
+    }
 
     const token = verifyToken(tokenRaw);
     // Force action
     token.action = "unsubscribe";
 
     const updated = await applyPreference(token);
-    if (!updated) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!updated) {
+      if (wantsJson(req)) return res.status(404).json({ message: "NOT_FOUND" });
+      return res.redirect(302, frontendEmailPrefsUrl({ action: "unsubscribe", ok: false, reason: "NOT_FOUND" }));
+    }
+
+    if (!wantsJson(req)) {
+      return res.redirect(
+        302,
+        frontendEmailPrefsUrl({ action: "unsubscribe", ok: true, email: updated.email })
+      );
+    }
 
     return res.json({ ok: true, ...updated, frontend: FRONTEND_URL });
   } catch (err: any) {
     logger.warn("[emails] unsubscribe failed", { err: err?.message || err });
-    return res.status(400).json({ message: "INVALID_TOKEN" });
+    if (wantsJson(req)) return res.status(400).json({ message: "INVALID_TOKEN" });
+    return res.redirect(302, frontendEmailPrefsUrl({ action: "unsubscribe", ok: false, reason: "INVALID_TOKEN" }));
   }
 });
 
 router.get("/subscribe", async (req: Request, res: Response) => {
   try {
     const tokenRaw = String(req.query.token || "").trim();
-    if (!tokenRaw) return res.status(400).json({ message: "MISSING_TOKEN" });
+    if (!tokenRaw) {
+      if (wantsJson(req)) return res.status(400).json({ message: "MISSING_TOKEN" });
+      return res.redirect(302, frontendEmailPrefsUrl({ action: "subscribe", ok: false, reason: "MISSING_TOKEN" }));
+    }
 
     const token = verifyToken(tokenRaw);
     token.action = "subscribe";
 
     const updated = await applyPreference(token);
-    if (!updated) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!updated) {
+      if (wantsJson(req)) return res.status(404).json({ message: "NOT_FOUND" });
+      return res.redirect(302, frontendEmailPrefsUrl({ action: "subscribe", ok: false, reason: "NOT_FOUND" }));
+    }
+
+    if (!wantsJson(req)) {
+      return res.redirect(
+        302,
+        frontendEmailPrefsUrl({ action: "subscribe", ok: true, email: updated.email })
+      );
+    }
 
     return res.json({ ok: true, ...updated, frontend: FRONTEND_URL });
   } catch (err: any) {
     logger.warn("[emails] subscribe failed", { err: err?.message || err });
-    return res.status(400).json({ message: "INVALID_TOKEN" });
+    if (wantsJson(req)) return res.status(400).json({ message: "INVALID_TOKEN" });
+    return res.redirect(302, frontendEmailPrefsUrl({ action: "subscribe", ok: false, reason: "INVALID_TOKEN" }));
   }
 });
 

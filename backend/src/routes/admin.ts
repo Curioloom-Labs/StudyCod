@@ -11,6 +11,7 @@ import adminMaintenanceRouter from "./adminMaintenance";
 import adminLibraryRouter from "./adminLibrary";
 import adminMaterialsRouter from "./adminMaterials";
 import adminBroadcastRouter from "./adminBroadcast";
+import adminMailRouter from "./adminMail";
 import { logger } from "../utils/logger";
 const adminRouter = Router();
 adminRouter.use("/support", adminSupportRouter);
@@ -18,15 +19,17 @@ adminRouter.use("/maintenance", adminMaintenanceRouter);
 adminRouter.use("/library", adminLibraryRouter);
 adminRouter.use("/materials", adminMaterialsRouter);
 adminRouter.use("/emails", adminBroadcastRouter);
+adminRouter.use("/mail", adminMailRouter);
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
 function normalizeLang(input?: string | null): UserLang {
-  const raw = (input || "").toUpperCase().trim();
+  const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
+  if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
 function buildUserDto(user: User) {
-  const difusValue = user.lang === "JAVA" ? user.difusJava : user.difusPython;
+  const difusValue = user.lang === "PYTHON" ? user.difusPython : user.difusJava;
   return {
     id: user.id,
     username: user.username,
@@ -51,7 +54,7 @@ const createUserSchema = z.object({
   lastName: z.string().optional(),
   userMode: z.enum(["PERSONAL", "EDUCATIONAL"]).optional(),
   role: z.enum(["USER", "TEACHER", "SYSTEM_ADMIN"]).optional(),
-  lang: z.enum(["JAVA", "PYTHON"]).optional(),
+  lang: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   emailVerified: z.boolean().optional()
 });
 const updateUserRoleSchema = z.object({
@@ -59,12 +62,12 @@ const updateUserRoleSchema = z.object({
 });
 const createClassSchema = z.object({
   name: z.string().min(1).max(255),
-  language: z.enum(["JAVA", "PYTHON"]).optional(),
+  language: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   teacherId: z.number().int().positive()
 });
 const updateClassSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  language: z.enum(["JAVA", "PYTHON"]).optional(),
+  language: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   teacherId: z.number().int().positive().optional()
 });
 adminRouter.post("/users", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {

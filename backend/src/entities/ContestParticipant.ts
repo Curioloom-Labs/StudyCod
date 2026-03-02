@@ -47,6 +47,12 @@ export class ContestParticipant {
   @Column({ type: "tinyint", width: 1, default: false, name: "is_disqualified" })
   isDisqualified!: boolean;
 
+  @Column({ type: "varchar", length: 120, nullable: true, name: "contest_account_handle" })
+  contestAccountHandle?: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true, name: "contest_account_note" })
+  contestAccountNote?: string | null;
+
   @Column({ type: "text", nullable: true, name: "disqualification_reason" })
   disqualificationReason?: string | null;
 

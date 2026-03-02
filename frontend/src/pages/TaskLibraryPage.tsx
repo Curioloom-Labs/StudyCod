@@ -6,6 +6,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
 import { MarkdownView } from "../components/MarkdownView";
+import { MarkdownImageInsertButton } from "../components/MarkdownImageInsertButton";
 import { Badge } from "../components/ui/Badge";
 import { Skeleton } from "../components/ui/Skeleton";
 import { getMe } from "../lib/api/profile";
@@ -164,6 +165,8 @@ export const TaskLibraryPage: React.FC = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const hydratedFromUrlRef = useRef(false);
+  const listSectionRef = useRef<HTMLDivElement | null>(null);
+  const previewSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [showEditor, setShowEditor] = useState(false);
   const autoEditHandledRef = useRef(false);
@@ -233,6 +236,7 @@ export const TaskLibraryPage: React.FC = () => {
   );
 
   const [editor, setEditor] = useState<EditorState>(emptyEditor);
+  const editorDescriptionRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     // This page is read-only for student tokens.
@@ -712,6 +716,11 @@ export const TaskLibraryPage: React.FC = () => {
     return key || String(task.id);
   };
 
+  const buildSolvePath = (task: LibraryTaskListItem) => {
+    const from = `${location.pathname}${location.search || ""}`;
+    return `${solvePathPrefix}/${getStableSolveKey(task)}?from=${encodeURIComponent(from)}`;
+  };
+
   const visibleTasks = useMemo(() => {
     let list: LibraryTaskListItem[] = tasks.slice();
 
@@ -982,11 +991,46 @@ export const TaskLibraryPage: React.FC = () => {
                   </div>
                 </div>
               ) : null}
+
+              <div className="pt-2 border-t border-border">
+                <div className="text-xs font-mono text-text-secondary mb-2">{tr("Швидкий перехід", "Quick navigation")}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => listSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    title={tr("До списку задач", "Jump to task list")}
+                  >
+                    {tr("Список", "List")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    title={tr("До перегляду задачі", "Jump to task preview")}
+                  >
+                    {tr("Перегляд", "Preview")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setOnlySolved(false);
+                      setOnlyFavorites(true);
+                      if (view === "approved") setPage(1);
+                    }}
+                    title={tr("Показати лише обрані", "Show favorites only")}
+                  >
+                    {tr("Обрані", "Favorites")}
+                  </Button>
+                </div>
+              </div>
             </div>
           </Card>
 
           {/* List */}
-          <Card className="p-4 lg:col-span-5">
+          <div ref={listSectionRef} className="lg:col-span-5">
+          <Card className="p-4">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="text-sm font-mono text-text-primary">
                 {view === "mine" ? tr("Мої завдання", "My tasks") : tr("Каталог", "Catalog")}
@@ -1210,7 +1254,7 @@ export const TaskLibraryPage: React.FC = () => {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`${solvePathPrefix}/${getStableSolveKey(task)}`);
+                                navigate(buildSolvePath(task));
                               }}
                             >
                               <Play className="w-3 h-3 mr-2" />
@@ -1225,9 +1269,11 @@ export const TaskLibraryPage: React.FC = () => {
               </div>
             )}
           </Card>
+          </div>
 
           {/* Preview */}
-          <Card className="p-4 lg:col-span-4">
+          <div ref={previewSectionRef} className="lg:col-span-4">
+          <Card className="p-4">
             {!selectedId ? (
               <div className="p-4 border border-border rounded-lg bg-bg-base">
                 <div className="text-sm font-mono text-text-primary">{tr("Вибери задачу", "Pick a task")}</div>
@@ -1282,7 +1328,7 @@ export const TaskLibraryPage: React.FC = () => {
                   </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
                     {details.task.status === "APPROVED" ? (
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`${solvePathPrefix}/${getStableSolveKey(details.task)}`)}>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(buildSolvePath(details.task))}>
                         <Play className="w-4 h-4 mr-2" />
                         {tr("Розв'язати", "Solve")}
                       </Button>
@@ -1377,6 +1423,7 @@ export const TaskLibraryPage: React.FC = () => {
               </div>
             )}
           </Card>
+          </div>
         </div>
       </div>
 
@@ -1582,8 +1629,17 @@ export const TaskLibraryPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Умова", "Description")} *</label>
+              <label className="block text-sm font-mono text-text-secondary mb-2">
+                {tr("Умова", "Description")} *
+                <MarkdownImageInsertButton
+                  value={editor.description}
+                  onChange={value => setEditor((s) => ({ ...s, description: value }))}
+                  textareaRef={editorDescriptionRef}
+                  className="ml-2 text-xs"
+                />
+              </label>
               <textarea
+                ref={editorDescriptionRef}
                 value={editor.description}
                 onChange={(e) => setEditor((s) => ({ ...s, description: e.target.value }))}
                 className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none min-h-[120px]"

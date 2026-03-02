@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { z } from "zod";
+import { createHash } from "crypto";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { User } from "../../entities/User";
@@ -25,6 +26,7 @@ import { submissionRateLimitMiddleware } from "../../middleware/submissionRateLi
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../../utils/multiFileSubmission";
 import { TopicNew } from "../../entities/TopicNew";
 import { IsNull } from "typeorm";
+import { buildLearningFirstFailure } from "../../services/learning/firstFailure";
 
 const router = Router();
 
@@ -43,6 +45,19 @@ const submitLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, messa
 const completeLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, message: "RATE_LIMIT" });
 
 type ApiCodeFile = { path: string; content: string };
+
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+function normalizeClientSubmissionId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 128) return trimmed.slice(0, 128);
+  return trimmed;
+}
+
 function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   if (!Array.isArray(raw)) return [];
   const out: ApiCodeFile[] = [];
@@ -94,6 +109,8 @@ const submitBodySchema = z
       .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
       .max(64)
       .optional(),
+    clientSubmissionId: z.string().min(1).max(128).optional(),
+    codeHash: z.string().min(8).max(128).optional(),
   })
   .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
     message: "code or files required",
@@ -228,7 +245,12 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
           testResults: sanitizeTestResultsForStudent(parsedTestResults),
           score: (latestGrade as any).score ?? null,
           maxScore: (latestGrade as any).maxScore ?? null,
-          groupScores: parsedGroupScores
+          groupScores: parsedGroupScores,
+          submissionMeta: {
+            submissionId: String(latestGrade.id),
+            clientSubmissionId: null,
+            codeHash: sha256Hex(String(latestGrade.submittedCode ?? ""))
+          }
         };
       }
     }
@@ -583,6 +605,8 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     }
     const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : providedCode;
     const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
+    const normalizedClientSubmissionId = normalizeClientSubmissionId((validatedBody.data as any).clientSubmissionId);
+    const serverCodeHash = sha256Hex(persistedSubmitted);
     const codeForHints = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
 
     const tests = [...(topicTask.testData || [])].sort((a, b) => a.id - b.id);
@@ -594,6 +618,14 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     let passedScore = 0;
     let maxScore = 0;
     let hintsForUser: string[] = [];
+    const learningFeedbackCandidates: Array<{
+      passed: boolean;
+      isPublic: boolean;
+      input?: string;
+      expected?: string;
+      actual?: string;
+      error_kind?: string | null;
+    }> = [];
 
     const testResultsDetailed: Array<{
       testId: number;
@@ -658,6 +690,14 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       if (workerRes.verdict === "CE" && workerRes.compile) {
         const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
         for (const t of tests) {
+          learningFeedbackCandidates.push({
+            passed: false,
+            isPublic: t.isHidden !== true,
+            input: t.input || "",
+            expected: String(t.expectedOutput ?? ""),
+            actual: "",
+            error_kind: workerRes.compile.error_kind ?? null
+          });
           if (t.isHidden) continue;
           testResultsDetailed.push({
             testId: t.id,
@@ -679,6 +719,14 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
             passed++;
             passedScore += t.points || 1;
           }
+          learningFeedbackCandidates.push({
+            passed: !!isPassed,
+            isPublic: t.isHidden !== true,
+            input: t.input || "",
+            expected: String(t.expectedOutput ?? ""),
+            actual: r?.actual ?? "",
+            error_kind: (r as any)?.error_kind ?? null
+          });
           if (t.isHidden) continue;
           testResultsDetailed.push({
             testId: t.id,
@@ -725,7 +773,12 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
             stderr: r.stderr ?? null
           }));
 
-        const langForHints = topicTask.topic.class.language === "JAVA" ? "JAVA" : "PYTHON";
+        const langForHints =
+          topicTask.topic.class.language === "JAVA"
+            ? "JAVA"
+            : topicTask.topic.class.language === "CPP"
+              ? "CPP"
+              : "PYTHON";
 
         const hints = await generateAlgorithmicHints({
           taskTitle: topicTask.title,
@@ -808,14 +861,28 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       return saved;
     });
 
+    const learningFirstFailure = buildLearningFirstFailure({
+      verdict: workerRes?.verdict ?? null,
+      tests: learningFeedbackCandidates
+    });
+
     res.json({
       grade: savedGrade,
+      submissionMeta: {
+        submissionId: String(savedGrade.id),
+        clientSubmissionId: normalizedClientSubmissionId,
+        codeHash: serverCodeHash
+      },
       testResults: sanitizeTestResultsForStudent(testResultsDetailed),
       hints: hintsForUser,
       scoring: {
         score: passedScore,
         maxScore,
         groupScores: scoringGroupScores
+      },
+      learningFeedback: {
+        verdict: workerRes?.verdict ?? null,
+        firstFailure: learningFirstFailure
       }
     });
   } catch (error: any) {
@@ -978,6 +1045,11 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
             isManuallyGraded: saved.isManuallyGraded === true,
             isCompleted: true
           },
+          submissionMeta: {
+            submissionId: String(saved.id),
+            clientSubmissionId: null,
+            codeHash: sha256Hex(String(saved.submittedCode ?? ""))
+          },
           testResults: sanitizeTestResultsForStudent(parsedTestResults),
           hints: [],
           scoring:
@@ -1010,6 +1082,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     }
     const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : providedCode;
     const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
+    const normalizedClientSubmissionId = normalizeClientSubmissionId((validatedBody.data as any).clientSubmissionId);
+    const serverCodeHash = sha256Hex(persistedSubmitted);
     const codeForHints = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
 
     const tests = [...(topicTask.testData || [])].sort((a, b) => a.id - b.id);
@@ -1021,6 +1095,14 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     let passedScore = 0;
     let maxScore = 0;
     let hintsForUser: string[] = [];
+    const learningFeedbackCandidates: Array<{
+      passed: boolean;
+      isPublic: boolean;
+      input?: string;
+      expected?: string;
+      actual?: string;
+      error_kind?: string | null;
+    }> = [];
 
     const testResultsDetailed: Array<{
       testId: number;
@@ -1085,6 +1167,14 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       if (workerRes.verdict === "CE" && workerRes.compile) {
         const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
         for (const t of tests) {
+          learningFeedbackCandidates.push({
+            passed: false,
+            isPublic: t.isHidden !== true,
+            input: t.input || "",
+            expected: String(t.expectedOutput ?? ""),
+            actual: "",
+            error_kind: workerRes.compile.error_kind ?? null
+          });
           if (t.isHidden) continue;
           testResultsDetailed.push({
             testId: t.id,
@@ -1106,6 +1196,14 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
             passed++;
             passedScore += t.points || 1;
           }
+          learningFeedbackCandidates.push({
+            passed: !!isPassed,
+            isPublic: t.isHidden !== true,
+            input: t.input || "",
+            expected: String(t.expectedOutput ?? ""),
+            actual: r?.actual ?? "",
+            error_kind: (r as any)?.error_kind ?? null
+          });
           if (t.isHidden) continue;
           testResultsDetailed.push({
             testId: t.id,
@@ -1152,7 +1250,12 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
             stderr: r.stderr ?? null
           }));
 
-        const langForHints = topicTask.topic.class.language === "JAVA" ? "JAVA" : "PYTHON";
+        const langForHints =
+          topicTask.topic.class.language === "JAVA"
+            ? "JAVA"
+            : topicTask.topic.class.language === "CPP"
+              ? "CPP"
+              : "PYTHON";
 
         const hints = await generateAlgorithmicHints({
           taskTitle: topicTask.title,
@@ -1278,6 +1381,11 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
           isManuallyGraded: saved.isManuallyGraded === true,
           isCompleted: true
         },
+        submissionMeta: {
+          submissionId: String(saved.id),
+          clientSubmissionId: null,
+          codeHash: sha256Hex(String(saved.submittedCode ?? ""))
+        },
         testResults: sanitizeTestResultsForStudent(parsedTestResults),
         hints: [],
         scoring:
@@ -1287,11 +1395,20 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
                 maxScore: (saved as any).maxScore,
                 groupScores: parsedGroupScores
               }
-            : undefined
+            : undefined,
+        learningFeedback: {
+          verdict: null,
+          firstFailure: null
+        }
       });
     }
 
     const saved = savedOrExisting.grade;
+
+    const learningFirstFailure = buildLearningFirstFailure({
+      verdict: workerRes?.verdict ?? null,
+      tests: learningFeedbackCandidates
+    });
 
     return res.json({
       requiresManualReview: false,
@@ -1303,12 +1420,21 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         isManuallyGraded: saved.isManuallyGraded,
         isCompleted: true
       },
+      submissionMeta: {
+        submissionId: String(saved.id),
+        clientSubmissionId: normalizedClientSubmissionId,
+        codeHash: serverCodeHash
+      },
       testResults: sanitizeTestResultsForStudent(testResultsDetailed),
       hints: hintsForUser,
       scoring: {
         score: passedScore,
         maxScore,
         groupScores: scoringGroupScores
+      },
+      learningFeedback: {
+        verdict: workerRes?.verdict ?? null,
+        firstFailure: learningFirstFailure
       }
     });
   } catch (error: any) {

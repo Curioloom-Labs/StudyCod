@@ -1,28 +1,46 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { StatusChip, type StatusChipTone } from "../components/ui/StatusChip";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
 import { Input } from "../components/ui/Input";
 import { MarkdownView } from "../components/MarkdownView";
+import { CodeEditor } from "../components/CodeEditor";
 import { Skeleton } from "../components/ui/Skeleton";
 import {
   addContestProblem,
+  addContestOrganizer,
+  answerContestCommunityQuestion,
+  getContestCommunity,
   getContestDetails,
+  getContestAccount,
   getContestMyProgress,
   getContestScoreboard,
+  listContestOrganizers,
+  listContestAnnulments,
   listContestAdminParticipants,
   listContestParticipantSubmissionsForAdmin,
+  postContestCommunityAnnouncement,
+  postContestCommunityQuestion,
+  removeContestOrganizer,
+  setContestAnnulment,
+  setContestPaused,
   setContestParticipantDisqualified,
   joinContest,
   updateContestProblemSettings,
+  updateContestAccount,
   updateContest,
+  type ContestAccount,
   type ContestAdminParticipant,
   type ContestAdminSubmission,
+  type ContestCommunityData,
   type ContestDetails,
+  type ContestAnnulmentItem,
+  type ContestOrganizerListItem,
   type ContestMyProgressProblem,
   type ScoreboardProblem,
   type ScoreboardRow,
@@ -90,6 +108,125 @@ function inferDifficultyFromTests(tests: Array<{ points?: number }>): "EASY" | "
   return "EASY";
 }
 
+type TrFn = (uk: string, en: string) => string;
+
+function contestPhaseChip(params: { started: boolean; finished: boolean; paused?: boolean; tr: TrFn }) {
+  if (params.paused) {
+    return {
+      glyph: "⏸",
+      label: params.tr("Пауза", "Paused"),
+      tone: "warn" as StatusChipTone,
+    };
+  }
+  if (params.finished) {
+    return {
+      glyph: "■",
+      label: params.tr("Завершено", "Finished"),
+      tone: "error" as StatusChipTone,
+    };
+  }
+  if (params.started) {
+    return {
+      glyph: "▶",
+      label: params.tr("Йде", "Running"),
+      tone: "success" as StatusChipTone,
+    };
+  }
+  return {
+    glyph: "⏱",
+    label: params.tr("Скоро", "Upcoming"),
+    tone: "info" as StatusChipTone,
+  };
+}
+
+function submissionPhaseChip(phase: "CONTEST" | "UPSOLVE", tr: TrFn) {
+  if (phase === "UPSOLVE") {
+    return {
+      glyph: "↺",
+      label: tr("Дорішування", "Upsolve"),
+      tone: "info" as StatusChipTone,
+    };
+  }
+  return {
+    glyph: "◆",
+    label: tr("Контест", "Contest"),
+    tone: "primary" as StatusChipTone,
+  };
+}
+
+function verdictChip(verdictRaw: string | null | undefined, tr: TrFn) {
+  const verdict = String(verdictRaw ?? "").trim().toUpperCase();
+  if (!verdict) {
+    return {
+      glyph: "·",
+      label: tr("Н/Д", "N/A"),
+      tone: "neutral" as StatusChipTone,
+    };
+  }
+
+  if (verdict === "AC") {
+    return {
+      glyph: "✓",
+      label: "AC",
+      tone: "success" as StatusChipTone,
+    };
+  }
+  if (verdict === "WA") {
+    return {
+      glyph: "≈",
+      label: "WA",
+      tone: "warn" as StatusChipTone,
+    };
+  }
+  if (verdict === "TLE") {
+    return {
+      glyph: "⏱",
+      label: "TLE",
+      tone: "warn" as StatusChipTone,
+    };
+  }
+  if (verdict === "CE") {
+    return {
+      glyph: "⚙",
+      label: "CE",
+      tone: "error" as StatusChipTone,
+    };
+  }
+  if (verdict === "RE") {
+    return {
+      glyph: "💥",
+      label: "RE",
+      tone: "error" as StatusChipTone,
+    };
+  }
+
+  return {
+    glyph: "•",
+    label: verdict,
+    tone: "neutral" as StatusChipTone,
+  };
+}
+
+function problemScoreTone(score: number | null | undefined, hasSubmission: boolean): string {
+  if (!hasSubmission) return "border-border bg-bg-surface text-text-secondary";
+  const value = Number(score ?? 0);
+  if (value >= 100) return "border-accent-success/60 bg-accent-success/10 text-accent-success";
+  if (value >= 50) return "border-accent-warn/60 bg-accent-warn/10 text-accent-warn";
+  if (value >= 1) return "border-accent-error/60 bg-accent-error/10 text-accent-error";
+  // 0 with a real submission is a valid score, not an error state.
+  return "border-primary/40 bg-primary/10 text-primary";
+}
+
+function submissionScoreTone(score: number | null | undefined): StatusChipTone {
+  if (score == null || !Number.isFinite(Number(score))) return "neutral";
+  const value = Number(score);
+  if (value >= 100) return "success";
+  if (value >= 50) return "warn";
+  if (value >= 1) return "error";
+  // 0 with an existing submission is valid and should stay non-error.
+  return "info";
+}
+
 const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ contestId, canManage }) => {
   const { i18n } = useTranslation();
   const isEn = (i18n.language ?? "").toLowerCase().startsWith("en");
@@ -125,10 +262,10 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
   }, [load]);
 
   return (
-    <Card className="p-4">
+    <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="font-mono text-text-primary flex items-center gap-2">
-          <Table2 className="w-4 h-4" />
+          <Flame className="w-4 h-4 text-primary" />
           {tr("Таблиця", "Standings")}
         </div>
         <Button variant="secondary" onClick={load} disabled={loading}>
@@ -148,38 +285,37 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
       ) : rows.length === 0 ? (
         <div className="text-sm text-text-secondary">{tr("Поки що немає учасників.", "No participants yet.")}</div>
       ) : (
-        <div className="overflow-auto">
-          <table className="min-w-[760px] w-full text-sm font-mono border border-border">
-            <thead className="bg-bg-hover">
-              <tr>
-                <th className="p-2 border-b border-border text-left">#</th>
-                <th className="p-2 border-b border-border text-left">{tr("Учасник", "Participant")}</th>
-                {problems.map((p) => (
-                  <th key={p.id} className="p-2 border-b border-border text-center">
-                    {p.label}
-                  </th>
-                ))}
-                <th className="p-2 border-b border-border text-center">{tr("Сума", "Total")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.participantId} className="odd:bg-bg-base even:bg-bg-surface">
-                  <td className="p-2 border-b border-border">{r.rank}</td>
-                  <td className="p-2 border-b border-border">{r.displayName}</td>
-                  {problems.map((p) => {
-                    const hit = r.problems.find((x) => x.problemId === p.id);
-                    return (
-                      <td key={p.id} className="p-2 border-b border-border text-center">
-                        {hit?.score ?? 0}
-                      </td>
-                    );
-                  })}
-                  <td className="p-2 border-b border-border text-center font-bold text-primary">{r.totalScore}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-2">
+          {rows.map((r) => (
+            <div key={r.participantId} className="rounded-xl border border-border bg-bg-base/80 p-3">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-lg border border-primary/50 bg-primary/10 text-primary text-xs font-bold">
+                    #{r.rank}
+                  </span>
+                  <span className="text-sm font-mono text-text-primary truncate">{r.displayName}</span>
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-lg border border-accent-success/40 bg-accent-success/10 px-2 py-1 text-xs font-mono text-accent-success">
+                  <Trophy className="w-3.5 h-3.5" /> {tr("Сума", "Total")}: {r.totalScore}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {problems.map((p) => {
+                  const hit = r.problems.find((x) => x.problemId === p.id);
+                  const score = Number(hit?.score ?? 0);
+                  const hasSubmission = Boolean((hit as any)?.bestAt);
+                  const scoreTone = problemScoreTone(score, hasSubmission);
+                  return (
+                    <span key={p.id} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-mono ${scoreTone}`}>
+                      <span className="opacity-80">{p.label}</span>
+                      <span>{hasSubmission ? score : "—"}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
           <div className="text-xs text-text-secondary mt-2">
             {tr(
               "Таблиця рахує лише подачі в межах контесту. Дорішування не впливає на результат.",
@@ -221,11 +357,27 @@ export const ContestPage: React.FC = () => {
   const [data, setData] = React.useState<ContestDetails | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [tab, setTab] = React.useState<"problems" | "standings">("problems");
+  const [tab, setTab] = React.useState<"problems" | "standings" | "community">("problems");
   const [standingsVersion, setStandingsVersion] = React.useState(0);
+
+  const [communityQuestionText, setCommunityQuestionText] = React.useState("");
+  const [communityAnnouncementText, setCommunityAnnouncementText] = React.useState("");
+  const [communityLoading, setCommunityLoading] = React.useState(false);
+  const [communityError, setCommunityError] = React.useState<string | null>(null);
+  const [communityData, setCommunityData] = React.useState<ContestCommunityData>({
+    contestId: Number(contestId ?? 0),
+    questions: [],
+    announcements: [],
+  });
 
   const [joinCode, setJoinCode] = React.useState("");
   const [joining, setJoining] = React.useState(false);
+  const [contestAccount, setContestAccount] = React.useState<ContestAccount>({ handle: null, note: null });
+  const [contestAccountHandle, setContestAccountHandle] = React.useState("");
+  const [contestAccountNote, setContestAccountNote] = React.useState("");
+  const [contestAccountLoading, setContestAccountLoading] = React.useState(false);
+  const [contestAccountSaving, setContestAccountSaving] = React.useState(false);
+  const [contestAccountError, setContestAccountError] = React.useState<string | null>(null);
   const [publishing, setPublishing] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [settingsSaving, setSettingsSaving] = React.useState(false);
@@ -265,11 +417,27 @@ export const ContestPage: React.FC = () => {
   const [adminParticipantsError, setAdminParticipantsError] = React.useState<string | null>(null);
   const [adminParticipants, setAdminParticipants] = React.useState<ContestAdminParticipant[]>([]);
 
-  const [adminSubsOpen, setAdminSubsOpen] = React.useState(false);
+  const [pauseSaving, setPauseSaving] = React.useState(false);
+  const [organizersLoading, setOrganizersLoading] = React.useState(false);
+  const [organizersError, setOrganizersError] = React.useState<string | null>(null);
+  const [organizers, setOrganizers] = React.useState<ContestOrganizerListItem[]>([]);
+  const [newOrganizerUserId, setNewOrganizerUserId] = React.useState("");
+  const [annulmentsLoading, setAnnulmentsLoading] = React.useState(false);
+  const [annulmentsError, setAnnulmentsError] = React.useState<string | null>(null);
+  const [annulments, setAnnulments] = React.useState<ContestAnnulmentItem[]>([]);
+  const [annulProblemId, setAnnulProblemId] = React.useState("");
+  const [annulParticipantId, setAnnulParticipantId] = React.useState("");
+  const [annulReason, setAnnulReason] = React.useState("");
+  const [annulledActive, setAnnulledActive] = React.useState(true);
+
   const [adminSubsLoading, setAdminSubsLoading] = React.useState(false);
   const [adminSubsError, setAdminSubsError] = React.useState<string | null>(null);
   const [adminSubsParticipant, setAdminSubsParticipant] = React.useState<ContestAdminParticipant | null>(null);
+  const [adminSubsFullPage, setAdminSubsFullPage] = React.useState(true);
   const [adminSubsRows, setAdminSubsRows] = React.useState<ContestAdminSubmission[]>([]);
+  const [adminSubsVerdictFilter, setAdminSubsVerdictFilter] = React.useState<string>("ALL");
+  const [adminSubsProblemFilter, setAdminSubsProblemFilter] = React.useState<string>("ALL");
+  const [adminSubsCodeViewer, setAdminSubsCodeViewer] = React.useState<ContestAdminSubmission | null>(null);
 
   const load = React.useCallback(() => {
     if (!contestId) return;
@@ -319,6 +487,88 @@ export const ContestPage: React.FC = () => {
     loadProgress();
   }, [tab, loadProgress]);
 
+  const loadCommunity = React.useCallback(async () => {
+    if (!contestId) return;
+    if (!data?.access?.canAccessContent) {
+      setCommunityData({ contestId, questions: [], announcements: [] });
+      setCommunityError(null);
+      return;
+    }
+    setCommunityLoading(true);
+    setCommunityError(null);
+    try {
+      const r = await getContestCommunity(contestId);
+      setCommunityData({
+        contestId,
+        questions: Array.isArray(r?.questions) ? r.questions : [],
+        announcements: Array.isArray(r?.announcements) ? r.announcements : [],
+      });
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setCommunityError(msg || tr("Не вдалося завантажити ком'юніті", "Failed to load community"));
+      setCommunityData({ contestId, questions: [], announcements: [] });
+    } finally {
+      setCommunityLoading(false);
+    }
+  }, [contestId, data?.access?.canAccessContent, tr]);
+
+  React.useEffect(() => {
+    if (tab !== "community") return;
+    loadCommunity();
+  }, [tab, loadCommunity]);
+
+  const postContestQuestion = async () => {
+    if (!contestId || !data?.access?.canAccessContent) return;
+    const text = communityQuestionText.trim();
+    if (!text) return;
+    try {
+      const r = await postContestCommunityQuestion(contestId, text);
+      setCommunityData((prev) => ({
+        ...prev,
+        questions: [...prev.questions, r.question],
+      }));
+      setCommunityQuestionText("");
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setCommunityError(msg || tr("Не вдалося надіслати питання", "Failed to send question"));
+    }
+  };
+
+  const answerContestQuestion = async (qid: number) => {
+    if (!contestId || !data?.access?.canManage) return;
+    const answer = typeof window !== "undefined"
+      ? window.prompt(tr("Введіть відповідь організатора", "Enter organizer answer"), "")
+      : null;
+    if (!answer || !answer.trim()) return;
+    try {
+      const r = await answerContestCommunityQuestion(contestId, qid, answer.trim());
+      setCommunityData((prev) => ({
+        ...prev,
+        questions: prev.questions.map((q) => (q.id === qid ? r.question : q)),
+      }));
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setCommunityError(msg || tr("Не вдалося зберегти відповідь", "Failed to save answer"));
+    }
+  };
+
+  const postContestAnnouncement = async () => {
+    if (!contestId || !data?.access?.canManage) return;
+    const text = communityAnnouncementText.trim();
+    if (!text) return;
+    try {
+      const r = await postContestCommunityAnnouncement(contestId, text);
+      setCommunityData((prev) => ({
+        ...prev,
+        announcements: [r.announcement, ...prev.announcements],
+      }));
+      setCommunityAnnouncementText("");
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setCommunityError(msg || tr("Не вдалося опублікувати оголошення", "Failed to publish announcement"));
+    }
+  };
+
   const loadAdminParticipants = React.useCallback(async () => {
     if (!contestId || !data?.access?.canManage) {
       setAdminParticipants([]);
@@ -344,24 +594,317 @@ export const ContestPage: React.FC = () => {
     loadAdminParticipants();
   }, [tab, loadAdminParticipants]);
 
-  const openAdminSubmissions = async (p: ContestAdminParticipant) => {
+  const loadOrganizers = React.useCallback(async () => {
+    if (!contestId || !data?.access?.canManage) {
+      setOrganizers([]);
+      setOrganizersError(null);
+      return;
+    }
+    setOrganizersLoading(true);
+    setOrganizersError(null);
+    try {
+      const r = await listContestOrganizers(contestId);
+      setOrganizers(Array.isArray(r.organizers) ? r.organizers : []);
+      setData((prev) => (prev ? { ...prev, access: { ...prev.access, isPaused: !!r.isPaused } } : prev));
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setOrganizersError(msg || tr("Не вдалося завантажити організаторів", "Failed to load organizers"));
+      setOrganizers([]);
+    } finally {
+      setOrganizersLoading(false);
+    }
+  }, [contestId, data?.access?.canManage, tr]);
+
+  React.useEffect(() => {
+    if (tab !== "standings") return;
+    loadOrganizers();
+  }, [tab, loadOrganizers]);
+
+  const loadAnnulments = React.useCallback(async () => {
+    if (!contestId || !data?.access?.canManage) {
+      setAnnulments([]);
+      setAnnulmentsError(null);
+      return;
+    }
+    setAnnulmentsLoading(true);
+    setAnnulmentsError(null);
+    try {
+      const r = await listContestAnnulments(contestId);
+      setAnnulments(Array.isArray(r.annulments) ? r.annulments : []);
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setAnnulmentsError(msg || tr("Не вдалося завантажити анулювання", "Failed to load annulments"));
+      setAnnulments([]);
+    } finally {
+      setAnnulmentsLoading(false);
+    }
+  }, [contestId, data?.access?.canManage, tr]);
+
+  React.useEffect(() => {
+    if (tab !== "standings") return;
+    loadAnnulments();
+  }, [tab, loadAnnulments]);
+
+  const toggleContestPaused = async () => {
+    if (!contestId || !data?.access?.canManage) return;
+    const targetPaused = !Boolean(data.access.isPaused);
+    setPauseSaving(true);
+    try {
+      const r = await setContestPaused(contestId, targetPaused);
+      setData((prev) => (prev ? { ...prev, access: { ...prev.access, isPaused: !!r.isPaused } } : prev));
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setError(msg || tr("Не вдалося змінити стан паузи", "Failed to change pause state"));
+    } finally {
+      setPauseSaving(false);
+    }
+  };
+
+  const addOrganizer = async () => {
+    if (!contestId || !data?.access?.canManage) return;
+    const uid = Number(newOrganizerUserId);
+    if (!Number.isFinite(uid) || uid <= 0) {
+      setOrganizersError(tr("Вкажіть коректний user ID", "Provide a valid user ID"));
+      return;
+    }
+    try {
+      await addContestOrganizer(contestId, uid);
+      setNewOrganizerUserId("");
+      await loadOrganizers();
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setOrganizersError(msg || tr("Не вдалося додати організатора", "Failed to add organizer"));
+    }
+  };
+
+  const removeOrganizer = async (userId: number) => {
+    if (!contestId || !data?.access?.canManage) return;
+    try {
+      await removeContestOrganizer(contestId, userId);
+      await loadOrganizers();
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setOrganizersError(msg || tr("Не вдалося видалити організатора", "Failed to remove organizer"));
+    }
+  };
+
+  const applyAnnulment = async () => {
+    if (!contestId || !data?.access?.canManage) return;
+    const problemId = Number(annulProblemId);
+    const participantId = String(annulParticipantId).trim() ? Number(annulParticipantId) : null;
+    if (!Number.isFinite(problemId) || problemId <= 0) {
+      setAnnulmentsError(tr("Вкажіть коректний problem ID", "Provide a valid problem ID"));
+      return;
+    }
+    if (participantId != null && (!Number.isFinite(participantId) || participantId <= 0)) {
+      setAnnulmentsError(tr("Некоректний participant ID", "Invalid participant ID"));
+      return;
+    }
+    try {
+      await setContestAnnulment(contestId, {
+        problemId,
+        participantId,
+        annulled: annulledActive,
+        reason: annulReason.trim() ? annulReason.trim() : null,
+      });
+      await loadAnnulments();
+      setAnnulReason("");
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setAnnulmentsError(msg || tr("Не вдалося застосувати анулювання", "Failed to apply annulment"));
+    }
+  };
+
+  const closeAdminInspector = React.useCallback(() => {
+    setAdminSubsParticipant(null);
+    setAdminSubsRows([]);
+    setAdminSubsCodeViewer(null);
+    setAdminSubsError(null);
+  }, []);
+
+  const openAdminSubmissions = async (p: ContestAdminParticipant, opts?: { fullPage?: boolean }) => {
     if (!contestId) return;
+    if (typeof opts?.fullPage === "boolean") setAdminSubsFullPage(opts.fullPage);
     setAdminSubsParticipant(p);
     setAdminSubsRows([]);
+    setAdminSubsVerdictFilter("ALL");
+    setAdminSubsProblemFilter("ALL");
     setAdminSubsError(null);
-    setAdminSubsOpen(true);
     setAdminSubsLoading(true);
     try {
       const r = await listContestParticipantSubmissionsForAdmin(contestId, p.id, 200);
-      setAdminSubsRows(Array.isArray((r as any)?.submissions) ? ((r as any).submissions as ContestAdminSubmission[]) : []);
+      const rows = Array.isArray((r as any)?.submissions) ? ((r as any).submissions as ContestAdminSubmission[]) : [];
+      setAdminSubsRows(rows);
+      setAdminSubsCodeViewer(rows[0] ?? null);
     } catch (e: any) {
       const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
       setAdminSubsError(msg || tr("Не вдалося завантажити подачі", "Failed to load submissions"));
       setAdminSubsRows([]);
+      setAdminSubsCodeViewer(null);
     } finally {
       setAdminSubsLoading(false);
     }
   };
+
+  const adminSubsProblemOptions = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ key: string; label: string }> = [];
+    for (const s of adminSubsRows) {
+      const key = String(s.problem?.id ?? "");
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ key, label: String(s.problem?.label ?? `P${s.problem?.order ?? "?"}`) });
+    }
+    return out;
+  }, [adminSubsRows]);
+
+  const adminSubsVerdictOptions = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const s of adminSubsRows) {
+      const verdict = String(s.verdict ?? "N/A").toUpperCase();
+      if (seen.has(verdict)) continue;
+      seen.add(verdict);
+      out.push(verdict);
+    }
+    return out;
+  }, [adminSubsRows]);
+
+  const adminSubsFilteredRows = React.useMemo(() => {
+    return adminSubsRows.filter((s) => {
+      const byProblem = adminSubsProblemFilter === "ALL" || String(s.problem?.id ?? "") === adminSubsProblemFilter;
+      const verdict = String(s.verdict ?? "N/A").toUpperCase();
+      const byVerdict = adminSubsVerdictFilter === "ALL" || verdict === adminSubsVerdictFilter;
+      return byProblem && byVerdict;
+    });
+  }, [adminSubsRows, adminSubsProblemFilter, adminSubsVerdictFilter]);
+
+  const adminInspectorBody = (
+    <>
+      {!adminSubsLoading && adminSubsRows.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+          <div className="border border-border bg-bg-base rounded-lg px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1">{tr("Задача", "Problem")}</div>
+            <select
+              value={adminSubsProblemFilter}
+              onChange={(e) => setAdminSubsProblemFilter(e.target.value)}
+              className="w-full bg-bg-base text-text-primary text-xs font-mono border border-border rounded px-2 py-1"
+            >
+              <option value="ALL">{tr("Усі", "All")}</option>
+              {adminSubsProblemOptions.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="border border-border bg-bg-base rounded-lg px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1">{tr("Вердикт", "Verdict")}</div>
+            <select
+              value={adminSubsVerdictFilter}
+              onChange={(e) => setAdminSubsVerdictFilter(e.target.value)}
+              className="w-full bg-bg-base text-text-primary text-xs font-mono border border-border rounded px-2 py-1"
+            >
+              <option value="ALL">{tr("Усі", "All")}</option>
+              {adminSubsVerdictOptions.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div className="border border-border bg-bg-base rounded-lg px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-text-secondary">{tr("Показано", "Shown")}</span>
+            <span className="text-sm font-mono text-text-primary">{adminSubsFilteredRows.length}/{adminSubsRows.length}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {adminSubsError ? <div className="text-sm text-accent-error mb-3">{adminSubsError}</div> : null}
+
+      {adminSubsLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
+      ) : adminSubsFilteredRows.length === 0 ? (
+        <div className="text-sm text-text-secondary">{tr("Немає подач", "No submissions")}</div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3">
+          <div className={`border border-border overflow-auto ${adminSubsFullPage ? "max-h-[calc(100vh-250px)]" : "max-h-[72vh]"}`}>
+            <table className="min-w-[700px] w-full text-xs font-mono">
+              <thead className="bg-bg-hover sticky top-0">
+                <tr>
+                  <th className="p-2 border-b border-border text-left">#</th>
+                  <th className="p-2 border-b border-border text-left">{tr("Час", "Time")}</th>
+                  <th className="p-2 border-b border-border text-center">{tr("Задача", "Problem")}</th>
+                  <th className="p-2 border-b border-border text-center">{tr("Фаза", "Phase")}</th>
+                  <th className="p-2 border-b border-border text-center">{tr("Вердикт", "Verdict")}</th>
+                  <th className="p-2 border-b border-border text-center">{tr("Бали", "Score")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminSubsFilteredRows.map((s) => (
+                  <tr
+                    key={s.id}
+                    className={`cursor-pointer odd:bg-bg-base even:bg-bg-surface hover:bg-bg-hover ${adminSubsCodeViewer?.id === s.id ? "!bg-primary/10" : ""}`}
+                    onClick={() => setAdminSubsCodeViewer(s)}
+                  >
+                    <td className="p-2 border-b border-border">{s.id}</td>
+                    <td className="p-2 border-b border-border">{fmtDateTime(s.createdAt, i18n.language)}</td>
+                    <td className="p-2 border-b border-border text-center">{s.problem?.label ?? "—"}</td>
+                    <td className="p-2 border-b border-border text-center">
+                      {(() => {
+                        const p = submissionPhaseChip(s.phase, tr);
+                        return <StatusChip glyph={p.glyph} label={p.label} tone={p.tone} />;
+                      })()}
+                    </td>
+                    <td className="p-2 border-b border-border text-center">
+                      {(() => {
+                        const v = verdictChip(s.verdict, tr);
+                        return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} />;
+                      })()}
+                    </td>
+                    <td className="p-2 border-b border-border text-center">
+                      {s.score != null && s.maxScore != null ? (
+                        <StatusChip
+                          glyph="◉"
+                          label={`${s.score}/${s.maxScore}`}
+                          tone={submissionScoreTone(s.score)}
+                        />
+                      ) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="border border-border bg-bg-base/70 p-2">
+            {adminSubsCodeViewer ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary font-mono">
+                  <span className="px-2 py-1 rounded border border-border bg-bg-base">#{adminSubsCodeViewer.id}</span>
+                  <span className="px-2 py-1 rounded border border-border bg-bg-base">{adminSubsCodeViewer.problem?.label ?? "—"}</span>
+                  <span className="px-2 py-1 rounded border border-border bg-bg-base">{adminSubsCodeViewer.language ?? "—"}</span>
+                  <span className="px-2 py-1 rounded border border-border bg-bg-base">{fmtDateTime(adminSubsCodeViewer.createdAt, i18n.language)}</span>
+                  {adminSubsCodeViewer.score != null && adminSubsCodeViewer.maxScore != null ? (
+                    <span className="px-2 py-1 rounded border border-border bg-bg-base">{adminSubsCodeViewer.score}/{adminSubsCodeViewer.maxScore}</span>
+                  ) : null}
+                </div>
+                <div className={`border border-border overflow-hidden ${adminSubsFullPage ? "h-[calc(100vh-280px)] min-h-[480px]" : "h-[62vh] min-h-[420px]"}`}>
+                  <CodeEditor
+                    language={(adminSubsCodeViewer.language as any) || "java"}
+                    value={adminSubsCodeViewer.submittedCode || ""}
+                    readOnly
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-text-secondary p-4">{tr("Виберіть подачу зліва, щоб переглянути код.", "Pick a submission on the left to inspect code.")}</div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   const toggleParticipantDisqualification = async (p: ContestAdminParticipant) => {
     if (!contestId) return;
@@ -405,6 +948,55 @@ export const ContestPage: React.FC = () => {
       setError(msg || tr("Невірний код", "Invalid code"));
     } finally {
       setJoining(false);
+    }
+  };
+
+  const loadContestAccount = React.useCallback(async () => {
+    if (!contestId || !hasToken || !data?.access?.canAccessContent) {
+      setContestAccount({ handle: null, note: null });
+      setContestAccountHandle("");
+      setContestAccountNote("");
+      setContestAccountError(null);
+      return;
+    }
+    setContestAccountLoading(true);
+    setContestAccountError(null);
+    try {
+      const r = await getContestAccount(contestId);
+      const account = r?.account ?? { handle: null, note: null };
+      setContestAccount(account);
+      setContestAccountHandle(String(account.handle ?? ""));
+      setContestAccountNote(String(account.note ?? ""));
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setContestAccountError(msg || tr("Не вдалося завантажити контест-акаунт", "Failed to load contest account"));
+    } finally {
+      setContestAccountLoading(false);
+    }
+  }, [contestId, hasToken, data?.access?.canAccessContent, tr]);
+
+  React.useEffect(() => {
+    if (tab !== "problems") return;
+    loadContestAccount();
+  }, [tab, loadContestAccount]);
+
+  const saveContestAccount = async () => {
+    if (!contestId || !hasToken || !data?.access?.canAccessContent) return;
+    setContestAccountSaving(true);
+    setContestAccountError(null);
+    try {
+      const r = await updateContestAccount(contestId, {
+        handle: contestAccountHandle.trim() ? contestAccountHandle.trim() : null,
+        note: contestAccountNote.trim() ? contestAccountNote.trim() : null,
+      });
+      setContestAccount(r.account);
+      setContestAccountHandle(String(r.account?.handle ?? ""));
+      setContestAccountNote(String(r.account?.note ?? ""));
+    } catch (e: any) {
+      const msg = (e as any)?.response?.data?.message ? String((e as any).response.data.message) : "";
+      setContestAccountError(msg || tr("Не вдалося зберегти контест-акаунт", "Failed to save contest account"));
+    } finally {
+      setContestAccountSaving(false);
     }
   };
 
@@ -661,6 +1253,12 @@ export const ContestPage: React.FC = () => {
           >
             <Table2 className="w-4 h-4 mr-2" />
             {tr("Таблиця", "Standings")}
+          </Button>
+          <Button variant={tab === "community" ? "secondary" : "ghost"} onClick={() => setTab("community")}
+            title={tr("Ком'юніті", "Community")}
+          >
+            <MessageSquare className="w-4 h-4 mr-2" />
+            {tr("Ком'юніті", "Community")}
           </Button>
         </div>
       </div>
@@ -927,65 +1525,7 @@ export const ContestPage: React.FC = () => {
         </div>
       </Modal>
 
-      <Modal
-        open={adminSubsOpen}
-        onClose={() => {
-          setAdminSubsOpen(false);
-          setAdminSubsError(null);
-        }}
-        title={tr("Подачі учасника", "Participant submissions")}
-      >
-        <div className="space-y-3">
-          <div className="text-sm font-mono text-text-primary">
-            {adminSubsParticipant ? `${adminSubsParticipant.displayName} (#${adminSubsParticipant.id})` : "—"}
-          </div>
-
-          {adminSubsError ? <div className="text-sm text-accent-error">{adminSubsError}</div> : null}
-
-          {adminSubsLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
-            </div>
-          ) : adminSubsRows.length === 0 ? (
-            <div className="text-sm text-text-secondary">{tr("Немає подач", "No submissions")}</div>
-          ) : (
-            <div className="max-h-[60vh] overflow-auto border border-border">
-              <table className="min-w-[980px] w-full text-xs font-mono">
-                <thead className="bg-bg-hover">
-                  <tr>
-                    <th className="p-2 border-b border-border text-left">#</th>
-                    <th className="p-2 border-b border-border text-left">{tr("Час", "Time")}</th>
-                    <th className="p-2 border-b border-border text-center">{tr("Задача", "Problem")}</th>
-                    <th className="p-2 border-b border-border text-center">{tr("Фаза", "Phase")}</th>
-                    <th className="p-2 border-b border-border text-center">{tr("Вердикт", "Verdict")}</th>
-                    <th className="p-2 border-b border-border text-center">{tr("Бали", "Score")}</th>
-                    <th className="p-2 border-b border-border text-left">{tr("Мова", "Lang")}</th>
-                    <th className="p-2 border-b border-border text-left">{tr("Код", "Code")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {adminSubsRows.map((s) => (
-                    <tr key={s.id} className="odd:bg-bg-base even:bg-bg-surface align-top">
-                      <td className="p-2 border-b border-border">{s.id}</td>
-                      <td className="p-2 border-b border-border">{fmtDateTime(s.createdAt, i18n.language)}</td>
-                      <td className="p-2 border-b border-border text-center">{s.problem?.label ?? "—"}</td>
-                      <td className="p-2 border-b border-border text-center">{s.phase === "UPSOLVE" ? tr("Дорішування", "Upsolve") : tr("Контест", "Contest")}</td>
-                      <td className="p-2 border-b border-border text-center">{s.verdict ?? "—"}</td>
-                      <td className="p-2 border-b border-border text-center">{s.score != null && s.maxScore != null ? `${s.score}/${s.maxScore}` : "—"}</td>
-                      <td className="p-2 border-b border-border">{s.language}</td>
-                      <td className="p-2 border-b border-border">
-                        <pre className="text-[11px] bg-bg-base border border-border p-2 overflow-auto max-h-[180px] max-w-[420px] whitespace-pre-wrap">{s.submittedCode || ""}</pre>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </Modal>
+      
 
       {loading ? (
         <Card className="p-4">
@@ -1000,14 +1540,38 @@ export const ContestPage: React.FC = () => {
         </Card>
       ) : !data ? null : (
         <div className="space-y-4">
-          <Card className="p-4">
+          <Card className="p-4 border border-border/70 bg-[linear-gradient(145deg,rgba(99,102,241,0.12),rgba(16,185,129,0.08)_45%,rgba(15,23,42,0.5))]">
             <div className="flex flex-wrap items-center gap-2">
               <Trophy className="w-5 h-5 text-primary" />
+              <Badge color="info">StudyCod Arena</Badge>
               <div className="text-lg font-mono text-text-primary">{data.contest.title}</div>
-              {data.phase.finished ? <Badge color="warn">{tr("Завершено", "Finished")}</Badge> : data.phase.started ? <Badge color="success">{tr("Йде", "Running")}</Badge> : <Badge color="info">{tr("Скоро", "Upcoming")}</Badge>}
+              {(() => {
+                const chip = contestPhaseChip({
+                  started: data.phase.started,
+                  finished: data.phase.finished,
+                  paused: !!data.access.isPaused,
+                  tr,
+                });
+                return <StatusChip glyph={chip.glyph} label={chip.label} tone={chip.tone} />;
+              })()}
               {data.contest.visibility === "PUBLIC" ? <Badge color="info">Public</Badge> : data.contest.visibility === "PRIVATE_CODE" ? <Badge color="warn">{tr("За кодом", "Code")}</Badge> : <Badge color="info">Class</Badge>}
               {data.contest.isPublished ? <Badge color="success">{tr("Опубліковано", "Published")}</Badge> : <Badge color="warn">{tr("Чернетка", "Draft")}</Badge>}
               {data.contest.allowUpsolve ? <Badge color="info">{tr("Дорішування", "Upsolve")}</Badge> : null}
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+              <div className="rounded-lg border border-border bg-bg-base/70 px-3 py-2">
+                <div className="text-text-secondary">{tr("Формат", "Format")}</div>
+                <div className="text-text-primary font-mono">{tr("IOI-стиль · partial scoring", "IOI-style · partial scoring")}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-bg-base/70 px-3 py-2">
+                <div className="text-text-secondary">{tr("Режим", "Mode")}</div>
+                <div className="text-text-primary font-mono">{data.access.isPaused ? tr("Пауза", "Paused") : tr("Змагальний", "Competitive")}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-bg-base/70 px-3 py-2">
+                <div className="text-text-secondary">{tr("Платформа", "Platform")}</div>
+                <div className="text-text-primary font-mono">StudyCod Contests</div>
+              </div>
             </div>
 
             {hasToken && data.access.canManage ? (
@@ -1021,6 +1585,13 @@ export const ContestPage: React.FC = () => {
                     : data.contest.isPublished
                       ? tr("Зняти з публікації", "Unpublish")
                       : tr("Опублікувати", "Publish")}
+                </Button>
+                <Button variant="secondary" onClick={toggleContestPaused} disabled={pauseSaving}>
+                  {pauseSaving
+                    ? tr("Оновлення...", "Updating...")
+                    : data.access.isPaused
+                      ? tr("Продовжити контест", "Resume contest")
+                      : tr("Поставити на паузу", "Pause contest")}
                 </Button>
               </div>
             ) : null}
@@ -1074,7 +1645,50 @@ export const ContestPage: React.FC = () => {
           </Card>
 
           {tab === "problems" ? (
-            <Card className="p-4">
+            <>
+              {hasToken && data.access.canAccessContent ? (
+                <Card className="p-4 border border-border/70 bg-bg-surface/80">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="font-mono text-text-primary">{tr("Контест-акаунт", "Contest account")}</div>
+                    <Button variant="secondary" onClick={loadContestAccount} disabled={contestAccountLoading || contestAccountSaving}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      {tr("Оновити", "Refresh")}
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <input
+                      value={contestAccountHandle}
+                      onChange={(e) => setContestAccountHandle(e.target.value)}
+                      className="px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
+                      placeholder={tr("Handle (напр. petr)", "Handle (e.g. tourist)")}
+                      maxLength={120}
+                    />
+                    <input
+                      value={contestAccountNote}
+                      onChange={(e) => setContestAccountNote(e.target.value)}
+                      className="px-3 py-2 bg-bg-base border border-border text-text-primary"
+                      placeholder={tr("Нотатка (команда/група)", "Note (team/group)")}
+                      maxLength={255}
+                    />
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-text-secondary">
+                    <span>
+                      {contestAccount.handle
+                        ? tr(`Поточний акаунт: ${contestAccount.handle}`, `Current account: ${contestAccount.handle}`)
+                        : tr("Акаунт ще не вказано", "No account set yet")}
+                    </span>
+                    <Button variant="secondary" onClick={saveContestAccount} disabled={contestAccountLoading || contestAccountSaving}>
+                      {contestAccountSaving ? tr("Збереження...", "Saving...") : tr("Зберегти", "Save")}
+                    </Button>
+                  </div>
+
+                  {contestAccountError ? <div className="text-sm text-accent-error mt-2">{contestAccountError}</div> : null}
+                </Card>
+              ) : null}
+
+              <Card className="p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div className="font-mono text-text-primary">{tr("Задачі", "Problems")}</div>
                 <div className="flex items-center gap-2">
@@ -1186,12 +1800,14 @@ export const ContestPage: React.FC = () => {
                               {last ? (
                                 <div className="flex flex-col items-center gap-1">
                                   <div className="flex items-center gap-2">
-                                    <span>{last.verdict ?? "-"}</span>
-                                    {last.phase === "UPSOLVE" ? (
-                                      <Badge color="info">{tr("Дорішування", "Upsolve")}</Badge>
-                                    ) : (
-                                      <Badge color="success">{tr("Контест", "Contest")}</Badge>
-                                    )}
+                                    {(() => {
+                                      const v = verdictChip(last.verdict, tr);
+                                      return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} size="sm" />;
+                                    })()}
+                                    {(() => {
+                                      const p = submissionPhaseChip(last.phase, tr);
+                                      return <StatusChip glyph={p.glyph} label={p.label} tone={p.tone} size="sm" />;
+                                    })()}
                                     <span className="text-text-secondary">{lastScoreText}</span>
                                   </div>
                                   <div className="text-xs text-text-secondary">{fmtDateTime(last.createdAt, i18n.language)}</div>
@@ -1242,87 +1858,410 @@ export const ContestPage: React.FC = () => {
                     : tr("Немає доступу до задач цього контесту.", "You don’t have access to this contest.")}
                 </div>
               ) : null}
-            </Card>
-          ) : (
+              </Card>
+            </>
+          ) : tab === "standings" ? (
             <div className="space-y-4">
               <Scoreboard key={`sb-${standingsVersion}`} contestId={data.contest.id} canManage={!!data.access.canManage} />
 
               {hasToken && data.access.canManage ? (
-                <Card className="p-4">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="font-mono text-text-primary">{tr("Модерація учасників", "Participant moderation")}</div>
-                    <Button variant="secondary" onClick={loadAdminParticipants} disabled={adminParticipantsLoading}>
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      {tr("Оновити", "Refresh")}
-                    </Button>
-                  </div>
+                <>
+                  <Card className="p-4">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="font-mono text-text-primary flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />{tr("Організатори та пауза", "Organizers and pause")}</div>
+                      <Button variant="secondary" onClick={loadOrganizers} disabled={organizersLoading}>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        {tr("Оновити", "Refresh")}
+                      </Button>
+                    </div>
 
-                  {adminParticipantsError ? (
-                    <div className="text-sm text-accent-error mb-3">{adminParticipantsError}</div>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <Button variant="secondary" onClick={toggleContestPaused} disabled={pauseSaving}>
+                        {data.access.isPaused ? tr("Зняти з паузи", "Resume") : tr("Пауза", "Pause")}
+                      </Button>
+                      <Badge color={data.access.isPaused ? "warn" : "success"}>
+                        {data.access.isPaused ? tr("Контест на паузі", "Contest is paused") : tr("Контест активний", "Contest is active")}
+                      </Badge>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-2 mb-3">
+                      <input
+                        value={newOrganizerUserId}
+                        onChange={(e) => setNewOrganizerUserId(e.target.value)}
+                        className="md:w-56 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
+                        placeholder={tr("User ID організатора", "Organizer user ID")}
+                        inputMode="numeric"
+                      />
+                      <Button variant="secondary" onClick={addOrganizer}>
+                        {tr("Додати організатора", "Add organizer")}
+                      </Button>
+                    </div>
+
+                    {organizersError ? <div className="text-sm text-accent-error mb-3">{organizersError}</div> : null}
+
+                    {organizersLoading ? (
+                      <div className="space-y-2">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <Skeleton key={i} className="h-10 w-full" />
+                        ))}
+                      </div>
+                    ) : organizers.length === 0 ? (
+                      <div className="text-sm text-text-secondary">{tr("Додаткових організаторів ще немає", "No additional organizers yet")}</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {organizers.map((o) => (
+                          <div key={o.userId} className="flex items-center justify-between gap-2 border border-border bg-bg-base px-3 py-2">
+                            <div className="text-sm font-mono text-text-primary">
+                              #{o.userId} · {o.username} {" "}
+                              <Link to={`/u/${encodeURIComponent(o.username)}`} className="text-primary hover:underline">
+                                {tr("профіль", "profile")}
+                              </Link>
+                            </div>
+                            <Button variant="ghost" onClick={() => removeOrganizer(o.userId)}>
+                              {tr("Прибрати", "Remove")}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+
+                  <Card className="p-4">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="font-mono text-text-primary">{tr("Анулювання задач", "Problem annulments")}</div>
+                      <Button variant="secondary" onClick={loadAnnulments} disabled={annulmentsLoading}>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        {tr("Оновити", "Refresh")}
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+                      <input
+                        value={annulProblemId}
+                        onChange={(e) => setAnnulProblemId(e.target.value)}
+                        className="px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
+                        placeholder={tr("Problem ID", "Problem ID")}
+                        inputMode="numeric"
+                      />
+                      <input
+                        value={annulParticipantId}
+                        onChange={(e) => setAnnulParticipantId(e.target.value)}
+                        className="px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
+                        placeholder={tr("Participant ID (опц.)", "Participant ID (opt)")}
+                        inputMode="numeric"
+                      />
+                      <input
+                        value={annulReason}
+                        onChange={(e) => setAnnulReason(e.target.value)}
+                        className="px-3 py-2 bg-bg-base border border-border text-text-primary"
+                        placeholder={tr("Причина (опц.)", "Reason (opt)")}
+                      />
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={annulledActive ? "1" : "0"}
+                          onChange={(e) => setAnnulledActive(e.target.value === "1")}
+                          className="px-3 py-2 bg-bg-base border border-border text-text-primary"
+                        >
+                          <option value="1">{tr("Анулювати", "Annul")}</option>
+                          <option value="0">{tr("Скасувати анулювання", "Un-annul")}</option>
+                        </select>
+                        <Button variant="secondary" onClick={applyAnnulment}>
+                          {tr("Застосувати", "Apply")}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-text-secondary mb-2">
+                      {tr("Якщо Participant ID порожній — дія застосовується для всіх учасників.", "If Participant ID is empty, action applies to all participants.")}
+                    </div>
+
+                    {annulmentsError ? <div className="text-sm text-accent-error mb-2">{annulmentsError}</div> : null}
+
+                    {annulmentsLoading ? (
+                      <div className="space-y-2">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <Skeleton key={i} className="h-10 w-full" />
+                        ))}
+                      </div>
+                    ) : annulments.length === 0 ? (
+                      <div className="text-sm text-text-secondary">{tr("Немає записів анулювання", "No annulment records")}</div>
+                    ) : (
+                      <div className="space-y-2 max-h-[260px] overflow-auto">
+                        {annulments.map((a) => (
+                          <div key={a.id} className="border border-border bg-bg-base px-3 py-2 text-sm font-mono">
+                            <div>#{a.id} · P{a.problemId} · {a.participantId ? `U${a.participantId}` : tr("для всіх", "for all")}</div>
+                            <div className="text-xs text-text-secondary">
+                              {a.isActive ? tr("активне", "active") : tr("неактивне", "inactive")} · {fmtDateTime(a.updatedAt ?? a.createdAt, i18n.language)}
+                              {a.reason ? ` · ${a.reason}` : ""}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+
+                  <Card className="p-4">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="font-mono text-text-primary flex items-center gap-2"><Users2 className="w-4 h-4 text-primary" />{tr("Модерація учасників", "Participant moderation")}</div>
+                      <Button variant="secondary" onClick={loadAdminParticipants} disabled={adminParticipantsLoading}>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        {tr("Оновити", "Refresh")}
+                      </Button>
+                    </div>
+
+                    {adminParticipantsError ? (
+                      <div className="text-sm text-accent-error mb-3">{adminParticipantsError}</div>
+                    ) : null}
+
+                    {adminParticipantsLoading ? (
+                      <div className="space-y-2">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <Skeleton key={i} className="h-10 w-full" />
+                        ))}
+                      </div>
+                    ) : adminParticipants.length === 0 ? (
+                      <div className="text-sm text-text-secondary">{tr("Поки що немає учасників", "No participants yet")}</div>
+                    ) : (
+                      <div className="overflow-auto border border-border">
+                        <table className="min-w-[860px] w-full text-sm font-mono">
+                          <thead className="bg-bg-hover">
+                            <tr>
+                              <th className="p-2 border-b border-border text-left">#</th>
+                              <th className="p-2 border-b border-border text-left">{tr("Учасник", "Participant")}</th>
+                              <th className="p-2 border-b border-border text-left">{tr("Тип", "Type")}</th>
+                              <th className="p-2 border-b border-border text-left">{tr("Контест-акаунт", "Contest account")}</th>
+                              <th className="p-2 border-b border-border text-left">{tr("Статус", "Status")}</th>
+                              <th className="p-2 border-b border-border text-right">{tr("Дія", "Action")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {adminParticipants.map((p) => (
+                              <tr key={p.id} className="odd:bg-bg-base even:bg-bg-surface">
+                                <td className="p-2 border-b border-border">{p.id}</td>
+                                <td className="p-2 border-b border-border">{p.displayName}</td>
+                                <td className="p-2 border-b border-border">{p.principalType}</td>
+                                <td className="p-2 border-b border-border">{p.contestAccountHandle ? p.contestAccountHandle : "—"}</td>
+                                <td className="p-2 border-b border-border">
+                                  {p.isDisqualified ? (
+                                    <Badge color="warn">{tr("Дискваліфіковано", "Disqualified")}</Badge>
+                                  ) : (
+                                    <Badge color="success">{tr("У заліку", "Active")}</Badge>
+                                  )}
+                                </td>
+                                <td className="p-2 border-b border-border text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button variant="secondary" onClick={() => openAdminSubmissions(p, { fullPage: true })}>
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      {tr("Подачі", "Submissions")}
+                                    </Button>
+                                    <Button variant="secondary" onClick={() => toggleParticipantDisqualification(p)}>
+                                      {p.isDisqualified ? (
+                                        <>
+                                          <RotateCcw className="w-4 h-4 mr-2" />
+                                          {tr("Повернути", "Restore")}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Ban className="w-4 h-4 mr-2" />
+                                          {tr("Дискваліфікувати", "Disqualify")}
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </Card>
+
+                  {adminSubsParticipant && !adminSubsFullPage ? (
+                    <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="font-mono text-text-primary">
+                          {tr("Інспектор подач", "Submission inspector")}: {adminSubsParticipant.displayName} (#{adminSubsParticipant.id})
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="secondary" onClick={() => openAdminSubmissions(adminSubsParticipant)} disabled={adminSubsLoading}>
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            {tr("Оновити", "Refresh")}
+                          </Button>
+                          <Button variant="secondary" onClick={() => setAdminSubsFullPage(true)}>
+                            {tr("На весь екран", "Full page")}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={closeAdminInspector}
+                          >
+                            {tr("Закрити інспектор", "Close inspector")}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {adminInspectorBody}
+                    </Card>
                   ) : null}
 
-                  {adminParticipantsLoading ? (
+                  {adminSubsParticipant && adminSubsFullPage ? (
+                    <div className="fixed inset-0 z-50 bg-bg-base">
+                      <div className="h-full flex flex-col">
+                        <div className="border-b border-border bg-bg-surface/95 backdrop-blur px-4 py-3 flex items-center justify-between gap-3">
+                          <div className="font-mono text-text-primary text-sm md:text-base">
+                            {tr("Інспектор подач", "Submission inspector")}: {adminSubsParticipant.displayName} (#{adminSubsParticipant.id})
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="secondary" onClick={() => openAdminSubmissions(adminSubsParticipant)} disabled={adminSubsLoading}>
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              {tr("Оновити", "Refresh")}
+                            </Button>
+                            <Button variant="secondary" onClick={() => setAdminSubsFullPage(false)}>
+                              {tr("Згорнути", "Minimize")}
+                            </Button>
+                            <Button variant="ghost" onClick={closeAdminInspector}>
+                              {tr("Закрити", "Close")}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4">
+                          {adminInspectorBody}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <Card className="p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs text-text-secondary">
+                    {tr("Питання та оголошення зберігаються на сервері в межах цього контесту.", "Questions and announcements are persisted on the server for this contest.")}
+                  </div>
+                  <Button variant="secondary" onClick={loadCommunity} disabled={communityLoading || !data.access.canAccessContent}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    {tr("Оновити", "Refresh")}
+                  </Button>
+                </div>
+                {communityError ? <div className="text-sm text-accent-error mt-2">{communityError}</div> : null}
+                {!data.access.canAccessContent ? (
+                  <div className="text-sm text-text-secondary mt-2">{tr("Немає доступу до ком'юніті цього контесту.", "You don't have access to this contest community.")}</div>
+                ) : null}
+              </Card>
+
+              <Card className="p-4">
+                <div className="text-sm font-mono text-text-primary mb-2 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" /> {tr("Питання до організатора", "Questions to organizer")}
+                </div>
+                <div className="text-xs text-text-secondary mb-3">
+                  {tr(
+                    "Це приватні звернення: учасник бачить лише власні питання та відповіді організаторів.",
+                    "These are private requests: each participant sees only their own questions and organizer answers."
+                  )}
+                </div>
+
+                <div className="space-y-2 mb-3 max-h-[360px] overflow-auto pr-1">
+                  {communityLoading ? (
                     <div className="space-y-2">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <Skeleton key={i} className="h-10 w-full" />
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <Skeleton key={i} className="h-16 w-full" />
                       ))}
                     </div>
-                  ) : adminParticipants.length === 0 ? (
-                    <div className="text-sm text-text-secondary">{tr("Поки що немає учасників", "No participants yet")}</div>
+                  ) : communityData.questions.length === 0 ? (
+                    <div className="text-sm text-text-secondary">{tr("Питань ще немає.", "No questions yet.")}</div>
                   ) : (
-                    <div className="overflow-auto border border-border">
-                      <table className="min-w-[860px] w-full text-sm font-mono">
-                        <thead className="bg-bg-hover">
-                          <tr>
-                            <th className="p-2 border-b border-border text-left">#</th>
-                            <th className="p-2 border-b border-border text-left">{tr("Учасник", "Participant")}</th>
-                            <th className="p-2 border-b border-border text-left">{tr("Тип", "Type")}</th>
-                            <th className="p-2 border-b border-border text-left">{tr("Статус", "Status")}</th>
-                            <th className="p-2 border-b border-border text-right">{tr("Дія", "Action")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {adminParticipants.map((p) => (
-                            <tr key={p.id} className="odd:bg-bg-base even:bg-bg-surface">
-                              <td className="p-2 border-b border-border">{p.id}</td>
-                              <td className="p-2 border-b border-border">{p.displayName}</td>
-                              <td className="p-2 border-b border-border">{p.principalType}</td>
-                              <td className="p-2 border-b border-border">
-                                {p.isDisqualified ? (
-                                  <Badge color="warn">{tr("Дискваліфіковано", "Disqualified")}</Badge>
-                                ) : (
-                                  <Badge color="success">{tr("У заліку", "Active")}</Badge>
-                                )}
-                              </td>
-                              <td className="p-2 border-b border-border text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button variant="secondary" onClick={() => openAdminSubmissions(p)}>
-                                    <Eye className="w-4 h-4 mr-2" />
-                                    {tr("Подачі", "Submissions")}
-                                  </Button>
-                                  <Button variant="secondary" onClick={() => toggleParticipantDisqualification(p)}>
-                                    {p.isDisqualified ? (
-                                      <>
-                                        <RotateCcw className="w-4 h-4 mr-2" />
-                                        {tr("Повернути", "Restore")}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Ban className="w-4 h-4 mr-2" />
-                                        {tr("Дискваліфікувати", "Disqualify")}
-                                      </>
-                                    )}
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    communityData.questions.map((q) => (
+                      <div key={q.id} className="rounded-xl border border-border bg-bg-base p-3">
+                        <div className="text-xs text-text-secondary mb-1 flex items-center gap-2 flex-wrap">
+                          <span>{q.author} · {fmtDateTime(q.createdAt, i18n.language)}</span>
+                          <StatusChip
+                            glyph={q.answer ? "✓" : "…"}
+                            label={q.answer ? tr("Відповідь є", "Answered") : tr("Очікує відповіді", "Waiting")}
+                            tone={q.answer ? "success" : "warn"}
+                            size="sm"
+                          />
+                        </div>
+                        <div className="text-sm text-text-primary whitespace-pre-wrap">{q.text}</div>
+                        {q.answer ? (
+                          <div className="mt-2 rounded-lg border border-primary/30 bg-primary/10 p-2">
+                            <div className="text-[11px] text-primary mb-1">{tr("Відповідь організатора", "Organizer answer")}</div>
+                            <div className="text-xs text-text-primary whitespace-pre-wrap">{q.answer}</div>
+                            {q.answeredAt ? <div className="text-[10px] text-text-secondary mt-1">{fmtDateTime(q.answeredAt, i18n.language)}</div> : null}
+                          </div>
+                        ) : data.access.canManage ? (
+                          <div className="mt-2">
+                            <Button variant="secondary" onClick={() => answerContestQuestion(q.id)}>
+                              {tr("Відповісти", "Answer")}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))
                   )}
-                </Card>
-              ) : null}
+                </div>
+
+                {hasToken && data.access.canAccessContent ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={communityQuestionText}
+                      onChange={(e) => setCommunityQuestionText(e.target.value)}
+                      className="w-full min-h-[90px] rounded-xl bg-bg-code border border-border px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
+                      placeholder={tr("Постав запитання щодо задач, правил або тестів...", "Ask about tasks, rules, or tests...")}
+                    />
+                    <div className="flex justify-end">
+                      <Button onClick={postContestQuestion} disabled={!communityQuestionText.trim()}>
+                        <Send className="w-4 h-4 mr-2" /> {tr("Надіслати питання", "Send question")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-text-secondary">{tr("Увійдіть і отримайте доступ до контесту, щоб ставити питання.", "Log in and join the contest to ask questions.")}</div>
+                )}
+              </Card>
+
+              <Card className="p-4">
+                <div className="text-sm font-mono text-text-primary mb-2 flex items-center gap-2">
+                  <Megaphone className="w-4 h-4" /> {tr("Оголошення", "Announcements")}
+                </div>
+
+                {data.access.canManage ? (
+                  <div className="space-y-2 mb-3">
+                    <textarea
+                      value={communityAnnouncementText}
+                      onChange={(e) => setCommunityAnnouncementText(e.target.value)}
+                      className="w-full min-h-[80px] rounded-xl bg-bg-code border border-border px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
+                      placeholder={tr("Наприклад: о 18:00 оновлено умову задачі B", "Example: at 18:00 problem B statement updated")}
+                    />
+                    <div className="flex justify-end">
+                      <Button variant="secondary" onClick={postContestAnnouncement} disabled={!communityAnnouncementText.trim()}>
+                        {tr("Опублікувати оголошення", "Publish announcement")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+                  {communityLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-14 w-full" />
+                      ))}
+                    </div>
+                  ) : communityData.announcements.length === 0 ? (
+                    <div className="text-sm text-text-secondary">{tr("Оголошень ще немає.", "No announcements yet.")}</div>
+                  ) : (
+                    communityData.announcements.map((a) => (
+                      <div key={a.id} className="rounded-xl border border-border bg-bg-base p-3">
+                        <div className="text-xs text-text-secondary mb-1">{a.author} · {fmtDateTime(a.createdAt, i18n.language)}</div>
+                        <div className="text-sm text-text-primary whitespace-pre-wrap">{a.text}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
             </div>
           )}
         </div>

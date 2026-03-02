@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <title>StudyCod</title>
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta
       name="description"
       content="StudyCod — навчальна платформа для вивчення програмування: уроки, задачі, прогрес, класи та оцінки."
@@ -13,13 +15,22 @@
     <meta name="robots" content="index,follow,max-image-preview:large" />
 
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="uk_UA" />
     <meta property="og:title" content="StudyCod" />
     <meta property="og:site_name" content="StudyCod" />
+    <meta property="og:url" content="/" />
     <meta
       property="og:description"
       content="StudyCod — навчальна платформа для вивчення програмування: уроки, задачі, прогрес, класи та оцінки."
     />
     <meta property="og:image" content="/favicon.svg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="StudyCod" />
+    <meta
+      name="twitter:description"
+      content="StudyCod — навчальна платформа для вивчення програмування: уроки, задачі, прогрес, класи та оцінки."
+    />
+    <meta name="twitter:image" content="/favicon.svg" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.svg" sizes="any" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,13 +54,15 @@
     <script>
       (function () {
         try {
+          var canonicalHref = window.location.origin + window.location.pathname;
+
           var canonical = document.querySelector('link[rel="canonical"]');
           if (!canonical) {
             canonical = document.createElement('link');
             canonical.setAttribute('rel', 'canonical');
             document.head.appendChild(canonical);
           }
-          canonical.setAttribute('href', window.location.origin + window.location.pathname);
+          canonical.setAttribute('href', canonicalHref);
 
           var ogUrl = document.querySelector('meta[property="og:url"]');
           if (!ogUrl) {
@@ -57,18 +70,10 @@
             ogUrl.setAttribute('property', 'og:url');
             document.head.appendChild(ogUrl);
           }
-          ogUrl.setAttribute('content', window.location.href);
+          ogUrl.setAttribute('content', canonicalHref);
         } catch (_) {
         }
       })();
-
-      console.log("HTML loaded, root element:", document.getElementById("root"));
-      window.addEventListener("error", function(e) {
-        console.error("Global error:", e.error, e.filename, e.lineno, e.colno);
-      });
-      window.addEventListener("unhandledrejection", function(e) {
-        console.error("Unhandled promise rejection:", e.reason);
-      });
     </script>
   </body>
 </html>

@@ -32,6 +32,16 @@ const classRepo = () => AppDataSource.getRepository(Class);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 
+function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxMs = 55_000): number {
+  const raw = Number(process.env[envKey]);
+  const value = Number.isFinite(raw) ? Math.floor(raw) : fallbackMs;
+  return Math.max(minMs, Math.min(maxMs, value));
+}
+
+const TOPICS_AI_DISABLE_DEADLINE = String(process.env.TOPICS_AI_DISABLE_DEADLINE || "").trim() === "1";
+const TOPICS_AI_BUDGET_MS = parseAIBudgetMs("TOPICS_AI_BUDGET_MS", 25_000);
+const TOPICS_AI_QUIZ_BUDGET_MS = parseAIBudgetMs("TOPICS_AI_QUIZ_BUDGET_MS", 35_000);
+
 const archiveUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -114,14 +124,14 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
         topics
       });
     }
-    if (!language || language !== "JAVA" && language !== "PYTHON") {
+    if (!language || (language !== "JAVA" && language !== "PYTHON" && language !== "CPP")) {
       return res.status(400).json({
         message: "INVALID_LANGUAGE"
       });
     }
     const topics = await topicRepo().find({
       where: {
-        language: language as "JAVA" | "PYTHON",
+        language: language as "JAVA" | "PYTHON" | "CPP",
         class: IsNull() as any
       },
       order: {
@@ -221,7 +231,7 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
       language,
       classId
     } = req.body || {};
-    if (!title || !language || language !== "JAVA" && language !== "PYTHON") {
+    if (!title || !language || (language !== "JAVA" && language !== "PYTHON" && language !== "CPP")) {
       return res.status(400).json({
         message: "INVALID_INPUT"
       });
@@ -254,7 +264,7 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
             id: classId
           } as any
         } as any : {
-          language: language as "JAVA" | "PYTHON",
+          language: language as "JAVA" | "PYTHON" | "CPP",
           class: IsNull() as any
         } as any,
         order: {
@@ -267,7 +277,7 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
       title,
       description: description || null,
       order: topicOrder,
-      language: language as "JAVA" | "PYTHON",
+      language: language as "JAVA" | "PYTHON" | "CPP",
       class: classId ? {
         id: classId
       } as any : null
@@ -658,6 +668,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       });
     }
     const userLanguage: "uk" | "en" = language === 'en' ? "en" : "uk";
+    const aiStartedAt = Date.now();
     const result = await safeAICall('generateTaskCondition', {
       topicTitle: topic.title,
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
@@ -667,7 +678,19 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       userId: user.id,
       topicId: topic.id
     }, {
-      language: userLanguage
+      language: userLanguage,
+      requestId: req.requestId,
+      maxAttempts: 2,
+      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: TOPICS_AI_BUDGET_MS })
+    });
+    const aiElapsedMs = Date.now() - aiStartedAt;
+    logger.info("[topics] generate-condition AI completed", {
+      requestId: req.requestId,
+      topicId,
+      userId: user.id,
+      success: result.success,
+      elapsedMs: aiElapsedMs,
+      budgetMs: TOPICS_AI_DISABLE_DEADLINE ? null : TOPICS_AI_BUDGET_MS
     });
     if (!result.success) {
       return sendAIError(res, result.error);
@@ -721,6 +744,7 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
       taskTitle
     } = req.body || {};
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
+    const aiStartedAt = Date.now();
     const result = await safeAICall('generateTaskTemplate', {
       topicTitle: topic.title,
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
@@ -729,7 +753,19 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
       userId: user.id,
       topicId: topic.id
     }, {
-      language: userLanguage
+      language: userLanguage,
+      requestId: req.requestId,
+      maxAttempts: 2,
+      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: TOPICS_AI_BUDGET_MS })
+    });
+    const aiElapsedMs = Date.now() - aiStartedAt;
+    logger.info("[topics] generate-template AI completed", {
+      requestId: req.requestId,
+      topicId,
+      userId: user.id,
+      success: result.success,
+      elapsedMs: aiElapsedMs,
+      budgetMs: TOPICS_AI_DISABLE_DEADLINE ? null : TOPICS_AI_BUDGET_MS
     });
     if (!result.success) {
       return sendAIError(res, result.error);
@@ -885,8 +921,14 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
         message: "TOPIC_TITLE_REQUIRED"
       });
     }
-    const language = controlWork.topic.language === "JAVA" || controlWork.topic.language === "PYTHON" ? controlWork.topic.language : "JAVA";
+    const language =
+      controlWork.topic.language === "JAVA" ||
+      controlWork.topic.language === "PYTHON" ||
+      controlWork.topic.language === "CPP"
+        ? controlWork.topic.language
+        : "JAVA";
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
+    const aiStartedAt = Date.now();
     const result = await safeAICall('generateQuiz', {
       lang: language,
       prevTopics: quizTopicTitle.trim(),
@@ -895,7 +937,20 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
       topicId: controlWork.topic.id
     }, {
       expectedCount: quizCount,
-      language: userLanguage
+      language: userLanguage,
+      requestId: req.requestId,
+      maxAttempts: 2,
+      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: TOPICS_AI_QUIZ_BUDGET_MS })
+    });
+    const aiElapsedMs = Date.now() - aiStartedAt;
+    logger.info("[topics] generate-quiz AI completed", {
+      requestId: req.requestId,
+      controlWorkId,
+      userId: user.id,
+      success: result.success,
+      elapsedMs: aiElapsedMs,
+      budgetMs: TOPICS_AI_DISABLE_DEADLINE ? null : TOPICS_AI_QUIZ_BUDGET_MS,
+      quizCount
     });
     if (!result.success) {
       return sendAIError(res, result.error);
@@ -1141,6 +1196,7 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
       });
     }
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
+    const aiStartedAt = Date.now();
     const theoryResult = await safeAICall('generateTheory', {
       topicTitle: topic.title,
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
@@ -1151,7 +1207,19 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
       userId: user.id,
       topicId: topic.id
     }, {
-      language: userLanguage
+      language: userLanguage,
+      requestId: req.requestId,
+      maxAttempts: 2,
+      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: TOPICS_AI_BUDGET_MS })
+    });
+    const aiElapsedMs = Date.now() - aiStartedAt;
+    logger.info("[topics] generate-theory AI completed", {
+      requestId: req.requestId,
+      topicId,
+      userId: user.id,
+      success: theoryResult.success,
+      elapsedMs: aiElapsedMs,
+      budgetMs: TOPICS_AI_DISABLE_DEADLINE ? null : TOPICS_AI_BUDGET_MS
     });
     if (!theoryResult.success) {
       return sendAIError(res, theoryResult.error);

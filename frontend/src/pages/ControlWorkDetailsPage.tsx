@@ -9,6 +9,7 @@ import { api } from "../lib/api/client";
 import { getMe } from "../lib/api/profile";
 import type { User } from "../types";
 import { MarkdownView } from "../components/MarkdownView";
+import { MarkdownImageInsertButton } from "../components/MarkdownImageInsertButton";
 import { generateTestData, getTestData, addTestData, updateTestData, deleteTestData, type TestData, updateControlWorkFormula } from "../lib/api/edu";
 import { importTestsFromInOutFiles } from "../utils/testInOutImport";
 interface ControlWork {
@@ -103,6 +104,8 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [formula, setFormula] = useState<string>("");
   const [savingFormula, setSavingFormula] = useState(false);
+  const createDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const editDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const optionLabel = (key: "А" | "Б" | "В" | "Г" | "Д") => {
     const map: Record<"А" | "Б" | "В" | "Г" | "Д", "A" | "B" | "C" | "D" | "E"> = {
@@ -874,8 +877,17 @@ export const ControlWorkDetailsPage: React.FC = () => {
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingCondition ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
+                  <MarkdownImageInsertButton
+                    value={newTask.description}
+                    onChange={value => setNewTask({
+                      ...newTask,
+                      description: value
+                    })}
+                    textareaRef={createDescriptionRef}
+                    className="ml-2 text-xs"
+                  />
                 </label>
-                <textarea value={newTask.description} onChange={e => setNewTask({
+                <textarea ref={createDescriptionRef} value={newTask.description} onChange={e => setNewTask({
               ...newTask,
               description: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Умова завдання...", "Task statement...")} />
@@ -946,8 +958,17 @@ export const ControlWorkDetailsPage: React.FC = () => {
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingCondition ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
+                  <MarkdownImageInsertButton
+                    value={newTask.description}
+                    onChange={value => setNewTask({
+                      ...newTask,
+                      description: value
+                    })}
+                    textareaRef={editDescriptionRef}
+                    className="ml-2 text-xs"
+                  />
                 </label>
-                <textarea value={newTask.description} onChange={e => setNewTask({
+                <textarea ref={editDescriptionRef} value={newTask.description} onChange={e => setNewTask({
               ...newTask,
               description: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Умова завдання...", "Task statement...")} />

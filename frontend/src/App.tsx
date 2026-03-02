@@ -3,7 +3,7 @@ import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } fr
 import { AnimatePresence, motion } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { Code2, User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, Trophy } from "lucide-react";
+import { Code2, User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library } from "lucide-react";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
@@ -44,6 +44,12 @@ const ProfilePage = React.lazy(() => import("./pages/ProfilePage").then(mod => (
 })));
 const HomePage = React.lazy(() => import("./pages/HomePage").then(mod => ({
   default: mod.HomePage
+})));
+const PublicProfilePage = React.lazy(() => import("./pages/PublicProfilePage").then(mod => ({
+  default: mod.PublicProfilePage
+})));
+const EmailPreferencesResultPage = React.lazy(() => import("./pages/EmailPreferencesResultPage").then(mod => ({
+  default: mod.EmailPreferencesResultPage
 })));
 const TeacherDashboardPage = React.lazy(() => import("./pages/TeacherDashboardPage").then(mod => ({
   default: mod.TeacherDashboardPage
@@ -99,15 +105,6 @@ const TaskLibraryPage = React.lazy(() => import("./pages/TaskLibraryPage").then(
 const LibraryTaskSolvePage = React.lazy(() => import("./pages/LibraryTaskSolvePage").then(mod => ({
   default: mod.LibraryTaskSolvePage
 })));
-const ContestsPage = React.lazy(() => import("./pages/ContestsPage").then(mod => ({
-  default: mod.ContestsPage
-})));
-const ContestPage = React.lazy(() => import("./pages/ContestPage").then(mod => ({
-  default: mod.ContestPage
-})));
-const ContestProblemSolvePage = React.lazy(() => import("./pages/ContestProblemSolvePage").then(mod => ({
-  default: mod.ContestProblemSolvePage
-})));
 const DevEditorPage = React.lazy(() => import("./pages/DevEditorPage").then(mod => ({
   default: mod.DevEditorPage
 })));
@@ -134,7 +131,6 @@ const AppContent: React.FC = React.memo(() => {
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
-  const [suppressFocusAutoResume, setSuppressFocusAutoResume] = useState(false);
   const navMenuRef = useRef<HTMLDivElement | null>(null);
   const [workspaceViewportEl, setWorkspaceViewportEl] = useState<HTMLElement | null>(null);
   const [maintenance, setMaintenance] = useState<MaintenancePayload | null>(() => {
@@ -353,23 +349,42 @@ const AppContent: React.FC = React.memo(() => {
     });
   }, []);
   const handleSetPage = useCallback((newPage: Page) => {
-    const leavingHome = page === "home" && newPage !== "home";
     startTransition(() => {
       setPage(newPage);
-      if (leavingHome) {
-        setSuppressFocusAutoResume(false);
-      }
     });
     setNavOpen(false);
-  }, [page]);
+  }, []);
   const handleGoHome = useCallback(() => {
-    setSuppressFocusAutoResume(true);
     startTransition(() => {
       setPage("home");
     });
     setNavOpen(false);
   }, []);
 
+  const handleGoHomeOrResume = useCallback(() => {
+    if (!user) {
+      startTransition(() => setPage("home"));
+      return;
+    }
+    const state = loadResumeState(user.id);
+    if (isResumableSession(user, state)) {
+      const resolved = resolveResumeRoute(user, state);
+      if (resolved.type === "path") {
+        navigate(resolved.path);
+        return;
+      }
+      if (resolved.type === "appPage") {
+        if (resolved.extras?.openTaskId) {
+          sessionStorage.setItem("openTaskId", resolved.extras.openTaskId);
+        }
+        startTransition(() => setPage(resolved.page));
+        return;
+      }
+    }
+
+    // No resumable session: show entry surface.
+    startTransition(() => setPage("home"));
+  }, [user?.id]);
   const handleToggleNav = useCallback(() => {
     setNavOpen(prev => !prev);
   }, []);
@@ -469,7 +484,7 @@ const AppContent: React.FC = React.memo(() => {
       {(() => {
       if (page === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
       if (page === "home") {
-        return <HomePage user={user} onNavigate={handleSetPage} suppressFocusAutoResume={suppressFocusAutoResume} />;
+        return <HomePage user={user} onNavigate={handleSetPage} />;
       }
       if (page === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       if (page === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
@@ -523,10 +538,6 @@ const AppContent: React.FC = React.memo(() => {
                   <Library className="w-4 h-4" />
                   {t("library")}
                 </button>
-                <button onClick={() => navigate("/contests")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-                  <Trophy className="w-4 h-4" />
-                  {t("contests", { defaultValue: "Contests" })}
-                </button>
               </>}
 
             <button onClick={() => navigate("/docs")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
@@ -551,11 +562,6 @@ const AppContent: React.FC = React.memo(() => {
                 {t('myClasses')}
               </button>}
 
-            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => navigate("/contests")} className="px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
-                <Trophy className="w-4 h-4" />
-                {t("contests", { defaultValue: "Contests" })}
-              </button>}
-
             {user.userMode === "EDUCATIONAL" && user.studentId && <>
                 <button onClick={() => handleSetPage("student")} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <BookOpen className="w-4 h-4" />
@@ -570,10 +576,6 @@ const AppContent: React.FC = React.memo(() => {
             }} className="px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   {t('lessons')}
-                </button>
-                <button onClick={() => navigate("/contests")} className="px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
-                  <Trophy className="w-4 h-4" />
-                  {t("contests", { defaultValue: "Contests" })}
                 </button>
               </>}
 
@@ -636,12 +638,8 @@ const AppContent: React.FC = React.memo(() => {
         }
         return;
       }
-      if (target === "contests") {
-        navigate("/contests");
-        return;
-      }
       if (target === "continue") {
-        handleGoHome();
+        handleGoHomeOrResume();
         return;
       }
       handleSetPage(target as any);
@@ -711,19 +709,14 @@ export const App: React.FC = () => {
                   <LibraryTaskSolvePage />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/contests" element={<Suspense fallback={<PageLoader />}>
+          <Route path="/u/:username" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
-                  <ContestsPage />
+                  <PublicProfilePage />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/contests/:id" element={<Suspense fallback={<PageLoader />}>
+          <Route path="/email-preferences" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
-                  <ContestPage />
-                </AnimatedPage>
-              </Suspense>} />
-          <Route path="/contests/:id/problems/:problemId" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <ContestProblemSolvePage />
+                  <EmailPreferencesResultPage />
                 </AnimatedPage>
               </Suspense>} />
           <Route path="/edu/*" element={<Suspense fallback={<PageLoader />}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
@@ -9,6 +9,7 @@ import { api } from "../lib/api/client";
 import { getMe } from "../lib/api/profile";
 import type { User } from "../types";
 import { MarkdownView } from "../components/MarkdownView";
+import { MarkdownImageInsertButton } from "../components/MarkdownImageInsertButton";
 import { generateTestData, getTestData, addTestData, updateTestData, deleteTestData, unassignTask, unassignControlWork, type TestData } from "../lib/api/edu";
 import { convertLocalToUTC, convertUTCToLocal, formatDeadlineForDisplay, getUserTimezone } from "../utils/timezone";
 import { importTestsFromInOutFiles } from "../utils/testInOutImport";
@@ -17,7 +18,7 @@ interface Topic {
   title: string;
   description?: string | null;
   order: number;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   tasks?: TopicTask[];
   controlWorks?: ControlWork[];
 }
@@ -109,6 +110,8 @@ export const TopicDetailsPage: React.FC = () => {
   const [importInputKey, setImportInputKey] = useState(0);
   const [importArchiveKey, setImportArchiveKey] = useState(0);
   const [importingArchive, setImportingArchive] = useState(false);
+  const createDescriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const editDescriptionRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     loadUser();
   }, []);
@@ -772,8 +775,17 @@ export const TopicDetailsPage: React.FC = () => {
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingCondition ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
+                  <MarkdownImageInsertButton
+                    value={newTask.description}
+                    onChange={value => setNewTask({
+                      ...newTask,
+                      description: value
+                    })}
+                    textareaRef={createDescriptionRef}
+                    className="ml-2 text-xs"
+                  />
                 </label>
-                <textarea value={newTask.description} onChange={e => setNewTask({
+                <textarea ref={createDescriptionRef} value={newTask.description} onChange={e => setNewTask({
               ...newTask,
               description: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Умова завдання...", "Task statement...")} />
@@ -884,8 +896,17 @@ export const TopicDetailsPage: React.FC = () => {
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingCondition ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
+                  <MarkdownImageInsertButton
+                    value={newTask.description}
+                    onChange={value => setNewTask({
+                      ...newTask,
+                      description: value
+                    })}
+                    textareaRef={editDescriptionRef}
+                    className="ml-2 text-xs"
+                  />
                 </label>
-                <textarea value={newTask.description} onChange={e => setNewTask({
+                <textarea ref={editDescriptionRef} value={newTask.description} onChange={e => setNewTask({
               ...newTask,
               description: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Умова завдання...", "Task description...")} />

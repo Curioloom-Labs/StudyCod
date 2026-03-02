@@ -9,6 +9,7 @@ import { GlobalTimer } from "../components/GlobalTimer";
 import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock } from "lucide-react";
 import { getMe } from "../lib/api/profile";
 import { MarkdownView } from "../components/MarkdownView";
+import { MarkdownImageInsertButton } from "../components/MarkdownImageInsertButton";
 import type { User } from "../types";
 import { isDeadlineExpired } from "../utils/timezone";
 import { importTestsFromInOutFiles } from "../utils/testInOutImport";
@@ -89,6 +90,7 @@ export const LessonDetailsPage: React.FC = () => {
   const [studentQuizReview, setStudentQuizReview] = useState<any | null>(null);
   const [hasAutoRedirected, setHasAutoRedirected] = useState(false);
   const [controlWorkStatus, setControlWorkStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | null>(null);
+  const createDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const lessonIdNum = React.useMemo(() => {
     const n = Number(lessonId);
@@ -914,8 +916,17 @@ export const LessonDetailsPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Опис завдання (Markdown)", "Task description (Markdown)")} *
+                  <MarkdownImageInsertButton
+                    value={newTask.description}
+                    onChange={value => setNewTask({
+                      ...newTask,
+                      description: value
+                    })}
+                    textareaRef={createDescriptionRef}
+                    className="ml-2 text-xs"
+                  />
                 </label>
-                <textarea value={newTask.description} onChange={e => setNewTask({
+                <textarea ref={createDescriptionRef} value={newTask.description} onChange={e => setNewTask({
               ...newTask,
               description: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" />

@@ -11,6 +11,7 @@ export type FocusNavTarget =
   | "continue"
   | "tasks"
   | "grades"
+  | "support"
   | "library"
   | "contests"
   | "student"
@@ -88,6 +89,12 @@ export const FocusShell: React.FC<Props> = ({
       label: "Admin",
       icon: Shield,
       show: user.role === "SYSTEM_ADMIN"
+    },
+    {
+      id: "support",
+      label: i18n.language?.toLowerCase().startsWith("en") ? "Support" : "Підтримка",
+      icon: HelpCircle,
+      show: true
     },
     {
       id: "library",

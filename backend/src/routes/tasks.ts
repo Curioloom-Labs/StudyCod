@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { body, validationResult } from "express-validator";
+import { createHash } from "crypto";
 import { AppDataSource } from "../data-source";
 import { Task, TaskType } from "../entities/Task";
 import type { TaskIoType } from "../entities/Task";
@@ -24,9 +25,23 @@ import { inferNeedsInput } from "../utils/inferNeedsInput";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
+import { buildLearningFirstFailure } from "../services/learning/firstFailure";
 const tasksRouter = Router();
 
 type ApiCodeFile = { path: string; content: string };
+
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+function normalizeClientSubmissionId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 128) return trimmed.slice(0, 128);
+  return trimmed;
+}
+
 function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   if (!Array.isArray(raw)) return [];
   const out: ApiCodeFile[] = [];
@@ -833,7 +848,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
           id: req.userId
         },
         ...(req.lang && {
-          lang: req.lang as "JAVA" | "PYTHON"
+          lang: req.lang as "JAVA" | "PYTHON" | "CPP"
         })
       },
       order: {
@@ -1904,6 +1919,8 @@ tasksRouter.post(
     body("code").optional().isString(),
     body("files").optional().isArray(),
     body("mode").optional().isIn(["TESTS", "AI"]),
+    body("clientSubmissionId").optional().isString().isLength({ min: 1, max: 128 }),
+    body("codeHash").optional().isString().isLength({ min: 8, max: 128 }),
     body().custom(v => {
       const hasCode = typeof (v as any)?.code === "string" && (v as any).code.length > 0;
       const hasFiles = Array.isArray((v as any)?.files) && (v as any).files.length > 0;
@@ -1923,11 +1940,13 @@ tasksRouter.post(
   const {
     code,
     files,
-    mode
+    mode,
+    clientSubmissionId
   } = req.body as {
     code?: string;
     files?: unknown;
     mode?: "TESTS" | "AI";
+    clientSubmissionId?: string;
   };
   const submitMode: "TESTS" | "AI" = mode ?? "TESTS";
   if (!req.userId) {
@@ -1966,6 +1985,8 @@ tasksRouter.post(
   const isMultiFile = effectiveFiles.length > 0;
   const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : String(code ?? "");
   const persistedSubmission = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : String(code ?? "");
+  const normalizedClientSubmissionId = normalizeClientSubmissionId(clientSubmissionId);
+  const serverCodeHash = sha256Hex(persistedSubmission);
 
   // For AI grading, concatenate all files for better context.
   const aiCodeText = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
@@ -2049,12 +2070,25 @@ tasksRouter.post(
         comparisonFeedback: savedGrade.comparisonFeedback ?? null,
         previousGrade: previous?.total ?? null,
         createdAt: savedGrade.createdAt
+      },
+      submissionMeta: {
+        submissionId: String(savedGrade.id),
+        clientSubmissionId: normalizedClientSubmissionId,
+        codeHash: serverCodeHash
       }
     });
   }
   let total = 0;
   let passedTests = 0;
   let hintsForUser: string[] = [];
+  const learningFeedbackCandidates: Array<{
+    passed: boolean;
+    isPublic: boolean;
+    input?: string;
+    expected?: string;
+    actual?: string;
+    error_kind?: string | null;
+  }> = [];
   const testResultsDetailed: Array<{
     testId: number;
     input: string;
@@ -2118,6 +2152,14 @@ tasksRouter.post(
     if (workerRes.verdict === "CE" && workerRes.compile) {
       const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
       for (const t of judgedTests) {
+        learningFeedbackCandidates.push({
+          passed: false,
+          isPublic: true,
+          input: t.input || "",
+          expected: (t.expectedOutput ?? "").toString(),
+          actual: "",
+          error_kind: workerRes.compile.error_kind ?? null
+        });
         testResultsDetailed.push({
           testId: t.id,
           input: t.input || "",
@@ -2146,6 +2188,14 @@ tasksRouter.post(
           passedTests++;
           total += effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (t.points || 1);
         }
+        learningFeedbackCandidates.push({
+          passed,
+          isPublic: true,
+          input: t.input || "",
+          expected: (r?.expected ?? t.expectedOutput ?? "").toString(),
+          actual: r?.actual ?? "",
+          error_kind: (r as any)?.error_kind ?? null
+        });
         testResultsDetailed.push({
           testId: t.id,
           input: t.input || "",
@@ -2258,6 +2308,10 @@ tasksRouter.post(
   });
   const savedGradeResult = await gradeRepo().save(grade);
   const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
+  const learningFirstFailure = buildLearningFirstFailure({
+    verdict: workerRes?.verdict ?? null,
+    tests: learningFeedbackCandidates
+  });
   return res.json({
     grade: {
       id: savedGrade.id,
@@ -2272,6 +2326,15 @@ tasksRouter.post(
       testResults: sanitizeTestResultsForStudent(testResultsDetailed),
       hints: hintsForUser,
       createdAt: savedGrade.createdAt
+    },
+    submissionMeta: {
+      submissionId: String(savedGrade.id),
+      clientSubmissionId: normalizedClientSubmissionId,
+      codeHash: serverCodeHash
+    },
+    learningFeedback: {
+      verdict: workerRes?.verdict ?? null,
+      firstFailure: learningFirstFailure
     }
   });
 }

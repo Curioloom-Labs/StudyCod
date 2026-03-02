@@ -1,6 +1,12 @@
 import { api } from "./client";
 
 export type CodeFile = { path: string; content: string };
+export type SubmissionBinding = { clientSubmissionId?: string; codeHash?: string };
+export type SubmissionMeta = {
+  submissionId: string;
+  clientSubmissionId?: string | null;
+  codeHash: string;
+};
 export interface StudentLoginResponse {
   token: string;
   student: {
@@ -12,7 +18,7 @@ export interface StudentLoginResponse {
     username: string;
     classId: number;
     className: string;
-    language: "JAVA" | "PYTHON";
+    language: "JAVA" | "PYTHON" | "CPP";
   };
 }
 export async function studentLogin(username: string, password: string): Promise<StudentLoginResponse> {
@@ -29,7 +35,7 @@ export async function studentLogin(username: string, password: string): Promise<
 export interface Class {
   id: number;
   name: string;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   studentsCount: number;
   createdAt: string;
 }
@@ -135,7 +141,7 @@ export interface TaskWithGrade {
   title: string;
   description: string;
   template: string;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   testDataCount: number;
   savedCode?: string;
   maxAttempts?: number;
@@ -186,6 +192,7 @@ export interface TaskWithGrade {
       actual?: string;
       stderr?: string;
     }> | null;
+    submissionMeta?: SubmissionMeta;
   };
 }
 export interface Grade {
@@ -238,7 +245,20 @@ export interface TestResult {
   actual?: string;
   stderr?: string;
 }
-export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON"): Promise<{
+
+export interface LearningFirstFailure {
+  testPublicIndex: number;
+  inputPreview: string;
+  expectedPreview: string;
+  actualPreview: string;
+  errorKind: string;
+}
+
+export interface LearningFeedback {
+  verdict?: string | null;
+  firstFailure?: LearningFirstFailure | null;
+}
+export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
   token?: string;
   user?: any;
   requiresEmailVerification?: boolean;
@@ -254,7 +274,7 @@ export async function registerTeacher(username: string, email: string, password:
   }
   return res.data;
 }
-export async function createClass(name: string, language: "JAVA" | "PYTHON"): Promise<Class> {
+export async function createClass(name: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<Class> {
   const res = await api.post("/edu/classes", {
     name,
     language
@@ -350,11 +370,11 @@ export interface Topic {
   title: string;
   description?: string | null;
   order: number;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   tasks?: any[];
   controlWorks?: any[];
 }
-export async function getTopics(classId?: number, language?: "JAVA" | "PYTHON"): Promise<Topic[]> {
+export async function getTopics(classId?: number, language?: "JAVA" | "PYTHON" | "CPP"): Promise<Topic[]> {
   const params = new URLSearchParams();
   if (classId) params.append("classId", classId.toString());
   if (language) params.append("language", language);
@@ -376,7 +396,7 @@ export async function generateTheory(lessonId: number, topicTitle: string): Prom
   });
   return res.data;
 }
-export async function generateTheoryPreview(topicTitle: string, language: "JAVA" | "PYTHON"): Promise<{
+export async function generateTheoryPreview(topicTitle: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
   theory: string;
 }> {
   const res = await api.post(`/edu/generate-theory`, {
@@ -406,6 +426,18 @@ export interface CreateTaskRequest {
   description: string;
   template: string;
 }
+
+export async function uploadStatementImage(file: File): Promise<{ url: string; markdown: string }> {
+  const form = new FormData();
+  form.append("image", file);
+  const res = await api.post("/edu/statement-images", form, {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
+  return res.data;
+}
+
 export async function createTask(lessonId: number, task: CreateTaskRequest): Promise<Task> {
   const res = await api.post(`/edu/lessons/${lessonId}/tasks`, task);
   return res.data.task;
@@ -426,7 +458,7 @@ export async function runCodeFiles(taskId: number, files: CodeFile[], input?: st
   const res = await api.post(`/edu/tasks/${taskId}/run`, { files, input });
   return res.data;
 }
-export async function submitCode(taskId: number, code: string): Promise<{
+export async function submitCode(taskId: number, code: string, binding?: SubmissionBinding): Promise<{
   message?: string;
   grade: {
     id: number;
@@ -447,18 +479,21 @@ export async function submitCode(taskId: number, code: string): Promise<{
       maxScore: number;
     }> | null;
   };
+  learningFeedback?: LearningFeedback;
+  submissionMeta?: SubmissionMeta;
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/submit`, {
-    code
+    code,
+    ...(binding ?? {})
   });
   return res.data;
 }
 
-export async function submitCodeFiles(taskId: number, files: CodeFile[]): Promise<any> {
-  const res = await api.post(`/edu/tasks/${taskId}/submit`, { files });
+export async function submitCodeFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<any> {
+  const res = await api.post(`/edu/tasks/${taskId}/submit`, { files, ...(binding ?? {}) });
   return res.data;
 }
-export async function completeTask(taskId: number, code: string): Promise<{
+export async function completeTask(taskId: number, code: string, binding?: SubmissionBinding): Promise<{
   message?: string;
   grade: {
     id: number;
@@ -480,15 +515,18 @@ export async function completeTask(taskId: number, code: string): Promise<{
       maxScore: number;
     }> | null;
   };
+  learningFeedback?: LearningFeedback;
+  submissionMeta?: SubmissionMeta;
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/complete`, {
-    code
+    code,
+    ...(binding ?? {})
   });
   return res.data;
 }
 
-export async function completeTaskFiles(taskId: number, files: CodeFile[]): Promise<any> {
-  const res = await api.post(`/edu/tasks/${taskId}/complete`, { files });
+export async function completeTaskFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<any> {
+  const res = await api.post(`/edu/tasks/${taskId}/complete`, { files, ...(binding ?? {}) });
   return res.data;
 }
 export async function generateTestData(taskId: number, count: number): Promise<{
@@ -601,7 +639,7 @@ export async function getMyStudentInfo(): Promise<{
     class: {
       id: number;
       name: string;
-      language: "JAVA" | "PYTHON";
+      language: "JAVA" | "PYTHON" | "CPP";
     };
   };
 }> {

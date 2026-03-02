@@ -17,8 +17,61 @@ export const DocsPage: React.FC = () => {
   const [query, setQuery] = useState("");
   const [audience, setAudience] = useState<DocsAudience>("ALL");
   const [showTour, setShowTour] = useState(false);
+  const isEn = i18n.language?.toLowerCase().startsWith("en");
+  const tx = (uk: string, en: string) => isEn ? en : uk;
   const selectedId = searchParams.get("id") as DocsSectionId | null || "welcome";
   const sections = useMemo(() => getDocsSections(i18n.language), [i18n.language]);
+  const openSection = (id: DocsSectionId) => setSearchParams({
+    id
+  }, {
+    replace: true
+  });
+  const newbieTracks = useMemo(() => [{
+    title: tx("Я учень", "I'm a student"),
+    buttons: [{
+      id: "getting-started" as DocsSectionId,
+      label: tx("1) Перші кроки", "1) First steps")
+    }, {
+      id: "edu-student" as DocsSectionId,
+      label: tx("2) Як проходити тему", "2) How to do topics")
+    }, {
+      id: "edu-controlworks" as DocsSectionId,
+      label: tx("3) Як проходити контрольну", "3) How control works")
+    }, {
+      id: "edu-gradebook" as DocsSectionId,
+      label: tx("4) Де дивитися оцінки", "4) Where to see grades")
+    }]
+  }, {
+    title: tx("Я вчитель", "I'm a teacher"),
+    buttons: [{
+      id: "getting-started" as DocsSectionId,
+      label: tx("1) Старт налаштування", "1) Setup start")
+    }, {
+      id: "edu-teacher" as DocsSectionId,
+      label: tx("2) Повний робочий цикл", "2) Full workflow")
+    }, {
+      id: "edu-topics" as DocsSectionId,
+      label: tx("3) Як вести теми", "3) Managing topics")
+    }, {
+      id: "edu-gradebook" as DocsSectionId,
+      label: tx("4) Як ставити оцінки", "4) Grading in gradebook")
+    }]
+  }, {
+    title: tx("Я в Personal", "I'm in Personal mode"),
+    buttons: [{
+      id: "getting-started" as DocsSectionId,
+      label: tx("1) Перші кроки", "1) First steps")
+    }, {
+      id: "personal" as DocsSectionId,
+      label: tx("2) Як працює Personal", "2) How Personal works")
+    }, {
+      id: "personal-tasks" as DocsSectionId,
+      label: tx("3) Ефективний сценарій", "3) Effective workflow")
+    }, {
+      id: "profile-progress-model" as DocsSectionId,
+      label: tx("4) Як читати прогрес", "4) How to read progress")
+    }]
+  }], [isEn]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sections.filter(s => {
@@ -42,7 +95,7 @@ export const DocsPage: React.FC = () => {
           </Button>
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-primary" />
-            <div className="text-lg font-mono text-text-primary">Docs / Wiki</div>
+            <div className="text-lg font-mono text-text-primary">StudyCod Wiki</div>
           </div>
         </div>
 
@@ -72,12 +125,24 @@ export const DocsPage: React.FC = () => {
               </div>
             </Card>
 
+            <Card className="p-3 mb-3 border border-primary/35 bg-[linear-gradient(160deg,rgba(16,185,129,0.1),rgba(30,64,175,0.08)_60%,rgba(15,23,42,0.5))]">
+              <div className="text-sm font-mono text-text-primary mb-1">{tx("Режим новачка", "Newbie mode")}</div>
+              <div className="text-xs text-text-secondary mb-3">{tx("Обери свій сценарій і переходь по кнопках 1 → 2 → 3 → 4.", "Pick your scenario and follow buttons 1 → 2 → 3 → 4.")}</div>
+
+              <div className="space-y-3">
+                {newbieTracks.map(track => <div key={track.title} className="border border-border/70 bg-bg-base/80 p-2.5">
+                    <div className="text-xs font-mono text-text-primary mb-2">{track.title}</div>
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {track.buttons.map(btn => <button key={`${track.title}-${btn.id}`} onClick={() => openSection(btn.id)} className="text-left px-2 py-1.5 text-xs font-mono border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast">
+                          {btn.label}
+                        </button>)}
+                    </div>
+                  </div>)}
+              </div>
+            </Card>
+
             <div className="space-y-2">
-              {filtered.map(s => <button key={s.id} onClick={() => setSearchParams({
-              id: s.id
-            }, {
-              replace: true
-            })} className={`w-full text-left p-3 border transition-fast ${selectedId === s.id ? "border-primary bg-bg-hover" : "border-border hover:bg-bg-hover"}`}>
+              {filtered.map(s => <button key={s.id} onClick={() => openSection(s.id)} className={`w-full text-left p-3 border transition-fast ${selectedId === s.id ? "border-primary bg-bg-hover" : "border-border hover:bg-bg-hover"}`}>
                   <div className="text-sm font-mono text-text-primary">{s.title}</div>
                   <div className="text-xs text-text-muted mt-1">
                     {s.audience === "ALL" ? "ALL" : s.audience}
@@ -94,7 +159,7 @@ export const DocsPage: React.FC = () => {
                 <div>
                   <div className="text-xl font-mono text-text-primary">{selected.title}</div>
                   <div className="text-xs text-text-muted mt-1">
-                    {selected.audience} · {selected.id}
+                    {selected.audience}
                   </div>
                 </div>
                 <Button variant="ghost" onClick={() => {

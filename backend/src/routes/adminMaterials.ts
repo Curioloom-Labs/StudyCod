@@ -28,7 +28,7 @@ type MaterialsLanguage = "JAVA" | "PYTHON" | "CPP";
 type TheoryBlockRevisionAction = "CREATE" | "UPDATE" | "ROLLBACK" | "AUTO";
 
 function isEduLanguage(lang: string): lang is TopicLanguage {
-  return lang === "JAVA" || lang === "PYTHON";
+  return lang === "JAVA" || lang === "PYTHON" || lang === "CPP";
 }
 
 function buildAdminTopicDtoFromLegacy(t: Topic): any {
@@ -199,7 +199,7 @@ function assertTheoryContentIsPure(content: string): void {
   }
 }
 
-const eduLanguageSchema = z.enum(["JAVA", "PYTHON"]);
+const eduLanguageSchema = z.enum(["JAVA", "PYTHON", "CPP"]);
 const materialsLanguageSchema = z.enum(["JAVA", "PYTHON", "CPP"]);
 
 const createTopicSchema = z.object({

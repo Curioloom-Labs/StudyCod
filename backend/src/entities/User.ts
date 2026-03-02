@@ -115,6 +115,39 @@ export class User {
     name: "first_name"
   })
   firstName?: string | null;
+
+  @Column({
+    type: "varchar",
+    length: 100,
+    nullable: true,
+    name: "cf_handle"
+  })
+  cfHandle?: string | null;
+
+  @Column({
+    type: "varchar",
+    length: 100,
+    nullable: true,
+    name: "atcoder_handle"
+  })
+  atcoderHandle?: string | null;
+
+  @Column({
+    type: "varchar",
+    length: 100,
+    nullable: true,
+    name: "leetcode_handle"
+  })
+  leetcodeHandle?: string | null;
+
+  @Column({
+    type: "varchar",
+    length: 100,
+    nullable: true,
+    name: "codechef_handle"
+  })
+  codechefHandle?: string | null;
+
   @Column({
     type: "varchar",
     length: 100,

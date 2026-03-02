@@ -18,6 +18,7 @@ import {
   submitCodeFiles,
   completeTaskFiles,
   type CodeFile,
+  type SubmissionMeta,
   type TaskWithGrade,
   type TestResult
 } from "../lib/api/edu";
@@ -28,6 +29,32 @@ import { getMe } from "../lib/api/profile";
 import type { User } from "../types";
 import { useWorkspaceViewport } from "../components/interface/WorkspaceViewport";
 import { buildResumeState, loadResumeState, saveResumeState } from "../lib/resumeState";
+import { FailureRecoveryCard, type FailureRecoveryData } from "../components/FailureRecoveryCard";
+
+const textEncoder = new TextEncoder();
+
+async function sha256HexBrowser(input: string): Promise<string> {
+  try {
+    if (typeof globalThis.crypto?.subtle?.digest === "function") {
+      const digest = await globalThis.crypto.subtle.digest("SHA-256", textEncoder.encode(input));
+      return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+  } catch {
+    // ignore and use fallback hash
+  }
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `fnv-${(h >>> 0).toString(16)}`;
+}
+
+function createClientSubmissionId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `cs_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export const StudentTaskPage: React.FC = () => {
   const {
     t,
@@ -60,6 +87,11 @@ export const StudentTaskPage: React.FC = () => {
     }> | null;
   }>(null);
   const [hints, setHints] = useState<string[]>([]);
+  const [learningFeedback, setLearningFeedback] = useState<{
+    verdict?: string | null;
+    firstFailure?: FailureRecoveryData | null;
+  } | null>(null);
+  const [learningFeedbackMeta, setLearningFeedbackMeta] = useState<SubmissionMeta | null>(null);
   const [revealedHints, setRevealedHints] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [testProgress, setTestProgress] = useState<Record<number, 'pending' | 'running' | 'passed' | 'failed'>>({});
@@ -100,6 +132,11 @@ export const StudentTaskPage: React.FC = () => {
   const filesRef = useRef(files);
   const useFilesRef = useRef(useFiles);
   const handleSubmitRef = useRef<(() => Promise<void>) | null>(null);
+  const latestSubmitRequestSeq = useRef(0);
+  const latestSubmissionBindingRef = useRef<{
+    submissionId?: string;
+    codeHash: string;
+  } | null>(null);
   useEffect(() => {
     taskRef.current = task;
     filesRef.current = files;
@@ -520,6 +557,15 @@ export const StudentTaskPage: React.FC = () => {
     try {
       const data = await getTask(parseInt(taskId, 10));
       setTask(data);
+      setLearningFeedback(null);
+      setLearningFeedbackMeta(null);
+      const serverMeta = (data.grade as any)?.submissionMeta as SubmissionMeta | undefined;
+      latestSubmissionBindingRef.current = serverMeta
+        ? {
+            submissionId: String(serverMeta.submissionId),
+            codeHash: String(serverMeta.codeHash)
+          }
+        : null;
       {
         const g: any = (data as any).grade;
         const score = typeof g?.score === "number" ? Number(g.score) : null;
@@ -728,14 +774,31 @@ export const StudentTaskPage: React.FC = () => {
       }));
       return;
     }
+    const submitSeq = ++latestSubmitRequestSeq.current;
     setSubmitting(true);
     setIsRunningTests(true);
     setTestResults([]);
+    setLearningFeedback(null);
+    setLearningFeedbackMeta(null);
+    setShowResults(false);
     setConsoleOutput(t("checkingCode"));
     try {
+      const clientSubmissionId = createClientSubmissionId();
+      const codeHash = await sha256HexBrowser(useFiles ? JSON.stringify(files) : String(code ?? ""));
+      latestSubmissionBindingRef.current = { codeHash };
       const result = useFiles
-        ? await submitCodeFiles(parseInt(taskId, 10), files)
-        : await submitCode(parseInt(taskId, 10), code);
+        ? await submitCodeFiles(parseInt(taskId, 10), files, { clientSubmissionId, codeHash })
+        : await submitCode(parseInt(taskId, 10), code, { clientSubmissionId, codeHash });
+      if (submitSeq !== latestSubmitRequestSeq.current) {
+        return;
+      }
+      const submissionMeta = (result as any).submissionMeta as SubmissionMeta | undefined;
+      if (submissionMeta?.submissionId && submissionMeta?.codeHash) {
+        latestSubmissionBindingRef.current = {
+          submissionId: String(submissionMeta.submissionId),
+          codeHash: String(submissionMeta.codeHash)
+        };
+      }
       if (taskId) {
         localStorage.removeItem(`task_draft_${taskId}`);
         localStorage.removeItem(`task_draft_files_${taskId}`);
@@ -743,6 +806,8 @@ export const StudentTaskPage: React.FC = () => {
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(finalTestResults);
       setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
+      setLearningFeedback((result as any).learningFeedback ?? null);
+      setLearningFeedbackMeta(submissionMeta ?? null);
       setLastScoring((result as any).scoring ?? null);
       setRevealedHints(0);
       setShowResults(true);
@@ -769,8 +834,10 @@ export const StudentTaskPage: React.FC = () => {
       setConsoleOutput(errorMessage);
       alert(errorMessage);
     } finally {
-      setSubmitting(false);
-      setIsRunningTests(false);
+      if (submitSeq === latestSubmitRequestSeq.current) {
+        setSubmitting(false);
+        setIsRunningTests(false);
+      }
     }
   }, [taskId, code, files, useFiles, currentCodeText, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, loadTask, t]);
   const handleComplete = useCallback(async () => {
@@ -797,14 +864,31 @@ export const StudentTaskPage: React.FC = () => {
     if (!confirm(t("confirmCompleteEarly"))) {
       return;
     }
+    const submitSeq = ++latestSubmitRequestSeq.current;
     setSubmitting(true);
     setIsRunningTests(true);
     setTestResults([]);
+    setLearningFeedback(null);
+    setLearningFeedbackMeta(null);
+    setShowResults(false);
     setConsoleOutput(t("completingTaskRunningFinalTest"));
     try {
+      const clientSubmissionId = createClientSubmissionId();
+      const codeHash = await sha256HexBrowser(useFiles ? JSON.stringify(files) : String(code ?? ""));
+      latestSubmissionBindingRef.current = { codeHash };
       const result = useFiles
-        ? await completeTaskFiles(parseInt(taskId, 10), files)
-        : await completeTask(parseInt(taskId, 10), code);
+        ? await completeTaskFiles(parseInt(taskId, 10), files, { clientSubmissionId, codeHash })
+        : await completeTask(parseInt(taskId, 10), code, { clientSubmissionId, codeHash });
+      if (submitSeq !== latestSubmitRequestSeq.current) {
+        return;
+      }
+      const submissionMeta = (result as any).submissionMeta as SubmissionMeta | undefined;
+      if (submissionMeta?.submissionId && submissionMeta?.codeHash) {
+        latestSubmissionBindingRef.current = {
+          submissionId: String(submissionMeta.submissionId),
+          codeHash: String(submissionMeta.codeHash)
+        };
+      }
       if (taskId) {
         localStorage.removeItem(`task_draft_${taskId}`);
         localStorage.removeItem(`task_draft_files_${taskId}`);
@@ -812,6 +896,8 @@ export const StudentTaskPage: React.FC = () => {
       const finalTestResults: TestResult[] = Array.isArray((result as any).testResults) ? (result as any).testResults : [];
       setTestResults(finalTestResults);
       setHints(Array.isArray((result as any).hints) ? (result as any).hints : []);
+      setLearningFeedback((result as any).learningFeedback ?? null);
+      setLearningFeedbackMeta(submissionMeta ?? null);
       setLastScoring((result as any).scoring ?? null);
       setRevealedHints(0);
       setShowResults(true);
@@ -848,8 +934,10 @@ export const StudentTaskPage: React.FC = () => {
       setConsoleOutput(errorMessage);
       alert(errorMessage);
     } finally {
-      setSubmitting(false);
-      setIsRunningTests(false);
+      if (submitSeq === latestSubmitRequestSeq.current) {
+        setSubmitting(false);
+        setIsRunningTests(false);
+      }
     }
   }, [taskId, code, files, useFiles, currentCodeText, task?.isClosed, task?.deadline, task?.grade?.isManuallyGraded, task?.grade?.isCompleted, loadTask, t]);
   useEffect(() => {
@@ -1353,6 +1441,38 @@ export const StudentTaskPage: React.FC = () => {
                   </div>
                 </div>
               </div>}
+
+            <FailureRecoveryCard
+              verdict={(() => {
+                const latest = latestSubmissionBindingRef.current;
+                if (!latest || !learningFeedbackMeta?.codeHash) return null;
+                const sameHash = String(latest.codeHash) === String(learningFeedbackMeta.codeHash);
+                const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
+                return sameHash && sameId ? (learningFeedback?.verdict ?? null) : null;
+              })()}
+              firstFailure={(() => {
+                const latest = latestSubmissionBindingRef.current;
+                if (!latest || !learningFeedbackMeta?.codeHash) return null;
+                const sameHash = String(latest.codeHash) === String(learningFeedbackMeta.codeHash);
+                const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
+                return sameHash && sameId ? (learningFeedback?.firstFailure ?? null) : null;
+              })()}
+            />
+
+            {(() => {
+              const latest = latestSubmissionBindingRef.current;
+              if (!latest || !learningFeedbackMeta?.codeHash) return null;
+              const sameHash = String(latest.codeHash) === String(learningFeedbackMeta.codeHash);
+              const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
+              const isLatest = sameHash && sameId;
+              const verdict = learningFeedback?.verdict ?? null;
+              const firstFailure = learningFeedback?.firstFailure ?? null;
+              const showFallback = isLatest && (verdict === "WA" || verdict === "PRESENTATION_ERROR" || verdict === "PARTIAL") && !firstFailure;
+              if (!showFallback) return null;
+              return <div className="mb-3 p-2 border border-border bg-bg-code text-xs font-mono text-text-secondary">
+                  {tr("Перший збій стався на прихованому тесті — показ прев’ю недоступний. Перевірте крайові випадки та формат виводу.", "The first failure occurred on a hidden test, so preview is unavailable. Re-check edge cases and output formatting.")}
+                </div>;
+            })()}
 
             <div className="space-y-3">
               {testResults.map((result, index) => <Card key={index} className="p-3">

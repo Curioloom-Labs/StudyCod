@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Private/auth and technical endpoints
+Disallow: /auth/
+Disallow: /verify-email
+Disallow: /__dev/
+Disallow: /edu/
+
+Sitemap: /sitemap.xml

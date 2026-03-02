@@ -37,6 +37,12 @@ function buildUserDto(user: User) {
     lang: user.lang,
     difus: difusValue ?? 0,
     avatarUrl: user.avatarUrl ?? null,
+    contestHandles: {
+      codeforces: user.cfHandle ?? null,
+      atcoder: user.atcoderHandle ?? null,
+      leetcode: user.leetcodeHandle ?? null,
+      codechef: user.codechefHandle ?? null,
+    },
     userMode: user.userMode,
     role: user.role || null,
     googleId: user.googleId ?? null,

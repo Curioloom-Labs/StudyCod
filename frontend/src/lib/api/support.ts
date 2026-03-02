@@ -98,6 +98,16 @@ export async function postSupportChatMessage(conversationId: number, data: {
   return res.data;
 }
 
+export async function closeSupportChatConversation(conversationId: number, reason?: string): Promise<{
+  ok: boolean;
+  conversation: SupportChatConversation;
+}> {
+  const res = await api.patch(`/support/chat/conversations/${conversationId}/close`, {
+    reason: reason?.trim() || undefined
+  });
+  return res.data;
+}
+
 function parseFilenameFromContentDisposition(v: string | undefined): string | null {
   if (!v) return null;
   // content-disposition: attachment; filename="name.ext"

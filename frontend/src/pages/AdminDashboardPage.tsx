@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { AdminMailWorkspace } from "../components/admin/AdminMailWorkspace";
 import { Modal } from "../components/ui/Modal";
 import { Input } from "../components/ui/Input";
 import { getAdminUsers, getAdminUser, createAdminUser, updateAdminUser, updateUserRole, deleteAdminUser, getAdminClasses, createAdminClass, updateAdminClass, deleteAdminClass, getAdminStats, getAdminSupportTickets, replyAdminSupportTicket, getAdminMaintenance, enableAdminMaintenance, disableAdminMaintenance, getAdminSupportConversations, getAdminSupportConversation, postAdminSupportConversationMessage, getAdminLibraryTasks, approveAdminLibraryTask, rejectAdminLibraryTask, getAdminMaterialTopics, getAdminMaterialsDiagnostics, createAdminMaterialTopic, updateAdminMaterialTopic, deleteAdminMaterialTopic, reorderAdminMaterialTopics, importAdminMaterialTopicsYaml, syncAdminMaterialTopicsFromRepo, importAdminMaterialTopicsLegacy, exportAdminMaterialTopicsYaml, sendAdminBroadcastEmail, type AdminBroadcastDryRunResult, type AdminBroadcastSendResult, getAdminTheoryBlockRevisions, getAdminTheoryBlockRevision, rollbackAdminTheoryBlockRevision, translateAdminTheoryBlockToEn, type AdminTheoryBlockRevision, type MaintenanceState, type AdminUser, type AdminClass, type AdminStats, type AdminSupportTicket, type CreateUserData, type UpdateUserData, type CreateClassData, type AdminSupportChatConversation, type AdminSupportChatMessage, type AdminLibraryTask, type AdminLibraryTaskStatus, type AdminMaterialTopic, type AdminMaterialsDiagnostics, type AdminMaterialsLanguage } from "../lib/api/admin";
@@ -11,7 +12,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Users, BookOpen, BarChart3, Plus, Edit, Trash2, Shield, User as UserIcon, GraduationCap, Search, Wrench, CheckCircle, XCircle, Library, FileText, Save, GripVertical, History, Mail, RefreshCcw, Languages } from "lucide-react";
-type Tab = "stats" | "users" | "classes" | "materials" | "library" | "emails" | "support" | "maintenance";
+type Tab = "stats" | "users" | "classes" | "materials" | "library" | "emails" | "mailbox" | "support" | "maintenance";
 
 type MaterialsLanguage = AdminMaterialsLanguage;
 function toDatetimeLocalValue(iso: string | null): string {
@@ -1279,6 +1280,11 @@ export const AdminDashboardPage: React.FC = () => {
           Emails
         </Button>
 
+        <Button variant={activeTab === "mailbox" ? "primary" : "secondary"} onClick={() => setActiveTab("mailbox")} className="flex items-center gap-2">
+          <Mail className="w-4 h-4" />
+          Mailbox
+        </Button>
+
         <Button variant={activeTab === "support" ? "primary" : "secondary"} onClick={() => setActiveTab("support")} className="flex items-center gap-2">
           <Shield className="w-4 h-4" />
           Support
@@ -2121,6 +2127,8 @@ export const AdminDashboardPage: React.FC = () => {
                   </div>}
               </Card>}
           </div>}
+
+        {activeTab === "mailbox" && <AdminMailWorkspace />}
 
         {}
         {activeTab === "support" && <div className="space-y-4">

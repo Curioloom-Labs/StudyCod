@@ -2,6 +2,9 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import multer from "multer";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { User, UserLang } from "../entities/User";
@@ -68,6 +71,53 @@ const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const taskTheoryRepo = () => AppDataSource.getRepository(TaskTheory);
+const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
+const STATEMENT_IMAGES_DIR = path.join(UPLOADS_ROOT, "statement-images");
+const ALLOWED_STATEMENT_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
+const statementImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 8 * 1024 * 1024,
+    files: 1
+  },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_STATEMENT_IMAGE_MIMES.has(String(file.mimetype || "").toLowerCase())) {
+      return cb(new Error("UNSUPPORTED_IMAGE_TYPE"));
+    }
+    cb(null, true);
+  }
+});
+
+function ensureDir(p: string) {
+  fs.mkdirSync(p, {
+    recursive: true
+  });
+}
+
+function safeExtFromUpload(file: Express.Multer.File): string {
+  const fromName = path.extname(String(file.originalname || "")).toLowerCase();
+  const allowed = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"]);
+  if (allowed.has(fromName)) return fromName;
+  const byMime: Record<string, string> = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/avif": ".avif"
+  };
+  return byMime[String(file.mimetype || "").toLowerCase()] || ".png";
+}
+
+function mimeByExt(fileName: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".avif") return "image/avif";
+  return "application/octet-stream";
+}
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
@@ -111,6 +161,74 @@ const createLessonTaskBodySchema = z.object({
   description: z.string().min(1).max(50_000),
   template: z.string().min(1).max(200_000)
 });
+
+eduRouter.post("/statement-images", authRequired, (req: AuthRequest, res: Response, next) => {
+  statementImageUpload.single("image")(req as any, res as any, (err: any) => {
+    if (err) {
+      const msg = String(err?.message || "UPLOAD_ERROR");
+      if (msg === "UNSUPPORTED_IMAGE_TYPE") {
+        return res.status(400).json({ message: "UNSUPPORTED_IMAGE_TYPE" });
+      }
+      if (String(err?.code || "") === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ message: "IMAGE_TOO_LARGE" });
+      }
+      return res.status(400).json({ message: "INVALID_UPLOAD" });
+    }
+    return next();
+  });
+}, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId && !req.studentId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file || !file.buffer || !file.size) {
+      return res.status(400).json({ message: "IMAGE_REQUIRED" });
+    }
+
+    ensureDir(STATEMENT_IMAGES_DIR);
+    const ext = safeExtFromUpload(file);
+    const token = crypto.randomBytes(12).toString("hex");
+    const storedName = `${Date.now()}_${token}${ext}`;
+    const abs = path.join(STATEMENT_IMAGES_DIR, storedName);
+    fs.writeFileSync(abs, file.buffer);
+
+    const altBase = path.basename(String(file.originalname || "image"), path.extname(String(file.originalname || ""))).trim() || "image";
+    const alt = altBase.replace(/[\[\]\(\)]/g, "").slice(0, 80) || "image";
+    const url = `/api/edu/statement-images/${encodeURIComponent(storedName)}`;
+
+    return res.status(201).json({
+      url,
+      markdown: `![${alt}](${url})`
+    });
+  } catch (error: any) {
+    logger.error("[edu] failed to upload statement image", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+eduRouter.get("/statement-images/:fileName", async (req: Request, res: Response) => {
+  try {
+    const fileName = String(req.params.fileName || "").trim();
+    if (!/^[a-zA-Z0-9._-]+$/.test(fileName)) {
+      return res.status(400).json({ message: "INVALID_FILE_NAME" });
+    }
+    const abs = path.join(STATEMENT_IMAGES_DIR, fileName);
+    if (!abs.startsWith(STATEMENT_IMAGES_DIR)) {
+      return res.status(400).json({ message: "INVALID_FILE_NAME" });
+    }
+    if (!fs.existsSync(abs)) {
+      return res.status(404).json({ message: "FILE_NOT_FOUND" });
+    }
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader("Content-Type", mimeByExt(fileName));
+    return res.sendFile(abs);
+  } catch (error: any) {
+    logger.error("[edu] failed to serve statement image", { err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
   try {
     const validated = registerTeacherSchema.safeParse(req.body);

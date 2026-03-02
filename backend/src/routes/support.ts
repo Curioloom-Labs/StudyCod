@@ -64,6 +64,10 @@ const createConversationSchema = z.object({
   message: z.string().trim().min(1).max(20_000)
 });
 
+const closeConversationSchema = z.object({
+  reason: z.string().trim().max(2000).optional()
+});
+
 const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
 const supportUpload = multer({
   storage: multer.memoryStorage(),
@@ -247,6 +251,66 @@ router.get("/chat/conversations/:id", authRequired, async (req: AuthRequest, res
     });
   } catch (err: any) {
     logger.error("[support chat] failed to get conversation", { requestId: req.requestId, principalId: req.principalId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.patch("/chat/conversations/:id/close", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userType) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (req.userType === "USER" && !req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (req.userType === "STUDENT" && !req.studentId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const conversationId = Number.parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(conversationId) || conversationId <= 0) {
+      return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
+    }
+
+    const validated = closeConversationSchema.safeParse(req.body ?? {});
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+
+    const conversation = await convRepo().findOne({
+      where: { id: conversationId } as any,
+      relations: ["user", "student"]
+    });
+    if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
+
+    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student as any)?.id === req.studentId : (conversation.user as any)?.id === req.userId;
+    if (!isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    if (conversation.status !== "CLOSED") {
+      await convRepo().update({ id: conversation.id }, { status: "CLOSED" } as any);
+
+      const reason = String(validated.data.reason ?? "").trim();
+      const text = reason
+        ? `Conversation closed by user. Reason: ${reason}`
+        : "Conversation closed by user.";
+
+      const sys = msgRepo().create({
+        conversation,
+        senderType: "SYSTEM",
+        text
+      } as Partial<SupportMessage>);
+      await msgRepo().save(sys);
+      await convRepo().update({ id: conversation.id }, { lastMessageAt: sys.createdAt } as any);
+    }
+
+    const updated = await convRepo().findOne({ where: { id: conversation.id } as any });
+    return res.json({
+      ok: true,
+      conversation: {
+        id: updated?.id ?? conversation.id,
+        subject: updated?.subject ?? conversation.subject,
+        status: updated?.status ?? "CLOSED",
+        createdAt: updated?.createdAt ?? conversation.createdAt,
+        updatedAt: updated?.updatedAt ?? conversation.updatedAt,
+        lastMessageAt: updated?.lastMessageAt ?? conversation.lastMessageAt
+      }
+    });
+  } catch (err: any) {
+    logger.error("[support chat] failed to close conversation", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

@@ -160,6 +160,46 @@
   animation: dots 1.1s steps(1, end) infinite;
 }
 
+@keyframes studycodSolvePulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 179, 95, 0.35); }
+  60% { box-shadow: 0 0 0 16px rgba(0, 179, 95, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 179, 95, 0); }
+}
+
+.studycod-solve-pulse {
+  animation: studycodSolvePulse 1.1s var(--ease-out);
+}
+
+@keyframes studycodShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.studycod-shake {
+  animation: studycodShake 420ms var(--ease-in-out);
+}
+
+@keyframes studycodConfetti {
+  0% { opacity: 0; transform: translateY(-8px); }
+  8% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(24px); }
+}
+
+.studycod-confetti {
+  background-image:
+    radial-gradient(circle at 8% 15%, rgba(123, 201, 255, 0.9) 0 3px, transparent 3px),
+    radial-gradient(circle at 22% 10%, rgba(0, 179, 95, 0.9) 0 3px, transparent 3px),
+    radial-gradient(circle at 35% 12%, rgba(174, 158, 255, 0.9) 0 3px, transparent 3px),
+    radial-gradient(circle at 48% 18%, rgba(255, 182, 106, 0.9) 0 3px, transparent 3px),
+    radial-gradient(circle at 62% 12%, rgba(127, 226, 194, 0.9) 0 3px, transparent 3px),
+    radial-gradient(circle at 74% 16%, rgba(123, 201, 255, 0.9) 0 3px, transparent 3px),
+    radial-gradient(circle at 86% 11%, rgba(0, 179, 95, 0.9) 0 3px, transparent 3px);
+  animation: studycodConfetti 1.55s var(--ease-out) forwards;
+}
+
 /* =========================
    Base Layer
    ========================= */

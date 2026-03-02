@@ -3,30 +3,34 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>StudyCod Screens</title>
+    <title>StudyCod — Галерея скріншотів</title>
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.5; }
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; line-height: 1.5; background: #0b1220; color: #e5e7eb; }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 36px 20px 48px; }
       ul { padding-left: 18px; }
-      a { color: #0b5fff; text-decoration: none; }
+      a { color: #93c5fd; text-decoration: none; }
       a:hover { text-decoration: underline; }
-      .muted { color: #6b7280; }
+      .muted { color: #9ca3af; }
+      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 16px; }
+      .card { border: 1px solid #1f2937; border-radius: 12px; padding: 12px; background: #111827; }
     </style>
   </head>
   <body>
-    <h1>StudyCod: /docs/screens</h1>
-    <p class="muted">Папка для реальних скріншотів інтерфейсу (SVG/PNG/JPG), які підтягуються у документації.</p>
+    <div class="wrap">
+      <h1 style="margin:0 0 8px;">🖼️ Галерея скріншотів StudyCod</h1>
+      <p class="muted" style="margin:0;">Реальні приклади екранів платформи для довідки та документації.</p>
 
-    <h2>Наявні файли (svg)</h2>
-    <ul>
-      <li><a href="/docs/screens/edu-gradebook-thematic.svg">edu-gradebook-thematic.svg</a></li>
-      <li><a href="/docs/screens/edu-practice-task-check.svg">edu-practice-task-check.svg</a></li>
-      <li><a href="/docs/screens/edu-quiz-editor.svg">edu-quiz-editor.svg</a></li>
-      <li><a href="/docs/screens/edu-quiz-results.svg">edu-quiz-results.svg</a></li>
-      <li><a href="/docs/screens/edu-student-lessons.svg">edu-student-lessons.svg</a></li>
-      <li><a href="/docs/screens/edu-topic-page.svg">edu-topic-page.svg</a></li>
-      <li><a href="/docs/screens/personal-tasks.svg">personal-tasks.svg</a></li>
-    </ul>
+      <div class="grid">
+        <div class="card"><a href="/docs/screens/edu-gradebook-thematic.svg">Тематичний журнал оцінок</a></div>
+        <div class="card"><a href="/docs/screens/edu-practice-task-check.svg">Перевірка практичної задачі</a></div>
+        <div class="card"><a href="/docs/screens/edu-quiz-editor.svg">Редактор тесту для контрольної</a></div>
+        <div class="card"><a href="/docs/screens/edu-quiz-results.svg">Результати тесту</a></div>
+        <div class="card"><a href="/docs/screens/edu-student-lessons.svg">Уроки та прогрес учня</a></div>
+        <div class="card"><a href="/docs/screens/edu-topic-page.svg">Сторінка теми в EDU</a></div>
+        <div class="card"><a href="/docs/screens/personal-tasks.svg">Особисті задачі в практиці</a></div>
+      </div>
 
-    <p class="muted"><a href="/docs/">← назад до /docs</a></p>
+      <p class="muted" style="margin-top:16px;"><a href="/docs/">← Повернутися до StudyCod Wiki</a></p>
+    </div>
   </body>
 </html>

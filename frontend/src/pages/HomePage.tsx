@@ -159,6 +159,9 @@ export const HomePage: React.FC<Props> = ({
     };
   }, [studentLessons, studentSummaryGrades]);
   const averageGrade = averageGradeData.average;
+  const hasControlInAverage = useMemo(() => {
+    return averageGradeData.items.some((it) => it.kind === "CONTROL");
+  }, [averageGradeData.items]);
 
   const openResume = () => {
     const r = resolveResumeRoute(user, resume);
@@ -384,7 +387,7 @@ export const HomePage: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className={`grid gap-3 ${isStudent && (!hasControlInAverage || averageGrade === null) ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-4"}`}>
             <div className="border border-border bg-bg-surface px-3 py-2.5">
               <div className="text-[11px] font-mono text-text-secondary">{tr("Роль", "Role")}</div>
               <div className="mt-1 text-sm font-mono text-text-primary truncate">
@@ -404,10 +407,12 @@ export const HomePage: React.FC<Props> = ({
               <div className="mt-1 text-sm font-mono text-text-primary truncate">{resumeMeta ?? tr("щойно", "just now")}</div>
             </div>
 
-            <div className="border border-border bg-bg-surface px-3 py-2.5">
-              <div className="text-[11px] font-mono text-text-secondary">{tr("Середній бал", "Average")}</div>
-              <div className="mt-1 text-sm font-mono text-text-primary">{averageGrade !== null ? averageGrade.toFixed(1) : "—"}</div>
-            </div>
+            {!(isStudent && (!hasControlInAverage || averageGrade === null)) ? (
+              <div className="border border-border bg-bg-surface px-3 py-2.5">
+                <div className="text-[11px] font-mono text-text-secondary">{tr("Середній бал", "Average")}</div>
+                <div className="mt-1 text-sm font-mono text-text-primary">{averageGrade !== null ? averageGrade.toFixed(1) : "—"}</div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -445,7 +450,7 @@ export const HomePage: React.FC<Props> = ({
 
                 {}
                 {isStudent && !loading && <div className="grid grid-cols-2 gap-4">
-                        {averageGrade !== null && <Card className="p-4 cursor-pointer hover:bg-bg-hover transition-fast" onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")}>
+                  {averageGrade !== null && hasControlInAverage && <Card className="p-4 cursor-pointer hover:bg-bg-hover transition-fast" onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")}>
                                 <TrendingUp className="w-5 h-5 text-primary" />
                                 <p className="text-xs">{tr("Середній бал", "Average grade")}</p>
                                 <p className="text-xl">{averageGrade.toFixed(1)}</p>
@@ -469,7 +474,7 @@ export const HomePage: React.FC<Props> = ({
                     </Card>}
 
                 {}
-                {isStudent && averageGrade !== null && <Modal open={showAverageBreakdown} onClose={() => setShowAverageBreakdown(false)} title={tr("Середній бал — розрахунок", "Average grade — calculation")}>
+                {isStudent && averageGrade !== null && hasControlInAverage && <Modal open={showAverageBreakdown} onClose={() => setShowAverageBreakdown(false)} title={tr("Середній бал — розрахунок", "Average grade — calculation")}>
                         <div className="p-6 space-y-4">
                             <div className="text-sm text-text-secondary font-mono">
                                 {tr("Середній бал рахується як середнє по всіх оцінках > 0 у поточному класі (практика + контрольні).", "The average grade is calculated as the mean of all grades > 0 in the current class (practice + control works).")}

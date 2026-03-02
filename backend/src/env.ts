@@ -85,6 +85,8 @@ const EnvSchema = z.object({
   OPENROUTER_MODEL: z.string().optional(),
   OPENROUTER_URL: z.string().optional(),
   OPENROUTER_REFERER: z.string().optional(),
+  TURNSTILE_SECRET_KEY: z.string().optional(),
+  TURNSTILE_VERIFY_URL: z.string().optional(),
 
   // Cloudflare AI worker base URL (used by LLM provider and can be reused for translation)
   CLOUDFLARE_AI_URL: z.string().optional(),

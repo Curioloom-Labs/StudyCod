@@ -1,12 +1,32 @@
 export type CourseLanguage = "JAVA" | "PYTHON" | "CPP";
 export type UserMode = "PERSONAL" | "EDUCATIONAL";
 export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
+
+export interface PublicProfilePrivacy {
+  showContestStats: boolean;
+  showSolvedHistory: boolean;
+  showLanguageBreakdown: boolean;
+}
+
 export interface User {
   id: number;
   username: string;
   course: CourseLanguage;
   difus: number;
   avatarUrl: string | null;
+  contestHandles?: {
+    codeforces?: string | null;
+    atcoder?: string | null;
+    leetcode?: string | null;
+    codechef?: string | null;
+  };
+  contestHandlesByCourse?: {
+    codeforces?: Partial<Record<CourseLanguage, string | null>>;
+    atcoder?: Partial<Record<CourseLanguage, string | null>>;
+    leetcode?: Partial<Record<CourseLanguage, string | null>>;
+    codechef?: Partial<Record<CourseLanguage, string | null>>;
+  };
+  publicProfilePrivacy?: PublicProfilePrivacy;
   timezone?: string | null;
   userMode?: UserMode;
   role?: UserRole;
@@ -29,6 +49,41 @@ export interface User {
   placementCodingTaskId?: string | null;
   placementCodingScore?: number | null;
   placementCodingDoneAt?: string | null;
+}
+
+export interface PublicProfile {
+  id: number;
+  username: string;
+  avatarUrl: string | null;
+  lang: CourseLanguage;
+  difus: number;
+  joinedAt: string;
+  contestHandles: {
+    codeforces: string | null;
+    atcoder: string | null;
+    leetcode: string | null;
+    codechef: string | null;
+  };
+  privacy?: PublicProfilePrivacy;
+  stats: {
+    solvedTotal: number;
+    solvedByLang: Record<CourseLanguage, number>;
+    badgesUnlocked: number[];
+    contestsJoined: number | null;
+    contestSubmissionsTotal: number | null;
+    contestAcceptedLike: number | null;
+  };
+  recentSolved: Array<{
+    id: number;
+    title: string;
+    problemCode: string | null;
+    slug: string | null;
+    lang: CourseLanguage;
+    lastScore: number | null;
+    lastTestsPassed: number | null;
+    lastTestsTotal: number | null;
+    lastCheckedAt: string | null;
+  }>;
 }
 export interface Topic {
   id: number;
