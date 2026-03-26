@@ -11,7 +11,7 @@ import { logger } from "../../utils/logger";
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(12, Math.round(n)));
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 async function calculateControlGradeForNewSystemWithManager(
@@ -119,7 +119,7 @@ async function calculateControlGradeForNewSystemWithManager(
   if (hasTestGrade && hasPracticeGrade) {
     const formulaToEvaluate = customFormula;
     finalGrade = clampGradeToInt(evaluateFormula(formulaToEvaluate, formulaVariables));
-    formulaSnapshot = customFormula ?? "(test + 1.3 * avg(practice)) / 2";
+    formulaSnapshot = customFormula ?? "0.35 * test + 0.65 * avg(practice)";
   } else if (hasTestGrade) {
     finalGrade = clampGradeToInt(theoryGrade);
     formulaSnapshot = "test";

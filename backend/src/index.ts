@@ -23,10 +23,12 @@ import supportRouter from "./routes/support";
 import libraryRouter from "./routes/library";
 import contestsRouter from "./routes/contests";
 import emailsRouter from "./routes/emails";
+import certificateRouter from "./routes/certificate";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { requestContextMiddleware } from "./middleware/requestContext";
 import { placementGate } from "./middleware/placementGate";
 import { authMiddleware } from "./middleware/authMiddleware";
+import { forbidContestModeUsers } from "./middleware/contestModeGuard";
 import { PORT, CORS_ORIGIN, CORS_ORIGINS, SESSION_SECRET, IS_PRODUCTION, TRUST_PROXY } from "./config";
 import { logger } from "./utils/logger";
 import { HttpError } from "./utils/httpError";
@@ -37,6 +39,7 @@ import { resolveJudgeSandboxConfig, resolveJudgeWorkerEntry } from "./services/j
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
 import { executionScheduler } from "./services/execution/executionSchedulerSingleton";
+import { startCertificateQueueWorker } from "./services/certificates/CertificateQueueWorker";
 const app = express();
 
 const serverStartedAt = new Date();
@@ -392,31 +395,33 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
 });
 app.use("/auth", authRouter);
 app.use("/profile", profileRouter);
-app.use("/tasks", authMiddleware, placementGate, tasksRouter);
-app.use("/grades", authMiddleware, placementGate, gradeRouter);
+app.use("/tasks", authMiddleware, forbidContestModeUsers, placementGate, tasksRouter);
+app.use("/grades", authMiddleware, forbidContestModeUsers, placementGate, gradeRouter);
 app.use("/edu", eduRouter);
-app.use("/topics", authMiddleware, placementGate, topicsRouter);
-app.use("/theory", authMiddleware, placementGate, theoryRouter);
-app.use("/streak", authMiddleware, placementGate, streakRouter);
-app.use("/birthday", authMiddleware, placementGate, birthdayRouter);
-app.use("/admin", adminRouter);
+app.use("/topics", authMiddleware, forbidContestModeUsers, placementGate, topicsRouter);
+app.use("/theory", authMiddleware, forbidContestModeUsers, placementGate, theoryRouter);
+app.use("/streak", authMiddleware, forbidContestModeUsers, placementGate, streakRouter);
+app.use("/birthday", authMiddleware, forbidContestModeUsers, placementGate, birthdayRouter);
+app.use("/admin", authMiddleware, forbidContestModeUsers, adminRouter);
 app.use("/support", supportRouter);
-app.use("/library", authMiddleware, libraryRouter);
+app.use("/library", authMiddleware, forbidContestModeUsers, libraryRouter);
 app.use("/contests", contestsRouter);
+app.use("/certificate", certificateRouter);
 app.use("/emails", emailsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/profile", profileRouter);
-app.use("/api/tasks", authMiddleware, placementGate, tasksRouter);
-app.use("/api/grades", authMiddleware, placementGate, gradeRouter);
+app.use("/api/tasks", authMiddleware, forbidContestModeUsers, placementGate, tasksRouter);
+app.use("/api/grades", authMiddleware, forbidContestModeUsers, placementGate, gradeRouter);
 app.use("/api/edu", eduRouter);
-app.use("/api/topics", authMiddleware, placementGate, topicsRouter);
-app.use("/api/theory", authMiddleware, placementGate, theoryRouter);
-app.use("/api/streak", authMiddleware, placementGate, streakRouter);
-app.use("/api/birthday", authMiddleware, placementGate, birthdayRouter);
-app.use("/api/admin", adminRouter);
+app.use("/api/topics", authMiddleware, forbidContestModeUsers, placementGate, topicsRouter);
+app.use("/api/theory", authMiddleware, forbidContestModeUsers, placementGate, theoryRouter);
+app.use("/api/streak", authMiddleware, forbidContestModeUsers, placementGate, streakRouter);
+app.use("/api/birthday", authMiddleware, forbidContestModeUsers, placementGate, birthdayRouter);
+app.use("/api/admin", authMiddleware, forbidContestModeUsers, adminRouter);
 app.use("/api/support", supportRouter);
-app.use("/api/library", authMiddleware, libraryRouter);
+app.use("/api/library", authMiddleware, forbidContestModeUsers, libraryRouter);
 app.use("/api/contests", contestsRouter);
+app.use("/api/certificate", certificateRouter);
 app.use("/api/emails", emailsRouter);
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error("Unhandled error", { err });
@@ -441,6 +446,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 AppDataSource.initialize().then(async () => {
   logger.info("Data Source initialized");
   await applyDbPatches();
+  startCertificateQueueWorker();
   const {
     seedTopicsIfNeeded
   } = await import("./utils/seedTopics");

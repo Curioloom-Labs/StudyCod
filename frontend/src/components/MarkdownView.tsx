@@ -1,16 +1,32 @@
 import React, { useEffect, useMemo, memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import { decodeEscapedInputText, normalizeMarkdownEscapes } from "../utils/inputTextNormalization";
 const remarkPlugins = [remarkGfm, remarkMath];
 const rehypePlugins = [rehypeKatex];
 interface MarkdownViewProps {
   content: string;
 }
 
-type SyntaxHighlighterComponent = React.ComponentType<any> | null;
-type SyntaxHighlighterStyle = any;
+type SyntaxHighlighterProps = {
+  language?: string;
+  style?: unknown;
+  customStyle?: React.CSSProperties;
+  PreTag?: React.ElementType;
+  children?: React.ReactNode;
+};
+type SyntaxHighlighterComponent = React.ComponentType<SyntaxHighlighterProps> | null;
+type SyntaxHighlighterStyle = unknown;
+type SyntaxHighlighterModule = {
+  Prism?: React.ComponentType<SyntaxHighlighterProps>;
+  default?: React.ComponentType<SyntaxHighlighterProps>;
+};
+type PrismStylesModule = {
+  vscDarkPlus?: unknown;
+};
 
 const PlainCodeBlock: React.FC<{ code: string }> = ({ code }) => {
   return <pre className="my-4 overflow-x-auto border border-border bg-bg-code p-4 text-sm leading-relaxed">
@@ -34,9 +50,11 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       import("react-syntax-highlighter/dist/esm/styles/prism")
     ]).then(([mod, styles]) => {
       if (cancelled) return;
-      const Highlighter = (mod as any).Prism ?? (mod as any).default ?? null;
+      const syntaxModule = mod as SyntaxHighlighterModule;
+      const stylesModule = styles as PrismStylesModule;
+      const Highlighter = syntaxModule.Prism ?? syntaxModule.default ?? null;
       setSyntaxHighlighter(() => Highlighter);
-      setSyntaxStyle((styles as any).vscDarkPlus ?? null);
+      setSyntaxStyle(stylesModule.vscDarkPlus ?? null);
     }).catch(() => {
       // Ignore: if dynamic import fails, we just render plain code blocks.
     });
@@ -46,18 +64,21 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     };
   }, []);
 
-  const codeComponents = useMemo(() => ({
+  const codeComponents = useMemo<Pick<Components, "code">>(() => ({
     code({
       node,
       inline,
       className,
       children,
       ...props
-    }: any) {
+    }: React.ComponentPropsWithoutRef<"code"> & {
+      node?: unknown;
+      inline?: boolean;
+    }) {
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : "";
       if (!inline && match) {
-        const code = String(children).replace(/\n$/, "");
+        const code = decodeEscapedInputText(String(children).replace(/\n$/, ""));
         if (!SyntaxHighlighter || !syntaxStyle) {
           return <PlainCodeBlock code={code} />;
         }
@@ -73,21 +94,17 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
               </SyntaxHighlighter>
             </div>;
       }
-      return <code className="bg-bg-code border border-border px-1.5 py-0.5 text-sm font-mono text-text-primary" {...props}>
-            {children}
-          </code>;
+      const inlineCode = decodeEscapedInputText(String(children ?? ""));
+      const hasMultilineInline = inlineCode.includes("\n");
+      return <code
+        className={`bg-bg-code border border-border px-1.5 py-0.5 text-sm font-mono text-text-primary ${hasMultilineInline ? "whitespace-pre-wrap inline-block align-top" : ""}`}
+        {...props}
+      >
+        {inlineCode}
+      </code>;
     }
   }), [SyntaxHighlighter, syntaxStyle]);
-  const normalizeForRender = (raw: string) => {
-    let s = String(raw ?? "");
-    s = s.replace(/\r\n/g, "\n");
-    const escapedNewlinesCount = (s.match(/\\n/g) || []).length;
-    if (!s.includes("\n") && escapedNewlinesCount >= 2 || escapedNewlinesCount >= 6) {
-      s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\t/g, "\t");
-    }
-    s = s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
-    return s;
-  };
+  const normalizeForRender = (raw: string) => normalizeMarkdownEscapes(raw);
   const processedContent = useMemo(() => {
     if (!content) return "";
     let processed = normalizeForRender(content);

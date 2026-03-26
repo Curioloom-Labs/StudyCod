@@ -6,6 +6,7 @@ interface AiScoreResult {
   optimization: number;
   integrity: number;
   feedback: string;
+  fallbackUsed?: boolean;
   comparison?: {
     hasPrevious: boolean;
     previousGrade: number | null;
@@ -18,6 +19,7 @@ interface AiScoreResult {
   };
 }
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const GRADE_SCALE_MAX = 100;
 export async function evaluateCodeWithAI(params: {
   code: string;
   language: "JAVA" | "PYTHON" | "CPP";
@@ -148,10 +150,13 @@ ${params.code}
   } catch (error: any) {
     logger.warn('[ai-eval] failed', { message: error?.message });
     return {
-      work: 2,
-      optimization: 2,
-      integrity: 2,
-      feedback: "Не вдалося підключитись до ШІ. Застосовано загальну оцінку 2/2/2."
+      // Conservative fallback: avoid artificially inflated grades when AI is unavailable.
+      // computeTotalFromParts(1,1,1) -> 25/100, a temporary conservative score until retry.
+      work: 1,
+      optimization: 1,
+      integrity: 1,
+      feedback: "Не вдалося підключитись до ШІ. Застосовано тимчасову консервативну оцінку. Спробуйте повторно пізніше.",
+      fallbackUsed: true
     };
   }
 }
@@ -161,6 +166,7 @@ export function computeTotalFromParts(parts: {
   integrity: number;
 }): number {
   if (parts.work === 0 || parts.integrity === 0) return 1;
-  const raw = parts.work + parts.optimization + parts.integrity;
-  return clamp(Math.round(raw), 1, 12);
+  const raw12 = parts.work + parts.optimization + parts.integrity;
+  const scaled100 = Math.round(raw12 / 12 * GRADE_SCALE_MAX);
+  return clamp(scaled100, 1, GRADE_SCALE_MAX);
 }

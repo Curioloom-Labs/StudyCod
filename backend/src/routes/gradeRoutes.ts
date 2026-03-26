@@ -5,8 +5,15 @@ import { Task } from "../entities/Task";
 import { Topic } from "../entities/Topic";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { logger } from "../utils/logger";
+import { parseGradeComparisonFeedback } from "../utils/gradeComparisonFeedback";
 const router = Router();
 const gradeRepo = () => AppDataSource.getRepository(Grade);
+
+function isPersonalControlQuizTask(task: Task | null | undefined): boolean {
+  if (!task) return false;
+  return task.type === "CONTROL" && String((task as any).subtitle ?? "").includes("|QUIZ|");
+}
+
 function mapTaskToDto(task: Task | null | undefined) {
   if (!task) return null;
   const taskWithRelations = task as Task & {
@@ -57,7 +64,10 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
       },
       relations: ["task", "task.topic"]
     });
-    const data = grades.map(g => {
+    const data = grades
+      .filter(g => !isPersonalControlQuizTask(g.task))
+      .map(g => {
+      const parsedComparison = parseGradeComparisonFeedback(g.comparisonFeedback);
       const isIntro = g.task?.type === "INTRO";
       return {
         id: g.id,
@@ -66,10 +76,12 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
         optimizationScore: isIntro ? null : g.optimizationScore ?? null,
         integrityScore: isIntro ? null : g.integrityScore ?? null,
         aiFeedback: g.aiFeedback,
+        comparisonFeedback: parsedComparison.comparisonFeedback,
+        aiUnavailableFallback: parsedComparison.aiUnavailableFallback,
         createdAt: g.createdAt,
         task: mapTaskToDto(g.task)
       };
-    });
+      });
     return res.json(data);
   } catch (err) {
     logger.error("GET /grades error", { requestId: req.requestId, err });

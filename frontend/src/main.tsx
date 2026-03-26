@@ -14,7 +14,7 @@ function extractErrorMessage(reason: unknown): string {
   if (typeof reason === "string") return reason;
   if (reason instanceof Error) return reason.message || "";
   if (reason && typeof reason === "object" && "message" in reason) {
-    const msg = (reason as any).message;
+    const msg = (reason as { message?: unknown }).message;
     return typeof msg === "string" ? msg : "";
   }
   return "";

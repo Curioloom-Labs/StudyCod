@@ -115,6 +115,32 @@ export async function seedTopicsIfNeeded(): Promise<void> {
     const topicRepo = AppDataSource.getRepository(Topic);
     const topicNewRepo = AppDataSource.getRepository(TopicNew);
     const theoryRepo = AppDataSource.getRepository(TheoryBlock);
+
+    // Safety guard: startup seeding should initialize empty databases,
+    // not overwrite already customized curriculum on every restart.
+    // Use SEED_TOPICS_FORCE_SYNC=true only when you intentionally want
+    // to re-sync DB from repo files.
+    const forceSync = String(process.env.SEED_TOPICS_FORCE_SYNC ?? "false").toLowerCase() === "true";
+    if (!forceSync) {
+      const [legacyCount, globalCount] = await Promise.all([
+        topicRepo.count(),
+        topicNewRepo.count({
+          where: {
+            class: IsNull() as any
+          } as any
+        })
+      ]);
+
+      if (legacyCount > 0 || globalCount > 0) {
+        logger.info('[seed-topics] skipped (existing curriculum detected)', {
+          legacyCount,
+          globalCount,
+          hint: 'Set SEED_TOPICS_FORCE_SYNC=true to force sync from repo files.'
+        });
+        return;
+      }
+    }
+
     const items: Array<{
       title: string;
       lang: "JAVA" | "PYTHON" | "CPP";

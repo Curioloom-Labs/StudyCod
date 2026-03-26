@@ -50,8 +50,6 @@ export type ContestWorkspaceProps = {
   latestVerdict: string | null;
   latestVerdictAt: number;
   currentUserLabel?: string | null;
-  notes: string;
-  onNotesChange: (next: string) => void;
   focusMode: boolean;
   onFocusModeChange: (next: boolean) => void;
   canAskOrganizer?: boolean;

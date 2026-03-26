@@ -245,7 +245,7 @@ export function evaluateFormula(formula: string | null | undefined, variables: F
     if (typeof result !== 'number' || isNaN(result) || !isFinite(result)) {
       throw new Error(`Invalid calculation result: ${result}`);
     }
-    return Math.max(0, Math.min(12, Math.round(result)));
+    return Math.max(0, Math.min(100, Math.round(result)));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn("Safe formula evaluation failed", {
@@ -262,13 +262,13 @@ function calculateDefaultGrade(variables: FormulaVariables): number {
   } = variables;
   let result = 0;
   if (test !== null && avgPractice > 0) {
-    result = (test + 1.3 * avgPractice) / 2;
+    result = 0.35 * test + 0.65 * avgPractice;
   } else if (test !== null) {
     result = test;
   } else if (avgPractice > 0) {
     result = avgPractice;
   }
-  return Math.max(0, Math.min(12, Math.round(result)));
+  return Math.max(0, Math.min(100, Math.round(result)));
 }
 export function validateFormula(formula: string): boolean {
   if (!formula || formula.trim() === "") {

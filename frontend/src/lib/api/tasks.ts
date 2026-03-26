@@ -2,6 +2,17 @@ import { api } from "./client";
 import type { Task } from "../../types";
 
 export type CodeFile = { path: string; content: string };
+export type WebTaskFile = { path: "index.html" | "styles.css" | "script.js"; content: string };
+export type WebTaskRule = {
+  id?: string;
+  type: "required_selector" | "forbidden_selector" | "required_text" | "forbidden_text" | "required_script_pattern" | "forbidden_script_pattern";
+  message?: string;
+  points?: number;
+  selector?: string;
+  text?: string;
+  pattern?: string;
+  flags?: string;
+};
 type CodeOrFiles = string | { code?: string; files?: CodeFile[] };
 type SubmitBinding = { clientSubmissionId?: string; codeHash?: string };
 
@@ -29,6 +40,7 @@ export type PersonalTaskGrade = {
   optimizationScore?: number;
   integrityScore?: number;
   aiFeedback?: string;
+  aiUnavailableFallback?: boolean;
   comparisonFeedback?: string | null;
   previousGrade?: number | null;
   testsPassed?: number;
@@ -66,10 +78,58 @@ export type SubmitTaskResponse = {
     clientSubmissionId?: string | null;
     codeHash: string;
   };
-  milestone?: any;
+  milestone?: unknown;
   status?: string;
   message?: string;
 };
+
+export type UiLanguage = "uk" | "en";
+
+export type PersonalControlQuizQuestion = {
+  index: number;
+  question: string;
+  options: Record<string, string>;
+};
+
+export type PersonalControlQuizPayload = {
+  taskId: number;
+  title: string;
+  count: number;
+  questions: PersonalControlQuizQuestion[];
+};
+
+export type PersonalControlQuizSubmitResponse = {
+  message: "QUIZ_SUBMITTED" | string;
+  grade?: {
+    id?: number;
+    total: number;
+    correctAnswers: number;
+    totalQuestions: number;
+  };
+  review?: {
+    version: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    questions: Array<{
+      index: number;
+      question: string;
+      options: Record<string, string>;
+      correct: string;
+      student: string | null;
+      isCorrect: boolean;
+    }>;
+  };
+  summary?: {
+    quizGrade: number | null;
+    practiceAvg: number | null;
+    practiceAdjusted: number | null;
+    finalGrade: number | null;
+    passed: boolean;
+    passGrade: number;
+    maxGrade: number;
+  } | null;
+};
+
 function requireToken(): string {
   const token = localStorage.getItem("token");
   if (!token) {
@@ -77,25 +137,33 @@ function requireToken(): string {
   }
   return token;
 }
-export async function listTasks(): Promise<Task[]> {
+export async function listTasks(uiLang?: UiLanguage): Promise<Task[]> {
   requireToken();
-  const res = await api.get("/tasks");
-  const data: any = res.data;
+  const res = await api.get("/tasks", {
+    params: uiLang ? { uiLang } : undefined
+  });
+  const data: unknown = res.data;
   if (Array.isArray(data)) return data as Task[];
-  if (data && Array.isArray(data.tasks)) return data.tasks as Task[];
+  if (data && typeof data === "object" && Array.isArray((data as { tasks?: unknown }).tasks)) {
+    return (data as { tasks: Task[] }).tasks;
+  }
   throw new Error("Невірна відповідь API для списку завдань. Перевір проксі /api/* у Nginx.");
 }
-export async function getTask(id: number): Promise<Task> {
-  const res = await api.get(`/tasks/${id}`);
+export async function getTask(id: number, uiLang?: UiLanguage): Promise<Task> {
+  const res = await api.get(`/tasks/${id}`, {
+    params: uiLang ? { uiLang } : undefined
+  });
   return res.data as Task;
 }
-export async function generateTask(): Promise<any> {
+export async function generateTask(language?: UiLanguage): Promise<unknown> {
   requireToken();
   try {
-    const res = await api.post("/tasks/generate", {});
+    const res = await api.post("/tasks/generate", language ? { language } : {});
     return res.data;
-  } catch (error: any) {
-    if (error.response?.status === 401) {
+  } catch (error: unknown) {
+    const response = error && typeof error === "object" ? Reflect.get(error, "response") : null;
+    const status = response && typeof response === "object" ? Reflect.get(response, "status") : null;
+    if (status === 401) {
       localStorage.removeItem("token");
       throw new Error("Сесія закінчилась. Будь ласка, увійдіть в систему знову.");
     }
@@ -137,4 +205,42 @@ export async function runTask(id: number, codeOrFiles: CodeOrFiles, input?: stri
     output: string;
     stderr?: string;
   };
+}
+
+export async function getWebTaskTemplate(id: number): Promise<{ taskId: number; taskMode: "WEB"; files: WebTaskFile[]; rules: WebTaskRule[] }> {
+  const res = await api.get(`/tasks/${id}/web-template`);
+  return res.data;
+}
+
+export async function saveWebTaskDraft(id: number, files: WebTaskFile[]): Promise<{ ok: boolean; updatedAt?: string }> {
+  const res = await api.put(`/tasks/${id}/web-draft`, { files });
+  return res.data;
+}
+
+export async function checkWebTask(id: number, files: WebTaskFile[]): Promise<{
+  taskMode: "WEB";
+  passed: boolean;
+  score: number;
+  maxScore: number;
+  passedRules: number;
+  totalRules: number;
+  results: Array<{ id: string; type: WebTaskRule["type"]; passed: boolean; message: string; points: number; earnedPoints: number }>;
+}> {
+  const res = await api.post(`/tasks/${id}/web-check`, { files });
+  return res.data;
+}
+
+export async function submitWebTask(id: number, files: WebTaskFile[]): Promise<SubmitTaskResponse> {
+  const res = await api.post(`/tasks/${id}/web-submit`, { files });
+  return res.data as SubmitTaskResponse;
+}
+
+export async function getPersonalControlQuiz(id: number): Promise<PersonalControlQuizPayload> {
+  const res = await api.get(`/tasks/${id}/quiz`);
+  return res.data as PersonalControlQuizPayload;
+}
+
+export async function submitPersonalControlQuiz(id: number, answers: string[]): Promise<PersonalControlQuizSubmitResponse> {
+  const res = await api.post(`/tasks/${id}/submit-quiz`, { answers });
+  return res.data as PersonalControlQuizSubmitResponse;
 }

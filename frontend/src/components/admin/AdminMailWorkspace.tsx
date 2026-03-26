@@ -15,6 +15,11 @@ import {
   type AdminMailMessageListItem,
 } from "../../lib/api/admin";
 import { Mail, RefreshCcw, Send, Trash2, CheckCircle2, Circle } from "lucide-react";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
+const getApiErrorMessage = (error: unknown): string | null => {
+  const message = getErrorMessageFromUnknown(error, "");
+  return message || null;
+};
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -145,8 +150,8 @@ export const AdminMailWorkspace: React.FC = () => {
       setComposeText("");
       await loadMessages(activeFolder);
       alert("Message sent");
-    } catch (e: any) {
-      alert(e?.response?.data?.message || "Failed to send");
+    } catch (e: unknown) {
+      alert(getApiErrorMessage(e) || "Failed to send");
     } finally {
       setSending(false);
     }

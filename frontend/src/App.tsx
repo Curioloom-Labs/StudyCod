@@ -3,118 +3,129 @@ import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } fr
 import { AnimatePresence, motion } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { Code2, User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library } from "lucide-react";
+import { Code2, User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon } from "lucide-react";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
 import { staggerContainer, fadeUpItem } from "./lib/motion";
 import { TerminalLoader } from "./components/ui/TerminalLoader";
-import { DocsPage } from "./pages/DocsPage";
+import { DocsPage, MaintenancePage, type MaintenancePayload } from "./pages/system";
 import { OnboardingEntry } from "./components/onboarding/OnboardingEntry";
 import { PlacementEntry } from "./components/placement/PlacementEntry";
 import { UIModeProvider, useUIMode } from "./components/interface/UIModeProvider";
-import { SwitchToFocusNudge } from "./components/interface/SwitchToFocusNudge";
+import { SwitchToMomentumNudge } from "./components/interface/SwitchToMomentumNudge";
 import { WorkspaceViewportProvider } from "./components/interface/WorkspaceViewport";
-import { FocusShell, type FocusNavTarget } from "./layout/focus/FocusShell";
+import { MomentumShell, type MomentumNavTarget } from "./layout/momentum/MomentumShell";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "./lib/resumeState";
 import { applyTheme, getCurrentTheme, type AppTheme } from "./theme";
-import MaintenancePage, { type MaintenancePayload } from "./pages/MaintenancePage";
 import { getMaintenanceStatus } from "./lib/api/maintenance";
 import { getAdminMaintenance } from "./lib/api/admin";
+import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
-import { PublicLandingPage } from "./pages/PublicLandingPage";
-const AuthPage = React.lazy(() => import("./pages/AuthPage").then(mod => ({
+import { ToastViewport } from "./components/ui/ToastViewport";
+import { PublicLandingPage } from "./pages/public";
+import { getErrorMessageFromUnknown } from "./lib/safeError";
+const AuthPage = React.lazy(() => import("./pages/auth").then(mod => ({
   default: mod.AuthPage
 })));
-const VerifyEmailPage = React.lazy(() => import("./pages/VerifyEmailPage").then(mod => ({
+const VerifyEmailPage = React.lazy(() => import("./pages/auth").then(mod => ({
   default: mod.VerifyEmailPage
 })));
-const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage").then(mod => ({
+const ResetPasswordPage = React.lazy(() => import("./pages/auth").then(mod => ({
   default: mod.ResetPasswordPage
 })));
-const TasksPage = React.lazy(() => import("./pages/TasksPage").then(mod => ({
+const TasksPage = React.lazy(() => import("./pages/core").then(mod => ({
   default: mod.TasksPage
 })));
-const GradesPage = React.lazy(() => import("./pages/GradesPage").then(mod => ({
+const GradesPage = React.lazy(() => import("./pages/core").then(mod => ({
   default: mod.GradesPage
 })));
-const ProfilePage = React.lazy(() => import("./pages/ProfilePage").then(mod => ({
+const ProfilePage = React.lazy(() => import("./pages/profile").then(mod => ({
   default: mod.ProfilePage
 })));
-const HomePage = React.lazy(() => import("./pages/HomePage").then(mod => ({
+const HomePage = React.lazy(() => import("./pages/core").then(mod => ({
   default: mod.HomePage
 })));
-const PublicProfilePage = React.lazy(() => import("./pages/PublicProfilePage").then(mod => ({
+const PublicProfilePage = React.lazy(() => import("./pages/public").then(mod => ({
   default: mod.PublicProfilePage
 })));
-const EmailPreferencesResultPage = React.lazy(() => import("./pages/EmailPreferencesResultPage").then(mod => ({
+const IadPage = React.lazy(() => import("./pages/core").then(mod => ({
+  default: mod.IadPage
+})));
+const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth").then(mod => ({
   default: mod.EmailPreferencesResultPage
 })));
-const TeacherDashboardPage = React.lazy(() => import("./pages/TeacherDashboardPage").then(mod => ({
+const TeacherDashboardPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.TeacherDashboardPage
 })));
-const ClassDetailsPage = React.lazy(() => import("./pages/ClassDetailsPage").then(mod => ({
+const ClassDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.ClassDetailsPage
 })));
-const CreateLessonPage = React.lazy(() => import("./pages/CreateLessonPage").then(mod => ({
+const CreateLessonPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.CreateLessonPage
 })));
-const CreateTopicPage = React.lazy(() => import("./pages/CreateTopicPage").then(mod => ({
+const CreateTopicPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.CreateTopicPage
 })));
-const TopicDetailsPage = React.lazy(() => import("./pages/TopicDetailsPage").then(mod => ({
+const TopicDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.TopicDetailsPage
 })));
-const ControlWorkDetailsPage = React.lazy(() => import("./pages/ControlWorkDetailsPage").then(mod => ({
+const ControlWorkDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.ControlWorkDetailsPage
 })));
-const StudentDashboardPage = React.lazy(() => import("./pages/StudentDashboardPage").then(mod => ({
+const StudentDashboardPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.StudentDashboardPage
 })));
-const StudentLessonsPage = React.lazy(() => import("./pages/StudentLessonsPage").then(mod => ({
+const StudentLessonsPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.StudentLessonsPage
 })));
-const LessonDetailsPage = React.lazy(() => import("./pages/LessonDetailsPage").then(mod => ({
+const LessonDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.LessonDetailsPage
 })));
-const StudentTaskPage = React.lazy(() => import("./pages/StudentTaskPage").then(mod => ({
+const StudentTaskPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.StudentTaskPage
 })));
-const GradeDetailsPage = React.lazy(() => import("./pages/GradeDetailsPage").then(mod => ({
+const GradeDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.GradeDetailsPage
 })));
-const SummaryGradesPage = React.lazy(() => import("./pages/SummaryGradesPage").then(mod => ({
+const SummaryGradesPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.SummaryGradesPage
 })));
-const ClassGradebookPage = React.lazy(() => import("./pages/ClassGradebookPage").then(mod => ({
+const ClassGradebookPage = React.lazy(() => import("./pages/edu").then(mod => ({
   default: mod.ClassGradebookPage
 })));
-const GoogleAuthCompletePage = React.lazy(() => import("./pages/GoogleAuthCompletePage").then(mod => ({
+const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth").then(mod => ({
   default: mod.GoogleAuthCompletePage
 })));
-const AdminDashboardPage = React.lazy(() => import("./pages/AdminDashboardPage").then(mod => ({
+const AdminDashboardPage = React.lazy(() => import("./pages/system").then(mod => ({
   default: mod.AdminDashboardPage
 })));
-const SupportPage = React.lazy(() => import("./pages/SupportPage").then(mod => ({
+const SupportPage = React.lazy(() => import("./pages/system").then(mod => ({
   default: mod.SupportPage
 })));
-const TaskLibraryPage = React.lazy(() => import("./pages/TaskLibraryPage").then(mod => ({
+const ProfileCertificatesPage = React.lazy(() => import("./pages/profile").then(mod => ({
+  default: mod.ProfileCertificatesPage
+})));
+const CertificateVerifyPage = React.lazy(() => import("./pages/public").then(mod => ({
+  default: mod.CertificateVerifyPage
+})));
+const TaskLibraryPage = React.lazy(() => import("./pages/library").then(mod => ({
   default: mod.TaskLibraryPage
 })));
-const LibraryTaskSolvePage = React.lazy(() => import("./pages/LibraryTaskSolvePage").then(mod => ({
+const LibraryTaskSolvePage = React.lazy(() => import("./pages/library").then(mod => ({
   default: mod.LibraryTaskSolvePage
 })));
-const ContestsPage = React.lazy(() => import("./pages/ContestsPage").then(mod => ({
+const ContestsPage = React.lazy(() => import("./pages/contest").then(mod => ({
   default: mod.ContestsPage
 })));
-const ContestPage = React.lazy(() => import("./pages/ContestPage").then(mod => ({
+const ContestPage = React.lazy(() => import("./pages/contest").then(mod => ({
   default: mod.ContestPage
 })));
-const ContestProblemSolvePage = React.lazy(() => import("./pages/ContestProblemSolvePage").then(mod => ({
+const ContestProblemSolvePage = React.lazy(() => import("./pages/contest").then(mod => ({
   default: mod.ContestProblemSolvePage
 })));
-const DevEditorPage = React.lazy(() => import("./pages/DevEditorPage").then(mod => ({
+const DevEditorPage = React.lazy(() => import("./pages/system").then(mod => ({
   default: mod.DevEditorPage
 })));
 const PageLoader: React.FC = () => {
@@ -126,6 +137,68 @@ const PageLoader: React.FC = () => {
     </div>;
 };
 type Page = "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin";
+
+type MaintenanceStoragePayload = {
+  title?: unknown;
+  message?: unknown;
+  until?: unknown;
+};
+
+type MaintenanceEventDetail = {
+  maintenance?: boolean;
+  title?: string;
+  message?: string;
+  until?: string | null;
+};
+
+type AdminMaintenanceEventDetail = {
+  enabled?: boolean;
+};
+
+type MaintenanceApiData = {
+  maintenance: boolean;
+  title?: unknown;
+  message?: unknown;
+  until?: unknown;
+};
+
+const extractMaintenanceData = (error: unknown): { status: number | null; data: MaintenanceApiData | null } => {
+  if (!error || typeof error !== "object") {
+    return { status: null, data: null };
+  }
+
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") {
+    return { status: null, data: null };
+  }
+
+  const statusRaw = Reflect.get(response, "status");
+  const status = typeof statusRaw === "number" ? statusRaw : null;
+
+  const dataRaw = Reflect.get(response, "data");
+  if (!dataRaw || typeof dataRaw !== "object") {
+    return { status, data: null };
+  }
+
+  const maintenanceRaw = Reflect.get(dataRaw, "maintenance");
+  const data: MaintenanceApiData = {
+    maintenance: maintenanceRaw === true,
+    title: Reflect.get(dataRaw, "title"),
+    message: Reflect.get(dataRaw, "message"),
+    until: Reflect.get(dataRaw, "until"),
+  };
+
+  return { status, data };
+};
+
+function asPage(value: string): Page | null {
+  return value === "home" || value === "tasks" || value === "grades" || value === "profile" || value === "teacher" || value === "student" || value === "admin" ? value : null;
+}
+
+function toMomentumPageTarget(value: MomentumNavTarget): Page | null {
+  return asPage(value);
+}
+
 const AppContent: React.FC = React.memo(() => {
   const {
     t,
@@ -146,7 +219,7 @@ const AppContent: React.FC = React.memo(() => {
     try {
       const raw = sessionStorage.getItem("studycod.maintenance");
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as any;
+      const parsed = JSON.parse(raw) as MaintenanceStoragePayload;
       if (parsed && parsed.title && parsed.message) {
         return {
           title: String(parsed.title),
@@ -199,9 +272,6 @@ const AppContent: React.FC = React.memo(() => {
     try {
       const requested = sessionStorage.getItem("studycod.openPage");
       if (!requested) return;
-      const asPage = (value: string): Page | null => {
-        return value === "home" || value === "tasks" || value === "grades" || value === "profile" || value === "teacher" || value === "student" || value === "admin" ? value : null;
-      };
       const next = asPage(requested);
       if (next) {
         startTransition(() => setPage(next));
@@ -212,8 +282,9 @@ const AppContent: React.FC = React.memo(() => {
     }
   }, [user?.id]);
   useEffect(() => {
-    const handler = (e: any) => {
-      const d = e?.detail as any;
+    const handler = (e: Event) => {
+      if (!(e instanceof CustomEvent)) return;
+      const d = (e.detail ?? null) as MaintenanceEventDetail | null;
       if (d && d.maintenance === true) {
         setMaintenance({
           title: String(d.title ?? "Технічне обслуговування"),
@@ -223,34 +294,61 @@ const AppContent: React.FC = React.memo(() => {
         setMaintenanceChecked(true);
       }
     };
-    window.addEventListener("studycod:maintenance", handler as any);
-    return () => window.removeEventListener("studycod:maintenance", handler as any);
+    window.addEventListener("studycod:maintenance", handler as EventListener);
+    return () => window.removeEventListener("studycod:maintenance", handler as EventListener);
   }, []);
   useEffect(() => {
-    getMaintenanceStatus().then(s => {
-      if (s.maintenance) {
-        setMaintenance({
-          title: s.title,
-          message: s.message,
-          until: s.until
-        });
-      } else {
-        setMaintenance(null);
+    let cancelled = false;
+    const run = async () => {
+      let checked = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          sessionStorage.removeItem("studycod.maintenance");
-        } catch {}
+          const s = await getMaintenanceStatus();
+          if (cancelled) return;
+          if (s.maintenance) {
+            setMaintenance({
+              title: s.title,
+              message: s.message,
+              until: s.until
+            });
+          } else {
+            setMaintenance(null);
+            try {
+              sessionStorage.removeItem("studycod.maintenance");
+            } catch {}
+          }
+          checked = true;
+          break;
+        } catch (err) {
+          if (attempt === 0) {
+            await new Promise(resolve => setTimeout(resolve, 1200));
+            continue;
+          }
+          console.warn("[app] maintenance status fetch failed", err);
+        }
       }
-    }).catch(() => {}).finally(() => {
-      setMaintenanceChecked(true);
-    });
+      if (!cancelled && !checked) {
+        // Even if check failed, unblock app boot and rely on runtime maintenance events.
+        checked = true;
+      }
+      if (!cancelled && checked) {
+        setMaintenanceChecked(true);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   useEffect(() => {
-    const handler = (e: any) => {
-      const enabled = !!e?.detail?.enabled;
+    const handler = (e: Event) => {
+      if (!(e instanceof CustomEvent)) return;
+      const detail = (e.detail ?? null) as AdminMaintenanceEventDetail | null;
+      const enabled = !!detail?.enabled;
       setAdminMaintenanceEnabled(enabled);
     };
-    window.addEventListener("studycod:adminMaintenance", handler as any);
-    return () => window.removeEventListener("studycod:adminMaintenance", handler as any);
+    window.addEventListener("studycod:adminMaintenance", handler as EventListener);
+    return () => window.removeEventListener("studycod:adminMaintenance", handler as EventListener);
   }, []);
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -261,6 +359,11 @@ const AppContent: React.FC = React.memo(() => {
     }
     getMe().then(u => {
       setUser(u);
+      if (u.userMode === "CONTEST") {
+        navigate("/contest/contests", { replace: true });
+        setBootResumeHandled(true);
+        return;
+      }
       const fromAuth = sessionStorage.getItem("fromAuth");
       if (fromAuth && u.role === "SYSTEM_ADMIN") {
         startTransition(() => {
@@ -328,18 +431,23 @@ const AppContent: React.FC = React.memo(() => {
       }
       setBootResumeHandled(true);
     }).catch(error => {
-      const isMaintenance = (error as any)?.response?.status === 503 && (error as any)?.response?.data?.maintenance;
+      const extracted = extractMaintenanceData(error);
+      const isMaintenance = extracted.status === 503 && extracted.data?.maintenance === true;
       if (isMaintenance) {
-        const d = (error as any).response.data;
+        const d = extracted.data;
+        if (!d) {
+          setBootResumeHandled(true);
+          return;
+        }
         setMaintenance({
-          title: String(d.title ?? "Технічне обслуговування"),
+            title: String(d.title ?? t("maintenanceTitle")),
           message: String(d.message ?? ""),
           until: d.until ? String(d.until) : null
         });
         return;
       }
       if (import.meta.env.DEV) {
-        console.error("Failed to get user:", error);
+        console.error("Failed to get user:", getErrorMessageFromUnknown(error, "unknown error"));
       }
       localStorage.removeItem("token");
       setUser(null);
@@ -436,8 +544,15 @@ const AppContent: React.FC = React.memo(() => {
   }, [user?.course]);
   const userModeLabel = useMemo(() => {
     if (!user) return "Personal";
-    return user.userMode === "EDUCATIONAL" ? "EDU" : "Personal";
+    if (user.userMode === "EDUCATIONAL") return "EDU";
+    if (user.userMode === "CONTEST") return "Contest";
+    return "Personal";
   }, [user?.userMode]);
+
+  const setWorkspaceViewportRef = useCallback((el: HTMLElement | null) => {
+    setWorkspaceViewportEl(el);
+  }, []);
+
   if (!maintenanceChecked) {
     return <div className="h-screen flex items-center justify-center text-text-primary font-mono">
         {t('loading')}
@@ -472,7 +587,7 @@ const AppContent: React.FC = React.memo(() => {
 
     const nextAfterAuth = searchParams.get("next");
     return <Suspense fallback={<PageLoader />}>
-        <AuthPage initialMode={authIntent === "register" ? "register" : "login"} showBackToLanding={location.pathname === "/"} onAuth={(u: any) => {
+      <AuthPage initialMode={authIntent === "register" ? "register" : "login"} showBackToLanding={location.pathname === "/"} onAuth={(u: User) => {
         setUser(u);
         setBootResumeHandled(true);
         sessionStorage.setItem("fromAuth", "true");
@@ -527,7 +642,7 @@ const AppContent: React.FC = React.memo(() => {
 
           <div className="flex items-center gap-2">
             {user.role === "SYSTEM_ADMIN" && adminMaintenanceEnabled && <div className="px-3 py-1 border border-amber-400/60 bg-amber-400/10 text-amber-200 text-xs font-mono">
-                MAINTENANCE MODE ENABLED
+                {t("maintenanceModeEnabled")}
               </div>}
             {}
             {(!user.userMode || user.userMode === "PERSONAL") && <>
@@ -556,7 +671,7 @@ const AppContent: React.FC = React.memo(() => {
 
             <button onClick={() => navigate("/support")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
               <HelpCircle className="w-4 h-4" />
-              Support
+              {t("support")}
             </button>
 
             {}
@@ -581,7 +696,7 @@ const AppContent: React.FC = React.memo(() => {
                   {t("library")}
                 </button>
                 <button onClick={() => {
-              window.location.href = "/edu/lessons";
+              navigate("/edu/lessons");
             }} className="px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   {t('lessons')}
@@ -623,11 +738,11 @@ const AppContent: React.FC = React.memo(() => {
           </div>
         </header>
 
-        <SwitchToFocusNudge />
+        <SwitchToMomentumNudge />
 
         {}
         <WorkspaceViewportProvider element={workspaceViewportEl}>
-          <main ref={setWorkspaceViewportEl as any} className={`flex-1 min-h-0 flex flex-col ${page === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+          <main ref={setWorkspaceViewportRef} className={`flex-1 min-h-0 flex flex-col ${page === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
             {content}
           </main>
         </WorkspaceViewportProvider>
@@ -636,9 +751,9 @@ const AppContent: React.FC = React.memo(() => {
       </div>;
   }
 
-  const focusCurrent: FocusNavTarget = page === "home" ? "continue" : (page as any);
+      const momentumCurrent: MomentumNavTarget = page === "home" ? "continue" : page;
   return <>
-      <FocusShell user={user} current={focusCurrent} onNavigate={target => {
+      <MomentumShell user={user} current={momentumCurrent} onNavigate={target => {
       if (target === "library") {
         if (user.userMode === "EDUCATIONAL" && user.studentId) {
           navigate("/edu/library");
@@ -659,12 +774,16 @@ const AppContent: React.FC = React.memo(() => {
         handleGoHomeOrResume();
         return;
       }
-      handleSetPage(target as any);
-    }} onLogout={handleLogout} topRight={<button onClick={toggleTheme} className="px-2 py-1 text-[11px] font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-            {theme === "dark" ? "Light" : "Dark"}
+      const pageTarget = toMomentumPageTarget(target);
+      if (pageTarget) {
+        handleSetPage(pageTarget);
+      }
+        }} onLogout={handleLogout} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+          <SunMoon className="w-3.5 h-3.5" />
+          {theme === "dark" ? "Light" : "Dark"}
           </button>}>
         {content}
-      </FocusShell>
+      </MomentumShell>
       {user ? <PlacementEntry user={user} onUserChange={setUser} /> : null}
       <OnboardingEntry />
     </>;
@@ -674,6 +793,7 @@ export const App: React.FC = () => {
   const location = useLocation();
   return <TheoryModalProvider>
       <UIModeProvider>
+        <ToastViewport />
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
           {import.meta.env.DEV ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
@@ -716,6 +836,18 @@ export const App: React.FC = () => {
                   <SupportPage />
                 </AnimatedPage>
               </Suspense>} />
+          <Route path="/profile/certificates" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <ProfileCertificatesPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
+          <Route path="/certificate/:certificateId" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <CertificateVerifyPage />
+                </AnimatedPage>
+              </Suspense>} />
           <Route path="/library" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <TaskLibraryPage />
@@ -746,6 +878,20 @@ export const App: React.FC = () => {
                   <PublicProfilePage />
                 </AnimatedPage>
               </Suspense>} />
+          <Route path="/iad" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <IadPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
+          <Route path="/difus" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <IadPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
           <Route path="/email-preferences" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <EmailPreferencesResultPage />
@@ -754,6 +900,11 @@ export const App: React.FC = () => {
           <Route path="/edu/*" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <EduRoutes />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/contest/*" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <ContestRoutes />
                 </AnimatedPage>
               </Suspense>} />
             <Route path="*" element={<AppContent />} />
@@ -779,12 +930,133 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   }
   return <>{children}</>;
 };
+
+type JwtUserPayload = {
+  userId?: number;
+  userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
+  type?: "USER" | "STUDENT";
+};
+
+function decodeJwtPayload(token: string | null): JwtUserPayload | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    const json = atob(padded);
+    const parsed = JSON.parse(json) as JwtUserPayload;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const ContestRoutes: React.FC = React.memo(() => {
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
+  const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const payload = decodeJwtPayload(token);
+    if (!token || !payload || payload.type === "STUDENT") {
+      setUser(null);
+      setReady(true);
+      return;
+    }
+    if (payload.userMode !== "CONTEST") {
+      navigate("/", { replace: true });
+      return;
+    }
+    setUser({
+      id: payload.userId ?? 0,
+      username: "contest-user",
+      course: "JAVA",
+      iad: 0,
+      avatarUrl: null,
+      userMode: "CONTEST",
+    });
+    setReady(true);
+  }, [navigate]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const next: AppTheme = prev === "dark" ? "light" : "dark";
+      applyTheme(next);
+      return next;
+    });
+  }, []);
+
+  if (!ready) return <PageLoader />;
+
+  if (!user) {
+    return <Suspense fallback={<PageLoader />}>
+      <AuthPage
+        initialMode="login"
+        initialUserMode="CONTEST"
+        onAuth={(u) => {
+          if (u.userMode !== "CONTEST") {
+            navigate("/", { replace: true });
+            return;
+          }
+          navigate("/contest/contests", { replace: true });
+          window.location.reload();
+        }}
+      />
+      </Suspense>;
+  }
+
+  return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
+      <header className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <Logo size={24} className="text-primary" />
+          <span className="text-lg font-mono text-text-primary">StudyCod Contest</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
+            {i18n.language === "uk" ? "EN" : "UA"}
+          </button>
+          <button onClick={toggleTheme} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
+          <button onClick={() => {
+          localStorage.removeItem("token");
+          navigate("/contest", { replace: true });
+          window.location.reload();
+        }} className="px-3 py-1 text-xs font-mono border border-border text-accent-error hover:bg-bg-hover transition-fast">
+            {t("logout")}
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 min-h-0 overflow-y-auto">
+        <Suspense fallback={<PageLoader />}>
+          <AnimatePresence mode="wait">
+            <Routes location={location} key={location.pathname}>
+              <Route index element={<Navigate to="contests" replace />} />
+              <Route path="contests" element={<AnimatedPage><ContestsPage /></AnimatedPage>} />
+              <Route path="contests/:id" element={<AnimatedPage><ContestPage /></AnimatedPage>} />
+              <Route path="contests/:id/problems/:problemId" element={<AnimatedPage><ContestProblemSolvePage /></AnimatedPage>} />
+              <Route path="*" element={<Navigate to="contests" replace />} />
+            </Routes>
+          </AnimatePresence>
+        </Suspense>
+      </main>
+    </div>;
+});
+ContestRoutes.displayName = "ContestRoutes";
+
 const EduRoutes: React.FC = React.memo(() => {
   const {
     t,
     i18n
   } = useTranslation();
   const ui = useUIMode();
+  const navigate = useNavigate();
   const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
@@ -798,7 +1070,9 @@ const EduRoutes: React.FC = React.memo(() => {
     }
     getMe().then(u => {
       if (u.userMode !== "EDUCATIONAL") {
-        window.location.href = "/";
+        navigate("/", {
+          replace: true
+        });
         return;
       }
       setUser(u);
@@ -809,7 +1083,7 @@ const EduRoutes: React.FC = React.memo(() => {
       localStorage.removeItem("token");
       setUser(null);
     }).finally(() => setLoading(false));
-  }, []);
+  }, [navigate]);
   const handleAuth = useCallback((u: User) => {
     setUser(u);
   }, []);
@@ -824,6 +1098,11 @@ const EduRoutes: React.FC = React.memo(() => {
     if (!user) return "Java";
     return user.course === "JAVA" ? "Java" : user.course === "PYTHON" ? "Python" : "C++";
   }, [user?.course]);
+
+  const setEduWorkspaceViewportRef = useCallback((el: HTMLElement | null) => {
+    setWorkspaceViewportEl(el);
+  }, []);
+
   if (loading) {
     return <PageLoader />;
   }
@@ -881,19 +1160,19 @@ const EduRoutes: React.FC = React.memo(() => {
             <button onClick={toggleTheme} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
               {theme === "dark" ? "Light" : "Dark"}
             </button>
-            <button onClick={() => window.location.href = "/docs"} className="px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast flex items-center gap-2">
+            <button onClick={() => navigate("/docs")} className="px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast flex items-center gap-2">
               <HelpCircle className="w-4 h-4" />
               {t("help")}
             </button>
-            <button onClick={() => window.location.href = "/"} className="px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast">
+            <button onClick={() => navigate("/")} className="px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast">
               {t('toHome')}
             </button>
           </div>
         </header>
 
-        <SwitchToFocusNudge />
+        <SwitchToMomentumNudge />
         <WorkspaceViewportProvider element={workspaceViewportEl}>
-          <div ref={setWorkspaceViewportEl as any} className="flex-1 min-h-0 overflow-y-auto">
+          <div ref={setEduWorkspaceViewportRef} className="flex-1 min-h-0 overflow-y-auto">
             {eduMain}
           </div>
         </WorkspaceViewportProvider>
@@ -901,46 +1180,47 @@ const EduRoutes: React.FC = React.memo(() => {
       </div>;
   }
 
-  const focusCurrent: FocusNavTarget = /^\/edu\/library/.test(location.pathname)
+  const momentumCurrent: MomentumNavTarget = /^\/edu\/library/.test(location.pathname)
     ? "library"
     : "continue";
   return <>
-      <FocusShell user={user} current={focusCurrent} onNavigate={target => {
+      <MomentumShell user={user} current={momentumCurrent} onNavigate={target => {
       if (target === "library") {
-        window.location.href = "/edu/library";
+        navigate("/edu/library");
         return;
       }
       if (target === "support") {
-        window.location.href = "/support";
+        navigate("/support");
         return;
       }
       if (target === "contests") {
-        window.location.href = "/contests";
+        navigate("/contests");
         return;
       }
       if (target === "profile") {
         try {
           sessionStorage.setItem("studycod.openPage", "profile");
         } catch {}
-        window.location.href = "/";
+        navigate("/");
         return;
       }
       if (target === "teacher") {
-        window.location.href = "/edu";
+        navigate("/edu");
         return;
       }
       if (target === "student" || target === "continue") {
-        window.location.href = "/edu/lessons";
+        navigate("/edu/lessons");
         return;
       }
     }} onLogout={() => {
       localStorage.removeItem("token");
-      window.location.href = "/";
-    }} topRight={<button onClick={toggleTheme} className="px-2 py-1 text-[11px] font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+      navigate("/");
+    }} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+            <SunMoon className="w-3.5 h-3.5" />
             {theme === "dark" ? "Light" : "Dark"}
           </button>}>
         {eduMain}
-      </FocusShell>
+      </MomentumShell>
       <OnboardingEntry />
     </>;
 });
@@ -969,23 +1249,67 @@ const GoogleAuthSuccessWrapper: React.FC = React.memo(() => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
+  const code = searchParams.get("code");
   const isLikelyJwt = (value: string) => /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
   useEffect(() => {
-    if (token) {
-      if (isLikelyJwt(token)) {
-        localStorage.setItem("token", token);
-        sessionStorage.setItem("fromAuth", "true");
-        window.location.replace("/");
-      } else {
-        localStorage.removeItem("token");
-        window.location.replace("/");
+    let cancelled = false;
+    const finishSuccess = (jwtToken: string) => {
+      localStorage.setItem("token", jwtToken);
+      sessionStorage.setItem("fromAuth", "true");
+      window.location.replace("/");
+    };
+
+    const run = async () => {
+      if (code) {
+        try {
+          const exchanged = await exchangeGoogleCode(code, "success");
+          if (cancelled) return;
+          if (exchanged.token && isLikelyJwt(exchanged.token)) {
+            finishSuccess(exchanged.token);
+            return;
+          }
+          localStorage.removeItem("token");
+          window.location.replace("/");
+          return;
+        } catch {
+          if (cancelled) return;
+          localStorage.removeItem("token");
+          window.location.replace("/");
+          return;
+        }
       }
-    } else {
+
+      if (token) {
+        if (isLikelyJwt(token)) {
+          finishSuccess(token);
+        } else {
+          localStorage.removeItem("token");
+          window.location.replace("/");
+        }
+        return;
+      }
+
+      try {
+        const exchanged = await exchangeGoogleCookie("success");
+        if (cancelled) return;
+        if (exchanged.token && isLikelyJwt(exchanged.token)) {
+          finishSuccess(exchanged.token);
+          return;
+        }
+      } catch {
+        // No cookie exchange available (direct navigation) — fallback to home.
+      }
+
       navigate("/", {
         replace: true
       });
-    }
-  }, [token, navigate]);
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, code, navigate]);
   return <PageLoader />;
 });
 GoogleAuthSuccessWrapper.displayName = "GoogleAuthSuccessWrapper";

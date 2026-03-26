@@ -6,11 +6,12 @@ export interface RegisterResponse {
   token?: string;
   user?: User;
 }
-export async function register(username: string, email: string, password: string, course: CourseLanguage, firstName: string, lastName: string, birthDay: number, birthMonth: number): Promise<RegisterResponse> {
+export async function register(username: string, email: string, password: string, course: CourseLanguage, firstName: string, lastName: string, birthDay: number, birthMonth: number, turnstileToken?: string): Promise<RegisterResponse> {
   const res = await api.post("/auth/register", {
     username,
     email,
     password,
+    ...(turnstileToken ? { turnstileToken } : {}),
     course,
     firstName,
     lastName,
@@ -22,10 +23,11 @@ export async function register(username: string, email: string, password: string
   }
   return res.data as RegisterResponse;
 }
-export async function login(username: string, password: string): Promise<User> {
+export async function login(username: string, password: string, turnstileToken?: string): Promise<User> {
   const res = await api.post("/auth/login", {
     username,
-    password
+    password,
+    ...(turnstileToken ? { turnstileToken } : {})
   });
   if (res.data.token) {
     localStorage.setItem("token", res.data.token);
@@ -33,6 +35,41 @@ export async function login(username: string, password: string): Promise<User> {
   }
   return res.data.user as User;
 }
+
+export async function contestLogin(username: string, password: string, turnstileToken?: string): Promise<User> {
+  const res = await api.post("/auth/contest-login", {
+    username,
+    password,
+    ...(turnstileToken ? { turnstileToken } : {})
+  });
+  if (res.data.token) {
+    localStorage.setItem("token", res.data.token);
+    api.defaults.headers.common.Authorization = `Bearer ${res.data.token}`;
+  }
+  return res.data.user as User;
+}
+
+export async function exchangeGoogleCode(code: string, flow?: "success" | "complete"): Promise<{ token: string; flow: "success" | "complete" }> {
+  const res = await api.post("/auth/google/exchange-code", {
+    code,
+    ...(flow ? { flow } : {})
+  });
+  return {
+    token: String(res.data.token || ""),
+    flow: res.data.flow === "complete" ? "complete" : "success"
+  };
+}
+
+export async function exchangeGoogleCookie(flow?: "success" | "complete"): Promise<{ token: string; flow: "success" | "complete" }> {
+  const res = await api.post("/auth/google/exchange-cookie", {
+    ...(flow ? { flow } : {})
+  });
+  return {
+    token: String(res.data.token || ""),
+    flow: res.data.flow === "complete" ? "complete" : "success"
+  };
+}
+
 export async function verifyEmail(token: string): Promise<{
   token: string;
   user: User;

@@ -37,6 +37,7 @@ import { AssessmentType, validateAssessmentType } from "../types/AssessmentType"
 import { detectAICode } from "../services/ai/aiCodeDetector";
 import { markControlWorkAttemptCompletedIfReadyWithManager, saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
 import { logger } from "../utils/logger";
+import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import studentAuthRouter from "./edu/studentAuth";
 import announcementsRouter from "./edu/announcements";
 import classStudentsRouter from "./edu/classStudents";
@@ -88,6 +89,14 @@ const statementImageUpload = multer({
   }
 });
 
+function resolveRequestLocale(req: Request): "uk" | "en" {
+  const explicit = String((req.headers["x-ui-language"] ?? req.headers["x-lang"] ?? "")).toLowerCase().trim();
+  if (explicit.startsWith("en")) return "en";
+  if (explicit.startsWith("uk")) return "uk";
+  const accept = String(req.headers["accept-language"] ?? "").toLowerCase();
+  return accept.includes("en") ? "en" : "uk";
+}
+
 function ensureDir(p: string) {
   fs.mkdirSync(p, {
     recursive: true
@@ -121,7 +130,7 @@ function mimeByExt(fileName: string): string {
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(12, Math.round(n)));
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 function normalizeLang(input?: string | null): UserLang {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
@@ -159,7 +168,38 @@ const createLessonBodySchema = z.object({
 const createLessonTaskBodySchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().min(1).max(50_000),
-  template: z.string().min(1).max(200_000)
+  template: z.string().max(200_000).optional(),
+  taskMode: z.enum(["CODE", "WEB"]).optional(),
+  webTemplateFiles: z.array(z.object({
+    path: z.enum(["index.html", "styles.css", "script.js"]),
+    content: z.string().max(200_000)
+  })).max(3).optional(),
+  webValidationRules: z.array(z.object({
+    id: z.string().optional(),
+    type: z.enum(["required_selector", "forbidden_selector", "required_text", "forbidden_text", "required_script_pattern", "forbidden_script_pattern", "required_attribute", "forbidden_attribute", "required_style", "forbidden_style"]),
+    message: z.string().max(1000).optional(),
+    points: z.number().int().min(0).max(1000).optional(),
+    selector: z.string().max(500).optional(),
+    attribute: z.string().max(200).optional(),
+    value: z.string().max(1000).optional(),
+    valuePattern: z.string().max(2000).optional(),
+    property: z.string().max(200).optional(),
+    text: z.string().max(2000).optional(),
+    pattern: z.string().max(2000).optional(),
+    flags: z.string().max(10).optional()
+  })).max(200).optional(),
+  webValidationProfile: z.object({
+    id: z.enum(["FREE_WEB", "HTML_ONLY", "HTML_CSS_NO_JS", "HTML_JS_NO_CSS", "JS_ONLY_DOM", "CSS_ONLY", "HTML_AND_INLINE_ONLY"]).optional(),
+    allowHtml: z.boolean().optional(),
+    allowCss: z.boolean().optional(),
+    allowJs: z.boolean().optional(),
+    allowInlineStyle: z.boolean().optional(),
+    allowInlineScript: z.boolean().optional(),
+    allowExternalResources: z.boolean().optional(),
+    lockHtml: z.boolean().optional(),
+    lockCss: z.boolean().optional(),
+    lockJs: z.boolean().optional()
+  }).or(z.enum(["FREE_WEB", "HTML_ONLY", "HTML_CSS_NO_JS", "HTML_JS_NO_CSS", "JS_ONLY_DOM", "CSS_ONLY", "HTML_AND_INLINE_ONLY"])).optional()
 });
 
 eduRouter.post("/statement-images", authRequired, (req: AuthRequest, res: Response, next) => {
@@ -268,7 +308,8 @@ eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
       emailVerificationToken: verificationToken
     });
     await userRepo().save(user);
-    emailService.sendVerificationEmail(email, verificationToken, username).catch(err => {
+    const locale = resolveRequestLocale(req);
+    emailService.sendVerificationEmail(email, verificationToken, username, locale).catch(err => {
       logger.error("[edu] verification email failed", { requestId: (req as any)?.requestId, err });
     });
     res.status(201).json({
@@ -408,6 +449,9 @@ eduRouter.get("/classes/:classId/lessons", authRequired, async (req: AuthRequest
           title: task.title,
           description: task.description || null,
           template: task.template || null,
+          taskMode: (task as any).taskMode ?? "CODE",
+          webTemplateFiles: (task as any).webTemplateFiles ?? null,
+          webValidationRules: (task as any).webValidationRules ?? null,
           deadline: task.deadline ? task.deadline.toISOString() : null,
           maxAttempts: task.maxAttempts || null,
           isClosed: task.isClosed || false,
@@ -494,12 +538,22 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
     });
   }
 
-  const { title, description, template } = parsedBody.data;
+  const { title, description } = parsedBody.data;
+  const normalizedTaskInput = normalizeWebTaskInput(parsedBody.data);
+  if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
+    return res.status(400).json({
+      message: "TITLE_DESCRIPTION_AND_TEMPLATE_REQUIRED"
+    });
+  }
   const task = taskRepo().create({
     lesson,
     title,
     description,
-    template,
+    template: normalizedTaskInput.template,
+    taskMode: normalizedTaskInput.taskMode as any,
+    webTemplateFiles: normalizedTaskInput.webTemplateFiles,
+    webValidationRules: normalizedTaskInput.webValidationRules,
+    webValidationProfile: normalizedTaskInput.webValidationProfile,
     maxAttempts: 1,
     isClosed: false
   });

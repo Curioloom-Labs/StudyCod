@@ -20,6 +20,7 @@ import { safeAICall, sendAIError } from "../services/ai/safeAICall";
 import multer from "multer";
 import AdmZip from "adm-zip";
 import { logger } from "../utils/logger";
+import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 const topicsRouter = Router();
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
@@ -31,6 +32,16 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
+const CONTROL_WORK_REQUIRED_TASKS_COUNT = 3;
+
+async function countControlTasksForControlWork(controlWorkId: number): Promise<number> {
+  return await taskRepo().count({
+    where: {
+      controlWork: { id: controlWorkId } as any,
+      type: "CONTROL" as any
+    } as any
+  });
+}
 
 function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxMs = 55_000): number {
   const raw = Number(process.env[envKey]);
@@ -76,6 +87,7 @@ function readZipJson<T>(zip: AdmZip, name: string): T {
     throw new Error(`INVALID_JSON_${name}`);
   }
 }
+
 topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const user = await userRepo().findOne({
@@ -331,13 +343,29 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       title,
       description,
       template,
+      taskMode,
+      webTemplateFiles,
+      webValidationRules,
+      webValidationProfile,
       type,
       order,
       maxAttempts,
       deadline,
       controlWorkId
     } = req.body || {};
-    if (!title || !description || !template || !type || type !== "PRACTICE" && type !== "CONTROL") {
+    if (!title || !description || !type || type !== "PRACTICE" && type !== "CONTROL") {
+      return res.status(400).json({
+        message: "INVALID_INPUT"
+      });
+    }
+    const normalizedTaskInput = normalizeWebTaskInput({
+      taskMode,
+      template,
+      webTemplateFiles,
+      webValidationRules,
+      webValidationProfile,
+    });
+    if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
         message: "INVALID_INPUT"
       });
@@ -363,6 +391,15 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
           message: "CONTROL_WORK_NOT_FOUND_OR_WRONG_TOPIC"
         });
       }
+
+      const currentControlTasksCount = await countControlTasksForControlWork(controlWork.id);
+      if (currentControlTasksCount >= CONTROL_WORK_REQUIRED_TASKS_COUNT) {
+        return res.status(400).json({
+          message: "CONTROL_WORK_MAX_TASKS_REACHED",
+          expected: CONTROL_WORK_REQUIRED_TASKS_COUNT,
+          actual: currentControlTasksCount
+        });
+      }
     }
     const task = taskRepo().create({
       topic: {
@@ -373,7 +410,11 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       } as any : null,
       title,
       description,
-      template,
+      template: normalizedTaskInput.template,
+      taskMode: normalizedTaskInput.taskMode,
+      webTemplateFiles: normalizedTaskInput.webTemplateFiles,
+      webValidationRules: normalizedTaskInput.webValidationRules,
+      webValidationProfile: normalizedTaskInput.webValidationProfile,
       type: type as "PRACTICE" | "CONTROL",
       order: order || 0,
       maxAttempts: maxAttempts || (type === "CONTROL" ? 1 : 3),
@@ -395,7 +436,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
  * Import/export educational tasks as archives (zip)
  * Format:
  * - manifest.json (optional)
- * - task.json: { title, description, template, type?, order?, maxAttempts? }
+ * - task.json: { title, description, template, taskMode?, webTemplateFiles?, webValidationRules?, type?, order?, maxAttempts? }
  * - tests.json (optional): [{ input, expectedOutput, isHidden?, points? }]
  * - theory.md (optional)
  */
@@ -423,7 +464,24 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     type TaskJson = {
       title: string;
       description: string;
-      template: string;
+      template?: string;
+      taskMode?: "CODE" | "WEB";
+      webValidationProfile?: any;
+      webTemplateFiles?: Array<{ path: "index.html" | "styles.css" | "script.js"; content: string }>;
+      webValidationRules?: Array<{
+        id?: string;
+        type: "required_selector" | "forbidden_selector" | "required_text" | "forbidden_text" | "required_script_pattern" | "forbidden_script_pattern" | "required_attribute" | "forbidden_attribute" | "required_style" | "forbidden_style";
+        message?: string;
+        points?: number;
+        selector?: string;
+        text?: string;
+        pattern?: string;
+        flags?: string;
+        attribute?: string;
+        value?: string;
+        valuePattern?: string;
+        property?: string;
+      }>;
       type?: "PRACTICE" | "CONTROL";
       order?: number;
       maxAttempts?: number;
@@ -432,12 +490,12 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     const taskJson = readZipJson<TaskJson>(zip, "task.json");
     const title = String(taskJson.title ?? "").trim();
     const description = String(taskJson.description ?? "").trim();
-    const template = String(taskJson.template ?? "").trim();
+    const normalizedTaskInput = normalizeWebTaskInput(taskJson);
     const type: "PRACTICE" | "CONTROL" = taskJson.type === "CONTROL" ? "CONTROL" : "PRACTICE";
     const order = Number.isFinite(Number(taskJson.order)) ? Number(taskJson.order) : 0;
     const maxAttempts = Number.isFinite(Number(taskJson.maxAttempts)) ? Math.max(1, Math.floor(Number(taskJson.maxAttempts))) : type === "CONTROL" ? 1 : 3;
 
-    if (!title || !description || !template) {
+    if (!title || !description || !normalizedTaskInput.template.trim()) {
       return res.status(400).json({ message: "INVALID_TASK_JSON" });
     }
 
@@ -445,7 +503,11 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       topic: { id: topicId } as any,
       title,
       description,
-      template,
+      template: normalizedTaskInput.template,
+      taskMode: normalizedTaskInput.taskMode as any,
+      webTemplateFiles: normalizedTaskInput.webTemplateFiles,
+      webValidationRules: normalizedTaskInput.webValidationRules,
+      webValidationProfile: normalizedTaskInput.webValidationProfile,
       type,
       order,
       maxAttempts,
@@ -537,6 +599,10 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
         title: task.title,
         description: task.description,
         template: task.template,
+        taskMode: (task as any).taskMode ?? "CODE",
+        webTemplateFiles: (task as any).webTemplateFiles ?? undefined,
+        webValidationRules: (task as any).webValidationRules ?? undefined,
+        webValidationProfile: (task as any).webValidationProfile ?? undefined,
         type: task.type,
         order: task.order,
         maxAttempts: task.maxAttempts
@@ -604,16 +670,35 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       title,
       description,
       template,
+      taskMode,
+      webTemplateFiles,
+      webValidationRules,
       maxAttempts
     } = req.body || {};
-    if (!title || !description || !template) {
+    if (!title || !description) {
+      return res.status(400).json({
+        message: "INVALID_INPUT"
+      });
+    }
+    const normalizedTaskInput = normalizeWebTaskInput({
+      taskMode,
+      template,
+      webTemplateFiles,
+      webValidationRules,
+      webValidationProfile: (req.body || {}).webValidationProfile,
+    });
+    if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
         message: "INVALID_INPUT"
       });
     }
     task.title = title;
     task.description = description;
-    task.template = template;
+    task.template = normalizedTaskInput.template;
+    task.taskMode = normalizedTaskInput.taskMode;
+    task.webTemplateFiles = normalizedTaskInput.webTemplateFiles;
+    task.webValidationRules = normalizedTaskInput.webValidationRules;
+    (task as any).webValidationProfile = normalizedTaskInput.webValidationProfile;
     if (maxAttempts !== undefined) {
       task.maxAttempts = maxAttempts;
     }
@@ -1583,6 +1668,18 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
         message: "ACCESS_DENIED"
       });
     }
+
+    if (controlWork.hasPractice !== false) {
+      const controlTasksCount = await countControlTasksForControlWork(controlWork.id);
+      if (controlTasksCount !== CONTROL_WORK_REQUIRED_TASKS_COUNT) {
+        return res.status(400).json({
+          message: "CONTROL_WORK_REQUIRES_EXACTLY_THREE_TASKS",
+          expected: CONTROL_WORK_REQUIRED_TASKS_COUNT,
+          actual: controlTasksCount
+        });
+      }
+    }
+
     const students = await studentRepo().find({
       where: {
         class: {
@@ -1722,7 +1819,7 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
           id: topicId
         }
       } as any,
-      relations: ["topic", "topic.class"]
+      relations: ["topic", "topic.class", "controlWork"]
     });
     if (!task) {
       return res.status(404).json({
@@ -1759,6 +1856,24 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
       }
     }
     const gradeRepo = () => AppDataSource.getRepository(EduGrade);
+
+    if (task.type === "CONTROL" && task.controlWork?.id) {
+      const cw = await controlWorkRepo().findOne({
+        where: { id: task.controlWork.id }
+      });
+
+      if (cw?.isAssigned && cw.hasPractice !== false) {
+        const currentControlTasksCount = await countControlTasksForControlWork(cw.id);
+        if (currentControlTasksCount <= CONTROL_WORK_REQUIRED_TASKS_COUNT) {
+          return res.status(400).json({
+            message: "CONTROL_WORK_ASSIGNED_REQUIRES_THREE_TASKS",
+            expected: CONTROL_WORK_REQUIRED_TASKS_COUNT,
+            actual: currentControlTasksCount
+          });
+        }
+      }
+    }
+
     await gradeRepo().delete({
       topicTask: {
         id: taskId

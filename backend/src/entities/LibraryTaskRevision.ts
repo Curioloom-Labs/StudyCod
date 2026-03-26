@@ -40,7 +40,7 @@ export class LibraryTaskRevision {
   @Column({ type: "varchar", length: 255, nullable: true })
   comment?: string | null;
 
-  @Column({ type: "mediumtext" })
+  @Column({ type: "longtext" })
   snapshot!: string;
 
   @Column({ type: "int", name: "created_by_user_id", nullable: true })

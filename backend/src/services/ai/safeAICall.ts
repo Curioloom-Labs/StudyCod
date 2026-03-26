@@ -193,6 +193,7 @@ function classifyAIProviderStatus(errorMessage: string): number {
     msg.includes('forbidden_scope_violation') ||
     msg.includes('multi_task_not_allowed') ||
     msg.includes('anchor_topic_mismatch') ||
+    msg.includes('anchor_invalid_payload') ||
     msg.includes('anchor_too_vague') ||
     msg.includes('topic_mismatch_hard_fail')
   ) return 400;
@@ -210,6 +211,7 @@ function isSemanticValidationError(errorMessage: string): boolean {
     msg.includes('FORBIDDEN_SCOPE_VIOLATION') ||
     msg.includes('MULTI_TASK_NOT_ALLOWED') ||
     msg.includes('ANCHOR_TOPIC_MISMATCH') ||
+    msg.includes('ANCHOR_INVALID_PAYLOAD') ||
     msg.includes('ANCHOR_TOO_VAGUE') ||
     msg.includes('TOPIC_MISMATCH_HARD_FAIL');
 }

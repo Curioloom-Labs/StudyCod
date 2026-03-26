@@ -125,7 +125,7 @@ export async function downloadSupportChatAttachment(attachmentId: number): Promi
   const res = await api.get(`/support/chat/attachments/${attachmentId}/download`, {
     responseType: "blob"
   });
-  const cd = (res.headers as any)?.["content-disposition"] as string | undefined;
+  const cd = typeof res.headers?.["content-disposition"] === "string" ? res.headers["content-disposition"] : undefined;
   const filename = parseFilenameFromContentDisposition(cd) || `attachment_${attachmentId}`;
   return {
     blob: res.data as Blob,

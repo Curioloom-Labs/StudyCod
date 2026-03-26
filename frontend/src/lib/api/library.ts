@@ -8,7 +8,70 @@ export type JudgeLanguage = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin
 export type LibraryCheckerSpec = { type: "exact" } | { type: "whitespace" } | { type: "float"; epsilon: number };
 
 export type CodeFile = { path: string; content: string };
+export type WebTaskFile = { path: "index.html" | "styles.css" | "script.js"; content: string };
+export type WebTaskProfileId =
+  | "FREE_WEB"
+  | "HTML_ONLY"
+  | "HTML_CSS_NO_JS"
+  | "HTML_JS_NO_CSS"
+  | "JS_ONLY_DOM"
+  | "CSS_ONLY"
+  | "HTML_AND_INLINE_ONLY";
+export type WebTaskValidationProfile = {
+  id: WebTaskProfileId;
+  allowHtml: boolean;
+  allowCss: boolean;
+  allowJs: boolean;
+  allowInlineStyle: boolean;
+  allowInlineScript: boolean;
+  allowExternalResources: boolean;
+  lockHtml: boolean;
+  lockCss: boolean;
+  lockJs: boolean;
+};
+export type WebTaskRule = {
+  id?: string;
+  type:
+    | "required_selector"
+    | "forbidden_selector"
+    | "required_text"
+    | "forbidden_text"
+    | "required_script_pattern"
+    | "forbidden_script_pattern"
+    | "required_attribute"
+    | "forbidden_attribute"
+    | "required_style"
+    | "forbidden_style";
+  message?: string;
+  points?: number;
+  selector?: string;
+  attribute?: string;
+  value?: string;
+  valuePattern?: string;
+  property?: string;
+  text?: string;
+  pattern?: string;
+  flags?: string;
+};
 type CodeOrFiles = string | { code?: string; files?: CodeFile[] };
+
+type JwtPayload = {
+  type?: string;
+  studentId?: number;
+};
+
+type StudentAttemptLangState = {
+  draft?: { code?: string; files?: CodeFile[] };
+  last?: {
+    verdict: string | null;
+    score: number | null;
+    maxScore: number | null;
+    testsPassed: number | null;
+    testsTotal: number | null;
+    checkedAt: string | null;
+  };
+  submissionsCount?: number;
+};
 
 function toPayload(input: CodeOrFiles): { code?: string; files?: CodeFile[] } {
   if (typeof input === "string") return { code: input };
@@ -32,6 +95,10 @@ export type LibraryTaskListItem = {
   title: string;
   description: string;
   template: string;
+  taskMode?: "CODE" | "WEB";
+  webTemplateFiles?: WebTaskFile[] | null;
+  webValidationRules?: WebTaskRule[] | null;
+  webValidationProfile?: WebTaskValidationProfile | null;
   templatesByLanguage?: Record<string, string> | null;
   lang: LibraryTaskLang;
   difficulty?: LibraryTaskDifficulty | null;
@@ -49,6 +116,12 @@ export type LibraryTaskListItem = {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  quality?: {
+    attempts: number;
+    solvedRate: number;
+    avgScoreRatio: number;
+    score: number;
+  } | null;
   author: { id: number; username: string } | null;
   attempt?: LibraryTaskAttemptSummary | null;
 };
@@ -89,21 +162,7 @@ export type LibraryRunResult = {
 type StudentLibraryAttemptV1 = {
   v: 1;
   updatedAt: string;
-  byLang: Record<
-    JudgeLanguage,
-    {
-      draft?: { code?: string; files?: CodeFile[] };
-      last?: {
-        verdict: string | null;
-        score: number | null;
-        maxScore: number | null;
-        testsPassed: number | null;
-        testsTotal: number | null;
-        checkedAt: string | null;
-      };
-      submissionsCount?: number;
-    }
-  >;
+  byLang: Partial<Record<JudgeLanguage, StudentAttemptLangState>>;
 };
 
 function safeJsonParse<T>(raw: string | null): T | null {
@@ -115,7 +174,7 @@ function safeJsonParse<T>(raw: string | null): T | null {
   }
 }
 
-function decodeJwtPayload(token: string | null): any | null {
+function decodeJwtPayload(token: string | null): JwtPayload | null {
   if (!token) return null;
   const parts = token.split(".");
   if (parts.length < 2) return null;
@@ -159,9 +218,9 @@ function writeStudentAttempt(taskId: number, attempt: StudentLibraryAttemptV1) {
 
 function upsertStudentAttempt(taskId: number, lang: JudgeLanguage, patch: Partial<StudentLibraryAttemptV1["byLang"][JudgeLanguage]>) {
   const now = new Date().toISOString();
-  const current = readStudentAttempt(taskId) ?? ({ v: 1, updatedAt: now, byLang: {} as any } satisfies StudentLibraryAttemptV1);
-  const prevLang = (current.byLang as any)[lang] ?? {};
-  (current.byLang as any)[lang] = { ...prevLang, ...patch };
+  const current = readStudentAttempt(taskId) ?? ({ v: 1, updatedAt: now, byLang: {} } satisfies StudentLibraryAttemptV1);
+  const prevLang = current.byLang[lang] ?? {};
+  current.byLang[lang] = { ...prevLang, ...patch };
   current.updatedAt = now;
   writeStudentAttempt(taskId, current);
 }
@@ -171,9 +230,9 @@ export function getStudentLibraryAttemptSummary(taskId: number): LibraryTaskAtte
   if (!a) return null;
   // Pick "best" across languages: prefer one with last check.
   const langs = Object.keys(a.byLang || {}) as JudgeLanguage[];
-  let best: any = null;
+  let best: StudentAttemptLangState | null = null;
   for (const l of langs) {
-    const x = (a.byLang as any)[l];
+    const x = a.byLang[l];
     if (!x) continue;
     if (!best) best = x;
     else if (x?.last?.checkedAt && !best?.last?.checkedAt) best = x;
@@ -225,10 +284,28 @@ export type LibraryCheckResult = {
   }>;
 };
 
-export async function listApprovedLibraryTasks(params?: { lang?: LibraryTaskLang; judgeLanguage?: JudgeLanguage; q?: string; page?: number; pageSize?: number }) {
-  const fullParams: any = { ...(params || {}), uiLang: (i18n.language || "uk").toLowerCase() };
+export async function listApprovedLibraryTasks(params?: {
+  lang?: LibraryTaskLang;
+  judgeLanguage?: JudgeLanguage;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const fullParams: {
+    lang?: LibraryTaskLang;
+    judgeLanguage?: JudgeLanguage;
+    q?: string;
+    page?: number;
+    pageSize?: number;
+    uiLang: string;
+  } = { ...(params || {}), uiLang: (i18n.language || "uk").toLowerCase() };
   const res = await api.get("/library/tasks", { params: fullParams });
-  const data = res.data as { tasks: LibraryTaskListItem[]; total?: number; page?: number; pageSize?: number };
+  const data = res.data as {
+    tasks: LibraryTaskListItem[];
+    total?: number;
+    page?: number;
+    pageSize?: number;
+  };
   if (isStudentToken()) {
     data.tasks = (data.tasks || []).map(t => ({
       ...t,
@@ -289,8 +366,8 @@ export async function saveLibraryTaskDraft(id: number, draftCodeOrFiles: string 
   const lang = (language ?? "java") as JudgeLanguage;
 
   if (isStudentToken()) {
-    const files = Array.isArray((payload as any).files) ? ((payload as any).files as CodeFile[]) : undefined;
-    const code = typeof (payload as any).draftCode === "string" ? String((payload as any).draftCode ?? "") : undefined;
+    const files = Array.isArray(payload.files) ? payload.files : undefined;
+    const code = typeof payload.draftCode === "string" ? String(payload.draftCode ?? "") : undefined;
     upsertStudentAttempt(id, lang, { draft: { code, files } });
     return { ok: true };
   }
@@ -302,6 +379,26 @@ export async function saveLibraryTaskDraft(id: number, draftCodeOrFiles: string 
 export async function runLibraryTask(id: number, payload: { input?: string; language?: JudgeLanguage } & ({ code: string } | { files: CodeFile[] } | { code?: string; files?: CodeFile[] })) {
   const res = await api.post(`/library/tasks/${id}/run`, payload);
   return res.data as LibraryRunResult;
+}
+
+export async function getLibraryWebTaskTemplate(id: number): Promise<{ taskId: number; taskMode: "WEB"; files: WebTaskFile[]; rules: WebTaskRule[]; profile?: WebTaskValidationProfile }> {
+  const res = await api.get(`/library/tasks/${id}/web-template`);
+  return res.data;
+}
+
+export async function saveLibraryWebTaskDraft(id: number, files: WebTaskFile[]): Promise<{ ok: boolean }> {
+  const res = await api.put(`/library/tasks/${id}/web-draft`, { files });
+  return res.data;
+}
+
+export async function checkLibraryWebTask(id: number, files: WebTaskFile[]) {
+  const res = await api.post(`/library/tasks/${id}/web-check`, { files });
+  return res.data as LibraryCheckResult;
+}
+
+export async function submitLibraryWebTask(id: number, files: WebTaskFile[]) {
+  const res = await api.post(`/library/tasks/${id}/web-submit`, { files });
+  return res.data as LibraryCheckResult;
 }
 
 export async function checkLibraryTask(id: number, payload: { language?: JudgeLanguage } & ({ code: string } | { files: CodeFile[] } | { code?: string; files?: CodeFile[] })) {
@@ -336,6 +433,10 @@ export async function createLibraryTask(payload: {
   difficulty?: LibraryTaskDifficulty;
   tags?: string[];
   section?: string;
+  taskMode?: "CODE" | "WEB";
+  webTemplateFiles?: WebTaskFile[];
+  webValidationRules?: WebTaskRule[];
+  webValidationProfile?: WebTaskProfileId | WebTaskValidationProfile;
   description: string;
   template: string;
   templatesByLanguage?: Record<string, string>;
@@ -362,6 +463,10 @@ export async function updateLibraryTask(
     difficulty: LibraryTaskDifficulty | null;
     tags: string[] | null;
     section: string | null;
+    taskMode: "CODE" | "WEB";
+    webTemplateFiles: WebTaskFile[] | null;
+    webValidationRules: WebTaskRule[] | null;
+    webValidationProfile: WebTaskProfileId | WebTaskValidationProfile | null;
     description: string;
     template: string;
     templatesByLanguage: Record<string, string> | null;
@@ -390,12 +495,38 @@ export async function submitLibraryTask(id: number) {
   return res.data as { task: LibraryTaskListItem };
 }
 
-export async function importLibraryTaskArchive(file: File, options?: { hideFromLibrary?: boolean }) {
+export type LibraryArchiveImportFailure = {
+  source: string;
+  message: string;
+  errors?: unknown[];
+  disabledLanguages?: string[];
+  problemCode?: string;
+};
+
+export type LibraryArchiveImportResult = {
+  task?: LibraryTaskListItem;
+  tasks?: LibraryTaskListItem[];
+  importedCount?: number;
+  failedCount?: number;
+  failures?: LibraryArchiveImportFailure[];
+};
+
+export async function importLibraryTaskArchives(files: File[], options?: { hideFromLibrary?: boolean }) {
+  const list = (files || []).filter(Boolean);
+  if (!list.length) throw new Error("ARCHIVE_REQUIRED");
   const form = new FormData();
-  form.append("archive", file);
+  for (const file of list) {
+    form.append("archives", file);
+  }
   if (options?.hideFromLibrary) form.append("hideFromLibrary", "true");
   const res = await api.post("/library/tasks/import-archive", form);
-  return res.data as { task: LibraryTaskListItem };
+  return res.data as LibraryArchiveImportResult;
+}
+
+export async function importLibraryTaskArchive(file: File, options?: { hideFromLibrary?: boolean }) {
+  const data = await importLibraryTaskArchives([file], options);
+  const task = data.task ?? (Array.isArray(data.tasks) ? data.tasks[0] : undefined);
+  return { task: task as LibraryTaskListItem };
 }
 
 function parseFilenameFromContentDisposition(v: string | undefined): string | null {
@@ -413,7 +544,7 @@ function parseFilenameFromContentDisposition(v: string | undefined): string | nu
 export async function downloadLibraryTaskArchive(id: number): Promise<{ blob: Blob; filename: string }>
 {
   const res = await api.get(`/library/tasks/${id}/export-archive`, { responseType: "blob" });
-  const cd = (res.headers as any)?.["content-disposition"] as string | undefined;
+  const cd = typeof res.headers?.["content-disposition"] === "string" ? res.headers["content-disposition"] : undefined;
   const filename = parseFilenameFromContentDisposition(cd) || `library_task_${id}.zip`;
   return { blob: res.data as Blob, filename };
 }

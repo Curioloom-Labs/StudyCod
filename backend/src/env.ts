@@ -87,6 +87,8 @@ const EnvSchema = z.object({
   OPENROUTER_REFERER: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   TURNSTILE_VERIFY_URL: z.string().optional(),
+  TURNSTILE_ENFORCE_CONTEST_SUBMIT: z.string().optional(),
+  TURNSTILE_ENFORCE_AUTH: z.string().optional(),
 
   // Cloudflare AI worker base URL (used by LLM provider and can be reused for translation)
   CLOUDFLARE_AI_URL: z.string().optional(),
@@ -120,6 +122,12 @@ const EnvSchema = z.object({
 
   // Retry-After header for overload responses
   OVERLOAD_RETRY_AFTER_SECONDS: z.string().optional(),
+
+  // Web task feature flags/limits
+  WEB_TASKS_ENABLED: z.string().optional(),
+  WEB_TASK_MAX_FILE_SIZE: z.string().optional(),
+  WEB_TASK_MAX_TOTAL_SIZE: z.string().optional(),
+  WEB_TASK_PREVIEW_RATE_LIMIT: z.string().optional(),
 }).transform(env => {
   const corsOrigins = normalizeOrigins(env.CORS_ORIGIN);
   const cfBase = String(env.CLOUDFLARE_AI_URL ?? "").trim();
@@ -150,6 +158,8 @@ const EnvSchema = z.object({
       return Number.isFinite(n) && n >= 0 ? n : isProduction ? 1 : 0;
     })(),
     __judgeWorkerEntry: (env.JUDGE_WORKER_ENTRY ?? "").trim(),
+    __turnstileEnforceContestSubmit: parseBoolEnv(env.TURNSTILE_ENFORCE_CONTEST_SUBMIT),
+    __turnstileEnforceAuth: parseBoolEnv(env.TURNSTILE_ENFORCE_AUTH),
     __nsjailPath: ((env.NSJAIL_PATH ?? "") || "/usr/bin/nsjail").trim(),
     __nsjailConfig: (env.NSJAIL_CONFIG ?? "").trim(),
     __nsjailUseConfig: parseBoolEnv(env.NSJAIL_USE_CONFIG),
@@ -214,6 +224,26 @@ const EnvSchema = z.object({
       if (!raw) return 3;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 3;
+    })(),
+
+    __webTasksEnabled: parseBoolEnv(env.WEB_TASKS_ENABLED),
+    __webTaskMaxFileSize: (() => {
+      const raw = (env.WEB_TASK_MAX_FILE_SIZE ?? "").trim();
+      if (!raw) return 200_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 1024 ? n : 200_000;
+    })(),
+    __webTaskMaxTotalSize: (() => {
+      const raw = (env.WEB_TASK_MAX_TOTAL_SIZE ?? "").trim();
+      if (!raw) return 500_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 2048 ? n : 500_000;
+    })(),
+    __webTaskPreviewRateLimit: (() => {
+      const raw = (env.WEB_TASK_PREVIEW_RATE_LIMIT ?? "").trim();
+      if (!raw) return 10;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 10;
     })(),
   };
 }).superRefine((env, ctx) => {

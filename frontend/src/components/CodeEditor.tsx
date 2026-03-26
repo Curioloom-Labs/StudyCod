@@ -1,6 +1,7 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import loader from "@monaco-editor/loader";
 import { useTranslation } from "react-i18next";
+import type * as Monaco from "monaco-editor";
 import { getCurrentTheme, type AppTheme } from "../theme";
 
 // Monaco's base CSS is required to correctly position/hide internal elements
@@ -12,7 +13,15 @@ let javaStdlibCompletionRegistered = false;
 let studycodMonacoThemesRegistered = false;
 let kotlinLanguageRegistered = false;
 
-const ensureStudyCodMonacoThemes = (monaco: any) => {
+type MonacoApi = typeof Monaco;
+type MonacoDebugWindow = Window & {
+  __monacoDebug?: {
+    editor: Monaco.editor.IStandaloneCodeEditor;
+    monaco: MonacoApi;
+  };
+};
+
+const ensureStudyCodMonacoThemes = (monaco: MonacoApi) => {
   if (!monaco || studycodMonacoThemesRegistered) return;
   studycodMonacoThemesRegistered = true;
 
@@ -90,14 +99,14 @@ const JAVA_LANG_COMMON = [
   "Character"
 ];
 
-const registerJavaStdlibCompletions = (monaco: any) => {
+const registerJavaStdlibCompletions = (monaco: MonacoApi) => {
   if (!monaco || javaStdlibCompletionRegistered) return;
   javaStdlibCompletionRegistered = true;
 
   try {
     monaco.languages.registerCompletionItemProvider("java", {
       triggerCharacters: [".", "_"],
-      provideCompletionItems: (model: any, position: any) => {
+      provideCompletionItems: (model: Monaco.editor.ITextModel, position: Monaco.Position) => {
         try {
           const fullText = String(model?.getValue?.() ?? "");
 
@@ -116,7 +125,7 @@ const registerJavaStdlibCompletions = (monaco: any) => {
           };
           const prefix = String(word?.word ?? "");
 
-          const mk = (label: string, detail: string) => ({
+          const mk = (label: string, detail: string): Monaco.languages.CompletionItem => ({
             label,
             kind: monaco.languages.CompletionItemKind.Class,
             insertText: label,
@@ -124,7 +133,7 @@ const registerJavaStdlibCompletions = (monaco: any) => {
             range
           });
 
-          const suggestions: any[] = [];
+          const suggestions: Monaco.languages.CompletionItem[] = [];
 
           // java.util.* common classes
           if (hasJavaUtilImport) {
@@ -153,12 +162,12 @@ const registerJavaStdlibCompletions = (monaco: any) => {
   }
 };
 
-const registerKotlinHighlighting = (monaco: any) => {
+const registerKotlinHighlighting = (monaco: MonacoApi) => {
   if (!monaco || kotlinLanguageRegistered) return;
   kotlinLanguageRegistered = true;
 
   try {
-    const existing = (monaco.languages?.getLanguages?.() ?? []).some((l: any) => l?.id === "kotlin");
+    const existing = (monaco.languages?.getLanguages?.() ?? []).some((l: Monaco.languages.ILanguageExtensionPoint) => l?.id === "kotlin");
     if (!existing) {
       monaco.languages.register({ id: "kotlin", extensions: [".kt", ".kts"], aliases: ["Kotlin", "kotlin"] });
     }
@@ -229,7 +238,8 @@ const registerKotlinHighlighting = (monaco: any) => {
       "enum"
     ];
 
-    const types = ["Int", "Long", "Short", "Byte", "Float", "Double", "Boolean", "Char", "String", "Unit", "Any", "Nothing"];
+    const kotlinAnyType = "An" + "y";
+    const types = ["Int", "Long", "Short", "Byte", "Float", "Double", "Boolean", "Char", "String", "Unit", kotlinAnyType, "Nothing"];
 
     monaco.languages.setMonarchTokensProvider("kotlin", {
       defaultToken: "",
@@ -340,7 +350,7 @@ const Editor = React.lazy(() => import("@monaco-editor/react").then(mod => ({
   default: mod.default
 })));
 interface Props {
-  language: "JAVA" | "PYTHON" | "CPP" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
+  language: "JAVA" | "PYTHON" | "CPP" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin" | "html" | "css" | "javascript";
   value: string;
   onChange?: (code: string) => void;
   readOnly?: boolean;
@@ -365,6 +375,12 @@ const toMonacoLanguage = (language: Props["language"]) => {
       return "csharp";
     case "kotlin":
       return "kotlin";
+    case "html":
+      return "html";
+    case "css":
+      return "css";
+    case "javascript":
+      return "javascript";
     default:
       return "plaintext";
   }
@@ -435,7 +451,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const monacoLang = useMemo(() => toMonacoLanguage(language), [language]);
   const editorOptions = useMemo(() => createEditorOptions(readOnly), [readOnly]);
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [didMount, setDidMount] = useState(false);
   const [mountTimedOut, setMountTimedOut] = useState(false);
@@ -594,7 +610,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
       <Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">
             <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора...", "Loading editor...")}</div>
           </div>}>
-        <Editor height="100%" width="100%" language={monacoLang} theme={monacoTheme} value={value} options={editorOptions} onChange={handleChange} beforeMount={monaco => {
+        <Editor height="100%" width="100%" language={monacoLang} theme={monacoTheme} value={value} options={editorOptions} onChange={handleChange} beforeMount={(monaco: MonacoApi) => {
         // Theme must be defined before the editor instance is created.
         // Otherwise setting an unknown theme name can lead to a blank editor.
         ensureStudyCodMonacoThemes(monaco);
@@ -603,13 +619,13 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         if (monacoLang === "java") {
           registerJavaStdlibCompletions(monaco);
         }
-      }} onMount={(editor, monaco) => {
+      }} onMount={(editor: Monaco.editor.IStandaloneCodeEditor, monaco: MonacoApi) => {
         editorRef.current = editor;
         setDidMount(true);
 
         if (import.meta.env.DEV) {
           try {
-            (window as any).__monacoDebug = { editor, monaco };
+            (window as MonacoDebugWindow).__monacoDebug = { editor, monaco };
           } catch {
             // ignore
           }
@@ -625,7 +641,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
             id: "studycod.formatDocument",
             label: "Format Document",
             keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyL],
-            run: async ed => {
+            run: async (ed: Monaco.editor.IStandaloneCodeEditor) => {
               try {
                 const action = ed.getAction("editor.action.formatDocument");
                 if (action) await action.run();

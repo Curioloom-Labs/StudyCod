@@ -98,6 +98,15 @@ class EmailService {
     return process.env.FRONTEND_URL || "http://localhost:5173";
   }
 
+  private normalizeLocale(locale?: string | null): "uk" | "en" {
+    const raw = String(locale ?? "").toLowerCase().trim();
+    return raw.startsWith("en") ? "en" : "uk";
+  }
+
+  private t(locale: "uk" | "en", uk: string, en: string): string {
+    return locale === "en" ? en : uk;
+  }
+
   private getBackendPublicUrl(): string {
     return process.env.BACKEND_PUBLIC_URL || BACKEND_PUBLIC_URL || "http://localhost:4000";
   }
@@ -135,7 +144,7 @@ class EmailService {
       preheader: preview ? `${preview}` : `Нове оголошення у класі ${className}`,
       greeting: `Привіт, ${username}!`,
       contentHtml: `<p>Ви отримали нове оголошення у класі <b>${this.escapeHtml(className)}</b>:</p>
-<div style="margin:12px 0 0 0;padding:12px 12px;border:1px solid #233043;border-radius:10px;background:#0b0f14;color:#d6e1f0;">${this.escapeHtml(
+<div style="margin:12px 0 0 0;padding:14px 14px;border:1px solid #1f3552;border-radius:12px;background:#0a1422;color:#dbe9ff;">${this.escapeHtml(
         preview
       )}</div>`,
       cta: { label: "Відкрити StudyCod", url: this.getFrontendUrl() },
@@ -204,11 +213,11 @@ class EmailService {
       preheader: opts.subject,
       contentHtml: `${opts.contentHtml}
 
-<hr style="border:none;border-top:1px solid #233043;margin:18px 0;" />
-<p style="margin:0;font-size:12px;color:#9fb3c8;line-height:1.6;">
+<hr style="border:none;border-top:1px solid #1f3552;margin:20px 0;" />
+<p style="margin:0;font-size:12px;color:#8fa6c2;line-height:1.65;">
   Ви отримали цей лист, бо підписані на розсилку StudyCod.
   <br />
-  Відписатися: <a href="${unsubscribeUrl}" style="color:#7ab7ff;text-decoration:underline;word-break:break-all;">${unsubscribeUrl}</a>
+  Відписатися: <a href="${unsubscribeUrl}" style="color:#7bc9ff;text-decoration:underline;word-break:break-all;">${unsubscribeUrl}</a>
 </p>`,
       footer: "Розсилка StudyCod"
     });
@@ -229,6 +238,11 @@ class EmailService {
     title: string;
     contentHtml: string;
     text?: string;
+    attachments?: Array<{
+      filename: string;
+      content: Buffer;
+      contentType?: string;
+    }>;
   }): Promise<void> {
     const html = this.buildBaseEmail({
       title: opts.title,
@@ -248,6 +262,7 @@ class EmailService {
       headers: {
         "X-StudyCod-Category": "notification",
       },
+      attachments: opts.attachments,
     });
   }
 
@@ -316,6 +331,11 @@ StudyCod: ${this.getFrontendUrl()}`;
     text: string;
     fromOverride?: string;
     headers?: Record<string, string>;
+    attachments?: Array<{
+      filename: string;
+      content: Buffer;
+      contentType?: string;
+    }>;
   }): Promise<void> {
     const apiKey = String(process.env.BREVO_API_KEY || "").trim();
     if (!apiKey) {
@@ -337,6 +357,15 @@ StudyCod: ${this.getFrontendUrl()}`;
 
     if (opts.headers && Object.keys(opts.headers).length) {
       payload.headers = opts.headers;
+    }
+
+    if (Array.isArray(opts.attachments) && opts.attachments.length > 0) {
+      payload.attachment = opts.attachments.map((a) => ({
+        name: String(a.filename || "attachment.bin"),
+        content: Buffer.isBuffer(a.content)
+          ? a.content.toString("base64")
+          : Buffer.from(String(a.content ?? "")).toString("base64"),
+      }));
     }
 
     const data = JSON.stringify(payload);
@@ -387,6 +416,11 @@ StudyCod: ${this.getFrontendUrl()}`;
     text: string;
     fromOverride?: string;
     headers?: Record<string, string>;
+    attachments?: Array<{
+      filename: string;
+      content: Buffer;
+      contentType?: string;
+    }>;
   }): Promise<void> {
     if (this.provider === "brevo-api") {
       await this.sendViaBrevoApi(opts);
@@ -398,7 +432,10 @@ StudyCod: ${this.getFrontendUrl()}`;
       logger.info('[email] log mode', {
         to: opts.to,
         subject: opts.subject,
-        text: String(opts.text ?? '').slice(0, 10_000)
+        text: String(opts.text ?? '').slice(0, 10_000),
+        attachments: Array.isArray(opts.attachments)
+          ? opts.attachments.map((a) => a.filename)
+          : []
       });
       return;
     }
@@ -411,6 +448,13 @@ StudyCod: ${this.getFrontendUrl()}`;
         html: opts.html,
         text: opts.text,
         headers: opts.headers,
+        attachments: Array.isArray(opts.attachments)
+          ? opts.attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+              contentType: a.contentType,
+            }))
+          : undefined,
       });
     } catch (err: any) {
       logger.error('[email] send failed', { message: err?.message });
@@ -429,7 +473,9 @@ StudyCod: ${this.getFrontendUrl()}`;
     contentHtml: string;
     cta?: { label: string; url: string };
     footer?: string;
+    locale?: "uk" | "en";
   }): string {
+    const locale = this.normalizeLocale(opts.locale);
     const title = this.escapeHtml(opts.title);
     const preheader = this.escapeHtml(opts.preheader || opts.title);
     const year = new Date().getFullYear();
@@ -441,11 +487,15 @@ StudyCod: ${this.getFrontendUrl()}`;
 
     const footer =
       opts.footer ||
-      "Це автоматичний лист від StudyCod. Будь ласка, не відповідайте на нього.";
+      this.t(
+        locale,
+        "Це автоматичний лист від StudyCod. Будь ласка, не відповідайте на нього.",
+        "This is an automatic email from StudyCod. Please do not reply to it."
+      );
 
     // Email-client friendly layout: table-based, inline styles.
     return `<!DOCTYPE html>
-<html lang="uk">
+<html lang="${locale}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -453,21 +503,21 @@ StudyCod: ${this.getFrontendUrl()}`;
     <meta name="supported-color-schemes" content="dark light" />
     <title>${title}</title>
   </head>
-  <body style="margin:0;padding:0;background-color:#0b0f14;color:#d6e1f0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <body style="margin:0;padding:0;background-color:#060b14;color:#dbe9ff;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;">
     <!-- Preheader (hidden) -->
-    <div style="display:none;font-size:1px;color:#0b0f14;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
+    <div style="display:none;font-size:1px;color:#060b14;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
 
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#0b0f14;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#060b14;">
       <tr>
-        <td align="center" style="padding:36px 12px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
+        <td align="center" style="padding:34px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="620" style="max-width:620px;width:100%;">
             <!-- Brand -->
             <tr>
-              <td align="center" style="padding:0 8px 18px 8px;">
-                <a href="${this.getFrontendUrl()}" style="text-decoration:none;color:#e8f1ff;font-weight:900;font-size:20px;letter-spacing:0.4px;">
+              <td align="center" style="padding:0 8px 16px 8px;">
+                <a href="${this.getFrontendUrl()}" style="text-decoration:none;color:#f2f7ff;font-weight:900;font-size:19px;letter-spacing:0.35px;">
                   StudyCod
                 </a>
-                <div style="margin-top:6px;font-size:12px;color:#7f93ab;">${this.escapeHtml(
+                <div style="margin-top:8px;font-size:11px;color:#8fa6c2;text-transform:uppercase;letter-spacing:0.9px;">${this.escapeHtml(
                   preheader
                 )}</div>
               </td>
@@ -475,31 +525,31 @@ StudyCod: ${this.getFrontendUrl()}`;
 
             <!-- Card -->
             <tr>
-              <td style="background:#0f1724;border:1px solid #243448;border-radius:16px;padding:26px 22px;box-shadow:0 18px 55px rgba(0,0,0,0.45);">
-                <div style="height:4px;background:#00e887;border-radius:999px;margin:0 0 16px 0;"></div>
-                <h1 style="margin:0 0 10px 0;font-size:24px;line-height:1.25;color:#f1f6ff;letter-spacing:0.2px;">${title}</h1>
+              <td style="background:#0c1626;border:1px solid #1f3552;border-radius:20px;padding:24px 22px;box-shadow:0 22px 60px rgba(0,0,0,0.48);">
+                <div style="height:4px;background:linear-gradient(90deg,#00ff88 0%, #7bc9ff 55%, #9a7dff 100%);border-radius:999px;margin:0 0 16px 0;"></div>
+                <h1 style="margin:0 0 10px 0;font-size:24px;line-height:1.24;color:#f2f7ff;letter-spacing:0.2px;">${title}</h1>
                 ${greeting}
-                <div style="font-size:15px;line-height:1.7;color:#d6e1f0;">
+                <div style="font-size:15px;line-height:1.72;color:#dbe9ff;">
                   ${opts.contentHtml}
                 </div>
 
                 ${
                   opts.cta
                     ? `
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
                   <tr>
-                    <td bgcolor="#00e887" style="border-radius:12px;">
+                    <td bgcolor="#00ff88" style="border-radius:12px;">
                       <a href="${opts.cta.url}"
-                         style="display:inline-block;padding:13px 20px;background:#00e887;color:#081019;text-decoration:none;border-radius:12px;font-weight:800;font-size:15px;letter-spacing:0.1px;">
+                         style="display:inline-block;padding:13px 20px;background:#00ff88;color:#04110a;text-decoration:none;border-radius:12px;font-weight:800;font-size:15px;letter-spacing:0.1px;">
                         ${this.escapeHtml(opts.cta.label)}
                       </a>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:14px 0 0 0;font-size:12px;line-height:1.55;color:#9fb3c8;">
+                <p style="margin:14px 0 0 0;font-size:12px;line-height:1.55;color:#8fa6c2;">
                   Якщо кнопка не працює, відкрийте посилання нижче:
                   <br />
-                  <a href="${opts.cta.url}" style="color:#7ab7ff;text-decoration:underline;word-break:break-all;">${opts.cta.url}</a>
+                  <a href="${opts.cta.url}" style="color:#7bc9ff;text-decoration:underline;word-break:break-all;">${opts.cta.url}</a>
                 </p>
                     `.trim()
                     : ""
@@ -510,10 +560,10 @@ StudyCod: ${this.getFrontendUrl()}`;
             <!-- Footer -->
             <tr>
               <td style="padding:14px 10px 0 10px;">
-                <p style="margin:0;font-size:12px;line-height:1.6;color:#7f93ab;">
+                <p style="margin:0;font-size:12px;line-height:1.65;color:#7f96b2;">
                   ${this.escapeHtml(footer)}
                 </p>
-                <p style="margin:8px 0 0 0;font-size:12px;color:#7f93ab;">© ${year} StudyCod • <a href="${this.getFrontendUrl()}" style="color:#7f93ab;text-decoration:underline;">studycod.space</a></p>
+                <p style="margin:8px 0 0 0;font-size:12px;color:#7f96b2;">© ${year} StudyCod • <a href="${this.getFrontendUrl()}" style="color:#7f96b2;text-decoration:underline;">studycod.space</a></p>
               </td>
             </tr>
           </table>
@@ -531,30 +581,48 @@ StudyCod: ${this.getFrontendUrl()}`;
   async sendVerificationEmail(
     email: string,
     token: string,
-    username: string
+    username: string,
+    locale?: "uk" | "en"
   ) {
+    const lng = this.normalizeLocale(locale);
     const url = `${this.getFrontendUrl()}/verify-email?token=${token}`;
 
     const html = this.buildBaseEmail({
-      title: "Підтвердження електронної пошти",
-      preheader: "Підтвердіть email, щоб активувати акаунт StudyCod.",
-      greeting: `Привіт, ${username}!`,
-      contentHtml: `<p>Дякуємо за реєстрацію в StudyCod.</p>
+      title: this.t(lng, "Підтвердження електронної пошти", "Email verification"),
+      preheader: this.t(lng, "Підтвердіть email, щоб активувати акаунт StudyCod.", "Confirm your email to activate your StudyCod account."),
+      greeting: this.t(lng, `Привіт, ${username}!`, `Hi, ${username}!`),
+      contentHtml: this.t(
+        lng,
+        `<p>Дякуємо за реєстрацію в StudyCod.</p>
 <p>Щоб активувати акаунт, підтвердіть вашу адресу електронної пошти.</p>
 <p style="margin:14px 0 0 0;color:#9fb3c8;">Якщо ви не створювали акаунт, просто проігноруйте цей лист.</p>`,
-      cta: { label: "Підтвердити email", url },
+        `<p>Thanks for registering at StudyCod.</p>
+<p>Please confirm your email address to activate your account.</p>
+<p style="margin:14px 0 0 0;color:#9fb3c8;">If you did not create this account, just ignore this email.</p>`
+      ),
+      cta: { label: this.t(lng, "Підтвердити email", "Verify email"), url },
+      locale: lng,
     });
 
-    const text = `Привіт, ${username}!
+    const text = this.t(
+      lng,
+      `Привіт, ${username}!
 
 Для підтвердження email перейдіть за посиланням:
 ${url}
 
-— StudyCod`;
+— StudyCod`,
+      `Hi, ${username}!
+
+Please confirm your email by following this link:
+${url}
+
+— StudyCod`
+    );
 
     await this.sendEmail({
       to: email,
-      subject: "Підтвердження електронної пошти",
+      subject: this.t(lng, "Підтвердження електронної пошти", "Email verification"),
       html,
       text,
     });
@@ -563,30 +631,48 @@ ${url}
   async sendPasswordResetEmail(
     email: string,
     token: string,
-    username: string
+    username: string,
+    locale?: "uk" | "en"
   ) {
+    const lng = this.normalizeLocale(locale);
     const url = `${this.getFrontendUrl()}/auth/reset-password?token=${token}`;
 
     const html = this.buildBaseEmail({
-      title: "Відновлення паролю",
-      preheader: "Посилання для відновлення паролю до вашого акаунта StudyCod.",
-      greeting: `Привіт, ${username}!`,
-      contentHtml: `<p>Ми отримали запит на відновлення паролю для вашого акаунта.</p>
+      title: this.t(lng, "Відновлення паролю", "Password reset"),
+      preheader: this.t(lng, "Посилання для відновлення паролю до вашого акаунта StudyCod.", "Use this link to reset your StudyCod account password."),
+      greeting: this.t(lng, `Привіт, ${username}!`, `Hi, ${username}!`),
+      contentHtml: this.t(
+        lng,
+        `<p>Ми отримали запит на відновлення паролю для вашого акаунта.</p>
 <p>Натисніть кнопку нижче, щоб встановити новий пароль.</p>
 <p style="margin:14px 0 0 0;color:#9fb3c8;">Якщо це були не ви — просто проігноруйте цей лист.</p>`,
-      cta: { label: "Відновити пароль", url },
+        `<p>We received a request to reset your account password.</p>
+<p>Click the button below to set a new password.</p>
+<p style="margin:14px 0 0 0;color:#9fb3c8;">If this wasn't you, simply ignore this email.</p>`
+      ),
+      cta: { label: this.t(lng, "Відновити пароль", "Reset password"), url },
+      locale: lng,
     });
 
-    const text = `Відновлення паролю:
+    const text = this.t(
+      lng,
+      `Відновлення паролю:
 
 ${url}
 
 Якщо це були не ви — просто ігноруйте лист.
-— StudyCod`;
+— StudyCod`,
+      `Password reset:
+
+${url}
+
+If this wasn't you, just ignore this email.
+— StudyCod`
+    );
 
     await this.sendEmail({
       to: email,
-      subject: "Відновлення паролю",
+      subject: this.t(lng, "Відновлення паролю", "Password reset"),
       html,
       text,
     });
@@ -600,8 +686,9 @@ ${url}
     const html = this.buildBaseEmail({
       title: opts.subject,
       preheader: "Відповідь від підтримки StudyCod.",
-      contentHtml: `<p style="margin:0 0 12px 0;">Ми відповіли на ваше звернення:</p>
-<div style="white-space:pre-wrap;background:#0b0f14;border:1px solid #233043;border-radius:10px;padding:12px 12px;color:#d6e1f0;">${this.escapeHtml(
+      contentHtml: `<p style="margin:0 0 12px 0;">Ми опрацювали ваше звернення та надіслали відповідь нижче:</p>
+<div style="margin:0 0 10px 0;padding:9px 11px;border-radius:10px;background:#0a1422;border:1px dashed #2a4d73;color:#9ec7ff;font-size:12px;font-weight:700;letter-spacing:0.25px;text-transform:uppercase;">Повідомлення від техпідтримки</div>
+<div style="white-space:pre-wrap;background:#08111d;border:1px solid #1f3552;border-radius:12px;padding:14px 14px;color:#dbe9ff;line-height:1.72;">${this.escapeHtml(
         opts.message
       )}</div>`,
       footer: "StudyCod Technical Support",

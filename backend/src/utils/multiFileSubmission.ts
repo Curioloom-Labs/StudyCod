@@ -40,6 +40,7 @@ export function decodeMultiFileSubmissionV1(s: unknown): MultiFileSubmissionV1 |
       }))
       .filter((f: { path: string; content: string }) => f.path.length > 0);
     if (!entry || files.length === 0) return null;
+    if (!files.some((f: { path: string; content: string }) => f.path === entry)) return null;
     return { version: 1, entry, files };
   } catch {
     return null;

@@ -27,6 +27,16 @@ import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, 
 import { TopicNew } from "../../entities/TopicNew";
 import { IsNull } from "typeorm";
 import { buildLearningFirstFailure } from "../../services/learning/firstFailure";
+import { env } from "../../env";
+import {
+  normalizeWebTaskFiles,
+  normalizeWebValidationProfile,
+  normalizeWebValidationRules,
+  validateWebTaskSubmission,
+  type WebTaskValidationProfile,
+  type WebTaskValidationRule,
+} from "../../services/webTaskValidationService";
+import { encodeWebTaskPayload } from "../../utils/webTaskPayload";
 
 const router = Router();
 
@@ -43,6 +53,36 @@ const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
 const runLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 25, message: "RATE_LIMIT" });
 const submitLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, message: "RATE_LIMIT" });
 const completeLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, message: "RATE_LIMIT" });
+
+const webDraftStore = new Map<string, { files: ReturnType<typeof normalizeWebTaskFiles>; updatedAt: number }>();
+
+function webDraftKey(studentId: number, taskId: number): string {
+  return `${studentId}:${taskId}`;
+}
+
+function normalizeWebRules(raw: unknown): WebTaskValidationRule[] {
+  return normalizeWebValidationRules(raw);
+}
+
+function normalizeWebProfile(raw: unknown): WebTaskValidationProfile {
+  return normalizeWebValidationProfile(raw ?? "FREE_WEB");
+}
+
+function assertWebFilesWithinLimits(files: ReturnType<typeof normalizeWebTaskFiles>) {
+  const maxFileSize = Number((env as any).__webTaskMaxFileSize ?? 200_000);
+  const maxTotalSize = Number((env as any).__webTaskMaxTotalSize ?? 500_000);
+  let total = 0;
+  for (const f of files) {
+    const size = Buffer.byteLength(String(f.content ?? ""), "utf8");
+    if (size > maxFileSize) {
+      throw new HttpError(400, "WEB_FILE_TOO_LARGE", { expose: true });
+    }
+    total += size;
+  }
+  if (total > maxTotalSize) {
+    throw new HttpError(400, "WEB_FILES_TOTAL_TOO_LARGE", { expose: true });
+  }
+}
 
 type ApiCodeFile = { path: string; content: string };
 
@@ -159,6 +199,55 @@ function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; pa
     .filter(r => Number.isFinite(r.testId) && r.testId > 0);
 }
 
+async function assertControlTaskUnlockedForStudent(studentId: number, topicTask: TopicTask): Promise<void> {
+  if (topicTask.type !== "CONTROL" || !topicTask.controlWork?.id) return;
+
+  const controlWorkId = topicTask.controlWork.id;
+
+  if (topicTask.controlWork.hasTheory) {
+    const summaryWithTheory = await AppDataSource
+      .createQueryBuilder(SummaryGrade, "sg")
+      .where("sg.student_id = :studentId", { studentId })
+      .andWhere("sg.control_work_id = :controlWorkId", { controlWorkId })
+      .andWhere("sg.theory_grade IS NOT NULL")
+      .getOne();
+
+    if (!summaryWithTheory) {
+      throw new HttpError(403, "CONTROL_QUIZ_REQUIRED", { expose: true });
+    }
+  }
+
+  const orderedControlTasks = await topicTaskRepo()
+    .createQueryBuilder("task")
+    .where("task.control_work_id = :controlWorkId", { controlWorkId })
+    .andWhere("task.type = :controlType", { controlType: "CONTROL" })
+    .orderBy("task.order", "ASC")
+    .addOrderBy("task.id", "ASC")
+    .getMany();
+
+  const currentIndex = orderedControlTasks.findIndex(t => t.id === topicTask.id);
+  if (currentIndex === -1) {
+    throw new HttpError(403, "CONTROL_TASK_NOT_IN_WORK", { expose: true });
+  }
+
+  if (currentIndex === 0) return;
+
+  const prevTaskIds = orderedControlTasks.slice(0, currentIndex).map(t => t.id);
+  if (!prevTaskIds.length) return;
+
+  const completedPrev = await gradeRepo()
+    .createQueryBuilder("g")
+    .select("DISTINCT g.topic_task_id", "topic_task_id")
+    .where("g.student_id = :studentId", { studentId })
+    .andWhere("g.topic_task_id IN (:...taskIds)", { taskIds: prevTaskIds })
+    .andWhere("g.total IS NOT NULL")
+    .getRawMany();
+
+  if (completedPrev.length < prevTaskIds.length) {
+    throw new HttpError(403, "CONTROL_PREVIOUS_TASKS_REQUIRED", { expose: true });
+  }
+}
+
 router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const taskId = Number(req.params.taskId);
@@ -186,6 +275,8 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       if (!student || !student.class || student.class.id !== topicTask.topic.class?.id) {
         return res.status(403).json({ message: "ACCESS_DENIED" });
       }
+
+      await assertControlTaskUnlockedForStudent(req.studentId, topicTask);
     } else if (req.userId) {
       const user = await userRepo().findOne({ where: { id: req.userId } });
       if (!user || (user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN")) {
@@ -378,6 +469,9 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         title: topicTask.title,
         description: topicTask.description,
         template: topicTask.template,
+        taskMode: (topicTask as any).taskMode ?? "CODE",
+        webTemplateFiles: (topicTask as any).webTemplateFiles ?? null,
+        webValidationRules: (topicTask as any).webValidationRules ?? null,
         maxAttempts: topicTask.maxAttempts,
         attemptsUsed: attemptsUsed ?? undefined,
         deadline: topicTask.deadline ? topicTask.deadline.toISOString() : null,
@@ -442,6 +536,306 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
   }
 });
 
+router.get("/tasks/:taskId/web-template", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+
+    const taskId = Number(req.params.taskId);
+    if (!Number.isInteger(taskId)) {
+      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    }
+
+    const topicTask = await topicTaskRepo()
+      .createQueryBuilder("topicTask")
+      .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topic.class", "class")
+      .where("topicTask.id = :taskId", { taskId })
+      .getOne();
+
+    if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+
+    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    if (req.userType === "STUDENT" && req.studentId) {
+      const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
+      if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
+        return res.status(403).json({ message: "ACCESS_DENIED" });
+      }
+    }
+
+    const files = normalizeWebTaskFiles((topicTask as any).webTemplateFiles ?? []);
+    const rules = normalizeWebRules((topicTask as any).webValidationRules ?? []);
+    return res.json({
+      taskId: topicTask.id,
+      taskMode: "WEB",
+      files,
+      rules,
+      profile: normalizeWebProfile((topicTask as any).webValidationProfile ?? "FREE_WEB"),
+    });
+  } catch (error: any) {
+    logger.error("Error getting web task template", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddleware, runLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    if (req.userType !== "STUDENT" || !req.studentId) {
+      return res.status(403).json({ message: "ONLY_STUDENTS_CAN_ACCESS" });
+    }
+
+    const taskId = Number(req.params.taskId);
+    if (!Number.isInteger(taskId)) {
+      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    }
+
+    const topicTask = await topicTaskRepo()
+      .createQueryBuilder("topicTask")
+      .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topic.class", "class")
+      .where("topicTask.id = :taskId", { taskId })
+      .getOne();
+
+    if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
+    if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    await assertControlTaskUnlockedForStudent(req.studentId, topicTask);
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertWebFilesWithinLimits(files);
+
+    webDraftStore.set(webDraftKey(req.studentId, taskId), {
+      files,
+      updatedAt: Date.now(),
+    });
+
+    return res.json({ ok: true, updatedAt: new Date().toISOString() });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("Error saving web draft", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/tasks/:taskId/web-check", authRequired, submissionRateLimitMiddleware, runLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    if (req.userType !== "STUDENT" || !req.studentId) {
+      return res.status(403).json({ message: "ONLY_STUDENTS_CAN_ACCESS" });
+    }
+
+    const taskId = Number(req.params.taskId);
+    if (!Number.isInteger(taskId)) {
+      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    }
+
+    const topicTask = await topicTaskRepo()
+      .createQueryBuilder("topicTask")
+      .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topic.class", "class")
+      .where("topicTask.id = :taskId", { taskId })
+      .getOne();
+
+    if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
+    if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertWebFilesWithinLimits(files);
+
+    const rules = normalizeWebRules((topicTask as any).webValidationRules ?? []);
+    const profile = normalizeWebProfile((topicTask as any).webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (topicTask as any).webTemplateFiles ?? [] });
+    return res.json({
+      taskMode: "WEB",
+      ...check,
+    });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("Error checking web task", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddleware, submitLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    if (req.userType !== "STUDENT" || !req.studentId) {
+      return res.status(403).json({ message: "ONLY_STUDENTS_CAN_ACCESS" });
+    }
+
+    const taskId = Number(req.params.taskId);
+    if (!Number.isInteger(taskId)) {
+      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    }
+
+    const topicTask = await topicTaskRepo()
+      .createQueryBuilder("topicTask")
+      .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topic.class", "class")
+      .leftJoinAndSelect("topicTask.controlWork", "controlWork")
+      .where("topicTask.id = :taskId", { taskId })
+      .getOne();
+
+    if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
+    if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    if (topicTask.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
+    if (topicTask.deadline && new Date() > new Date(topicTask.deadline)) {
+      return res.status(403).json({ message: "DEADLINE_PASSED" });
+    }
+
+    const existingGradesCount = await gradeRepo()
+      .createQueryBuilder("grade")
+      .where("grade.topic_task_id = :taskId", { taskId })
+      .andWhere("grade.student_id = :studentId", { studentId: req.studentId })
+      .getCount();
+
+    if (existingGradesCount >= topicTask.maxAttempts) {
+      return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertWebFilesWithinLimits(files);
+    const rules = normalizeWebRules((topicTask as any).webValidationRules ?? []);
+    const profile = normalizeWebProfile((topicTask as any).webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (topicTask as any).webTemplateFiles ?? [] });
+
+    const maxScore = check.maxScore > 0 ? check.maxScore : Math.max(1, check.totalRules);
+    const score = check.maxScore > 0 ? check.score : check.passedRules;
+    const ratio = maxScore > 0 ? score / maxScore : 0;
+    const totalGrade = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+
+    const submittedCode = encodeWebTaskPayload({
+      mode: "WEB",
+      version: 1,
+      files,
+    });
+
+    const feedback = check.passed
+      ? "All web validation rules passed."
+      : check.results.filter(r => !r.passed).map(r => `- ${r.message}`).join("\n");
+
+    const testResults = check.results.map((r, idx) => ({
+      testId: idx + 1,
+      passed: r.passed,
+      verdict: r.passed ? "AC" : "WA",
+      errorKind: r.passed ? null : "web_rule",
+    }));
+
+    const savedGrade = await AppDataSource.transaction("SERIALIZABLE", async manager => {
+      await manager
+        .createQueryBuilder(Student, "student")
+        .setLock("pessimistic_write")
+        .where("student.id = :studentId", { studentId: req.studentId })
+        .getOne();
+
+      const gradeRepoM = manager.getRepository(EduGrade);
+      const countM = await gradeRepoM
+        .createQueryBuilder("grade")
+        .where("grade.topic_task_id = :taskId", { taskId })
+        .andWhere("grade.student_id = :studentId", { studentId: req.studentId })
+        .getCount();
+
+      if (countM >= topicTask.maxAttempts) {
+        throw new Error("MAX_ATTEMPTS_REACHED");
+      }
+
+      const grade = gradeRepoM.create({
+        student: { id: req.studentId } as any,
+        topicTask: { id: taskId } as any,
+        total: totalGrade,
+        testsPassed: check.passedRules,
+        testsTotal: check.totalRules,
+        submittedCode,
+        isManuallyGraded: false,
+        feedback,
+        testResults: JSON.stringify(testResults),
+        score,
+        maxScore,
+        groupScores: null,
+      });
+
+      const saved = await gradeRepoM.save(grade);
+
+      if (topicTask.controlWork?.id) {
+        await saveControlSummaryGradeForNewSystemWithManager(manager, topicTask.controlWork.id, req.studentId!, null);
+        await markControlWorkAttemptCompletedIfReadyWithManager(manager, topicTask.controlWork.id, req.studentId!);
+      }
+
+      return saved;
+    });
+
+    return res.json({
+      grade: {
+        id: savedGrade.id,
+        total: savedGrade.total,
+        testsPassed: savedGrade.testsPassed,
+        testsTotal: savedGrade.testsTotal,
+        isManuallyGraded: savedGrade.isManuallyGraded,
+      },
+      testResults,
+      scoring: {
+        score,
+        maxScore,
+      },
+      taskMode: "WEB",
+    });
+  } catch (error: any) {
+    if (error?.message === "MAX_ATTEMPTS_REACHED") {
+      return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
+    }
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("Error submitting web task", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, runLimiter, async (req: AuthRequest, res: Response) => {
   try {
     if (req.userType !== "STUDENT" || !req.studentId) {
@@ -470,10 +864,10 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
     const input = validated.data.input;
 
     const judgeLang = judgeLanguageFromEduLanguage(topicTask.topic.class.language);
-    const entryFile = entryFileForJudgeLanguage(judgeLang);
     const normalizedFiles = normalizeApiFiles((validated.data as any).files);
     const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+    const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
     const isMultiFile = effectiveFiles.length > 0;
     if (isMultiFile && !effectiveFiles.some(f => f.path === entryFile)) {
@@ -485,6 +879,8 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
     if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
+
+    await assertControlTaskUnlockedForStudent(studentId, topicTask);
 
     // For single-file we can run locally; for multi-file route through judge worker.
     if (!isMultiFile) {
@@ -558,6 +954,8 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
+    await assertControlTaskUnlockedForStudent(studentId, topicTask);
+
     if (topicTask.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
     if (topicTask.deadline && new Date() > new Date(topicTask.deadline)) {
       return res.status(403).json({ message: "DEADLINE_PASSED" });
@@ -594,10 +992,10 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
 
     const eduLang = topicTask.topic.class.language;
     const judgeLang = judgeLanguageFromEduLanguage(eduLang);
-    const entryFile = entryFileForJudgeLanguage(judgeLang);
     const normalizedFiles = normalizeApiFiles((validatedBody.data as any).files);
     const providedCode = typeof (validatedBody.data as any).code === "string" ? (validatedBody.data as any).code : "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+    const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
     const isMultiFile = effectiveFiles.length > 0;
     if (isMultiFile && !effectiveFiles.some(f => f.path === entryFile)) {
@@ -799,8 +1197,8 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     }
 
     const ratio = maxScore > 0 ? passedScore / maxScore : 0;
-    const score = Math.round(ratio * 12);
-    const totalGrade = Math.max(0, Math.min(12, score));
+    const score = Math.round(ratio * 100);
+    const totalGrade = Math.max(0, Math.min(100, score));
 
     const savedGrade = await AppDataSource.transaction("SERIALIZABLE", async manager => {
       // Lock the student row to serialize submissions from the same student.
@@ -1071,10 +1469,10 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
 
     const eduLang = topicTask.topic.class.language;
     const judgeLang = judgeLanguageFromEduLanguage(eduLang);
-    const entryFile = entryFileForJudgeLanguage(judgeLang);
     const normalizedFiles = normalizeApiFiles((validatedBody.data as any).files);
     const providedCode = typeof (validatedBody.data as any).code === "string" ? (validatedBody.data as any).code : "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+    const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
     const isMultiFile = effectiveFiles.length > 0;
     if (isMultiFile && !effectiveFiles.some(f => f.path === entryFile)) {
@@ -1276,8 +1674,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     }
 
     const ratio = maxScore > 0 ? passedScore / maxScore : 0;
-    const score = Math.round(ratio * 12);
-    const totalGrade = Math.max(0, Math.min(12, score));
+    const score = Math.round(ratio * 100);
+    const totalGrade = Math.max(0, Math.min(100, score));
 
     const savedOrExisting = await AppDataSource.transaction("SERIALIZABLE", async manager => {
       await manager

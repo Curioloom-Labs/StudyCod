@@ -7,8 +7,21 @@ import { ContestParticipant } from "../entities/ContestParticipant";
 import { ContestSubmission } from "../entities/ContestSubmission";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
 import { executeCodeWithInput } from "../services/codeExecutionService";
+import {
+  buildPlacementAssessmentPack,
+  computePlacementLevelFromAssessment,
+  toPublicPlacementAssessmentPack,
+  type PlacementAssessmentLevel,
+  type PlacementAssessmentTrack,
+} from "../services/placementAssessmentService";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
+import {
+  getIadDeltaByGrade,
+  getIadReasonKeyByGrade,
+  getLastProcessedGradeIdForLang,
+  getUserIadForLang,
+} from "../utils/iad";
 const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
@@ -197,7 +210,7 @@ function serializeUserProfileMeta(meta: {
 }
 
 function buildUserDto(user: User) {
-  const difusValue = user.lang === "PYTHON" ? user.difusPython : user.difusJava;
+  const iadValue = getUserIadForLang(user, user.lang);
   const handlesByCourse = getContestHandlesByCourse(user);
   const profileMeta = parseUserProfileMeta(user.timezone ?? null);
   return {
@@ -205,7 +218,18 @@ function buildUserDto(user: User) {
     username: user.username,
     course: user.lang,
     lang: user.lang,
-    difus: difusValue ?? 0,
+    iad: iadValue ?? 0,
+    difus: iadValue ?? 0,
+    iadByLang: {
+      JAVA: getUserIadForLang(user, "JAVA"),
+      PYTHON: getUserIadForLang(user, "PYTHON"),
+      CPP: getUserIadForLang(user, "CPP"),
+    },
+    difusByLang: {
+      JAVA: getUserIadForLang(user, "JAVA"),
+      PYTHON: getUserIadForLang(user, "PYTHON"),
+      CPP: getUserIadForLang(user, "CPP"),
+    },
     avatarUrl: user.avatarUrl ?? null,
     contestHandles: pickContestHandlesForCourse(handlesByCourse, user.lang),
     contestHandlesByCourse: handlesByCourse,
@@ -229,6 +253,14 @@ function buildUserDto(user: User) {
 }
 
 const PROFILE_BADGES: ReadonlyArray<number> = [25, 50, 100, 250, 500, 1000];
+
+function denyContestProfileAccess(req: AuthRequest, res: Response): boolean {
+  if (req.userType === "USER" && req.userMode === "CONTEST") {
+    res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
+    return true;
+  }
+  return false;
+}
 
 router.get("/public/:username", async (req: AuthRequest, res: Response) => {
   try {
@@ -330,7 +362,8 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
       username: user.username,
       avatarUrl: user.avatarUrl ?? null,
       lang: user.lang,
-      difus: user.lang === "PYTHON" ? user.difusPython ?? 0 : user.difusJava ?? 0,
+      iad: getUserIadForLang(user, user.lang),
+      difus: getUserIadForLang(user, user.lang),
       joinedAt: user.createdAt,
       contestHandles: pickContestHandlesForCourse(getContestHandlesByCourse(user), user.lang),
       privacy,
@@ -360,6 +393,106 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
       username: (req.params as any)?.username,
       err,
     });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (denyContestProfileAccess(req, res)) return;
+    if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (req.userType === "STUDENT" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
+    }
+
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ message: "USER_NOT_FOUND" });
+    if (user.userMode !== "PERSONAL") {
+      return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
+    }
+
+    const lang = user.lang;
+    const currentIad = getUserIadForLang(user, lang);
+    const lastAppliedGradeId = getLastProcessedGradeIdForLang(user, lang);
+
+    const recentGrades = await AppDataSource
+      .createQueryBuilder()
+      .select("g.id", "gradeId")
+      .addSelect("g.total", "grade")
+      .addSelect("g.created_at", "createdAt")
+      .addSelect("t.id", "taskId")
+      .addSelect("t.title", "taskTitle")
+      .addSelect("t.topic_index", "topicIndex")
+      .from("grades", "g")
+      .innerJoin("tasks", "t", "t.id = g.task_id")
+      .where("g.user_id = :userId", { userId: req.userId })
+      .andWhere("t.lang = :lang", { lang })
+      .andWhere("g.total IS NOT NULL")
+      .orderBy("g.created_at", "DESC")
+      .addOrderBy("g.id", "DESC")
+      .limit(25)
+      .getRawMany<{
+        gradeId: string | number;
+        grade: string | number;
+        createdAt: string;
+        taskId: string | number;
+        taskTitle: string;
+        topicIndex: string | number;
+      }>();
+
+    const events = recentGrades.map((row) => {
+      const gradeValue = Number(row.grade ?? 0);
+      const delta = getIadDeltaByGrade(gradeValue);
+      const gradeId = Number(row.gradeId ?? 0);
+      return {
+        gradeId,
+        taskId: Number(row.taskId ?? 0),
+        taskTitle: String(row.taskTitle ?? ""),
+        topicIndex: Number(row.topicIndex ?? 0),
+        grade: gradeValue,
+        delta,
+        reasonKey: getIadReasonKeyByGrade(gradeValue),
+        direction: delta > 0 ? "up" : delta < 0 ? "down" : "flat",
+        applied: lastAppliedGradeId != null ? gradeId <= lastAppliedGradeId : false,
+        createdAt: row.createdAt,
+      };
+    });
+
+    const positiveEvents = events.filter((e) => e.delta > 0).length;
+    const negativeEvents = events.filter((e) => e.delta < 0).length;
+
+    return res.json({
+      lang,
+      currentIad,
+      currentDifus: currentIad,
+      iadByLang: {
+        JAVA: getUserIadForLang(user, "JAVA"),
+        PYTHON: getUserIadForLang(user, "PYTHON"),
+        CPP: getUserIadForLang(user, "CPP"),
+      },
+      difusByLang: {
+        JAVA: getUserIadForLang(user, "JAVA"),
+        PYTHON: getUserIadForLang(user, "PYTHON"),
+        CPP: getUserIadForLang(user, "CPP"),
+      },
+      limits: { min: 0, max: 1 },
+      lastAppliedGradeId,
+      updatedAt: user.lastIadChange ?? user.lastDifusChange ?? null,
+      rules: [
+        { minGrade: 0, maxGrade: 30, delta: -0.045, reasonKey: "very_low_score" },
+        { minGrade: 31, maxGrade: 55, delta: -0.02, reasonKey: "low_score" },
+        { minGrade: 56, maxGrade: 79, delta: 0.012, reasonKey: "good_score" },
+        { minGrade: 80, maxGrade: 100, delta: 0.028, reasonKey: "excellent_score" },
+      ],
+      recentEvents: events,
+      summary: {
+        totalEvents: events.length,
+        positiveEvents,
+        negativeEvents,
+      },
+    });
+  } catch (err) {
+    logger.error("[profile] GET /profile/iad error", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -543,8 +676,22 @@ function buildChallengeFor(level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED", user
   return buildFizzBuzzChallenge(level, seed);
 }
 
+function normalizePlacementTrack(input: unknown): PlacementAssessmentTrack {
+  const raw = String(input ?? "").toUpperCase().trim();
+  if (raw === "INTERMEDIATE") return "INTERMEDIATE";
+  if (raw === "ADVANCED") return "ADVANCED";
+  return "UNDECIDED";
+}
+
+function fallbackMasteredByLevel(level: PlacementAssessmentLevel): number | null {
+  if (level === "BEGINNER") return null;
+  if (level === "INTERMEDIATE") return 2;
+  return 5;
+}
+
 router.get("/placement/coding-challenge", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     if (!req.userId) {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
@@ -589,6 +736,7 @@ router.get("/placement/coding-challenge", authMiddleware, async (req: AuthReques
 
 router.post("/placement/coding-submit", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     if (!req.userId) {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
@@ -671,7 +819,7 @@ router.post("/placement/coding-submit", authMiddleware, async (req: AuthRequest,
     user.placementCodingPassed = true;
     user.placementCodingLevel = normalizedLevel;
     user.placementCodingTaskId = built.challenge.taskId;
-    user.placementCodingScore = passedCount;
+    user.placementCodingScore = Math.max(0, Math.min(100, Math.round((passedCount / Math.max(1, tests.length)) * 100)));
     user.placementCodingDoneAt = new Date();
     await userRepo().save(user);
 
@@ -688,8 +836,220 @@ router.post("/placement/coding-submit", authMiddleware, async (req: AuthRequest,
     return res.status(500).json({ error: "INTERNAL_SERVER_ERROR", status: 500 });
   }
 });
+
+router.get("/placement/assessment-pack", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (denyContestProfileAccess(req, res)) return;
+    if (!req.userId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+    if (req.userType === "STUDENT" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
+    }
+
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) {
+      return res.status(404).json({ message: "USER_NOT_FOUND" });
+    }
+    if (user.userMode === "EDUCATIONAL") {
+      return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
+    }
+
+    const track = normalizePlacementTrack((req.query as any)?.track);
+    const normalizedLang = normalizeLang((req.query as any)?.course || (req.query as any)?.lang || user.lang);
+    const pack = buildPlacementAssessmentPack(track, normalizedLang, user.id);
+    return res.json(toPublicPlacementAssessmentPack(pack));
+  } catch (err) {
+    logger.error("[profile] GET /profile/placement/assessment-pack error", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/placement/assessment-submit", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (denyContestProfileAccess(req, res)) return;
+    if (!req.userId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+    if (req.userType === "STUDENT" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
+    }
+
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user) {
+      return res.status(404).json({ message: "USER_NOT_FOUND" });
+    }
+    if (user.userMode === "EDUCATIONAL") {
+      return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
+    }
+
+    const {
+      track,
+      course,
+      lang,
+      quizAnswers,
+      taskSolutions,
+    } = req.body as {
+      track?: PlacementAssessmentTrack;
+      course?: string | null;
+      lang?: string | null;
+      quizAnswers?: Array<{ questionId: string; selectedIndex: number }>;
+      taskSolutions?: Array<{ taskId: string; code: string }>;
+    };
+
+    const normalizedTrack = normalizePlacementTrack(track);
+    const normalizedLang = normalizeLang(course || lang || user.lang);
+    const pack = buildPlacementAssessmentPack(normalizedTrack, normalizedLang, user.id);
+
+    const quizById = new Map(pack.quizQuestions.map((q) => [q.id, q]));
+    const answerById = new Map<string, number>();
+    for (const item of Array.isArray(quizAnswers) ? quizAnswers : []) {
+      if (!item || typeof item.questionId !== "string") continue;
+      const v = Number(item.selectedIndex);
+      if (!Number.isFinite(v)) continue;
+      answerById.set(item.questionId, Math.floor(v));
+    }
+
+    const quizTotal = pack.quizQuestions.length;
+    let quizCorrect = 0;
+    const quizReports = pack.quizQuestions.map((q) => {
+      const selectedIndexRaw = answerById.get(q.id);
+      const selectedIndex = Number.isFinite(Number(selectedIndexRaw)) ? Number(selectedIndexRaw) : -1;
+      const isCorrect = selectedIndex === q.correctIndex;
+      if (isCorrect) quizCorrect++;
+      return {
+        questionId: q.id,
+        selectedIndex,
+        correctIndex: q.correctIndex,
+        isCorrect,
+      };
+    });
+    const quizPct = quizTotal > 0 ? Math.round((quizCorrect / quizTotal) * 100) : 0;
+
+    const solutionByTaskId = new Map<string, string>();
+    for (const item of Array.isArray(taskSolutions) ? taskSolutions : []) {
+      if (!item || typeof item.taskId !== "string") continue;
+      solutionByTaskId.set(item.taskId, String(item.code ?? ""));
+    }
+
+    const taskReports: Array<{
+      taskId: string;
+      passed: boolean;
+      passedTests: number;
+      totalTests: number;
+      caseIndex?: number;
+      stderr?: string | null;
+      expected?: string;
+      actual?: string;
+    }> = [];
+
+    let practicalPassed = 0;
+    for (const task of pack.tasks) {
+      const code = String(solutionByTaskId.get(task.id) ?? "").trim();
+      if (!code) {
+        taskReports.push({
+          taskId: task.id,
+          passed: false,
+          passedTests: 0,
+          totalTests: task.tests.length,
+          stderr: "CODE_REQUIRED",
+        });
+        continue;
+      }
+
+      let passedCount = 0;
+      let failedReport: {
+        caseIndex?: number;
+        stderr?: string | null;
+        expected?: string;
+        actual?: string;
+      } | null = null;
+
+      for (let i = 0; i < task.tests.length; i++) {
+        const test = task.tests[i];
+        const execRes = await executeCodeWithInput(code, normalizedLang, test.input, 8000);
+        if (!execRes.success) {
+          failedReport = {
+            caseIndex: i,
+            stderr: execRes.stderr || null,
+          };
+          break;
+        }
+        const actualTokens = normalizeTokens(execRes.stdout);
+        const expectedTokens = test.expectedTokens;
+        if (actualTokens.join(" ") !== expectedTokens.join(" ")) {
+          failedReport = {
+            caseIndex: i,
+            expected: expectedTokens.join(" "),
+            actual: actualTokens.join(" "),
+          };
+          break;
+        }
+        passedCount++;
+      }
+
+      const passed = failedReport == null;
+      if (passed) practicalPassed++;
+      taskReports.push({
+        taskId: task.id,
+        passed,
+        passedTests: passedCount,
+        totalTests: task.tests.length,
+        ...(failedReport || {}),
+      });
+    }
+
+    const practicalTotal = pack.tasks.length;
+    const practicalPct = practicalTotal > 0 ? Math.round((practicalPassed / practicalTotal) * 100) : 0;
+    const overallPct = Math.round(quizPct * 0.4 + practicalPct * 0.6);
+    const finalLevel = computePlacementLevelFromAssessment(normalizedTrack, quizPct, practicalPassed, practicalTotal);
+
+    user.lang = normalizedLang;
+    user.placementDone = true;
+    user.placementDoneAt = new Date();
+    user.placementLevel = finalLevel;
+    user.placementScore = Math.max(0, Math.min(100, overallPct));
+    if (normalizedLang === "JAVA") {
+      user.placementMasteredUntilTopicIndexJava = fallbackMasteredByLevel(finalLevel);
+    } else {
+      user.placementMasteredUntilTopicIndexPython = fallbackMasteredByLevel(finalLevel);
+    }
+    user.placementCodingPassed = practicalPassed >= 2;
+    user.placementCodingLevel = finalLevel;
+    user.placementCodingTaskId = `assessment:${normalizedTrack}`;
+    user.placementCodingScore = practicalPct;
+    user.placementCodingDoneAt = new Date();
+
+    await userRepo().save(user);
+
+    return res.json({
+      user: buildUserDto(user),
+      summary: {
+        track: normalizedTrack,
+        finalLevel,
+        quizCorrect,
+        quizTotal,
+        quizPct,
+        practicalPassed,
+        practicalTotal,
+        practicalPct,
+        overallPct,
+      },
+      quizReports,
+      taskReports,
+    });
+  } catch (err) {
+    if (err instanceof HttpError) {
+      return res.status(err.statusCode).json({ error: err.message, status: err.statusCode });
+    }
+    logger.error("[profile] POST /profile/placement/assessment-submit error", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(500).json({ error: "INTERNAL_SERVER_ERROR", status: 500 });
+  }
+});
+
 router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     if (req.userType === "STUDENT" && req.studentId) {
       const student = await studentRepo().findOne({
         where: {
@@ -703,6 +1063,7 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
           username: student.generatedUsername,
           course: student.class.language,
           lang: student.class.language,
+          iad: 0,
           difus: 0,
           avatarUrl: student.avatarUrl ?? null,
           userMode: "EDUCATIONAL",
@@ -747,6 +1108,7 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
 });
 router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     if (req.userType === "STUDENT" && req.studentId) {
       const student = await studentRepo().findOne({
         where: {
@@ -777,6 +1139,7 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         username: student.generatedUsername,
         course: student.class.language,
         lang: student.class.language,
+        iad: 0,
         difus: 0,
         avatarUrl: student.avatarUrl ?? null,
         userMode: "EDUCATIONAL",
@@ -903,6 +1266,7 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.get("/email-subscription", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     if (req.userType === "STUDENT" && req.studentId) {
       const student = await studentRepo().findOne({ where: { id: req.studentId } });
       if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
@@ -920,6 +1284,7 @@ router.get("/email-subscription", authMiddleware, async (req: AuthRequest, res: 
 
 router.put("/email-subscription", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     const enabled = Boolean((req.body as any)?.enabled);
 
     if (req.userType === "STUDENT" && req.studentId) {
@@ -941,8 +1306,68 @@ router.put("/email-subscription", authMiddleware, async (req: AuthRequest, res: 
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
+
+router.get("/certificates", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (denyContestProfileAccess(req, res)) return;
+
+    if (!req.userId && !req.studentId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const rows = (await AppDataSource.query(
+      `
+      SELECT c.certificate_id as certificateId,
+             c.contest_id as contestId,
+             c.participant_name as participantName,
+             c.score as score,
+             c.max_score as maxScore,
+             c.place_text as placeText,
+             c.organizer_name as organizerName,
+             c.issued_at as issuedAt,
+             c.status as status,
+             c.pdf_storage_key as pdfStorageKey,
+             c.created_at as createdAt,
+             ct.title as contestTitle
+      FROM certificates c
+      JOIN contests ct ON ct.id = c.contest_id
+      WHERE (${req.userId ? "c.user_id = ?" : "1 = 0"})
+         OR (${req.studentId ? "c.student_id = ?" : "1 = 0"})
+      ORDER BY COALESCE(c.issued_at, c.created_at) DESC, c.id DESC
+      `,
+      [
+        ...(req.userId ? [req.userId] : []),
+        ...(req.studentId ? [req.studentId] : []),
+      ]
+    )) as Array<any>;
+
+    return res.json({
+      certificates: rows.map((r) => ({
+        certificateId: String(r.certificateId ?? ""),
+        contestId: Number(r.contestId),
+        contestTitle: String(r.contestTitle ?? ""),
+        participantName: String(r.participantName ?? ""),
+        score: Number(r.score ?? 0) || 0,
+        maxScore: Number(r.maxScore ?? 0) || 0,
+        place: r.placeText == null ? null : String(r.placeText),
+        organizer: String(r.organizerName ?? ""),
+        status: String(r.status ?? "queued"),
+        issuedAt: r.issuedAt ? new Date(r.issuedAt).toISOString() : null,
+        pdfStorageKey: r.pdfStorageKey == null ? null : String(r.pdfStorageKey),
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+      })),
+    });
+  } catch (err) {
+    logger.error("[profile] GET /profile/certificates error", {
+      requestId: req.requestId,
+      principalId: req.principalId,
+      err,
+    });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 router.post("/milestone-shown", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     if (!req.userId) {
       return res.status(401).json({
         message: "UNAUTHORIZED"
@@ -973,6 +1398,7 @@ router.post("/milestone-shown", authMiddleware, async (req: AuthRequest, res: Re
 
 router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    if (denyContestProfileAccess(req, res)) return;
     if (!req.userId) {
       return res.status(401).json({
         message: "UNAUTHORIZED"
@@ -1083,11 +1509,6 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
 
     const isBeginnerBypass = level === "BEGINNER" && score == null && masteredUntilTopicIndex == null;
     if (!isBeginnerBypass) {
-      if (typeof score !== "number" || !Number.isFinite(Number(score)) || Number(score) < 0) {
-        return res.status(400).json({
-          message: "PLACEMENT_SCORE_REQUIRED"
-        });
-      }
       if (!user.placementCodingPassed) {
         return res.status(403).json({
           message: "PLACEMENT_CODING_REQUIRED"
@@ -1097,6 +1518,33 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
         return res.status(403).json({
           message: "PLACEMENT_CODING_LEVEL_MISMATCH"
         });
+      }
+
+      const hasValidIncomingScore = typeof score === "number" && Number.isFinite(Number(score)) && Number(score) >= 0;
+      if (hasValidIncomingScore) {
+        (user as any).placementScore = Math.max(0, Math.min(100, Math.round(Number(score))));
+      } else {
+        const codingScore = Number((user as any).placementCodingScore ?? NaN);
+        if (!Number.isFinite(codingScore)) {
+          return res.status(400).json({
+            message: "PLACEMENT_SCORE_REQUIRED"
+          });
+        }
+        (user as any).placementScore = Math.max(0, Math.min(100, Math.round(codingScore)));
+      }
+
+      if (masteredUntilTopicIndex === undefined) {
+        const byLevel: Record<"BEGINNER" | "INTERMEDIATE" | "ADVANCED", number | null> = {
+          BEGINNER: null,
+          INTERMEDIATE: 2,
+          ADVANCED: 5,
+        };
+        const fallbackMastered = byLevel[level as "BEGINNER" | "INTERMEDIATE" | "ADVANCED"];
+        if (normalizedLang === "JAVA") {
+          (user as any).placementMasteredUntilTopicIndexJava = fallbackMastered;
+        } else {
+          (user as any).placementMasteredUntilTopicIndexPython = fallbackMastered;
+        }
       }
     } else {
       (user as any).placementScore = null;

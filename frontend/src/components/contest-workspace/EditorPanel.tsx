@@ -20,6 +20,8 @@ type EditorPanelProps = {
   onLanguageChange: (next: JudgeLanguage) => void;
   code: string;
   onCodeChange: (next: string) => void;
+  runInput: string;
+  onRunInputChange: (next: string) => void;
   running: boolean;
   checking: boolean;
   onRun: () => void;
@@ -42,6 +44,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onLanguageChange,
   code,
   onCodeChange,
+  runInput,
+  onRunInputChange,
   running,
   checking,
   onRun,
@@ -117,6 +121,16 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
       <div className="flex-1 min-h-0">
         <CodeEditor language={language} value={code} onChange={onCodeChange} />
+      </div>
+
+      <div className="border-t border-border/60 bg-bg-base/35 px-4 py-3">
+        <div className="text-[11px] uppercase tracking-wider text-text-secondary mb-2">Run input (stdin)</div>
+        <textarea
+          value={runInput}
+          onChange={(e) => onRunInputChange(e.target.value)}
+          className="w-full min-h-[92px] max-h-[180px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
+          placeholder="Enter custom input for Run..."
+        />
       </div>
     </div>
   );

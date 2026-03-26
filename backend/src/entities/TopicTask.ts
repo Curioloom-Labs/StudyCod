@@ -5,6 +5,8 @@ import { TaskTheory } from "./TaskTheory";
 import { TestData } from "./TestData";
 import { EduGrade } from "./EduGrade";
 export type TaskType = "PRACTICE" | "CONTROL";
+export type TopicTaskMode = "CODE" | "WEB";
+export type WebValidationProfileId = "FREE_WEB" | "HTML_ONLY" | "HTML_CSS_NO_JS" | "HTML_JS_NO_CSS" | "JS_ONLY_DOM" | "CSS_ONLY" | "HTML_AND_INLINE_ONLY";
 @Entity("topic_tasks")
 export class TopicTask {
   @PrimaryGeneratedColumn()
@@ -45,6 +47,68 @@ export class TopicTask {
     type: "text"
   })
   template!: string;
+  @Column({
+    type: "enum",
+    enum: ["CODE", "WEB"],
+    default: "CODE",
+    name: "task_mode"
+  })
+  taskMode!: TopicTaskMode;
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "web_template_files"
+  })
+  webTemplateFiles?: Array<{
+    path: "index.html" | "styles.css" | "script.js";
+    content: string;
+  }> | null;
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "web_validation_rules"
+  })
+  webValidationRules?: Array<{
+    id?: string;
+    type:
+      | "required_selector"
+      | "forbidden_selector"
+      | "required_text"
+      | "forbidden_text"
+      | "required_script_pattern"
+      | "forbidden_script_pattern"
+      | "required_attribute"
+      | "forbidden_attribute"
+      | "required_style"
+      | "forbidden_style";
+    message?: string;
+    points?: number;
+    selector?: string;
+    attribute?: string;
+    value?: string;
+    valuePattern?: string;
+    property?: string;
+    text?: string;
+    pattern?: string;
+    flags?: string;
+  }> | null;
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "web_validation_profile"
+  })
+  webValidationProfile?: {
+    id: WebValidationProfileId;
+    allowHtml?: boolean;
+    allowCss?: boolean;
+    allowJs?: boolean;
+    allowInlineStyle?: boolean;
+    allowInlineScript?: boolean;
+    allowExternalResources?: boolean;
+    lockHtml?: boolean;
+    lockCss?: boolean;
+    lockJs?: boolean;
+  } | null;
   @Column({
     type: "int",
     default: 1,

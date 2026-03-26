@@ -1,6 +1,40 @@
 import { api } from "./client";
 
+type EduUserPayload = {
+  id: number;
+  username: string;
+  course: "JAVA" | "PYTHON" | "CPP";
+  difus: number;
+  avatarUrl: string | null;
+  userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
+  role?: "USER" | "TEACHER" | "SYSTEM_ADMIN";
+  studentId?: number;
+  classId?: number;
+  className?: string;
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  email?: string;
+};
+
+type QuizItem = {
+  question: string;
+  options: Record<string, string>;
+  correct: string;
+};
+
 export type CodeFile = { path: string; content: string };
+export type WebTaskFile = { path: "index.html" | "styles.css" | "script.js"; content: string };
+export type WebTaskRule = {
+  id?: string;
+  type: "required_selector" | "forbidden_selector" | "required_text" | "forbidden_text" | "required_script_pattern" | "forbidden_script_pattern";
+  message?: string;
+  points?: number;
+  selector?: string;
+  text?: string;
+  pattern?: string;
+  flags?: string;
+};
 export type SubmissionBinding = { clientSubmissionId?: string; codeHash?: string };
 export type SubmissionMeta = {
   submissionId: string;
@@ -97,12 +131,22 @@ export interface Lesson {
       isCorrect: boolean;
     }>;
   } | null;
+  studentControlProgress?: {
+    totalTasks: number;
+    completedTasks: number;
+    currentTaskOrder: number | null;
+    unlockedTaskIds: number[];
+    reviewAvailable: boolean;
+  };
   deadline?: string | null;
   tasks?: Array<{
     id: number;
     title: string;
     description?: string;
     template?: string;
+    taskMode?: "CODE" | "WEB";
+    webTemplateFiles?: WebTaskFile[] | null;
+    webValidationRules?: WebTaskRule[] | null;
     deadline?: string | null;
     maxAttempts?: number;
     isClosed?: boolean;
@@ -141,6 +185,9 @@ export interface TaskWithGrade {
   title: string;
   description: string;
   template: string;
+  taskMode?: "CODE" | "WEB";
+  webTemplateFiles?: WebTaskFile[] | null;
+  webValidationRules?: WebTaskRule[] | null;
   language: "JAVA" | "PYTHON" | "CPP";
   testDataCount: number;
   savedCode?: string;
@@ -260,7 +307,7 @@ export interface LearningFeedback {
 }
 export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
   token?: string;
-  user?: any;
+  user?: EduUserPayload;
   requiresEmailVerification?: boolean;
 }> {
   const res = await api.post("/edu/register-teacher", {
@@ -371,8 +418,8 @@ export interface Topic {
   description?: string | null;
   order: number;
   language: "JAVA" | "PYTHON" | "CPP";
-  tasks?: any[];
-  controlWorks?: any[];
+  tasks?: unknown[];
+  controlWorks?: unknown[];
 }
 export async function getTopics(classId?: number, language?: "JAVA" | "PYTHON" | "CPP"): Promise<Topic[]> {
   const params = new URLSearchParams();
@@ -407,7 +454,7 @@ export async function generateTheoryPreview(topicTitle: string, language: "JAVA"
 }
 export async function generateQuiz(lessonId: number, count?: number, topicTitle?: string): Promise<{
   count: number;
-  quiz: any[];
+  quiz: QuizItem[];
   quizJson: string;
 }> {
   const res = await api.post(`/edu/lessons/${lessonId}/generate-quiz`, {
@@ -416,7 +463,7 @@ export async function generateQuiz(lessonId: number, count?: number, topicTitle?
   });
   return res.data;
 }
-export async function saveQuiz(lessonId: number, quiz: any[]): Promise<void> {
+export async function saveQuiz(lessonId: number, quiz: QuizItem[]): Promise<void> {
   await api.put(`/edu/lessons/${lessonId}/quiz`, {
     quiz
   });
@@ -425,6 +472,9 @@ export interface CreateTaskRequest {
   title: string;
   description: string;
   template: string;
+  taskMode?: "CODE" | "WEB";
+  webTemplateFiles?: WebTaskFile[];
+  webValidationRules?: WebTaskRule[];
 }
 
 export async function uploadStatementImage(file: File): Promise<{ url: string; markdown: string }> {
@@ -458,6 +508,44 @@ export async function runCodeFiles(taskId: number, files: CodeFile[], input?: st
   const res = await api.post(`/edu/tasks/${taskId}/run`, { files, input });
   return res.data;
 }
+export async function getWebTaskTemplate(taskId: number): Promise<{ taskId: number; taskMode: "WEB"; files: WebTaskFile[]; rules: WebTaskRule[] }> {
+  const res = await api.get(`/edu/tasks/${taskId}/web-template`);
+  return res.data;
+}
+export async function saveWebTaskDraft(taskId: number, files: WebTaskFile[]): Promise<{ ok: boolean; updatedAt?: string }> {
+  const res = await api.put(`/edu/tasks/${taskId}/web-draft`, { files });
+  return res.data;
+}
+export async function checkWebTask(taskId: number, files: WebTaskFile[]): Promise<{
+  taskMode: "WEB";
+  passed: boolean;
+  score: number;
+  maxScore: number;
+  passedRules: number;
+  totalRules: number;
+  results: Array<{ id: string; type: WebTaskRule["type"]; passed: boolean; message: string; points: number; earnedPoints: number }>;
+}> {
+  const res = await api.post(`/edu/tasks/${taskId}/web-check`, { files });
+  return res.data;
+}
+export async function submitWebTask(taskId: number, files: WebTaskFile[]): Promise<{
+  grade: {
+    id: number;
+    total: number | null;
+    testsPassed: number;
+    testsTotal: number;
+    isManuallyGraded: boolean;
+  };
+  testResults?: TestResult[];
+  scoring?: {
+    score: number;
+    maxScore: number;
+  };
+  taskMode?: "WEB";
+}> {
+  const res = await api.post(`/edu/tasks/${taskId}/web-submit`, { files });
+  return res.data;
+}
 export async function submitCode(taskId: number, code: string, binding?: SubmissionBinding): Promise<{
   message?: string;
   grade: {
@@ -489,7 +577,7 @@ export async function submitCode(taskId: number, code: string, binding?: Submiss
   return res.data;
 }
 
-export async function submitCodeFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<any> {
+export async function submitCodeFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<unknown> {
   const res = await api.post(`/edu/tasks/${taskId}/submit`, { files, ...(binding ?? {}) });
   return res.data;
 }
@@ -525,7 +613,7 @@ export async function completeTask(taskId: number, code: string, binding?: Submi
   return res.data;
 }
 
-export async function completeTaskFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<any> {
+export async function completeTaskFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<unknown> {
   const res = await api.post(`/edu/tasks/${taskId}/complete`, { files, ...(binding ?? {}) });
   return res.data;
 }

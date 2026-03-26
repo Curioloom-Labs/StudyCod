@@ -23,7 +23,7 @@ const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(12, Math.round(n)));
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 router.get("/students/me", authRequired, async (req: AuthRequest, res: Response) => {

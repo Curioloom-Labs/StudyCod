@@ -2,7 +2,7 @@ import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { logger } from '../../utils/logger';
 import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
 
-type ChatMessage = { role: 'system' | 'developer' | 'user' | 'assistant'; content: string };
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 type OpenAICompatRequest = {
 	model: string;

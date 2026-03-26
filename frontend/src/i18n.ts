@@ -4,9 +4,9 @@ import ukTranslations from './locales/uk';
 import enTranslations from './locales/en';
 const STORAGE_KEY = 'studycod_language';
 const savedLanguage = (() => {
-  if (typeof window === 'undefined') return 'uk';
+  if (typeof window === 'undefined') return 'en';
   const saved = localStorage.getItem(STORAGE_KEY);
-  return saved === 'en' || saved === 'uk' ? saved : 'uk';
+  return saved === 'en' || saved === 'uk' ? saved : 'en';
 })();
 i18n.use(initReactI18next).init({
   resources: {
@@ -21,7 +21,7 @@ i18n.use(initReactI18next).init({
   fallbackLng: {
     en: ['en'],
     uk: ['uk'],
-    default: ['uk']
+    default: ['en']
   },
   interpolation: {
     escapeValue: false
@@ -38,7 +38,7 @@ if (typeof document !== 'undefined') {
   document.documentElement.lang = savedLanguage === 'en' ? 'en' : 'uk';
 }
 export function tr(uk: string, en: string): string {
-  const lng = (i18n.language || 'uk').toLowerCase();
+  const lng = (i18n.language || 'en').toLowerCase();
   return lng.startsWith('en') ? en : uk;
 }
 export default i18n;

@@ -1,4 +1,6 @@
 import { Router, Response } from "express";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { authOptional, authRequired, AuthRequest } from "../middleware/authMiddleware";
@@ -18,6 +20,9 @@ import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1 } from "../uti
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { env } from "../env";
+import { FRONTEND_URL } from "../config";
+import { emailService } from "../services/emailService";
+import { certificateService } from "../services/certificates/CertificateService";
 
 const contestsRouter = Router();
 
@@ -144,6 +149,10 @@ function isNowWithinContest(contest: Contest): boolean {
   return startOk && endOk;
 }
 
+function isContestOnlyUser(req: AuthRequest): boolean {
+  return req.userType === "USER" && req.userMode === "CONTEST";
+}
+
 function getContestTimeState(contest: Contest): { started: boolean; finished: boolean; active: boolean } {
   const now = Date.now();
   const startsAtMs = contest.startsAt ? new Date(contest.startsAt).getTime() : null;
@@ -168,7 +177,13 @@ async function canViewContestMeta(params: { contest: Contest; req: AuthRequest }
     return false;
   }
 
-  if (contest.visibility === "PUBLIC") return true;
+  if (contest.visibility === "PUBLIC") {
+    // Contest-only accounts must not discover unrelated public contests.
+    if (isContestOnlyUser(req)) {
+      return canAccessContest({ contest, req });
+    }
+    return true;
+  }
   // PRIVATE_CODE: don't leak contest existence/details to users who haven't joined.
   if (contest.visibility === "PRIVATE_CODE") return canAccessContest({ contest, req });
 
@@ -200,15 +215,54 @@ async function getOrCreateParticipant(params: { contestId: number; req: AuthRequ
     return n || `student_${principalId}`;
   })();
 
+  const notificationEmail = await (async (): Promise<string | null> => {
+    if (principalType === "USER") {
+      const u = await userRepo().findOne({ where: { id: principalId } as any });
+      const email = String(u?.email ?? "").trim().toLowerCase();
+      return email || null;
+    }
+    const s = await studentRepo().findOne({ where: { id: principalId } as any });
+    const email = String(s?.email ?? "").trim().toLowerCase();
+    return email || null;
+  })();
+
   const created: ContestParticipant = participantRepo().create();
   Object.assign(created, {
     contest: { id: params.contestId } as any,
     principalType,
     displayName,
+    notificationEmail,
+    notificationFullName: displayName || null,
     ...(principalType === "USER" ? { user: { id: principalId } as any } : { student: { id: principalId } as any }),
   });
   const saved: ContestParticipant = await participantRepo().save(created as any);
   return saved;
+}
+
+async function ensureContestParticipantNotificationColumns(): Promise<void> {
+  const rows = (await AppDataSource.query(
+    `
+    SELECT COLUMN_NAME as columnName
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'contest_participants'
+      AND COLUMN_NAME IN ('notification_email', 'notification_full_name')
+    `
+  )) as Array<any>;
+
+  const existing = new Set((rows || []).map((r) => String(r?.columnName ?? "").trim().toLowerCase()));
+
+  if (!existing.has("notification_email")) {
+    await AppDataSource.query(
+      `ALTER TABLE contest_participants ADD COLUMN notification_email VARCHAR(255) NULL`
+    );
+  }
+
+  if (!existing.has("notification_full_name")) {
+    await AppDataSource.query(
+      `ALTER TABLE contest_participants ADD COLUMN notification_full_name VARCHAR(180) NULL`
+    );
+  }
 }
 
 async function canAccessContest(params: { contest: Contest; req: AuthRequest }): Promise<boolean> {
@@ -225,7 +279,19 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
     return false;
   }
 
-  if (contest.visibility === "PUBLIC") return true;
+  if (contest.visibility === "PUBLIC") {
+    if (!isContestOnlyUser(req)) return true;
+
+    // Contest-only accounts can access only contests where they are participants.
+    if (!req.userId) return false;
+    const participant = await participantRepo().findOne({
+      where: {
+        contest: { id: contest.id } as any,
+        user: { id: req.userId } as any,
+      } as any,
+    });
+    return !!participant;
+  }
 
   // For PRIVATE_CODE and CLASS: require auth and either joined or eligible.
   const principalId = req.userId ?? req.studentId ?? null;
@@ -312,6 +378,8 @@ async function ensureContestAdminTables(): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `
     );
+
+    await ensureContestParticipantNotificationColumns();
   })();
   return ensureContestAdminTablesPromise;
 }
@@ -426,6 +494,61 @@ function scaleScoreToProblemPoints(rawScore: number, rawMax: number, problemPoin
   const weightedMax = Math.floor(p);
   const weightedScore = Math.max(0, Math.min(weightedMax, Math.round(normalized * weightedMax)));
   return { score: weightedScore, maxScore: weightedMax };
+}
+
+function randomContestPassword(): string {
+  return crypto.randomBytes(9).toString("base64url");
+}
+
+function splitFullName(raw: unknown): { fullName: string; firstName: string | null; lastName: string | null } {
+  const fullName = String(raw ?? "").trim().replace(/\s+/g, " ").slice(0, 160);
+  if (!fullName) return { fullName: "", firstName: null, lastName: null };
+  const parts = fullName.split(" ").filter(Boolean);
+  if (parts.length === 1) return { fullName, firstName: parts[0], lastName: null };
+  return {
+    fullName,
+    firstName: parts.slice(0, -1).join(" ").slice(0, 100) || null,
+    lastName: parts[parts.length - 1]?.slice(0, 100) || null,
+  };
+}
+
+function usernamePrefixFromFullName(raw: unknown): string {
+  const base = String(raw ?? "").trim().toLowerCase();
+  const latin = base
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9_\-\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const token = latin.split(" ")[0] || "";
+  return sanitizeContestUsernamePrefix(token || "ct");
+}
+
+function escapeHtml(input: unknown): string {
+  const s = String(input ?? "");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function sanitizeContestUsernamePrefix(raw: unknown): string {
+  const base = String(raw ?? "ct").trim().toLowerCase();
+  const safe = base.replace(/[^a-z0-9_-]/g, "").slice(0, 12);
+  return safe || "ct";
+}
+
+async function allocateUniqueContestUsername(prefix: string, contestId: number): Promise<string> {
+  for (let i = 0; i < 30; i++) {
+    const suffix = crypto.randomBytes(4).toString("hex");
+    const username = `${prefix}_${contestId}_${suffix}`;
+    const existing = await userRepo().findOne({ where: { username } as any });
+    if (!existing) return username;
+  }
+  const fallback = `${prefix}_${contestId}_${Date.now()}`.slice(0, 50);
+  return fallback;
 }
 
 async function getMaxScoreByLibraryTaskId(libraryTaskIds: number[]): Promise<Map<number, number>> {
@@ -817,8 +940,24 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
 
     const contests = await contestRepo().find(findOptions);
 
+    let contestOnlyUserParticipantContestIds: Set<number> | null = null;
+    if (isContestOnlyUser(req) && req.userId) {
+      const rows = await participantRepo().find({
+        where: { user: { id: req.userId } as any } as any,
+        relations: ["contest"] as any,
+      });
+      contestOnlyUserParticipantContestIds = new Set(
+        rows
+          .map((row) => Number((row as any)?.contest?.id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      );
+    }
+
     const visible: Contest[] = [];
     for (const c of contests) {
+      if (contestOnlyUserParticipantContestIds && !contestOnlyUserParticipantContestIds.has(c.id)) {
+        continue;
+      }
       const canMeta = await canViewContestMeta({ contest: c, req });
       if (canMeta) visible.push(c);
     }
@@ -847,6 +986,10 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
 // Join PRIVATE_CODE contest by code (without knowing contestId)
 contestsRouter.post("/join-by-code", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    if (isContestOnlyUser(req)) {
+      return res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
+    }
+
     const principalId = req.userId ?? req.studentId ?? null;
     if (!principalId) return res.status(401).json({ message: "UNAUTHORIZED" });
 
@@ -877,6 +1020,9 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
   try {
     if (!req.userId || req.userType !== "USER") {
       return res.status(403).json({ message: "ONLY_USERS" });
+    }
+    if (isContestOnlyUser(req)) {
+      return res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
     }
 
     const schema = z.object({
@@ -1087,6 +1233,10 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
 // Join contest
 contestsRouter.post("/:id/join", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    if (isContestOnlyUser(req)) {
+      return res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
+    }
+
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "INVALID_ID" });
     const principalId = req.userId ?? req.studentId ?? null;
@@ -1346,6 +1496,215 @@ contestsRouter.delete("/:id/admin/organizers/:userId", authRequired, async (req:
   }
 });
 
+// Owner/admin: generate dedicated CONTEST accounts for this contest and auto-join them.
+contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const isOwner = contest.createdBy?.id === req.userId;
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    if (!isOwner && !isAdmin) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    await ensureContestAdminTables();
+
+    const schema = z.object({
+      entries: z.array(z.object({
+        fullName: z.string().min(1).max(160),
+        email: z.string().email().max(255),
+      })).min(1).max(300).optional(),
+
+      // Legacy fallback mode (kept for backward compatibility)
+      count: z.number().int().min(1).max(200).optional(),
+      usernamePrefix: z.string().min(1).max(24).optional(),
+    });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+
+    const roster = Array.isArray(parsed.data.entries) && parsed.data.entries.length > 0
+      ? parsed.data.entries.map((e) => ({
+          fullName: splitFullName(e.fullName).fullName,
+          email: String(e.email).trim().toLowerCase(),
+        }))
+      : Array.from({ length: parsed.data.count ?? 1 }).map(() => ({
+          fullName: "",
+          email: "",
+        }));
+
+    const legacyPrefix = sanitizeContestUsernamePrefix(parsed.data.usernamePrefix ?? "ct");
+
+    const created: Array<{
+      userId: number;
+      username: string;
+      password: string;
+      participantId: number;
+      fullName: string | null;
+      email: string | null;
+    }> = [];
+
+    for (const row of roster) {
+      const byNamePrefix = row.fullName ? usernamePrefixFromFullName(row.fullName) : legacyPrefix;
+      const username = await allocateUniqueContestUsername(byNamePrefix, contestId);
+      const password = randomContestPassword();
+      const passwordHash = await bcrypt.hash(password, 10);
+      const split = splitFullName(row.fullName);
+      const displayName = split.fullName || username;
+
+      const user = userRepo().create({
+        username,
+        email: null,
+        password: passwordHash,
+        lang: "JAVA",
+        difusJava: 0,
+        difusPython: 0,
+        difusCpp: 0,
+        emailVerified: true,
+        role: "USER",
+        userMode: "CONTEST",
+        firstName: split.firstName,
+        lastName: split.lastName,
+      } as any);
+      const savedUser = await userRepo().save(user as any);
+
+      const participant: ContestParticipant = participantRepo().create();
+      Object.assign(participant, {
+        contest: { id: contestId } as any,
+        user: { id: savedUser.id } as any,
+        principalType: "USER",
+        displayName,
+        notificationEmail: row.email || null,
+        notificationFullName: split.fullName || displayName,
+      });
+      const savedParticipant = await participantRepo().save(participant as any);
+
+      created.push({
+        userId: savedUser.id,
+        username: savedUser.username,
+        password,
+        participantId: savedParticipant.id,
+        fullName: split.fullName || null,
+        email: row.email || null,
+      });
+    }
+
+    return res.json({
+      contestId,
+      created,
+    });
+  } catch (error: any) {
+    logger.error("[contests] POST /:id/admin/accounts/generate error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Owner/admin: send generated contest credentials to participants by email from StudyCod.
+contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const isOwner = contest.createdBy?.id === req.userId;
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    if (!isOwner && !isAdmin) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const schema = z.object({
+      recipients: z.array(z.object({
+        fullName: z.string().min(1).max(160),
+        email: z.string().email().max(255),
+        username: z.string().min(1).max(120),
+        password: z.string().min(1).max(200),
+      })).min(1).max(300),
+      includeContestInfo: z.boolean().optional(),
+      customMessage: z.string().max(5000).optional(),
+    });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+
+    const includeContestInfo = parsed.data.includeContestInfo !== false;
+    const customMessage = String(parsed.data.customMessage ?? "").trim();
+    const contestUrl = `${String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "")}/contest/contests/${contestId}`;
+
+    const sent: Array<{ email: string }> = [];
+    const failed: Array<{ email: string; reason: string }> = [];
+
+    for (const r of parsed.data.recipients) {
+      const email = String(r.email).trim().toLowerCase();
+      const fullName = String(r.fullName).trim();
+      const username = String(r.username).trim();
+      const password = String(r.password);
+
+      const introHtml = `<p style="margin:0 0 12px 0;">Вітаємо, <b>${escapeHtml(fullName)}</b>!</p>
+<p style="margin:0 0 12px 0;">Для участі у контесті вам створено окремий акаунт StudyCod:</p>
+<ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;">
+  <li><b>Логін:</b> ${escapeHtml(username)}</li>
+  <li><b>Пароль:</b> ${escapeHtml(password)}</li>
+</ul>`;
+
+      const contestHtml = includeContestInfo
+        ? `<p style="margin:0 0 8px 0;"><b>Контест:</b> ${escapeHtml(contest.title)}</p>
+<p style="margin:0 0 8px 0;"><b>Початок:</b> ${contest.startsAt ? escapeHtml(new Date(contest.startsAt).toLocaleString("uk-UA")) : "—"}</p>
+<p style="margin:0 0 12px 0;"><b>Завершення:</b> ${contest.endsAt ? escapeHtml(new Date(contest.endsAt).toLocaleString("uk-UA")) : "—"}</p>
+<p style="margin:0 0 12px 0;">Посилання: <a href="${contestUrl}">${contestUrl}</a></p>`
+        : "";
+
+      const customHtml = customMessage
+        ? `<div style="margin:12px 0 0 0;padding:12px;border:1px solid #1f3552;border-radius:10px;background:#0a1422;">${escapeHtml(customMessage).replace(/\n/g, "<br />")}</div>`
+        : "";
+
+      const html = `${introHtml}${contestHtml}${customHtml}`;
+      const text = [
+        `Вітаємо, ${fullName}!`,
+        "",
+        "Для участі у контесті вам створено окремий акаунт StudyCod:",
+        `Логін: ${username}`,
+        `Пароль: ${password}`,
+        includeContestInfo ? "" : "",
+        includeContestInfo ? `Контест: ${contest.title}` : "",
+        includeContestInfo ? `Початок: ${contest.startsAt ? new Date(contest.startsAt).toLocaleString("uk-UA") : "—"}` : "",
+        includeContestInfo ? `Завершення: ${contest.endsAt ? new Date(contest.endsAt).toLocaleString("uk-UA") : "—"}` : "",
+        includeContestInfo ? `Посилання: ${contestUrl}` : "",
+        customMessage ? "" : "",
+        customMessage || "",
+      ].filter(Boolean).join("\n");
+
+      try {
+        await emailService.sendNotificationEmail({
+          to: email,
+          subject: `StudyCod · Доступ до контесту «${contest.title}»`,
+          title: "Дані для входу в контест",
+          contentHtml: html,
+          text,
+        });
+        sent.push({ email });
+      } catch (error: any) {
+        failed.push({
+          email,
+          reason: String(error?.message ?? "SEND_FAILED"),
+        });
+      }
+    }
+
+    return res.json({
+      contestId,
+      total: parsed.data.recipients.length,
+      sentCount: sent.length,
+      failedCount: failed.length,
+      failed,
+    });
+  } catch (error: any) {
+    logger.error("[contests] POST /:id/admin/accounts/send-emails error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 // Organizer/admin: list annulments
 contestsRouter.get("/:id/admin/annulments", authRequired, async (req: AuthRequest, res: Response) => {
   try {
@@ -1537,13 +1896,132 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
 
-    const participant = await participantRepo().findOne({ where: { id: participantId, contest: { id: contestId } } as any });
+    const participant = await participantRepo().findOne({
+      where: { id: participantId, contest: { id: contestId } } as any,
+      relations: ["user", "student"] as any,
+    });
     if (!participant) return res.status(404).json({ message: "PARTICIPANT_NOT_FOUND" });
 
     (participant as any).isDisqualified = parsed.data.disqualified;
     (participant as any).disqualificationReason = parsed.data.disqualified ? (parsed.data.reason?.trim() || null) : null;
     (participant as any).disqualifiedAt = parsed.data.disqualified ? new Date() : null;
     const saved = await participantRepo().save(participant as any);
+
+    let notification: {
+      attempted: boolean;
+      sent: boolean;
+      recipientEmail: string | null;
+      reason: string | null;
+    } = {
+      attempted: false,
+      sent: false,
+      recipientEmail: null,
+      reason: null,
+    };
+
+    if (parsed.data.disqualified) {
+      const snapshotEmail = String((participant as any)?.notificationEmail ?? "").trim().toLowerCase();
+      const userEmail = String((participant as any)?.user?.email ?? "").trim().toLowerCase();
+      const studentEmail = String((participant as any)?.student?.email ?? "").trim().toLowerCase();
+      const recipientEmail = snapshotEmail || userEmail || studentEmail || "";
+
+      if (!snapshotEmail && recipientEmail) {
+        try {
+          (saved as any).notificationEmail = recipientEmail;
+          await participantRepo().save(saved as any);
+        } catch (persistError: any) {
+          logger.warn("[contests] failed to persist participant notification_email snapshot", {
+            requestId: req.requestId,
+            contestId,
+            participantId,
+            recipientEmail,
+            err: persistError,
+          });
+        }
+      }
+
+      const reasonText = String((saved as any).disqualificationReason ?? "").trim() || "Не вказано";
+      const disqualifiedAtIso = (saved as any).disqualifiedAt
+        ? new Date((saved as any).disqualifiedAt).toISOString()
+        : new Date().toISOString();
+      const disqualifiedAtDisplay = new Date(disqualifiedAtIso).toLocaleString("uk-UA");
+      const contestUrl = `${String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "")}/contest/contests/${contestId}`;
+
+      if (!recipientEmail) {
+        notification = {
+          attempted: false,
+          sent: false,
+          recipientEmail: null,
+          reason: "EMAIL_NOT_AVAILABLE",
+        };
+      } else {
+        const participantName = String((participant as any).notificationFullName ?? participant.displayName ?? "учасник").trim() || "учасник";
+        const contentHtml = `
+<p style="margin:0 0 12px 0;">Вітаємо, <b>${escapeHtml(participantName)}</b>.</p>
+<p style="margin:0 0 12px 0;">Повідомляємо, що вас дискваліфіковано з контесту <b>${escapeHtml(contest.title)}</b>.</p>
+<p style="margin:0 0 8px 0;"><b>Дата/час рішення:</b> ${escapeHtml(disqualifiedAtDisplay)}</p>
+<p style="margin:0 0 12px 0;"><b>Причина дискваліфікації:</b> ${escapeHtml(reasonText)}</p>
+
+<div style="margin:0 0 12px 0;padding:12px;border:1px solid #1f3552;border-radius:10px;background:#0a1422;">
+  <p style="margin:0 0 8px 0;"><b>Нагадування про академічну доброчесність:</b></p>
+  <ul style="margin:0 0 0 18px;padding:0;line-height:1.7;">
+    <li>самостійне виконання завдань без списування;</li>
+    <li>заборона на плагіат, передачу або спільне написання змагального коду;</li>
+    <li>дотримання правил контесту та чесної конкуренції.</li>
+  </ul>
+</div>
+
+<p style="margin:0 0 8px 0;">Якщо вважаєте, що рішення прийнято помилково, зверніться до організатора контесту та надайте пояснення.</p>
+<p style="margin:0;">Посилання на контест: <a href="${contestUrl}">${contestUrl}</a></p>
+        `;
+
+        const text = [
+          `Вітаємо, ${participantName}.`,
+          "",
+          `Вас дискваліфіковано з контесту \"${contest.title}\".`,
+          `Дата/час рішення: ${disqualifiedAtDisplay}`,
+          `Причина дискваліфікації: ${reasonText}`,
+          "",
+          "Нагадування про академічну доброчесність:",
+          "- самостійне виконання завдань без списування;",
+          "- заборона на плагіат, передачу або спільне написання змагального коду;",
+          "- дотримання правил контесту та чесної конкуренції.",
+          "",
+          "Якщо вважаєте, що рішення прийнято помилково, зверніться до організатора контесту.",
+          `Посилання на контест: ${contestUrl}`,
+        ].join("\n");
+
+        try {
+          await emailService.sendNotificationEmail({
+            to: recipientEmail,
+            subject: `StudyCod · Дискваліфікація з контесту «${contest.title}»`,
+            title: "Повідомлення про дискваліфікацію",
+            contentHtml,
+            text,
+          });
+          notification = {
+            attempted: true,
+            sent: true,
+            recipientEmail,
+            reason: null,
+          };
+        } catch (mailError: any) {
+          logger.error("[contests] disqualification email send failed", {
+            requestId: req.requestId,
+            contestId,
+            participantId,
+            recipientEmail,
+            err: mailError,
+          });
+          notification = {
+            attempted: true,
+            sent: false,
+            recipientEmail,
+            reason: "EMAIL_SEND_FAILED",
+          };
+        }
+      }
+    }
 
     return res.json({
       participant: {
@@ -1552,6 +2030,7 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
         disqualificationReason: (saved as any).disqualificationReason ?? null,
         disqualifiedAt: (saved as any).disqualifiedAt ? new Date((saved as any).disqualifiedAt).toISOString() : null,
       },
+      notification,
     });
   } catch (error: any) {
     logger.error("[contests] PATCH /:id/admin/participants/:participantId/disqualify error", { requestId: req.requestId, err: error });
@@ -1987,9 +2466,9 @@ contestsRouter.post(
       };
 
       const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-      const entryFile = entryFileForJudgeLanguage(judgeLang);
       const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
       const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+      const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
       let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
       const isMultiFile = effectiveFiles.length > 0;
       if (isMultiFile && !effectiveFiles.some((f) => f.path === entryFile)) {
@@ -2104,7 +2583,10 @@ contestsRouter.post(
       }
 
       const turnstileSecretKey = String(env.TURNSTILE_SECRET_KEY ?? "").trim();
-      if (turnstileSecretKey) {
+      const enforceTurnstileOnContestSubmit = Boolean(env.__turnstileEnforceContestSubmit);
+      // Human verification is enforced for regular participants.
+      // Privileged users (SYSTEM_ADMIN / contest managers) are allowed to submit without Turnstile token.
+      if (enforceTurnstileOnContestSubmit && turnstileSecretKey && !isPrivileged) {
         const token = String((validated.data as any).turnstileToken ?? "").trim();
         if (!token) {
           return res.status(400).json({ message: "TURNSTILE_REQUIRED" });
@@ -2159,9 +2641,9 @@ contestsRouter.post(
       const maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
 
       const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-      const entryFile = entryFileForJudgeLanguage(judgeLang);
       const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
       const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+      const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
       let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
       const isMultiFile = effectiveFiles.length > 0;
       if (isMultiFile && !effectiveFiles.some((f) => f.path === entryFile)) {
@@ -2642,6 +3124,44 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
     });
   } catch (error: any) {
     logger.error("[contests] GET /:id/scoreboard error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Organizer/admin: enqueue certificate generation for all non-disqualified participants
+contestsRouter.post("/:id/generate-certificates", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+
+    const contestId = Number(req.params.id);
+    if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const canManage = await canManageContest({ contest, req });
+    if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const schema = z.object({ forceRegenerate: z.boolean().optional() });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+
+    const job = await certificateService.enqueueContestGeneration({
+      contestId,
+      requestedByUserId: req.userId,
+      forceRegenerate: parsed.data.forceRegenerate,
+    });
+
+    return res.json({
+      queued: true,
+      contestId,
+      jobId: job.jobId,
+    });
+  } catch (error: any) {
+    if (String(error?.message ?? "") === "CERTIFICATES_DISABLED_FOR_CONTEST") {
+      return res.status(400).json({ message: "CERTIFICATES_DISABLED_FOR_CONTEST" });
+    }
+    logger.error("[contests] POST /:id/generate-certificates error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

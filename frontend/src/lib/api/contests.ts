@@ -87,7 +87,7 @@ export type ContestProblemStatement = {
     timeLimitMs: number | null;
     memoryLimitMb: number | null;
     outputLimitKb: number | null;
-    checkerSpec: any | null;
+    checkerSpec: unknown | null;
   };
 };
 
@@ -145,6 +145,22 @@ export type ContestAdminParticipant = {
   isDisqualified: boolean;
   disqualificationReason: string | null;
   disqualifiedAt: string | null;
+};
+
+export type ContestGeneratedAccount = {
+  fullName: string | null;
+  email: string | null;
+  userId: number;
+  username: string;
+  password: string;
+  participantId: number;
+};
+
+export type ContestAccountRecipient = {
+  fullName: string;
+  email: string;
+  username: string;
+  password: string;
 };
 
 export type ContestAccount = {
@@ -305,7 +321,15 @@ export async function setContestParticipantDisqualified(
   contestId: number,
   participantId: number,
   payload: { disqualified: boolean; reason?: string | null }
-): Promise<{ participant: { id: number; isDisqualified: boolean; disqualificationReason: string | null; disqualifiedAt: string | null } }> {
+): Promise<{
+  participant: { id: number; isDisqualified: boolean; disqualificationReason: string | null; disqualifiedAt: string | null };
+  notification?: {
+    attempted: boolean;
+    sent: boolean;
+    recipientEmail: string | null;
+    reason: string | null;
+  };
+}> {
   const res = await api.patch(`/contests/${contestId}/admin/participants/${participantId}/disqualify`, payload);
   return res.data;
 }
@@ -453,6 +477,30 @@ export async function addContestOrganizer(contestId: number, userId: number): Pr
 
 export async function removeContestOrganizer(contestId: number, userId: number): Promise<{ removed: boolean; userId: number }> {
   const res = await api.delete(`/contests/${contestId}/admin/organizers/${userId}`);
+  return res.data;
+}
+
+export async function generateContestAccounts(
+  contestId: number,
+  payload: {
+    entries: Array<{ fullName: string; email: string }>;
+    count?: number;
+    usernamePrefix?: string;
+  }
+): Promise<{ contestId: number; created: ContestGeneratedAccount[] }> {
+  const res = await api.post(`/contests/${contestId}/admin/accounts/generate`, payload);
+  return res.data;
+}
+
+export async function sendContestAccountsEmails(
+  contestId: number,
+  payload: {
+    recipients: ContestAccountRecipient[];
+    includeContestInfo?: boolean;
+    customMessage?: string;
+  }
+): Promise<{ contestId: number; total: number; sentCount: number; failedCount: number; failed: Array<{ email: string; reason: string }> }> {
+  const res = await api.post(`/contests/${contestId}/admin/accounts/send-emails`, payload);
   return res.data;
 }
 

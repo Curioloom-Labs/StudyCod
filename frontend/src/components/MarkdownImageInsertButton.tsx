@@ -3,6 +3,11 @@ import { useTranslation } from "react-i18next";
 import { ImagePlus } from "lucide-react";
 import { Button } from "./ui/Button";
 import { uploadStatementImage } from "../lib/api/edu";
+import { getErrorMessageFromUnknown } from "../lib/safeError";
+const getApiErrorMessage = (error: unknown): string | null => {
+  const message = getErrorMessageFromUnknown(error, "");
+  return message || null;
+};
 
 interface MarkdownImageInsertButtonProps {
   value: string;
@@ -61,8 +66,8 @@ export const MarkdownImageInsertButton: React.FC<MarkdownImageInsertButtonProps>
     try {
       const result = await uploadStatementImage(file);
       insertAtCursor(result.markdown || `![image](${result.url})`);
-    } catch (error: any) {
-      const message = error?.response?.data?.message;
+    } catch (error: unknown) {
+      const message = getApiErrorMessage(error);
       if (message === "UNSUPPORTED_IMAGE_TYPE") {
         alert(tr("Підтримуються лише PNG, JPG, WEBP, GIF, AVIF", "Only PNG, JPG, WEBP, GIF, AVIF are supported"));
       } else if (message === "IMAGE_TOO_LARGE") {

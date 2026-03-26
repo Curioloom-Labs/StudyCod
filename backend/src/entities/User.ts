@@ -2,9 +2,24 @@ import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, Up
 import { Task } from "./Task";
 import { Grade } from "./Grade";
 export type UserLang = "JAVA" | "PYTHON" | "CPP";
-export type UserMode = "PERSONAL" | "EDUCATIONAL";
+export type UserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
 export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
 export type PlacementLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+
+const iadDecimalTransformer = {
+  to: (value: number | null | undefined) => {
+    const n = Number(value ?? 0);
+    if (!Number.isFinite(n)) return 0;
+    const clamped = Math.max(0, Math.min(1, n));
+    return Math.round(clamped * 1000) / 1000;
+  },
+  from: (value: string | number | null) => {
+    const n = Number(value ?? 0);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(1, n));
+  }
+};
+
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn()
@@ -45,6 +60,12 @@ export class User {
   })
   emailVerificationToken?: string | null;
   @Column({
+    type: "timestamp",
+    nullable: true,
+    name: "email_verification_expires"
+  })
+  emailVerificationExpires?: Date | null;
+  @Column({
     type: "varchar",
     length: 255,
     nullable: true,
@@ -61,7 +82,7 @@ export class User {
   password!: string;
   @Column({
     type: "enum",
-    enum: ["PERSONAL", "EDUCATIONAL"],
+    enum: ["PERSONAL", "EDUCATIONAL", "CONTEST"],
     default: "PERSONAL",
     name: "user_mode"
   })
@@ -81,19 +102,32 @@ export class User {
   })
   lang!: UserLang;
   @Column({
-    type: "tinyint",
-    unsigned: true,
+    type: "decimal",
+    precision: 6,
+    scale: 3,
     default: 0,
-    name: "difus_java"
+    name: "difus_java",
+    transformer: iadDecimalTransformer
   })
-  difusJava!: number;
+  iadJava!: number;
   @Column({
-    type: "tinyint",
-    unsigned: true,
+    type: "decimal",
+    precision: 6,
+    scale: 3,
     default: 0,
-    name: "difus_python"
+    name: "difus_python",
+    transformer: iadDecimalTransformer
   })
-  difusPython!: number;
+  iadPython!: number;
+  @Column({
+    type: "decimal",
+    precision: 6,
+    scale: 3,
+    default: 0,
+    name: "difus_cpp",
+    transformer: iadDecimalTransformer
+  })
+  iadCpp!: number;
   @Column({
     type: "text",
     nullable: true,
@@ -210,7 +244,79 @@ export class User {
     nullable: true,
     name: "last_difus_change"
   })
-  lastDifusChange?: Date | null;
+  lastIadChange?: Date | null;
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "last_difus_grade_id_java"
+  })
+  lastIadGradeIdJava!: number | null;
+
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "last_difus_grade_id_python"
+  })
+  lastIadGradeIdPython!: number | null;
+
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "last_difus_grade_id_cpp"
+  })
+  lastIadGradeIdCpp!: number | null;
+
+  get difusJava(): number {
+    return this.iadJava;
+  }
+  set difusJava(value: number) {
+    this.iadJava = value;
+  }
+
+  get difusPython(): number {
+    return this.iadPython;
+  }
+  set difusPython(value: number) {
+    this.iadPython = value;
+  }
+
+  get difusCpp(): number {
+    return this.iadCpp;
+  }
+  set difusCpp(value: number) {
+    this.iadCpp = value;
+  }
+
+  get lastDifusChange(): Date | null | undefined {
+    return this.lastIadChange;
+  }
+  set lastDifusChange(value: Date | null | undefined) {
+    this.lastIadChange = value;
+  }
+
+  get lastDifusGradeIdJava(): number | null {
+    return this.lastIadGradeIdJava;
+  }
+  set lastDifusGradeIdJava(value: number | null) {
+    this.lastIadGradeIdJava = value;
+  }
+
+  get lastDifusGradeIdPython(): number | null {
+    return this.lastIadGradeIdPython;
+  }
+  set lastDifusGradeIdPython(value: number | null) {
+    this.lastIadGradeIdPython = value;
+  }
+
+  get lastDifusGradeIdCpp(): number | null {
+    return this.lastIadGradeIdCpp;
+  }
+  set lastDifusGradeIdCpp(value: number | null) {
+    this.lastIadGradeIdCpp = value;
+  }
   @Column({
     type: "varchar",
     length: 100,

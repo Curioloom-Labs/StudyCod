@@ -28,7 +28,7 @@ const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(12, Math.round(n)));
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 const lessonIdParamSchema = z.coerce.number().int().positive();
@@ -185,6 +185,17 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       let quizSubmitted: boolean | undefined = undefined;
       let quizGrade: number | null | undefined = undefined;
       let quizReview: any | null | undefined = undefined;
+      let studentControlProgress:
+        | {
+            totalTasks: number;
+            completedTasks: number;
+            currentTaskOrder: number | null;
+            unlockedTaskIds: number[];
+            reviewAvailable: boolean;
+          }
+        | undefined = undefined;
+
+      const latestGradeByTaskId = new Map<number, EduGrade>();
 
       if (req.studentId) {
         const sg = await summaryGradeRepo()
@@ -208,6 +219,55 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           quizGrade = null;
           quizReview = null;
         }
+
+        const controlTaskIds = controlTasks.map(t => t.id);
+        if (controlTaskIds.length > 0) {
+          const allGrades = await gradeRepo()
+            .createQueryBuilder("g")
+            .leftJoinAndSelect("g.topicTask", "topicTask")
+            .where("g.student_id = :studentId", { studentId: req.studentId })
+            .andWhere("g.topic_task_id IN (:...taskIds)", { taskIds: controlTaskIds })
+            .orderBy("g.created_at", "DESC")
+            .getMany();
+
+          for (const g of allGrades) {
+            const tid = (g as any).topicTask?.id;
+            if (!tid || latestGradeByTaskId.has(tid)) continue;
+            latestGradeByTaskId.set(tid, g);
+          }
+        }
+
+        const hasTheoryGate = !!controlWork.hasTheory;
+        const theoryGatePassed = !hasTheoryGate || quizSubmitted === true;
+        const completedTasks = controlTasks.filter(t => {
+          const g = latestGradeByTaskId.get(t.id);
+          return !!g && g.total !== null && Number.isFinite(Number(g.total));
+        }).length;
+
+        let currentTaskOrder: number | null = null;
+        const unlockedTaskIds: number[] = [];
+
+        if (theoryGatePassed) {
+          const firstIncompleteIndex = controlTasks.findIndex(t => {
+            const g = latestGradeByTaskId.get(t.id);
+            return !(g && g.total !== null && Number.isFinite(Number(g.total)));
+          });
+
+          if (firstIncompleteIndex === -1) {
+            for (const t of controlTasks) unlockedTaskIds.push(t.id);
+          } else {
+            unlockedTaskIds.push(controlTasks[firstIncompleteIndex].id);
+            currentTaskOrder = firstIncompleteIndex + 1;
+          }
+        }
+
+        studentControlProgress = {
+          totalTasks: controlTasks.length,
+          completedTasks,
+          currentTaskOrder,
+          unlockedTaskIds,
+          reviewAvailable: theoryGatePassed && completedTasks === controlTasks.length
+        };
       }
 
       const lessonResponse = {
@@ -228,6 +288,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           quizSubmitted,
           quizGrade,
           quizReview,
+          studentControlProgress,
           tasks: controlTasks.map(task => ({
             id: task.id,
             title: task.title,
@@ -238,7 +299,24 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
             isClosed: task.isClosed,
             isAssigned: task.isAssigned || false,
             type: task.type,
-            order: task.order
+            order: task.order,
+            hasGrade: (() => {
+              if (!req.studentId) return false;
+              const g = latestGradeByTaskId.get(task.id);
+              return !!g && g.total !== null && Number.isFinite(Number(g.total));
+            })(),
+            grade: (() => {
+              if (!req.studentId) return undefined;
+              const g = latestGradeByTaskId.get(task.id);
+              if (!g || g.total === null || !Number.isFinite(Number(g.total))) return undefined;
+              return {
+                id: g.id,
+                total: clampGradeToInt(Number(g.total)),
+                testsPassed: Number(g.testsPassed || 0),
+                testsTotal: Number(g.testsTotal || 0),
+                isCompleted: g.isCompleted === true
+              };
+            })()
           })),
           tasksCount: controlTasks.length,
           createdAt: controlWork.createdAt.toISOString()
@@ -862,7 +940,7 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
       });
     }
 
-    const theoryGrade = Math.round(correctAnswers / totalQuestions * 12);
+    const theoryGrade = Math.round(correctAnswers / totalQuestions * 100);
 
     let summaryGrade = existingSummaryGrade || null;
     if (!summaryGrade) {

@@ -1,3 +1,4 @@
+import { encodeAiComparisonFeedback, parseGradeComparisonFeedback } from "../utils/gradeComparisonFeedback";
 import { Router, Response } from "express";
 import { body, validationResult } from "express-validator";
 import { createHash } from "crypto";
@@ -8,6 +9,7 @@ import { Topic } from "../entities/Topic";
 import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
 import { TestData } from "../entities/TestData";
+import { TheoryBlock } from "../entities/TheoryBlock";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
 import { In } from "typeorm";
@@ -26,9 +28,22 @@ import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
 import { buildLearningFirstFailure } from "../services/learning/firstFailure";
+import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
+import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn } from "../services/translation/translateUkToEn";
+import { env } from "../env";
+import {
+  normalizeWebTaskFiles,
+  normalizeWebValidationProfile,
+  normalizeWebValidationRules,
+  type WebTaskValidationProfile,
+  type WebTaskValidationRule,
+  validateWebTaskSubmission,
+} from "../services/webTaskValidationService";
+import { decodeWebTaskPayload, encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 const tasksRouter = Router();
 
 type ApiCodeFile = { path: string; content: string };
+type UiLanguage = "uk" | "en";
 
 function sha256Hex(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
@@ -57,6 +72,56 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   const byPath = new Map<string, ApiCodeFile>();
   for (const f of out) byPath.set(f.path, f);
   return [...byPath.values()];
+}
+
+const personalWebDraftStore = new Map<string, {
+  files: ReturnType<typeof normalizeWebTaskFiles>;
+  updatedAt: number;
+}>();
+
+function personalWebDraftKey(userId: number, taskId: number): string {
+  return `${userId}:${taskId}`;
+}
+
+function normalizeWebRules(raw: unknown): WebTaskValidationRule[] {
+  return normalizeWebValidationRules(raw);
+}
+
+function normalizeWebProfile(raw: unknown): WebTaskValidationProfile {
+  return normalizeWebValidationProfile(raw ?? "FREE_WEB");
+}
+
+function assertPersonalWebFilesWithinLimits(files: ReturnType<typeof normalizeWebTaskFiles>) {
+  const maxFileSize = Number((env as any).__webTaskMaxFileSize ?? 200_000);
+  const maxTotalSize = Number((env as any).__webTaskMaxTotalSize ?? 500_000);
+  let total = 0;
+  for (const f of files) {
+    const size = Buffer.byteLength(String(f.content ?? ""), "utf8");
+    if (size > maxFileSize) {
+      throw new HttpError(400, "WEB_FILE_TOO_LARGE", { code: "WEB_FILE_TOO_LARGE", expose: true });
+    }
+    total += size;
+  }
+  if (total > maxTotalSize) {
+    throw new HttpError(400, "WEB_PAYLOAD_TOO_LARGE", { code: "WEB_PAYLOAD_TOO_LARGE", expose: true });
+  }
+}
+
+function resolveUiLanguage(req: AuthRequest): UiLanguage {
+  const q = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+  if (q.startsWith("en")) return "en";
+  if (q.startsWith("uk")) return "uk";
+
+  const bodyLang = String((req.body as any)?.language ?? "").toLowerCase().trim();
+  if (bodyLang === "en") return "en";
+  if (bodyLang === "uk") return "uk";
+
+  const accept = String(req.headers["accept-language"] ?? "").toLowerCase();
+  return accept.includes("en") ? "en" : "uk";
+}
+
+function i18nText<T extends string>(uiLanguage: UiLanguage, uk: T, en: T): T {
+  return (uiLanguage === "en" ? en : uk) as T;
 }
 function taskNeedsInput(taskDesc: string): boolean {
   // Kept for backwards compatibility inside this file.
@@ -155,6 +220,78 @@ const topicRepo = () => AppDataSource.getRepository(Topic);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
+const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
+
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
+
+function startOfDay(d: Date): Date {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+async function updateLearningStreakForUser(userId: number): Promise<void> {
+  const user = await userRepo().findOne({ where: { id: userId } });
+  if (!user) return;
+
+  const today = startOfDay(new Date());
+  const previous = user.lastActivityDate ? startOfDay(new Date(user.lastActivityDate)) : null;
+
+  if (!previous) {
+    user.currentStreak = 1;
+  } else {
+    const daysDiff = Math.floor((today.getTime() - previous.getTime()) / MILLISECONDS_PER_DAY);
+    if (daysDiff <= 0) {
+      // Already had activity today: do not increment streak.
+    } else if (daysDiff === 1) {
+      user.currentStreak = Math.max(1, Number(user.currentStreak ?? 0) + 1);
+    } else {
+      user.currentStreak = 1;
+    }
+  }
+
+  user.longestStreak = Math.max(Number(user.longestStreak ?? 0), Number(user.currentStreak ?? 0));
+  user.lastActivityDate = new Date();
+  await userRepo().save(user);
+}
+
+async function syncPostLearningProgress(params: {
+  userId: number;
+  lang: "JAVA" | "PYTHON" | "CPP";
+  topicIndex?: number | null;
+  requestId?: string;
+}): Promise<void> {
+  const user = await userRepo().findOne({ where: { id: params.userId } });
+  if (!user || user.userMode !== "PERSONAL") {
+    return;
+  }
+
+  const normalizedTopicIndex = Number.isFinite(Number(params.topicIndex))
+    ? Math.max(0, Math.floor(Number(params.topicIndex)))
+    : 0;
+
+  try {
+    await updateLearningStreakForUser(params.userId);
+  } catch (error) {
+    logger.warn("[tasks] syncPostLearningProgress streak update failed", {
+      requestId: params.requestId,
+      userId: params.userId,
+      error
+    });
+  }
+
+  try {
+    await getStableDifus(params.userId, params.lang, normalizedTopicIndex, userRepo, gradeRepo);
+  } catch (error) {
+    logger.warn("[tasks] syncPostLearningProgress difus update failed", {
+      requestId: params.requestId,
+      userId: params.userId,
+      lang: params.lang,
+      topicIndex: normalizedTopicIndex,
+      error
+    });
+  }
+}
 type TaskStatus = "OPEN" | "SUBMITTED" | "GRADED";
 
 // Personal mode: after each 5 fully completed topics (since placement), generate a control work:
@@ -163,7 +300,34 @@ const PERSONAL_CONTROL_BATCH_SIZE = 5;
 const PERSONAL_CONTROL_QUIZ_COUNT = 15;
 const PERSONAL_CONTROL_PRACTICE_COUNT = 3;
 const PERSONAL_CONTROL_PRACTICE_COEFF = 1.3;
-const PERSONAL_CONTROL_PASS_GRADE = 7;
+const PERSONAL_CONTROL_PASS_GRADE = 60;
+
+const GENERATE_COOLDOWN_MIN_MS = (() => {
+  const raw = Number(process.env.TASKS_GENERATE_COOLDOWN_MIN_MS);
+  const v = Number.isFinite(raw) ? Math.floor(raw) : 5_000;
+  return Math.max(1_000, Math.min(60_000, v));
+})();
+
+const GENERATE_COOLDOWN_MAX_MS = (() => {
+  const raw = Number(process.env.TASKS_GENERATE_COOLDOWN_MAX_MS);
+  const fallback = 10_000;
+  const v = Number.isFinite(raw) ? Math.floor(raw) : fallback;
+  const bounded = Math.max(1_000, Math.min(60_000, v));
+  return Math.max(GENERATE_COOLDOWN_MIN_MS, bounded);
+})();
+
+const generateCooldownByUserLang = new Map<string, number>();
+const generateInFlightByUserLang = new Set<string>();
+
+function randomIntInclusive(min: number, max: number): number {
+  const lo = Math.floor(Math.min(min, max));
+  const hi = Math.floor(Math.max(min, max));
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
+}
+
+function makeGenerateThrottleKey(userId: number, lang: "JAVA" | "PYTHON" | "CPP"): string {
+  return `${userId}:${lang}`;
+}
 
 function buildPersonalControlBatchPrefix(params: { lang: "JAVA" | "PYTHON" | "CPP"; startTopicIndex: number; endTopicIndex: number }): string {
   return `PCW:${params.lang}:${params.startTopicIndex}-${params.endTopicIndex}`;
@@ -182,9 +346,9 @@ function isPersonalControlQuizTask(task: Pick<Task, "type" | "subtitle">): boole
   return typeof (task as any).subtitle === "string" && String((task as any).subtitle).includes("|QUIZ|");
 }
 
-function clampGrade0to12Int(v: number): number {
+function clampGrade0to100Int(v: number): number {
   if (!Number.isFinite(v)) return 0;
-  return Math.max(0, Math.min(12, Math.round(v)));
+  return Math.max(0, Math.min(100, Math.round(v)));
 }
 
 function computePersonalControlFinalGrade(params: { quizGrade: number | null; practiceGrades: Array<number | null> }): {
@@ -203,7 +367,7 @@ function computePersonalControlFinalGrade(params: { quizGrade: number | null; pr
   const finalRaw = (quiz !== null && practiceAdjusted !== null)
     ? ((quiz + practiceAdjusted) / 2)
     : null;
-  const finalGrade = finalRaw === null ? null : clampGrade0to12Int(finalRaw);
+  const finalGrade = finalRaw === null ? null : clampGrade0to100Int(finalRaw);
   const passed = typeof finalGrade === "number" ? finalGrade >= PERSONAL_CONTROL_PASS_GRADE : false;
   return { practiceAvg, practiceAdjusted, finalGrade, passed };
 }
@@ -252,6 +416,93 @@ async function getLatestGradesByTaskId(params: { userId: number; taskIds: number
   }
   return out;
 }
+
+async function buildLocalizedTheoryEnByBlockId(params: {
+  req: AuthRequest;
+  theoryBlockIds: number[];
+}): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (!params.theoryBlockIds.length) return out;
+
+  const hasCols = await hasTheoryBlockEnTranslationColumns();
+  if (!hasCols) return out;
+
+  const blocks = await theoryBlockRepo()
+    .createQueryBuilder("b")
+    .where("b.id IN (:...ids)", { ids: params.theoryBlockIds })
+    .addSelect(["b.contentEn", "b.translationVersionEn", "b.translatedAtEn"])
+    .getMany();
+
+  for (const b of blocks) {
+    const contentEn = String((b as any).contentEn ?? "");
+    const isFresh =
+      contentEn.trim().length > 0 &&
+      !looksLikeTranslationProviderErrorText(contentEn) &&
+      Number((b as any).translationVersionEn ?? 0) === Number((b as any).version ?? 0);
+
+    if (isFresh) {
+      out.set(b.id, contentEn);
+      continue;
+    }
+
+    try {
+      const translated = await translateMarkdownUkToEn(String(b.content ?? ""));
+      if (translated.trim().length > 0 && !looksLikeTranslationProviderErrorText(translated)) {
+        (b as any).contentEn = translated;
+        (b as any).translationVersionEn = Number((b as any).version ?? 1);
+        (b as any).translatedAtEn = new Date();
+        await theoryBlockRepo().save(b);
+        out.set(b.id, translated);
+      }
+    } catch (error: any) {
+      logger.warn("[tasks] translate theory block uk->en failed", {
+        requestId: params.req.requestId,
+        userId: params.req.userId,
+        theoryBlockId: b.id,
+        error: error?.message ?? String(error)
+      });
+    }
+  }
+
+  return out;
+}
+
+async function buildLocalizedLegacyTheoryEnByTopicId(params: {
+  req: AuthRequest;
+  topics: Array<Topic | null | undefined>;
+}): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const unique = new Map<number, string>();
+
+  for (const topic of params.topics) {
+    const topicId = Number((topic as any)?.id);
+    if (!Number.isFinite(topicId) || topicId <= 0) continue;
+    const hasTheoryBlock = !!(topic as any)?.theoryBlock;
+    if (hasTheoryBlock) continue;
+    const legacy = String((topic as any)?.theoryMarkdown ?? "").trim();
+    if (!legacy) continue;
+    if (!unique.has(topicId)) unique.set(topicId, legacy);
+  }
+
+  for (const [topicId, markdown] of unique.entries()) {
+    try {
+      const translated = await translateMarkdownUkToEn(markdown);
+      if (translated.trim().length > 0 && !looksLikeTranslationProviderErrorText(translated)) {
+        out.set(topicId, translated);
+      }
+    } catch (error: any) {
+      logger.warn("[tasks] translate legacy topic theory uk->en failed", {
+        requestId: params.req.requestId,
+        userId: params.req.userId,
+        topicId,
+        error: error?.message ?? String(error)
+      });
+    }
+  }
+
+  return out;
+}
+
 function stripPracticeLikeSectionsFromTheory(rawTheory: string): string {
   const t = normalizeMarkdownText(rawTheory).trim();
   if (!t) return "";
@@ -271,29 +522,128 @@ function stripPracticeHeader(rawPractice: string): string {
   return s.replace(/^###\s*(Практика|Practice)\b\s*/i, "").replace(/^###\s*(Практичне\s+завдання|Practical\s+task)\b\s*/i, "").trim();
 }
 
+function sanitizeGeneratedTestText(raw: unknown, kind: "input" | "output"): string {
+  let s = normalizeMarkdownText(String(raw ?? ""));
+  if (!s) return "";
+
+  // Remove markdown fences if model wrapped values as code blocks.
+  s = s.replace(/^```[a-zA-Z0-9_-]*\s*/g, "").replace(/```$/g, "").trim();
+
+  // Remove common field prefixes that occasionally leak from model formatting.
+  if (kind === "input") {
+    s = s.replace(/^\s*(input|stdin|вхід|вхідні\s+дані)\s*[:：]\s*/i, "").trim();
+  } else {
+    s = s.replace(/^\s*(output|stdout|expected(?:\s+output)?|вихід|вихідні\s+дані|очікуван(?:ий|а)\s+вивід)\s*[:：]\s*/i, "").trim();
+  }
+
+  return s;
+}
+
+function looksLikeJudgeSuccessText(text: string): boolean {
+  const s = String(text ?? "").trim().toLowerCase();
+  if (!s) return false;
+  if (/програма\s+скомпілювал/i.test(s) && /виконал/i.test(s) && /без\s+помил/i.test(s)) return true;
+  if (/(compiled|build)\s+(successfully|ok)/i.test(s) && /(executed|ran|run)/i.test(s)) return true;
+  if (/program\s+(?:has\s+)?(?:compiled|executed|ran)\s+(?:successfully|without\s+errors)/i.test(s)) return true;
+  return false;
+}
+
+function sanitizeGeneratedTestExample(params: {
+  input: unknown;
+  output: unknown;
+  ioType: TaskIoType;
+}): { input: string; output: string } | null {
+  const input = sanitizeGeneratedTestText(params.input, "input");
+  let output = sanitizeGeneratedTestText(params.output, "output");
+
+  if (looksLikeJudgeSuccessText(output)) return null;
+
+  if (params.ioType === "NO_INPUT_FREE_OUTPUT") {
+    return { input: "", output: "(any non-empty output)" };
+  }
+
+  if (!output.trim()) return null;
+
+  if (params.ioType === "STDIN_STDOUT") {
+    if (!input.trim()) return null;
+    return { input, output };
+  }
+
+  // NO_INPUT_FIXED_OUTPUT
+  return { input: "", output };
+}
+
+function normalizeTestInputKey(input: string, ioType: TaskIoType): string {
+  if (ioType === "NO_INPUT_FIXED_OUTPUT" || ioType === "NO_INPUT_FREE_OUTPUT") return "__NO_INPUT__";
+  return String(input ?? "").replace(/\r\n/g, "\n").trim();
+}
+
+function mergeConsistentExamples(params: {
+  base: Array<{ input: string; output: string }>;
+  candidates: Array<{ input: string; output: string }>;
+  ioType: TaskIoType;
+  maxCount: number;
+  fixedNoInputExpected?: string | null;
+}): { merged: Array<{ input: string; output: string }>; droppedConflicts: number } {
+  const out: Array<{ input: string; output: string }> = [];
+  const expectedByInput = new Map<string, string>();
+  let droppedConflicts = 0;
+
+  const pushIfConsistent = (ex: { input: string; output: string }): void => {
+    if (out.length >= params.maxCount) return;
+    const key = normalizeTestInputKey(ex.input, params.ioType);
+    const normalizedOutput = String(ex.output ?? "").trim();
+    if (!normalizedOutput) return;
+
+    // Strong rule for deterministic no-input tasks: expected output must be exact.
+    if (params.ioType === "NO_INPUT_FIXED_OUTPUT" && params.fixedNoInputExpected && normalizedOutput !== params.fixedNoInputExpected.trim()) {
+      droppedConflicts += 1;
+      return;
+    }
+
+    const known = expectedByInput.get(key);
+    if (known && known !== normalizedOutput) {
+      droppedConflicts += 1;
+      return;
+    }
+    if (!known) expectedByInput.set(key, normalizedOutput);
+
+    // Keep only one example per normalized input key.
+    if (out.some(item => normalizeTestInputKey(item.input, params.ioType) === key)) return;
+    out.push({ input: ex.input, output: normalizedOutput });
+  };
+
+  for (const ex of params.base) pushIfConsistent(ex);
+  for (const ex of params.candidates) pushIfConsistent(ex);
+
+  return { merged: out, droppedConflicts };
+}
+
 function composeTaskStatementMarkdown(params: {
   practicalTask: string;
   inputFormat?: string | null;
   outputFormat?: string | null;
   constraints?: string | null;
+  uiLanguage?: UiLanguage;
 }): string {
   const practical = normalizeMarkdownText(String(params.practicalTask ?? "")).trim();
   const inputFormat = normalizeMarkdownText(String(params.inputFormat ?? "")).trim();
   const outputFormat = normalizeMarkdownText(String(params.outputFormat ?? "")).trim();
   const constraints = normalizeMarkdownText(String(params.constraints ?? "")).trim();
+  const uiLanguage = params.uiLanguage ?? "uk";
 
   const sections: string[] = [];
   if (practical) sections.push(practical);
 
   // Always include formats so students see the same contract that tests use.
-  sections.push("#### Формат вхідних даних");
-  sections.push(inputFormat || "Вхідних даних немає. (stdin порожній)");
+  sections.push(i18nText(uiLanguage, "#### Формат вхідних даних", "#### Input format"));
+  sections.push(inputFormat || i18nText(uiLanguage, "Вхідних даних немає. (stdin порожній)", "No input data. (stdin is empty)"));
 
-  sections.push("#### Формат вихідних даних");
-  sections.push(outputFormat || "Виведіть результат згідно умови.");
+  sections.push(i18nText(uiLanguage, "#### Формат вихідних даних", "#### Output format"));
+  sections.push(outputFormat || i18nText(uiLanguage, "Виведіть результат згідно умови.", "Output the result according to the statement."));
 
   if (constraints) {
-    sections.push("#### Обмеження");
+    sections.push(i18nText(uiLanguage, "#### Обмеження", "#### Constraints"));
     sections.push(constraints);
   }
 
@@ -312,17 +662,25 @@ function pickNoInputFixedExpectedOutput(params: {
   if (fromOutputFormat) return fromOutputFormat;
   return null;
 }
-function getTopicTheoryMarkdown(task: Task): string {
+function getTopicTheoryMarkdown(task: Task, uiLanguage: UiLanguage = "uk"): string {
   const fromBlock = (task.topic as any)?.theoryBlock?.content;
   const theory = stripPracticeLikeSectionsFromTheory(String(fromBlock ?? ""));
   if (theory) return theory;
   const legacy = stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? ""));
   if (legacy) return legacy;
-  return "## Теорія\n\n_Теорія для цієї теми ще не додана. Повідом викладачу або відкрий довідку._";
+  return i18nText(
+    uiLanguage,
+    "## Теорія\n\n_Теорія для цієї теми ще не додана. Повідом викладачу або відкрий довідку._",
+    "## Theory\n\n_Theory for this topic has not been added yet. Please ask your teacher or open the docs._"
+  );
 }
 
 type TopicTheorySource = "topic.theoryBlock" | "topic.theoryMarkdown" | "fallback";
-function getTopicTheoryInfo(task: Task): {
+function getTopicTheoryInfo(task: Task, opts?: {
+  uiLanguage?: UiLanguage;
+  localizedTheoryEnByBlockId?: Map<number, string>;
+  localizedLegacyTheoryEnByTopicId?: Map<number, string>;
+}): {
   markdown: string;
   source: TopicTheorySource;
   theoryBlockId: number | null;
@@ -330,36 +688,49 @@ function getTopicTheoryInfo(task: Task): {
   blockLength: number;
   legacyLength: number;
 } {
+  const uiLanguage = opts?.uiLanguage ?? "uk";
   const block = (task.topic as any)?.theoryBlock;
-  const blockContent = stripPracticeLikeSectionsFromTheory(String(block?.content ?? ""));
+  const blockId = typeof block?.id === "number" ? block.id : null;
+  const blockRaw = uiLanguage === "en" && blockId && opts?.localizedTheoryEnByBlockId?.has(blockId)
+    ? String(opts.localizedTheoryEnByBlockId.get(blockId) ?? "")
+    : String(block?.content ?? "");
+  const blockContent = stripPracticeLikeSectionsFromTheory(blockRaw);
   if (blockContent) {
     return {
       markdown: blockContent,
       source: "topic.theoryBlock",
-      theoryBlockId: typeof block?.id === "number" ? block.id : null,
+      theoryBlockId: blockId,
       theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
       blockLength: blockContent.length,
       legacyLength: stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? "")).length
     };
   }
 
-  const legacyContent = stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? ""));
+  const topicId = Number((task.topic as any)?.id);
+  const legacyRaw = uiLanguage === "en" && Number.isFinite(topicId) && opts?.localizedLegacyTheoryEnByTopicId?.has(topicId)
+    ? String(opts.localizedLegacyTheoryEnByTopicId.get(topicId) ?? "")
+    : String((task.topic as any)?.theoryMarkdown ?? "");
+  const legacyContent = stripPracticeLikeSectionsFromTheory(legacyRaw);
   if (legacyContent) {
     return {
       markdown: legacyContent,
       source: "topic.theoryMarkdown",
-      theoryBlockId: typeof block?.id === "number" ? block.id : null,
+      theoryBlockId: blockId,
       theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
       blockLength: stripPracticeLikeSectionsFromTheory(String(block?.content ?? "")).length,
       legacyLength: legacyContent.length
     };
   }
 
-  const fallback = "## Теорія\n\n_Теорія для цієї теми ще не додана. Повідом викладачу або відкрий довідку._";
+  const fallback = i18nText(
+    uiLanguage,
+    "## Теорія\n\n_Теорія для цієї теми ще не додана. Повідом викладачу або відкрий довідку._",
+    "## Theory\n\n_Theory for this topic has not been added yet. Please ask your teacher or open the docs._"
+  );
   return {
     markdown: fallback,
     source: "fallback",
-    theoryBlockId: typeof block?.id === "number" ? block.id : null,
+    theoryBlockId: blockId,
     theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
     blockLength: stripPracticeLikeSectionsFromTheory(String(block?.content ?? "")).length,
     legacyLength: stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? "")).length
@@ -414,37 +785,111 @@ function isStdinAllowedForTopic(params: { allTopics: Topic[]; lang: "JAVA" | "PY
   return false;
 }
 
-function sanitizeMetaOutputFormatInStatement(statementMarkdown: string, ioType: TaskIoType | null | undefined): string {
+function envFlag(name: string, fallback = false): boolean {
+  const raw = String(process.env[name] ?? '').trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+function envInt(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) ? Math.floor(raw) : fallback;
+}
+
+const FORCE_STDIN_AFTER_INPUT = envFlag('TASKS_FORCE_STDIN_AFTER_INPUT', false);
+const FORCE_STDIN_FROM_TOPIC_INDEX = envInt('TASKS_FORCE_STDIN_FROM_TOPIC_INDEX', 0);
+const STRICT_TEST_CONSISTENCY = envFlag('TASKS_STRICT_TEST_CONSISTENCY', true);
+const TEST_CONSISTENCY_RETRY_ATTEMPTS = Math.max(0, envInt('TASKS_TEST_CONSISTENCY_RETRY_ATTEMPTS', 1));
+
+function chooseGenerationAllowedIoTypes(params: {
+  stdinAllowed: boolean;
+  numInTopic: number;
+  topicIndex: number;
+}): Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT"> | undefined {
+  if (!params.stdinAllowed) {
+    return ["NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
+  }
+
+  const strictStdin = FORCE_STDIN_AFTER_INPUT && params.topicIndex >= FORCE_STDIN_FROM_TOPIC_INDEX;
+  if (strictStdin) {
+    return ["STDIN_STDOUT"];
+  }
+
+  // Default behavior: once input is learned, prefer stdin tasks frequently (roughly 2 of each 3 tasks).
+  const shouldPreferStdinTask = params.numInTopic % 3 !== 1;
+  return shouldPreferStdinTask ? ["STDIN_STDOUT"] : undefined;
+}
+
+function sanitizeMetaOutputFormatInStatement(
+  statementMarkdown: string,
+  ioType: TaskIoType | null | undefined,
+  uiLanguage: UiLanguage = "uk"
+): string {
   const s = String(statementMarkdown ?? "");
   if (!s) return s;
   const re = /(Програма\s+скомпілювал[а-яіїє]*\s+та\s+виконал[а-яіїє]*\s+без\s+помилок\.)|(Program\s+compiled\s+and\s+ran\s+without\s+errors\.?)/gi;
   if (!re.test(s)) return s;
 
   const replacement = (() => {
-    if (ioType === "NO_INPUT_FREE_OUTPUT") return "Виведіть будь-який непорожній рядок (без підказок типу \"Відповідь:\").";
-    if (ioType === "NO_INPUT_FIXED_OUTPUT") return "Виведіть точний результат згідно умови (stdout має збігатися символ у символ).";
-    return "Виведіть результат згідно умови (без додаткових пояснювальних фраз у виводі).";
+    if (ioType === "NO_INPUT_FREE_OUTPUT") {
+      return i18nText(
+        uiLanguage,
+        "Виведіть будь-який непорожній рядок (без підказок типу \"Відповідь:\").",
+        "Print any non-empty line (without helper phrases like \"Answer:\")."
+      );
+    }
+    if (ioType === "NO_INPUT_FIXED_OUTPUT") {
+      return i18nText(
+        uiLanguage,
+        "Виведіть точний результат згідно умови (stdout має збігатися символ у символ).",
+        "Print the exact result according to the statement (stdout must match character by character)."
+      );
+    }
+    return i18nText(
+      uiLanguage,
+      "Виведіть результат згідно умови (без додаткових пояснювальних фраз у виводі).",
+      "Print the result according to the statement (without extra explanatory phrases in output)."
+    );
   })();
 
   // Replace only the meta message itself; keep the rest of the statement intact.
   return s.replace(re, replacement);
 }
 
-function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: { includeTheoryDebug?: boolean }) {
+function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
+  includeTheoryDebug?: boolean;
+  uiLanguage?: UiLanguage;
+  localizedTheoryEnByBlockId?: Map<number, string>;
+  localizedLegacyTheoryEnByTopicId?: Map<number, string>;
+}) {
+  const uiLanguage = opts?.uiLanguage ?? "uk";
   const hasGrade = gradeTaskIds ? gradeTaskIds.has(task.id) : !!task.completed;
   const status: TaskStatus = computeTaskStatus(task, hasGrade);
-  const rawPractice = sanitizeMetaOutputFormatInStatement((task.descriptionMarkdown || task.description || "").toString(), (task as any).ioType);
+  const rawPractice = sanitizeMetaOutputFormatInStatement(
+    (task.descriptionMarkdown || task.description || "").toString(),
+    (task as any).ioType,
+    uiLanguage
+  );
   const isControlStandalone = task.type === "CONTROL" && !task.topic;
 
   const includeTheory = isControlStandalone ? false : shouldIncludeTheoryInStatement(task);
-  const theoryInfo = includeTheory ? getTopicTheoryInfo(task) : null;
+  const theoryInfo = includeTheory
+    ? getTopicTheoryInfo(task, {
+        uiLanguage,
+        localizedTheoryEnByBlockId: opts?.localizedTheoryEnByBlockId,
+        localizedLegacyTheoryEnByTopicId: opts?.localizedLegacyTheoryEnByTopicId
+      })
+    : null;
   const theoryMarkdown = includeTheory ? (theoryInfo?.markdown || "") : "";
   const practiceText = isControlStandalone ? normalizeMarkdownText(rawPractice).trim() : stripPracticeHeader(rawPractice);
+  const practiceHeader = i18nText(uiLanguage, "### Практика", "### Practice");
+  const controlPlaceholder = i18nText(uiLanguage, "_Контрольне завдання ще не додано._", "_Control task has not been added yet._");
+  const practicePlaceholder = i18nText(uiLanguage, "_Практичне завдання ще не додано._", "_Practical task has not been added yet._");
   const normalizedDescription = isControlStandalone
-    ? (practiceText || "_Контрольне завдання ще не додано._")
+    ? (practiceText || controlPlaceholder)
     : (includeTheory
-        ? `${theoryMarkdown}\n\n### Практика\n\n${practiceText || "_Практичне завдання ще не додано._"}`.trim()
-        : `### Практика\n\n${practiceText || "_Практичне завдання ще не додано._"}`.trim());
+        ? `${theoryMarkdown}\n\n${practiceHeader}\n\n${practiceText || practicePlaceholder}`.trim()
+        : `${practiceHeader}\n\n${practiceText || practicePlaceholder}`.trim());
 
   const topicId = typeof (task.topic as any)?.id === "number" ? (task.topic as any).id : null;
   const topicTitle = typeof (task.topic as any)?.title === "string" ? (task.topic as any).title : null;
@@ -453,6 +898,10 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: { includeTh
   const starterFiles = starterDecoded?.files ?? null;
   const starterEntry = starterDecoded?.entry ?? null;
   const starterCode = starterDecoded ? pickEntryContent(starterDecoded) : task.template;
+  const taskMode = String((task as any).taskMode ?? "CODE") === "WEB" ? "WEB" : "CODE";
+  const normalizedWebTemplate = taskMode === "WEB"
+    ? normalizeWebTaskTemplate((task as any).template)
+    : null;
 
   const codeRaw = status === "GRADED" ? task.finalCode || "" : task.draftCode || "";
   const userDecoded = decodeMultiFileSubmissionV1(codeRaw);
@@ -463,6 +912,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: { includeTh
   return {
     id: task.id,
     title: task.title,
+    subtitle: task.subtitle || undefined,
     topicId,
     topicTitle,
     descriptionMarkdown: normalizedDescription,
@@ -483,6 +933,9 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: { includeTh
         }
       : {}),
     practiceText,
+    taskMode,
+    webTemplateFiles: taskMode === "WEB" ? normalizedWebTemplate?.files ?? normalizeWebTaskFiles((task as any).webTemplateFiles ?? []) : undefined,
+    webValidationRules: taskMode === "WEB" ? normalizeWebRules((task as any).webValidationRules ?? normalizedWebTemplate?.rules ?? []) : undefined,
     starterCode,
     starterFiles: starterFiles ?? undefined,
     starterEntryFile: starterEntry ?? undefined,
@@ -527,9 +980,11 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     lang: params.lang,
     topicIndex: params.stdinPolicyTopicIndex
   });
-  const generationAllowedIoTypes = stdinAllowed
-    ? (undefined)
-    : (["NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
+  const generationAllowedIoTypes = chooseGenerationAllowedIoTypes({
+    stdinAllowed,
+    numInTopic: params.numInTopic,
+    topicIndex: params.stdinPolicyTopicIndex
+  });
 
   const previousTasksBrief = params.existingTasksForContext
     .map(t => {
@@ -557,13 +1012,16 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     const raw = Number(process.env.TASKS_GENERATE_TASK_BUDGET_MS);
     const fallback = Math.floor(params.requestBudgetMs * 0.75);
     const v = Number.isFinite(raw) ? raw : fallback;
-    return Math.max(10_000, Math.min(50_000, Math.floor(v)));
+    // Guard against accidental under-budgeting (e.g., 10-15s) which causes frequent deadline aborts.
+    // We still respect the remaining request budget below.
+    return Math.max(25_000, Math.min(50_000, Math.floor(v)));
   })();
   const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
   const aiTaskResult = await safeAICall('generateTask', {
     topicTitle: params.topicTitleForAi,
-    theory: String(params.theoryForAi || "Контрольна робота. Теорії не потрібно.").trim() || "Контрольна робота.",
+    theory: String(params.theoryForAi || i18nText(params.userLanguage, "Контрольна робота. Теорії не потрібно.", "Control work. No theory is required.")).trim()
+      || i18nText(params.userLanguage, "Контрольна робота.", "Control work."),
     lang: params.lang,
     topicIndex: params.topicIndex,
     numInTopic: params.numInTopic,
@@ -649,13 +1107,18 @@ async function generateAndPersistPersonalProgrammingTask(params: {
 
   const statementMarkdown = composeTaskStatementMarkdown({
     practicalTask: practicalOnly,
-    inputFormat: ioType === "STDIN_STDOUT" ? (aiTask as any)?.inputFormat : "Вхідних даних немає.",
+    inputFormat: ioType === "STDIN_STDOUT"
+      ? (aiTask as any)?.inputFormat
+      : i18nText(params.userLanguage, "Вхідних даних немає.", "No input data."),
     outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
-    constraints: (aiTask as any)?.constraints
+    constraints: (aiTask as any)?.constraints,
+    uiLanguage: params.userLanguage
   });
 
   const aiTitleRaw = typeof (aiTask as any)?.title === "string" ? String((aiTask as any).title).trim() : "";
-  const baseTitle = aiTitleRaw || (params.type === "CONTROL" ? `Контрольна практика` : `Практика: ${params.topicTitleForAi}`);
+  const baseTitle = aiTitleRaw || (params.type === "CONTROL"
+    ? i18nText(params.userLanguage, "Контрольна практика", "Control practice")
+    : i18nText(params.userLanguage, `Практика: ${params.topicTitleForAi}`, `Practice: ${params.topicTitleForAi}`));
   const titlePrefix = params.requiredTasksInThisGroup > 1 ? `(${params.numInTopic}/${params.requiredTasksInThisGroup}) ` : "";
   const uniqueTitle = `${titlePrefix}${baseTitle}`.trim();
 
@@ -699,18 +1162,15 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     if (testExamples.length === 0 && expected !== null) testExamples = [{ input: "", output: expected }];
   }
 
-  const aiExamples = Array.isArray((aiTask as any)?.examples)
-    ? (aiTask as any).examples
-        .map((ex: any) => ({
-          input: needsInput ? String(ex?.input ?? "") : "",
-          output: String(ex?.output ?? "")
-        }))
-        .filter((ex: { input: string; output: string }) => {
-          if (typeof ex.output !== "string" || ex.output.trim().length === 0) return false;
-          if (needsInput && String(ex.input ?? "").trim().length === 0) return false;
-          return true;
-        })
-    : [];
+    const aiExamples = Array.isArray((aiTask as any)?.examples)
+      ? (aiTask as any).examples
+          .map((ex: any) => sanitizeGeneratedTestExample({
+            input: ex?.input,
+            output: ex?.output,
+            ioType
+          }))
+          .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex)
+      : [];
 
   if (testExamples.length === 0 && aiExamples.length > 0) {
     testExamples = aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length)));
@@ -746,71 +1206,149 @@ async function generateAndPersistPersonalProgrammingTask(params: {
         remainingBeforeTests
       });
 
-      const merged = [...testExamples, ...aiExamples];
-      const seen = new Set<string>();
-      const deduped: typeof testExamples = [];
-      for (const ex of merged) {
-        const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(ex);
+      const mergedFallback = mergeConsistentExamples({
+        base: testExamples,
+        candidates: aiExamples,
+        ioType,
+        maxCount: REQUIRED_TEST_COUNT,
+        fixedNoInputExpected
+      });
+      testExamples = mergedFallback.merged.length ? mergedFallback.merged : aiExamples.slice(0, 1);
+      if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
+        await taskRepo().remove(saved);
+        throw {
+          statusCode: 400,
+          message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
+          error: "INCONSISTENT_TEST_DATA",
+          details: {
+            mode: "generateTestData",
+            droppedConflicts: mergedFallback.droppedConflicts,
+            ioType,
+            lang: params.lang
+          }
+        };
       }
-      testExamples = deduped.length ? deduped : aiExamples.slice(0, 1);
     } else {
 
-    const testDataResult = await safeAICall('generateTestData', {
-      taskDescription: statementMarkdown || practicalOnly,
-      taskTitle: params.topicTitleForAi,
-      lang: params.lang,
-      count: remainingCount,
-      userId: params.userId
-    }, {
-      expectedCount: remainingCount,
-      language: params.userLanguage,
-      requestId: params.requestId,
-      maxAttempts: 1,
-      ...(disableDeadlines ? {} : { totalTimeoutMs: testsBudgetMs })
-    });
-    if (!testDataResult.success) {
-      const status = Number(testDataResult.error?.statusCode ?? 0);
-      const canFallback = status === 429 || status === 503 || status === 504;
-      if (!canFallback) {
-        await taskRepo().remove(saved);
-        throw testDataResult.error;
-      }
-      if (aiExamples.length === 0) {
-        await taskRepo().remove(saved);
-        throw testDataResult.error;
-      }
-      logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
-        requestId: params.requestId,
-        userId: params.userId,
+    for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
+      const testDataResult = await safeAICall('generateTestData', {
+        taskDescription: statementMarkdown || practicalOnly,
+        taskTitle: params.topicTitleForAi,
         lang: params.lang,
-        status
+        count: remainingCount,
+        userId: params.userId
+      }, {
+        expectedCount: remainingCount,
+        language: params.userLanguage,
+        requestId: params.requestId,
+        maxAttempts: 1,
+        ...(disableDeadlines ? {} : { totalTimeoutMs: testsBudgetMs })
       });
-      testExamples = aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length)));
-    } else {
-      const additional = (testDataResult.data || []).map((ex: any) => ({
-        input: String(ex?.input ?? ""),
-        output: String(ex?.output ?? "")
-      }));
-      const seen = new Set<string>();
-      const merged: typeof testExamples = [];
-      for (const ex of [...testExamples, ...additional]) {
-        const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push(ex);
-        if (merged.length >= REQUIRED_TEST_COUNT) break;
+      if (!testDataResult.success) {
+        const status = Number(testDataResult.error?.statusCode ?? 0);
+        const canFallback = status === 429 || status === 503 || status === 504;
+        if (!canFallback) {
+          await taskRepo().remove(saved);
+          throw testDataResult.error;
+        }
+        if (aiExamples.length === 0) {
+          await taskRepo().remove(saved);
+          throw testDataResult.error;
+        }
+        logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
+          requestId: params.requestId,
+          userId: params.userId,
+          lang: params.lang,
+          status
+        });
+
+        const mergedFallback = mergeConsistentExamples({
+          base: testExamples,
+          candidates: aiExamples,
+          ioType,
+          maxCount: REQUIRED_TEST_COUNT,
+          fixedNoInputExpected
+        });
+        if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
+          await taskRepo().remove(saved);
+          throw {
+            statusCode: 400,
+            message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
+            error: "INCONSISTENT_TEST_DATA",
+            details: {
+              mode: "generateTestData",
+              droppedConflicts: mergedFallback.droppedConflicts,
+              ioType,
+              lang: params.lang
+            }
+          };
+        }
+
+        testExamples = mergedFallback.merged.length
+          ? mergedFallback.merged
+          : aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length)));
+        break;
       }
-      testExamples = merged;
+
+      const additional = (testDataResult.data || [])
+        .map((ex: any) => sanitizeGeneratedTestExample({
+          input: ex?.input,
+          output: ex?.output,
+          ioType
+        }))
+        .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex);
+      const mergedResult = mergeConsistentExamples({
+        base: testExamples,
+        candidates: additional,
+        ioType,
+        maxCount: REQUIRED_TEST_COUNT,
+        fixedNoInputExpected
+      });
+      if (mergedResult.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
+        if (consistencyAttempt < TEST_CONSISTENCY_RETRY_ATTEMPTS) {
+          logger.warn("[tasks] inconsistent generated tests detected, retrying generateTestData", {
+            requestId: params.requestId,
+            userId: params.userId,
+            lang: params.lang,
+            ioType,
+            droppedConflicts: mergedResult.droppedConflicts,
+            consistencyAttempt: consistencyAttempt + 1,
+            maxConsistencyAttempts: TEST_CONSISTENCY_RETRY_ATTEMPTS + 1
+          });
+          continue;
+        }
+        await taskRepo().remove(saved);
+        throw {
+          statusCode: 400,
+          message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
+          error: "INCONSISTENT_TEST_DATA",
+          details: {
+            mode: "generateTestData",
+            droppedConflicts: mergedResult.droppedConflicts,
+            ioType,
+            lang: params.lang
+          }
+        };
+      }
+
+      testExamples = mergedResult.merged;
+      if (mergedResult.droppedConflicts > 0) {
+        logger.warn("[tasks] dropped inconsistent generated tests", {
+          requestId: params.requestId,
+          userId: params.userId,
+          topicId: params.topic?.id ?? null,
+          droppedConflicts: mergedResult.droppedConflicts,
+          ioType
+        });
+      }
+      break;
     }
     }
   }
 
   const pointsByIndex: number[] = (() => {
     const n = Math.max(1, testExamples.length);
-    const totalPoints = 12;
+    const totalPoints = 100;
     if (n === 1) return [totalPoints];
     const base = Math.floor(totalPoints / n);
     const rem = totalPoints % n;
@@ -841,6 +1379,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
       const u = await userRepo().findOne({ where: { id: req.userId } });
       return u?.role === "SYSTEM_ADMIN";
     })();
+    const uiLanguage = resolveUiLanguage(req);
 
     const tasks = await taskRepo().find({
       where: {
@@ -875,8 +1414,23 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
         if (typeof tid === "number") gradeTaskIds.add(tid);
       }
     }
+    const theoryBlockIds = uiLanguage === "en"
+      ? Array.from(new Set(tasks.map(t => Number((t.topic as any)?.theoryBlock?.id)).filter((id): id is number => Number.isFinite(id) && id > 0)))
+      : [];
+    const localizedTheoryEnByBlockId = uiLanguage === "en"
+      ? await buildLocalizedTheoryEnByBlockId({ req, theoryBlockIds })
+      : new Map<number, string>();
+    const localizedLegacyTheoryEnByTopicId = uiLanguage === "en"
+      ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: tasks.map(t => (t as any)?.topic) })
+      : new Map<number, string>();
+
     if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
-    return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds, { includeTheoryDebug })));
+    return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds, {
+      includeTheoryDebug,
+      uiLanguage,
+      localizedTheoryEnByBlockId,
+      localizedLegacyTheoryEnByTopicId
+    })));
   } catch (error) {
     logger.error("[tasks] GET /tasks error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
@@ -902,6 +1456,7 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
       const u = await userRepo().findOne({ where: { id: req.userId } });
       return u?.role === "SYSTEM_ADMIN";
     })();
+    const uiLanguage = resolveUiLanguage(req);
 
     const task = await taskRepo().findOne({
       where: {
@@ -927,8 +1482,22 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
     });
     const gradeTaskIds = new Set<number>();
     if (grade) gradeTaskIds.add(task.id);
+    const theoryBlockId = Number((task as any)?.topic?.theoryBlock?.id);
+    const theoryBlockIds = uiLanguage === "en" && Number.isFinite(theoryBlockId) && theoryBlockId > 0 ? [theoryBlockId] : [];
+    const localizedTheoryEnByBlockId = uiLanguage === "en"
+      ? await buildLocalizedTheoryEnByBlockId({ req, theoryBlockIds })
+      : new Map<number, string>();
+    const localizedLegacyTheoryEnByTopicId = uiLanguage === "en"
+      ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: [(task as any)?.topic] })
+      : new Map<number, string>();
+
     if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
-    return res.json(mapTaskToDto(task, gradeTaskIds, { includeTheoryDebug }));
+    return res.json(mapTaskToDto(task, gradeTaskIds, {
+      includeTheoryDebug,
+      uiLanguage,
+      localizedTheoryEnByBlockId,
+      localizedLegacyTheoryEnByTopicId
+    }));
   } catch {
     return res.status(500).json({
       message: "Internal server error"
@@ -942,6 +1511,8 @@ tasksRouter.get("/:id/quiz", authMiddleware, async (req: AuthRequest, res: Respo
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: "INVALID_ID" });
     if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const uiLanguage = resolveUiLanguage(req);
+    const optionLabels = uiLanguage === "en" ? ["A", "B", "C", "D", "E"] : ["А", "Б", "В", "Г", "Д"];
 
     const task = await taskRepo().findOne({
       where: { id, user: { id: req.userId } },
@@ -961,13 +1532,19 @@ tasksRouter.get("/:id/quiz", authMiddleware, async (req: AuthRequest, res: Respo
     const questions = quiz.map((q, i) => {
       const rawOptions = Array.isArray((q as any).options)
         ? {
-            А: (q as any).options[0] || "",
-            Б: (q as any).options[1] || "",
-            В: (q as any).options[2] || "",
-            Г: (q as any).options[3] || "",
-            Д: (q as any).options[4] || ""
+            [optionLabels[0]]: (q as any).options[0] || "",
+            [optionLabels[1]]: (q as any).options[1] || "",
+            [optionLabels[2]]: (q as any).options[2] || "",
+            [optionLabels[3]]: (q as any).options[3] || "",
+            [optionLabels[4]]: (q as any).options[4] || ""
           }
-        : ((q as any).options || { А: "", Б: "", В: "", Г: "", Д: "" });
+        : ((q as any).options || {
+            [optionLabels[0]]: "",
+            [optionLabels[1]]: "",
+            [optionLabels[2]]: "",
+            [optionLabels[3]]: "",
+            [optionLabels[4]]: ""
+          });
       return {
         index: i,
         question: (q as any).question || (q as any).q || "",
@@ -992,6 +1569,25 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: "INVALID_ID" });
     if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const uiLanguage = resolveUiLanguage(req);
+    const optionLabels = uiLanguage === "en" ? ["A", "B", "C", "D", "E"] : ["А", "Б", "В", "Г", "Д"];
+    const optionIndexByLabel: Record<string, number> = {
+      A: 0,
+      B: 1,
+      C: 2,
+      D: 3,
+      E: 4,
+      А: 0,
+      Б: 1,
+      В: 2,
+      Г: 3,
+      Д: 4
+    };
+    const normalizeOption = (value: unknown): string => {
+      const key = String(value ?? "").toUpperCase().trim();
+      const idx = optionIndexByLabel[key];
+      return Number.isFinite(idx) ? optionLabels[idx] : key;
+    };
 
     const answers = Array.isArray((req.body as any)?.answers) ? (req.body as any).answers : null;
     if (!answers || !Array.isArray(answers)) {
@@ -1032,24 +1628,30 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
 
       let normalizedCorrect: string;
       if (typeof correctAnswer === "number") {
-        normalizedCorrect = ["А", "Б", "В", "Г", "Д"][correctAnswer] || "А";
+        normalizedCorrect = optionLabels[correctAnswer] || optionLabels[0];
       } else {
-        normalizedCorrect = String(correctAnswer).toUpperCase();
+        normalizedCorrect = normalizeOption(correctAnswer);
       }
 
-      const normalizedStudent = String(studentAnswer || "").toUpperCase().trim();
+      const normalizedStudent = normalizeOption(studentAnswer);
       const isCorrect = normalizedStudent === normalizedCorrect;
       if (isCorrect) correctAnswers++;
 
       const rawOptions = Array.isArray((question as any).options)
         ? {
-            А: (question as any).options[0] || "",
-            Б: (question as any).options[1] || "",
-            В: (question as any).options[2] || "",
-            Г: (question as any).options[3] || "",
-            Д: (question as any).options[4] || ""
+            [optionLabels[0]]: (question as any).options[0] || "",
+            [optionLabels[1]]: (question as any).options[1] || "",
+            [optionLabels[2]]: (question as any).options[2] || "",
+            [optionLabels[3]]: (question as any).options[3] || "",
+            [optionLabels[4]]: (question as any).options[4] || ""
           }
-        : ((question as any).options || { А: "", Б: "", В: "", Г: "", Д: "" });
+        : ((question as any).options || {
+            [optionLabels[0]]: "",
+            [optionLabels[1]]: "",
+            [optionLabels[2]]: "",
+            [optionLabels[3]]: "",
+            [optionLabels[4]]: ""
+          });
 
       reviewQuestions.push({
         index: i,
@@ -1061,7 +1663,7 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
       });
     }
 
-    const quizGrade = clampGrade0to12Int(Math.round(correctAnswers / totalQuestions * 12));
+    const quizGrade = clampGrade0to100Int(Math.round(correctAnswers / totalQuestions * 100));
 
     // Persist submission
     await taskRepo().update({ id: task.id } as any, {
@@ -1089,12 +1691,23 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
       workScore: 0,
       optimizationScore: 0,
       integrityScore: 0,
-      aiFeedback: `Тест: правильних відповідей ${correctAnswers}/${totalQuestions}. Оцінка: ${quizGrade}/12.`,
+      aiFeedback: i18nText(
+        uiLanguage,
+        `Тест: правильних відповідей ${correctAnswers}/${totalQuestions}. Оцінка: ${quizGrade}/100.`,
+        `Quiz: correct answers ${correctAnswers}/${totalQuestions}. Grade: ${quizGrade}/100.`
+      ),
       codeSnapshot: JSON.stringify(answers),
       comparisonFeedback: reviewJson,
       previousGradeId: null
     });
     const savedGrade = await gradeRepo().save(grade);
+
+    await syncPostLearningProgress({
+      userId: req.userId,
+      lang: task.lang,
+      topicIndex: task.topicIndex,
+      requestId: req.requestId
+    });
 
     // If this quiz belongs to a control batch, compute current summary.
     const batchPrefix = parsePersonalControlBatchPrefix((task as any).subtitle);
@@ -1128,7 +1741,7 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
         finalGrade: calc.finalGrade,
         passed: calc.passed,
         passGrade: PERSONAL_CONTROL_PASS_GRADE,
-        maxGrade: 12
+        maxGrade: 100
       };
     }
 
@@ -1207,7 +1820,7 @@ tasksRouter.get("/:id/control-summary", authMiddleware, async (req: AuthRequest,
       finalGrade: calc.finalGrade,
       passed: calc.passed,
       passGrade: PERSONAL_CONTROL_PASS_GRADE,
-      maxGrade: 12,
+      maxGrade: 100,
       completed: isCompleted
     });
   } catch (error: any) {
@@ -1217,21 +1830,61 @@ tasksRouter.get("/:id/control-summary", authMiddleware, async (req: AuthRequest,
 });
 
 tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Response) => {
+  let throttleKey: string | null = null;
   try {
     const requestStartedAt = Date.now();
-    // nginx proxy_read_timeout is often 30s..60s.
-    // Keep backend budgets below that so we return JSON instead of nginx HTML 504.
-    // Override with env TASKS_GENERATE_BUDGET_MS when you control the proxy timeout.
+    // Total budget for the whole generation flow (quiz/task/tests).
+    // Override with TASKS_GENERATE_BUDGET_MS to match your upstream proxy timeout.
+    // If your proxy timeout is 60s, set this to something like 45-55s.
     const REQUEST_BUDGET_MS = (() => {
       const raw = Number(process.env.TASKS_GENERATE_BUDGET_MS);
       const v = Number.isFinite(raw) ? raw : 45_000;
-      return Math.max(10_000, Math.min(55_000, Math.floor(v)));
+      // Keep sane bounds; lower bound prevents too aggressive aborts, upper bound avoids runaway waits.
+      return Math.max(15_000, Math.min(120_000, Math.floor(v)));
     })();
     const DISABLE_AI_DEADLINES = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
     const userId = req.userId!;
     const rawLang = String(req.lang ?? "").toUpperCase().trim();
     const lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
-    const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
+    throttleKey = makeGenerateThrottleKey(userId, lang);
+
+    // Prevent parallel generation for the same user+language.
+    if (generateInFlightByUserLang.has(throttleKey)) {
+      res.setHeader("Retry-After", "2");
+      return res.status(409).json({
+        status: "blocked",
+        message: "GENERATE_REQUEST_IN_PROGRESS",
+        retryAfterMs: 2000
+      });
+    }
+
+    // Enforce interval between generation requests (default random 5-10s).
+    const now = Date.now();
+    const notBefore = generateCooldownByUserLang.get(throttleKey) ?? 0;
+    if (notBefore > now) {
+      const retryAfterMs = Math.max(200, notBefore - now);
+      res.setHeader("Retry-After", String(Math.max(1, Math.ceil(retryAfterMs / 1000))));
+      return res.status(429).json({
+        status: "blocked",
+        message: "GENERATE_COOLDOWN_ACTIVE",
+        retryAfterMs
+      });
+    }
+
+    generateInFlightByUserLang.add(throttleKey);
+    generateCooldownByUserLang.set(
+      throttleKey,
+      now + randomIntInclusive(GENERATE_COOLDOWN_MIN_MS, GENERATE_COOLDOWN_MAX_MS)
+    );
+
+    // Opportunistic cleanup for expired cooldown entries.
+    if (generateCooldownByUserLang.size > 1000) {
+      for (const [k, ts] of generateCooldownByUserLang.entries()) {
+        if (ts <= now) generateCooldownByUserLang.delete(k);
+      }
+    }
+
+    const userLanguage = resolveUiLanguage(req);
     const user = await userRepo().findOne({
       where: {
         id: userId
@@ -1240,6 +1893,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     if (!user) return res.status(404).json({
       message: "USER_NOT_FOUND"
     });
+    if (user.userMode !== "PERSONAL") {
+      return res.status(403).json({
+        message: "LEARNING_MODE_ONLY"
+      });
+    }
 
     const masteredUntilTopicIndex = (() => {
       const raw = lang === "JAVA"
@@ -1333,7 +1991,15 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
       if (!quizTask) {
         const remainingBeforeQuiz = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
-        const quizBudgetMs = Math.max(6_000, Math.min(12_000, remainingBeforeQuiz - 6_000));
+        // Quiz generation can be slower on free/provider-constrained models.
+        // Keep this budget configurable and a bit more generous than before to reduce 504/deadline aborts.
+        const QUIZ_BUDGET_CAP_MS = (() => {
+          const raw = Number(process.env.TASKS_GENERATE_QUIZ_BUDGET_MS);
+          const fallback = 20_000;
+          const v = Number.isFinite(raw) ? raw : fallback;
+          return Math.max(10_000, Math.min(35_000, Math.floor(v)));
+        })();
+        const quizBudgetMs = Math.max(8_000, Math.min(QUIZ_BUDGET_CAP_MS, remainingBeforeQuiz - 5_000));
         const quizResult = await safeAICall('generateQuiz', {
           lang,
           prevTopics: prevTopicsText,
@@ -1343,21 +2009,25 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           expectedCount: PERSONAL_CONTROL_QUIZ_COUNT,
           language: userLanguage,
           requestId: req.requestId,
-          maxAttempts: 2,
+          maxAttempts: 3,
           ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: quizBudgetMs })
         });
         if (!quizResult.success) {
           return sendAIError(res, quizResult.error);
         }
 
-        const quizTitle = `Контрольна (${rangeLabel}): Тест (${PERSONAL_CONTROL_QUIZ_COUNT} питань)`;
+        const quizTitle = i18nText(
+          userLanguage,
+          `Контрольна (${rangeLabel}): Тест (${PERSONAL_CONTROL_QUIZ_COUNT} питань)`,
+          `Control (${rangeLabel}): Quiz (${PERSONAL_CONTROL_QUIZ_COUNT} questions)`
+        );
         const quizDescription = [
-          "### Тест",
+          i18nText(userLanguage, "### Тест", "### Quiz"),
           "",
-          `Ця контрольна охоплює теми ${rangeLabel}:`,
-          prevTopicsText ? prevTopicsText.split("\n").map((t, i) => `${i + 1}. ${t}`).join("\n") : "(теми не визначені)",
+          i18nText(userLanguage, `Ця контрольна охоплює теми ${rangeLabel}:`, `This control work covers topics ${rangeLabel}:`),
+          prevTopicsText ? prevTopicsText.split("\n").map((t, i) => `${i + 1}. ${t}`).join("\n") : i18nText(userLanguage, "(теми не визначені)", "(topics are not defined)"),
           "",
-          "Оберіть правильну відповідь для кожного питання (А/Б/В/Г/Д)."
+          i18nText(userLanguage, "Оберіть правильну відповідь для кожного питання (А/Б/В/Г/Д).", "Choose the correct option for each question (A/B/C/D/E).")
         ].join("\n");
 
         const quizSaved = await taskRepo().save(taskRepo().create({
@@ -1381,7 +2051,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
         return res.json({
           status: "ok",
-          task: mapTaskToDto(quizSaved)
+          task: mapTaskToDto(quizSaved, undefined, { uiLanguage: userLanguage })
         });
       }
 
@@ -1389,12 +2059,12 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         const difus = await getStableDifus(userId, lang, endTopicIndex, userRepo, gradeRepo);
         const nextPracticeNum = practiceTasks.length + 1;
         const controlTheoryForAi = [
-          `Контрольна робота (персонал) за темами ${rangeLabel}.`,
-          "Не використовуй поняття, яких ще не було у цих темах.",
-          "Не роби multi-task структур (завдання 1/2/3 в одному).",
-          "Одна задача — одна умова.",
+          i18nText(userLanguage, `Контрольна робота (персонал) за темами ${rangeLabel}.`, `Personal control work for topics ${rangeLabel}.`),
+          i18nText(userLanguage, "Не використовуй поняття, яких ще не було у цих темах.", "Do not use concepts that were not covered in these topics yet."),
+          i18nText(userLanguage, "Не роби multi-task структур (завдання 1/2/3 в одному).", "Do not create multi-task structures (task 1/2/3 in one)."),
+          i18nText(userLanguage, "Одна задача — одна умова.", "One task — one statement."),
           "",
-          "Перелік тем:",
+          i18nText(userLanguage, "Перелік тем:", "Topics list:"),
           prevTopicsText
         ].join("\n").trim();
 
@@ -1412,7 +2082,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
             topicIndex: endTopicIndex,
             numInTopic: nextPracticeNum,
             requiredTasksInThisGroup: PERSONAL_CONTROL_PRACTICE_COUNT,
-            topicTitleForAi: `Контрольна (${rangeLabel}): Практика`,
+            topicTitleForAi: i18nText(userLanguage, `Контрольна (${rangeLabel}): Практика`, `Control (${rangeLabel}): Practice`),
             theoryForAi: controlTheoryForAi,
             prevTopicsText,
             subtitle: `${batchPrefix}|PRACTICE|${nextPracticeNum}`,
@@ -1427,7 +2097,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           });
           return res.json({
             status: "ok",
-            task: mapTaskToDto(saved)
+            task: mapTaskToDto(saved, undefined, { uiLanguage: userLanguage })
           });
         } catch (err: any) {
           if (err && err.statusCode) return sendAIError(res, err);
@@ -1501,9 +2171,18 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       lang,
       topicIndex: topic.topicIndex
     });
-    const generationAllowedIoTypes = stdinAllowed
-      ? (undefined)
-      : (["NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
+    const generationAllowedIoTypes = chooseGenerationAllowedIoTypes({
+      stdinAllowed,
+      numInTopic,
+      topicIndex: topic.topicIndex
+    });
+
+    const prevTopicsForReinforcement = topics
+      .filter(t => t.topicIndex < topic.topicIndex)
+      .slice(-6)
+      .map(t => String(t.title || "").trim())
+      .filter(Boolean)
+      .join("\n");
 
     const previousTasksBrief = existingTasksInTopic
       .map(t => {
@@ -1531,7 +2210,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       const raw = Number(process.env.TASKS_GENERATE_TASK_BUDGET_MS);
       const fallback = Math.floor(REQUEST_BUDGET_MS * 0.75);
       const v = Number.isFinite(raw) ? raw : fallback;
-      return Math.max(10_000, Math.min(50_000, Math.floor(v)));
+      // Guard against accidental under-budgeting (e.g., 10-15s) which causes frequent deadline aborts.
+      // We still respect the remaining request budget below.
+      return Math.max(25_000, Math.min(50_000, Math.floor(v)));
     })();
     // Keep some budget for test-data generation + DB writes.
     // Cap low to avoid nginx 504; generation retries still happen inside this budget.
@@ -1549,6 +2230,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       topicId: topic.id,
       semanticRetries: 1,
       allowedIoTypes: generationAllowedIoTypes,
+      ...(prevTopicsForReinforcement ? { prevTopics: prevTopicsForReinforcement } : {}),
       previousTasks: previousTasksBrief,
       previousTaskPractices: previousTaskPracticesForUniq,
       previousTaskTitles: previousTaskTitlesForUniq
@@ -1591,15 +2273,18 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }) : null;
     const statementMarkdown = composeTaskStatementMarkdown({
       practicalTask: practicalOnly,
-      inputFormat: ioType === "STDIN_STDOUT" ? (aiTask as any)?.inputFormat : "Вхідних даних немає.",
+      inputFormat: ioType === "STDIN_STDOUT"
+        ? (aiTask as any)?.inputFormat
+        : i18nText(userLanguage, "Вхідних даних немає.", "No input data."),
       // For NO_INPUT_FIXED_OUTPUT we want the visible output section to match the exact expected output.
       outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
-      constraints: (aiTask as any)?.constraints
+      constraints: (aiTask as any)?.constraints,
+      uiLanguage: userLanguage
     });
     description = statementMarkdown;
 
     const aiTitleRaw = typeof (aiTask as any)?.title === "string" ? String((aiTask as any).title).trim() : "";
-    const baseTitle = aiTitleRaw || `Практика: ${topic.title}`;
+    const baseTitle = aiTitleRaw || i18nText(userLanguage, `Практика: ${topic.title}`, `Practice: ${topic.title}`);
     const titlePrefix = requiredTasksInThisTopic > 1 ? `(${numInTopic}/${requiredTasksInThisTopic}) ` : "";
     const uniqueTitle = `${titlePrefix}${baseTitle}`.trim();
     const task = taskRepo().create({
@@ -1657,16 +2342,12 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // Reuse AI-provided examples when possible (can reduce or avoid a separate test-generation call).
     const aiExamples = Array.isArray((aiTask as any)?.examples)
       ? (aiTask as any).examples
-          .map((ex: any) => ({
-            // Never allow non-empty stdin for NO_INPUT_* tasks.
-            input: needsInput ? String(ex?.input ?? "") : "",
-            output: String(ex?.output ?? "")
+          .map((ex: any) => sanitizeGeneratedTestExample({
+            input: ex?.input,
+            output: ex?.output,
+            ioType
           }))
-          .filter((ex: { input: string; output: string }) => {
-            if (typeof ex.output !== "string" || ex.output.trim().length === 0) return false;
-            if (needsInput && String(ex.input ?? "").trim().length === 0) return false;
-            return true;
-          })
+          .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex)
       : [];
 
     // If we still don't have tests, seed from examples.
@@ -1700,83 +2381,163 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           remainingBeforeTests
         });
 
-        // Merge any existing tests with AI examples, then cap to whatever we have.
-        const merged = [...testExamples, ...fallbackExamples];
-        const seen = new Set<string>();
-        const deduped: typeof testExamples = [];
-        for (const ex of merged) {
-          const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          deduped.push(ex);
+        const mergedFallback = mergeConsistentExamples({
+          base: testExamples,
+          candidates: fallbackExamples,
+          ioType,
+          maxCount: REQUIRED_TEST_COUNT,
+          fixedNoInputExpected
+        });
+        testExamples = mergedFallback.merged.length ? mergedFallback.merged : (fallbackExamples.slice(0, 1));
+        if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
+          await taskRepo().remove(saved);
+          return sendAIError(res, {
+            statusCode: 400,
+            message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
+            error: "INCONSISTENT_TEST_DATA",
+            details: {
+              mode: "generateTestData",
+              droppedConflicts: mergedFallback.droppedConflicts,
+              ioType,
+              topicId: topic.id,
+              lang
+            }
+          });
         }
-        testExamples = deduped.length ? deduped : (fallbackExamples.slice(0, 1));
       } else {
 
       const remainingCount = REQUIRED_TEST_COUNT - testExamples.length;
-      const testDataResult = await safeAICall('generateTestData', {
-        taskDescription: taskDescriptionForTests || description,
-        taskTitle: topic.title,
-        lang,
-        count: remainingCount,
-        userId
-      }, {
-        expectedCount: remainingCount,
-        language: userLanguage,
-        requestId: req.requestId,
-        maxAttempts: 1,
-        ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: testsBudgetMs })
-      });
-      if (!testDataResult.success) {
-        // If upstream AI is rate-limited/unavailable, fall back to examples produced by the task generation itself.
-        // This avoids failing the whole task generation flow under provider pressure.
-        const status = Number(testDataResult.error?.statusCode ?? 0);
-        const canFallback = status === 429 || status === 503 || status === 504;
-        if (!canFallback) {
-          await taskRepo().remove(saved);
-          return sendAIError(res, testDataResult.error);
-        }
-
-        const fallbackExamples = aiExamples;
-
-        if (fallbackExamples.length === 0) {
-          // Should not happen because generateTask validator requires examples, but keep a safe fallback.
-          await taskRepo().remove(saved);
-          return sendAIError(res, testDataResult.error);
-        }
-
-        logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
-          requestId: req.requestId,
-          userId,
-          topicId: topic.id,
+      for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
+        const testDataResult = await safeAICall('generateTestData', {
+          taskDescription: taskDescriptionForTests || description,
+          taskTitle: topic.title,
           lang,
-          status,
-          retryAfterMs: testDataResult.error?.details?.retryAfterMs
+          count: remainingCount,
+          userId
+        }, {
+          expectedCount: remainingCount,
+          language: userLanguage,
+          requestId: req.requestId,
+          maxAttempts: 1,
+          ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: testsBudgetMs })
         });
+        if (!testDataResult.success) {
+          // If upstream AI is rate-limited/unavailable, fall back to examples produced by the task generation itself.
+          // This avoids failing the whole task generation flow under provider pressure.
+          const status = Number(testDataResult.error?.statusCode ?? 0);
+          const canFallback = status === 429 || status === 503 || status === 504;
+          if (!canFallback) {
+            await taskRepo().remove(saved);
+            return sendAIError(res, testDataResult.error);
+          }
 
-        testExamples = fallbackExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, fallbackExamples.length)));
-      } else {
-        const additional = (testDataResult.data || []).map((ex: any) => ({
-          input: String(ex?.input ?? ""),
-          output: String(ex?.output ?? "")
-        }));
-        const seen = new Set<string>();
-        const merged: typeof testExamples = [];
-        for (const ex of [...testExamples, ...additional]) {
-          const key = `${String(ex.input ?? "")}\n---\n${String(ex.output ?? "")}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          merged.push(ex);
-          if (merged.length >= REQUIRED_TEST_COUNT) break;
+          const fallbackExamples = aiExamples;
+
+          if (fallbackExamples.length === 0) {
+            // Should not happen because generateTask validator requires examples, but keep a safe fallback.
+            await taskRepo().remove(saved);
+            return sendAIError(res, testDataResult.error);
+          }
+
+          logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
+            requestId: req.requestId,
+            userId,
+            topicId: topic.id,
+            lang,
+            status,
+            retryAfterMs: testDataResult.error?.details?.retryAfterMs
+          });
+
+          const mergedFallback = mergeConsistentExamples({
+            base: testExamples,
+            candidates: fallbackExamples,
+            ioType,
+            maxCount: REQUIRED_TEST_COUNT,
+            fixedNoInputExpected
+          });
+          if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
+            await taskRepo().remove(saved);
+            return sendAIError(res, {
+              statusCode: 400,
+              message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
+              error: "INCONSISTENT_TEST_DATA",
+              details: {
+                mode: "generateTestData",
+                droppedConflicts: mergedFallback.droppedConflicts,
+                ioType,
+                topicId: topic.id,
+                lang
+              }
+            });
+          }
+
+          testExamples = mergedFallback.merged.length
+            ? mergedFallback.merged
+            : fallbackExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, fallbackExamples.length)));
+          break;
         }
-        testExamples = merged;
+
+        const additional = (testDataResult.data || [])
+          .map((ex: any) => sanitizeGeneratedTestExample({
+            input: ex?.input,
+            output: ex?.output,
+            ioType
+          }))
+          .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex);
+        const mergedResult = mergeConsistentExamples({
+          base: testExamples,
+          candidates: additional,
+          ioType,
+          maxCount: REQUIRED_TEST_COUNT,
+          fixedNoInputExpected
+        });
+        if (mergedResult.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
+          if (consistencyAttempt < TEST_CONSISTENCY_RETRY_ATTEMPTS) {
+            logger.warn("[tasks] inconsistent generated tests detected, retrying generateTestData", {
+              requestId: req.requestId,
+              userId,
+              topicId: topic.id,
+              lang,
+              ioType,
+              droppedConflicts: mergedResult.droppedConflicts,
+              consistencyAttempt: consistencyAttempt + 1,
+              maxConsistencyAttempts: TEST_CONSISTENCY_RETRY_ATTEMPTS + 1
+            });
+            continue;
+          }
+          await taskRepo().remove(saved);
+          return sendAIError(res, {
+            statusCode: 400,
+            message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
+            error: "INCONSISTENT_TEST_DATA",
+            details: {
+              mode: "generateTestData",
+              droppedConflicts: mergedResult.droppedConflicts,
+              ioType,
+              topicId: topic.id,
+              lang
+            }
+          });
+        }
+
+        testExamples = mergedResult.merged;
+        if (mergedResult.droppedConflicts > 0) {
+          logger.warn("[tasks] dropped inconsistent generated tests", {
+            requestId: req.requestId,
+            userId,
+            topicId: topic.id,
+            droppedConflicts: mergedResult.droppedConflicts,
+            ioType
+          });
+        }
+        break;
       }
       }
     }
-    // Keep max grade scale (12) stable even if we had to fall back to fewer tests.
+    // Keep max grade scale (100) stable even if we had to fall back to fewer tests.
     const pointsByIndex: number[] = (() => {
       const n = Math.max(1, testExamples.length);
-      const totalPoints = needsInput ? 12 : 12;
+      const totalPoints = 100;
       if (n === 1) return [totalPoints];
       const base = Math.floor(totalPoints / n);
       const rem = totalPoints % n;
@@ -1796,7 +2557,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     await testDataRepo().save(newTestData);
     return res.json({
       status: "ok",
-      task: mapTaskToDto(saved)
+      task: mapTaskToDto(saved, undefined, { uiLanguage: userLanguage })
     });
   } catch (error: any) {
     logger.error("[tasks] POST /generate error", { requestId: req.requestId, userId: req.userId, error });
@@ -1809,17 +2570,20 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     return res.status(500).json({
       message: "Internal server error"
     });
+  } finally {
+    if (throttleKey) generateInFlightByUserLang.delete(throttleKey);
   }
 });
 tasksRouter.post("/reset-topic", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    const uiLanguage = resolveUiLanguage(req);
     const userId = req.userId!;
     const {
       topicId
     } = req.body;
     if (!topicId || typeof topicId !== "number") {
       return res.status(400).json({
-        message: "topicId is required and must be a number"
+        message: i18nText(uiLanguage, "topicId є обов'язковим і має бути числом", "topicId is required and must be a number")
       });
     }
     const tasks = await taskRepo().find({
@@ -1851,15 +2615,224 @@ tasksRouter.post("/reset-topic", authMiddleware, async (req: AuthRequest, res: R
       }
     });
     return res.json({
-      message: "Topic reset successfully"
+      message: i18nText(uiLanguage, "Тему успішно скинуто", "Topic reset successfully")
     });
   } catch (error: any) {
     logger.error("[tasks] POST /reset-topic error", { requestId: req.requestId, userId: req.userId, error });
+    const uiLanguage = resolveUiLanguage(req);
     return res.status(500).json({
-      message: "Internal server error"
+      message: i18nText(uiLanguage, "Внутрішня помилка сервера", "Internal server error")
     });
   }
 });
+
+tasksRouter.get("/:id/web-template", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = Number(req.params.id);
+    if (!req.userId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+    const task = await taskRepo().findOne({
+      where: {
+        id,
+        user: { id: req.userId }
+      }
+    });
+    if (!task) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const normalized = normalizeWebTaskTemplate((task as any).template);
+    return res.json({
+      taskId: task.id,
+      taskMode: "WEB",
+      files: normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalized.files),
+      rules: normalizeWebRules((task as any).webValidationRules ?? normalized.rules),
+      profile: normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB"),
+    });
+  } catch (error: any) {
+    logger.error("[tasks] GET /:id/web-template error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+tasksRouter.put("/:id/web-draft", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = Number(req.params.id);
+    if (!req.userId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+
+    const task = await taskRepo().findOne({ where: { id, user: { id: req.userId } } });
+    if (!task) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertPersonalWebFilesWithinLimits(files);
+
+    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
+    const encoded = encodeWebTaskPayload({ mode: "WEB", version: 1, files, rules });
+    task.draftCode = encoded;
+    await taskRepo().save(task);
+
+    personalWebDraftStore.set(personalWebDraftKey(req.userId, id), {
+      files,
+      updatedAt: Date.now(),
+    });
+
+    return res.json({ ok: true, updatedAt: new Date().toISOString() });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("[tasks] PUT /:id/web-draft error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+tasksRouter.post("/:id/web-check", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = Number(req.params.id);
+    if (!req.userId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+
+    const task = await taskRepo().findOne({ where: { id, user: { id: req.userId } } });
+    if (!task) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertPersonalWebFilesWithinLimits(files);
+    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
+    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+
+    return res.json({ taskMode: "WEB", ...check });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("[tasks] POST /:id/web-check error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = Number(req.params.id);
+    if (!req.userId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+
+    const task = await taskRepo().findOne({ where: { id, user: { id: req.userId } } });
+    if (!task) {
+      throw new HttpError(404, "TASK_NOT_FOUND", { code: "TASK_NOT_FOUND", expose: true });
+    }
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      throw new HttpError(400, "TASK_IS_NOT_WEB", { code: "TASK_IS_NOT_WEB", expose: true });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertPersonalWebFilesWithinLimits(files);
+    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
+    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+
+    const maxScore = check.maxScore > 0 ? check.maxScore : Math.max(1, check.totalRules);
+    const score = check.maxScore > 0 ? check.score : check.passedRules;
+    const ratio = maxScore > 0 ? score / maxScore : 0;
+    const total = Math.max(1, Math.min(100, Math.round(ratio * 100)));
+
+    const codeSnapshot = encodeWebTaskPayload({ mode: "WEB", version: 1, files, rules });
+    task.finalCode = codeSnapshot;
+    task.completed = 1;
+    await taskRepo().save(task);
+
+    const feedback = check.passed
+      ? "All web validation rules passed."
+      : check.results.filter(r => !r.passed).map(r => `- ${r.message}`).join("\n");
+
+    const grade = gradeRepo().create({
+      user: { id: req.userId },
+      task: { id: task.id },
+      total,
+      workScore: 0,
+      optimizationScore: 0,
+      integrityScore: 0,
+      aiFeedback: feedback,
+      codeSnapshot,
+      previousGradeId: null,
+      comparisonFeedback: null,
+    } as any);
+    const savedGradeResult = await gradeRepo().save(grade);
+    const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
+
+    await syncPostLearningProgress({
+      userId: req.userId,
+      lang: task.lang,
+      topicIndex: task.topicIndex,
+      requestId: req.requestId
+    });
+
+    const testResults = check.results.map((r, idx) => ({
+      testId: idx + 1,
+      passed: r.passed,
+      verdict: r.passed ? "AC" : "WA",
+      errorKind: r.passed ? null : "web_rule",
+      error: r.passed ? null : r.message,
+    }));
+
+    return res.json({
+      grade: {
+        id: savedGrade.id,
+        gradingMode: "TESTS",
+        total: savedGrade.total,
+        testsPassed: check.passedRules,
+        testsTotal: check.totalRules,
+        score,
+        maxScore,
+        testResults,
+        aiFeedback: feedback,
+        createdAt: savedGrade.createdAt,
+      },
+      taskMode: "WEB",
+      scoring: {
+        score,
+        maxScore,
+      },
+    });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("[tasks] POST /:id/web-submit error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 tasksRouter.post(
   "/:id/save-draft",
   authMiddleware,
@@ -1979,8 +2952,8 @@ tasksRouter.post(
   }
 
   const normalizedFiles = normalizeApiFiles(files);
-  const entryFile = task.lang === "PYTHON" ? "main.py" : task.lang === "CPP" ? "main.cpp" : "Main.java";
   const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(code) : null;
+  const entryFile = decodedFromCode?.entry || (task.lang === "PYTHON" ? "main.py" : task.lang === "CPP" ? "main.cpp" : "Main.java");
   const effectiveFiles = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
   const isMultiFile = effectiveFiles.length > 0;
   const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : String(code ?? "");
@@ -1997,7 +2970,7 @@ tasksRouter.post(
     });
   }
   const MIN_GRADE = 1;
-  const MAX_GRADE = 12;
+  const MAX_GRADE = 100;
   const TASK_COMPLETED_FLAG = 1;
   if (submitMode === "AI") {
     const previous = await gradeRepo().findOne({
@@ -2031,12 +3004,16 @@ tasksRouter.post(
       optimization: ai.optimization,
       integrity: ai.integrity
     });
-    const comparisonFeedback = ai.comparison?.changes?.length ? ai.comparison.changes.map(c => {
+    const comparisonFeedbackText = ai.comparison?.changes?.length ? ai.comparison.changes.map(c => {
       const category = c.category === "work" ? "Працездатність" : c.category === "optimization" ? "Оптимізація" : "Доброчесність";
       const sign = c.delta >= 0 ? "+" : "";
       const line = c.codeLine ? ` (рядок ${c.codeLine})` : "";
       return `${category}: ${sign}${c.delta}${line} — ${c.reason}`;
     }).join("\n") : null;
+    const encodedComparisonFeedback = encodeAiComparisonFeedback({
+      comparisonFeedback: comparisonFeedbackText ?? null,
+      aiUnavailableFallback: Boolean(ai.fallbackUsed)
+    });
     task.finalCode = persistedSubmission;
     task.completed = TASK_COMPLETED_FLAG;
     await taskRepo().save(task);
@@ -2054,10 +3031,19 @@ tasksRouter.post(
       aiFeedback: ai.feedback,
       codeSnapshot: persistedSubmission,
       previousGradeId: previous?.id ?? null,
-      comparisonFeedback: comparisonFeedback ?? null
+      comparisonFeedback: encodedComparisonFeedback
     });
     const savedGradeResult = await gradeRepo().save(grade);
     const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
+    const parsedComparisonFeedback = parseGradeComparisonFeedback(savedGrade.comparisonFeedback);
+
+    await syncPostLearningProgress({
+      userId: req.userId,
+      lang: task.lang,
+      topicIndex: task.topicIndex,
+      requestId: req.requestId
+    });
+
     return res.json({
       grade: {
         id: savedGrade.id,
@@ -2067,7 +3053,8 @@ tasksRouter.post(
         optimizationScore: savedGrade.optimizationScore ?? 0,
         integrityScore: savedGrade.integrityScore ?? 0,
         aiFeedback: savedGrade.aiFeedback,
-        comparisonFeedback: savedGrade.comparisonFeedback ?? null,
+        aiUnavailableFallback: parsedComparisonFeedback.aiUnavailableFallback || Boolean(ai.fallbackUsed),
+        comparisonFeedback: parsedComparisonFeedback.comparisonFeedback,
         previousGrade: previous?.total ?? null,
         createdAt: savedGrade.createdAt
       },
@@ -2308,6 +3295,14 @@ tasksRouter.post(
   });
   const savedGradeResult = await gradeRepo().save(grade);
   const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
+
+  await syncPostLearningProgress({
+    userId: req.userId,
+    lang: task.lang,
+    topicIndex: task.topicIndex,
+    requestId: req.requestId
+  });
+
   const learningFirstFailure = buildLearningFirstFailure({
     verdict: workerRes?.verdict ?? null,
     tests: learningFeedbackCandidates
@@ -2394,8 +3389,8 @@ tasksRouter.post(
   }
 
   const normalizedFiles = normalizeApiFiles(files);
-  const entryFile = task.lang === "PYTHON" ? "main.py" : task.lang === "CPP" ? "main.cpp" : "Main.java";
   const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(code) : null;
+  const entryFile = decodedFromCode?.entry || (task.lang === "PYTHON" ? "main.py" : task.lang === "CPP" ? "main.cpp" : "Main.java");
   const effectiveFiles = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
   const isMultiFile = effectiveFiles.length > 0;
   const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : String(code ?? "");

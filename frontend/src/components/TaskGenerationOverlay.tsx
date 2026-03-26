@@ -3,33 +3,44 @@ import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { tr } from "../i18n";
 
-export function TaskGenerationOverlay(props: { open: boolean }) {
-  const { open } = props;
+export type TaskGenerationPhase =
+  | "requesting"
+  | "generating"
+  | "syncing"
+  | "opening"
+  | "finishing"
+  | "error";
+
+export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenerationPhase | null }) {
+  const { open, phase } = props;
   const { i18n } = useTranslation();
 
-  const steps = useMemo(() => {
-    // Short, playful “terminal-ish” sequence. Keep it neutral and not misleading about exact backend steps.
-    return [
-      tr("Підбираю тему", "Picking a topic"),
-      tr("Формулюю умову", "Drafting the statement"),
-      tr("Перевіряю коректність", "Sanity-checking"),
-      tr("Пакую шаблон коду", "Packing a starter template"),
-      tr("Фінальні штрихи", "Final touches"),
-    ];
+  const phaseSteps = useMemo<Record<TaskGenerationPhase, string>>(() => {
+    return {
+      requesting: tr("Надсилаю запит на генерацію", "Sending generation request"),
+      generating: tr("Генерую завдання на сервері", "Generating task on server"),
+      syncing: tr("Оновлюю список завдань", "Refreshing tasks list"),
+      opening: tr("Відкриваю нове завдання", "Opening the new task"),
+      finishing: tr("Завершую підготовку інтерфейсу", "Finalizing UI setup"),
+      error: tr("Помилка генерації", "Generation failed"),
+    };
   }, [i18n.language]);
 
-  const [stepIdx, setStepIdx] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
     if (!open) {
-      setStepIdx(0);
+      setElapsedSeconds(0);
       return;
     }
     const id = setInterval(() => {
-      setStepIdx((v: number) => (v + 1) % steps.length);
-    }, 1200);
+      setElapsedSeconds((v: number) => v + 1);
+    }, 1000);
     return () => clearInterval(id);
-  }, [open, steps.length]);
+  }, [open]);
+
+  const activePhase: TaskGenerationPhase = phase ?? "generating";
+  const currentStepLabel = phaseSteps[activePhase];
 
   if (!open) return null;
 
@@ -60,7 +71,7 @@ export function TaskGenerationOverlay(props: { open: boolean }) {
                 <span className="terminal-dots" />
               </div>
               <div className="text-[11px] font-mono text-text-muted">
-                {tr("Зазвичай це займає 10–30 секунд", "Usually takes 10–30 seconds")}
+                {tr("Минає часу", "Elapsed time")}: {elapsedSeconds}{tr(" с", "s")}
               </div>
             </div>
             <div className="ml-auto flex items-center gap-2">
@@ -79,15 +90,8 @@ export function TaskGenerationOverlay(props: { open: boolean }) {
         {/* “Terminal” body */}
         <div className="relative px-5 py-4">
           <div className="text-xs font-mono text-text-secondary">
-            <span className="text-text-muted">$</span> {steps[stepIdx]}
+            <span className="text-text-muted">$</span> {currentStepLabel}
             <span className="terminal-dots" />
-          </div>
-
-          <div className="mt-3 text-[11px] font-mono text-text-muted leading-relaxed">
-            {tr(
-              "Порада: якщо генерація зависла — онови сторінку і спробуй ще раз.",
-              "Tip: if generation gets stuck, refresh the page and try again."
-            )}
           </div>
         </div>
       </div>

@@ -3,8 +3,13 @@ export type UIMode = "classic" | "focus";
 const STORAGE_KEYS = {
   preference: "studycod.uiMode.preference",
   override: "studycod.uiMode.override",
-  introSeen: "studycod.uiMode.focusIntroSeen.v1",
+  introSeen: "studycod.uiMode.momentumIntroSeen.v2",
   studySessions: "studycod.studySessions.successCount.v1",
+  switchSuggestionDismissed: "studycod.uiMode.momentumSwitchSuggestionDismissed.v2"
+} as const;
+
+const LEGACY_STORAGE_KEYS = {
+  introSeen: "studycod.uiMode.focusIntroSeen.v1",
   switchSuggestionDismissed: "studycod.uiMode.switchSuggestionDismissed.v1"
 } as const;
 
@@ -39,6 +44,29 @@ const safeLocalStorage = {
 
 export function parseUIMode(value: unknown): UIMode | null {
   return value === "classic" || value === "focus" ? value : null;
+}
+
+function getWithLegacy(primaryKey: string, ...legacyKeys: string[]): string | null {
+  const primary = safeLocalStorage.get(primaryKey);
+  if (primary != null) {
+    // Cleanup stale legacy keys once new key is present.
+    for (const legacyKey of legacyKeys) {
+      safeLocalStorage.remove(legacyKey);
+    }
+    return primary;
+  }
+
+  for (const legacyKey of legacyKeys) {
+    const legacy = safeLocalStorage.get(legacyKey);
+    if (legacy != null) {
+      // Write-through migration: old users keep their setting after rename.
+      safeLocalStorage.set(primaryKey, legacy);
+      // One-time cleanup of migrated key.
+      safeLocalStorage.remove(legacyKey);
+      return legacy;
+    }
+  }
+  return null;
 }
 
 export function getPreferredUIMode(): UIMode | null {
@@ -98,7 +126,7 @@ export function getEffectiveUIMode(now = Date.now()): {
       source: "preference"
     };
   }
-  // Default after this update: start in Focus interface.
+  // Product name is Momentum UI; technical mode value remains "focus" for compatibility.
   return {
     mode: "focus",
     source: "default"
@@ -106,7 +134,7 @@ export function getEffectiveUIMode(now = Date.now()): {
 }
 
 export function isFocusIntroSeen(): boolean {
-  return safeLocalStorage.get(STORAGE_KEYS.introSeen) === "1";
+  return getWithLegacy(STORAGE_KEYS.introSeen, LEGACY_STORAGE_KEYS.introSeen) === "1";
 }
 
 export function markFocusIntroSeen() {
@@ -126,7 +154,10 @@ export function incrementSuccessfulStudySessions(): number {
 }
 
 export function isSwitchSuggestionDismissed(): boolean {
-  return safeLocalStorage.get(STORAGE_KEYS.switchSuggestionDismissed) === "1";
+  return getWithLegacy(
+    STORAGE_KEYS.switchSuggestionDismissed,
+    LEGACY_STORAGE_KEYS.switchSuggestionDismissed
+  ) === "1";
 }
 
 export function dismissSwitchSuggestion() {

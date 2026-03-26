@@ -8,10 +8,11 @@ export interface AdminUser {
   emailVerified: boolean;
   firstName: string | null;
   lastName: string | null;
-  userMode: "PERSONAL" | "EDUCATIONAL";
+  userMode: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
   role: "USER" | "TEACHER" | "SYSTEM_ADMIN";
   lang: "JAVA" | "PYTHON";
-  difus: number;
+  iad: number;
+  difus?: number;
   avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
@@ -48,6 +49,7 @@ export interface AdminStats {
     byMode: {
       PERSONAL: number;
       EDUCATIONAL: number;
+      CONTEST?: number;
     };
   };
   classes: {
@@ -103,7 +105,7 @@ export interface CreateUserData {
   password: string;
   firstName?: string;
   lastName?: string;
-  userMode?: "PERSONAL" | "EDUCATIONAL";
+  userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
   role?: "USER" | "TEACHER" | "SYSTEM_ADMIN";
   lang?: "JAVA" | "PYTHON";
   emailVerified?: boolean;
@@ -312,7 +314,7 @@ export async function createAdminMaterialTopic(data: {
   description?: string | null;
   order?: number;
   language: AdminMaterialsLanguage;
-  theory?: { title?: string; content: string; level?: number | null; tags?: any } | null;
+  theory?: { title?: string; content: string; level?: number | null; tags?: unknown } | null;
 }): Promise<{ topic: AdminMaterialTopic }> {
   const res = await api.post("/admin/materials/topics", data);
   return res.data;
@@ -325,7 +327,7 @@ export async function updateAdminMaterialTopic(
     description?: string | null;
     order?: number;
     language?: AdminMaterialsLanguage;
-    theory?: { title?: string; content: string; level?: number | null; tags?: any } | null;
+    theory?: { title?: string; content: string; level?: number | null; tags?: unknown } | null;
     clearTheory?: boolean;
     theoryRevisionAction?: "UPDATE" | "AUTO";
     theoryRevisionComment?: string;
@@ -360,7 +362,7 @@ export async function importAdminMaterialTopicsYaml(data: {
 export async function syncAdminMaterialTopicsFromRepo(data: {
   language: AdminMaterialsLanguage;
   mode?: "merge" | "replace";
-}): Promise<{ created: number; updated: number; skipped: number; topics: AdminMaterialTopic[]; source?: any }> {
+}): Promise<{ created: number; updated: number; skipped: number; topics: AdminMaterialTopic[]; source?: unknown }> {
   const res = await api.post("/admin/materials/sync/repo", data);
   return res.data;
 }
@@ -394,7 +396,7 @@ export async function exportAdminMaterialTopicsYaml(params: {
     responseType: "blob"
   });
 
-  const cd = (res.headers as any)?.["content-disposition"] as string | undefined;
+  const cd = typeof res.headers?.["content-disposition"] === "string" ? res.headers["content-disposition"] : undefined;
   const filename = parseFilenameFromContentDisposition(cd) || `materials_${params.language}.yaml`;
   return { blob: res.data as Blob, filename };
 }
@@ -418,7 +420,7 @@ export async function getAdminTheoryBlockRevisions(theoryBlockId: number): Promi
 export async function getAdminTheoryBlockRevision(
   theoryBlockId: number,
   version: number
-): Promise<{ revision: AdminTheoryBlockRevision; snapshot: { title: string; content: string; level: number | null; tags: any } | null }> {
+): Promise<{ revision: AdminTheoryBlockRevision; snapshot: { title: string; content: string; level: number | null; tags: unknown } | null }> {
   const res = await api.get(`/admin/materials/theory-blocks/${theoryBlockId}/revisions/${version}`);
   return res.data;
 }
@@ -507,7 +509,7 @@ export async function sendAdminBroadcastEmail(data: {
   };
   dryRun?: boolean;
   limit?: number;
-}): Promise<AdminBroadcastDryRunResult | AdminBroadcastSendResult | any> {
+}): Promise<AdminBroadcastDryRunResult | AdminBroadcastSendResult | unknown> {
   const res = await api.post("/admin/emails/broadcast", data);
   return res.data;
 }

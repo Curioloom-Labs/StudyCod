@@ -8,9 +8,9 @@ const TaskGenerationSchema = z.object({
   theoryMarkdown: z.string().min(1, 'theoryMarkdown must be a non-empty string'),
   practicalTask: z.string().min(1, 'practicalTask must be a non-empty string'),
   ioType: z.enum(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]).optional().default("STDIN_STDOUT"),
-  inputFormat: z.string(),
-  outputFormat: z.string(),
-  constraints: z.string(),
+  inputFormat: z.string().min(1, 'inputFormat must be a non-empty string'),
+  outputFormat: z.string().min(1, 'outputFormat must be a non-empty string'),
+  constraints: z.string().min(1, 'constraints must be a non-empty string'),
   examples: z
     .array(
       z.object({
@@ -45,6 +45,72 @@ function defaultNoInputFormat(preferUkrainian: boolean): string {
     : 'There is no input (stdin is empty).';
 }
 
+function defaultInputFormatByIo(ioType: string): string {
+  if (ioType === 'NO_INPUT_FIXED_OUTPUT' || ioType === 'NO_INPUT_FREE_OUTPUT') {
+    return 'Вхідні дані відсутні (нічого не вводиться).';
+  }
+  return 'Зчитайте вхідні дані зі стандартного потоку вводу (stdin) у форматі, описаному в умові.';
+}
+
+function defaultOutputFormatByIo(ioType: string): string {
+  if (ioType === 'NO_INPUT_FREE_OUTPUT') {
+    return 'Виведіть будь-який непорожній коректний рядок у stdout згідно вимоги задачі.';
+  }
+  return 'Виведіть результат у стандартний потік виводу (stdout) у форматі, описаному в умові.';
+}
+
+function defaultConstraintsText(): string {
+  return 'Час виконання: до 1 с. Обмеження памʼяті: до 256 МБ. Використовуйте допустимі межі вхідних значень для вибраних типів даних.';
+}
+
+function normalizeIoType(raw: unknown, context?: { practicalTask?: string; inputFormat?: string; outputFormat?: string }): "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT" {
+  const source = typeof raw === 'string' ? raw.trim() : '';
+  const compact = source
+    .toUpperCase()
+    .replace(/[\s\-]+/g, '_')
+    .replace(/[^A-Z0-9_]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (compact === 'STDIN_STDOUT' || compact === 'STDIN' || compact === 'INPUT_OUTPUT' || compact === 'WITH_INPUT') {
+    return 'STDIN_STDOUT';
+  }
+
+  if (
+    compact === 'NO_INPUT_FIXED_OUTPUT' ||
+    compact === 'NOINPUT_FIXED_OUTPUT' ||
+    compact === 'NO_INPUT_FIXED' ||
+    compact === 'NO_INPUT_EXACT_OUTPUT' ||
+    compact === 'NO_INPUT_DETERMINISTIC_OUTPUT' ||
+    compact === 'FIXED_OUTPUT'
+  ) {
+    return 'NO_INPUT_FIXED_OUTPUT';
+  }
+
+  if (
+    compact === 'NO_INPUT_FREE_OUTPUT' ||
+    compact === 'NOINPUT_FREE_OUTPUT' ||
+    compact === 'NO_INPUT_FREE' ||
+    compact === 'NO_INPUT_ANY_OUTPUT' ||
+    compact === 'ANY_NON_EMPTY_OUTPUT' ||
+    compact === 'FREE_OUTPUT'
+  ) {
+    return 'NO_INPUT_FREE_OUTPUT';
+  }
+
+  // Semantic fallback if model returns unsupported enum labels.
+  const practical = String(context?.practicalTask ?? '').trim();
+  const inputFmt = String(context?.inputFormat ?? '').trim();
+  const outputFmt = String(context?.outputFormat ?? '').trim().toLowerCase();
+  const noInput = mentionsNoInput(`${practical}\n${inputFmt}`);
+  if (noInput) {
+    const freeOutputHint = /(будь-як|непорожн|any\s+non-?empty|any\s+output|free\s+output)/i.test(outputFmt);
+    return freeOutputHint ? 'NO_INPUT_FREE_OUTPUT' : 'NO_INPUT_FIXED_OUTPUT';
+  }
+
+  return 'STDIN_STDOUT';
+}
+
 function looksLikeJudgeSuccessMessage(text: string): boolean {
   const s = String(text ?? '').trim().toLowerCase();
   if (!s) return false;
@@ -57,6 +123,56 @@ function looksLikeJudgeSuccessMessage(text: string): boolean {
   if (/program\s+(?:has\s+)?(?:compiled|executed|ran)\s+(?:successfully|without\s+errors)/i.test(s)) return true;
   if (/successfully\s+(?:compiled|executed|ran)/i.test(s)) return true;
   return false;
+}
+
+function looksLikeDefaultPlaceholder(text: string, field: 'inputFormat' | 'outputFormat' | 'constraints'): boolean {
+  const s = String(text ?? '').trim().toLowerCase();
+  if (!s) return true;
+
+  const placeholders = new Set<string>([
+    'default inputformat',
+    'default outputformat',
+    'default constraints',
+    'inputformat',
+    'outputformat',
+    'constraints',
+    'n/a',
+    'na',
+    '-',
+    'todo',
+    'tbd'
+  ]);
+  if (placeholders.has(s)) return true;
+
+  if (field === 'inputFormat' && /default\s*input\s*format/i.test(s)) return true;
+  if (field === 'outputFormat' && /default\s*output\s*format/i.test(s)) return true;
+  if (field === 'constraints' && /default\s*constraints?/i.test(s)) return true;
+
+  return false;
+}
+
+function looksLikeMultiTaskInstruction(text: string): boolean {
+  const src = String(text ?? '').toLowerCase();
+  if (!src.trim()) return false;
+
+  const count = (re: RegExp) => (src.match(re) || []).length;
+  const writeProgramUa = count(/\bнапиш(?:іть|и)\s+програм/gi);
+  const writeProgramEn = count(/\bwrite\s+a\s+program\b/gi);
+  if (writeProgramUa + writeProgramEn >= 2) return true;
+
+  // Common “two tasks in one” pattern: "... . Також ..."
+  if (/\bтакож\b[\s\S]{0,120}\b(напиш(?:іть|и)|зробіть|реалізуйте|write|implement)\b/i.test(src)) return true;
+
+  // Explicit numbered multi-task markers.
+  if (/\b(завдання|задача|task)\s*[1-9]\b/i.test(src)) return true;
+
+  return false;
+}
+
+function hasVagueOutputContract(text: string): boolean {
+  const s = String(text ?? '').toLowerCase();
+  if (!s.trim()) return true;
+  return /(тощо|і\s*т\.д\.|і\s*тд|або\s+щось\s+подібне|будь-як|any\s+output|anything|etc\.?|and\s+so\s+on)/i.test(s);
 }
 
 function looksTooShortOrVaguePracticalTask(text: string): boolean {
@@ -154,6 +270,8 @@ export class AIResponseValidator {
 
       const practical = String(validated.practicalTask ?? '').trim();
       const outFmt = String(validated.outputFormat ?? '').trim();
+      const inFmt = String(validated.inputFormat ?? '').trim();
+      const constraints = String(validated.constraints ?? '').trim();
 
       // Quality gates: expand the condition and prevent meta “success” messages.
       if (looksTooShortOrVaguePracticalTask(practical)) {
@@ -164,6 +282,20 @@ export class AIResponseValidator {
       }
       if (looksLikeJudgeSuccessMessage(exOutput)) {
         throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: examples[0].output looks like judge meta message (e.g., "program compiled/executed without errors")', data);
+      }
+
+      if (looksLikeDefaultPlaceholder(inFmt, 'inputFormat')) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: inputFormat is placeholder/default text', data);
+      }
+      if (looksLikeDefaultPlaceholder(outFmt, 'outputFormat')) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat is placeholder/default text', data);
+      }
+      if (looksLikeDefaultPlaceholder(constraints, 'constraints')) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: constraints is placeholder/default text', data);
+      }
+
+      if (looksLikeMultiTaskInstruction(practical)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask appears to contain multiple tasks/programs', data);
       }
 
       if (ioType === 'STDIN_STDOUT') {
@@ -203,6 +335,10 @@ export class AIResponseValidator {
         if (looksLikeJudgeSuccessMessage(exOutput)) {
           throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT examples[0].output must be exact expected output, not a meta success message', data);
         }
+      }
+
+      if (ioType !== 'NO_INPUT_FREE_OUTPUT' && hasVagueOutputContract(outFmt)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat is vague for deterministic task type; specify exact output contract', data);
       }
 
       // For non-fixed-output tasks, outputFormat must be an actual contract description.
@@ -254,6 +390,12 @@ export class AIResponseValidator {
 
     const fixed = { ...data };
 
+    fixed.ioType = normalizeIoType(fixed.ioType, {
+      practicalTask: fixed.practicalTask,
+      inputFormat: fixed.inputFormat,
+      outputFormat: fixed.outputFormat,
+    });
+
     const ioTypeHint = typeof fixed.ioType === 'string' ? String(fixed.ioType).trim() : '';
     const isNoInputIoType = ioTypeHint === 'NO_INPUT_FIXED_OUTPUT' || ioTypeHint === 'NO_INPUT_FREE_OUTPUT';
 
@@ -295,7 +437,15 @@ export class AIResponseValidator {
       fixed.examples = [defaultExample];
     }
 
-    const stringFields = ['title', 'theoryMarkdown', 'practicalTask', 'inputFormat', 'outputFormat', 'constraints', 'codeTemplate'] as const;
+    if (
+      ioTypeHint === 'STDIN_STDOUT'
+      && fixed.examples.length > 0
+      && fixed.examples.every((ex: any) => String(ex?.input ?? '').trim().length === 0)
+    ) {
+      fixed.examples[0].input = '1';
+    }
+
+    const stringFields = ['title', 'theoryMarkdown', 'practicalTask', 'codeTemplate'] as const;
     for (const field of stringFields) {
       const raw = fixed[field];
       if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
@@ -312,6 +462,13 @@ export class AIResponseValidator {
         fixed[field] = String(raw).trim();
       }
     }
+
+    const inputFormat = typeof fixed.inputFormat === 'string' ? fixed.inputFormat.trim() : '';
+    const outputFormat = typeof fixed.outputFormat === 'string' ? fixed.outputFormat.trim() : '';
+    const constraints = typeof fixed.constraints === 'string' ? fixed.constraints.trim() : '';
+    fixed.inputFormat = inputFormat || defaultInputFormatByIo(ioTypeHint);
+    fixed.outputFormat = outputFormat || defaultOutputFormatByIo(ioTypeHint);
+    fixed.constraints = constraints || defaultConstraintsText();
 
     if (fixed.topic && typeof fixed.topic === 'string') {
       fixed.topic = fixed.topic.trim();

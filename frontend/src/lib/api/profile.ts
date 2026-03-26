@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { User, CourseLanguage, PublicProfile, PublicProfilePrivacy } from "../../types";
+import type { User, CourseLanguage, PublicProfile, PublicProfilePrivacy, IadDetails } from "../../types";
 export async function getMe(): Promise<User> {
   const res = await api.get("/profile/me");
   return res.data as User;
@@ -67,6 +67,62 @@ export type PlacementCodingSubmitResult = {
   stdout?: string | null;
 };
 
+export type PlacementAssessmentTrack = "INTERMEDIATE" | "ADVANCED" | "UNDECIDED";
+
+export type PlacementAssessmentPack = {
+  track: PlacementAssessmentTrack;
+  language: CourseLanguage;
+  quizQuestions: Array<{
+    id: string;
+    promptUk: string;
+    promptEn: string;
+    optionsUk: string[];
+    optionsEn: string[];
+  }>;
+  tasks: Array<{
+    id: string;
+    titleUk: string;
+    titleEn: string;
+    promptUk: string;
+    promptEn: string;
+    starterCode: string;
+    language: CourseLanguage;
+    sampleInput: string;
+    sampleOutput: string;
+  }>;
+};
+
+export type PlacementAssessmentSubmitResult = {
+  user: User;
+  summary: {
+    track: PlacementAssessmentTrack;
+    finalLevel: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+    quizCorrect: number;
+    quizTotal: number;
+    quizPct: number;
+    practicalPassed: number;
+    practicalTotal: number;
+    practicalPct: number;
+    overallPct: number;
+  };
+  quizReports: Array<{
+    questionId: string;
+    selectedIndex: number;
+    correctIndex: number;
+    isCorrect: boolean;
+  }>;
+  taskReports: Array<{
+    taskId: string;
+    passed: boolean;
+    passedTests: number;
+    totalTests: number;
+    caseIndex?: number;
+    stderr?: string | null;
+    expected?: string;
+    actual?: string;
+  }>;
+};
+
 export async function submitPlacementCoding(data: {
   code: string;
   level: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
@@ -76,6 +132,26 @@ export async function submitPlacementCoding(data: {
 }): Promise<PlacementCodingSubmitResult> {
   const res = await api.post("/profile/placement/coding-submit", data);
   return res.data as PlacementCodingSubmitResult;
+}
+
+export async function getPlacementAssessmentPack(params: {
+  track: PlacementAssessmentTrack;
+  course?: CourseLanguage;
+  lang?: CourseLanguage;
+}): Promise<PlacementAssessmentPack> {
+  const res = await api.get("/profile/placement/assessment-pack", { params });
+  return res.data as PlacementAssessmentPack;
+}
+
+export async function submitPlacementAssessment(data: {
+  track: PlacementAssessmentTrack;
+  course?: CourseLanguage;
+  lang?: CourseLanguage;
+  quizAnswers: Array<{ questionId: string; selectedIndex: number }>;
+  taskSolutions: Array<{ taskId: string; code: string }>;
+}): Promise<PlacementAssessmentSubmitResult> {
+  const res = await api.post("/profile/placement/assessment-submit", data);
+  return res.data as PlacementAssessmentSubmitResult;
 }
 
 export async function getEmailSubscription(): Promise<{ enabled: boolean; email: string | null }> {
@@ -93,3 +169,10 @@ export async function getPublicProfile(username: string): Promise<PublicProfile>
   const res = await api.get(`/profile/public/${safe}`);
   return res.data as PublicProfile;
 }
+
+export async function getIadDetails(): Promise<IadDetails> {
+  const res = await api.get("/profile/iad");
+  return res.data as IadDetails;
+}
+
+export const getDifusDetails = getIadDetails;

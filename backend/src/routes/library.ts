@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Response, NextFunction } from "express";
 import { z } from "zod";
 import AdmZip from "adm-zip";
 import multer from "multer";
@@ -24,6 +24,17 @@ import { HttpError } from "../utils/httpError";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
 import { hasLibraryTaskEnTranslationColumns } from "../services/translation/translationSchema";
+import { env } from "../env";
+import {
+  normalizeWebTaskFiles,
+  normalizeWebValidationProfile,
+  normalizeWebValidationRules,
+  type WebTaskValidationProfile,
+  type WebTaskValidationRule,
+  validateWebTaskSubmission,
+} from "../services/webTaskValidationService";
+import { normalizeWebTaskTemplate } from "../utils/webTaskPayload";
+import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 
 const libraryRouter = Router();
 
@@ -44,6 +55,30 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   return [...byPath.values()];
 }
 
+function normalizeWebRules(raw: unknown): WebTaskValidationRule[] {
+  return normalizeWebValidationRules(raw);
+}
+
+function normalizeWebProfile(raw: unknown): WebTaskValidationProfile {
+  return normalizeWebValidationProfile(raw ?? "FREE_WEB");
+}
+
+function assertLibraryWebFilesWithinLimits(files: ReturnType<typeof normalizeWebTaskFiles>) {
+  const maxFileSize = Number((env as any).__webTaskMaxFileSize ?? 200_000);
+  const maxTotalSize = Number((env as any).__webTaskMaxTotalSize ?? 500_000);
+  let total = 0;
+  for (const f of files) {
+    const size = Buffer.byteLength(String(f.content ?? ""), "utf8");
+    if (size > maxFileSize) {
+      throw new HttpError(400, "WEB_FILE_TOO_LARGE", { code: "WEB_FILE_TOO_LARGE", expose: true });
+    }
+    total += size;
+  }
+  if (total > maxTotalSize) {
+    throw new HttpError(400, "WEB_PAYLOAD_TOO_LARGE", { code: "WEB_PAYLOAD_TOO_LARGE", expose: true });
+  }
+}
+
 function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
   switch (lang) {
     case "java":
@@ -61,12 +96,50 @@ function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
   }
 }
 
+const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
+  const n = parseInt(String(raw ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const LIBRARY_ARCHIVE_UPLOAD_MAX_MB = parsePositiveInt(process.env.LIBRARY_ARCHIVE_UPLOAD_MAX_MB, 120);
+const LIBRARY_ARCHIVE_UPLOAD_MAX_FILES = parsePositiveInt(process.env.LIBRARY_ARCHIVE_UPLOAD_MAX_FILES, 100);
+const LIBRARY_ARCHIVE_UPLOAD_MAX_BYTES = LIBRARY_ARCHIVE_UPLOAD_MAX_MB * 1024 * 1024;
+
 const archiveUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 30 * 1024 * 1024,
+    fileSize: LIBRARY_ARCHIVE_UPLOAD_MAX_BYTES,
+    files: LIBRARY_ARCHIVE_UPLOAD_MAX_FILES,
   },
 });
+
+const archiveUploadAny = archiveUpload.any();
+const archiveUploadMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+  archiveUploadAny(req as any, res as any, (error: any) => {
+    if (!error) return next();
+
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          message: "ARCHIVE_TOO_LARGE",
+          maxFileSizeMb: LIBRARY_ARCHIVE_UPLOAD_MAX_MB,
+        });
+      }
+      if (error.code === "LIMIT_FILE_COUNT") {
+        return res.status(400).json({
+          message: "TOO_MANY_ARCHIVE_FILES",
+          maxFiles: LIBRARY_ARCHIVE_UPLOAD_MAX_FILES,
+        });
+      }
+      return res.status(400).json({
+        message: "INVALID_ARCHIVE_UPLOAD",
+        code: error.code,
+      });
+    }
+
+    return next(error);
+  });
+};
 
 const userRepo = () => AppDataSource.getRepository(User);
 const libraryRepo = () => AppDataSource.getRepository(LibraryTask);
@@ -75,6 +148,13 @@ const theoryRepo = () => AppDataSource.getRepository(TaskTheory);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
+
+type LibraryTaskQuality = {
+  attempts: number;
+  solvedRate: number;
+  avgScoreRatio: number;
+  score: number;
+};
 
 function isProblemCodeDuplicateError(error: any): boolean {
   const msg = String(error?.message ?? "");
@@ -218,7 +298,63 @@ function canReadTask(task: LibraryTask, userId: number | null, userRole: string 
   return false;
 }
 
-function buildTaskDto(task: LibraryTask) {
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
+function normalizeScoreTo100(rawScore: number, rawMaxScore: number): number {
+  const max = Number(rawMaxScore ?? 0);
+  const score = Number(rawScore ?? 0);
+  if (!Number.isFinite(max) || max <= 0 || !Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(100, Math.round((score / max) * 100)));
+}
+
+async function computeTaskQualityMap(taskIds: number[]): Promise<Map<number, LibraryTaskQuality>> {
+  const ids = (taskIds || []).filter((x) => Number.isFinite(x) && x > 0);
+  const out = new Map<number, LibraryTaskQuality>();
+  if (!ids.length) return out;
+
+  const rows = await attemptRepo()
+    .createQueryBuilder("a")
+    .select("a.library_task_id", "taskId")
+    .addSelect("COUNT(a.id)", "attempts")
+    .addSelect(
+      "SUM(CASE WHEN a.last_tests_total IS NOT NULL AND a.last_tests_total > 0 AND a.last_tests_passed IS NOT NULL AND a.last_tests_passed >= a.last_tests_total THEN 1 ELSE 0 END)",
+      "solved"
+    )
+    .addSelect(
+      "AVG(CASE WHEN a.last_max_score IS NOT NULL AND a.last_max_score > 0 AND a.last_score IS NOT NULL THEN (a.last_score / a.last_max_score) ELSE NULL END)",
+      "avgScoreRatio"
+    )
+    .where("a.library_task_id IN (:...ids)", { ids })
+    .andWhere("a.last_tests_total IS NOT NULL")
+    .andWhere("a.last_tests_total > 0")
+    .groupBy("a.library_task_id")
+    .getRawMany<Array<{ taskId: string | number; attempts: string | number; solved: string | number; avgScoreRatio: string | number | null }>>();
+
+  for (const row of rows as any) {
+    const taskId = Number((row as any).taskId ?? 0);
+    const attempts = Number((row as any).attempts ?? 0) || 0;
+    const solved = Number((row as any).solved ?? 0) || 0;
+    const avgScoreRatio = clamp01(Number((row as any).avgScoreRatio ?? 0) || 0);
+    if (!Number.isFinite(taskId) || taskId <= 0 || attempts <= 0) continue;
+    const solvedRate = clamp01(solved / attempts);
+    const qualityScore = Math.round((0.7 * solvedRate + 0.3 * avgScoreRatio) * 100);
+    out.set(taskId, {
+      attempts,
+      solvedRate,
+      avgScoreRatio,
+      score: qualityScore,
+    });
+  }
+
+  return out;
+}
+
+function buildTaskDto(task: LibraryTask, quality: LibraryTaskQuality | null = null) {
+  const taskMode = String((task as any).taskMode ?? "CODE") === "WEB" ? "WEB" : "CODE";
+  const normalizedWeb = taskMode === "WEB" ? normalizeWebTaskTemplate((task as any).template) : null;
   return {
     id: task.id,
     problemCode: (task as any).problemCode ?? null,
@@ -226,6 +362,10 @@ function buildTaskDto(task: LibraryTask) {
     title: task.title,
     description: task.description,
     template: task.template,
+    taskMode,
+    webTemplateFiles: taskMode === "WEB" ? normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalizedWeb?.files ?? []) : null,
+    webValidationRules: taskMode === "WEB" ? normalizeWebRules((task as any).webValidationRules ?? normalizedWeb?.rules ?? []) : null,
+    webValidationProfile: taskMode === "WEB" ? normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB") : null,
     templatesByLanguage: (task as any).templatesByLanguage ?? null,
     lang: task.lang,
     difficulty: (task as any).difficulty ?? null,
@@ -244,6 +384,7 @@ function buildTaskDto(task: LibraryTask) {
     publishedAt: task.publishedAt ?? null,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
+    quality,
     author: (task as any)?.author
       ? {
           id: (task as any).author.id,
@@ -432,6 +573,61 @@ const createLibraryTaskSchema = z.object({
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
   tags: z.array(z.string().min(1).max(32)).max(20).optional(),
   section: z.string().min(1).max(80).optional(),
+  taskMode: z.enum(["CODE", "WEB"]).optional(),
+  webTemplateFiles: z
+    .array(
+      z.object({
+        path: z.enum(["index.html", "styles.css", "script.js"]),
+        content: z.string().max(200_000),
+      })
+    )
+    .max(3)
+    .optional(),
+  webValidationRules: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        type: z.enum([
+          "required_selector",
+          "forbidden_selector",
+          "required_text",
+          "forbidden_text",
+          "required_script_pattern",
+          "forbidden_script_pattern",
+          "required_attribute",
+          "forbidden_attribute",
+          "required_style",
+          "forbidden_style",
+        ]),
+        message: z.string().max(1000).optional(),
+        points: z.number().int().min(0).max(1000).optional(),
+        selector: z.string().max(500).optional(),
+        attribute: z.string().max(200).optional(),
+        value: z.string().max(1000).optional(),
+        valuePattern: z.string().max(2000).optional(),
+        property: z.string().max(200).optional(),
+        text: z.string().max(2000).optional(),
+        pattern: z.string().max(2000).optional(),
+        flags: z.string().max(10).optional(),
+      })
+    )
+    .max(200)
+    .optional(),
+  webValidationProfile: z
+    .object({
+      id: z.enum(["FREE_WEB", "HTML_ONLY", "HTML_CSS_NO_JS", "HTML_JS_NO_CSS", "JS_ONLY_DOM", "CSS_ONLY", "HTML_AND_INLINE_ONLY"]).optional(),
+      allowHtml: z.boolean().optional(),
+      allowCss: z.boolean().optional(),
+      allowJs: z.boolean().optional(),
+      allowInlineStyle: z.boolean().optional(),
+      allowInlineScript: z.boolean().optional(),
+      allowExternalResources: z.boolean().optional(),
+      lockHtml: z.boolean().optional(),
+      lockCss: z.boolean().optional(),
+      lockJs: z.boolean().optional(),
+    })
+    .or(z.enum(["FREE_WEB", "HTML_ONLY", "HTML_CSS_NO_JS", "HTML_JS_NO_CSS", "JS_ONLY_DOM", "CSS_ONLY", "HTML_AND_INLINE_ONLY"]))
+    .optional(),
   description: z.string().min(1),
   template: z.string().min(1),
   templatesByLanguage: z.preprocess(
@@ -496,9 +692,9 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
     if (q) {
       qb.andWhere("(t.title LIKE :q OR t.description LIKE :q)", { q: `%${q}%` });
     }
+    qb.orderBy("t.updatedAt", "DESC");
 
     const [tasks, total] = await qb
-      .orderBy("t.updatedAt", "DESC")
       .skip((page - 1) * pageSize)
       .take(pageSize)
       .getManyAndCount();
@@ -521,9 +717,11 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
       if (typeof tid === "number") attemptByTaskId.set(tid, a);
     }
 
+    const qualityByTaskId = await computeTaskQualityMap(ids);
+
     return res.json({
       tasks: tasks.map(t => {
-        const dto: any = buildTaskDto(t);
+        const dto: any = buildTaskDto(t, qualityByTaskId.get(t.id) ?? null);
         const en = enById.get(t.id);
         if (en) {
           dto.title = en.title;
@@ -573,7 +771,8 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
         });
 
     const enById = wantsEn ? await localizeLibraryTasksToEn([task], req) : new Map<number, { title: string; description: string }>();
-    const dto: any = buildTaskDto(task);
+    const qualityByTaskId = await computeTaskQualityMap([task.id]);
+    const dto: any = buildTaskDto(task, qualityByTaskId.get(task.id) ?? null);
     const en = enById.get(task.id);
     if (en) {
       dto.title = en.title;
@@ -629,11 +828,13 @@ libraryRouter.get("/tasks/mine", authRequired, async (req: AuthRequest, res: Res
       if (typeof tid === "number") attemptByTaskId.set(tid, a);
     }
 
+    const qualityByTaskId = await computeTaskQualityMap(ids);
+
     const enById = wantsEn ? await localizeLibraryTasksToEn(tasks, req) : new Map<number, { title: string; description: string }>();
 
     return res.json({
       tasks: tasks.map(t => {
-        const dto: any = buildTaskDto(t);
+        const dto: any = buildTaskDto(t, qualityByTaskId.get(t.id) ?? null);
         const en = enById.get(t.id);
         if (en) {
           dto.title = en.title;
@@ -679,7 +880,8 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
         });
 
     const enById = wantsEn ? await localizeLibraryTasksToEn([task], req) : new Map<number, { title: string; description: string }>();
-    const dto: any = buildTaskDto(task);
+    const qualityByTaskId = await computeTaskQualityMap([task.id]);
+    const dto: any = buildTaskDto(task, qualityByTaskId.get(task.id) ?? null);
     const en = enById.get(task.id);
     if (en) {
       dto.title = en.title;
@@ -844,6 +1046,217 @@ libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
   }
 });
 
+libraryRouter.get("/tasks/:id/web-template", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const normalized = normalizeWebTaskTemplate((task as any).template);
+    return res.json({
+      taskId: task.id,
+      taskMode: "WEB",
+      files: normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalized.files),
+      rules: normalizeWebRules((task as any).webValidationRules ?? normalized.rules),
+      profile: normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB"),
+    });
+  } catch (error: any) {
+    logger.error("[library] GET /tasks/:id/web-template error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.put("/tasks/:id/web-draft", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertLibraryWebFilesWithinLimits(files);
+
+    // For EDU students (no userId) accept request without DB persistence, matching existing behavior.
+    if (!req.userId) {
+      return res.json({ ok: true });
+    }
+
+    let attempt = await attemptRepo().findOne({
+      where: {
+        user: { id: req.userId },
+        libraryTask: { id: task.id }
+      } as any
+    });
+
+    const serialized = JSON.stringify({ mode: "WEB", version: 1, files });
+    if (!attempt) {
+      attempt = attemptRepo().create({
+        user: { id: req.userId } as any,
+        libraryTask: { id: task.id } as any,
+        draftCode: serialized
+      });
+    } else {
+      attempt.draftCode = serialized;
+    }
+    await attemptRepo().save(attempt);
+    return res.json({ ok: true });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("[library] PUT /tasks/:id/web-draft error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.post("/tasks/:id/web-check", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertLibraryWebFilesWithinLimits(files);
+    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
+    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+    const rawMaxScore = check.maxScore > 0 ? check.maxScore : check.totalRules;
+    const normalizedScore = normalizeScoreTo100(check.score, rawMaxScore);
+
+    return res.json({
+      taskMode: "WEB",
+      verdict: check.passed ? "AC" : "WA",
+      testsPassed: check.passedRules,
+      testsTotal: check.totalRules,
+      score: normalizedScore,
+      maxScore: 100,
+      publicTestResultsCompact: check.results.map((r, idx) => ({
+        testId: idx + 1,
+        passed: r.passed,
+        verdict: r.passed ? "AC" : "WA",
+        errorKind: r.passed ? null : "web_rule"
+      })),
+      publicTestResults: check.results.map((r, idx) => ({
+        testId: idx + 1,
+        passed: r.passed,
+        verdict: r.passed ? "AC" : "WA",
+        error: r.passed ? null : r.message,
+        errorKind: r.passed ? null : "web_rule"
+      }))
+    });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("[library] POST /tasks/:id/web-check error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(env as any).__webTasksEnabled) {
+      return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
+    }
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+      return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
+    }
+
+    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    assertLibraryWebFilesWithinLimits(files);
+    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
+    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+    const rawMaxScore = check.maxScore > 0 ? check.maxScore : check.totalRules;
+    const normalizedScore = normalizeScoreTo100(check.score, rawMaxScore);
+
+    if (req.userId) {
+      let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
+      const serialized = JSON.stringify({ mode: "WEB", version: 1, files });
+      if (!attempt) {
+        attempt = attemptRepo().create({
+          user: { id: req.userId } as any,
+          libraryTask: { id: task.id } as any,
+          draftCode: serialized,
+          lastSubmittedCode: serialized,
+        });
+      } else {
+        attempt.draftCode = serialized;
+        attempt.lastSubmittedCode = serialized;
+      }
+      attempt.lastVerdict = check.passed ? "AC" : "WA";
+      attempt.lastScore = normalizedScore;
+      attempt.lastMaxScore = 100;
+      attempt.lastTestsPassed = check.passedRules;
+      attempt.lastTestsTotal = check.totalRules;
+      attempt.submissionsCount = (attempt.submissionsCount ?? 0) + 1;
+      attempt.lastCheckedAt = new Date();
+      await attemptRepo().save(attempt);
+    }
+
+    return res.json({
+      taskMode: "WEB",
+      verdict: check.passed ? "AC" : "WA",
+      testsPassed: check.passedRules,
+      testsTotal: check.totalRules,
+      score: normalizedScore,
+      maxScore: 100,
+      publicTestResultsCompact: check.results.map((r, idx) => ({
+        testId: idx + 1,
+        passed: r.passed,
+        verdict: r.passed ? "AC" : "WA",
+        errorKind: r.passed ? null : "web_rule"
+      }))
+    });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    logger.error("[library] POST /tasks/:id/web-submit error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -882,9 +1295,9 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     }
 
     const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-    const entryFile = entryFileForJudgeLanguage(selectedLang);
     const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+    const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(selectedLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
     const isMultiFile = effectiveFiles.length > 0;
     if (isMultiFile && !effectiveFiles.some(f => f.path === entryFile)) {
@@ -1050,9 +1463,9 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
 
     const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-    const entryFile = entryFileForJudgeLanguage(judgeLang);
     const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
+    const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
     const isMultiFile = effectiveFiles.length > 0;
     if (isMultiFile && !effectiveFiles.some(f => f.path === entryFile)) {
@@ -1162,6 +1575,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
 
     const scoringScore = typeof workerRes?.score === "number" ? workerRes.score : totalScore;
     const scoringMaxScore = typeof workerRes?.max_score === "number" ? workerRes.max_score : maxScore;
+    const normalizedScore = normalizeScoreTo100(scoringScore, scoringMaxScore);
 
     // Upsert attempt (draft + last check summary).
     if (req.userId) {
@@ -1187,8 +1601,8 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         attempt.lastSubmittedCodeByLanguage = nextSubMap;
 
         attempt.lastVerdict = workerRes?.verdict ?? null;
-        attempt.lastScore = scoringScore;
-        attempt.lastMaxScore = scoringMaxScore;
+        attempt.lastScore = normalizedScore;
+        attempt.lastMaxScore = 100;
         attempt.lastTestsPassed = totalPassed;
         attempt.lastTestsTotal = tests.length;
         attempt.submissionsCount = (attempt.submissionsCount ?? 0) + 1;
@@ -1201,8 +1615,8 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
       verdict: workerRes?.verdict ?? null,
       testsPassed: totalPassed,
       testsTotal: tests.length,
-      score: scoringScore,
-      maxScore: scoringMaxScore,
+      score: normalizedScore,
+      maxScore: 100,
       compileError,
       compileErrorKind,
       publicTestResultsTotal: publicTestsTotal,
@@ -1235,6 +1649,15 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
     if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
 
     const data = validated.data;
+    const normalizedTaskInput = normalizeWebTaskInput(data);
+    const taskMode = normalizedTaskInput.taskMode;
+    const normalizedWebFiles = normalizedTaskInput.webTemplateFiles;
+    const normalizedWebRules = normalizedTaskInput.webValidationRules;
+    const normalizedWebProfile = normalizedTaskInput.webValidationProfile;
+
+    if (taskMode === "WEB") {
+      assertLibraryWebFilesWithinLimits(normalizedWebFiles ?? normalizeWebTaskFiles([]));
+    }
 
     if (Array.isArray((data as any).allowedLanguages) && (data as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
       return res.status(400).json({
@@ -1244,7 +1667,7 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
     }
     const allowedLanguages = (Array.isArray((data as any).allowedLanguages) ? ((data as any).allowedLanguages as JudgeLangId[]) : null);
     const templatesByLanguage = normalizeTemplatesByLanguage({
-      baseTemplate: data.template,
+      baseTemplate: normalizedTaskInput.template,
       allowedLanguages,
       raw: (data as any).templatesByLanguage,
     });
@@ -1257,8 +1680,12 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
       difficulty: data.difficulty ?? null,
       tags: data.tags ?? null,
       section: data.section?.trim() ?? null,
+      taskMode: taskMode as any,
+      webTemplateFiles: normalizedWebFiles,
+      webValidationRules: normalizedWebRules,
+      webValidationProfile: normalizedWebProfile,
       description: data.description.trim(),
-      template: data.template,
+      template: normalizedTaskInput.template,
       templatesByLanguage,
       lang: normalizeLang(data.lang),
       maxAttempts: data.maxAttempts ?? 3,
@@ -1368,7 +1795,25 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
     if ((data as any).tags !== undefined) (task as any).tags = (data as any).tags ?? null;
     if ((data as any).section !== undefined) (task as any).section = String((data as any).section ?? "").trim() || null;
     if (typeof data.description === "string") task.description = data.description.trim();
-    if (typeof data.template === "string") task.template = data.template;
+    const effectiveTaskMode = String(((data as any).taskMode ?? (task as any).taskMode ?? "CODE")) === "WEB" ? "WEB" : "CODE";
+    const normalizedTaskInput = normalizeWebTaskInput(
+      {
+        taskMode: (data as any).taskMode,
+        template: data.template,
+        webTemplateFiles: (data as any).webTemplateFiles,
+        webValidationRules: (data as any).webValidationRules,
+        webValidationProfile: (data as any).webValidationProfile,
+      },
+      {
+        taskMode: (task as any).taskMode,
+        template: task.template,
+        webTemplateFiles: (task as any).webTemplateFiles,
+        webValidationRules: (task as any).webValidationRules,
+        webValidationProfile: (task as any).webValidationProfile,
+      }
+    );
+    (task as any).taskMode = normalizedTaskInput.taskMode;
+    task.template = normalizedTaskInput.template;
     if ((data as any).templatesByLanguage !== undefined) {
       const effectiveAllowed = ((data as any).allowedLanguages !== undefined)
         ? ((data as any).allowedLanguages ?? null)
@@ -1397,6 +1842,18 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
     if ((data as any).outputLimitKb !== undefined) (task as any).outputLimitKb = (data as any).outputLimitKb ?? null;
     if ((data as any).checkerSpec !== undefined) (task as any).checkerSpec = (data as any).checkerSpec ?? null;
     if ((data as any).allowedLanguages !== undefined) (task as any).allowedLanguages = (data as any).allowedLanguages ?? null;
+
+    if (effectiveTaskMode === "WEB") {
+      const effectiveWebFiles = normalizedTaskInput.webTemplateFiles ?? normalizeWebTaskFiles([]);
+      assertLibraryWebFilesWithinLimits(effectiveWebFiles);
+      (task as any).webTemplateFiles = effectiveWebFiles;
+      (task as any).webValidationRules = normalizedTaskInput.webValidationRules ?? [];
+      (task as any).webValidationProfile = normalizedTaskInput.webValidationProfile ?? normalizeWebProfile("FREE_WEB");
+    } else {
+      (task as any).webTemplateFiles = null;
+      (task as any).webValidationRules = null;
+      (task as any).webValidationProfile = null;
+    }
 
     // Editing resets rejection reason.
     task.rejectionReason = null;
@@ -1563,6 +2020,9 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
       title: libTask.title,
       description: libTask.description,
       template: libTask.template,
+      taskMode: (String((libTask as any).taskMode ?? "CODE") === "WEB" ? "WEB" : "CODE") as any,
+      webTemplateFiles: normalizeWebTaskFiles((libTask as any).webTemplateFiles ?? []),
+      webValidationRules: normalizeWebRules((libTask as any).webValidationRules ?? []),
       type: "PRACTICE",
       order: 0,
       maxAttempts: libTask.maxAttempts ?? 3,
@@ -1614,6 +2074,321 @@ function readZipJson<T>(zip: AdmZip, path: string): T {
   return JSON.parse(raw) as T;
 }
 
+type UploadArchiveFile = { buffer: Buffer; originalname: string; fieldname?: string };
+
+function normalizeImportArchiveFiles(req: AuthRequest): UploadArchiveFile[] {
+  const out: UploadArchiveFile[] = [];
+
+  const one = (req as any).file as UploadArchiveFile | undefined;
+  if (one?.buffer) out.push(one);
+
+  const many = (req as any).files as UploadArchiveFile[] | Record<string, UploadArchiveFile[]> | undefined;
+  if (Array.isArray(many)) {
+    for (const f of many) {
+      if (f?.buffer) out.push(f);
+    }
+  } else if (many && typeof many === "object") {
+    for (const list of Object.values(many)) {
+      if (!Array.isArray(list)) continue;
+      for (const f of list) {
+        if (f?.buffer) out.push(f);
+      }
+    }
+  }
+
+  // Keep only known fields used by frontend/API clients.
+  const filtered = out.filter(f => {
+    const field = String(f.fieldname ?? "archive").trim();
+    return field === "archive" || field === "archives";
+  });
+
+  // De-duplicate by (name + size + first bytes hash-ish) to avoid accidental duplicates if middleware populates both file/files.
+  const seen = new Set<string>();
+  const deduped: UploadArchiveFile[] = [];
+  for (const f of filtered) {
+    const sig = `${f.originalname || "archive.zip"}|${f.buffer.length}|${f.buffer.subarray(0, 16).toString("hex")}`;
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    deduped.push(f);
+  }
+  return deduped;
+}
+
+function extractTaskArchiveCandidates(file: UploadArchiveFile): Array<{ sourceName: string; buffer: Buffer }> {
+  const sourceName = String(file.originalname || "archive.zip");
+  const primaryZip = new AdmZip(file.buffer);
+
+  // Standard single-task archive.
+  if (primaryZip.getEntry("task.json")) {
+    return [{ sourceName, buffer: file.buffer }];
+  }
+
+  // Bundle mode: an archive that contains multiple task archives (*.zip).
+  const nestedZipEntries = primaryZip
+    .getEntries()
+    .filter(e => !e.isDirectory && String(e.entryName || "").toLowerCase().endsWith(".zip"));
+
+  if (!nestedZipEntries.length) {
+    // Fallback to keep old behavior/error messaging.
+    return [{ sourceName, buffer: file.buffer }];
+  }
+
+  const out: Array<{ sourceName: string; buffer: Buffer }> = [];
+  for (const entry of nestedZipEntries) {
+    try {
+      const nestedBuffer = entry.getData();
+      if (!nestedBuffer || nestedBuffer.length === 0) continue;
+      out.push({
+        sourceName: `${sourceName}::${entry.entryName}`,
+        buffer: nestedBuffer,
+      });
+    } catch {
+      // Skip unreadable nested entry; detailed error appears when trying to import candidates.
+    }
+  }
+
+  return out.length ? out : [{ sourceName, buffer: file.buffer }];
+}
+
+async function importSingleLibraryArchive(params: {
+  user: User;
+  hideFromLibrary: boolean;
+  buffer: Buffer;
+}): Promise<LibraryTask> {
+  const { user, hideFromLibrary, buffer } = params;
+  const zip = new AdmZip(buffer);
+
+  const archiveTaskSchema = z.object({
+    title: z.string().min(1).max(255),
+    description: z.string().min(1),
+    template: z.string().optional(),
+    taskMode: z.enum(["CODE", "WEB"]).optional(),
+    webTemplateFiles: z
+      .array(
+        z.object({
+          path: z.enum(["index.html", "styles.css", "script.js"]),
+          content: z.string().max(200_000),
+        })
+      )
+      .max(3)
+      .optional(),
+    webValidationRules: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          type: z.enum([
+            "required_selector",
+            "forbidden_selector",
+            "required_text",
+            "forbidden_text",
+            "required_script_pattern",
+            "forbidden_script_pattern",
+            "required_attribute",
+            "forbidden_attribute",
+            "required_style",
+            "forbidden_style",
+          ]),
+          message: z.string().max(1000).optional(),
+          points: z.number().int().min(0).max(1000).optional(),
+          selector: z.string().max(500).optional(),
+          attribute: z.string().max(200).optional(),
+          value: z.string().max(1000).optional(),
+          valuePattern: z.string().max(2000).optional(),
+          property: z.string().max(200).optional(),
+          text: z.string().max(2000).optional(),
+          pattern: z.string().max(2000).optional(),
+          flags: z.string().max(10).optional(),
+        })
+      )
+      .max(200)
+      .optional(),
+    webValidationProfile: z
+      .object({
+        id: z.enum(["FREE_WEB", "HTML_ONLY", "HTML_CSS_NO_JS", "HTML_JS_NO_CSS", "JS_ONLY_DOM", "CSS_ONLY", "HTML_AND_INLINE_ONLY"]).optional(),
+        allowHtml: z.boolean().optional(),
+        allowCss: z.boolean().optional(),
+        allowJs: z.boolean().optional(),
+        allowInlineStyle: z.boolean().optional(),
+        allowInlineScript: z.boolean().optional(),
+        allowExternalResources: z.boolean().optional(),
+        lockHtml: z.boolean().optional(),
+        lockCss: z.boolean().optional(),
+        lockJs: z.boolean().optional(),
+      })
+      .or(z.enum(["FREE_WEB", "HTML_ONLY", "HTML_CSS_NO_JS", "HTML_JS_NO_CSS", "JS_ONLY_DOM", "CSS_ONLY", "HTML_AND_INLINE_ONLY"]))
+      .optional(),
+    // optional metadata (same constraints as API schema, but with coercion)
+    problemCode: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .optional(),
+    slug: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?$/)
+      .optional(),
+    difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
+    tags: z
+      .preprocess(
+        (v) => {
+          if (Array.isArray(v)) return v;
+          if (typeof v === "string") {
+            return v
+              .split(",")
+              .map(x => String(x).trim())
+              .filter(Boolean);
+          }
+          return undefined;
+        },
+        z.array(z.string().min(1).max(32)).max(20)
+      )
+      .optional(),
+    section: z.string().min(1).max(80).optional(),
+    maxAttempts: z.coerce.number().int().min(1).max(100).optional(),
+    timeLimitMs: z.coerce.number().int().min(100).max(60000).optional(),
+    memoryLimitMb: z.coerce.number().int().min(16).max(2048).optional(),
+    outputLimitKb: z.coerce.number().int().min(4).max(1024).optional(),
+    checkerSpec: z
+      .discriminatedUnion("type", [
+        z.object({ type: z.literal("exact") }),
+        z.object({ type: z.literal("whitespace") }),
+        z.object({ type: z.literal("float"), epsilon: z.coerce.number().positive().max(1) }),
+      ])
+      .optional(),
+    allowedLanguages: z
+      .preprocess(
+        (v) => {
+          if (v == null) return undefined;
+          if (Array.isArray(v)) return v;
+          if (typeof v === "string") {
+            return v
+              .split(/[\s,]+/g)
+              .map(x => String(x).trim().toLowerCase())
+              .filter(Boolean);
+          }
+          return v;
+        },
+        z.array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
+          .min(1)
+          .max(6)
+      )
+      .optional(),
+    templatesByLanguage: z.record(z.string(), z.string()).optional(),
+  });
+
+  const taskJsonRaw = readZipJson<any>(zip, "task.json");
+  const parsedTaskJson = archiveTaskSchema.safeParse(taskJsonRaw);
+  if (!parsedTaskJson.success) {
+    const err = new Error("INVALID_TASK_JSON") as Error & { issues?: unknown[] };
+    err.issues = parsedTaskJson.error.issues;
+    throw err;
+  }
+
+  const taskJson = parsedTaskJson.data;
+  const normalizedTaskInput = normalizeWebTaskInput(taskJson);
+  if (!normalizedTaskInput.template.trim()) {
+    const err = new Error("INVALID_TASK_JSON") as Error & { issues?: unknown[] };
+    err.issues = [{ path: ["template"], message: "Required" }];
+    throw err;
+  }
+
+  if (Array.isArray((taskJson as any).allowedLanguages) && (taskJson as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+    const err = new Error("LANGUAGE_DISABLED") as Error & { disabledLanguages?: string[] };
+    err.disabledLanguages = Array.from(DISABLED_JUDGE_LANGS);
+    throw err;
+  }
+
+  const title = String(taskJson.title ?? "").trim();
+  const description = String(taskJson.description ?? "").trim();
+  const template = normalizedTaskInput.template;
+  const maxAttempts = typeof taskJson.maxAttempts === "number" && Number.isFinite(taskJson.maxAttempts)
+    ? Math.max(1, Math.floor(taskJson.maxAttempts))
+    : 3;
+
+  const incomingProblemCode = taskJson.problemCode?.trim() ?? null;
+  if (!hideFromLibrary && incomingProblemCode) {
+    const exists = await libraryRepo().findOne({ where: { problemCode: incomingProblemCode } as any });
+    if (exists) {
+      const err = new Error("PROBLEM_CODE_TAKEN") as Error & { problemCode?: string };
+      err.problemCode = incomingProblemCode;
+      throw err;
+    }
+  }
+
+  const normalizedTemplatesByLanguage = normalizeTemplatesByLanguage({
+    baseTemplate: template,
+    allowedLanguages: Array.isArray((taskJson as any).allowedLanguages) ? ((taskJson as any).allowedLanguages as JudgeLangId[]) : null,
+    raw: (taskJson as any).templatesByLanguage,
+  });
+
+  if (normalizedTaskInput.taskMode === "WEB") {
+    const archiveWebFiles = normalizedTaskInput.webTemplateFiles ?? normalizeWebTaskFiles([]);
+    assertLibraryWebFilesWithinLimits(archiveWebFiles ?? normalizeWebTaskFiles([]));
+  }
+
+  const task = libraryRepo().create({
+    author: { id: user.id } as any,
+    title,
+    problemCode: hideFromLibrary ? null : incomingProblemCode,
+    slug: hideFromLibrary ? null : (taskJson.slug?.trim() ?? null),
+    difficulty: (taskJson as any).difficulty ?? null,
+    tags: (taskJson as any).tags ?? null,
+    section: taskJson.section?.trim() ?? null,
+    taskMode: normalizedTaskInput.taskMode as any,
+    webTemplateFiles: normalizedTaskInput.webTemplateFiles,
+    webValidationRules: normalizedTaskInput.webValidationRules,
+    webValidationProfile: normalizedTaskInput.webValidationProfile,
+    description,
+    template,
+    templatesByLanguage: normalizedTemplatesByLanguage,
+    maxAttempts,
+    timeLimitMs: (taskJson as any).timeLimitMs ?? null,
+    memoryLimitMb: (taskJson as any).memoryLimitMb ?? null,
+    outputLimitKb: (taskJson as any).outputLimitKb ?? null,
+    checkerSpec: (taskJson as any).checkerSpec ?? null,
+    allowedLanguages: (taskJson as any).allowedLanguages ?? null,
+    isHiddenFromLibrary: hideFromLibrary,
+    status: "DRAFT",
+    rejectionReason: null,
+    submittedAt: null,
+    publishedAt: null,
+  });
+
+  await libraryRepo().save(task);
+
+  const theoryEntry = zip.getEntry("theory.md");
+  if (theoryEntry) {
+    const content = theoryEntry.getData().toString("utf-8").trim();
+    if (content) {
+      await theoryRepo().save(theoryRepo().create({ libraryTask: { id: task.id } as any, content }));
+    }
+  }
+
+  const testsEntry = zip.getEntry("tests.json");
+  if (testsEntry) {
+    const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>>(zip, "tests.json");
+    if (Array.isArray(tests) && tests.length > 0) {
+      const rows = tests.map(t =>
+        testDataRepo().create({
+          libraryTask: { id: task.id } as any,
+          input: String(t.input ?? ""),
+          expectedOutput: String(t.expectedOutput ?? ""),
+          isHidden: !!t.isHidden,
+          kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+          points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
+        })
+      );
+      await testDataRepo().save(rows);
+    }
+  }
+
+  const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author"] });
+  return full ?? task;
+}
+
 /**
  * Archive format for library task import/export:
  * - task.json (required)
@@ -1625,173 +2400,68 @@ function readZipJson<T>(zip: AdmZip, path: string): T {
  * via the API after import. The archive format intentionally does not include a
  * "lang" field.
  */
-libraryRouter.post("/tasks/import-archive", authRequired, archiveUpload.single("archive"), async (req: AuthRequest, res: Response) => {
+libraryRouter.post("/tasks/import-archive", authRequired, archiveUploadMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
     const user = await userRepo().findOne({ where: { id: req.userId } });
     if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
 
-    const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
-    if (!file?.buffer) return res.status(400).json({ message: "ARCHIVE_REQUIRED" });
+    const files = normalizeImportArchiveFiles(req);
+    if (!files.length) return res.status(400).json({ message: "ARCHIVE_REQUIRED" });
     const hideFromLibraryRaw = String((req.body as any)?.hideFromLibrary ?? "").trim().toLowerCase();
     const hideFromLibrary = hideFromLibraryRaw === "1" || hideFromLibraryRaw === "true" || hideFromLibraryRaw === "yes";
 
-    const zip = new AdmZip(file.buffer);
+    const candidates = files.flatMap(extractTaskArchiveCandidates);
+    const importedTasks: any[] = [];
+    const failures: Array<{ source: string; message: string; errors?: unknown[]; disabledLanguages?: string[]; problemCode?: string }> = [];
 
-    const archiveTaskSchema = z.object({
-      title: z.string().min(1).max(255),
-      description: z.string().min(1),
-      template: z.string().min(1),
-      // optional metadata (same constraints as API schema, but with coercion)
-      problemCode: z
-        .string()
-        .min(1)
-        .max(64)
-        .regex(/^[A-Za-z0-9_-]+$/)
-        .optional(),
-      slug: z
-        .string()
-        .min(1)
-        .max(128)
-        .regex(/^[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?$/)
-        .optional(),
-      difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
-      tags: z
-        .preprocess(
-          (v) => {
-            if (Array.isArray(v)) return v;
-            if (typeof v === "string") {
-              return v
-                .split(",")
-                .map(x => String(x).trim())
-                .filter(Boolean);
-            }
-            return undefined;
-          },
-          z.array(z.string().min(1).max(32)).max(20)
-        )
-        .optional(),
-      section: z.string().min(1).max(80).optional(),
-      maxAttempts: z.coerce.number().int().min(1).max(100).optional(),
-      timeLimitMs: z.coerce.number().int().min(100).max(60000).optional(),
-      memoryLimitMb: z.coerce.number().int().min(16).max(2048).optional(),
-      outputLimitKb: z.coerce.number().int().min(4).max(1024).optional(),
-      checkerSpec: z
-        .discriminatedUnion("type", [
-          z.object({ type: z.literal("exact") }),
-          z.object({ type: z.literal("whitespace") }),
-          z.object({ type: z.literal("float"), epsilon: z.coerce.number().positive().max(1) }),
-        ])
-        .optional(),
-      allowedLanguages: z
-        .preprocess(
-          (v) => {
-            if (v == null) return undefined;
-            if (Array.isArray(v)) return v;
-            if (typeof v === "string") {
-              return v
-                .split(/[\s,]+/g)
-                .map(x => String(x).trim().toLowerCase())
-                .filter(Boolean);
-            }
-            return v;
-          },
-          z.array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
-            .min(1)
-            .max(6)
-        )
-        .optional(),
-      templatesByLanguage: z.record(z.string(), z.string()).optional(),
-    });
-
-    const taskJsonRaw = readZipJson<any>(zip, "task.json");
-    const parsedTaskJson = archiveTaskSchema.safeParse(taskJsonRaw);
-    if (!parsedTaskJson.success) {
-      return res.status(400).json({ message: "INVALID_TASK_JSON", errors: parsedTaskJson.error.issues });
+    for (const candidate of candidates) {
+      try {
+        const imported = await importSingleLibraryArchive({
+          user,
+          hideFromLibrary,
+          buffer: candidate.buffer,
+        });
+        importedTasks.push(buildTaskDto(imported));
+      } catch (error: any) {
+        const msg = String(error?.message || "INTERNAL_SERVER_ERROR");
+        failures.push({
+          source: candidate.sourceName,
+          message: msg,
+          errors: Array.isArray(error?.issues) ? error.issues : undefined,
+          disabledLanguages: Array.isArray(error?.disabledLanguages) ? error.disabledLanguages : undefined,
+          problemCode: typeof error?.problemCode === "string" ? error.problemCode : undefined,
+        });
+      }
     }
 
-    const taskJson = parsedTaskJson.data;
-
-    if (Array.isArray((taskJson as any).allowedLanguages) && (taskJson as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+    if (importedTasks.length === 0) {
       return res.status(400).json({
-        message: "LANGUAGE_DISABLED",
-        disabledLanguages: Array.from(DISABLED_JUDGE_LANGS)
+        message: failures[0]?.message || "IMPORT_FAILED",
+        importedCount: 0,
+        failedCount: failures.length,
+        failures,
       });
     }
 
-    const title = String(taskJson.title ?? "").trim();
-    const description = String(taskJson.description ?? "").trim();
-    const template = String(taskJson.template ?? "").trim();
-    const maxAttempts = typeof taskJson.maxAttempts === "number" && Number.isFinite(taskJson.maxAttempts)
-      ? Math.max(1, Math.floor(taskJson.maxAttempts))
-      : 3;
-
-    const incomingProblemCode = taskJson.problemCode?.trim() ?? null;
-    if (!hideFromLibrary && incomingProblemCode) {
-      const exists = await libraryRepo().findOne({ where: { problemCode: incomingProblemCode } as any });
-      if (exists) return res.status(409).json({ message: "PROBLEM_CODE_TAKEN", problemCode: incomingProblemCode });
+    // Backward compatibility for existing callers expecting { task }.
+    const firstTask = importedTasks[0];
+    if (failures.length === 0) {
+      return res.status(201).json({
+        task: firstTask,
+        tasks: importedTasks,
+        importedCount: importedTasks.length,
+        failedCount: 0,
+      });
     }
 
-    const normalizedTemplatesByLanguage = normalizeTemplatesByLanguage({
-      baseTemplate: template,
-      allowedLanguages: Array.isArray((taskJson as any).allowedLanguages) ? ((taskJson as any).allowedLanguages as JudgeLangId[]) : null,
-      raw: (taskJson as any).templatesByLanguage,
+    return res.status(207).json({
+      task: firstTask,
+      tasks: importedTasks,
+      importedCount: importedTasks.length,
+      failedCount: failures.length,
+      failures,
     });
-
-    const task = libraryRepo().create({
-      author: { id: user.id } as any,
-      title,
-      problemCode: hideFromLibrary ? null : incomingProblemCode,
-      slug: hideFromLibrary ? null : (taskJson.slug?.trim() ?? null),
-      difficulty: (taskJson as any).difficulty ?? null,
-      tags: (taskJson as any).tags ?? null,
-      section: taskJson.section?.trim() ?? null,
-      description,
-      template,
-      templatesByLanguage: normalizedTemplatesByLanguage,
-      maxAttempts,
-      timeLimitMs: (taskJson as any).timeLimitMs ?? null,
-      memoryLimitMb: (taskJson as any).memoryLimitMb ?? null,
-      outputLimitKb: (taskJson as any).outputLimitKb ?? null,
-      checkerSpec: (taskJson as any).checkerSpec ?? null,
-      allowedLanguages: (taskJson as any).allowedLanguages ?? null,
-      isHiddenFromLibrary: hideFromLibrary,
-      status: "DRAFT",
-      rejectionReason: null,
-      submittedAt: null,
-      publishedAt: null,
-    });
-
-    await libraryRepo().save(task);
-
-    const theoryEntry = zip.getEntry("theory.md");
-    if (theoryEntry) {
-      const content = theoryEntry.getData().toString("utf-8").trim();
-      if (content) {
-        await theoryRepo().save(theoryRepo().create({ libraryTask: { id: task.id } as any, content }));
-      }
-    }
-
-    const testsEntry = zip.getEntry("tests.json");
-    if (testsEntry) {
-      const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>>(zip, "tests.json");
-      if (Array.isArray(tests) && tests.length > 0) {
-        const rows = tests.map(t =>
-          testDataRepo().create({
-            libraryTask: { id: task.id } as any,
-            input: String(t.input ?? ""),
-            expectedOutput: String(t.expectedOutput ?? ""),
-            isHidden: !!t.isHidden,
-            kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
-            points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
-          })
-        );
-        await testDataRepo().save(rows);
-      }
-    }
-
-    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author"] });
-    return res.status(201).json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
   } catch (error: any) {
     logger.error("[library] import archive failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
@@ -1839,6 +2509,10 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
             difficulty: (task as any).difficulty ?? undefined,
             tags: (task as any).tags ?? undefined,
             section: (task as any).section ?? undefined,
+            taskMode: (task as any).taskMode ?? "CODE",
+            webTemplateFiles: (task as any).webTemplateFiles ?? undefined,
+            webValidationRules: (task as any).webValidationRules ?? undefined,
+            webValidationProfile: (task as any).webValidationProfile ?? undefined,
             description: task.description,
             template: task.template,
             maxAttempts: task.maxAttempts,

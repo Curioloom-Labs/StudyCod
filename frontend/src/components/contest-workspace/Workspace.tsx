@@ -6,27 +6,32 @@ import {
   Trophy,
   UserCircle2,
   FolderCode,
-  Sigma,
   PanelRightClose,
   PanelRightOpen,
   SquareArrowOutUpRight,
   FoldHorizontal,
   RefreshCw,
   GripVertical,
+  type LucideIcon,
 } from "lucide-react";
 import { EditorPanel } from "./EditorPanel";
 import { OutputDock } from "./OutputDock";
 import { ProblemTab } from "./ProblemTab";
 import { ContestDashboard } from "./ContestDashboard";
 import type { ContestWorkspaceProps, WorkspaceTab, WorkspaceTabKind } from "./types";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
-type NavItem = { id: string; icon: React.ComponentType<any>; label: string };
+type NavItem = { id: string; icon: LucideIcon; label: string };
+
+const getApiErrorMessage = (error: unknown): string | null => {
+  const message = getErrorMessageFromUnknown(error, "");
+  return message || null;
+};
 
 const RAIL_ITEMS: NavItem[] = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { id: "contests", icon: Trophy, label: "Contests" },
   { id: "problems", icon: FolderCode, label: "Problems" },
-  { id: "practice", icon: Sigma, label: "Practice" },
   { id: "submissions", icon: Activity, label: "Submissions" },
   { id: "profile", icon: UserCircle2, label: "Profile" },
 ];
@@ -83,10 +88,10 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   latestVerdict,
   latestVerdictAt,
   currentUserLabel,
-  notes,
-  onNotesChange,
   focusMode,
   onFocusModeChange,
+  canAskOrganizer,
+  onAskOrganizer,
 }) => {
   const [tabs, setTabs] = React.useState<WorkspaceTab[]>([tabTemplate("contest-overview"), tabTemplate("problem")]);
   const [activeTabId, setActiveTabId] = React.useState<string>("problem");
@@ -97,7 +102,6 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   const [dockWidth, setDockWidth] = React.useState(390);
   const [dockAttention, setDockAttention] = React.useState(false);
 
-  const [streak, setStreak] = React.useState(0);
   const [shakeWrong, setShakeWrong] = React.useState(false);
   const [discussionText, setDiscussionText] = React.useState("");
   const [askingOrganizer, setAskingOrganizer] = React.useState(false);
@@ -120,12 +124,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
 
   React.useEffect(() => {
     const tone = toneFromVerdict(latestVerdict);
-    if (tone === "accepted") {
-      setStreak((s) => s + 1);
-      return;
-    }
     if (tone === "wrong") {
-      setStreak(0);
       setShakeWrong(true);
       const t = window.setTimeout(() => setShakeWrong(false), 550);
       return () => window.clearTimeout(t);
@@ -231,9 +230,6 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
             <ProblemTab
               statement={statement}
               onInjectExampleInput={onRunInputChange}
-              notes={notes}
-              onNotesChange={onNotesChange}
-              streak={streak}
             />
           );
         }
@@ -244,6 +240,8 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
             onLanguageChange={onLanguageChange}
             code={code}
             onCodeChange={onCodeChange}
+            runInput={runInput}
+            onRunInputChange={onRunInputChange}
             onRun={onRun}
             onSubmit={onSubmit}
             running={running}
@@ -339,9 +337,8 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
         await onAskOrganizer(text);
         setDiscussionText("");
         setDiscussionSuccess("Question sent. Opened support thread.");
-      } catch (err: any) {
-        const msg = err?.response?.data?.message || err?.message || "Failed to send question";
-        setDiscussionError(String(msg));
+      } catch (err: unknown) {
+        setDiscussionError(getApiErrorMessage(err) ?? "Failed to send question");
       } finally {
         setAskingOrganizer(false);
       }
@@ -390,7 +387,6 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                     if (item.id === "submissions") openTab("submissions");
                     if (item.id === "problems") openTab("problem");
                     if (item.id === "contests") openTab("leaderboard");
-                    if (item.id === "practice") openTab("discussion");
                   }}
                 >
                   <Icon className="w-4 h-4" />

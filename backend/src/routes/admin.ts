@@ -13,6 +13,7 @@ import adminMaterialsRouter from "./adminMaterials";
 import adminBroadcastRouter from "./adminBroadcast";
 import adminMailRouter from "./adminMail";
 import { logger } from "../utils/logger";
+import { getUserIadForLang } from "../utils/iad";
 const adminRouter = Router();
 adminRouter.use("/support", adminSupportRouter);
 adminRouter.use("/maintenance", adminMaintenanceRouter);
@@ -29,7 +30,7 @@ function normalizeLang(input?: string | null): UserLang {
   return "JAVA";
 }
 function buildUserDto(user: User) {
-  const difusValue = user.lang === "PYTHON" ? user.difusPython : user.difusJava;
+  const iadValue = getUserIadForLang(user, user.lang);
   return {
     id: user.id,
     username: user.username,
@@ -40,7 +41,8 @@ function buildUserDto(user: User) {
     userMode: user.userMode,
     role: user.role || null,
     lang: user.lang,
-    difus: difusValue ?? 0,
+    iad: iadValue ?? 0,
+    difus: iadValue ?? 0,
     avatarUrl: user.avatarUrl ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
@@ -52,7 +54,7 @@ const createUserSchema = z.object({
   password: z.string().min(8),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  userMode: z.enum(["PERSONAL", "EDUCATIONAL"]).optional(),
+  userMode: z.enum(["PERSONAL", "EDUCATIONAL", "CONTEST"]).optional(),
   role: z.enum(["USER", "TEACHER", "SYSTEM_ADMIN"]).optional(),
   lang: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   emailVerified: z.boolean().optional()
@@ -117,8 +119,9 @@ adminRouter.post("/users", authRequired, systemAdminGuard, async (req: AuthReque
       role: role,
       lang: data.lang || "JAVA",
       emailVerified: data.emailVerified ?? false,
-      difusJava: 0,
-      difusPython: 0
+      iadJava: 0,
+      iadPython: 0,
+      iadCpp: 0
     });
     await userRepo().save(user);
     return res.status(201).json({
@@ -140,7 +143,7 @@ adminRouter.get("/users", authRequired, systemAdminGuard, async (req: AuthReques
     const limit = parseInt(req.query.limit as string, 10) || DEFAULT_PAGE_SIZE;
     const skip = (page - 1) * limit;
     const roleFilter = req.query.role as UserRole | undefined;
-    const userModeFilter = req.query.userMode as "PERSONAL" | "EDUCATIONAL" | undefined;
+    const userModeFilter = req.query.userMode as "PERSONAL" | "EDUCATIONAL" | "CONTEST" | undefined;
     const queryBuilder = userRepo().createQueryBuilder("user");
     if (roleFilter) {
       queryBuilder.where("user.role = :role", {
@@ -150,6 +153,11 @@ adminRouter.get("/users", authRequired, systemAdminGuard, async (req: AuthReques
     if (userModeFilter) {
       queryBuilder.andWhere("user.userMode = :userMode", {
         userMode: userModeFilter
+      });
+    } else {
+      // By default keep generated contest-only accounts out of the main admin users list.
+      queryBuilder.andWhere("user.userMode <> :contestMode", {
+        contestMode: "CONTEST"
       });
     }
     const [users, total] = await queryBuilder.orderBy("user.createdAt", "DESC").skip(skip).take(limit).getManyAndCount();

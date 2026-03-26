@@ -39,13 +39,27 @@ function modelsWithoutJsonMode(): string[] {
 function normalizeModelForSystemCheck(model: string): string {
   return model.toLowerCase().trim();
 }
+function isGemmaModel(model: string): boolean {
+  return normalizeModelForSystemCheck(model).includes('gemma');
+}
 function shouldCombineSystemToUser(model: string): boolean {
+  // Robust production guard:
+  // some Gemma routes reject instruction channels; inline instructions into user message.
+  if (isGemmaModel(model)) return true;
   const normalized = normalizeModelForSystemCheck(model);
   return modelsWithoutSystemSupport().some(m => normalized.includes(m.toLowerCase()));
 }
 function shouldRemoveJsonMode(model: string): boolean {
+  // Robust production guard: Gemma routes may reject OpenAI JSON mode.
+  if (isGemmaModel(model)) return true;
   const normalized = normalizeModelForSystemCheck(model);
   return modelsWithoutJsonMode().some(m => normalized.includes(m.toLowerCase()));
+}
+function supportedRolesForModel(model: string): Set<string> {
+  const supportsSystem = !shouldCombineSystemToUser(model);
+  const roles = new Set<string>(['user', 'assistant']);
+  if (supportsSystem) roles.add('system');
+  return roles;
 }
 function adaptMessagesForModel(messages: Array<{
   role: string;
@@ -54,26 +68,51 @@ function adaptMessagesForModel(messages: Array<{
   role: string;
   content: string;
 }> {
-  if (!shouldCombineSystemToUser(model)) {
-    return messages;
-  }
-  const systemMessages: string[] = [];
-  const userMessages: string[] = [];
-  for (const msg of messages) {
-    if (msg.role === 'system' || msg.role === 'developer') {
-      systemMessages.push(msg.content);
-    } else if (msg.role === 'user') {
-      userMessages.push(msg.content);
+  const combineSystemToUser = shouldCombineSystemToUser(model);
+  const allowedRoles = supportedRolesForModel(model);
+
+  const normalized = messages;
+
+  if (combineSystemToUser) {
+    const systemMessages: string[] = [];
+    const passthrough: Array<{ role: string; content: string }> = [];
+    for (const msg of normalized) {
+      if (msg.role === 'system') {
+        systemMessages.push(msg.content);
+        continue;
+      }
+      passthrough.push(msg);
     }
+
+    if (systemMessages.length > 0) {
+      const prefix = systemMessages.join('\n\n');
+      const firstUserIndex = passthrough.findIndex(m => m.role === 'user');
+      if (firstUserIndex >= 0) {
+        passthrough[firstUserIndex] = {
+          role: 'user',
+          content: `${prefix}\n\n${passthrough[firstUserIndex].content}`
+        };
+      } else {
+        passthrough.unshift({ role: 'user', content: prefix });
+      }
+    }
+
+    return passthrough.filter(msg => allowedRoles.has(msg.role));
   }
-  if (systemMessages.length === 0) {
-    return messages;
-  }
-  const combinedUserContent = systemMessages.join('\n\n') + (userMessages.length > 0 ? '\n\n' + userMessages.join('\n\n') : '');
-  return [{
-    role: 'user',
-    content: combinedUserContent
-  }];
+
+  return normalized.filter(msg => allowedRoles.has(msg.role));
+}
+function normalizeMessagesForOutgoingPayload(messages: Array<{
+  role: string;
+  content: string;
+}>, model: string): Array<{
+  role: string;
+  content: string;
+}> {
+  // Last-mile hardening: normalize again right before HTTP send.
+  const adapted = adaptMessagesForModel(messages, model);
+
+  return adapted.filter(msg => msg.role === 'system' || msg.role === 'user' || msg.role === 'assistant');
 }
 export async function callOpenRouter(request: OpenRouterRequest, options: OpenRouterCallOptions = {}): Promise<OpenRouterResponse> {
   const {
@@ -99,6 +138,20 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
   if (allKeys.length === 0) {
     throw new Error('AI_GENERATION_FAILED: No OpenRouter API keys configured');
   }
+  const retryBaseDelayMs = (() => {
+    const raw = String(process.env.OPENROUTER_RETRY_BASE_DELAY_MS || '').trim();
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 4_000;
+  })();
+  const retryMaxDelayMs = (() => {
+    const raw = String(process.env.OPENROUTER_RETRY_MAX_DELAY_MS || '').trim();
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 30_000;
+  })();
+  const getRetryDelayMs = (attempt: number): number => {
+    const exp = retryBaseDelayMs * Math.pow(2, attempt);
+    return Math.min(exp, retryMaxDelayMs);
+  };
   let lastError: Error | null = null;
   for (const apiKey of allKeys) {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -115,6 +168,16 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
           model
         };
         logger.info("OpenRouter request started", logContext);
+        const finalMessages = normalizeMessagesForOutgoingPayload(adaptedRequest.messages, model);
+        const outgoingRoles = finalMessages.map(m => m.role);
+        logger.warn(`Outgoing AI request roles: ${JSON.stringify(outgoingRoles)}`, {
+          traceId,
+          userId,
+          topicId,
+          model,
+          roles: outgoingRoles
+        });
+
         const response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -125,6 +188,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
           },
           body: JSON.stringify({
             ...adaptedRequest,
+            messages: finalMessages,
             model
           }),
           signal: controller.signal
@@ -145,7 +209,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
             parsedError = null;
           }
           const errorMessage = parsedError?.error?.message || errorText;
-          const isInvalidArgument = response.status === 400 && (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('Developer instruction is not enabled') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled'));
+          const isInvalidArgument = response.status === 400 && (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled'));
           const isRateLimit = response.status === 429 || errorMessage.includes('rate limit') || errorMessage.includes('rate-limited') || errorMessage.toLowerCase().includes('temporarily rate-limited');
           if (isInvalidArgument) {
             throw new Error(`AI_GENERATION_FAILED: Invalid request for model ${model}. ${errorText}`);
@@ -160,7 +224,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
           if (isRateLimit || response.status >= 500) {
             if (attempt < maxRetries) {
               lastError = error;
-              const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+              const delay = getRetryDelayMs(attempt);
               logger.info("OpenRouter retry", {
                 traceId,
                 userId,
@@ -182,7 +246,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
         const data = (await response.json()) as OpenRouterResponse;
         if (data.error) {
           const errorMessage = data.error.message || data.error.type || 'Unknown error';
-          const isInvalidArgument = errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('Developer instruction is not enabled') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled');
+          const isInvalidArgument = errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled');
           const isRateLimit = errorMessage.includes('rate limit') || errorMessage.includes('rate-limited') || errorMessage.includes('429') || errorMessage.toLowerCase().includes('temporarily rate-limited');
           const error = new Error(`OpenRouter API error: ${errorMessage}`);
           logger.warn("OpenRouter API error", {
@@ -195,7 +259,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
           if (isRateLimit) {
             if (attempt < maxRetries) {
               lastError = error;
-              const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+              const delay = getRetryDelayMs(attempt);
               logger.info("OpenRouter retry (rate limit)", {
                 traceId,
                 userId,
@@ -243,7 +307,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
         if (attempt >= maxRetries) {
           break;
         }
-        const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+        const delay = getRetryDelayMs(attempt);
         logger.info("OpenRouter retry", {
           traceId,
           userId,

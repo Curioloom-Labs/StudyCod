@@ -10,7 +10,9 @@ const console = {
 } as const;
 
 export async function applyDbPatches(): Promise<void> {
+  await ensureUserModeEnums();
   await ensureCppLanguageEnums();
+  await ensureUsersDifusColumns();
   await ensureTestDataIsHiddenColumn();
   await ensureTestDataKindColumn();
   await backfillTestDataKindFromIsHidden();
@@ -34,11 +36,14 @@ export async function applyDbPatches(): Promise<void> {
   await ensureLibraryTasksTable();
   await ensureLibraryTasksOjColumns();
   await ensureLibraryTaskRevisionsTable();
+  await ensureLibraryTaskRevisionsSnapshotColumn();
   await ensureLibraryTaskAttemptsTable();
   await ensureLibraryTaskAttemptsMultiLangColumns();
+  await ensureWebTaskColumns();
   await ensureTaskTheoriesLibraryTaskColumn();
   await ensureTestDataLibraryTaskColumn();
   await ensureContestTables();
+  await ensureCertificateTables();
   await ensureTopicsTheoryBlockIdColumn();
   await ensureTopicsTheoryMarkdownColumn();
   await ensureTopicsNewTheoryBlockIdColumn();
@@ -47,11 +52,276 @@ export async function applyDbPatches(): Promise<void> {
   await fixNoInputFixedExampleTaskTests();
 }
 
+async function ensureUsersDifusColumns(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'users'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const ensureColumn = async (columnName: string, sql: string): Promise<void> => {
+      const col = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE ?", [columnName])) as Array<any>;
+      if (Array.isArray(col) && col.length > 0) return;
+      logger.warn(`[DB Patch] Column users.${columnName} is missing. Applying ALTER TABLE...`);
+      await AppDataSource.query(sql);
+      logger.info(`[DB Patch] Added column users.${columnName}`);
+    };
+
+    await ensureColumn("difus_cpp", "ALTER TABLE `users` ADD COLUMN `difus_cpp` DECIMAL(6,3) NOT NULL DEFAULT 0");
+    await ensureColumn("last_difus_grade_id_java", "ALTER TABLE `users` ADD COLUMN `last_difus_grade_id_java` INT NULL DEFAULT NULL");
+    await ensureColumn("last_difus_grade_id_python", "ALTER TABLE `users` ADD COLUMN `last_difus_grade_id_python` INT NULL DEFAULT NULL");
+    await ensureColumn("last_difus_grade_id_cpp", "ALTER TABLE `users` ADD COLUMN `last_difus_grade_id_cpp` INT NULL DEFAULT NULL");
+
+    const ensureDecimalColumn = async (columnName: string): Promise<void> => {
+      const col = (await AppDataSource.query("SHOW COLUMNS FROM `users` LIKE ?", [columnName])) as Array<any>;
+      if (!Array.isArray(col) || col.length === 0) return;
+      const type = String(col?.[0]?.Type ?? "").toLowerCase();
+      if (type.includes("decimal(6,3)")) return;
+      logger.warn(`[DB Patch] Converting users.${columnName} to DECIMAL(6,3)...`, { from: type });
+      await AppDataSource.query(`ALTER TABLE \`users\` MODIFY COLUMN \`${columnName}\` DECIMAL(6,3) NOT NULL DEFAULT 0`);
+      logger.info(`[DB Patch] Converted users.${columnName} to DECIMAL(6,3)`);
+    };
+
+    await ensureDecimalColumn("difus_java");
+    await ensureDecimalColumn("difus_python");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure users difus columns:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureUserModeEnums(): Promise<void> {
+  await ensureEnumColumnHasValues({ table: "users", column: "user_mode", values: ["PERSONAL", "EDUCATIONAL", "CONTEST"] });
+}
+
 async function ensureContestTables(): Promise<void> {
   await ensureContestsTable();
   await ensureContestProblemsTable();
   await ensureContestParticipantsTable();
   await ensureContestSubmissionsTable();
+}
+
+async function ensureCertificateTables(): Promise<void> {
+  await ensureContestCertificateSettingsTable();
+  await ensureCertificateTemplatesTable();
+  await ensureCertificateFieldsTable();
+  await ensureEnumColumnHasValues({
+    table: "certificate_fields",
+    column: "field_key",
+    values: [
+      "contest_name",
+      "name",
+      "full_name",
+      "place",
+      "score",
+      "max_score",
+      "date",
+      "organizer",
+      "signature",
+      "certificate_id",
+      "qr_code",
+    ],
+  });
+  await ensureCertificatesTable();
+  await ensureCertificateJobQueueTable();
+}
+
+async function ensureContestCertificateSettingsTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'contest_certificate_settings'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Table contest_certificate_settings is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE contest_certificate_settings (
+        id INT NOT NULL AUTO_INCREMENT,
+        contest_id INT NOT NULL,
+        certificate_mode ENUM('none','studycod','custom') NOT NULL DEFAULT 'none',
+        default_template_id INT NULL,
+        send_email_enabled TINYINT(1) NOT NULL DEFAULT 1,
+        generation_status ENUM('idle','queued','running','completed','failed') NOT NULL DEFAULT 'idle',
+        last_generation_job_id INT NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_contest_certificate_settings_contest (contest_id),
+        INDEX idx_contest_certificate_settings_mode (certificate_mode),
+        CONSTRAINT fk_contest_certificate_settings_contest FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table contest_certificate_settings");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure contest_certificate_settings table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureCertificateTemplatesTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'certificate_templates'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Table certificate_templates is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE certificate_templates (
+        id INT NOT NULL AUTO_INCREMENT,
+        contest_id INT NULL,
+        name VARCHAR(180) NOT NULL,
+        type ENUM('studycod','custom') NOT NULL DEFAULT 'studycod',
+        html_template MEDIUMTEXT NULL,
+        css_template MEDIUMTEXT NULL,
+        background_pdf_url VARCHAR(1024) NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        version INT NOT NULL DEFAULT 1,
+        created_by_user_id INT NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        INDEX idx_certificate_templates_contest (contest_id),
+        INDEX idx_certificate_templates_type_active (type, is_active),
+        CONSTRAINT fk_certificate_templates_contest FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE,
+        CONSTRAINT fk_certificate_templates_created_by FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table certificate_templates");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure certificate_templates table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureCertificateFieldsTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'certificate_fields'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Table certificate_fields is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE certificate_fields (
+        id INT NOT NULL AUTO_INCREMENT,
+        template_id INT NOT NULL,
+        field_key ENUM('contest_name','name','full_name','place','score','max_score','date','organizer','signature','certificate_id','qr_code') NOT NULL,
+        is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+        is_required TINYINT(1) NOT NULL DEFAULT 0,
+        x DECIMAL(10,2) NULL,
+        y DECIMAL(10,2) NULL,
+        width DECIMAL(10,2) NULL,
+        height DECIMAL(10,2) NULL,
+        font_size INT NULL,
+        font_weight VARCHAR(40) NULL,
+        color VARCHAR(32) NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        INDEX idx_certificate_fields_template (template_id),
+        CONSTRAINT fk_certificate_fields_template FOREIGN KEY (template_id) REFERENCES certificate_templates(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table certificate_fields");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure certificate_fields table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureCertificatesTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'certificates'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Table certificates is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE certificates (
+        id INT NOT NULL AUTO_INCREMENT,
+        certificate_id VARCHAR(120) NOT NULL,
+        contest_id INT NOT NULL,
+        participant_id INT NOT NULL,
+        user_id INT NULL,
+        student_id INT NULL,
+        template_id INT NULL,
+        status ENUM('queued','rendered','emailed','failed') NOT NULL DEFAULT 'queued',
+        score INT NOT NULL DEFAULT 0,
+        max_score INT NOT NULL DEFAULT 0,
+        place_text VARCHAR(64) NULL,
+        participant_name VARCHAR(255) NOT NULL,
+        organizer_name VARCHAR(255) NOT NULL,
+        issued_at DATETIME(6) NULL,
+        pdf_storage_key VARCHAR(1024) NULL,
+        qr_code_data_url MEDIUMTEXT NULL,
+        checksum_sha256 VARCHAR(128) NULL,
+        email_sent_at DATETIME(6) NULL,
+        revoked_at DATETIME(6) NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_certificates_certificate_id (certificate_id),
+        UNIQUE KEY uq_certificates_contest_participant (contest_id, participant_id),
+        INDEX idx_certificates_user (user_id),
+        INDEX idx_certificates_student (student_id),
+        INDEX idx_certificates_contest (contest_id),
+        CONSTRAINT fk_certificates_contest FOREIGN KEY (contest_id) REFERENCES contests(id) ON DELETE CASCADE,
+        CONSTRAINT fk_certificates_participant FOREIGN KEY (participant_id) REFERENCES contest_participants(id) ON DELETE CASCADE,
+        CONSTRAINT fk_certificates_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT fk_certificates_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
+        CONSTRAINT fk_certificates_template FOREIGN KEY (template_id) REFERENCES certificate_templates(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table certificates");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure certificates table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
+async function ensureCertificateJobQueueTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'certificate_job_queue'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Table certificate_job_queue is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE certificate_job_queue (
+        id INT NOT NULL AUTO_INCREMENT,
+        queue_name ENUM('generate_batch','pdf_render','email_send') NOT NULL,
+        status ENUM('queued','processing','done','failed') NOT NULL DEFAULT 'queued',
+        payload_json MEDIUMTEXT NOT NULL,
+        attempts INT NOT NULL DEFAULT 0,
+        max_attempts INT NOT NULL DEFAULT 3,
+        available_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        last_error TEXT NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        INDEX idx_certificate_job_queue_pick (queue_name, status, available_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table certificate_job_queue");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure certificate_job_queue table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
 }
 
 async function ensureContestsTable(): Promise<void> {
@@ -445,7 +715,7 @@ async function ensureLibraryTaskRevisionsTable(): Promise<void> {
         version INT NOT NULL,
         action ENUM('APPROVE','ROLLBACK','MANUAL') NOT NULL DEFAULT 'APPROVE',
         comment VARCHAR(255) NULL,
-        snapshot MEDIUMTEXT NOT NULL,
+        snapshot LONGTEXT NOT NULL,
         created_by_user_id INT NULL,
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         PRIMARY KEY (id),
@@ -458,6 +728,34 @@ async function ensureLibraryTaskRevisionsTable(): Promise<void> {
     logger.info("[DB Patch] Created table library_task_revisions");
   } catch (err: any) {
     logger.error("[DB Patch] Failed to ensure library_task_revisions table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureLibraryTaskRevisionsSnapshotColumn(): Promise<void> {
+  try {
+    const tables = (await AppDataSource.query("SHOW TABLES LIKE 'library_task_revisions'")) as Array<any>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const col = (await AppDataSource.query("SHOW COLUMNS FROM `library_task_revisions` LIKE 'snapshot'")) as Array<any>;
+    if (!Array.isArray(col) || col.length === 0) return;
+
+    const type = String(col?.[0]?.Type ?? "").toLowerCase();
+    const nullable = String(col?.[0]?.Null ?? "NO").toUpperCase() === "YES";
+    if (!type) return;
+    if (type.includes("longtext")) return;
+
+    logger.warn("[DB Patch] Widening library_task_revisions.snapshot to LONGTEXT...", { from: type });
+    await AppDataSource.query(
+      `ALTER TABLE \`library_task_revisions\` MODIFY COLUMN \`snapshot\` LONGTEXT ${nullable ? "NULL" : "NOT NULL"}`
+    );
+    logger.info("[DB Patch] library_task_revisions.snapshot is LONGTEXT");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to widen library_task_revisions.snapshot:", {
       message: err?.message,
       code: err?.code,
       errno: err?.errno,
@@ -698,6 +996,10 @@ async function ensureLibraryTasksTable(): Promise<void> {
         title VARCHAR(255) NOT NULL,
         description TEXT NOT NULL,
         template TEXT NOT NULL,
+        task_mode ENUM('CODE','WEB') NOT NULL DEFAULT 'CODE',
+        web_template_files MEDIUMTEXT NULL,
+        web_validation_rules MEDIUMTEXT NULL,
+        web_validation_profile MEDIUMTEXT NULL,
         problem_code VARCHAR(64) NULL,
         slug VARCHAR(128) NULL,
         difficulty ENUM('EASY','MEDIUM','HARD') NULL,
@@ -971,6 +1273,57 @@ async function ensureTasksIoTypeColumn(): Promise<void> {
       sqlState: err?.sqlState
     });
   }
+}
+
+async function ensureWebTaskColumns(): Promise<void> {
+  const ensureForTable = async (table: string): Promise<void> => {
+    try {
+      const tableRows = (await AppDataSource.query("SHOW TABLES LIKE ?", [table])) as Array<any>;
+      if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+      const hasColumn = async (columnName: string): Promise<boolean> => {
+        const col = (await AppDataSource.query(`SHOW COLUMNS FROM \`${table}\` LIKE ?`, [columnName])) as Array<any>;
+        return Array.isArray(col) && col.length > 0;
+      };
+
+      if (!(await hasColumn("task_mode"))) {
+        logger.warn(`[DB Patch] Column ${table}.task_mode is missing. Applying ALTER TABLE...`);
+        await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`task_mode\` ENUM('CODE','WEB') NOT NULL DEFAULT 'CODE' AFTER \`template\``);
+        logger.info(`[DB Patch] Added column ${table}.task_mode`);
+      }
+
+      if (!(await hasColumn("web_template_files"))) {
+        logger.warn(`[DB Patch] Column ${table}.web_template_files is missing. Applying ALTER TABLE...`);
+        await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`web_template_files\` MEDIUMTEXT NULL AFTER \`task_mode\``);
+        logger.info(`[DB Patch] Added column ${table}.web_template_files`);
+      }
+
+      if (!(await hasColumn("web_validation_rules"))) {
+        logger.warn(`[DB Patch] Column ${table}.web_validation_rules is missing. Applying ALTER TABLE...`);
+        await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`web_validation_rules\` MEDIUMTEXT NULL AFTER \`web_template_files\``);
+        logger.info(`[DB Patch] Added column ${table}.web_validation_rules`);
+      }
+
+      if (!(await hasColumn("web_validation_profile"))) {
+        logger.warn(`[DB Patch] Column ${table}.web_validation_profile is missing. Applying ALTER TABLE...`);
+        await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`web_validation_profile\` MEDIUMTEXT NULL AFTER \`web_validation_rules\``);
+        logger.info(`[DB Patch] Added column ${table}.web_validation_profile`);
+      }
+    } catch (err: any) {
+      logger.error(`[DB Patch] Failed to ensure web task columns for ${table}:`, {
+        message: err?.message,
+        code: err?.code,
+        errno: err?.errno,
+        sqlState: err?.sqlState
+      });
+    }
+  };
+
+  // Keep entity<->schema parity for all task-like tables that support CODE/WEB mode.
+  await ensureForTable("tasks");
+  await ensureForTable("library_tasks");
+  await ensureForTable("topic_tasks");
+  await ensureForTable("edu_tasks");
 }
 
 async function ensureEduGradesScoringColumns(): Promise<void> {
@@ -1563,7 +1916,7 @@ async function fixIntroPythonFixedSumTaskTests(): Promise<void> {
     console.warn(`[DB Patch] Fixing intro Python fixed-sum task tests for ${taskIdsToFix.length} personal task(s)...`);
     for (const taskId of taskIdsToFix) {
       await AppDataSource.query("DELETE FROM test_data WHERE personal_task_id = ?", [taskId]);
-      await AppDataSource.query("INSERT INTO test_data (input, expected_output, is_hidden, points, created_at, personal_task_id) VALUES (?, ?, 0, 12, NOW(), ?)", ["", "8", taskId]);
+      await AppDataSource.query("INSERT INTO test_data (input, expected_output, is_hidden, points, created_at, personal_task_id) VALUES (?, ?, 0, 100, NOW(), ?)", ["", "8", taskId]);
     }
     console.log("[DB Patch] Intro Python fixed-sum task tests fixed");
   } catch (err: any) {
@@ -1619,7 +1972,7 @@ async function fixNoInputFixedExampleTaskTests(): Promise<void> {
     console.warn(`[DB Patch] Fixing no-input fixed-example personal task tests for ${candidates.length} task(s)...`);
     for (const c of candidates) {
       await AppDataSource.query("DELETE FROM test_data WHERE personal_task_id = ?", [c.id]);
-      await AppDataSource.query("INSERT INTO test_data (input, expected_output, is_hidden, points, created_at, personal_task_id) VALUES (?, ?, 0, 12, NOW(), ?)", ["", c.expected, c.id]);
+      await AppDataSource.query("INSERT INTO test_data (input, expected_output, is_hidden, points, created_at, personal_task_id) VALUES (?, ?, 0, 100, NOW(), ?)", ["", c.expected, c.id]);
     }
     console.log("[DB Patch] No-input fixed-example task tests fixed");
   } catch (err: any) {

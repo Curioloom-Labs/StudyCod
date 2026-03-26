@@ -1,16 +1,12 @@
 import React from "react";
 import { MarkdownView } from "../MarkdownView";
 import type { ContestProblemStatement } from "../../lib/api/contests";
-import { NotebookPen, Sparkles } from "lucide-react";
 
 type StatementSegment = "description" | "io" | "constraints" | "examples" | "notes";
 
 type ProblemTabProps = {
   statement: ContestProblemStatement;
   onInjectExampleInput: (input: string) => void;
-  notes: string;
-  onNotesChange: (next: string) => void;
-  streak: number;
 };
 
 type ExamplePair = {
@@ -64,7 +60,7 @@ function extractExamples(markdown: string): ExamplePair[] {
   return pairs;
 }
 
-export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExampleInput, notes, onNotesChange, streak }) => {
+export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExampleInput }) => {
   const [segment, setSegment] = React.useState<StatementSegment>("description");
 
   const split = React.useMemo(() => splitByHeadings(statement.task.description), [statement.task.description]);
@@ -81,8 +77,8 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
   const segmentBody = split[segment] || statement.task.description;
 
   return (
-    <div className="h-full min-h-0 grid grid-cols-12 gap-3">
-      <div className="col-span-8 min-h-0 rounded-2xl border border-border/70 bg-bg-surface/80 shadow-[0_12px_30px_rgba(0,0,0,0.24)] flex flex-col overflow-hidden">
+    <div className="h-full min-h-0">
+      <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface/80 shadow-[0_12px_30px_rgba(0,0,0,0.24)] flex flex-col overflow-hidden">
         <div className="px-4 pt-3 pb-2 border-b border-border/60 flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {([
@@ -126,41 +122,6 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
           ) : (
             <MarkdownView content={segmentBody || statement.task.description} />
           )}
-        </div>
-      </div>
-
-      <div className="col-span-4 min-h-0 flex flex-col gap-3">
-        <div className="rounded-2xl border border-border/70 bg-bg-surface/85 p-3 shadow-[0_8px_26px_rgba(0,0,0,0.25)]">
-          <div className="flex items-center gap-2 text-text-primary">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <div className="text-sm font-semibold">Progress Streak</div>
-          </div>
-          <div className="mt-2 flex items-end gap-1.5">
-            {Array.from({ length: 7 }).map((_, idx) => {
-              const active = idx < Math.min(7, streak);
-              return (
-                <div
-                  key={idx}
-                  className={`w-4 rounded-md ${active ? "bg-primary/80 shadow-[0_0_16px_rgba(0,179,95,0.35)]" : "bg-border/80"}`}
-                  style={{ height: active ? 32 : 20 }}
-                />
-              );
-            })}
-          </div>
-          <div className="text-xs text-text-secondary mt-2">Current streak: {streak}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border/70 bg-bg-surface/85 p-3 shadow-[0_8px_26px_rgba(0,0,0,0.25)] flex-1 min-h-0 flex flex-col">
-          <div className="flex items-center gap-2 text-text-primary">
-            <NotebookPen className="w-4 h-4 text-secondary" />
-            <div className="text-sm font-semibold">Personal Notes</div>
-          </div>
-          <textarea
-            value={notes}
-            onChange={(e) => onNotesChange(e.target.value)}
-            className="mt-2 flex-1 min-h-[120px] rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
-            placeholder="Store your insights, corner cases, and strategy notes..."
-          />
         </div>
       </div>
     </div>

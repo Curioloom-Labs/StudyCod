@@ -390,7 +390,7 @@ ${JSON.stringify(schema, null, 2)}
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     userId?: number;
     topicId?: number;
-  }): Promise<any> {
+  }, options?: LLMGenerateOptions): Promise<any> {
     const taskTimeoutMs = (() => {
       const raw = String(process.env.LLM_TASK_TIMEOUT_MS ?? '').trim();
       const n = raw ? Number(raw) : NaN;
@@ -402,7 +402,9 @@ ${JSON.stringify(schema, null, 2)}
     }, {
       userId: params.userId,
       topicId: params.topicId,
-      timeout: taskTimeoutMs
+      timeout: options?.timeout ?? taskTimeoutMs,
+      signal: options?.signal,
+      language: options?.language ?? "uk"
     });
     if (!response.content) {
       throw new Error('AI_GENERATION_FAILED: Empty response from CloudflareAI');
@@ -547,8 +549,9 @@ ${JSON.stringify(schema, null, 2)}
       schema: built.schema
     }, {
       userId: params.userId,
-      timeout: 30000,
-      language: options?.language ?? "uk"
+      timeout: options?.timeout ?? 30000,
+      language: options?.language ?? "uk",
+      signal: options?.signal
     });
     if (!response.content) {
       throw new Error('AI_GENERATION_FAILED: Empty response from CloudflareAI');

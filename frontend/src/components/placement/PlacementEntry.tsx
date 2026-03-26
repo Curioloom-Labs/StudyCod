@@ -8,6 +8,16 @@ export const PlacementEntry: React.FC<{
 }> = ({ user, onUserChange }) => {
   const [open, setOpen] = useState(false);
 
+  const hasDebugForceOpen = (): boolean => {
+    if (typeof window === "undefined") return false;
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      return params.get("placementDebug") === "1";
+    } catch {
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -15,7 +25,12 @@ export const PlacementEntry: React.FC<{
     if (user.userMode && user.userMode !== "PERSONAL") return;
     if (user.studentId) return;
 
+    const forceOpen = hasDebugForceOpen();
     const done = Boolean(user.placementDone);
+    if (forceOpen) {
+      const timer = setTimeout(() => setOpen(true), 120);
+      return () => clearTimeout(timer);
+    }
     if (!done) {
       const timer = setTimeout(() => setOpen(true), 350);
       return () => clearTimeout(timer);

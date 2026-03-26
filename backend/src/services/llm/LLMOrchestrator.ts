@@ -196,6 +196,8 @@ export class LLMOrchestrator {
         allowedIoTypes: params.allowedIoTypes,
         userId: params.userId,
         topicId: params.topicId
+      }, {
+        signal: params.signal
       });
       return AIResponseValidator.validateGenerateTask(raw);
     };
@@ -302,27 +304,86 @@ export class LLMOrchestrator {
 - forbiddenScope: що категорично заборонено робити (інші теми, інші операції)
 
 Поверни ТІЛЬКИ JSON без пояснень.`;
-    const parsed = await provider.generateJSON<{
-      topic: string;
-      coreOperation: string;
-      allowedScope: string[];
-      forbiddenScope: string[];
-    }>(userPrompt, anchorSchema, systemPrompt, {
-      timeout: LLM_TASK_TIMEOUT_MS,
-      maxRetries: 0,
+    const expectedTopic = params.topicTitle.trim();
+    const fallbackAnchor = {
+      topic: expectedTopic,
+      coreOperation: `Розв'язати задачу з теми "${expectedTopic}" та вивести результат у stdout`,
+      allowedScope: [expectedTopic, 'базові конструкції мови', 'вивід у stdout'],
+      forbiddenScope: ['multi-task структура', 'мета-повідомлення компілятора', 'створення файлів/проєктів']
+    };
+
+    const maxAnchorAttempts = 2;
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= maxAnchorAttempts; attempt++) {
+      try {
+        const parsed = await provider.generateJSON<{
+          topic: string;
+          coreOperation: string;
+          allowedScope: string[];
+          forbiddenScope: string[];
+        }>(userPrompt, anchorSchema, systemPrompt, {
+          timeout: LLM_TASK_TIMEOUT_MS,
+          maxRetries: 0,
+          userId: params.userId,
+          topicId: params.topicId,
+          signal: params.signal,
+          temperature: 0.2,
+          maxTokens: 500
+        });
+
+        const parsedTopicRaw = typeof parsed?.topic === 'string' ? parsed.topic.trim() : '';
+        const coreOperationRaw = typeof parsed?.coreOperation === 'string' ? parsed.coreOperation.trim() : '';
+        const allowedScopeRaw = Array.isArray(parsed?.allowedScope)
+          ? parsed.allowedScope.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+          : [];
+        const forbiddenScopeRaw = Array.isArray(parsed?.forbiddenScope)
+          ? parsed.forbiddenScope.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+          : [];
+
+        const parsedTopic = parsedTopicRaw || expectedTopic;
+        const coreOperation = coreOperationRaw.length >= 10
+          ? coreOperationRaw
+          : fallbackAnchor.coreOperation;
+        const allowedScope = allowedScopeRaw.length > 0 ? allowedScopeRaw : fallbackAnchor.allowedScope;
+        const forbiddenScope = forbiddenScopeRaw.length > 0 ? forbiddenScopeRaw : fallbackAnchor.forbiddenScope;
+
+        // Never fail on topic mismatch here; force canonical topic to keep generation stable.
+        const topic = parsedTopic === expectedTopic ? parsedTopic : expectedTopic;
+        if (parsedTopic !== expectedTopic) {
+          logger.warn('[llm] anchor topic mismatch, forced expected topic', {
+            expectedTopic,
+            receivedTopic: parsedTopic,
+            userId: params.userId,
+            topicId: params.topicId,
+            attempt
+          });
+        }
+
+        return {
+          topic,
+          coreOperation,
+          allowedScope,
+          forbiddenScope
+        };
+      } catch (err) {
+        lastErr = err;
+        logger.warn('[llm] anchor generation attempt failed', {
+          attempt,
+          maxAnchorAttempts,
+          userId: params.userId,
+          topicId: params.topicId,
+          error: String((err as any)?.message || err)
+        });
+      }
+    }
+
+    logger.warn('[llm] using fallback anchor after failed anchor attempts', {
       userId: params.userId,
       topicId: params.topicId,
-      signal: params.signal,
-      temperature: 0.2,
-      maxTokens: 500
+      expectedTopic,
+      error: String((lastErr as any)?.message || lastErr || 'unknown')
     });
-    if (parsed.topic.trim() !== params.topicTitle.trim()) {
-      throw new Error(`ANCHOR_TOPIC_MISMATCH: Expected topic "${params.topicTitle}", but anchor contains "${parsed.topic}". Topic must exactly match.`);
-    }
-    if (parsed.coreOperation.trim().length < 10) {
-      throw new Error(`ANCHOR_TOO_VAGUE: coreOperation "${parsed.coreOperation}" is too vague (less than 10 characters). Generation aborted.`);
-    }
-    return parsed;
+    return fallbackAnchor;
   }
   private async generateTaskFromAnchor(params: {
     topicTitle: string;
@@ -334,6 +395,7 @@ export class LLMOrchestrator {
       allowedScope: string[];
       forbiddenScope: string[];
     };
+    prevTopics?: string;
     previousTasks?: string;
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     difus?: number;
@@ -454,6 +516,16 @@ ${difficultyPrompt}
 - Якщо STDIN_STDOUT НЕ дозволено — ЗАБОРОНЕНО просити введення даних, читати stdin або згадувати input()/Scanner/System.in/std::cin/cin/getline.
 - Якщо STDIN_STDOUT дозволено — можна робити задачі зі stdin.
 
+ПРІОРИТЕТ ТОЧНОСТІ УМОВИ:
+- У practicalTask явно вкажи: (1) що дано, (2) що потрібно обчислити/визначити, (3) що саме і в якому форматі вивести.
+- Для outputFormat не використовуй розмиті слова: "тощо", "і т.д.", "або щось подібне", "будь-який" (окрім NO_INPUT_FREE_OUTPUT).
+- Якщо можливі кілька фіксованих відповідей (наприклад, день тижня/помилка) — перелічи їх явно.
+
+М'ЯКЕ ПОВТОРЕННЯ МИНУЛИХ ТЕМ:
+- Ненав'язливо використай 1 знайомий прийом із попередніх тем, щоб студент не забував матеріал.
+- Це має бути природно і НЕ перетворювати завдання на multi-task.
+${params.prevTopics && params.prevTopics.trim().length > 0 ? `Попередні теми:\n${params.prevTopics.trim()}` : ''}
+
 Теорія з теми (для контексту):
 ${params.theory.slice(0, 2000)}
 ${uniquenessBlock}
@@ -554,7 +626,11 @@ ${uniquenessBlock}
           await new Promise(r => setTimeout(r, 1000));
           continue;
         }
-        throw new Error(`AI_GENERATION_FAILED: ${err.message || 'Unknown error'}`);
+        const msg = String(err?.message || 'Unknown error');
+        if (msg.includes('AI_GENERATION_FAILED')) {
+          throw err;
+        }
+        throw new Error(`AI_GENERATION_FAILED: ${msg}`);
       }
     }
     throw new Error(`AI_GENERATION_FAILED: All retries exhausted. Last error: ${lastError?.message || 'Unknown error'}`);
@@ -588,6 +664,7 @@ ${uniquenessBlock}
       theory: params.theory,
       lang: params.lang,
       anchor: anchor,
+      prevTopics: params.prevTopics,
       previousTasks: params.previousTasks,
       allowedIoTypes: params.allowedIoTypes,
       difus: params.difus,
@@ -624,7 +701,8 @@ ${uniquenessBlock}
         userId: params.userId,
         topicId: params.topicId
       }, {
-        language: params.language
+        language: params.language,
+        signal: params.signal
       } as any);
       return AIResponseValidator.validateGenerateTheory(raw);
     };
@@ -741,7 +819,8 @@ ${uniquenessBlock}
         userId: params.userId,
         topicId: params.topicId
       }, {
-        language: params.language
+        language: params.language,
+        signal: params.signal
       } as any);
       return AIResponseValidator.validateGenerateQuiz(raw, params.count || 12);
     };
@@ -954,7 +1033,8 @@ ${uniquenessBlock}
         userId: params.userId,
         topicId: params.topicId
       }, {
-        language: params.userLanguage
+        language: params.userLanguage,
+        signal: params.signal
       } as any);
       return AIResponseValidator.validateGenerateTaskCondition(raw);
     };
@@ -1143,7 +1223,8 @@ ${difficultyPrompt}
         userId: params.userId,
         topicId: params.topicId
       }, {
-        language: params.userLanguage
+        language: params.userLanguage,
+        signal: params.signal
       } as any);
 
       // Cloudflare returns the template as-is; normalize TODO line for consistency.
@@ -1412,6 +1493,8 @@ public class Main {
         lang: params.lang,
         count: params.count,
         userId: params.userId
+      }, {
+        signal: params.signal
       });
       return AIResponseValidator.validateGenerateTestData(raw, params.count);
     };

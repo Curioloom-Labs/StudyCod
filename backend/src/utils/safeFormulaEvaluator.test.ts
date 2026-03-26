@@ -29,7 +29,7 @@ test("safeFormulaEvaluator: default grade uses available parts", () => {
   assert.equal(evaluateFormula(null, {
     test: 10,
     avgPractice: 8
-  }), 10);
+  }), 9);
 });
 test("safeFormulaEvaluator: supports avg(practice) and test variables", () => {
   assert.equal(evaluateFormula("avg(practice)", {

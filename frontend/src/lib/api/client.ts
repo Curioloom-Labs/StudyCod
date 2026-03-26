@@ -5,6 +5,13 @@ type MaintenancePayload = {
   message: string;
   until: string | null;
 };
+
+type MaintenanceErrorData = {
+  maintenance?: boolean;
+  title?: unknown;
+  message?: unknown;
+  until?: unknown;
+};
 function emitMaintenance(payload: MaintenancePayload) {
   if (typeof window === "undefined") return;
   try {
@@ -15,7 +22,11 @@ function emitMaintenance(payload: MaintenancePayload) {
   }));
 }
 function joinApiBase(url: string): string {
-  const base = (url || "").replace(/\/+$/, "");
+  let base = String(url || "").trim();
+  // Remove trailing slashes
+  base = base.replace(/\/+$/, "");
+  // If caller provided a value that already ends with '/api', strip it to avoid '/api/api' when appending.
+  base = base.replace(/\/api\/?$/i, "");
   return `${base}/api`;
 }
 function getDefaultBaseUrl(): string {
@@ -34,10 +45,32 @@ if (savedToken) {
 }
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem("token");
+  const uiLanguage = localStorage.getItem("studycod_language") || "en";
   if (token) {
-    const headers = (config.headers ?? {}) as any;
-    headers.Authorization = `Bearer ${token}`;
-    config.headers = headers;
+    if (config.headers && typeof config.headers.set === "function") {
+      config.headers.set("Authorization", `Bearer ${token}`);
+      config.headers.set("X-UI-Language", uiLanguage);
+      config.headers.set("Accept-Language", uiLanguage);
+    } else {
+      config.headers = {
+        ...(config.headers || {}),
+        Authorization: `Bearer ${token}`,
+        "X-UI-Language": uiLanguage,
+        "Accept-Language": uiLanguage
+      };
+    }
+    return config;
+  }
+
+  if (config.headers && typeof config.headers.set === "function") {
+    config.headers.set("X-UI-Language", uiLanguage);
+    config.headers.set("Accept-Language", uiLanguage);
+  } else {
+    config.headers = {
+      ...(config.headers || {}),
+      "X-UI-Language": uiLanguage,
+      "Accept-Language": uiLanguage
+    };
   }
   return config;
 }, (error: AxiosError) => {
@@ -52,15 +85,16 @@ api.interceptors.response.use((response: AxiosResponse) => {
     }
   }
   return response;
-}, (error: AxiosError) => {
-  if ((error as any).response?.status === 401) {
+}, (error: AxiosError<MaintenanceErrorData>) => {
+  if (error.response?.status === 401) {
     localStorage.removeItem("token");
     if (typeof window !== "undefined") {
-      window.location.href = "/auth";
+      const isContestArea = window.location.pathname.startsWith("/contest");
+      window.location.href = isContestArea ? "/contest" : "/auth";
     }
   }
-  if ((error as any).response?.status === 503) {
-    const data = (error as any).response?.data as any;
+  if (error.response?.status === 503) {
+    const data = error.response?.data;
     if (data && data.maintenance === true) {
       emitMaintenance({
         maintenance: true,

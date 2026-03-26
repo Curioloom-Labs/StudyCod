@@ -80,8 +80,30 @@ interface OpenRouterResponse {
   id?: string;
   choices?: Array<{
     message?: {
-      content?: string;
+      content?: string | {
+        text?: string;
+        content?: string;
+      } | Array<{
+        type?: string;
+        text?: string;
+        content?: string;
+      }>;
+      reasoning?: string;
+      tool_calls?: Array<{
+        function?: {
+          arguments?: string;
+        };
+      }>;
     };
+    delta?: {
+      content?: string | Array<{
+        type?: string;
+        text?: string;
+        content?: string;
+      }>;
+    };
+    reasoning?: string;
+    text?: string;
   }>;
   error?: {
     message?: string;
@@ -89,13 +111,163 @@ interface OpenRouterResponse {
   };
 }
 
+function summarizeOpenRouterResponseShape(response: OpenRouterResponse): string {
+  try {
+    const c = response.choices?.[0];
+    if (!c) return 'no-choices';
+    const msg = c.message;
+    const contentType = Array.isArray(msg?.content) ? 'array' : typeof msg?.content;
+    const deltaType = Array.isArray(c.delta?.content) ? 'array' : typeof c.delta?.content;
+    return [
+      `choice.keys=${Object.keys(c).join(',') || 'none'}`,
+      `message.keys=${msg ? Object.keys(msg).join(',') : 'none'}`,
+      `message.content=${contentType}`,
+      `delta.content=${deltaType}`,
+      `choice.text=${typeof c.text}`,
+      `choice.reasoning=${typeof c.reasoning}`,
+      `message.reasoning=${typeof msg?.reasoning}`
+    ].join(' | ');
+  } catch {
+    return 'shape-unavailable';
+  }
+}
+
+function extractOpenRouterText(response: OpenRouterResponse): string {
+  const firstChoice = response.choices?.[0];
+  if (!firstChoice) return '';
+
+  const message = firstChoice.message;
+  const content = message?.content;
+
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    const text = typeof content.text === 'string' ? content.text : '';
+    if (text.trim()) return text;
+    const nested = typeof content.content === 'string' ? content.content : '';
+    if (nested.trim()) return nested;
+  }
+
+  if (Array.isArray(content)) {
+    const joined = content
+      .map(part => {
+        if (typeof part === 'string') return part;
+        const text = typeof part?.text === 'string' ? part.text : '';
+        if (text) return text;
+        const nested = typeof part?.content === 'string' ? part.content : '';
+        return nested;
+      })
+      .join('')
+      .trim();
+    if (joined) return joined;
+  }
+
+  const deltaContent = firstChoice.delta?.content;
+  if (typeof deltaContent === 'string' && deltaContent.trim()) {
+    return deltaContent;
+  }
+  if (Array.isArray(deltaContent)) {
+    const joinedDelta = deltaContent
+      .map(part => {
+        const text = typeof part?.text === 'string' ? part.text : '';
+        if (text) return text;
+        const nested = typeof part?.content === 'string' ? part.content : '';
+        return nested;
+      })
+      .join('')
+      .trim();
+    if (joinedDelta) return joinedDelta;
+  }
+
+  if (typeof firstChoice.text === 'string' && firstChoice.text.trim()) {
+    return firstChoice.text;
+  }
+
+  if (typeof message?.reasoning === 'string' && message.reasoning.trim()) {
+    return message.reasoning;
+  }
+  if (typeof firstChoice.reasoning === 'string' && firstChoice.reasoning.trim()) {
+    return firstChoice.reasoning;
+  }
+
+  const toolArgs = message?.tool_calls?.[0]?.function?.arguments;
+  if (typeof toolArgs === 'string' && toolArgs.trim()) {
+    return toolArgs;
+  }
+
+  return '';
+}
+
+function extractBalancedJsonObject(text: string): string | null {
+  const s = String(text ?? '');
+  const start = s.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return s.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseModelJsonOrThrow<T = any>(raw: string): T {
+  const content = String(raw ?? '').trim();
+  if (!content) {
+    throw new Error('Empty JSON response content');
+  }
+
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    // continue with best-effort extraction/repair below
+  }
+
+  const balanced = extractBalancedJsonObject(content);
+  if (balanced) {
+    try {
+      return JSON.parse(balanced) as T;
+    } catch {
+      // continue to existing fixer
+    }
+  }
+
+  return tryFixJsonResponse(content) as T;
+}
+
 function isRateLimitLike(message: string): boolean {
   const m = String(message ?? '').toLowerCase();
   return m.includes('rate limit') || m.includes('rate-limited') || m.includes('temporarily rate-limited') || /\b429\b/.test(m);
 }
 function modelsWithoutSystemSupport(): string[] {
-  // Some routed providers (e.g., Google AI Studio) reject system/developer instructions for certain Gemma models.
-  // When that happens, we must inline the system/developer instructions into the user message.
+  // Some routed providers (e.g., Google AI Studio) reject system instructions for certain Gemma models.
+  // When that happens, we inline system text into the user message.
   return [
     'google/gemma-3-27b-it',
     'google/gemma-3-27b-it:free',
@@ -119,13 +291,31 @@ function modelsWithoutJsonMode(): string[] {
 function normalizeModelForSystemCheck(model: string): string {
   return model.toLowerCase().trim();
 }
+function isGemmaModel(model: string): boolean {
+  return normalizeModelForSystemCheck(model).includes('gemma');
+}
 function shouldCombineSystemToUser(model: string): boolean {
+  // Robust production guard:
+  // some Gemma routes (Google AI Studio via OpenRouter) reject instruction channels,
+  // so we inline system text into user content.
+  if (isGemmaModel(model)) return true;
   const normalized = normalizeModelForSystemCheck(model);
   return modelsWithoutSystemSupport().some(m => normalized.includes(m.toLowerCase()));
 }
 function shouldRemoveJsonMode(model: string): boolean {
+  // Robust production guard:
+  // Gemma routes can reject OpenAI JSON mode (`response_format`).
+  if (isGemmaModel(model)) return true;
   const normalized = normalizeModelForSystemCheck(model);
   return modelsWithoutJsonMode().some(m => normalized.includes(m.toLowerCase()));
+}
+function supportedRolesForModel(model: string): Set<string> {
+  const supportsSystem = !shouldCombineSystemToUser(model);
+
+  // Keep this allow-list narrow and explicit so we never send roles rejected by the selected model.
+  const roles = new Set<string>(['user', 'assistant']);
+  if (supportsSystem) roles.add('system');
+  return roles;
 }
 function adaptMessagesForModel(messages: Array<{
   role: string;
@@ -134,26 +324,93 @@ function adaptMessagesForModel(messages: Array<{
   role: string;
   content: string;
 }> {
-  if (!shouldCombineSystemToUser(model)) {
-    return messages;
-  }
-  const systemMessages: string[] = [];
-  const userMessages: string[] = [];
-  for (const msg of messages) {
-    if (msg.role === 'system' || msg.role === 'developer') {
-      systemMessages.push(msg.content);
-    } else if (msg.role === 'user') {
-      userMessages.push(msg.content);
+  const combineSystemToUser = shouldCombineSystemToUser(model);
+  const allowedRoles = supportedRolesForModel(model);
+  const normalized = messages;
+
+  // Step 2: If model rejects system role, fold all system instructions into a user message.
+  if (combineSystemToUser) {
+    const systemMessages: string[] = [];
+    const passthrough: Array<{ role: string; content: string }> = [];
+
+    for (const msg of normalized) {
+      if (msg.role === 'system') {
+        systemMessages.push(msg.content);
+        continue;
+      }
+      passthrough.push(msg);
     }
+
+    if (systemMessages.length > 0) {
+      const prefix = systemMessages.join('\n\n');
+      const firstUserIndex = passthrough.findIndex(m => m.role === 'user');
+      if (firstUserIndex >= 0) {
+        passthrough[firstUserIndex] = {
+          role: 'user',
+          content: `${prefix}\n\n${passthrough[firstUserIndex].content}`
+        };
+      } else {
+        passthrough.unshift({ role: 'user', content: prefix });
+      }
+    }
+
+    // Step 3: Strict role filtering: only keep roles supported by this model.
+    return passthrough.filter(msg => allowedRoles.has(msg.role));
   }
-  if (systemMessages.length === 0) {
-    return messages;
+
+  // Step 3 (non-system-fallback path): strict role filtering after normalization.
+  return normalized.filter(msg => allowedRoles.has(msg.role));
+}
+function normalizeMessagesForOutgoingPayload(messages: Array<{
+  role: string;
+  content: string;
+}>, model: string): Array<{
+  role: string;
+  content: string;
+}> {
+  // Last-mile hardening: run model adaptation immediately before sending the HTTP request.
+  // This protects against any upstream/builder drift and guarantees no unsupported roles leak out.
+  const adapted = adaptMessagesForModel(messages, model);
+
+  // Final OpenAI-compatible role allow-list for outgoing payload.
+  return adapted
+    .filter(msg => msg.role === 'system' || msg.role === 'user' || msg.role === 'assistant');
+}
+
+function resolveTextModel(rawModel: string): string {
+  const configured = String(rawModel ?? '').trim();
+  const fallback = String(process.env.OPENROUTER_TEXT_MODEL || '').trim() || 'openai/gpt-4o-mini';
+  if (!configured) return fallback;
+
+  // Vision-first models are frequently incompatible with strict JSON/text-only generation flow.
+  const looksVisionModel = /(?:^|[\/-])vl(?:[\/-]|$)/i.test(configured) || /vision/i.test(configured);
+  if (!looksVisionModel) return configured;
+
+  logger.warn('Configured OpenRouter model looks like a vision model for text generation; falling back to text model.', {
+    configuredModel: configured,
+    fallbackModel: fallback
+  });
+  return fallback;
+}
+
+function resolveJsonModel(rawModel: string): string {
+  const configured = String(rawModel ?? '').trim();
+  const explicitJsonModel = String(process.env.OPENROUTER_JSON_MODEL || '').trim();
+  if (explicitJsonModel) {
+    return resolveTextModel(explicitJsonModel);
   }
-  const combinedUserContent = systemMessages.join('\n\n') + (userMessages.length > 0 ? '\n\n' + userMessages.join('\n\n') : '');
-  return [{
-    role: 'user',
-    content: combinedUserContent
-  }];
+
+  const fallback = String(process.env.OPENROUTER_TEXT_MODEL || '').trim() || 'openai/gpt-4o-mini';
+  if (!configured) return fallback;
+
+  const looksThinkingModel = /thinking|reasoning|reasoner/i.test(configured);
+  if (!looksThinkingModel) return resolveTextModel(configured);
+
+  logger.warn('Configured OpenRouter model looks like a reasoning/thinking model for strict JSON generation. Using it because OPENROUTER_JSON_MODEL is not configured.', {
+    configuredModel: configured,
+    suggestion: 'Set OPENROUTER_JSON_MODEL to a JSON-stable model if available'
+  });
+  return configured;
 }
 export class OpenRouterProvider implements LLMProvider {
   private async callOpenRouter(request: OpenRouterRequest, options: LLMGenerateOptions = {}): Promise<OpenRouterResponse> {
@@ -165,12 +422,12 @@ export class OpenRouterProvider implements LLMProvider {
       traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       signal
     } = options;
-    const model = request.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    const requestedModel = request.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    const model = resolveTextModel(requestedModel);
     const url = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
-    const adaptedMessages = adaptMessagesForModel(request.messages, model);
     const adaptedRequest = {
       ...request,
-      messages: adaptedMessages
+      messages: adaptMessagesForModel(request.messages, model)
     };
     if (shouldRemoveJsonMode(model) && adaptedRequest.response_format) {
       delete adaptedRequest.response_format;
@@ -209,13 +466,27 @@ export class OpenRouterProvider implements LLMProvider {
     const defaultRateLimitCooldownMs = (() => {
       const raw = String(process.env.OPENROUTER_RATE_LIMIT_COOLDOWN_MS || '').trim();
       const n = Number.parseInt(raw, 10);
-      return Number.isFinite(n) && n > 0 ? n : 10_000;
+      return Number.isFinite(n) && n > 0 ? n : 20_000;
     })();
     const defaultServerErrorCooldownMs = (() => {
       const raw = String(process.env.OPENROUTER_SERVER_ERROR_COOLDOWN_MS || '').trim();
       const n = Number.parseInt(raw, 10);
-      return Number.isFinite(n) && n > 0 ? n : 2_000;
+      return Number.isFinite(n) && n > 0 ? n : 4_000;
     })();
+    const defaultRetryBaseDelayMs = (() => {
+      const raw = String(process.env.OPENROUTER_RETRY_BASE_DELAY_MS || '').trim();
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 4_000;
+    })();
+    const defaultRetryMaxDelayMs = (() => {
+      const raw = String(process.env.OPENROUTER_RETRY_MAX_DELAY_MS || '').trim();
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 30_000;
+    })();
+    const getRetryDelayMs = (attempt: number): number => {
+      const exp = defaultRetryBaseDelayMs * Math.pow(2, attempt);
+      return Math.min(exp, defaultRetryMaxDelayMs);
+    };
 
     for (let keyIdx = 0; keyIdx < allKeys.length; keyIdx++) {
       const apiKey = allKeys[keyIdx];
@@ -267,6 +538,29 @@ export class OpenRouterProvider implements LLMProvider {
             model
           };
           logger.info("OpenRouter request started", logContext);
+          const finalMessages = normalizeMessagesForOutgoingPayload(adaptedRequest.messages, model);
+          const outgoingRoles = finalMessages.map(m => m.role);
+          const hasUnknownRole = outgoingRoles.some(r => r !== 'system' && r !== 'user' && r !== 'assistant' && r !== 'tool');
+          const hasSystemRole = outgoingRoles.includes('system');
+          if (hasUnknownRole) {
+            logger.warn(`Outgoing AI request roles include unknown values: ${JSON.stringify(outgoingRoles)}`, {
+              traceId,
+              userId,
+              topicId,
+              model,
+              roles: outgoingRoles
+            });
+          } else if (!hasSystemRole) {
+            // Some flows intentionally send only user role; keep this as debug to avoid noisy false alarms.
+            logger.debug(`Outgoing AI request roles: ${JSON.stringify(outgoingRoles)}`, {
+              traceId,
+              userId,
+              topicId,
+              model,
+              roles: outgoingRoles
+            });
+          }
+
           const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -277,6 +571,7 @@ export class OpenRouterProvider implements LLMProvider {
             },
             body: JSON.stringify({
               ...adaptedRequest,
+              messages: finalMessages,
               model
             }),
             signal: controller.signal
@@ -309,7 +604,7 @@ export class OpenRouterProvider implements LLMProvider {
               parsedError = null;
             }
             const errorMessage = parsedError?.error?.message || errorText;
-            const isInvalidArgument = response.status === 400 && (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('Developer instruction is not enabled') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled'));
+            const isInvalidArgument = response.status === 400 && (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled'));
             const isRateLimit = response.status === 429 || isRateLimitLike(errorMessage);
             if (isInvalidArgument) {
               throw new Error(`AI_GENERATION_FAILED: Invalid request for model ${model}. ${errorText}`);
@@ -333,7 +628,7 @@ export class OpenRouterProvider implements LLMProvider {
               }
               if (attempt < maxRetries) {
                 lastError = error;
-                const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+                const delay = getRetryDelayMs(attempt);
                 logger.info("OpenRouter retry", {
                   traceId,
                   userId,
@@ -354,7 +649,7 @@ export class OpenRouterProvider implements LLMProvider {
           const data = (await response.json()) as OpenRouterResponse;
           if (data.error) {
             const errorMessage = data.error.message || data.error.type || 'Unknown error';
-            const isInvalidArgument = errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('Developer instruction is not enabled') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled');
+            const isInvalidArgument = errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled');
             const isRateLimit = isRateLimitLike(errorMessage);
             const error = new Error(`OpenRouter API error: ${errorMessage}`);
             logger.warn("OpenRouter API error", {
@@ -378,7 +673,7 @@ export class OpenRouterProvider implements LLMProvider {
               keyHealth.cooldownUntilMs = nowMs() + defaultRateLimitCooldownMs;
               if (attempt < maxRetries) {
                 lastError = error;
-                const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+                const delay = getRetryDelayMs(attempt);
                 logger.info("OpenRouter retry (rate limit)", {
                   traceId,
                   userId,
@@ -442,7 +737,7 @@ export class OpenRouterProvider implements LLMProvider {
           if (attempt >= maxRetries) {
             break;
           }
-          const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+          const delay = getRetryDelayMs(attempt);
           logger.info("OpenRouter retry", {
             traceId,
             userId,
@@ -482,7 +777,7 @@ export class OpenRouterProvider implements LLMProvider {
     throw new Error(`AI_GENERATION_FAILED: All API keys exhausted for model ${model}. Last error: ${lastError?.message || 'Unknown error'}`);
   }
   async generateText(prompt: string, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<string> {
-    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    const model = resolveTextModel(process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini');
     const messages: Array<{
       role: string;
       content: string;
@@ -504,14 +799,19 @@ export class OpenRouterProvider implements LLMProvider {
       max_tokens: options.maxTokens
     };
     const response = await this.callOpenRouter(request, options);
-    const content = response.choices?.[0]?.message?.content;
+    const content = extractOpenRouterText(response).trim();
     if (!content) {
+      logger.warn('OpenRouter response had no extractable text', {
+        model,
+        responseId: response.id || 'unknown',
+        shape: summarizeOpenRouterResponseShape(response)
+      });
       throw new Error('AI_GENERATION_FAILED: Empty response from LLM');
     }
     return content;
   }
   async generateJSON<T = any>(prompt: string, schema: object, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<T> {
-    const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    const model = resolveJsonModel(process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini');
     const messages: Array<{
       role: string;
       content: string;
@@ -537,20 +837,134 @@ export class OpenRouterProvider implements LLMProvider {
       max_tokens: options.maxTokens
     };
     const response = await this.callOpenRouter(request, options);
-    const content = response.choices?.[0]?.message?.content;
+    const content = extractOpenRouterText(response).trim();
     if (!content) {
+      logger.warn('OpenRouter JSON response had no extractable text', {
+        model,
+        responseId: response.id || 'unknown',
+        shape: summarizeOpenRouterResponseShape(response)
+      });
       throw new Error('AI_GENERATION_FAILED: Empty response from LLM');
     }
+
+    const jsonOnlySystemPrompt = 'You are a strict JSON formatter. Return ONLY one valid JSON object. Never output analysis, reasoning, or any prose.';
+    const jsonRepairPrompt = [
+      'Convert the following model output into a VALID JSON object that conforms to the schema.',
+      'Rules:',
+      '- Output ONLY JSON object',
+      '- No markdown fences',
+      '- No explanations or prefixes like "Okay"',
+      '- First character MUST be "{" and last character MUST be "}"',
+      '- Do NOT output any analysis / internal thoughts',
+      '- Do NOT output text like "Okay, let\'s"',
+      '- Keep semantics, only fix formatting/structure',
+      '',
+      'Schema:',
+      JSON.stringify(schema, null, 2),
+      '',
+      'Original output:',
+      content
+    ].join('\n');
+
+    const strictRegeneratePrompt = [
+      prompt,
+      '',
+      'JSON schema:',
+      JSON.stringify(schema, null, 2),
+      '',
+      'CRITICAL OUTPUT CONTRACT:',
+      '- Return one JSON object only',
+      '- No text before JSON',
+      '- No text after JSON',
+      '- No markdown/code fences',
+      '- Response must start with "{" and end with "}"',
+      '- No analysis, no reasoning, no comments',
+      '- Never write: "Okay, let\'s..."',
+      '',
+      'Valid shape example (illustrative only):',
+      '{"title":"...","topic":"...","difficulty":1,"theoryMarkdown":"...","practicalTask":"...","inputFormat":"...","outputFormat":"...","constraints":"...","examples":[{"input":"...","output":"...","explanation":"..."}],"codeTemplate":"..."}'
+    ].join('\n');
+
     try {
-      let jsonContent = content.trim();
+      let jsonContent = content;
       if (jsonContent.includes('```')) {
         const jsonMatch = jsonContent.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
         if (jsonMatch) jsonContent = jsonMatch[1];
       }
-      return JSON.parse(jsonContent) as T;
+      return parseModelJsonOrThrow<T>(jsonContent);
     } catch (error: any) {
+      logger.warn('OpenRouter JSON parse failed on primary response', {
+        model,
+        responseId: response.id || 'unknown',
+        parseError: error?.message || String(error),
+        preview: content.slice(0, 160)
+      });
+
       try {
-        return tryFixJsonResponse(content) as T;
+        const repairRequest: OpenRouterRequest = {
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: jsonOnlySystemPrompt
+            },
+            {
+              role: 'user',
+              content: jsonRepairPrompt
+            }
+          ],
+          response_format: {
+            type: 'json_object'
+          },
+          temperature: 0,
+          max_tokens: options.maxTokens
+        };
+        const repaired = await this.callOpenRouter(repairRequest, {
+          ...options,
+          maxRetries: 0,
+          temperature: 0
+        });
+        const repairedContent = extractOpenRouterText(repaired).trim();
+        if (!repairedContent) {
+          throw new Error('Empty repair response content');
+        }
+        try {
+          return parseModelJsonOrThrow<T>(repairedContent);
+        } catch (repairParseError: any) {
+          logger.warn('OpenRouter JSON parse failed on repair response; trying strict regeneration', {
+            model,
+            responseId: repaired.id || 'unknown',
+            parseError: repairParseError?.message || String(repairParseError),
+            preview: repairedContent.slice(0, 160)
+          });
+
+          const strictRequest: OpenRouterRequest = {
+            model,
+            messages: [
+              ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+              {
+                role: 'user',
+                content: strictRegeneratePrompt
+              }
+            ],
+            response_format: {
+              type: 'json_object'
+            },
+            temperature: 0,
+            max_tokens: options.maxTokens
+          };
+
+          const strictResponse = await this.callOpenRouter(strictRequest, {
+            ...options,
+            maxRetries: 0,
+            temperature: 0
+          });
+          const strictContent = extractOpenRouterText(strictResponse).trim();
+          if (!strictContent) {
+            throw new Error('Empty strict regeneration response content');
+          }
+          return parseModelJsonOrThrow<T>(strictContent);
+        }
       } catch (fixError: any) {
         throw new Error(`AI_GENERATION_FAILED: Failed to parse JSON response: ${error.message}. ` + `Fix attempt failed: ${fixError?.message || String(fixError)}`);
       }

@@ -1,6 +1,6 @@
 import React from "react";
 import type { ContestRunResult, ContestSubmissionListItem } from "../../lib/api/contests";
-import { Activity, Clock3, FlaskConical, Radio, TerminalSquare } from "lucide-react";
+import { Activity, Clock3, FlaskConical, Radio, TerminalSquare, type LucideIcon } from "lucide-react";
 
 type ExampleCase = {
   id: string;
@@ -73,7 +73,7 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
           ["tests", "Tests", FlaskConical],
           ["run", "Run", TerminalSquare],
           ["verdicts", "Verdicts", Activity],
-        ] as Array<[DockView, string, React.ComponentType<any>]>).map(([id, label, Icon]) => (
+        ] as Array<[DockView, string, LucideIcon]>).map(([id, label, Icon]) => (
           <button
             key={id}
             onClick={() => setView(id)}

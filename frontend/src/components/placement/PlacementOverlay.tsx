@@ -1,14 +1,28 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CourseLanguage, User } from "../../types";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Modal } from "../ui/Modal";
-import { completePlacement, getPlacementCodingChallenge, submitPlacementCoding, type PlacementCodingChallenge, type PlacementCodingSubmitResult } from "../../lib/api/profile";
-import { computeMasteredUntilTopicIndex, getPlacementQuestions, recommendLevel, type PlacementLevel } from "./placementQuestions";
+import {
+  completePlacement,
+  getPlacementAssessmentPack,
+  submitPlacementAssessment,
+  type PlacementAssessmentPack,
+  type PlacementAssessmentSubmitResult,
+  type PlacementAssessmentTrack,
+} from "../../lib/api/profile";
+import { type PlacementLevel } from "./placementQuestions";
 import { CodeEditor } from "../CodeEditor";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
-type Step = "pick" | "quiz" | "confirm" | "coding";
+type Step = "pick" | "assessment" | "result";
+type PlacementChoice = PlacementLevel | "UNDECIDED";
+
+const getApiErrorMessage = (error: unknown): string | null => {
+  const message = getErrorMessageFromUnknown(error, "");
+  return message || null;
+};
 
 function levelLabel(level: PlacementLevel, lang: "uk" | "en") {
   const isUk = lang === "uk";
@@ -17,10 +31,26 @@ function levelLabel(level: PlacementLevel, lang: "uk" | "en") {
   return isUk ? "Просунутий" : "Advanced";
 }
 
+function choiceLabel(choice: PlacementChoice, lang: "uk" | "en"): string {
+  if (choice === "UNDECIDED") return lang === "uk" ? "Не визначився" : "Undecided";
+  return levelLabel(choice, lang);
+}
+
 function courseLabel(course: CourseLanguage) {
   if (course === "JAVA") return "Java";
   if (course === "PYTHON") return "Python";
   return "C++";
+}
+
+function choiceToTrack(choice: PlacementChoice): PlacementAssessmentTrack | null {
+  if (choice === "INTERMEDIATE") return "INTERMEDIATE";
+  if (choice === "ADVANCED") return "ADVANCED";
+  if (choice === "UNDECIDED") return "UNDECIDED";
+  return null;
+}
+
+function getTaskReportMap(result: PlacementAssessmentSubmitResult | null): Map<string, PlacementAssessmentSubmitResult["taskReports"][number]> {
+  return new Map((result?.taskReports || []).map((r) => [r.taskId, r]));
 }
 
 export const PlacementOverlay: React.FC<{
@@ -33,44 +63,45 @@ export const PlacementOverlay: React.FC<{
   const lang = i18n.language?.toLowerCase().startsWith("en") ? "en" : "uk";
 
   const [pickedCourse, setPickedCourse] = useState<CourseLanguage>(() => user.course || "JAVA");
-  const questions = useMemo(() => getPlacementQuestions(pickedCourse), [pickedCourse]);
-
   const [step, setStep] = useState<Step>("pick");
-  const [pickedLevel, setPickedLevel] = useState<PlacementLevel>("BEGINNER");
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [pickedChoice, setPickedChoice] = useState<PlacementChoice>("BEGINNER");
+
+  const [assessmentLoading, setAssessmentLoading] = useState(false);
+  const [assessmentPack, setAssessmentPack] = useState<PlacementAssessmentPack | null>(null);
+  const [assessmentQuizAnswers, setAssessmentQuizAnswers] = useState<Record<string, number>>({});
+  const [assessmentTaskCodes, setAssessmentTaskCodes] = useState<Record<string, string>>({});
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [assessmentResult, setAssessmentResult] = useState<PlacementAssessmentSubmitResult | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [codingChallenge, setCodingChallenge] = useState<PlacementCodingChallenge | null>(null);
-  const [codingCode, setCodingCode] = useState<string>("");
-  const [codingResult, setCodingResult] = useState<PlacementCodingSubmitResult | null>(null);
-  const [codingSubmitting, setCodingSubmitting] = useState(false);
+  const assessmentTrack = useMemo(() => choiceToTrack(pickedChoice), [pickedChoice]);
+  const quizTotal = assessmentPack?.quizQuestions.length ?? 0;
+  const quizAnswered = Object.keys(assessmentQuizAnswers).length;
+  const taskTotal = assessmentPack?.tasks.length ?? 0;
+  const taskFilled = useMemo(() => {
+    if (!assessmentPack) return 0;
+    return assessmentPack.tasks.filter((task) => String(assessmentTaskCodes[task.id] ?? "").trim().length > 0).length;
+  }, [assessmentPack, assessmentTaskCodes]);
 
-  const total = questions.length;
-  const correct = useMemo(() => {
-    let c = 0;
-    for (const q of questions) {
-      const a = answers[q.id];
-      if (typeof a === "number" && a === q.correctIndex) c++;
-    }
-    return c;
-  }, [answers, questions]);
+  const taskReportMap = useMemo(() => getTaskReportMap(assessmentResult), [assessmentResult]);
 
-  const recommended = useMemo(() => recommendLevel(correct, total), [correct, total]);
-
-  const masteredUntilTopicIndex = useMemo(() => computeMasteredUntilTopicIndex(questions, answers), [questions, answers]);
-
-  const title = step === "pick" ? t("placementPickTitle") : step === "quiz" ? t("placementQuickTestTitle") : step === "confirm" ? t("placementConfirmTitle") : (lang === "uk" ? "Практична частина" : "Practical part");
+  const title = step === "pick"
+    ? t("placementPickTitle")
+    : step === "assessment"
+      ? (lang === "uk" ? "Комплексне тестування" : "Comprehensive assessment")
+      : (lang === "uk" ? "Результати assessment" : "Assessment results");
 
   const description = step === "pick"
     ? t("placementPickBody")
-    : step === "quiz"
-      ? t("placementQuickTestBody")
-      : step === "confirm"
-        ? (lang === "uk" ? "Можна прийняти рекомендацію або вибрати інший рівень." : "Accept the recommendation or choose another level.")
-        : (lang === "uk" ? "Розв’яжи коротку задачу — це потрібно, щоб підтвердити рівень." : "Solve a short task — required to confirm your level.");
-
-  const canFinishQuiz = step !== "quiz" || Object.keys(answers).length === total;
+    : step === "assessment"
+      ? (lang === "uk"
+        ? "Тестова частина + 5 практичних задач для підтвердження рівня."
+        : "Quiz section + 5 practical tasks to confirm level.")
+      : (lang === "uk"
+        ? "Детальний розбір тестової та практичної частини."
+        : "Detailed breakdown of quiz and practical sections.");
 
   async function save(level: PlacementLevel, score?: number | null, masteredUntil?: number | null) {
     setSubmitting(true);
@@ -84,14 +115,14 @@ export const PlacementOverlay: React.FC<{
       });
       onUserChange(updated);
       onClose();
-    } catch (e: any) {
-      const msg = e?.response?.data?.message;
+    } catch (e: unknown) {
+      const msg = getApiErrorMessage(e);
       if (msg === "PLACEMENT_CODING_REQUIRED") {
-        setError(lang === "uk" ? "Спочатку пройди практичну частину (задачу)." : "Please complete the practical task first.");
+        setError(lang === "uk" ? "Спочатку пройди комплексну практичну частину." : "Please complete the comprehensive practical section first.");
       } else if (msg === "PLACEMENT_CODING_LEVEL_MISMATCH") {
-        setError(lang === "uk" ? "Практична задача має відповідати обраному рівню. Повернись і пройди практику ще раз." : "The practical task must match your chosen level. Please redo the practice step.");
+        setError(lang === "uk" ? "Результат практичної частини не відповідає обраному рівню." : "Practical section result does not match the selected level.");
       } else if (msg === "PLACEMENT_SCORE_REQUIRED") {
-        setError(lang === "uk" ? "Потрібно пройти тест (квіз) перед збереженням." : "You need to complete the quiz before saving.");
+        setError(lang === "uk" ? "Потрібно завершити тестову частину перед збереженням." : "You need to complete the quiz section before saving.");
       } else {
         setError(typeof msg === "string" ? msg : (lang === "uk" ? "Не вдалося зберегти." : "Failed to save."));
       }
@@ -100,32 +131,80 @@ export const PlacementOverlay: React.FC<{
     }
   }
 
-  useEffect(() => {
-    if (step !== "coding") return;
-    let cancelled = false;
-    setCodingSubmitting(true);
-    setCodingResult(null);
+  async function openAssessment(track: PlacementAssessmentTrack) {
+    setAssessmentLoading(true);
     setError(null);
-    getPlacementCodingChallenge({
-      level: pickedLevel,
-      course: pickedCourse
-    })
-      .then(ch => {
-        if (cancelled) return;
-        setCodingChallenge(ch);
-        setCodingCode(ch.starterCode || "");
-      })
-      .catch(e => {
-        const msg = (e as any)?.response?.data?.message;
-        setError(typeof msg === "string" ? msg : (lang === "uk" ? "Не вдалося завантажити задачу." : "Failed to load the task."));
-      })
-      .finally(() => {
-        if (!cancelled) setCodingSubmitting(false);
+    setAssessmentResult(null);
+    try {
+      const pack = await getPlacementAssessmentPack({
+        track,
+        course: pickedCourse,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [step, lang, pickedLevel, pickedCourse]);
+      setAssessmentPack(pack);
+      setAssessmentQuizAnswers({});
+      const nextCodes: Record<string, string> = {};
+      for (const task of pack.tasks) {
+        nextCodes[task.id] = task.starterCode || "";
+      }
+      setAssessmentTaskCodes(nextCodes);
+      setActiveTaskId(pack.tasks[0]?.id ?? null);
+      setStep("assessment");
+    } catch (e: unknown) {
+      const msg = getApiErrorMessage(e);
+      setError(typeof msg === "string" ? msg : (lang === "uk" ? "Не вдалося завантажити комплексне тестування." : "Failed to load comprehensive assessment."));
+    } finally {
+      setAssessmentLoading(false);
+    }
+  }
+
+  async function submitAssessment() {
+    if (!assessmentPack || !assessmentTrack) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const quizAnswers = assessmentPack.quizQuestions.map((q) => ({
+        questionId: q.id,
+        selectedIndex: Number(assessmentQuizAnswers[q.id] ?? -1),
+      }));
+      if (quizAnswers.some((x) => !Number.isFinite(x.selectedIndex) || x.selectedIndex < 0)) {
+        setError(lang === "uk" ? "Дай відповіді на всі питання тесту." : "Please answer all quiz questions.");
+        return;
+      }
+
+      const taskSolutions = assessmentPack.tasks.map((task) => ({
+        taskId: task.id,
+        code: String(assessmentTaskCodes[task.id] ?? ""),
+      }));
+      if (taskSolutions.some((x) => !x.code.trim())) {
+        setError(lang === "uk" ? "Заповни код для всіх 5 задач." : "Please provide code for all 5 tasks.");
+        return;
+      }
+
+      const result = await submitPlacementAssessment({
+        track: assessmentTrack,
+        course: pickedCourse,
+        quizAnswers,
+        taskSolutions,
+      });
+      setAssessmentResult(result);
+      onUserChange(result.user);
+      setStep("result");
+    } catch (e: unknown) {
+      const msg = getApiErrorMessage(e);
+      setError(typeof msg === "string" ? msg : (lang === "uk" ? "Не вдалося завершити тестування." : "Failed to finish assessment."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const activeTask = useMemo(() => {
+    if (!assessmentPack || !activeTaskId) return null;
+    return assessmentPack.tasks.find((t) => t.id === activeTaskId) || null;
+  }, [assessmentPack, activeTaskId]);
+
+  const quizReportById = useMemo(() => {
+    return new Map((assessmentResult?.quizReports || []).map((r) => [r.questionId, r]));
+  }, [assessmentResult]);
 
   return (
     <Modal
@@ -157,10 +236,11 @@ export const PlacementOverlay: React.FC<{
                     variant={c === pickedCourse ? "primary" : "ghost"}
                     onClick={() => {
                       setPickedCourse(c);
-                      setAnswers({});
-                      setCodingChallenge(null);
-                      setCodingCode("");
-                      setCodingResult(null);
+                      setAssessmentPack(null);
+                      setAssessmentQuizAnswers({});
+                      setAssessmentTaskCodes({});
+                      setActiveTaskId(null);
+                      setAssessmentResult(null);
                       setError(null);
                     }}
                     disabled={submitting}
@@ -171,28 +251,30 @@ export const PlacementOverlay: React.FC<{
               </div>
               <div className="text-xs text-text-muted font-mono mt-2">
                 {lang === "uk"
-                  ? "Обери мову — тест визначить теми, які можна пропустити."
-                  : "Pick a language — the test will determine which topics we can skip."}
+                  ? "Обери мову — для non-beginner працює окреме комплексне середовище (тест + 5 задач)."
+                  : "Pick a language — non-beginner levels use a separate comprehensive environment (quiz + 5 tasks)."}
               </div>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {(["BEGINNER", "INTERMEDIATE", "ADVANCED"] as PlacementLevel[]).map(l => (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {(["BEGINNER", "INTERMEDIATE", "ADVANCED", "UNDECIDED"] as PlacementChoice[]).map((l) => (
                 <button
                   key={l}
-                  onClick={() => setPickedLevel(l)}
+                  onClick={() => setPickedChoice(l)}
                   className={
                     "text-left p-4 border transition-fast bg-bg-surface " +
-                    (pickedLevel === l ? "border-primary" : "border-border hover:bg-bg-hover")
+                    (pickedChoice === l ? "border-primary" : "border-border hover:bg-bg-hover")
                   }
                 >
-                  <div className="text-sm font-mono text-text-primary">{levelLabel(l, lang)}</div>
+                  <div className="text-sm font-mono text-text-primary">{choiceLabel(l, lang)}</div>
                   <div className="text-xs text-text-secondary mt-2">
                     {l === "BEGINNER"
                       ? (lang === "uk" ? "Я тільки починаю." : "I’m just starting.")
                       : l === "INTERMEDIATE"
-                        ? (lang === "uk" ? "Базу знаю, хочу практику." : "I know the basics, want practice.")
-                        : (lang === "uk" ? "Хочу складніші задачі." : "I want harder tasks.")}
+                        ? (lang === "uk" ? "Комплексне середовище на середній рівень." : "Dedicated medium-level environment.")
+                        : l === "ADVANCED"
+                          ? (lang === "uk" ? "Комплексне середовище на просунутий рівень." : "Dedicated advanced-level environment.")
+                          : (lang === "uk" ? "Пройду повне комплексне тестування для визначення рівня." : "Take full comprehensive testing to determine level.")}
                   </div>
                 </button>
               ))}
@@ -200,160 +282,251 @@ export const PlacementOverlay: React.FC<{
           </div>
         )}
 
-        {step === "quiz" && (
+        {step === "assessment" && assessmentPack && (
           <div className="space-y-3">
-            {questions.map((q, idx) => {
-              const prompt = lang === "uk" ? q.promptUk : q.promptEn;
-              const opts = lang === "uk" ? q.optionsUk : q.optionsEn;
-              const selected = answers[q.id];
-              return (
-                <Card key={q.id} className="p-4">
-                  <div className="text-xs font-mono text-text-secondary mb-2">
-                    {lang === "uk" ? "Питання" : "Question"} {idx + 1}/{total}
-                  </div>
-                  <div className="text-sm font-mono text-text-primary whitespace-pre-line">{prompt}</div>
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {opts.map((o, oi) => (
-                      <button
-                        key={oi}
-                        onClick={() => setAnswers(prev => ({ ...prev, [q.id]: oi }))}
-                        className={
-                          "text-left px-3 py-2 border text-sm font-mono transition-fast " +
-                          (selected === oi ? "border-primary bg-bg-hover" : "border-border hover:bg-bg-hover/60")
-                        }
-                      >
-                        {o}
-                      </button>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+            <Card className="p-4 border border-primary/40">
+              <div className="text-sm font-mono text-text-primary mb-2">
+                {lang === "uk" ? "Поточне середовище" : "Current environment"}: {assessmentPack.track}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs font-mono">
+                <div className="border border-border p-2 bg-bg-code">
+                  {lang === "uk" ? "Тест" : "Quiz"}: {quizAnswered}/{quizTotal}
+                </div>
+                <div className="border border-border p-2 bg-bg-code">
+                  {lang === "uk" ? "Практика" : "Practice"}: {taskFilled}/{taskTotal}
+                </div>
+                <div className="border border-border p-2 bg-bg-code">
+                  {lang === "uk" ? "Мова" : "Language"}: {courseLabel(assessmentPack.language)}
+                </div>
+              </div>
+            </Card>
 
-        {step === "coding" && (
-          <div className="space-y-3">
             <Card className="p-4">
               <div className="text-xs font-mono text-text-secondary mb-2">
-                {lang === "uk" ? "Задача" : "Task"}
+                {lang === "uk" ? "Тестова частина" : "Quiz section"}
               </div>
-              <div className="text-sm font-mono text-text-primary whitespace-pre-line">
-                {lang === "uk" ? (codingChallenge?.promptUk || "") : (codingChallenge?.promptEn || "")}
+              <div className="space-y-3">
+                {assessmentPack.quizQuestions.map((q, idx) => {
+                  const selected = assessmentQuizAnswers[q.id];
+                  const prompt = lang === "uk" ? q.promptUk : q.promptEn;
+                  const opts = lang === "uk" ? q.optionsUk : q.optionsEn;
+                  return (
+                    <div key={q.id} className="border border-border p-3 bg-bg-code/60">
+                      <div className="text-xs font-mono text-text-secondary mb-1">
+                        {lang === "uk" ? "Питання" : "Question"} {idx + 1}/{quizTotal}
+                      </div>
+                      <div className="text-sm font-mono text-text-primary mb-2">{prompt}</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {opts.map((o, oi) => (
+                          <button
+                            key={`${q.id}-${oi}`}
+                            onClick={() => setAssessmentQuizAnswers((prev) => ({ ...prev, [q.id]: oi }))}
+                            className={
+                              "text-left px-3 py-2 border text-sm font-mono transition-fast " +
+                              (selected === oi ? "border-primary bg-bg-hover" : "border-border hover:bg-bg-hover/60")
+                            }
+                          >
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs font-mono text-text-secondary mb-2">
+                {lang === "uk" ? "Практична частина (5 задач)" : "Practical section (5 tasks)"}
+              </div>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {assessmentPack.tasks.map((task, idx) => {
+                  const report = taskReportMap.get(task.id);
+                  const isActive = activeTaskId === task.id;
+                  return (
+                    <button
+                      key={task.id}
+                      onClick={() => setActiveTaskId(task.id)}
+                      className={
+                        "px-2.5 py-1 border text-xs font-mono transition-fast " +
+                        (isActive ? "border-primary bg-bg-hover" : "border-border hover:bg-bg-hover/60")
+                      }
+                    >
+                      {lang === "uk" ? "Задача" : "Task"} {idx + 1}
+                      {report ? <span className={report.passed ? "text-accent-success ml-1" : "text-accent-error ml-1"}>{report.passed ? "✓" : "✕"}</span> : null}
+                    </button>
+                  );
+                })}
               </div>
 
-              {codingChallenge && (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Приклад вводу" : "Sample input"}</div>
-                    <pre className="text-xs font-mono bg-bg-code border border-border p-3 overflow-auto">{codingChallenge.sampleInput}</pre>
+              {activeTask && (
+                <div className="space-y-3">
+                  <div className="border border-border p-3 bg-bg-code/60">
+                    <div className="text-sm font-mono text-text-primary mb-2">
+                      {lang === "uk" ? activeTask.titleUk : activeTask.titleEn}
+                    </div>
+                    <div className="text-sm font-mono text-text-primary whitespace-pre-line">
+                      {lang === "uk" ? activeTask.promptUk : activeTask.promptEn}
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Приклад виводу" : "Sample output"}</div>
-                    <pre className="text-xs font-mono bg-bg-code border border-border p-3 overflow-auto">{codingChallenge.sampleOutput}</pre>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Приклад вводу" : "Sample input"}</div>
+                      <pre className="text-xs font-mono bg-bg-code border border-border p-3 overflow-auto">{activeTask.sampleInput}</pre>
+                    </div>
+                    <div>
+                      <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Приклад виводу" : "Sample output"}</div>
+                      <pre className="text-xs font-mono bg-bg-code border border-border p-3 overflow-auto">{activeTask.sampleOutput}</pre>
+                    </div>
                   </div>
+
+                  <div className="border border-border h-[46vh] min-h-[320px] max-h-[700px] mt-3">
+                    <CodeEditor
+                      language={activeTask.language}
+                      value={assessmentTaskCodes[activeTask.id] ?? ""}
+                      onChange={(next) => setAssessmentTaskCodes((prev) => ({ ...prev, [activeTask.id]: next }))}
+                    />
+                  </div>
+
+                  {taskReportMap.get(activeTask.id) && !taskReportMap.get(activeTask.id)?.passed ? (
+                    <div className="border border-accent-error p-3 bg-bg-code/60">
+                      <div className="text-xs font-mono text-accent-error mb-1">
+                        {lang === "uk" ? "Останній результат" : "Last result"}
+                      </div>
+                      {taskReportMap.get(activeTask.id)?.stderr ? (
+                        <pre className="text-xs font-mono bg-bg-code border border-border p-2 overflow-auto">{taskReportMap.get(activeTask.id)?.stderr}</pre>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Очікувалося" : "Expected"}</div>
+                            <pre className="text-xs font-mono bg-bg-code border border-border p-2 overflow-auto">{taskReportMap.get(activeTask.id)?.expected ?? ""}</pre>
+                          </div>
+                          <div>
+                            <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Отримали" : "Actual"}</div>
+                            <pre className="text-xs font-mono bg-bg-code border border-border p-2 overflow-auto">{taskReportMap.get(activeTask.id)?.actual ?? ""}</pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </Card>
-
-            <Card className="p-3">
-              <div className="text-xs font-mono text-text-secondary mb-2">
-                {lang === "uk" ? "Код" : "Code"}
-                {codingChallenge?.language ? <span className="text-text-muted"> ({courseLabel(codingChallenge.language)})</span> : null}
-              </div>
-              <div className="border border-border h-[52vh] min-h-[360px] max-h-[720px]">
-                <CodeEditor language={codingChallenge?.language || pickedCourse} value={codingCode} onChange={setCodingCode} />
-              </div>
-            </Card>
-
-            {codingResult && !codingResult.passed && (
-              <Card className="p-4 border border-accent-error">
-                <div className="text-xs font-mono text-accent-error mb-2">
-                  {lang === "uk" ? "Помилка перевірки" : "Check failed"}
-                </div>
-                {typeof codingResult.caseIndex === "number" && (
-                  <div className="text-xs font-mono text-text-secondary mb-2">
-                    {lang === "uk" ? "Тест" : "Test"}: {codingResult.caseIndex + 1}/{codingResult.total}
-                  </div>
-                )}
-                {codingResult.stderr ? (
-                  <pre className="text-xs font-mono bg-bg-code border border-border p-3 overflow-auto">{codingResult.stderr}</pre>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Очікувалося" : "Expected"}</div>
-                      <pre className="text-xs font-mono bg-bg-code border border-border p-3 overflow-auto">{codingResult.expected ?? ""}</pre>
-                    </div>
-                    <div>
-                      <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Отримали" : "Actual"}</div>
-                      <pre className="text-xs font-mono bg-bg-code border border-border p-3 overflow-auto">{codingResult.actual ?? ""}</pre>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            )}
           </div>
         )}
 
-        {step === "confirm" && (
-          <Card className="p-5">
-            <div className="text-sm font-mono text-text-primary">
-              {t("placementResult")}: {correct}/{total}
-            </div>
-            <div className="text-sm text-text-secondary mt-2">
-              {t("placementRecommended")}: <span className="text-text-primary font-mono">{levelLabel(recommended, lang)}</span>
-            </div>
-
-            <div className="text-sm text-text-secondary mt-2">
-              {lang === "uk" ? "Теми, які можна пропустити" : "Topics we can skip"}: {" "}
-              <span className="text-text-primary font-mono">
-                {masteredUntilTopicIndex === null ? (lang === "uk" ? "немає" : "none") : `${masteredUntilTopicIndex + 1}`}
-              </span>
-              <span className="text-text-muted">{lang === "uk" ? " (з початку курсу)" : " (from the start)"}</span>
-            </div>
-            <div className="mt-4">
-              <div className="text-xs text-text-secondary font-mono mb-2">
-                {t("placementOrChoose")}{lang === "uk" ? ":" : ":"}
+        {step === "result" && assessmentPack && assessmentResult && (
+          <div className="space-y-3">
+            <Card className="p-4 border border-primary/40">
+              <div className="text-sm font-mono text-text-primary mb-2">
+                {lang === "uk" ? "Підсумок" : "Summary"}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {(["BEGINNER", "INTERMEDIATE", "ADVANCED"] as PlacementLevel[]).map(l => (
-                  <Button
-                    key={l}
-                    variant={l === pickedLevel ? "primary" : "ghost"}
-                    onClick={() => {
-                      setPickedLevel(l);
-                      setCodingChallenge(null);
-                      setCodingCode("");
-                      setCodingResult(null);
-                      setError(null);
-                    }}
-                  >
-                    {levelLabel(l, lang)}
-                  </Button>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs font-mono">
+                <div className="border border-border p-2 bg-bg-code">
+                  {lang === "uk" ? "Фінальний рівень" : "Final level"}: {assessmentResult.summary.finalLevel}
+                </div>
+                <div className="border border-border p-2 bg-bg-code">
+                  {lang === "uk" ? "Тестова частина" : "Quiz"}: {assessmentResult.summary.quizCorrect}/{assessmentResult.summary.quizTotal} ({assessmentResult.summary.quizPct}%)
+                </div>
+                <div className="border border-border p-2 bg-bg-code">
+                  {lang === "uk" ? "Практична частина" : "Practical"}: {assessmentResult.summary.practicalPassed}/{assessmentResult.summary.practicalTotal} ({assessmentResult.summary.practicalPct}%)
+                </div>
+                <div className="border border-border p-2 bg-bg-code">
+                  {lang === "uk" ? "Загальний бал" : "Overall"}: {assessmentResult.summary.overallPct}%
+                </div>
               </div>
-            </div>
+            </Card>
 
-            <div className="mt-4 text-xs text-text-muted font-mono">
-              {pickedLevel === "BEGINNER"
-                ? (lang === "uk" ? "BEGINNER: стартуєш з самого початку (результати тесту не застосовуємо)." : "BEGINNER: you start from the beginning (we won’t apply quiz results).")
-                : (lang === "uk" ? "INTERMEDIATE/ADVANCED: потрібно пройти практичну задачу для підтвердження рівня." : "INTERMEDIATE/ADVANCED: you must complete a practical task to confirm this level.")}
-            </div>
-          </Card>
+            <Card className="p-4">
+              <div className="text-xs font-mono text-text-secondary mb-2">
+                {lang === "uk" ? "Детально: тестова частина" : "Details: quiz section"}
+              </div>
+              <div className="space-y-3">
+                {assessmentPack.quizQuestions.map((q, idx) => {
+                  const report = quizReportById.get(q.id);
+                  const options = lang === "uk" ? q.optionsUk : q.optionsEn;
+                  const prompt = lang === "uk" ? q.promptUk : q.promptEn;
+                  const selectedLabel = report && report.selectedIndex >= 0 ? options[report.selectedIndex] : (lang === "uk" ? "Немає відповіді" : "No answer");
+                  const correctLabel = report && report.correctIndex >= 0 ? options[report.correctIndex] : "—";
+                  return (
+                    <div key={q.id} className={`border p-3 ${report?.isCorrect ? "border-accent-success" : "border-accent-error"}`}>
+                      <div className="text-xs font-mono text-text-secondary mb-1">
+                        {lang === "uk" ? "Питання" : "Question"} {idx + 1}
+                      </div>
+                      <div className="text-sm font-mono text-text-primary mb-2">{prompt}</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
+                        <div className="border border-border p-2 bg-bg-code">
+                          {lang === "uk" ? "Твоя відповідь" : "Your answer"}: {selectedLabel}
+                        </div>
+                        <div className="border border-border p-2 bg-bg-code">
+                          {lang === "uk" ? "Правильна відповідь" : "Correct answer"}: {correctLabel}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="text-xs font-mono text-text-secondary mb-2">
+                {lang === "uk" ? "Детально: практична частина (5 задач)" : "Details: practical section (5 tasks)"}
+              </div>
+              <div className="space-y-3">
+                {assessmentPack.tasks.map((task, idx) => {
+                  const report = taskReportMap.get(task.id);
+                  return (
+                    <div key={task.id} className={`border p-3 ${report?.passed ? "border-accent-success" : "border-accent-error"}`}>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="text-sm font-mono text-text-primary">
+                          {lang === "uk" ? "Задача" : "Task"} {idx + 1}: {lang === "uk" ? task.titleUk : task.titleEn}
+                        </div>
+                        <div className={report?.passed ? "text-accent-success text-xs font-mono" : "text-accent-error text-xs font-mono"}>
+                          {report?.passed ? (lang === "uk" ? "Пройдено" : "Passed") : (lang === "uk" ? "Не пройдено" : "Failed")}
+                        </div>
+                      </div>
+                      <div className="text-xs font-mono text-text-secondary mb-2">
+                        {lang === "uk" ? "Тести" : "Tests"}: {report?.passedTests ?? 0}/{report?.totalTests ?? 0}
+                      </div>
+
+                      {!report?.passed ? (
+                        report.stderr ? (
+                          <pre className="text-xs font-mono bg-bg-code border border-border p-2 overflow-auto">{report.stderr}</pre>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div>
+                              <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Очікувалося" : "Expected"}</div>
+                              <pre className="text-xs font-mono bg-bg-code border border-border p-2 overflow-auto">{report.expected ?? ""}</pre>
+                            </div>
+                            <div>
+                              <div className="text-xs font-mono text-text-secondary mb-1">{lang === "uk" ? "Отримали" : "Actual"}</div>
+                              <pre className="text-xs font-mono bg-bg-code border border-border p-2 overflow-auto">{report.actual ?? ""}</pre>
+                            </div>
+                          </div>
+                        )
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
         )}
 
         <div className="flex items-center justify-between pt-2">
           <div />
 
           <div className="flex gap-2">
-            {step !== "pick" && (
+            {step === "assessment" && (
               <Button
                 variant="ghost"
                 onClick={() => {
                   setError(null);
-                  setStep(step === "coding" ? "confirm" : step === "confirm" ? "quiz" : "pick");
+                  setStep("pick");
                 }}
-                disabled={submitting || codingSubmitting}
+                disabled={submitting || assessmentLoading}
               >
                 {t("back")}
               </Button>
@@ -362,113 +535,42 @@ export const PlacementOverlay: React.FC<{
             {step === "pick" && (
               <>
                 <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setError(null);
-                    setStep("quiz");
-                  }}
-                  disabled={submitting || total === 0}
-                >
-                  {t("placementTakeTest")}
-                </Button>
-                <Button
-                  onClick={() => {
-                    if (pickedLevel === "BEGINNER") {
+                  onClick={async () => {
+                    if (pickedChoice === "BEGINNER") {
                       void save("BEGINNER", null, null);
                       return;
                     }
+                    const track = choiceToTrack(pickedChoice);
+                    if (!track) {
+                      setError(lang === "uk" ? "Оберіть валідний режим тестування." : "Please choose a valid testing mode.");
+                      return;
+                    }
                     setError(null);
-                    setStep("quiz");
+                    await openAssessment(track);
                   }}
-                  disabled={submitting}
+                  disabled={submitting || assessmentLoading}
                 >
-                  {pickedLevel === "BEGINNER"
+                  {assessmentLoading
+                    ? (lang === "uk" ? "Завантаження..." : "Loading...")
+                    : pickedChoice === "BEGINNER"
                     ? (lang === "uk" ? "Почати з нуля" : "Start from scratch")
-                    : (lang === "uk" ? "Продовжити" : "Continue")}
+                    : (lang === "uk" ? "Відкрити середовище" : "Open environment")}
                 </Button>
               </>
             )}
 
-            {step === "quiz" && (
+            {step === "assessment" && (
               <Button
-                onClick={() => {
-                  if (!canFinishQuiz) {
-                    setError(t("pleaseAnswerAllQuestions"));
-                    return;
-                  }
-                  setError(null);
-                  setPickedLevel(recommended);
-                  setCodingChallenge(null);
-                  setCodingCode("");
-                  setCodingResult(null);
-                  setStep("confirm");
-                }}
+                onClick={() => void submitAssessment()}
                 disabled={submitting}
               >
-                {lang === "uk" ? "Далі" : "Next"}
+                {submitting ? (lang === "uk" ? "Перевіряю..." : "Evaluating...") : (lang === "uk" ? "Завершити тестування" : "Finish assessment")}
               </Button>
             )}
 
-            {step === "confirm" && (
-              <Button
-                onClick={() => {
-                  if (pickedLevel === "BEGINNER") {
-                    void save("BEGINNER", null, null);
-                    return;
-                  }
-                  setError(null);
-                  setStep("coding");
-                }}
-                disabled={submitting}
-              >
-                {pickedLevel === "BEGINNER"
-                  ? (lang === "uk" ? "Почати з нуля" : "Start from scratch")
-                  : (lang === "uk" ? "До практики" : "Go to practice")}
-              </Button>
-            )}
-
-            {step === "coding" && (
-              <Button
-                onClick={async () => {
-                  if (!codingCode.trim()) {
-                    setCodingResult({
-                      passed: false,
-                      passedCount: 0,
-                      total: 0,
-                      stderr: lang === "uk" ? "Встав код перед відправкою." : "Please enter code before submitting."
-                    });
-                    return;
-                  }
-                  setCodingSubmitting(true);
-                  setCodingResult(null);
-                  setError(null);
-                  try {
-                    const r = await submitPlacementCoding({
-                      code: codingCode,
-                      level: pickedLevel,
-                      challengeId: codingChallenge?.id || "",
-                      course: pickedCourse
-                    });
-                    setCodingResult(r);
-                    if (r.passed) {
-                      await save(pickedLevel, correct, masteredUntilTopicIndex);
-                    }
-                  } catch (e: any) {
-                    const msg = e?.response?.data?.message;
-                    if (msg === "CHALLENGE_MISMATCH") {
-                      setError(lang === "uk" ? "Задача змінилася (можливо, ти змінив рівень/мову). Онови практику і спробуй ще раз." : "The challenge changed (maybe you changed level/language). Reload practice and try again.");
-                    } else if (msg === "LEVEL_REQUIRED") {
-                      setError(lang === "uk" ? "Потрібно вибрати рівень." : "Level is required.");
-                    } else {
-                      setError(typeof msg === "string" ? msg : (lang === "uk" ? "Не вдалося перевірити код." : "Failed to check code."));
-                    }
-                  } finally {
-                    setCodingSubmitting(false);
-                  }
-                }}
-                disabled={submitting || codingSubmitting || !codingChallenge || !codingChallenge?.id}
-              >
-                {codingSubmitting ? (lang === "uk" ? "Перевіряю…" : "Checking…") : (lang === "uk" ? "Відправити на перевірку" : "Submit for check")}
+            {step === "result" && (
+              <Button onClick={onClose}>
+                {lang === "uk" ? "Завершити" : "Done"}
               </Button>
             )}
           </div>
@@ -476,8 +578,8 @@ export const PlacementOverlay: React.FC<{
 
         <div className="text-xs text-text-muted font-mono">
           {lang === "uk"
-            ? "Можна змінити рівень пізніше (у профілі — додамо в наступних ітераціях)."
-            : "You can change this later (we’ll add it to Profile in a next iteration)."}
+            ? "Для non-beginner і режиму «не визначився» застосовується окреме комплексне середовище: тест + 5 практичних задач."
+            : "For non-beginner and undecided modes, a dedicated comprehensive environment is used: quiz + 5 practical tasks."}
         </div>
       </div>
     </Modal>

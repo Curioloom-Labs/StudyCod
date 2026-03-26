@@ -29,17 +29,17 @@ const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
 const aiDetectLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, message: "RATE_LIMIT" });
 
 const manualTaskGradeBodySchema = z.object({
-  total: z.number().finite().min(0).max(12),
+  total: z.number().finite().min(0).max(100),
   feedback: z.string().max(20_000).optional()
 });
 
 const controlWorkGradeBodySchema = z.object({
-  grade: z.number().finite().min(0).max(12)
+  grade: z.number().finite().min(0).max(100)
 });
 
 const updateGradeBodySchema = z
   .object({
-    total: z.number().finite().min(0).max(12).optional(),
+    total: z.number().finite().min(0).max(100).optional(),
     feedback: z.string().max(20_000).optional()
   })
   .strict();
@@ -60,7 +60,7 @@ function messageForGradeBodyError(err: z.ZodError, missingMessage: string, inval
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(12, Math.round(n)));
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 function disableCache(res: Response) {

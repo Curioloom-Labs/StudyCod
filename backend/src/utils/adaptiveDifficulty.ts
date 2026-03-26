@@ -1,48 +1,78 @@
-export function calculateAdaptiveDifus(averageGrade: number, last3Grades: number[], topicIndex: number): number {
-  const baseDifus = topicIndex < 5 ? 0 : topicIndex < 10 ? 0.5 : 1;
-  if (averageGrade >= 9 && last3Grades.length === 3 && last3Grades.every(g => g >= 9)) {
-    return Math.min(1, baseDifus + 0.3);
-  } else if (averageGrade >= 7 && last3Grades.length === 3 && last3Grades.every(g => g >= 7)) {
-    return baseDifus;
-  } else if (averageGrade < 6 || last3Grades.length > 0 && last3Grades.some(g => g < 5)) {
-    return Math.max(0, baseDifus - 0.3);
-  }
-  return baseDifus;
+import {
+  clampIad,
+  getIadDeltaByGrade,
+  getLastProcessedGradeIdForLang,
+  getUserIadForLang,
+  setLastProcessedGradeIdForLang,
+  setUserIadForLang,
+} from "./iad";
+
+/**
+ * Backward-compatible helper for quick deterministic updates in tests/tools.
+ */
+export function calculateAdaptiveIad(currentIad: number, grade: number): number {
+  return clampIad(Number(currentIad ?? 0) + getIadDeltaByGrade(Number(grade ?? 0)));
 }
-export async function getStableDifus(userId: number, lang: "JAVA" | "PYTHON" | "CPP", topicIndex: number, userRepo: () => any, gradeRepo: () => any): Promise<number> {
-  const user = await userRepo().findOne({
-    where: {
-      id: userId
-    }
-  });
-  if (!user) {
-    return topicIndex < 5 ? 0 : topicIndex < 10 ? 0.5 : 1;
-  }
-  const grades = await gradeRepo().createQueryBuilder("grade").leftJoinAndSelect("grade.task", "task").where("grade.user_id = :userId", {
-    userId
-  }).andWhere("task.lang = :lang", {
-    lang
-  }).orderBy("grade.createdAt", "DESC").take(5).getMany();
-  const validGrades = grades.filter((g: any) => g.total !== null && g.total !== undefined);
-  if (validGrades.length < 3) {
-    const currentDifus = lang === "PYTHON" ? user.difusPython : user.difusJava;
-    return currentDifus;
-  }
-  const last5Grades = validGrades.slice(0, 5).map((g: any) => g.total ?? 0);
-  const last3Grades = last5Grades.slice(0, 3);
-  const averageGrade = last5Grades.reduce((sum: number, g: number) => sum + g, 0) / last5Grades.length;
-  const newDifus = calculateAdaptiveDifus(averageGrade, last3Grades, topicIndex);
-  const currentDifus = lang === "PYTHON" ? user.difusPython : user.difusJava;
-  if (Math.abs(newDifus - currentDifus) >= 0.3) {
-    const lastChange = (user as any).lastDifusChange || new Date(0);
-    const daysSinceChange = Math.floor((new Date().getTime() - new Date(lastChange).getTime()) / (1000 * 60 * 60 * 24));
-    if (daysSinceChange >= 1 || validGrades.length < 3) {
-      if (lang === "PYTHON") user.difusPython = newDifus;
-      else user.difusJava = newDifus;
-      (user as any).lastDifusChange = new Date();
+
+export const calculateAdaptiveDifus = calculateAdaptiveIad;
+
+export async function getStableIad(
+  userId: number,
+  lang: "JAVA" | "PYTHON" | "CPP",
+  _topicIndex: number,
+  userRepo: () => any,
+  gradeRepo: () => any
+): Promise<number> {
+  const user = await userRepo().findOne({ where: { id: userId } });
+  if (!user) return 0;
+
+  let currentIad = getUserIadForLang(user, lang);
+  let lastProcessedGradeId = getLastProcessedGradeIdForLang(user, lang);
+
+  // Compatibility bootstrap: do not replay all historic grades on first run.
+  // Start from the current IAD and begin applying deltas only for new grades.
+  if (lastProcessedGradeId == null) {
+    const latestKnownGrade = await gradeRepo()
+      .createQueryBuilder("grade")
+      .leftJoin("grade.task", "task")
+      .where("grade.user_id = :userId", { userId })
+      .andWhere("task.lang = :lang", { lang })
+      .andWhere("grade.total IS NOT NULL")
+      .orderBy("grade.id", "DESC")
+      .take(1)
+      .getOne();
+
+    if (latestKnownGrade?.id) {
+      setLastProcessedGradeIdForLang(user, lang, Number(latestKnownGrade.id));
       await userRepo().save(user);
-      return newDifus;
     }
+    return currentIad;
   }
-  return currentDifus;
+
+  const newGrades = await gradeRepo()
+    .createQueryBuilder("grade")
+    .leftJoin("grade.task", "task")
+    .where("grade.user_id = :userId", { userId })
+    .andWhere("task.lang = :lang", { lang })
+    .andWhere("grade.total IS NOT NULL")
+    .andWhere("grade.id > :lastProcessedGradeId", { lastProcessedGradeId })
+    .orderBy("grade.id", "ASC")
+    .getMany();
+
+  if (!Array.isArray(newGrades) || newGrades.length === 0) return currentIad;
+
+  for (const grade of newGrades) {
+    const gradeValue = Number((grade as any)?.total ?? 0);
+    currentIad = calculateAdaptiveIad(currentIad, gradeValue);
+  }
+
+  setUserIadForLang(user, lang, currentIad);
+  setLastProcessedGradeIdForLang(user, lang, Number(newGrades[newGrades.length - 1]?.id ?? lastProcessedGradeId));
+  (user as any).lastIadChange = new Date();
+  (user as any).lastDifusChange = new Date();
+  await userRepo().save(user);
+
+  return currentIad;
 }
+
+export const getStableDifus = getStableIad;

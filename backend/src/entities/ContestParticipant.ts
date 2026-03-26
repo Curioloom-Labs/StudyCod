@@ -53,6 +53,12 @@ export class ContestParticipant {
   @Column({ type: "varchar", length: 255, nullable: true, name: "contest_account_note" })
   contestAccountNote?: string | null;
 
+  @Column({ type: "varchar", length: 255, nullable: true, name: "notification_email" })
+  notificationEmail?: string | null;
+
+  @Column({ type: "varchar", length: 180, nullable: true, name: "notification_full_name" })
+  notificationFullName?: string | null;
+
   @Column({ type: "text", nullable: true, name: "disqualification_reason" })
   disqualificationReason?: string | null;
 

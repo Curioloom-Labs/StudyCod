@@ -1,5 +1,5 @@
 export type CourseLanguage = "JAVA" | "PYTHON" | "CPP";
-export type UserMode = "PERSONAL" | "EDUCATIONAL";
+export type UserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
 export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
 
 export interface PublicProfilePrivacy {
@@ -13,6 +13,7 @@ export interface User {
   username: string;
   course: CourseLanguage;
   difus: number;
+  difusByLang?: Record<CourseLanguage, number>;
   avatarUrl: string | null;
   contestHandles?: {
     codeforces?: string | null;
@@ -85,6 +86,53 @@ export interface PublicProfile {
     lastCheckedAt: string | null;
   }>;
 }
+
+export interface DifusRule {
+  minGrade: number;
+  maxGrade: number;
+  delta: number;
+  reasonKey: "very_low_score" | "low_score" | "good_score" | "excellent_score";
+}
+
+export type IadRule = DifusRule;
+
+export interface DifusEvent {
+  gradeId: number;
+  taskId: number;
+  taskTitle: string;
+  topicIndex: number;
+  grade: number;
+  delta: number;
+  reasonKey: "very_low_score" | "low_score" | "good_score" | "excellent_score";
+  direction: "up" | "down" | "flat";
+  applied: boolean;
+  createdAt: string;
+}
+
+export type IadEvent = DifusEvent;
+
+export interface DifusDetails {
+  lang: CourseLanguage;
+  currentIad?: number;
+  currentDifus: number;
+  iadByLang?: Record<CourseLanguage, number>;
+  difusByLang: Record<CourseLanguage, number>;
+  limits: {
+    min: number;
+    max: number;
+  };
+  lastAppliedGradeId: number | null;
+  updatedAt: string | null;
+  rules: DifusRule[];
+  recentEvents: DifusEvent[];
+  summary: {
+    totalEvents: number;
+    positiveEvents: number;
+    negativeEvents: number;
+  };
+}
+
+export type IadDetails = DifusDetails;
 export interface Topic {
   id: number;
   title: string;
@@ -94,12 +142,25 @@ export interface Topic {
 export interface Task {
   id: number;
   title: string;
+  subtitle?: string;
   topicId?: number | null;
   topicTitle?: string | null;
   descriptionMarkdown: string;
   theoryMarkdown?: string;
   practiceText?: string;
   starterCode: string;
+  taskMode?: "CODE" | "WEB";
+  webTemplateFiles?: Array<{ path: "index.html" | "styles.css" | "script.js"; content: string }>;
+  webValidationRules?: Array<{
+    id?: string;
+    type: "required_selector" | "forbidden_selector" | "required_text" | "forbidden_text" | "required_script_pattern" | "forbidden_script_pattern";
+    message?: string;
+    points?: number;
+    selector?: string;
+    text?: string;
+    pattern?: string;
+    flags?: string;
+  }>;
   starterFiles?: Array<{ path: string; content: string }>;
   starterEntryFile?: string;
   userCode: string;
@@ -121,6 +182,7 @@ export interface Grade {
   integrityScore: number;
   aiFeedback: string | null;
   comparisonFeedback?: string | null;
+  aiUnavailableFallback?: boolean;
   previousGrade?: number | null;
   createdAt: string;
   task: Task & {
