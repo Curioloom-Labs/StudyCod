@@ -152,11 +152,11 @@ export const MomentumShell: React.FC<Props> = ({
 
   return (
     <div data-ui-mode={ui.mode} className="min-h-[100dvh] bg-bg-base text-text-primary flex">
-      <aside className="w-[72px] border-r border-border bg-bg-surface flex flex-col items-stretch">
-        <div className="h-16 flex items-center justify-center border-b border-border">
+      <aside className="w-[64px] sm:w-[76px] border-r border-border bg-bg-surface flex flex-col items-stretch">
+        <div className="h-[72px] flex items-center justify-center border-b border-border">
           <button
             onClick={() => onNavigate("continue")}
-            className="w-10 h-10 border border-border bg-bg-code flex items-center justify-center hover:bg-bg-hover transition-fast"
+            className="w-11 h-11 rounded-xl border border-border bg-bg-code flex items-center justify-center hover:bg-bg-hover transition-fast"
             title="StudyCod"
             aria-label={t("goToSession")}
           >
@@ -164,7 +164,7 @@ export const MomentumShell: React.FC<Props> = ({
           </button>
         </div>
 
-        <nav className="flex-1 py-3 flex flex-col gap-1 items-stretch">
+        <nav className="flex-1 py-4 flex flex-col gap-2 items-stretch">
           {items
             .filter(it => it.show)
             .map(it => {
@@ -177,7 +177,7 @@ export const MomentumShell: React.FC<Props> = ({
                   aria-label={it.label}
                   aria-pressed={active}
                   className={
-                    "mx-2 h-11 flex items-center justify-center border transition-fast " +
+                    "mx-2 h-11 rounded-xl flex items-center justify-center border transition-fast " +
                     (active
                       ? "border-primary bg-bg-hover text-primary"
                       : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40")
@@ -190,10 +190,10 @@ export const MomentumShell: React.FC<Props> = ({
             })}
         </nav>
 
-        <div className="py-3 border-t border-border flex flex-col items-stretch gap-2">
+        <div className="py-4 border-t border-border flex flex-col items-stretch gap-2">
           <button
             onClick={() => navigate("/docs")}
-            className="mx-2 h-11 flex items-center justify-center border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
+            className="mx-2 h-11 rounded-xl flex items-center justify-center border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
             title={t("help")}
             aria-label={t("help")}
           >
@@ -203,7 +203,7 @@ export const MomentumShell: React.FC<Props> = ({
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(v => !v)}
-              className="mx-2 h-11 w-[calc(100%-16px)] flex items-center justify-center border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
+              className="mx-2 h-11 w-[calc(100%-16px)] rounded-xl flex items-center justify-center border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
               title={t("menu")}
               aria-label={t("menu")}
               aria-haspopup="menu"
@@ -213,8 +213,8 @@ export const MomentumShell: React.FC<Props> = ({
             </button>
             {menuOpen ? (
               <>
-                <div className="absolute bottom-12 left-2 z-40 bg-bg-surface border border-border w-[240px]" role="menu" aria-label={t("accountMenu")}>
-                  <div className="px-3 py-2 text-xs font-mono text-text-secondary border-b border-border">
+                <div className="absolute bottom-12 left-2 z-40 bg-bg-surface border border-border w-[min(240px,calc(100vw-90px))]" role="menu" aria-label={t("accountMenu")}>
+                  <div className="px-3 py-2 text-xs font-mono font-medium tracking-[0.03em] text-text-secondary border-b border-border">
                     {t("account")}
                   </div>
                   <button
@@ -222,7 +222,7 @@ export const MomentumShell: React.FC<Props> = ({
                       setMenuOpen(false);
                       onNavigate("profile");
                     }}
-                    className="w-full px-3 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast"
+                    className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast"
                   >
                     {t("profile")}
                   </button>
@@ -231,7 +231,7 @@ export const MomentumShell: React.FC<Props> = ({
                       setMenuOpen(false);
                       ui.setMode(ui.mode === "focus" ? "classic" : "focus");
                     }}
-                    className="w-full px-3 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary"
+                    className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-text-secondary"
                   >
                     {t("interfaceLabel")}: {ui.mode === "focus" ? t("momentumUiName") : t("classicUiName")}
                   </button>
@@ -240,7 +240,7 @@ export const MomentumShell: React.FC<Props> = ({
                       setMenuOpen(false);
                       onLogout();
                     }}
-                    className="w-full px-3 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-accent-error flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-accent-error flex items-center gap-2"
                   >
                     <LogOut className="w-4 h-4" />
                     {t("logout")}
@@ -253,18 +253,17 @@ export const MomentumShell: React.FC<Props> = ({
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-bg-base/90 backdrop-blur-sm">
+        <div className="min-h-[58px] py-2 flex items-center justify-between px-3 md:px-4 border-b border-border bg-bg-base">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-bg-surface text-xs font-mono text-text-secondary max-w-full">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" aria-hidden="true" />
+            <div className="inline-flex items-center px-3 py-1 rounded-full border border-border bg-bg-surface text-xs font-mono font-medium tracking-[0.02em] text-text-secondary max-w-full">
               <span className="truncate">{currentLabel}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 pl-2">
+          <div className="flex items-center gap-3 pl-2">
             {topRight}
             <button
               onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium tracking-[0.03em] border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}
             >
               <Languages className="w-3.5 h-3.5" />

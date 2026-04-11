@@ -73,23 +73,26 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   }, [onRun, onSubmit]);
 
   return (
-    <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-[radial-gradient(circle_at_top,#1a1f2f_0%,#121521_34%,#0f1118_100%)] shadow-[0_8px_36px_rgba(0,0,0,0.38)] flex flex-col overflow-hidden">
-      <div className="px-4 py-3 border-b border-border/70 flex flex-wrap items-center justify-between gap-3">
+    <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface shadow-[0_6px_18px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden">
+      <div className="px-4 py-3 border-b border-border/70 flex flex-wrap items-center justify-between gap-3 bg-bg-surface">
         <div className="min-w-0">
-          <div className="text-sm text-text-secondary">{statement.problem.label}. Mission</div>
+          <div className="text-[11px] uppercase tracking-[0.08em] text-text-secondary">{statement.problem.label} · Solve workspace</div>
           <div className="text-lg text-text-primary font-semibold truncate">{statement.task.title}</div>
           <div className="mt-1 flex items-center gap-2 text-[11px] text-text-secondary">
-            <span className="px-2 py-0.5 rounded-md bg-bg-base/80 border border-border/70">TL: {statement.task.timeLimitMs ?? "—"} ms</span>
-            <span className="px-2 py-0.5 rounded-md bg-bg-base/80 border border-border/70">ML: {statement.task.memoryLimitMb ?? "—"} MB</span>
+            <span className="px-2 py-1 rounded-md bg-bg-base border border-border/70">TL: {statement.task.timeLimitMs ?? "—"} ms</span>
+            <span className="px-2 py-1 rounded-md bg-bg-base border border-border/70">ML: {statement.task.memoryLimitMb ?? "—"} MB</span>
             <Badge color={difficulty === "HARD" ? "warn" : difficulty === "MEDIUM" ? "info" : "success"}>{difficulty}</Badge>
           </div>
         </div>
 
         <div className="flex items-center flex-wrap gap-2">
+          <label htmlFor="contest-editor-language" className="sr-only">Language</label>
           <select
+            id="contest-editor-language"
             value={language}
             onChange={(e) => onLanguageChange(e.target.value as JudgeLanguage)}
-            className="px-3 py-2 rounded-xl bg-bg-base border border-border text-text-primary text-sm"
+            aria-label="Select solution language"
+            className="h-11 px-3 rounded-xl bg-bg-base border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-secondary/50"
           >
             {(allowedLangs.length ? allowedLangs : ["java"]).map((lang) => (
               <option key={lang} value={lang}>
@@ -98,38 +101,48 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             ))}
           </select>
 
-          <Button variant="secondary" onClick={onToggleFocusMode} title="Toggle Focus Mode">
+          <Button
+            variant="ghost"
+            onClick={onToggleFocusMode}
+            className="h-11 px-4"
+            title="Toggle Focus Mode"
+            aria-label={focusMode ? "Exit focus mode" : "Enable focus mode"}
+          >
             <ScanSearch className="w-4 h-4 mr-2" />
             {focusMode ? "Exit Focus" : "Focus"}
           </Button>
 
-          <Button variant="secondary" onClick={onRun} disabled={running || checking}>
+          <Button variant="secondary" onClick={onRun} disabled={running || checking} className="h-11 px-4" aria-label="Run code">
             <Play className="w-4 h-4 mr-2" />
             {running ? "Running..." : "Run (Ctrl+Enter)"}
           </Button>
 
-          <Button onClick={onSubmit} disabled={checking || running}>
+          <Button onClick={onSubmit} disabled={checking || running} className="h-11 px-4" aria-label="Submit solution">
             <Rocket className="w-4 h-4 mr-2" />
             {checking ? "Submitting..." : "Submit (Ctrl+Shift+Enter)"}
           </Button>
         </div>
       </div>
 
-      <div className="px-4 py-2 text-[11px] text-text-secondary border-b border-border/50 bg-bg-base/35">
-        StudyCod hotkeys active • Ctrl+Enter run • Ctrl+Shift+Enter submit • Autosave enabled per problem/language
+      <div className="px-4 py-2 text-[11px] text-text-secondary border-b border-border/60 bg-bg-base/60">
+        Hotkeys: <span className="text-text-primary">Ctrl+Enter</span> run · <span className="text-text-primary">Ctrl+Shift+Enter</span> submit · Drafts auto-save by problem and language
       </div>
 
       <div className="flex-1 min-h-0">
         <CodeEditor language={language} value={code} onChange={onCodeChange} />
       </div>
 
-      <div className="border-t border-border/60 bg-bg-base/35 px-4 py-3">
-        <div className="text-[11px] uppercase tracking-wider text-text-secondary mb-2">Run input (stdin)</div>
+      <div className="border-t border-border/60 bg-bg-base/55 px-4 py-3">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-[11px] uppercase tracking-wider text-text-secondary">Run input (stdin)</div>
+          <div className="text-[11px] text-text-muted">Use examples from the problem panel for quick checks</div>
+        </div>
         <textarea
           value={runInput}
           onChange={(e) => onRunInputChange(e.target.value)}
-          className="w-full min-h-[92px] max-h-[180px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
-          placeholder="Enter custom input for Run..."
+          aria-label="Custom run input"
+          className="w-full min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
+          placeholder="Paste input to validate edge cases before submit..."
         />
       </div>
     </div>

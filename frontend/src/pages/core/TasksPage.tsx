@@ -931,30 +931,70 @@ export const TasksPage: React.FC<Props> = ({
   }, [tasks, getControlBatchKey, controlBatchTitleFromKey]);
 
   const sidebarSections = useMemo(() => {
-    const byTopic = new Map<string, { title: string; items: typeof sidebarTasks }>();
+    const byTopic = new Map<string, {
+      title: string;
+      items: typeof sidebarTasks;
+      topicId: number | null;
+      topicIndex: number | null;
+    }>();
 
     for (const item of sidebarTasks) {
       const rawTopicTitle = String(item.openTask.topicTitle ?? "").trim();
       const topicTitle = rawTopicTitle || tr("Без теми", "No topic");
       const topicId = Number(item.openTask.topicId ?? 0);
+      const topicIndexRaw = Number(item.openTask.topicIndex ?? NaN);
+      const topicIndex = Number.isFinite(topicIndexRaw) ? Math.floor(topicIndexRaw) : null;
       const topicKey = Number.isFinite(topicId) && topicId > 0 ? `topic:${topicId}` : `topic-title:${topicTitle.toLowerCase()}`;
 
       if (!byTopic.has(topicKey)) {
-        byTopic.set(topicKey, { title: topicTitle, items: [] as typeof sidebarTasks });
+        byTopic.set(topicKey, {
+          title: topicTitle,
+          items: [] as typeof sidebarTasks,
+          topicId: Number.isFinite(topicId) && topicId > 0 ? topicId : null,
+          topicIndex,
+        });
+      } else if (topicIndex !== null) {
+        const current = byTopic.get(topicKey)!;
+        const prev = current.topicIndex;
+        current.topicIndex = prev === null ? topicIndex : Math.min(prev, topicIndex);
       }
       byTopic.get(topicKey)!.items.push(item);
     }
 
     const sections = Array.from(byTopic.entries()).map(([key, section]) => {
       const sortedItems = [...section.items].sort((a, b) => {
+        const aLesson = Number(a.openTask.lessonInTopic ?? 0);
+        const bLesson = Number(b.openTask.lessonInTopic ?? 0);
+        const hasLessons = Number.isFinite(aLesson) && Number.isFinite(bLesson) && aLesson > 0 && bLesson > 0;
+
+        if (section.topicId !== null && hasLessons && aLesson !== bLesson) {
+          return aLesson - bLesson;
+        }
+
         const ta = new Date(a.createdAt).getTime();
         const tb = new Date(b.createdAt).getTime();
         return tb - ta;
       });
-      return { key, title: section.title, items: sortedItems };
+      return {
+        key,
+        title: section.title,
+        items: sortedItems,
+        topicId: section.topicId,
+        topicIndex: section.topicIndex,
+      };
     });
 
     return sections.sort((a, b) => {
+      const aIsTopic = a.topicId !== null;
+      const bIsTopic = b.topicId !== null;
+      if (aIsTopic && bIsTopic) {
+        const ai = Number.isFinite(Number(a.topicIndex)) ? Number(a.topicIndex) : Number.MAX_SAFE_INTEGER;
+        const bi = Number.isFinite(Number(b.topicIndex)) ? Number(b.topicIndex) : Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+        return a.title.localeCompare(b.title, i18n.language || "uk");
+      }
+      if (aIsTopic !== bIsTopic) return aIsTopic ? -1 : 1;
+
       const ta = a.items.length ? new Date(a.items[0].createdAt).getTime() : 0;
       const tb = b.items.length ? new Date(b.items[0].createdAt).getTime() : 0;
       return tb - ta;
@@ -1208,20 +1248,29 @@ export const TasksPage: React.FC<Props> = ({
       const payload = asRecord(res);
       const status = String(payload?.status ?? "");
       if (status === "ok" && payload?.task && typeof payload.task === "object") {
-        const newTask = payload.task as Task;
+        const generatedTask = payload.task as Task;
+        const generatedTaskId = Number((generatedTask as Record<string, unknown>).id ?? 0);
         setGenerationPhase("syncing");
         const newTasks = await listTasks(uiLanguage);
         setTasks(newTasks);
+
+        const openedTask = Number.isFinite(generatedTaskId) && generatedTaskId > 0
+          ? newTasks.find((t) => t.id === generatedTaskId) ?? generatedTask
+          : generatedTask;
+
         setGenerationPhase("opening");
-        setActive(newTask);
-        setCode(newTask.starterCode);
+        setActive(openedTask);
+        const nextEditorState = deriveEditorFromTask(openedTask);
+        setUseFiles(nextEditorState.useFiles);
+        setFiles(nextEditorState.files);
+        setCode(nextEditorState.code);
         setAiResult(null);
         setConsoleOutput("");
-        const hasTheory = computeHasTheory(newTask);
+        const hasTheory = computeHasTheory(openedTask);
         setTheoryAcknowledged(!hasTheory);
         setGenerationPhase("finishing");
         if (hasTheory) {
-          const theory = getTheoryMarkdown(newTask);
+          const theory = getTheoryMarkdown(openedTask);
           if (theory) {
             openTheory({
               title: tr("Теорія", "Theory"),
@@ -1755,16 +1804,16 @@ export const TasksPage: React.FC<Props> = ({
     ["notes", tr("Нотатки", "Notes")]
   ];
 
-    return <div className={`relative w-full px-3 pb-3 ${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)]" : "h-[calc(100dvh-3rem)] min-h-[760px]"}`}>
-      <div className={`${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)] overflow-visible" : "h-full overflow-hidden"} rounded-3xl bg-[linear-gradient(150deg,#0c0f17_0%,#0f111a_46%,#0b0d14_100%)] border border-border/60 shadow-[0_24px_70px_rgba(0,0,0,0.48)] flex`}>
-        <aside className="w-[58px] border-r border-border/60 bg-bg-surface/70 flex flex-col items-center py-3 gap-2">
+    return <div className={`relative w-full px-2 sm:px-3 pb-3 ${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)]" : "h-[calc(100dvh-3rem)] md:min-h-[760px]"}`}>
+      <div className={`${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)] overflow-visible" : "h-full overflow-hidden"} rounded-3xl bg-bg-surface border border-border/60 shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex`}>
+        <aside className="w-12 sm:w-[58px] border-r border-border/60 bg-bg-surface/70 flex flex-col items-center py-3 gap-2">
           {railItems.map(item => (
             <div key={item.id} className="group relative">
               <button
                 onClick={() => focusWorkspaceArea(item.id)}
                 title={item.label}
                 aria-label={item.label}
-                className={`w-10 h-10 rounded-xl border transition-fast flex items-center justify-center ${isRailItemActive(item.id) ? "border-primary/50 bg-primary/10 text-primary" : "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary"}`}
+                className={`w-11 h-11 rounded-xl border transition-fast flex items-center justify-center ${isRailItemActive(item.id) ? "border-primary/50 bg-primary/10 text-primary" : "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary"}`}
               >
                 <item.Icon className="w-4 h-4" />
               </button>
@@ -1835,7 +1884,7 @@ export const TasksPage: React.FC<Props> = ({
                 disabled={!action.enabled}
                 title={action.hint || action.label}
                 aria-label={action.label}
-                className={`w-10 h-10 rounded-xl border transition-fast flex items-center justify-center ${action.enabled ? "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary" : "border-transparent text-text-muted/40 cursor-not-allowed"}`}
+                className={`w-11 h-11 rounded-xl border transition-fast flex items-center justify-center ${action.enabled ? "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary" : "border-transparent text-text-muted/40 cursor-not-allowed"}`}
               >
                 <action.Icon className="w-4 h-4" />
               </button>
@@ -1847,13 +1896,13 @@ export const TasksPage: React.FC<Props> = ({
         </aside>
 
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          <div className="h-10 border-b border-border/60 bg-bg-surface/60 px-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-xs">
+          <div className="min-h-10 border-b border-border/60 bg-bg-surface/60 px-2 sm:px-3 py-1 flex items-center justify-between gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 text-xs">
               <span className="px-2 py-1 rounded-lg border border-border bg-bg-base text-text-primary">{tr("Personal Workspace", "Personal Workspace")}</span>
               <span className="px-2 py-1 rounded-lg border border-border text-text-secondary">{tr("IDE режим", "IDE mode")}</span>
               <span className="px-2 py-1 rounded-lg border border-border text-text-secondary">{tr("Mission control", "Mission control")}</span>
             </div>
-            <div className="text-[11px] text-text-secondary">
+            <div className="text-[11px] text-text-secondary whitespace-nowrap">
               {tr("Стан уроку", "Lesson state")}: <span className="text-text-primary">{lessonStatus}</span>
             </div>
           </div>
@@ -1871,21 +1920,23 @@ export const TasksPage: React.FC<Props> = ({
           style={{ order: columnOrder.tasks }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => handleColumnDrop("tasks")}
-          className={`bg-bg-surface border-r border-border transition-slow ease-in-out flex flex-col ${showTaskHistory ? "w-[280px]" : "w-12"}`}
+          className={`bg-bg-surface border-r border-border transition-slow ease-in-out flex flex-col ${showTaskHistory ? "w-[clamp(220px,42vw,320px)] sm:w-[clamp(240px,32vw,320px)]" : "w-12"}`}
         >
           <div className="flex items-center justify-between p-3 border-b border-border">
             {showTaskHistory && <h2 className="text-sm font-mono text-text-primary">{tr("Завдання", "Tasks")}</h2>}
             <div className="flex items-center gap-1 ml-auto">
-              <span
+              <button
+                type="button"
                 draggable
                 onDragStart={() => setDraggingColumn("tasks")}
                 onDragEnd={() => setDraggingColumn(null)}
-                className="w-6 h-6 border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast cursor-grab"
+                className="w-11 h-11 border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast cursor-grab"
                 title={tr("Перетягни колонку", "Drag column")}
+                aria-label={tr("Перетягни колонку", "Drag column")}
               >
                 <GripVertical className="w-3.5 h-3.5" />
-              </span>
-              <button onClick={() => setShowTaskHistory(!showTaskHistory)} className="w-6 h-6 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast">
+              </button>
+              <button type="button" onClick={() => setShowTaskHistory(!showTaskHistory)} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" aria-label={showTaskHistory ? tr("Згорнути список завдань", "Collapse task list") : tr("Розгорнути список завдань", "Expand task list")}>
               {showTaskHistory ? <ChevronLeft className="w-3 h-3 text-text-secondary" /> : <ChevronRight className="w-3 h-3 text-text-secondary" />}
               </button>
             </div>
@@ -1912,7 +1963,7 @@ export const TasksPage: React.FC<Props> = ({
                     <div className="px-1 pb-1 pt-2 text-[10px] font-mono uppercase tracking-wider text-text-muted border-b border-border/60">
                       {section.title}
                     </div>
-                    {section.items.map(item => <div key={item.id} className={`p-3 cursor-pointer border transition-fast bg-bg-surface ${isSidebarItemActive(item) ? "border-primary bg-bg-hover" : "border-border hover:border-primary/50"}`} onClick={() => {
+                    {section.items.map(item => <button type="button" key={item.id} className={`w-full p-3 text-left border transition-fast bg-bg-surface ${isSidebarItemActive(item) ? "border-primary bg-bg-hover" : "border-border hover:border-primary/50"}`} onClick={() => {
                         openSidebarTask(item.openTask);
                       }}>
                         {item.isGroupedControl ? <div className="mb-1 inline-flex items-center rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
@@ -1934,7 +1985,7 @@ export const TasksPage: React.FC<Props> = ({
                         <div className="text-[10px] font-mono text-text-muted">
                           {new Date(item.createdAt).toLocaleDateString(locale)}
                         </div>
-                      </div>)}
+                      </button>)}
                   </div>
                 ))}
               </div>
@@ -1974,15 +2025,17 @@ export const TasksPage: React.FC<Props> = ({
               </button>
             ))}
             </div>
-            <span
+            <button
+              type="button"
               draggable
               onDragStart={() => setDraggingColumn("center")}
               onDragEnd={() => setDraggingColumn(null)}
-              className="mb-1 w-7 h-7 rounded-md border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast cursor-grab flex-shrink-0"
+              className="mb-1 w-11 h-11 rounded-md border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast cursor-grab flex-shrink-0"
               title={tr("Перетягни колонку", "Drag column")}
+              aria-label={tr("Перетягни колонку", "Drag column")}
             >
               <GripVertical className="w-3.5 h-3.5" />
-            </span>
+            </button>
           </div>
 
         {activeCenterTab === "mission" ? (active ? <>
@@ -2466,7 +2519,7 @@ export const TasksPage: React.FC<Props> = ({
                 })()}
                 {aiResult.gradingMode !== "TESTS" && aiResult.total !== null && aiResult.total !== undefined && <>
                     <div className="text-xs font-mono text-text-secondary">
-                      {tr("Оцінка:", "Grade:")} <span className={`font-semibold ${aiResult.total >= 85 ? "text-accent-success" : aiResult.total >= 65 ? "text-accent-warn" : aiResult.total >= 40 ? "text-yellow-500" : "text-accent-error"}`}>{aiResult.total}</span>
+                      {tr("Оцінка:", "Grade:")} <span className={`font-semibold ${aiResult.total >= 85 ? "text-accent-success" : aiResult.total >= 65 ? "text-accent-warn" : aiResult.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>{aiResult.total}</span>
                       {aiResult.previousGrade !== null && aiResult.previousGrade !== undefined && <span className="text-text-muted ml-2">
                           ({tr(`було ${aiResult.previousGrade}`, `was ${aiResult.previousGrade}`)})
                         </span>}
@@ -2607,14 +2660,19 @@ export const TasksPage: React.FC<Props> = ({
                 {tr("⚠ Попередження", "⚠ Warning")}
             </div>}
           </div> : <div className="flex-1 min-h-0 p-1 flex items-start justify-center">
-              <button className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center mt-2" onClick={() => setDockCollapsed(false)}>
+              <button
+                className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center mt-2"
+                onClick={() => setDockCollapsed(false)}
+                aria-label={tr("Розгорнути консоль", "Expand console")}
+                title={tr("Розгорнути консоль", "Expand console")}
+              >
                 <FoldHorizontal className="w-4 h-4" />
               </button>
             </div>}
         </div> : null}
       </div>
 
-      {dockPopOut ? <div className="fixed right-4 top-20 w-[430px] h-[72vh] z-40 rounded-2xl border border-border bg-bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-3">
+      {dockPopOut ? <div className="fixed right-2 sm:right-4 top-16 sm:top-20 w-[min(92vw,430px)] h-[min(72vh,640px)] z-40 rounded-2xl border border-border bg-bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-text-secondary uppercase tracking-widest">{tr("Консоль (вікно)", "Console (pop-out)")}</div>
             <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockPopOut(false)}>

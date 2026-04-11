@@ -1,18 +1,15 @@
 import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, startTransition } from "react";
 import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { Code2, User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon } from "lucide-react";
+import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon } from "lucide-react";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
-import { staggerContainer, fadeUpItem } from "./lib/motion";
 import { TerminalLoader } from "./components/ui/TerminalLoader";
-import { DocsPage, MaintenancePage, type MaintenancePayload } from "./pages/system";
-import { OnboardingEntry } from "./components/onboarding/OnboardingEntry";
-import { PlacementEntry } from "./components/placement/PlacementEntry";
+import type { MaintenancePayload } from "./pages/system/MaintenancePage";
 import { UIModeProvider, useUIMode } from "./components/interface/UIModeProvider";
 import { SwitchToMomentumNudge } from "./components/interface/SwitchToMomentumNudge";
 import { WorkspaceViewportProvider } from "./components/interface/WorkspaceViewport";
@@ -24,110 +21,46 @@ import { getAdminMaintenance } from "./lib/api/admin";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
 import { ToastViewport } from "./components/ui/ToastViewport";
-import { PublicLandingPage } from "./pages/public";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
-const AuthPage = React.lazy(() => import("./pages/auth").then(mod => ({
-  default: mod.AuthPage
-})));
-const VerifyEmailPage = React.lazy(() => import("./pages/auth").then(mod => ({
-  default: mod.VerifyEmailPage
-})));
-const ResetPasswordPage = React.lazy(() => import("./pages/auth").then(mod => ({
-  default: mod.ResetPasswordPage
-})));
-const TasksPage = React.lazy(() => import("./pages/core").then(mod => ({
-  default: mod.TasksPage
-})));
-const GradesPage = React.lazy(() => import("./pages/core").then(mod => ({
-  default: mod.GradesPage
-})));
-const ProfilePage = React.lazy(() => import("./pages/profile").then(mod => ({
-  default: mod.ProfilePage
-})));
-const HomePage = React.lazy(() => import("./pages/core").then(mod => ({
-  default: mod.HomePage
-})));
-const PublicProfilePage = React.lazy(() => import("./pages/public").then(mod => ({
-  default: mod.PublicProfilePage
-})));
-const IadPage = React.lazy(() => import("./pages/core").then(mod => ({
-  default: mod.IadPage
-})));
-const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth").then(mod => ({
-  default: mod.EmailPreferencesResultPage
-})));
-const TeacherDashboardPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.TeacherDashboardPage
-})));
-const ClassDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.ClassDetailsPage
-})));
-const CreateLessonPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.CreateLessonPage
-})));
-const CreateTopicPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.CreateTopicPage
-})));
-const TopicDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.TopicDetailsPage
-})));
-const ControlWorkDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.ControlWorkDetailsPage
-})));
-const StudentDashboardPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.StudentDashboardPage
-})));
-const StudentLessonsPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.StudentLessonsPage
-})));
-const LessonDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.LessonDetailsPage
-})));
-const StudentTaskPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.StudentTaskPage
-})));
-const GradeDetailsPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.GradeDetailsPage
-})));
-const SummaryGradesPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.SummaryGradesPage
-})));
-const ClassGradebookPage = React.lazy(() => import("./pages/edu").then(mod => ({
-  default: mod.ClassGradebookPage
-})));
-const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth").then(mod => ({
-  default: mod.GoogleAuthCompletePage
-})));
-const AdminDashboardPage = React.lazy(() => import("./pages/system").then(mod => ({
-  default: mod.AdminDashboardPage
-})));
-const SupportPage = React.lazy(() => import("./pages/system").then(mod => ({
-  default: mod.SupportPage
-})));
-const ProfileCertificatesPage = React.lazy(() => import("./pages/profile").then(mod => ({
-  default: mod.ProfileCertificatesPage
-})));
-const CertificateVerifyPage = React.lazy(() => import("./pages/public").then(mod => ({
-  default: mod.CertificateVerifyPage
-})));
-const TaskLibraryPage = React.lazy(() => import("./pages/library").then(mod => ({
-  default: mod.TaskLibraryPage
-})));
-const LibraryTaskSolvePage = React.lazy(() => import("./pages/library").then(mod => ({
-  default: mod.LibraryTaskSolvePage
-})));
-const ContestsPage = React.lazy(() => import("./pages/contest").then(mod => ({
-  default: mod.ContestsPage
-})));
-const ContestPage = React.lazy(() => import("./pages/contest").then(mod => ({
-  default: mod.ContestPage
-})));
-const ContestProblemSolvePage = React.lazy(() => import("./pages/contest").then(mod => ({
-  default: mod.ContestProblemSolvePage
-})));
-const DevEditorPage = React.lazy(() => import("./pages/system").then(mod => ({
-  default: mod.DevEditorPage
-})));
+const AuthPage = React.lazy(() => import("./pages/auth/AuthPage").then(mod => ({ default: mod.AuthPage })));
+const VerifyEmailPage = React.lazy(() => import("./pages/auth/VerifyEmailPage").then(mod => ({ default: mod.VerifyEmailPage })));
+const ResetPasswordPage = React.lazy(() => import("./pages/auth/ResetPasswordPage").then(mod => ({ default: mod.ResetPasswordPage })));
+const TasksPage = React.lazy(() => import("./pages/core/TasksPage").then(mod => ({ default: mod.TasksPage })));
+const GradesPage = React.lazy(() => import("./pages/core/GradesPage").then(mod => ({ default: mod.GradesPage })));
+const ProfilePage = React.lazy(() => import("./pages/profile/ProfilePage").then(mod => ({ default: mod.ProfilePage })));
+const HomePage = React.lazy(() => import("./pages/core/HomePage").then(mod => ({ default: mod.HomePage })));
+const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfilePage").then(mod => ({ default: mod.PublicProfilePage })));
+const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
+const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
+const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherDashboardPage").then(mod => ({ default: mod.TeacherDashboardPage })));
+const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassDetailsPage").then(mod => ({ default: mod.ClassDetailsPage })));
+const CreateLessonPage = React.lazy(() => import("./pages/edu/CreateLessonPage").then(mod => ({ default: mod.CreateLessonPage })));
+const CreateTopicPage = React.lazy(() => import("./pages/edu/CreateTopicPage").then(mod => ({ default: mod.CreateTopicPage })));
+const TopicDetailsPage = React.lazy(() => import("./pages/edu/TopicDetailsPage").then(mod => ({ default: mod.TopicDetailsPage })));
+const ControlWorkDetailsPage = React.lazy(() => import("./pages/edu/ControlWorkDetailsPage").then(mod => ({ default: mod.ControlWorkDetailsPage })));
+const StudentDashboardPage = React.lazy(() => import("./pages/edu/StudentDashboardPage").then(mod => ({ default: mod.StudentDashboardPage })));
+const StudentLessonsPage = React.lazy(() => import("./pages/edu/StudentLessonsPage").then(mod => ({ default: mod.StudentLessonsPage })));
+const LessonDetailsPage = React.lazy(() => import("./pages/edu/LessonDetailsPage").then(mod => ({ default: mod.LessonDetailsPage })));
+const StudentTaskPage = React.lazy(() => import("./pages/edu/StudentTaskPage").then(mod => ({ default: mod.StudentTaskPage })));
+const GradeDetailsPage = React.lazy(() => import("./pages/edu/GradeDetailsPage").then(mod => ({ default: mod.GradeDetailsPage })));
+const SummaryGradesPage = React.lazy(() => import("./pages/edu/SummaryGradesPage").then(mod => ({ default: mod.SummaryGradesPage })));
+const ClassGradebookPage = React.lazy(() => import("./pages/edu/ClassGradebookPage").then(mod => ({ default: mod.ClassGradebookPage })));
+const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
+const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminDashboardPage").then(mod => ({ default: mod.AdminDashboardPage })));
+const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => ({ default: mod.DocsPage })));
+const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(mod => ({ default: mod.SupportPage })));
+const MaintenancePage = React.lazy(() => import("./pages/system/MaintenancePage").then(mod => ({ default: mod.MaintenancePage })));
+const ProfileCertificatesPage = React.lazy(() => import("./pages/profile/ProfileCertificatesPage").then(mod => ({ default: mod.ProfileCertificatesPage })));
+const CertificateVerifyPage = React.lazy(() => import("./pages/public/CertificateVerifyPage").then(mod => ({ default: mod.CertificateVerifyPage })));
+const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
+const TaskLibraryPage = React.lazy(() => import("./pages/library/TaskLibraryPage").then(mod => ({ default: mod.TaskLibraryPage })));
+const LibraryTaskSolvePage = React.lazy(() => import("./pages/library/LibraryTaskSolvePage").then(mod => ({ default: mod.LibraryTaskSolvePage })));
+const ContestsPage = React.lazy(() => import("./pages/contest/ContestsPage").then(mod => ({ default: mod.ContestsPage })));
+const ContestPage = React.lazy(() => import("./pages/contest/ContestPage").then(mod => ({ default: mod.ContestPage })));
+const ContestProblemSolvePage = React.lazy(() => import("./pages/contest/ContestProblemSolvePage").then(mod => ({ default: mod.ContestProblemSolvePage })));
+const DevEditorPage = React.lazy(() => import("./pages/system/DevEditorPage").then(mod => ({ default: mod.DevEditorPage })));
+const OnboardingEntry = React.lazy(() => import("./components/onboarding/OnboardingEntry").then(mod => ({ default: mod.OnboardingEntry })));
+const PlacementEntry = React.lazy(() => import("./components/placement/PlacementEntry").then(mod => ({ default: mod.PlacementEntry })));
 const PageLoader: React.FC = () => {
   const {
     t
@@ -571,18 +504,22 @@ const AppContent: React.FC = React.memo(() => {
   }
   if (!user) {
     if (maintenance && !showAdminLogin) {
-      return <MaintenancePage state={maintenance} onAdminLogin={() => {
+      return <Suspense fallback={<PageLoader />}>
+        <MaintenancePage state={maintenance} onAdminLogin={() => {
         startTransition(() => setShowAdminLogin(true));
       }} onRetry={() => {
         window.location.reload();
-      }} />;
+      }} />
+      </Suspense>;
     }
 
     const authIntent = searchParams.get("auth");
     const wantsAuth = authIntent === "login" || authIntent === "register";
     const showLanding = location.pathname === "/" && !wantsAuth;
     if (showLanding) {
-      return <PublicLandingPage />;
+      return <Suspense fallback={<PageLoader />}>
+        <PublicLandingPage />
+      </Suspense>;
     }
 
     const nextAfterAuth = searchParams.get("next");
@@ -600,9 +537,11 @@ const AppContent: React.FC = React.memo(() => {
       </Suspense>;
   }
   if (maintenance && user.role !== "SYSTEM_ADMIN") {
-    return <MaintenancePage state={maintenance} onRetry={() => {
+    return <Suspense fallback={<PageLoader />}>
+      <MaintenancePage state={maintenance} onRetry={() => {
       window.location.reload();
-    }} />;
+    }} />
+    </Suspense>;
   }
   const content = <Suspense fallback={<PageLoader />}>
       {(() => {
@@ -622,82 +561,82 @@ const AppContent: React.FC = React.memo(() => {
   if (ui.mode === "classic") {
     return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
         {}
-        <header className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">
-          <div className="flex items-center gap-4">
+        <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
+          <div className="flex items-center gap-4 min-w-0 flex-wrap md:flex-nowrap">
             <div className="flex items-center gap-2">
               <Logo size={24} className="text-primary" />
-              <span className="text-lg font-mono text-text-primary">StudyCod</span>
+              <span className="text-lg font-mono font-semibold tracking-[0.01em] text-text-primary">StudyCod</span>
             </div>
-            <div className="h-6 w-px bg-border" />
-            <div className="px-3 py-1 border border-border text-sm font-mono text-text-secondary">
+            <div className="hidden sm:block h-6 w-px bg-border" />
+            <div className="hidden sm:block px-3 py-1 border border-border bg-bg-surface text-sm font-mono text-text-secondary">
               {courseLabel}
             </div>
             {user.userMode && <>
-                <div className="h-6 w-px bg-border" />
-                <div className="px-3 py-1 border border-border text-sm font-mono text-text-secondary">
+                <div className="hidden sm:block h-6 w-px bg-border" />
+                <div className="hidden sm:block px-3 py-1 border border-border bg-bg-surface text-sm font-mono text-text-secondary">
                   {userModeLabel}
                 </div>
               </>}
           </div>
 
-          <div className="flex items-center gap-2">
-            {user.role === "SYSTEM_ADMIN" && adminMaintenanceEnabled && <div className="px-3 py-1 border border-amber-400/60 bg-amber-400/10 text-amber-200 text-xs font-mono">
+          <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap justify-start md:justify-end">
+            {user.role === "SYSTEM_ADMIN" && adminMaintenanceEnabled && <div className="px-3 py-1 border border-accent-warning/60 bg-accent-warning/12 text-accent-warning text-xs font-mono">
                 {t("maintenanceModeEnabled")}
               </div>}
             {}
             {(!user.userMode || user.userMode === "PERSONAL") && <>
-                <button onClick={handleGoHome} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={handleGoHome} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <Home className="w-4 h-4" />
                   {t('home')}
                 </button>
-                <button onClick={() => handleSetPage("tasks")} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('tasks')}
                 </button>
-                <button onClick={() => handleSetPage("grades")} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('grades')}
                 </button>
-                <button onClick={() => navigate("/library")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+                <button onClick={() => navigate("/library")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
                   <Library className="w-4 h-4" />
                   {t("library")}
                 </button>
               </>}
 
-            <button onClick={() => navigate("/docs")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+            <button onClick={() => navigate("/docs")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
               <HelpCircle className="w-4 h-4" />
               {t("help")}
             </button>
 
-            <button onClick={() => navigate("/support")} className="px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+            <button onClick={() => navigate("/support")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
               <HelpCircle className="w-4 h-4" />
               {t("support")}
             </button>
 
             {}
-            {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <Shield className="w-4 h-4" />
                 Admin
               </button>}
 
             {}
-            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => handleSetPage("teacher")} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => handleSetPage("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <GraduationCap className="w-4 h-4" />
                 {t('myClasses')}
               </button>}
 
             {user.userMode === "EDUCATIONAL" && user.studentId && <>
-                <button onClick={() => handleSetPage("student")} className={`px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <BookOpen className="w-4 h-4" />
                   {t('myJournal')}
                 </button>
-                <button onClick={() => navigate("/edu/library")} className="px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+                <button onClick={() => navigate("/edu/library")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <Library className="w-4 h-4" />
                   {t("library")}
                 </button>
                 <button onClick={() => {
               navigate("/edu/lessons");
-            }} className="px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+            }} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   {t('lessons')}
                 </button>
@@ -708,20 +647,20 @@ const AppContent: React.FC = React.memo(() => {
             {}
             <div className="flex items-center gap-2">
               {}
-              <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
+              <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
                 {i18n.language === 'uk' ? 'EN' : 'UA'}
               </button>
 
               {}
-              <button onClick={toggleTheme} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+              <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
                 {theme === "dark" ? "Light" : "Dark"}
               </button>
               
-              <button onClick={() => handleSetPage("profile")} className={`w-8 h-8 border flex items-center justify-center hover:bg-bg-hover transition-fast ${page === "profile" ? "border-primary" : "border-border"}`} title={t('profile')}>
+              <button onClick={() => handleSetPage("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${page === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
                 <UserIcon className="w-4 h-4 text-text-secondary" />
               </button>
               <div className="relative" ref={navMenuRef}>
-                <button onClick={handleToggleNav} className="w-8 h-8 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" title={t('menu')}>
+                <button onClick={handleToggleNav} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" title={t('menu')} aria-label={t('menu')}>
                   {navOpen ? <X className="w-4 h-4 text-text-secondary" /> : <Menu className="w-4 h-4 text-text-secondary" />}
                 </button>
                 {navOpen && <>
@@ -740,14 +679,17 @@ const AppContent: React.FC = React.memo(() => {
 
         <SwitchToMomentumNudge />
 
-        {}
         <WorkspaceViewportProvider element={workspaceViewportEl}>
           <main ref={setWorkspaceViewportRef} className={`flex-1 min-h-0 flex flex-col ${page === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
             {content}
           </main>
         </WorkspaceViewportProvider>
-        {user ? <PlacementEntry user={user} onUserChange={setUser} /> : null}
-        <OnboardingEntry />
+        {user ? <Suspense fallback={null}>
+            <PlacementEntry user={user} onUserChange={setUser} />
+          </Suspense> : null}
+        <Suspense fallback={null}>
+          <OnboardingEntry />
+        </Suspense>
       </div>;
   }
 
@@ -778,14 +720,18 @@ const AppContent: React.FC = React.memo(() => {
       if (pageTarget) {
         handleSetPage(pageTarget);
       }
-        }} onLogout={handleLogout} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+        }} onLogout={handleLogout} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
           <SunMoon className="w-3.5 h-3.5" />
-          {theme === "dark" ? "Light" : "Dark"}
+          <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
           </button>}>
         {content}
       </MomentumShell>
-      {user ? <PlacementEntry user={user} onUserChange={setUser} /> : null}
-      <OnboardingEntry />
+      {user ? <Suspense fallback={null}>
+          <PlacementEntry user={user} onUserChange={setUser} />
+        </Suspense> : null}
+      <Suspense fallback={null}>
+        <OnboardingEntry />
+      </Suspense>
     </>;
 });
 AppContent.displayName = "AppContent";
@@ -976,7 +922,7 @@ const ContestRoutes: React.FC = React.memo(() => {
       id: payload.userId ?? 0,
       username: "contest-user",
       course: "JAVA",
-      iad: 0,
+      difus: 0,
       avatarUrl: null,
       userMode: "CONTEST",
     });
@@ -1011,23 +957,23 @@ const ContestRoutes: React.FC = React.memo(() => {
   }
 
   return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-      <header className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">
+      <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
         <div className="flex items-center gap-3">
           <Logo size={24} className="text-primary" />
           <span className="text-lg font-mono text-text-primary">StudyCod Contest</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
+        <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap">
+          <button onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
             {i18n.language === "uk" ? "EN" : "UA"}
           </button>
-          <button onClick={toggleTheme} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+          <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
             {theme === "dark" ? "Light" : "Dark"}
           </button>
           <button onClick={() => {
           localStorage.removeItem("token");
           navigate("/contest", { replace: true });
           window.location.reload();
-        }} className="px-3 py-1 text-xs font-mono border border-border text-accent-error hover:bg-bg-hover transition-fast">
+        }} className="shrink-0 px-3 py-1 text-xs font-mono border border-border text-accent-error hover:bg-bg-hover transition-fast">
             {t("logout")}
           </button>
         </div>
@@ -1142,29 +1088,29 @@ const EduRoutes: React.FC = React.memo(() => {
 
   if (ui.mode === "classic") {
     return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-        <header className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">
-          <div className="flex items-center gap-4">
+        <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
+          <div className="flex items-center gap-4 min-w-0">
             <div className="flex items-center gap-2">
               <Logo size={24} className="text-primary" />
               <span className="text-lg font-mono text-text-primary">StudyCod EDU</span>
             </div>
-            <div className="h-6 w-px bg-border" />
-            <div className="px-3 py-1 border border-border text-sm font-mono text-text-secondary">
+            <div className="hidden sm:block h-6 w-px bg-border" />
+            <div className="hidden sm:block px-3 py-1 border border-border text-sm font-mono text-text-secondary">
               {courseLabel}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
+          <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap">
+            <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
               {i18n.language === 'uk' ? 'EN' : 'UA'}
             </button>
-            <button onClick={toggleTheme} className="px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+            <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
               {theme === "dark" ? "Light" : "Dark"}
             </button>
-            <button onClick={() => navigate("/docs")} className="px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast flex items-center gap-2">
+            <button onClick={() => navigate("/docs")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast flex items-center gap-2">
               <HelpCircle className="w-4 h-4" />
               {t("help")}
             </button>
-            <button onClick={() => navigate("/")} className="px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast">
+            <button onClick={() => navigate("/")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast">
               {t('toHome')}
             </button>
           </div>
@@ -1215,19 +1161,21 @@ const EduRoutes: React.FC = React.memo(() => {
     }} onLogout={() => {
       localStorage.removeItem("token");
       navigate("/");
-    }} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-            <SunMoon className="w-3.5 h-3.5" />
-            {theme === "dark" ? "Light" : "Dark"}
+    }} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+          <SunMoon className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
           </button>}>
         {eduMain}
       </MomentumShell>
-      <OnboardingEntry />
+      <Suspense fallback={null}>
+        <OnboardingEntry />
+      </Suspense>
     </>;
 });
 EduRoutes.displayName = "EduRoutes";
 const VerifyEmailWrapper: React.FC = React.memo(() => {
   const navigate = useNavigate();
-  const handleAuth = useCallback((u: User) => {
+  const handleAuth = useCallback((_u: User) => {
     navigate("/");
   }, [navigate]);
   return <Suspense fallback={<PageLoader />}>
@@ -1237,7 +1185,7 @@ const VerifyEmailWrapper: React.FC = React.memo(() => {
 VerifyEmailWrapper.displayName = "VerifyEmailWrapper";
 const GoogleAuthWrapper: React.FC = React.memo(() => {
   const navigate = useNavigate();
-  const handleAuth = useCallback((user: User) => {
+  const handleAuth = useCallback((_user: User) => {
     sessionStorage.setItem("fromAuth", "true");
     navigate("/");
     window.location.reload();

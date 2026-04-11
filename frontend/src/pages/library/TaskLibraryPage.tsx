@@ -1699,7 +1699,7 @@ export const TaskLibraryPage: React.FC = () => {
                         {tr("Звіт імпорту", "Import report")}
                       </Button>
                     ) : null}
-                    <Button size="sm" onClick={openCreate} title={tr("Нове завдання", "New task")}>
+                    <Button size="sm" onClick={openCreate} title={tr("Нове завдання", "New task")} aria-label={tr("Створити нове завдання", "Create new task")}>
                       <Plus className="w-4 h-4 mr-2" />
                       {tr("Створити", "Create")}
                     </Button>
@@ -1734,6 +1734,7 @@ export const TaskLibraryPage: React.FC = () => {
                       size="sm"
                       disabled={bulkActionPending || selectedDraftIds.size === 0}
                       onClick={handleBulkSubmitDrafts}
+                      aria-label={tr("Відправити вибрані чернетки на модерацію", "Submit selected drafts for moderation")}
                       title={tr("Відправити вибрані чернетки на модерацію", "Submit selected drafts for moderation")}
                     >
                       <Send className="w-4 h-4 mr-2" />
@@ -1745,6 +1746,7 @@ export const TaskLibraryPage: React.FC = () => {
                       size="sm"
                       disabled={bulkActionPending || selectedDraftIds.size === 0}
                       onClick={handleBulkDeleteDrafts}
+                      aria-label={tr("Видалити вибрані чернетки", "Delete selected drafts")}
                       title={tr("Видалити вибрані чернетки", "Delete selected drafts")}
                     >
                       <Trash2 className="w-4 h-4 mr-2" />

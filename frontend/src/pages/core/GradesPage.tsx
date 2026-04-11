@@ -34,15 +34,15 @@ interface Props {
 function gradeTone(value: number): string {
   if (value >= 85) return "text-accent-success";
   if (value >= 65) return "text-accent-warn";
-  if (value >= 40) return "text-yellow-500";
+  if (value >= 40) return "text-accent-warning";
   return "text-accent-error";
 }
 
 function gradeHeatTone(value: number): string {
-  if (value >= 85) return "bg-emerald-500/25 border-emerald-500/40";
-  if (value >= 65) return "bg-amber-500/20 border-amber-500/35";
-  if (value >= 40) return "bg-yellow-500/15 border-yellow-500/35";
-  return "bg-red-500/20 border-red-500/40";
+  if (value >= 85) return "bg-accent-success/25 border-accent-success/40";
+  if (value >= 65) return "bg-accent-warn/20 border-accent-warn/35";
+  if (value >= 40) return "bg-accent-warning/15 border-accent-warning/35";
+  return "bg-accent-error/20 border-accent-error/40";
 }
 
 export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
@@ -359,13 +359,16 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
                       </div>
                     </div>
                     <div className="overflow-auto">
-                      <table className="min-w-[760px] w-full text-sm font-mono">
+                      <table className="min-w-[620px] md:min-w-[760px] w-full text-xs sm:text-sm font-mono">
+                        <caption className="sr-only">
+                          {tr("Спроби по темі та їхні оцінки", "Attempts by topic and their grades")}
+                        </caption>
                         <thead className="bg-bg-surface/80">
                           <tr>
                             <th className="p-2 border-b border-border text-left">{tr("Дата", "Date")}</th>
                             <th className="p-2 border-b border-border text-left">{tr("Завдання", "Task")}</th>
                             <th className="p-2 border-b border-border text-center">{tr("Підсумок", "Total")}</th>
-                            <th className="p-2 border-b border-border text-center">W/O/I</th>
+                            <th className="hidden md:table-cell p-2 border-b border-border text-center">W/O/I</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -384,7 +387,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
                               <td className={`p-2 border-b border-border text-center font-semibold ${gradeTone(Number(grade.total))}`}>
                                 {grade.total}
                               </td>
-                              <td className="p-2 border-b border-border text-center text-text-secondary">
+                              <td className="hidden md:table-cell p-2 border-b border-border text-center text-text-secondary">
                                 {grade.workScore}/{grade.optimizationScore}/{grade.integrityScore}
                               </td>
                             </tr>

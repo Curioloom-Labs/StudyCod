@@ -176,7 +176,7 @@ export const AdminMailWorkspace: React.FC = () => {
         </div>
 
         {status && !status.ok ? (
-          <div className="mt-3 border border-red-500/50 bg-red-500/10 p-3 text-xs font-mono text-red-200 whitespace-pre-wrap">
+          <div className="mt-3 border border-accent-error/55 bg-accent-error/12 p-3 text-xs font-mono text-accent-error whitespace-pre-wrap">
             Mail is not configured:\n{status.issues.join("\n")}
           </div>
         ) : null}
@@ -245,7 +245,7 @@ export const AdminMailWorkspace: React.FC = () => {
                   <Circle className="w-4 h-4 mr-1" /> Mark unread
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => moveTo("Trash")}>Move to Trash</Button>
-                <Button variant="secondary" size="sm" onClick={deleteCurrent} className="text-red-500 hover:text-red-700">
+                <Button variant="secondary" size="sm" onClick={deleteCurrent} className="text-accent-error hover:opacity-85">
                   <Trash2 className="w-4 h-4 mr-1" /> Delete
                 </Button>
               </div>

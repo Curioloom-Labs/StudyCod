@@ -9,13 +9,13 @@ export const Badge: React.FC<Props> = ({
   color = "info"
 }) => {
   const colors: Record<string, string> = {
-    success: "border border-accent-success text-accent-success",
-    warn: "border border-accent-warn text-accent-warn",
-    error: "border border-accent-error text-accent-error",
-    "logic-warning": "border border-accent-logic-warning text-accent-logic-warning",
-    info: "border border-secondary text-secondary"
+    success: "border border-accent-success/60 bg-accent-success/10 text-accent-success",
+    warn: "border border-accent-warn/60 bg-accent-warn/10 text-accent-warn",
+    error: "border border-accent-error/60 bg-accent-error/10 text-accent-error",
+    "logic-warning": "border border-accent-logic-warning/60 bg-accent-logic-warning/10 text-accent-logic-warning",
+    info: "border border-secondary/60 bg-secondary/10 text-secondary"
   };
-  return <span className={clsx("inline-flex items-center px-2 py-0.5 text-xs font-mono border", colors[color])}>
+  return <span className={clsx("inline-flex items-center px-2 py-0.5 text-xs font-mono rounded-md", colors[color])}>
       {children}
     </span>;
 };

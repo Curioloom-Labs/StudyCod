@@ -79,3 +79,11 @@ coverage/
 
 # Uploads (user files)
 **/uploads/
+
+.gitignore
+.agents/
+.github/
+.impeccable.md
+skills-lock.json
+tmp-harden-findings-full.json
+tmp-harden-findings.json

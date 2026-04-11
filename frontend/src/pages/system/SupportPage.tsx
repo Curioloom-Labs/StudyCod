@@ -296,7 +296,7 @@ export const SupportPage: React.FC = () => {
                     <div className="text-sm text-text-primary font-mono truncate">{c.subject}</div>
                     <div className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                       c.status === "OPEN"
-                        ? "border-emerald-400/60 text-emerald-200 bg-emerald-400/10"
+                        ? "border-accent-success/60 text-accent-success bg-accent-success/10"
                         : "border-border text-text-secondary bg-bg-secondary"
                     }`}
                     >

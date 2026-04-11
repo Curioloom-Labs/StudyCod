@@ -103,6 +103,8 @@ export interface DifusEvent {
   topicIndex: number;
   grade: number;
   delta: number;
+  appliedDelta?: number;
+  potentialDelta?: number;
   reasonKey: "very_low_score" | "low_score" | "good_score" | "excellent_score";
   direction: "up" | "down" | "flat";
   applied: boolean;
@@ -121,6 +123,7 @@ export interface DifusDetails {
     min: number;
     max: number;
   };
+  limitState?: "none" | "min" | "max";
   lastAppliedGradeId: number | null;
   updatedAt: string | null;
   rules: DifusRule[];
@@ -129,6 +132,7 @@ export interface DifusDetails {
     totalEvents: number;
     positiveEvents: number;
     negativeEvents: number;
+    pendingEvents?: number;
   };
 }
 
@@ -145,6 +149,7 @@ export interface Task {
   subtitle?: string;
   topicId?: number | null;
   topicTitle?: string | null;
+  topicIndex?: number | null;
   descriptionMarkdown: string;
   theoryMarkdown?: string;
   practiceText?: string;

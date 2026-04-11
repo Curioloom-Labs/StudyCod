@@ -414,6 +414,14 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
     const lang = user.lang;
     const currentIad = getUserIadForLang(user, lang);
     const lastAppliedGradeId = getLastProcessedGradeIdForLang(user, lang);
+    const minIad = 0;
+    const maxIad = 1;
+    const limitEpsilon = 0.0005;
+    const limitState: "none" | "min" | "max" = currentIad <= (minIad + limitEpsilon)
+      ? "min"
+      : currentIad >= (maxIad - limitEpsilon)
+        ? "max"
+        : "none";
 
     const recentGrades = await AppDataSource
       .createQueryBuilder()
@@ -444,6 +452,8 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
       const gradeValue = Number(row.grade ?? 0);
       const delta = getIadDeltaByGrade(gradeValue);
       const gradeId = Number(row.gradeId ?? 0);
+      const applied = lastAppliedGradeId != null ? gradeId <= lastAppliedGradeId : false;
+      const appliedDelta = applied ? delta : 0;
       return {
         gradeId,
         taskId: Number(row.taskId ?? 0),
@@ -451,15 +461,18 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
         topicIndex: Number(row.topicIndex ?? 0),
         grade: gradeValue,
         delta,
+        appliedDelta,
+        potentialDelta: delta,
         reasonKey: getIadReasonKeyByGrade(gradeValue),
-        direction: delta > 0 ? "up" : delta < 0 ? "down" : "flat",
-        applied: lastAppliedGradeId != null ? gradeId <= lastAppliedGradeId : false,
+        direction: appliedDelta > 0 ? "up" : appliedDelta < 0 ? "down" : "flat",
+        applied,
         createdAt: row.createdAt,
       };
     });
 
-    const positiveEvents = events.filter((e) => e.delta > 0).length;
-    const negativeEvents = events.filter((e) => e.delta < 0).length;
+    const positiveEvents = events.filter((e) => e.appliedDelta > 0).length;
+    const negativeEvents = events.filter((e) => e.appliedDelta < 0).length;
+    const pendingEvents = events.filter((e) => !e.applied).length;
 
     return res.json({
       lang,
@@ -475,7 +488,8 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
         PYTHON: getUserIadForLang(user, "PYTHON"),
         CPP: getUserIadForLang(user, "CPP"),
       },
-      limits: { min: 0, max: 1 },
+      limits: { min: minIad, max: maxIad },
+      limitState,
       lastAppliedGradeId,
       updatedAt: user.lastIadChange ?? user.lastDifusChange ?? null,
       rules: [
@@ -489,6 +503,7 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
         totalEvents: events.length,
         positiveEvents,
         negativeEvents,
+        pendingEvents,
       },
     });
   } catch (err) {

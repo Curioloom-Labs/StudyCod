@@ -139,7 +139,7 @@ const ReflexGame: React.FC = () => {
       hint: state.bestMs != null ? `Best: ${state.bestMs} ms` : ""
     };
   })();
-  const boxClass = state.phase === "ready" ? "border-emerald-400 bg-emerald-400/10 text-emerald-300" : state.phase === "waiting" ? "border-border bg-bg-code text-text-secondary" : "border-border bg-bg-code text-text-primary";
+  const boxClass = state.phase === "ready" ? "border-accent-success bg-accent-success/10 text-accent-success" : state.phase === "waiting" ? "border-border bg-bg-code text-text-secondary" : "border-border bg-bg-code text-text-primary";
   return <div className="mt-6">
       <div className="flex items-center justify-between gap-3">
         <div>

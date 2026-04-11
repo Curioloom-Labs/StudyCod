@@ -158,7 +158,6 @@ export const ControlWorkDetailsPage: React.FC = () => {
   }, []);
   useEffect(() => {
     if (user && controlWorkId) {
-      console.log("Loading control work:", controlWorkId);
       loadControlWork();
     }
   }, [user, controlWorkId]);
@@ -178,9 +177,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      console.log("Fetching control work:", `/topics/control-works/${controlWorkId}`);
       const res = await api.get(`/topics/control-works/${controlWorkId}`);
-      console.log("Control work response:", res.data);
       const cw = res.data.controlWork;
       if (!cw) {
         throw new Error("Control work not found in response");
@@ -533,8 +530,6 @@ export const ControlWorkDetailsPage: React.FC = () => {
         topicTitle: quizTopicTitle.trim(),
         count: quizCount
       });
-      console.log("Full response:", res.data);
-      console.log("Response status:", res.status);
       let questions = res.data?.questions;
       if (!questions) {
         console.error("No questions field in response:", res.data);
@@ -559,8 +554,6 @@ export const ControlWorkDetailsPage: React.FC = () => {
         setGeneratingQuiz(false);
         return;
       }
-      console.log("Successfully extracted questions:", questions.length, "questions");
-      console.log("Generated questions:", questions);
       setQuizQuestions(questions);
       setHasTheory(true);
       setShowGenerateQuizModal(false);
@@ -699,13 +692,13 @@ export const ControlWorkDetailsPage: React.FC = () => {
                 setEditingTitle(false);
               }
             }} />
-                <Button variant="ghost" size="sm" onClick={handleSaveTitle}>
+                <Button variant="ghost" size="sm" onClick={handleSaveTitle} aria-label={tr("Зберегти назву", "Save title")} title={tr("Зберегти назву", "Save title")}>
                   <Save className="w-4 h-4" />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => {
               setControlWorkTitle(controlWork.title || "");
               setEditingTitle(false);
-            }}>
+            }} aria-label={tr("Скасувати редагування назви", "Cancel title editing")} title={tr("Скасувати редагування назви", "Cancel title editing")}>
                   <X className="w-4 h-4" />
                 </Button>
               </div> : <div className="flex items-center gap-2">
@@ -1261,10 +1254,10 @@ export const ControlWorkDetailsPage: React.FC = () => {
                             points: test.points,
                             isHidden: test.isHidden === true
                       });
-                    }} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")}>
+                    }} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")} aria-label={t("edit")}>
                                 <Edit2 className="w-4 h-4 text-primary" />
                               </button>
-                              <button onClick={() => handleDeleteTestData(test.id)} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")}>
+                              <button onClick={() => handleDeleteTestData(test.id)} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")} aria-label={t("delete")}>
                                 <Trash2 className="w-4 h-4 text-accent-error" />
                               </button>
                             </div>

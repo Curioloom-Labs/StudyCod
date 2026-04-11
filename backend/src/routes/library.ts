@@ -659,6 +659,9 @@ const createLibraryTaskSchema = z.object({
         expectedOutput: z.string(),
         isHidden: z.boolean().optional(),
         points: z.number().int().min(1).max(1000).optional(),
+        // Subtask id used for binary (0/full) subtask scoring in contests.
+        // Stored on each test row; total 100 points is expected to be distributed across subtasks via `points`.
+        subtask: z.number().int().min(1).max(100000).optional(),
       })
     )
     .optional(),
@@ -1743,6 +1746,7 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
           isHidden: !!t.isHidden,
           kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
           points: t.points ?? 1,
+          subtask: typeof (t as any).subtask === "number" ? String((t as any).subtask) : null,
         })
       );
       await testDataRepo().save(rows);
@@ -1889,6 +1893,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
             isHidden: !!t.isHidden,
             kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
             points: t.points ?? 1,
+            subtask: typeof (t as any).subtask === "number" ? String((t as any).subtask) : null,
           })
         );
         await testDataRepo().save(rows);
@@ -2052,6 +2057,7 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
           isHidden: !!t.isHidden,
           kind: (((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any),
           points: t.points,
+          subtask: (t as any).subtask ?? null,
         })
       );
       await testDataRepo().save(rows);
@@ -2369,7 +2375,7 @@ async function importSingleLibraryArchive(params: {
 
   const testsEntry = zip.getEntry("tests.json");
   if (testsEntry) {
-    const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>>(zip, "tests.json");
+    const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json");
     if (Array.isArray(tests) && tests.length > 0) {
       const rows = tests.map(t =>
         testDataRepo().create({
@@ -2379,6 +2385,7 @@ async function importSingleLibraryArchive(params: {
           isHidden: !!t.isHidden,
           kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
           points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
+          subtask: t.subtask == null ? null : String(t.subtask),
         })
       );
       await testDataRepo().save(rows);
@@ -2540,6 +2547,7 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
               expectedOutput: t.expectedOutput,
               isHidden: !!t.isHidden,
               points: t.points,
+              subtask: (t as any).subtask ?? null,
             })),
             null,
             2

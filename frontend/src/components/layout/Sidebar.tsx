@@ -64,7 +64,7 @@ export const Sidebar: React.FC<Props> = ({
             </div>
           </div>
         </div>
-        <button onClick={onLogout} className="text-accent-error hover:opacity-80 transition-fast">
+        <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center text-accent-error hover:opacity-80 transition-fast" aria-label={t("logout")} title={t("logout")}>
           <LogOut className="w-4 h-4" />
         </button>
       </div>

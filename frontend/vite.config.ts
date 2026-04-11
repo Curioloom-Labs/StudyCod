@@ -48,11 +48,14 @@ export default defineConfig({
           if (norm.includes("/node_modules/framer-motion/")) return "framer-motion";
 
           // Markdown + math rendering
-          if (norm.includes("/node_modules/html-parse-stringify/") || norm.includes("/node_modules/void-elements/")) {
+          if (norm.includes("/node_modules/remark-math/") || norm.includes("/node_modules/rehype-katex/") || norm.includes("/node_modules/katex/") || norm.includes("/node_modules/mdast-util-math/") || norm.includes("/node_modules/micromark-extension-math/")) {
             return "markdown-math";
           }
-          if (norm.includes("/node_modules/react-markdown/") || norm.includes("/node_modules/remark-gfm/") || norm.includes("/node_modules/remark-math/") || norm.includes("/node_modules/rehype-katex/") || norm.includes("/node_modules/remark-parse/") || norm.includes("/node_modules/remark-rehype/") || norm.includes("/node_modules/rehype-stringify/") || norm.includes("/node_modules/unified/") || norm.includes("/node_modules/vfile/") || norm.includes("/node_modules/katex/") || /\/node_modules\/(micromark|mdast-|hast-|unist-|zwitch|property-information|web-namespaces|space-separated-tokens|comma-separated-tokens|trim-lines|ccount|longest-streak|is-alphabetical|is-alphanumerical|is-decimal|is-hexadecimal|decode-named-character-reference|parse-entities|character-entities|character-entities-legacy|character-reference-invalid|html-url-attributes|markdown-table|hastscript|hast-util-|mdast-util-|micromark-extension-|micromark-factory-|micromark-core-commonmark|micromark-util-)/.test(norm)) {
-            return "markdown-math";
+          if (norm.includes("/node_modules/html-parse-stringify/") || norm.includes("/node_modules/void-elements/")) {
+            return "markdown-core";
+          }
+          if (norm.includes("/node_modules/react-markdown/") || norm.includes("/node_modules/remark-gfm/") || norm.includes("/node_modules/remark-parse/") || norm.includes("/node_modules/remark-rehype/") || norm.includes("/node_modules/rehype-stringify/") || norm.includes("/node_modules/unified/") || norm.includes("/node_modules/vfile/") || norm.includes("/node_modules/vfile-message/") || /\/node_modules\/(micromark|mdast-|hast-|unist-|zwitch|property-information|web-namespaces|space-separated-tokens|comma-separated-tokens|trim-lines|ccount|longest-streak|is-alphabetical|is-alphanumerical|is-decimal|is-hexadecimal|decode-named-character-reference|parse-entities|character-entities|character-entities-legacy|character-reference-invalid|html-url-attributes|markdown-table|hastscript|hast-util-|mdast-util-|micromark-extension-|micromark-factory-|micromark-core-commonmark|micromark-util-)/.test(norm)) {
+            return "markdown-core";
           }
 
           // Syntax highlighting (very large) – also lazy-loaded in MarkdownView.

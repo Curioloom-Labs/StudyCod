@@ -56,10 +56,10 @@ export const ContestDashboard: React.FC<ContestDashboardProps> = ({ title, start
   }, [rows]);
 
   return (
-    <div className="h-full min-h-0 grid grid-cols-12 gap-3">
-      <div className="col-span-4 min-h-0 flex flex-col gap-3">
+    <div className="h-full min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-3">
+      <div className="xl:col-span-4 min-h-0 flex flex-col gap-3">
         <div className="rounded-2xl border border-border/70 bg-bg-surface/85 p-4 shadow-[0_12px_30px_rgba(0,0,0,0.28)]">
-          <div className="text-xs text-text-secondary uppercase tracking-widest">Timeline Event Dashboard</div>
+          <div className="text-xs text-text-secondary uppercase tracking-widest">Contest timeline</div>
           <div className="text-lg text-text-primary font-semibold mt-1">{title}</div>
 
           <div className="mt-4 flex items-center justify-center">
@@ -105,7 +105,7 @@ export const ContestDashboard: React.FC<ContestDashboardProps> = ({ title, start
         <div className="rounded-2xl border border-border/70 bg-bg-surface/85 p-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)] flex-1 min-h-0 flex flex-col">
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-semibold text-text-primary">Recent Solves Feed</div>
-            <button onClick={onRefresh} className="px-2 py-1 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast">Refresh</button>
+            <button onClick={onRefresh} className="h-11 px-3 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast" aria-label="Refresh activity feed">Refresh</button>
           </div>
           <div className="mt-2 flex-1 min-h-0 overflow-auto space-y-2">
             {activity.length === 0 ? <div className="text-xs text-text-secondary">No activity yet.</div> : null}
@@ -119,18 +119,18 @@ export const ContestDashboard: React.FC<ContestDashboardProps> = ({ title, start
         </div>
       </div>
 
-      <div className="col-span-8 min-h-0 rounded-2xl border border-border/70 bg-bg-surface/85 p-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)] flex flex-col">
+      <div className="xl:col-span-8 min-h-0 rounded-2xl border border-border/70 bg-bg-surface/85 p-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)] flex flex-col">
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="text-sm font-semibold text-text-primary flex items-center gap-2">
             <AlarmClockCheck className="w-4 h-4 text-secondary" />
             Live Leaderboard
           </div>
-          <button onClick={onRefresh} className="px-2 py-1 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast">Update</button>
+          <button onClick={onRefresh} className="h-11 px-3 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast" aria-label="Refresh leaderboard">Update</button>
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto">
           {loading ? <div className="text-xs text-text-secondary">Loading leaderboard...</div> : null}
-          <table className="w-full min-w-[560px] text-xs border border-border rounded-lg overflow-hidden">
+          <table className="w-full min-w-[480px] text-xs border border-border rounded-lg overflow-hidden">
             <thead className="bg-bg-hover">
               <tr>
                 <th className="p-2 border-b border-border text-left">#</th>

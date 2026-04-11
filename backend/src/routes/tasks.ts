@@ -619,6 +619,61 @@ function mergeConsistentExamples(params: {
   return { merged: out, droppedConflicts };
 }
 
+function looksLikeNumberedChecklistPracticalTask(text: string): boolean {
+  const lines = String(text ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^#{1,6}\s+/.test(line));
+
+  if (lines.length < 3) return false;
+
+  const sample = lines.slice(0, Math.min(lines.length, 8));
+  const numbered = sample.filter((line) => /^\d+[\.)]\s+/.test(line)).length;
+  const bullets = sample.filter((line) => /^[-*•]\s+/.test(line)).length;
+  const markers = numbered + bullets;
+
+  if (numbered < 2 && markers < 4) return false;
+  return markers / sample.length >= 0.55;
+}
+
+function rewriteChecklistPracticalTaskToNarrative(text: string): string {
+  const source = String(text ?? "").trim();
+  if (!source) return "";
+  if (!looksLikeNumberedChecklistPracticalTask(source)) return source;
+
+  const fragments = source
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^#{1,6}\s+/.test(line))
+    .map((line) => line.replace(/^\s*(?:\d+[\.)]|[-*•])\s+/, "").trim())
+    .filter(Boolean)
+    .map((part) => {
+      const compact = part.replace(/\s+/g, " ").trim();
+      if (!compact) return "";
+      return /[.!?…:]$/.test(compact) ? compact : `${compact}.`;
+    })
+    .filter(Boolean);
+
+  if (fragments.length < 2) return source;
+  return fragments.join(" ");
+}
+
+function formatStatementSectionValueForMarkdown(value: string, options?: {
+  preferCodeBlock?: boolean;
+}): string {
+  const normalized = normalizeMarkdownText(String(value ?? "")).trim();
+  if (!normalized) return "";
+  if (/^```/.test(normalized)) return normalized;
+
+  const sanitized = normalized.replace(/```/g, "").trim();
+  const hasMultipleLines = /\n/.test(sanitized);
+  if (options?.preferCodeBlock || hasMultipleLines) {
+    return `\`\`\`text\n${sanitized}\n\`\`\``;
+  }
+
+  return sanitized;
+}
+
 function composeTaskStatementMarkdown(params: {
   practicalTask: string;
   inputFormat?: string | null;
@@ -626,7 +681,9 @@ function composeTaskStatementMarkdown(params: {
   constraints?: string | null;
   uiLanguage?: UiLanguage;
 }): string {
-  const practical = normalizeMarkdownText(String(params.practicalTask ?? "")).trim();
+  const practical = rewriteChecklistPracticalTaskToNarrative(
+    normalizeMarkdownText(String(params.practicalTask ?? "")).trim()
+  );
   const inputFormat = normalizeMarkdownText(String(params.inputFormat ?? "")).trim();
   const outputFormat = normalizeMarkdownText(String(params.outputFormat ?? "")).trim();
   const constraints = normalizeMarkdownText(String(params.constraints ?? "")).trim();
@@ -635,12 +692,26 @@ function composeTaskStatementMarkdown(params: {
   const sections: string[] = [];
   if (practical) sections.push(practical);
 
+  const fallbackInputFormat = i18nText(uiLanguage, "Вхідних даних немає. (stdin порожній)", "No input data. (stdin is empty)");
+  const fallbackOutputFormat = i18nText(uiLanguage, "Виведіть результат згідно умови.", "Output the result according to the statement.");
+  const renderedInputFormat = inputFormat
+    ? formatStatementSectionValueForMarkdown(inputFormat, {
+        preferCodeBlock: /\n/.test(inputFormat)
+      })
+    : fallbackInputFormat;
+  const renderedOutputFormat = outputFormat
+    ? formatStatementSectionValueForMarkdown(outputFormat, {
+        // Output format is a strict contract for judge checks; keep it visually exact.
+        preferCodeBlock: true
+      })
+    : fallbackOutputFormat;
+
   // Always include formats so students see the same contract that tests use.
   sections.push(i18nText(uiLanguage, "#### Формат вхідних даних", "#### Input format"));
-  sections.push(inputFormat || i18nText(uiLanguage, "Вхідних даних немає. (stdin порожній)", "No input data. (stdin is empty)"));
+  sections.push(renderedInputFormat);
 
   sections.push(i18nText(uiLanguage, "#### Формат вихідних даних", "#### Output format"));
-  sections.push(outputFormat || i18nText(uiLanguage, "Виведіть результат згідно умови.", "Output the result according to the statement."));
+  sections.push(renderedOutputFormat);
 
   if (constraints) {
     sections.push(i18nText(uiLanguage, "#### Обмеження", "#### Constraints"));
@@ -893,6 +964,9 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
 
   const topicId = typeof (task.topic as any)?.id === "number" ? (task.topic as any).id : null;
   const topicTitle = typeof (task.topic as any)?.title === "string" ? (task.topic as any).title : null;
+  const topicIndex = typeof (task as any)?.topicIndex === "number" && Number.isFinite((task as any).topicIndex)
+    ? Number((task as any).topicIndex)
+    : null;
 
   const starterDecoded = decodeMultiFileSubmissionV1(task.template);
   const starterFiles = starterDecoded?.files ?? null;
@@ -915,6 +989,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     subtitle: task.subtitle || undefined,
     topicId,
     topicTitle,
+    topicIndex,
     descriptionMarkdown: normalizedDescription,
     theoryMarkdown: theoryMarkdown || undefined,
     ...(opts?.includeTheoryDebug
@@ -1014,7 +1089,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     const v = Number.isFinite(raw) ? raw : fallback;
     // Guard against accidental under-budgeting (e.g., 10-15s) which causes frequent deadline aborts.
     // We still respect the remaining request budget below.
-    return Math.max(25_000, Math.min(50_000, Math.floor(v)));
+    return Math.max(25_000, Math.min(90_000, Math.floor(v)));
   })();
   const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
@@ -1833,16 +1908,21 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
   let throttleKey: string | null = null;
   try {
     const requestStartedAt = Date.now();
+    const DISABLE_AI_DEADLINES = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
     // Total budget for the whole generation flow (quiz/task/tests).
     // Override with TASKS_GENERATE_BUDGET_MS to match your upstream proxy timeout.
     // If your proxy timeout is 60s, set this to something like 45-55s.
     const REQUEST_BUDGET_MS = (() => {
+      if (DISABLE_AI_DEADLINES) {
+        // Explicit "no deadline" mode for internal guards.
+        // This keeps fallback/test-generation branches from short-circuiting due to synthetic request budgets.
+        return Number.MAX_SAFE_INTEGER;
+      }
       const raw = Number(process.env.TASKS_GENERATE_BUDGET_MS);
       const v = Number.isFinite(raw) ? raw : 45_000;
       // Keep sane bounds; lower bound prevents too aggressive aborts, upper bound avoids runaway waits.
       return Math.max(15_000, Math.min(120_000, Math.floor(v)));
     })();
-    const DISABLE_AI_DEADLINES = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
     const userId = req.userId!;
     const rawLang = String(req.lang ?? "").toUpperCase().trim();
     const lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
@@ -2212,7 +2292,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       const v = Number.isFinite(raw) ? raw : fallback;
       // Guard against accidental under-budgeting (e.g., 10-15s) which causes frequent deadline aborts.
       // We still respect the remaining request budget below.
-      return Math.max(25_000, Math.min(50_000, Math.floor(v)));
+      return Math.max(25_000, Math.min(90_000, Math.floor(v)));
     })();
     // Keep some budget for test-data generation + DB writes.
     // Cap low to avoid nginx 504; generation retries still happen inside this budget.
@@ -2555,9 +2635,15 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       }
     }));
     await testDataRepo().save(newTestData);
+
+    const savedHydrated = await taskRepo().findOne({
+      where: { id: saved.id },
+      relations: ["topic", "topic.theoryBlock"]
+    });
+
     return res.json({
       status: "ok",
-      task: mapTaskToDto(saved, undefined, { uiLanguage: userLanguage })
+      task: mapTaskToDto(savedHydrated ?? saved, undefined, { uiLanguage: userLanguage })
     });
   } catch (error: any) {
     logger.error("[tasks] POST /generate error", { requestId: req.requestId, userId: req.userId, error });

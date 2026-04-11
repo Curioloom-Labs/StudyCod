@@ -747,14 +747,14 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   return (
     <div className="relative min-h-[calc(100dvh-3rem)] w-full px-3 pb-3">
-      <div className="min-h-[calc(100dvh-3.75rem)] rounded-3xl bg-[linear-gradient(150deg,#0c0f17_0%,#0f111a_46%,#0b0d14_100%)] border border-border/60 overflow-hidden shadow-[0_24px_70px_rgba(0,0,0,0.48)] flex">
+      <div className="min-h-[calc(100dvh-3.75rem)] rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex">
         <aside className="hidden xl:flex w-[58px] border-r border-border/60 bg-bg-surface/70 flex-col items-center py-3 gap-2">
           <div className="group relative">
             <button
               onClick={goBackToLibrary}
               title={tr("Назад", "Back")}
               aria-label={tr("Назад", "Back")}
-              className="w-10 h-10 rounded-xl border border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary transition-fast flex items-center justify-center"
+              className="w-11 h-11 rounded-xl border border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary transition-fast flex items-center justify-center"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -773,7 +773,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
                 onClick={() => scrollToSection(item.id as "mission" | "task" | "console")}
                 title={item.label}
                 aria-label={item.label}
-                className={`w-10 h-10 rounded-xl border transition-fast flex items-center justify-center ${activeRailItem === item.id ? "border-primary/50 bg-primary/10 text-primary" : "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary"}`}
+                className={`w-11 h-11 rounded-xl border transition-fast flex items-center justify-center ${activeRailItem === item.id ? "border-primary/50 bg-primary/10 text-primary" : "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary"}`}
               >
                 <item.Icon className="w-4 h-4" />
               </button>
@@ -798,7 +798,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
             </h1>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={resetToTemplate} disabled={!task || loading} title={tr("Скинути", "Reset")}
+            <Button variant="ghost" onClick={resetToTemplate} disabled={!task || loading} title={tr("Скинути", "Reset")} aria-label={tr("Скинути код до шаблону", "Reset code to template")} className="h-11 w-11 p-0"
               >
               <RotateCcw className="w-4 h-4" />
             </Button>
@@ -806,6 +806,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
               variant="ghost"
               onClick={manualSave}
               disabled={loading}
+              aria-label={tr("Зберегти чернетку", "Save draft")}
+              className="h-11 w-11 p-0"
               title={
                 hasToken
                   ? tr("Зберегти чернетку", "Save draft")

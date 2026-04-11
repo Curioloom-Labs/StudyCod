@@ -44,6 +44,13 @@ export interface JudgeRequest {
   debug?: boolean;
   run_all?: boolean;
   rerun_failed_once?: boolean;
+  /**
+   * How to convert per-group test results into group score (and overall `score`).
+   * - SUM (default): score is sum of weights for tests with `verdict=AC` inside the group.
+   * - BINARY_ALL_OR_NOT: group gets full max_score only if *all* tests in the group are AC,
+   *   otherwise group score is 0.
+   */
+  group_scoring_mode?: "SUM" | "BINARY_ALL_OR_NOT";
 }
 export interface JudgeCompileResult {
   ok: boolean;

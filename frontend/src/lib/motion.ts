@@ -1,29 +1,53 @@
 import type { Variants, Transition } from "framer-motion";
 export const easeOutExpo: Transition["ease"] = [0.16, 1, 0.3, 1];
+export const easeOutQuint: Transition["ease"] = [0.22, 1, 0.36, 1];
 export const pageTransition: Transition = {
-  duration: 0.28,
-  ease: easeOutExpo
+  duration: 0.36,
+  ease: easeOutQuint
+};
+export const reducedMotionTransition: Transition = {
+  duration: 0.01,
+  ease: "linear"
 };
 export const pageVariants: Variants = {
   initial: {
     opacity: 0,
-    y: 10,
-    filter: "blur(6px)"
+    y: 12,
+    scale: 0.995
   },
   animate: {
     opacity: 1,
     y: 0,
-    filter: "blur(0px)",
+    scale: 1,
     transition: pageTransition
   },
   exit: {
     opacity: 0,
     y: -8,
-    filter: "blur(6px)",
+    scale: 0.998,
     transition: {
-      duration: 0.2,
-      ease: easeOutExpo
+      duration: 0.22,
+      ease: easeOutQuint
     }
+  }
+};
+export const reducedPageVariants: Variants = {
+  initial: {
+    opacity: 1,
+    y: 0,
+    scale: 1
+  },
+  animate: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: reducedMotionTransition
+  },
+  exit: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: reducedMotionTransition
   }
 };
 export const overlayVariants: Variants = {
@@ -33,14 +57,14 @@ export const overlayVariants: Variants = {
   animate: {
     opacity: 1,
     transition: {
-      duration: 0.18,
+      duration: 0.2,
       ease: easeOutExpo
     }
   },
   exit: {
     opacity: 0,
     transition: {
-      duration: 0.14,
+      duration: 0.15,
       ease: easeOutExpo
     }
   }
@@ -49,23 +73,20 @@ export const modalVariants: Variants = {
   initial: {
     opacity: 0,
     y: 14,
-    scale: 0.98,
-    filter: "blur(6px)"
+    scale: 0.985
   },
   animate: {
     opacity: 1,
     y: 0,
     scale: 1,
-    filter: "blur(0px)",
     transition: pageTransition
   },
   exit: {
     opacity: 0,
     y: 10,
     scale: 0.98,
-    filter: "blur(6px)",
     transition: {
-      duration: 0.18,
+      duration: 0.24,
       ease: easeOutExpo
     }
   }

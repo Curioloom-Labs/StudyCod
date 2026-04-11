@@ -41,16 +41,79 @@ export interface TestDataExample {
   explanation?: string;
 }
 
-function parseEnvTimeoutMs(envVar: string, fallbackMs: number, minMs: number, maxMs: number): number {
+type TaskAnchor = {
+  topic: string;
+  coreOperation: string;
+  allowedScope: string[];
+  forbiddenScope: string[];
+};
+
+function parseEnvInt(envVar: string, fallbackValue: number, minValue: number, maxValue: number): number {
   const raw = String(process.env[envVar] ?? '').trim();
   const n = raw ? Number(raw) : NaN;
-  const v = Number.isFinite(n) ? Math.floor(n) : fallbackMs;
-  return Math.max(minMs, Math.min(maxMs, v));
+  const v = Number.isFinite(n) ? Math.floor(n) : fallbackValue;
+  return Math.max(minValue, Math.min(maxValue, v));
+}
+
+function parseEnvTimeoutMs(envVar: string, fallbackMs: number, minMs: number, maxMs: number): number {
+  return parseEnvInt(envVar, fallbackMs, minMs, maxMs);
+}
+
+function parseEnvBoolean(envVar: string, fallbackValue: boolean): boolean {
+  const raw = String(process.env[envVar] ?? '').trim().toLowerCase();
+  if (!raw) return fallbackValue;
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true;
+  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false;
+  return fallbackValue;
 }
 
 // Default is intentionally above 30s to reduce 504s from upstream on slower generations.
 // NOTE: ensure your reverse proxy (e.g., nginx proxy_read_timeout) is >= this value.
 const LLM_TASK_TIMEOUT_MS = parseEnvTimeoutMs('LLM_TASK_TIMEOUT_MS', 45_000, 10_000, 120_000);
+const LLM_TASK_MAX_TOKENS = parseEnvInt('LLM_TASK_MAX_TOKENS', 2600, 1200, 4000);
+const LLM_TASK_THEORY_CONTEXT_CHARS = parseEnvInt('LLM_TASK_THEORY_CONTEXT_CHARS', 1200, 400, 3000);
+const LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS = parseEnvInt('LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS', 1200, 400, 3000);
+const LLM_TASK_ANCHOR_CACHE_TTL_MS = parseEnvTimeoutMs('LLM_TASK_ANCHOR_CACHE_TTL_MS', 30 * 60 * 1000, 10_000, 24 * 60 * 60 * 1000);
+const LLM_TASK_ANCHOR_CACHE_ENABLED = parseEnvBoolean('LLM_TASK_ANCHOR_CACHE_ENABLED', true);
+
+function cloneTaskAnchor(anchor: TaskAnchor): TaskAnchor {
+  return {
+    topic: String(anchor.topic ?? ''),
+    coreOperation: String(anchor.coreOperation ?? ''),
+    allowedScope: Array.isArray(anchor.allowedScope) ? anchor.allowedScope.map(s => String(s ?? '')) : [],
+    forbiddenScope: Array.isArray(anchor.forbiddenScope) ? anchor.forbiddenScope.map(s => String(s ?? '')) : []
+  };
+}
+
+function buildTaskAnchorCacheKey(params: {
+  topicTitle: string;
+  lang: LLMTaskLanguage;
+}): string {
+  return `${params.lang}|${String(params.topicTitle ?? '').trim().toLowerCase()}`;
+}
+
+function compactPromptText(raw: string, maxLength: number): string {
+  const normalized = String(raw ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[\t ]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+
+  const clipped = normalized.slice(0, maxLength);
+  const preferredBoundary = Math.max(
+    clipped.lastIndexOf('\n\n'),
+    clipped.lastIndexOf('. '),
+    clipped.lastIndexOf('! '),
+    clipped.lastIndexOf('? ')
+  );
+  const cutAt = preferredBoundary > Math.floor(maxLength * 0.65)
+    ? preferredBoundary + 1
+    : maxLength;
+  return clipped.slice(0, cutAt).trim();
+}
+
 function getDifficultyPrompt(difus: number): string {
   if (difus < 0.2) return "Рівень: ПОЧАТКОВИЙ (Дуже легко). Завдання має бути максимально простим, лише на відпрацювання синтаксису. Жодних складних алгоритмів.";
   if (difus < 0.4) return "Рівень: ЛЕГКИЙ. Просте завдання, мінімум умов. Фокус на розумінні теми.";
@@ -108,10 +171,43 @@ export class LLMOrchestrator {
   private cloudflareProvider: CloudflareAIProvider;
   private openRouterProvider: OpenRouterProvider;
   private localProvider: LocalLLMProvider;
+  private static readonly taskAnchorCache = new Map<string, {
+    anchor: TaskAnchor;
+    expiresAt: number;
+  }>();
   constructor() {
     this.cloudflareProvider = new CloudflareAIProvider();
     this.openRouterProvider = new OpenRouterProvider();
     this.localProvider = new LocalLLMProvider();
+  }
+
+  private getCachedTaskAnchor(cacheKey: string): TaskAnchor | null {
+    if (!LLM_TASK_ANCHOR_CACHE_ENABLED) return null;
+    const record = LLMOrchestrator.taskAnchorCache.get(cacheKey);
+    if (!record) return null;
+    if (record.expiresAt <= Date.now()) {
+      LLMOrchestrator.taskAnchorCache.delete(cacheKey);
+      return null;
+    }
+    return cloneTaskAnchor(record.anchor);
+  }
+
+  private setCachedTaskAnchor(cacheKey: string, anchor: TaskAnchor): void {
+    if (!LLM_TASK_ANCHOR_CACHE_ENABLED) return;
+    LLMOrchestrator.taskAnchorCache.set(cacheKey, {
+      anchor: cloneTaskAnchor(anchor),
+      expiresAt: Date.now() + LLM_TASK_ANCHOR_CACHE_TTL_MS
+    });
+
+    // Prevent unbounded growth if service stays hot for a long time.
+    if (LLMOrchestrator.taskAnchorCache.size > 256) {
+      const now = Date.now();
+      for (const [key, value] of LLMOrchestrator.taskAnchorCache.entries()) {
+        if (value.expiresAt <= now) {
+          LLMOrchestrator.taskAnchorCache.delete(key);
+        }
+      }
+    }
   }
 
   private normalizeTemplateTodoComments(params: {
@@ -305,12 +401,27 @@ export class LLMOrchestrator {
 
 Поверни ТІЛЬКИ JSON без пояснень.`;
     const expectedTopic = params.topicTitle.trim();
+    const cacheKey = buildTaskAnchorCacheKey({
+      topicTitle: expectedTopic,
+      lang: params.lang
+    });
     const fallbackAnchor = {
       topic: expectedTopic,
       coreOperation: `Розв'язати задачу з теми "${expectedTopic}" та вивести результат у stdout`,
       allowedScope: [expectedTopic, 'базові конструкції мови', 'вивід у stdout'],
       forbiddenScope: ['multi-task структура', 'мета-повідомлення компілятора', 'створення файлів/проєктів']
     };
+
+    const cachedAnchor = this.getCachedTaskAnchor(cacheKey);
+    if (cachedAnchor) {
+      logger.debug('[llm] using cached task anchor', {
+        userId: params.userId,
+        topicId: params.topicId,
+        topic: expectedTopic,
+        lang: params.lang
+      });
+      return cachedAnchor;
+    }
 
     const maxAnchorAttempts = 2;
     let lastErr: unknown = null;
@@ -359,12 +470,14 @@ export class LLMOrchestrator {
           });
         }
 
-        return {
+        const resolvedAnchor: TaskAnchor = {
           topic,
           coreOperation,
           allowedScope,
           forbiddenScope
         };
+        this.setCachedTaskAnchor(cacheKey, resolvedAnchor);
+        return resolvedAnchor;
       } catch (err) {
         lastErr = err;
         logger.warn('[llm] anchor generation attempt failed', {
@@ -383,6 +496,7 @@ export class LLMOrchestrator {
       expectedTopic,
       error: String((lastErr as any)?.message || lastErr || 'unknown')
     });
+    this.setCachedTaskAnchor(cacheKey, fallbackAnchor);
     return fallbackAnchor;
   }
   private async generateTaskFromAnchor(params: {
@@ -479,8 +593,10 @@ export class LLMOrchestrator {
       ? params.allowedIoTypes
       : ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
     const stdinAllowed = allowedIoTypes.includes("STDIN_STDOUT");
-    const uniquenessBlock = params.previousTasks && params.previousTasks.trim().length > 0
-      ? `\n\nВЖЕ ЗГЕНЕРОВАНІ ЗАВДАННЯ У ЦІЙ ТЕМІ (щоб уникнути повторів):\n${params.previousTasks.trim()}\n\nТвоє нове завдання має бути СУТТЄВО ІНШИМ: інший сюжет/дані/формулювання, інші приклади та інші числа.`
+    const compactPreviousTasks = compactPromptText(params.previousTasks ?? '', LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS);
+    const compactTheoryContext = compactPromptText(params.theory, LLM_TASK_THEORY_CONTEXT_CHARS);
+    const uniquenessBlock = compactPreviousTasks
+      ? `\n\nВЖЕ ЗГЕНЕРОВАНІ ЗАВДАННЯ У ЦІЙ ТЕМІ (щоб уникнути повторів):\n${compactPreviousTasks}\n\nТвоє нове завдання має бути СУТТЄВО ІНШИМ: інший сюжет/дані/формулювання, інші приклади та інші числа.`
       : '';
 
     const userPrompt = `
@@ -508,8 +624,13 @@ ${difficultyPrompt}
 - Якщо тема про структуру проєкту — перетвори це на програмне завдання (наприклад: вивести текст/схему структури), але все одно лише через stdout.
 
 ЯКІСТЬ УМОВИ (важливо для студентів):
-- practicalTask має бути РОЗГОРНУТИЙ: мінімум 4–6 речень або структуровані маркери (що зробити, які саме дані/значення використати, що саме вивести, як форматувати).
+- practicalTask має бути пізнавальним, цікавим і зрозумілим: мінімум 4–6 речень зв'язного тексту (1–2 абзаци), з природним стилем як у класичній умові задачі.
+- У перших 1–2 реченнях ОБОВ'ЯЗКОВО поясни простими словами, що саме треба вивести, щоб студент це зрозумів ще ДО секції "Формат вихідних даних".
+- Додай короткий реалістичний контекст (міні-сюжет), але без зайвої "води".
+- Окремим фінальним реченням у practicalTask додай маркер "Що потрібно вивести: ...", але не можна писати саме "Що потрібно вивести:", а до прикладу: Необхідно вивести n, тощо (без списків).
 - Заборонено робити умову «в 1 рядок» типу “Оголосіть змінну ...”. Додай контекст і чіткий критерій перевірки.
+- КАТЕГОРИЧНО ЗАБОРОНЕНО оформлювати practicalTask як нумерований чекліст типу "1.", "2.", "3.".
+- Якщо треба структуру, роби це через зв'язні речення; не перетворюй умову на список кроків.
 - Якщо завдання про змінні/типи/операції — вимагай ВИВЕСТИ результат (print) так, щоб автотест міг перевірити (детермінований stdout).
 
 ДОЗВОЛЕНІ IO-ТИПИ (allowedIoTypes): ${allowedIoTypes.join(' | ')}
@@ -527,7 +648,7 @@ ${difficultyPrompt}
 ${params.prevTopics && params.prevTopics.trim().length > 0 ? `Попередні теми:\n${params.prevTopics.trim()}` : ''}
 
 Теорія з теми (для контексту):
-${params.theory.slice(0, 2000)}
+${compactTheoryContext}
 ${uniquenessBlock}
 
 ШАБЛОН КОДУ (codeTemplate) - ЗАБОРОНЕНО писати реалізацію:
@@ -556,6 +677,7 @@ ${uniquenessBlock}
 ВИХІДНІ ДАНІ (outputFormat):
 - outputFormat — це контракт для автоперевірки. Опиши РІВНО те, що треба вивести, включно з усіма пробілами/двокрапками/переносами рядків, якщо вони важливі.
 - Якщо ioType = NO_INPUT_FIXED_OUTPUT: outputFormat МАЄ бути ТОЧНИМ текстом, який програма має вивести в stdout (як готовий expected output), а не описом.
+- Якщо очікується кілька рядків, outputFormat ОБОВ'ЯЗКОВО подай багаторядково: кожен рядок на новому рядку (реальні переноси \n), у правильному порядку, без злиття в один рядок.
 - КАТЕГОРИЧНО ЗАБОРОНЕНО писати у outputFormat або examples.output мета-фрази на кшталт:
   "Програма скомпілювалася та виконалась без помилок.", "Program compiled and ran without errors", "Success" тощо.
 - Мітки/префікси (наприклад "integer: ") ДОЗВОЛЕНІ лише якщо вони є частиною expected output. Якщо використовуєш мітки — вони мають бути:
@@ -587,7 +709,7 @@ ${uniquenessBlock}
           topicId: params.topicId,
           signal: params.signal,
           temperature: 0.2,
-          maxTokens: 4000
+          maxTokens: LLM_TASK_MAX_TOKENS
         });
         const validated = AIResponseValidator.validateGenerateTask(parsed, params.anchor.topic);
         const practicalTaskLower = validated.practicalTask.toLowerCase();

@@ -21,29 +21,29 @@ export const StateIndicator: React.FC<Props> = ({
     evaluating: {
       icon: Loader2,
       color: "text-secondary",
-      bg: "bg-bg-code",
+      bg: "bg-secondary/10",
       border: "border-secondary",
       message: message || tr("Оцінювання...", "Evaluating...")
     },
     success: {
       icon: CheckCircle2,
       color: "text-accent-success",
-      bg: "bg-bg-code",
+      bg: "bg-accent-success/10",
       border: "border-accent-success",
       message: message || tr("Успішно", "Success")
     },
     error: {
       icon: XCircle,
       color: "text-accent-error",
-      bg: "bg-bg-code",
+      bg: "bg-accent-error/10",
       border: "border-accent-error",
       message: message || tr("Помилка", "Error")
     },
     "logic-warning": {
       icon: AlertTriangle,
-      color: "text-accent-logic-warn",
-      bg: "bg-bg-code",
-      border: "border-accent-logic-warn",
+      color: "text-accent-logic-warning",
+      bg: "bg-accent-logic-warning/10",
+      border: "border-accent-logic-warning",
       message: message || tr("Попередження", "Warning")
     }
   };

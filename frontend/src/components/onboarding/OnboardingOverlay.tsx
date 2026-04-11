@@ -105,7 +105,7 @@ export const OnboardingOverlay: React.FC<Props> = ({
             <Card className="p-5 bg-bg-surface border border-border/80">
               <div className="flex items-center justify-between mb-4">
                 <div className="text-sm font-mono text-text-secondary">{t("onboardingQuickTour")}</div>
-                <button onClick={handleDone} className="p-2 hover:bg-bg-hover rounded border border-border/60">
+                <button onClick={handleDone} className="w-11 h-11 flex items-center justify-center hover:bg-bg-hover rounded border border-border/60" aria-label={t("done")} title={t("done")}>
                   <X className="w-4 h-4 text-text-secondary" />
                 </button>
               </div>

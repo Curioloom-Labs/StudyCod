@@ -99,7 +99,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
 
   const [dockCollapsed, setDockCollapsed] = React.useState(false);
   const [dockPopOut, setDockPopOut] = React.useState(false);
-  const [dockWidth, setDockWidth] = React.useState(390);
+  const [dockWidth, setDockWidth] = React.useState(370);
   const [dockAttention, setDockAttention] = React.useState(false);
 
   const [shakeWrong, setShakeWrong] = React.useState(false);
@@ -115,6 +115,36 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
   const examples = React.useMemo(() => buildExamplesFromMarkdown(statement.task.description), [statement.task.description]);
+  const latestVerdictTone = toneFromVerdict(latestVerdict);
+  const solveLoop = React.useMemo(() => {
+    const hasRead = String(statement.task.description ?? "").trim().length > 0;
+    const hasCode = String(code ?? "").trim().length > 0;
+    const hasRun = !!runResult;
+    const hasSubmitted = !!checkResult || submissions.length > 0;
+    const accepted = [latestVerdict, checkResult?.verdict, submissions[0]?.verdict].some((v) => toneFromVerdict(v) === "accepted");
+
+    const steps = [
+      { key: "read", label: "Read", done: hasRead },
+      { key: "code", label: "Implement", done: hasCode },
+      { key: "run", label: "Run", done: hasRun },
+      { key: "submit", label: "Submit", done: hasSubmitted },
+      { key: "refine", label: "Refine", done: accepted },
+    ];
+
+    const current = Math.min(
+      steps.findIndex((s) => !s.done),
+      steps.length - 1,
+    );
+
+    let nextHint = "Review the latest verdict and keep iterating.";
+    if (!hasCode) nextHint = "Write a baseline solution first, then run it on sample input.";
+    else if (!hasRun) nextHint = "Run your solution on sample input before your first submit.";
+    else if (!hasSubmitted) nextHint = "Submit now to validate against hidden tests and subtasks.";
+    else if (accepted) nextHint = "Accepted. Move to the next problem or optimize only if necessary.";
+    else nextHint = "Check failed subtasks/verdict details, update logic, and submit again.";
+
+    return { steps, current: current < 0 ? steps.length - 1 : current, nextHint };
+  }, [statement.task.description, code, runResult, checkResult, submissions, latestVerdict]);
 
   React.useEffect(() => {
     setDockAttention(true);
@@ -154,6 +184,13 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
     setActiveTabId(next.id);
   };
 
+  const handleRailNavigate = (id: string) => {
+    if (id === "dashboard") openTab("contest-overview");
+    if (id === "submissions") openTab("submissions");
+    if (id === "problems") openTab("problem");
+    if (id === "contests") openTab("leaderboard");
+  };
+
   const closeTab = (id: string) => {
     setTabs((prev) => {
       const target = prev.find((t) => t.id === id);
@@ -184,7 +221,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
     const startWidth = dockWidth;
     const onMove = (e: MouseEvent) => {
       const delta = startX - e.clientX;
-      const next = Math.min(560, Math.max(300, startWidth + delta));
+      const next = Math.min(520, Math.max(300, startWidth + delta));
       setDockWidth(next);
     };
     const onUp = () => {
@@ -254,7 +291,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
 
       return (
         <div className={`h-full min-h-0 ${shakeWrong ? "studycod-shake" : ""} ${toneFromVerdict(latestVerdict) === "accepted" ? "studycod-solve-pulse" : ""}`}>
-          <div className={`h-full min-h-0 grid ${focusMode ? "grid-cols-12" : "grid-cols-12"} gap-3`}>
+          <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3">
             {problemBlockOrder.map((block) => (
               <section
                 key={block}
@@ -263,18 +300,20 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                   if (draggingProblemBlock) moveProblemBlock(draggingProblemBlock, block);
                   setDraggingProblemBlock(null);
                 }}
-                className={`${focusMode ? (block === "statement" ? "col-span-5" : "col-span-7") : "col-span-6"} min-h-0 rounded-2xl border border-border/60 bg-bg-surface/40 overflow-hidden`}
+                className={`${focusMode ? (block === "statement" ? "lg:col-span-5" : "lg:col-span-7") : "lg:col-span-6"} min-h-0 rounded-2xl border border-border/60 bg-bg-surface/40 overflow-hidden`}
               >
-                <div className="h-8 px-2 border-b border-border/60 bg-bg-surface/70 flex items-center justify-between text-[11px] text-text-secondary uppercase tracking-wider">
+                <div className="h-10 px-3 border-b border-border/60 bg-bg-surface/75 flex items-center justify-between text-[11px] text-text-secondary uppercase tracking-wider">
                   <span>{block === "statement" ? "Problem" : "Editor"}</span>
-                  <span
+                  <button
+                    type="button"
                     draggable
                     onDragStart={() => setDraggingProblemBlock(block)}
                     onDragEnd={() => setDraggingProblemBlock(null)}
+                    aria-label={`Drag to reorder ${block} panel`}
                     className="inline-flex items-center gap-1 text-[10px] text-text-muted cursor-grab"
                   >
                     <GripVertical className="w-3.5 h-3.5" /> drag
-                  </span>
+                  </button>
                 </div>
                 <div className="h-[calc(100%-2rem)] min-h-0">{renderProblemBlock(block)}</div>
               </section>
@@ -303,7 +342,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
         <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface/85 p-3 overflow-auto">
           <div className="flex items-center justify-between gap-2 mb-3">
             <div className="text-sm font-semibold text-text-primary">Submission Stream</div>
-            <button onClick={onRefreshSubmissions} className="px-2 py-1 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-1">
+            <button onClick={onRefreshSubmissions} className="h-11 px-3 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-1" aria-label="Refresh submissions stream">
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh
             </button>
@@ -315,6 +354,17 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                 <div>
                   <div className="text-text-primary font-medium">#{s.id} · {s.language}</div>
                   <div className="text-text-secondary">{s.phase} · tests {s.testsPassed ?? 0}/{s.testsTotal ?? 0}</div>
+                  {Array.isArray(s.groupScores) && s.groupScores.length > 0 ? (
+                    <div className="text-[11px] text-text-secondary mt-0.5">
+                      Subtasks{" "}
+                      {(() => {
+                        const groupsWithMax = s.groupScores!.filter((g) => Number.isFinite(g.maxScore) && (g.maxScore ?? 0) > 0);
+                        if (!groupsWithMax.length) return null;
+                        const solved = groupsWithMax.filter((g) => (g.score ?? 0) >= (g.maxScore ?? 0)).length;
+                        return `${solved}/${groupsWithMax.length}`;
+                      })()}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <div className={toneFromVerdict(s.verdict) === "accepted" ? "text-accent-success" : toneFromVerdict(s.verdict) === "wrong" ? "text-accent-error" : "text-text-secondary"}>{s.verdict ?? "—"}</div>
@@ -362,7 +412,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
             <button
               onClick={submitOrganizerQuestion}
               disabled={!canAskOrganizer || askingOrganizer || !discussionText.trim()}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-11 px-4 rounded-lg border border-border text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {askingOrganizer ? "Sending..." : "Send to organizer"}
             </button>
@@ -373,21 +423,60 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   };
 
   return (
-    <div className="relative h-[calc(100dvh-3rem)] min-h-[760px] w-full px-3 pb-3">
-      <div className="h-full rounded-3xl bg-[linear-gradient(150deg,#0c0f17_0%,#0f111a_46%,#0b0d14_100%)] border border-border/60 overflow-hidden shadow-[0_24px_70px_rgba(0,0,0,0.48)] flex">
-        <aside className="w-[58px] border-r border-border/60 bg-bg-surface/70 flex flex-col items-center py-3 gap-2">
+    <div className="relative h-[calc(100dvh-3.25rem)] min-h-[620px] md:min-h-[680px] w-full px-2 md:px-3 pb-3">
+      <div className="h-full rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex flex-col">
+        <header className="h-12 border-b border-border/60 bg-bg-surface px-3 flex items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-2 text-xs">
+            <span className="px-2 py-1 rounded-md border border-border bg-bg-base text-text-secondary uppercase tracking-[0.07em]">Contest</span>
+            <span className="text-text-primary truncate">{contestTitle}</span>
+            <span className="text-text-muted hidden md:inline">· {statement.problem.label}</span>
+          </div>
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className={`px-2 py-1 rounded-md border border-border bg-bg-base ${wsStatus === "connected" ? "text-accent-success" : wsStatus === "connecting" ? "text-accent-warn" : "text-text-secondary"}`}>
+              ws: {wsStatus}
+            </span>
+            <span className={`px-2 py-1 rounded-md border border-border bg-bg-base ${latestVerdictTone === "accepted" ? "text-accent-success" : latestVerdictTone === "wrong" ? "text-accent-error" : "text-text-secondary"}`}>
+              verdict: {latestVerdict ?? "—"}
+            </span>
+          </div>
+        </header>
+
+        <div className="px-3 py-2 border-b border-border/60 bg-bg-surface/60">
+          <div className="flex flex-wrap items-center gap-2">
+            {solveLoop.steps.map((step, idx) => {
+              const isCurrent = solveLoop.current === idx;
+              return (
+                <div
+                  key={step.key}
+                  className={`h-8 px-2.5 rounded-md border text-[11px] inline-flex items-center gap-1.5 ${step.done ? "border-primary/50 bg-primary/10 text-text-primary" : isCurrent ? "border-secondary/60 bg-secondary/10 text-secondary" : "border-border bg-bg-base/70 text-text-secondary"}`}
+                >
+                  <span className="text-[10px]">{idx + 1}</span>
+                  <span>{step.label}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 text-[11px] text-text-secondary">Next: {solveLoop.nextHint}</div>
+        </div>
+
+        <div className="md:hidden px-2 py-2 border-b border-border/60 bg-bg-surface/55 flex items-center gap-2 overflow-x-auto">
+          <button onClick={() => openTab("problem")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "problem" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Problem</button>
+          <button onClick={() => openTab("contest-overview")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "contest-overview" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Overview</button>
+          <button onClick={() => openTab("submissions")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "submissions" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Submissions</button>
+          <button onClick={() => openTab("leaderboard")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "leaderboard" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Leaderboard</button>
+        </div>
+
+        <div className="flex-1 min-h-0 flex">
+          <aside className="hidden md:flex w-[64px] border-r border-border/60 bg-bg-surface/70 flex-col items-center py-3 gap-2">
           {RAIL_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
               <div key={item.id} className="group relative">
                 <button
-                  className="w-10 h-10 rounded-xl border border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary transition-fast flex items-center justify-center"
-                  onClick={() => {
-                    if (item.id === "dashboard") openTab("contest-overview");
-                    if (item.id === "submissions") openTab("submissions");
-                    if (item.id === "problems") openTab("problem");
-                    if (item.id === "contests") openTab("leaderboard");
-                  }}
+                  className="w-11 h-11 rounded-xl border border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary transition-fast flex items-center justify-center"
+                  onClick={() => handleRailNavigate(item.id)}
+                  aria-label={item.label}
+                  title={item.label}
                 >
                   <Icon className="w-4 h-4" />
                 </button>
@@ -397,11 +486,11 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
               </div>
             );
           })}
-        </aside>
+          </aside>
 
-        <div className="flex-1 min-w-0 min-h-0 flex">
-          <section className="flex-1 min-w-0 min-h-0 flex flex-col">
-            <div className="h-11 border-b border-border/60 bg-bg-surface/65 px-2 flex items-end gap-1 overflow-auto">
+          <div className="flex-1 min-w-0 min-h-0 flex">
+            <section className="flex-1 min-w-0 min-h-0 flex flex-col">
+              <div className="h-12 border-b border-border/60 bg-bg-surface/65 px-2 hidden md:flex items-end gap-1 overflow-auto">
               {tabs.map((tab) => (
                 <div
                   key={tab.id}
@@ -412,7 +501,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                     if (draggingTab) moveTab(draggingTab, tab.id);
                     setDraggingTab(null);
                   }}
-                  className={`h-9 mb-1 rounded-t-xl border border-b-0 px-3 flex items-center gap-2 text-xs cursor-pointer select-none ${activeTabId === tab.id ? "border-border bg-bg-base text-text-primary" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-hover/70"}`}
+                  className={`h-10 mb-1 rounded-t-xl border border-b-0 px-3 flex items-center gap-2 text-xs cursor-pointer select-none ${activeTabId === tab.id ? "border-border bg-bg-base text-text-primary" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-hover/70"}`}
                   onClick={() => setActiveTabId(tab.id)}
                 >
                   <span>{tab.title}</span>
@@ -424,65 +513,68 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                       }}
                       className="text-text-secondary hover:text-accent-error"
                       title="Close tab"
+                      aria-label={`Close ${tab.title} tab`}
                     >
                       ×
                     </button>
                   ) : null}
                 </div>
               ))}
-            </div>
+              </div>
 
-            <div ref={scrollerRef} onScroll={onScrollActive} className="flex-1 min-h-0 overflow-auto p-3">
-              {renderTabContent()}
-            </div>
-          </section>
+              <div ref={scrollerRef} onScroll={onScrollActive} className="flex-1 min-h-0 overflow-auto p-2 md:p-3">
+                {renderTabContent()}
+              </div>
+            </section>
 
-          {!focusMode ? (
-            <>
-              {!dockCollapsed && !dockPopOut ? <div onMouseDown={startResize} className="w-1.5 cursor-col-resize bg-transparent hover:bg-secondary/30 transition-fast" /> : null}
+            {!focusMode ? (
+              <>
+                {!dockCollapsed && !dockPopOut ? <div onMouseDown={startResize} className="w-1.5 cursor-col-resize bg-transparent hover:bg-secondary/30 transition-fast hidden md:block" /> : null}
 
-              {!dockPopOut ? (
-                <aside style={{ width: dockCollapsed ? 46 : dockWidth }} className="min-h-0 border-l border-border/60 bg-bg-surface/45 relative">
-                  <div className="absolute top-2 right-2 left-2 z-10 flex items-center justify-end gap-1">
-                    <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockCollapsed((v) => !v)} title={dockCollapsed ? "Expand dock" : "Collapse dock"}>
+                {!dockPopOut ? (
+                  <aside style={{ width: dockCollapsed ? 54 : dockWidth }} className="min-h-0 border-l border-border/60 bg-bg-surface/45 relative hidden md:block">
+                    <div className="absolute top-2 right-2 left-2 z-10 flex items-center justify-end gap-1">
+                      <button className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed((v) => !v)} title={dockCollapsed ? "Expand dock" : "Collapse dock"} aria-label={dockCollapsed ? "Expand output dock" : "Collapse output dock"}>
                       {dockCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
-                    </button>
-                    {!dockCollapsed ? (
-                      <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockPopOut(true)} title="Pop out dock">
+                      </button>
+                      {!dockCollapsed ? (
+                        <button className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockPopOut(true)} title="Pop out dock" aria-label="Open output dock pop out">
                         <SquareArrowOutUpRight className="w-3.5 h-3.5" />
-                      </button>
-                    ) : null}
-                  </div>
+                        </button>
+                      ) : null}
+                    </div>
 
-                  <div className={`h-full min-h-0 pt-10 ${dockCollapsed ? "px-1" : "p-2"}`}>
-                    {dockCollapsed ? (
-                      <button className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed(false)}>
-                        <FoldHorizontal className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <OutputDock
-                        examples={examples}
-                        onPickExample={onRunInputChange}
-                        runResult={runResult}
-                        submissions={submissions}
-                        wsStatus={wsStatus}
-                        latestVerdict={latestVerdict}
-                        attention={dockAttention}
-                      />
-                    )}
-                  </div>
-                </aside>
-              ) : null}
-            </>
-          ) : null}
+                    <div className={`h-full min-h-0 pt-11 ${dockCollapsed ? "px-1" : "p-2"}`}>
+                      {dockCollapsed ? (
+                        <button className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed(false)} aria-label="Expand output dock">
+                          <FoldHorizontal className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <OutputDock
+                          examples={examples}
+                          onPickExample={onRunInputChange}
+                          runResult={runResult}
+                          checkResult={checkResult}
+                          submissions={submissions}
+                          wsStatus={wsStatus}
+                          latestVerdict={latestVerdict}
+                          attention={dockAttention}
+                        />
+                      )}
+                    </div>
+                  </aside>
+                ) : null}
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
 
       {dockPopOut && !focusMode ? (
-        <div className="fixed right-4 top-20 w-[430px] h-[72vh] z-40 rounded-2xl border border-border bg-bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-2">
+        <div className="fixed right-4 top-20 w-[min(92vw,430px)] h-[min(76vh,700px)] z-40 rounded-2xl border border-border bg-bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-2">
           <div className="flex items-center justify-between mb-2 px-1">
             <div className="text-xs text-text-secondary uppercase tracking-widest">Output Dock (Pop-out)</div>
-            <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockPopOut(false)}>
+            <button className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockPopOut(false)} aria-label="Close output dock pop out">
               <PanelRightOpen className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -491,6 +583,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
               examples={examples}
               onPickExample={onRunInputChange}
               runResult={runResult}
+              checkResult={checkResult}
               submissions={submissions}
               wsStatus={wsStatus}
               latestVerdict={latestVerdict}
@@ -500,7 +593,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
         </div>
       ) : null}
 
-      <div className="absolute bottom-4 left-[76px] right-4 pointer-events-none">
+      <div className="absolute bottom-4 left-3 md:left-[76px] right-3 md:right-4 pointer-events-none">
         <div className="rounded-xl border border-border/70 bg-bg-surface/70 px-3 py-2 text-[11px] text-text-secondary flex items-center justify-between gap-3">
           <span>{contestTitle} · {statement.problem.label} · {statement.task.title}</span>
           <span className="text-text-secondary">stdin buffer: {runInput.length} chars · ws: {wsStatus}</span>

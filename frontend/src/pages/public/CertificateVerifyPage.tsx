@@ -54,7 +54,7 @@ export const CertificateVerifyPage: React.FC = () => {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <Card className="p-5 border border-border/70 bg-[linear-gradient(145deg,rgba(16,185,129,0.12),rgba(59,130,246,0.08)_45%,rgba(15,23,42,0.45))] mb-4">
+      <Card className="p-5 border border-border/70 mb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="font-mono text-text-primary">{tr("Перевірка сертифіката", "Certificate verification")}</div>
           <Button variant="secondary" onClick={() => void load()} disabled={loading}>

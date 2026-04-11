@@ -165,6 +165,7 @@ async function buildSnapshot(taskId: number) {
       isHidden: t.isHidden,
       kind: (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
       points: t.points,
+      subtask: (t as any).subtask ?? null,
       createdAt: t.createdAt,
     })),
   };
@@ -523,6 +524,7 @@ adminLibraryRouter.post(
             isHidden: !!t.isHidden,
             kind: (t.kind === "SAMPLE" ? "SAMPLE" : "JUDGE") as any,
             points: Number.isFinite(Number(t.points)) ? Number(t.points) : 1,
+            subtask: typeof t.subtask === "number" ? String(t.subtask) : t.subtask != null ? String(t.subtask) : null,
           })
         );
         await testDataRepo().save(rows);

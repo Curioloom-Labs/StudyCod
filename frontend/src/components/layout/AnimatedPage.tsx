@@ -1,6 +1,6 @@
 import React from "react";
-import { motion } from "framer-motion";
-import { pageVariants } from "../../lib/motion";
+import { motion, useReducedMotion } from "framer-motion";
+import { pageVariants, reducedPageVariants } from "../../lib/motion";
 import clsx from "classnames";
 export const AnimatedPage: React.FC<{
   children: React.ReactNode;
@@ -9,7 +9,8 @@ export const AnimatedPage: React.FC<{
   children,
   className
 }) => {
-  return <motion.div className={clsx("flex-1 min-h-0 flex flex-col", className)} variants={pageVariants} initial="initial" animate="animate" exit="exit">
+  const shouldReduceMotion = useReducedMotion();
+  return <motion.div className={clsx("flex-1 min-h-0 flex flex-col", className)} variants={shouldReduceMotion ? reducedPageVariants : pageVariants} initial="initial" animate="animate" exit="exit">
       {children}
     </motion.div>;
 };

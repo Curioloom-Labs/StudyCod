@@ -531,14 +531,15 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     // Optional tests
     const testsEntry = zip.getEntry("tests.json");
     if (testsEntry) {
-      const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>>(zip, "tests.json");
+      const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json");
       if (Array.isArray(tests) && tests.length > 0) {
         const rows = tests.map(t => testDataRepo().create({
           topicTask: { id: task.id } as any,
           input: String(t.input ?? ""),
           expectedOutput: String(t.expectedOutput ?? ""),
           isHidden: !!t.isHidden,
-          points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1
+          points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
+          subtask: t.subtask == null ? null : String(t.subtask),
         }));
         await testDataRepo().save(rows);
       }
@@ -614,7 +615,8 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
         input: t.input,
         expectedOutput: t.expectedOutput,
         isHidden: t.isHidden,
-        points: t.points
+        points: t.points,
+        subtask: (t as any).subtask ?? null
       })), null, 2), "utf-8")
     );
     if (theory?.content) {

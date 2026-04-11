@@ -69,6 +69,15 @@ export class TestData {
     default: 1
   })
   points!: number;
+
+  // Optional: subtask identifier used for binary (0 or full) subtask scoring.
+  // When null/empty => falls back to legacy public/hidden grouping.
+  @Column({
+    type: "varchar",
+    length: 64,
+    nullable: true,
+  })
+  subtask?: string | null;
   @CreateDateColumn({
     name: "created_at"
   })

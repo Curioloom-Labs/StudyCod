@@ -15,6 +15,7 @@ export async function applyDbPatches(): Promise<void> {
   await ensureUsersDifusColumns();
   await ensureTestDataIsHiddenColumn();
   await ensureTestDataKindColumn();
+  await ensureTestDataSubtaskColumn();
   await backfillTestDataKindFromIsHidden();
   await ensureTestDataTextColumns();
   await ensureEduGradesScoringColumns();
@@ -43,6 +44,7 @@ export async function applyDbPatches(): Promise<void> {
   await ensureTaskTheoriesLibraryTaskColumn();
   await ensureTestDataLibraryTaskColumn();
   await ensureContestTables();
+  await ensureContestSubmissionsGroupScoresColumn();
   await ensureCertificateTables();
   await ensureTopicsTheoryBlockIdColumn();
   await ensureTopicsTheoryMarkdownColumn();
@@ -1738,6 +1740,27 @@ async function ensureTestDataIsHiddenColumn(): Promise<void> {
   }
 }
 
+async function ensureContestSubmissionsGroupScoresColumn(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'contest_submissions'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const rows = (await AppDataSource.query("SHOW COLUMNS FROM `contest_submissions` LIKE 'group_scores'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Column contest_submissions.group_scores is missing. Applying ALTER TABLE...");
+    await AppDataSource.query("ALTER TABLE `contest_submissions` ADD COLUMN `group_scores` TEXT NULL AFTER `compile_error_kind`");
+    logger.info("[DB Patch] Added column contest_submissions.group_scores");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure contest_submissions.group_scores column:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
 async function ensureTestDataKindColumn(): Promise<void> {
   try {
     const tables = (await AppDataSource.query("SHOW TABLES LIKE 'test_data'")) as Array<any>;
@@ -1752,6 +1775,27 @@ async function ensureTestDataKindColumn(): Promise<void> {
     logger.info("[DB Patch] Added column test_data.kind");
   } catch (err: any) {
     logger.error("[DB Patch] Failed to ensure test_data.kind column:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureTestDataSubtaskColumn(): Promise<void> {
+  try {
+    const tables = (await AppDataSource.query("SHOW TABLES LIKE 'test_data'")) as Array<any>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const rows = (await AppDataSource.query("SHOW COLUMNS FROM `test_data` LIKE 'subtask'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Column test_data.subtask is missing. Applying ALTER TABLE...");
+    await AppDataSource.query("ALTER TABLE `test_data` ADD COLUMN `subtask` VARCHAR(64) NULL AFTER `points`");
+    logger.info("[DB Patch] Added column test_data.subtask");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure test_data.subtask column:", {
       message: err?.message,
       code: err?.code,
       errno: err?.errno,

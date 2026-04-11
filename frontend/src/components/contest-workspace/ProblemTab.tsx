@@ -78,9 +78,9 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
 
   return (
     <div className="h-full min-h-0">
-      <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface/80 shadow-[0_12px_30px_rgba(0,0,0,0.24)] flex flex-col overflow-hidden">
-        <div className="px-4 pt-3 pb-2 border-b border-border/60 flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface shadow-[0_6px_18px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden">
+        <div className="px-4 pt-3 pb-2 border-b border-border/60 flex items-center justify-between gap-3 bg-bg-surface">
+          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Problem statement sections">
             {([
               ["description", "Description"],
               ["io", "Input / Output"],
@@ -91,14 +91,17 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
               <button
                 key={key}
                 onClick={() => setSegment(key)}
-                className={`px-3 py-1.5 rounded-lg text-xs border transition-fast ${segment === key ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
+                role="tab"
+                aria-pressed={segment === key}
+                aria-selected={segment === key}
+                className={`h-10 px-3 rounded-lg text-xs border transition-fast ${segment === key ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
               >
                 {label}
               </button>
             ))}
           </div>
 
-          <div className="text-xs text-text-secondary">Segment: {segmentTitle}</div>
+          <div className="text-xs text-text-secondary">Now reading: <span className="text-text-primary">{segmentTitle}</span></div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto px-4 py-4 space-y-4">
@@ -108,19 +111,33 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
                 <button
                   key={ex.id}
                   onClick={() => onInjectExampleInput(ex.input)}
-                  className="text-left rounded-xl border border-border bg-bg-base/70 hover:bg-bg-hover/70 transition-fast p-3"
-                  title="Click to send input to run panel"
+                  className="text-left rounded-xl border border-border bg-bg-base/80 hover:bg-bg-hover/70 transition-fast p-3"
+                  title="Copy example input to run panel"
+                  aria-label={`Use example ${idx + 1} input`}
                 >
-                  <div className="text-xs text-primary mb-2">Example #{idx + 1} (click to use input)</div>
-                  <div className="text-[11px] text-text-secondary mb-1">Input</div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-xs text-primary">Example #{idx + 1}</div>
+                    <div className="text-[11px] text-text-muted">Tap to send input →</div>
+                  </div>
+                  <div className="text-[11px] uppercase tracking-[0.06em] text-text-secondary mb-1">Input</div>
                   <pre className="text-xs text-text-primary overflow-auto max-h-28">{ex.input || "—"}</pre>
-                  <div className="text-[11px] text-text-secondary mt-2 mb-1">Output</div>
+                  <div className="text-[11px] uppercase tracking-[0.06em] text-text-secondary mt-2 mb-1">Output</div>
                   <pre className="text-xs text-text-primary overflow-auto max-h-28">{ex.output || "—"}</pre>
                 </button>
               ))}
             </div>
+          ) : segment === "examples" ? (
+            <div className="rounded-xl border border-border bg-bg-base/70 p-4 text-sm text-text-secondary">
+              No fenced examples were detected in the statement. You can still run custom input from the editor panel.
+            </div>
+          ) : !segmentBody ? (
+            <div className="rounded-xl border border-border bg-bg-base/70 p-4 text-sm text-text-secondary">
+              This section is currently empty in the problem statement.
+            </div>
           ) : (
-            <MarkdownView content={segmentBody || statement.task.description} />
+            <div className="max-w-[75ch]">
+              <MarkdownView content={segmentBody || statement.task.description} />
+            </div>
           )}
         </div>
       </div>

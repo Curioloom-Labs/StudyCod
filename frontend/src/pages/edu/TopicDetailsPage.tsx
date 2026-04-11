@@ -718,10 +718,7 @@ export const TopicDetailsPage: React.FC = () => {
           <div className="space-y-2">
             {controlWorks.length === 0 ? <p className="text-text-secondary text-sm">{t('noControlWorks')}</p> : controlWorks.map(cw => <div key={cw.id} className="p-3 border border-border hover:bg-bg-hover transition-fast">
                   <div className="flex items-center justify-between">
-                    <div className="flex-1 cursor-pointer" onClick={e => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log("Navigating to control work:", cw.id);
+                    <button type="button" className="flex-1 text-left" onClick={() => {
                 navigate(`/edu/control-works/${cw.id}`);
               }}>
                       <div className="text-sm font-mono text-text-primary">
@@ -737,7 +734,7 @@ export const TopicDetailsPage: React.FC = () => {
                             {t('deadlineLabel')}: {formatDeadlineForDisplay(cw.deadline, user?.timezone || undefined)}
                           </div>}
                       </div>
-                    </div>
+                    </button>
                     {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex gap-2 items-center">
                         {!cw.isAssigned ? <Button variant="ghost" onClick={e => {
                   e.stopPropagation();
@@ -1259,10 +1256,10 @@ export const TopicDetailsPage: React.FC = () => {
                             points: test.points,
                             isHidden: test.isHidden === true
                       });
-                    }} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={tr("Редагувати", "Edit")}>
+                    }} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={tr("Редагувати", "Edit")} aria-label={tr("Редагувати тест", "Edit test")}>
                                 <Edit2 className="w-4 h-4 text-primary" />
                               </button>
-                              <button onClick={() => handleDeleteTestData(test.id)} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t('delete')}>
+                              <button onClick={() => handleDeleteTestData(test.id)} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t('delete')} aria-label={tr("Видалити тест", "Delete test")}>
                                 <Trash2 className="w-4 h-4 text-accent-error" />
                               </button>
                             </div>

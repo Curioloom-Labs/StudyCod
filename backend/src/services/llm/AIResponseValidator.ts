@@ -187,6 +187,45 @@ function looksTooShortOrVaguePracticalTask(text: string): boolean {
   return true;
 }
 
+function looksLikeNumberedChecklistPracticalTask(text: string): boolean {
+  const lines = String(text ?? '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !/^#{1,6}\s+/.test(line));
+
+  if (lines.length < 3) return false;
+
+  const sample = lines.slice(0, Math.min(lines.length, 8));
+  const numbered = sample.filter(line => /^\d+[\.)]\s+/.test(line)).length;
+  const bullets = sample.filter(line => /^[-*•]\s+/.test(line)).length;
+  const markers = numbered + bullets;
+
+  if (numbered < 2 && markers < 4) return false;
+  return markers / sample.length >= 0.55;
+}
+
+function rewriteChecklistPracticalTaskToNarrative(text: string): string {
+  const source = String(text ?? '').trim();
+  if (!source) return '';
+  if (!looksLikeNumberedChecklistPracticalTask(source)) return source;
+
+  const fragments = source
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !/^#{1,6}\s+/.test(line))
+    .map(line => line.replace(/^\s*(?:\d+[\.)]|[-*•])\s+/, '').trim())
+    .filter(Boolean)
+    .map(part => {
+      const compact = part.replace(/\s+/g, ' ').trim();
+      if (!compact) return '';
+      return /[.!?…:]$/.test(compact) ? compact : `${compact}.`;
+    })
+    .filter(Boolean);
+
+  if (fragments.length < 2) return source;
+  return fragments.join(' ');
+}
+
 const TheoryResponseSchema = z.object({
   theory: z.string().min(1, 'theory must be a non-empty string'),
 });
@@ -275,7 +314,10 @@ export class AIResponseValidator {
 
       // Quality gates: expand the condition and prevent meta “success” messages.
       if (looksTooShortOrVaguePracticalTask(practical)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask is too short/vague; must be more detailed (multi-sentence or with clear bullet steps)', data);
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask is too short/vague; must be a detailed multi-sentence narrative', data);
+      }
+      if (looksLikeNumberedChecklistPracticalTask(practical)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask must be a natural narrative statement, not a numbered checklist', data);
       }
       if (looksLikeJudgeSuccessMessage(outFmt)) {
         throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat looks like judge meta message (e.g., "program compiled/executed without errors")', data);
@@ -461,6 +503,10 @@ export class AIResponseValidator {
       } else {
         fixed[field] = String(raw).trim();
       }
+    }
+
+    if (typeof fixed.practicalTask === 'string') {
+      fixed.practicalTask = rewriteChecklistPracticalTaskToNarrative(fixed.practicalTask);
     }
 
     const inputFormat = typeof fixed.inputFormat === 'string' ? fixed.inputFormat.trim() : '';

@@ -2,8 +2,8 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
-import { AnimatePresence, motion } from "framer-motion";
-import { overlayVariants, modalVariants } from "../../lib/motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { overlayVariants, modalVariants, reducedMotionTransition } from "../../lib/motion";
 interface Props {
   open?: boolean;
   isOpen?: boolean;
@@ -41,6 +41,7 @@ export const Modal: React.FC<Props> = ({
   const panelRef = React.useRef<HTMLDivElement | null>(null);
   const lastFocusedRef = React.useRef<HTMLElement | null>(null);
   const onCloseRef = React.useRef(onClose);
+  const shouldReduceMotion = useReducedMotion();
   const titleId = React.useId();
   const descriptionId = React.useId();
 
@@ -104,8 +105,8 @@ export const Modal: React.FC<Props> = ({
   const content = <AnimatePresence>
       {resolvedOpen && <motion.div className={"fixed inset-0 z-50 flex items-center justify-center bg-black/80" + (overlayClassName ? ` ${overlayClassName}` : "")} onClick={isClosable ? () => onCloseRef.current() : undefined} style={{
       backdropFilter: "blur(2px)"
-    }} variants={overlayVariants} initial="initial" animate="animate" exit="exit">
-          <motion.div ref={panelRef} className={"bg-bg-surface border border-border max-w-[900px] w-[95vw] max-h-[95vh] flex flex-col overflow-hidden" + (panelClassName ? ` ${panelClassName}` : "")} onClick={e => e.stopPropagation()} variants={modalVariants} initial="initial" animate="animate" exit="exit" role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
+    }} variants={overlayVariants} initial="initial" animate="animate" exit="exit" transition={shouldReduceMotion ? reducedMotionTransition : undefined}>
+          <motion.div ref={panelRef} className={"bg-bg-surface border border-border max-w-[900px] w-[95vw] max-h-[95vh] flex flex-col overflow-hidden" + (panelClassName ? ` ${panelClassName}` : "")} onClick={e => e.stopPropagation()} variants={modalVariants} initial="initial" animate="animate" exit="exit" transition={shouldReduceMotion ? reducedMotionTransition : undefined} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
             {title && <div className="px-6 py-4 border-b border-border flex-shrink-0">
                 <h2 id={titleId} className="text-lg font-mono text-text-primary">{title}</h2>
                 {description && <p id={descriptionId} className="text-sm text-text-secondary mt-2 whitespace-pre-line">{description}</p>}

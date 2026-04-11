@@ -11,11 +11,8 @@ export const Card: React.FC<React.HTMLAttributes<HTMLDivElement> & {
   variant = "default",
   ...rest
 }) => {
-  const base = "relative overflow-hidden rounded-xl border border-border transition-fast ease-out";
-  const chrome = "shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_18px_40px_rgba(0,0,0,0.45)]";
-  const surface = variant === "inset" ? "bg-bg-base" : variant === "panel" ? "bg-bg-surface/60" : "bg-bg-surface";
-  const overlay = "before:absolute before:inset-0 before:pointer-events-none before:opacity-80 " + "before:bg-[radial-gradient(circle_at_20%_0%,rgba(0,255,136,0.10),transparent_42%),radial-gradient(circle_at_100%_20%,rgba(91,159,255,0.08),transparent_38%)] " + "after:absolute after:inset-0 after:pointer-events-none after:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]";
-  return <div {...rest} className={clsx(base, chrome, surface, overlay, className)}>
-      <div className="relative">{children}</div>
-    </div>;
+  const base = "rounded-2xl border border-border transition-fast ease-out";
+  const chrome = "shadow-[0_1px_2px_rgba(0,0,0,0.16)]";
+  const surface = variant === "inset" ? "bg-bg-base" : variant === "panel" ? "bg-bg-surface/80" : "bg-bg-surface";
+  return <div {...rest} className={clsx(base, chrome, surface, className)}>{children}</div>;
 };

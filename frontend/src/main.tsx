@@ -2,7 +2,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import "./index.css";
-import "katex/dist/katex.min.css";
 import "./i18n";
 import { App } from "./App";
 import { initTheme } from "./theme";
@@ -87,8 +86,8 @@ const ErrorDisplay: React.FC<{
     padding: "20px",
     textAlign: "center",
     fontFamily: "monospace",
-    color: "#fff",
-    backgroundColor: "#1a1a1a",
+    color: "var(--text-primary, #e8e8f0)",
+    backgroundColor: "var(--bg-surface, #111118)",
     minHeight: "100vh",
     display: "flex",
     flexDirection: "column",
@@ -96,22 +95,22 @@ const ErrorDisplay: React.FC<{
     justifyContent: "center"
   }}>
       <h1 style={{
-      color: "#ef4444",
+      color: "var(--accent-error, #ef4444)",
       marginBottom: "20px"
     }}>Loading Error</h1>
       <p style={{
       marginBottom: "10px",
-      color: "#fbbf24"
+      color: "var(--accent-warn, #fbbf24)"
     }}>{error?.message || "Unknown Error"}</p>
       {error?.stack && <pre style={{
       textAlign: "left",
       fontSize: "12px",
-      color: "#9ca3af",
+      color: "var(--text-muted, #9ca3af)",
       maxWidth: "800px",
       overflow: "auto",
       marginBottom: "20px",
       padding: "10px",
-      backgroundColor: "#0a0a0a",
+      backgroundColor: "var(--bg-base, #0a0a0f)",
       borderRadius: "4px"
     }}>
           {error.stack}
@@ -120,9 +119,9 @@ const ErrorDisplay: React.FC<{
       window.location.reload();
     }} style={{
       padding: "10px 20px",
-      backgroundColor: "#3b82f6",
-      color: "#fff",
-      border: "none",
+      backgroundColor: "var(--secondary, #3b82f6)",
+      color: "var(--text-primary, #e8e8f0)",
+      border: "1px solid var(--border, #2a2a3a)",
       borderRadius: "4px",
       cursor: "pointer",
       fontFamily: "monospace"
@@ -194,16 +193,16 @@ try {
   const wrap = document.createElement("div");
   wrap.style.padding = "20px";
   wrap.style.fontFamily = "monospace";
-  wrap.style.color = "#fff";
-  wrap.style.background = "#1a1a1a";
+  wrap.style.color = "var(--text-primary, #e8e8f0)";
+  wrap.style.background = "var(--bg-surface, #111118)";
   wrap.style.minHeight = "100vh";
   const h1 = document.createElement("h1");
   h1.textContent = "Critical initialization error";
-  h1.style.color = "#ef4444";
+  h1.style.color = "var(--accent-error, #ef4444)";
   const p = document.createElement("p");
   p.textContent = errorMessage;
   const pre = document.createElement("pre");
-  pre.style.background = "#0a0a0a";
+  pre.style.background = "var(--bg-base, #0a0a0f)";
   pre.style.padding = "10px";
   pre.style.borderRadius = "4px";
   pre.style.overflow = "auto";
@@ -212,9 +211,9 @@ try {
   btn.textContent = "Reload";
   btn.style.marginTop = "12px";
   btn.style.padding = "10px 20px";
-  btn.style.backgroundColor = "#3b82f6";
-  btn.style.color = "#fff";
-  btn.style.border = "none";
+  btn.style.backgroundColor = "var(--secondary, #3b82f6)";
+  btn.style.color = "var(--text-primary, #e8e8f0)";
+  btn.style.border = "1px solid var(--border, #2a2a3a)";
   btn.style.borderRadius = "4px";
   btn.style.cursor = "pointer";
   btn.style.fontFamily = "monospace";

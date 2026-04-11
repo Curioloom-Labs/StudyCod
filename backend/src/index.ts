@@ -36,6 +36,7 @@ import { spawn } from "child_process";
 import * as fsSync from "fs";
 import * as path from "path";
 import { resolveJudgeSandboxConfig, resolveJudgeWorkerEntry } from "./services/judgeWorker/workerPaths";
+import { getOpenRouterRuntimeDiagnostics } from "./services/llm/OpenRouterProvider";
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
 import { executionScheduler } from "./services/execution/executionSchedulerSingleton";
@@ -234,6 +235,19 @@ app.get(["/internal/load", "/api/internal/load"], (_req, res) => {
     avgQueueWaitTimeMs: Math.round(m.averageQueueWaitTime),
     totalRejectedQueueFull: m.totalRejectedQueueFull,
     totalCompleted: m.totalCompleted,
+  });
+});
+
+app.get(["/internal/ai/openrouter", "/api/internal/ai/openrouter"], (_req, res) => {
+  const exposeInProduction = String(process.env.EXPOSE_INTERNAL_AI_DIAGNOSTICS || "").trim() === "1";
+  if (IS_PRODUCTION && !exposeInProduction) {
+    return res.status(404).json({ error: "NOT_FOUND", status: 404 });
+  }
+
+  return res.json({
+    status: "ok",
+    service: "studycod-backend",
+    diagnostics: getOpenRouterRuntimeDiagnostics()
   });
 });
 

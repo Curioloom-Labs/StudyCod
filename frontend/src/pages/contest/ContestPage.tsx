@@ -1686,6 +1686,17 @@ export const ContestPage: React.FC = () => {
         }
       }
 
+      if (certificateMode === "custom" && !defaultTemplateId) {
+        setCertificateError(
+          tr(
+            "Для custom-режиму потрібен Template ID або заповнений HTML шаблон",
+            "Custom mode requires a Template ID or a non-empty HTML template"
+          )
+        );
+        setCertificateSaving(false);
+        return;
+      }
+
       if (certificateMode === "studycod" && !defaultTemplateId) {
         setCertificateError(
           tr(
@@ -3661,10 +3672,13 @@ export const ContestPage: React.FC = () => {
             <div className="text-sm text-text-secondary">{tr("У контесті ще немає задач.", "No problems in this contest yet.")}</div>
           ) : (
             <div className="overflow-auto border border-border">
-              <table className="min-w-[760px] w-full text-sm font-mono">
+              <table className="min-w-[620px] md:min-w-[760px] w-full text-xs sm:text-sm font-mono">
+                <caption className="sr-only">
+                  {tr("Налаштування задач контесту", "Contest problem settings")}
+                </caption>
                 <thead className="bg-bg-hover">
                   <tr>
-                    <th className="p-2 border-b border-border text-left">ID</th>
+                    <th className="hidden md:table-cell p-2 border-b border-border text-left">ID</th>
                     <th className="p-2 border-b border-border text-left">{tr("Назва", "Title")}</th>
                     <th className="p-2 border-b border-border text-center">{tr("Літера", "Label")}</th>
                     <th className="p-2 border-b border-border text-center">{tr("Порядок", "Order")}</th>
@@ -3678,7 +3692,7 @@ export const ContestPage: React.FC = () => {
                     const savingThis = savingProblemSettingsId === p.id;
                     return (
                       <tr key={p.id} className="odd:bg-bg-base even:bg-bg-surface">
-                        <td className="p-2 border-b border-border">{p.id}</td>
+                        <td className="hidden md:table-cell p-2 border-b border-border">{p.id}</td>
                         <td className="p-2 border-b border-border">{p.title}</td>
                         <td className="p-2 border-b border-border text-center">
                           <input
@@ -3900,7 +3914,7 @@ export const ContestPage: React.FC = () => {
         </Card>
       ) : !data ? null : (
         <div className="space-y-4">
-          <Card className="p-4 border border-border/70 bg-[linear-gradient(145deg,rgba(99,102,241,0.12),rgba(16,185,129,0.08)_45%,rgba(15,23,42,0.5))]">
+          <Card className="p-4 border border-border/70">
             <div className="flex flex-wrap items-center gap-2">
               <Trophy className="w-5 h-5 text-primary" />
               <Badge color="info">StudyCod Arena</Badge>

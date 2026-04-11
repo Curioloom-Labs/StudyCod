@@ -37,7 +37,10 @@ module.exports = {
           error: "var(--accent-error)",
           success: "var(--accent-success)",
           warn: "var(--accent-warn)",
+          warning: "var(--accent-warning)",
           "logic-warning": "var(--accent-logic-warning)",
+          "logic-warn": "var(--accent-logic-warn)",
+          info: "var(--accent-info)",
         },
       },
       fontFamily: {

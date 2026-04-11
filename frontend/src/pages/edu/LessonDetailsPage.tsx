@@ -266,16 +266,6 @@ export const LessonDetailsPage: React.FC = () => {
     try {
       const requestedType = (searchParams.get("type") || undefined) as "TOPIC" | "CONTROL" | "LESSON" | undefined;
       const data = await getLesson(parseInt(lessonId, 10), requestedType);
-      console.log(`[LessonDetailsPage] Loaded lesson:`, {
-        id: data.id,
-        type: data.type,
-        title: data.title,
-        tasksCount: data.tasks?.length,
-        tasks: data.tasks?.map(t => ({
-          id: t.id,
-          title: t.title,
-        }))
-      });
       setLesson(data);
       if (data.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId) {
         try {
@@ -946,7 +936,7 @@ export const LessonDetailsPage: React.FC = () => {
                           {t("until")}{" "}
                           {new Date(task.deadline).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
                         </span>}
-                        {showTaskGrade && hasGrade && task.grade && <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${task.grade.total >= 85 ? 'bg-accent-success/20 text-accent-success border border-accent-success/30' : task.grade.total >= 65 ? 'bg-accent-warn/20 text-accent-warn border border-accent-warn/30' : task.grade.total >= 40 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' : 'bg-accent-error/20 text-accent-error border border-accent-error/30'}`}>
+                        {showTaskGrade && hasGrade && task.grade && <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${task.grade.total >= 85 ? 'bg-accent-success/20 text-accent-success border border-accent-success/30' : task.grade.total >= 65 ? 'bg-accent-warn/20 text-accent-warn border border-accent-warn/30' : task.grade.total >= 40 ? 'bg-accent-warning/20 text-accent-warning border border-accent-warning/30' : 'bg-accent-error/20 text-accent-error border border-accent-error/30'}`}>
                           {t("grade")}: {task.grade.total}/100
                         </span>}
                     </div>
@@ -1173,7 +1163,7 @@ export const LessonDetailsPage: React.FC = () => {
                   <div className="flex items-center gap-4">
                     {item.grade ? <>
                         <div className="text-right">
-                          <div className={`text-lg font-mono font-bold ${item.grade.total >= 85 ? "text-accent-success" : item.grade.total >= 65 ? "text-accent-warn" : item.grade.total >= 40 ? "text-yellow-500" : "text-accent-error"}`}>
+                          <div className={`text-lg font-mono font-bold ${item.grade.total >= 85 ? "text-accent-success" : item.grade.total >= 65 ? "text-accent-warn" : item.grade.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>
                             {item.grade.total}
                           </div>
                           <div className="text-xs text-text-muted">{t("outOf")} 12</div>
@@ -1391,10 +1381,10 @@ export const LessonDetailsPage: React.FC = () => {
                     points: test.points,
                     isHidden: test.isHidden === true
                   });
-                }} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")}>
+                }} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")} aria-label={t("edit")}>
                               <Edit2 className="w-4 h-4 text-primary" />
                             </button>
-                            <button onClick={() => handleDeleteTest(test.id)} className="p-2 h-8 w-8 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")}>
+                            <button onClick={() => handleDeleteTest(test.id)} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")} aria-label={t("delete")}>
                               <Trash2 className="w-4 h-4 text-accent-error" />
                             </button>
                           </div>

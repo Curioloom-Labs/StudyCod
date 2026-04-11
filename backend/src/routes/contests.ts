@@ -97,9 +97,9 @@ function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
     case "c":
       return "main.c";
     case "csharp":
-      return "main.cs";
+      return "Program.cs";
     case "kotlin":
-      return "main.kt";
+      return "Main.kt";
   }
 }
 
@@ -2147,6 +2147,8 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
           expectedOutput: z.string(),
           isHidden: z.boolean().optional(),
           points: z.number().int().min(1).max(1000).optional(),
+          // Optional subtask identifier for binary (0/full) subtask scoring.
+          subtask: z.number().int().min(1).max(100000).optional(),
         })).optional(),
       }),
       z.object({ mode: z.literal("COPY"), libraryTaskId: z.number().int().positive() }),
@@ -2180,6 +2182,7 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
               isHidden: !!tt.isHidden,
               kind: (!!tt.isHidden ? "JUDGE" : "SAMPLE") as any,
               points: tt.points ?? 1,
+                subtask: typeof (tt as any).subtask === "number" ? String((tt as any).subtask) : null,
             })) as any
           ) as any;
           await testDataRepo().save(rows as any);
@@ -2219,6 +2222,7 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
             isHidden: t.isHidden,
             kind: (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
             points: t.points,
+            subtask: (t as any).subtask ?? null,
             libraryTask: { id: savedClone.id } as any,
           })) as any
         ) as any;
@@ -2456,7 +2460,7 @@ contestsRouter.post(
         python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
         cpp: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
         c: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
-        csharp: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
+        csharp: { time_limit_ms: 1200, memory_limit_mb: 1024, output_limit_kb: 64 },
         kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
       };
       const effectiveLimits = {
@@ -2627,7 +2631,7 @@ contestsRouter.post(
         python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
         cpp: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
         c: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
-        csharp: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
+        csharp: { time_limit_ms: 1200, memory_limit_mb: 1024, output_limit_kb: 64 },
         kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
       };
       const effectiveLimits = {
@@ -2639,6 +2643,7 @@ contestsRouter.post(
       const explicitChecker = (task as any).checkerSpec as CheckerSpec | null | undefined;
       const effectiveChecker = explicitChecker ?? chooseDefaultCheckerFromExpectedOutputs(tests.map((t) => t.expectedOutput || ""));
       const maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
+      const hasSubtasks = tests.some(t => String((t as any).subtask ?? "").trim().length > 0);
 
       const normalizedFiles = normalizeApiFiles((validated.data as any).files);
       const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
@@ -2658,14 +2663,22 @@ contestsRouter.post(
         language: judgeLang,
         source: sourceText,
         ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
-        tests: tests.map((t) => ({
-          id: t.id,
-          input: t.input || "",
-          output: t.expectedOutput || "",
-          hidden: t.isHidden === true,
-          group: t.isHidden === true ? "hidden" : "public",
-          weight: t.points || 1,
-        })),
+        // IOI-style binary subtasks: each `test.subtask` becomes a group,
+        // group score is 0/full depending on whether all tests in the subtask passed.
+        group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : undefined,
+        tests: tests.map((t) => {
+          const subtaskRaw = (t as any).subtask ?? "";
+          const subtaskGroup = String(subtaskRaw ?? "").trim();
+          const group = hasSubtasks ? (subtaskGroup ? subtaskGroup : `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
+          return {
+            id: t.id,
+            input: t.input || "",
+            output: t.expectedOutput || "",
+            hidden: t.isHidden === true,
+            group,
+            weight: t.points || 1,
+          };
+        }),
         limits: effectiveLimits,
         checker: effectiveChecker,
         debug: false,
@@ -2685,6 +2698,13 @@ contestsRouter.post(
       let totalScore = 0;
       let compileError: string | null = null;
       let compileErrorKind: string | null = null;
+      const groupScores = Array.isArray((workerRes as any).group_scores)
+        ? (workerRes as any).group_scores.map((gs: any) => ({
+            group: String(gs?.group ?? ""),
+            score: Number.isFinite(Number(gs?.score)) ? Number(gs.score) : 0,
+            max_score: Number.isFinite(Number(gs?.max_score)) ? Number(gs.max_score) : 0,
+          }))
+        : null;
 
       if (workerRes.verdict === "CE" && workerRes.compile) {
         compileErrorKind = workerRes.compile.error_kind ?? null;
@@ -2722,6 +2742,7 @@ contestsRouter.post(
         testsPassed: totalPassed,
         testsTotal: tests.length,
         compileErrorKind,
+        groupScores: groupScores ? JSON.stringify(groupScores) : null,
         phase: submissionPhase,
       });
       const saved: ContestSubmission = await submissionRepo().save(newSubmission as any);
@@ -2785,7 +2806,8 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
                max_score as maxScore,
                tests_passed as testsPassed,
                tests_total as testsTotal,
-               compile_error_kind as compileErrorKind
+               compile_error_kind as compileErrorKind,
+               group_scores as groupScores
         FROM contest_submissions
         WHERE contest_id = ? AND problem_id = ? AND participant_id = ?
         ORDER BY id DESC
@@ -2809,6 +2831,20 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
         testsPassed: r.testsPassed != null ? Number(r.testsPassed) : null,
         testsTotal: r.testsTotal != null ? Number(r.testsTotal) : null,
         compileErrorKind: r.compileErrorKind != null ? String(r.compileErrorKind) : null,
+          groupScores: (() => {
+            if (r.groupScores == null) return null;
+            try {
+              const parsed = typeof r.groupScores === "string" ? JSON.parse(r.groupScores) : r.groupScores;
+              if (!Array.isArray(parsed)) return null;
+              return parsed.map((gs: any) => ({
+                group: String(gs?.group ?? ""),
+                score: Number.isFinite(Number(gs?.score)) ? Number(gs.score) : 0,
+                maxScore: Number.isFinite(Number(gs?.max_score)) ? Number(gs.max_score) : Number.isFinite(Number(gs?.maxScore)) ? Number(gs.maxScore) : 0,
+              }));
+            } catch {
+              return null;
+            }
+          })(),
       })),
     });
   } catch (error: any) {

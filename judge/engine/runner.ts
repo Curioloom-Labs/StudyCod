@@ -253,6 +253,10 @@ export class Runner {
 
       let score = 0;
       const groupAgg = scoringPlan.groupAgg;
+      const groupScoringMode = req.group_scoring_mode ?? "SUM";
+      // Binary subtask scoring requires all tests in a group to be executed, so we only enable it when `run_all=true`.
+      const binaryGroupScoring = groupScoringMode === "BINARY_ALL_OR_NOT" && runAll;
+      const groupFailed: Record<string, boolean> = {};
 
       const runPlan = adapter.getRunPlan();
       for (let i = 0; i < req.tests.length; i++) {
@@ -351,13 +355,18 @@ export class Runner {
             }
             tests.push(base);
             finalVerdict = worsen(finalVerdict, "WA");
+            if (binaryGroupScoring) {
+              groupFailed[group] = true;
+            }
             if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
             continue;
           }
-          score += weight;
-          const agg = groupAgg[group];
-          if (agg) {
-            agg.score += weight;
+          if (!binaryGroupScoring) {
+            score += weight;
+            const agg = groupAgg[group];
+            if (agg) {
+              agg.score += weight;
+            }
           }
           if (allowDetails && req.debug) {
             base.actual = truncate(r.stdout, 2048);
@@ -366,6 +375,9 @@ export class Runner {
           continue;
         }
         base.message = runtimeVerdict === "TLE" ? "Time limit exceeded" : runtimeVerdict === "MLE" ? "Memory limit exceeded" : r.outputLimitExceeded ? "Output limit exceeded" : runtimeVerdict === "CE" ? "Compilation error" : "Runtime error";
+        if (binaryGroupScoring) {
+          groupFailed[group] = true;
+        }
         if (allowDetails) {
           base.input = truncate(input, 4096);
           base.expected = truncate(expected, 4096);
@@ -375,6 +387,14 @@ export class Runner {
         tests.push(base);
         finalVerdict = worsen(finalVerdict, runtimeVerdict);
         if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
+      }
+      if (binaryGroupScoring) {
+        // Convert group pass/fail into 0/full scoring.
+        for (const [groupName, agg] of Object.entries(groupAgg)) {
+          const failed = groupFailed[groupName] === true;
+          agg.score = failed ? 0 : agg.max_score;
+        }
+        score = Object.values(groupAgg).reduce((sum, agg) => sum + (agg.score || 0), 0);
       }
       return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
     } finally {
@@ -602,6 +622,11 @@ function validateRequest(req: JudgeRequest) {
   if (req.debug !== undefined && typeof req.debug !== "boolean") throw new Error("INVALID_REQUEST: debug must be boolean");
   if (req.run_all !== undefined && typeof req.run_all !== "boolean") throw new Error("INVALID_REQUEST: run_all must be boolean");
   if (req.rerun_failed_once !== undefined && typeof req.rerun_failed_once !== "boolean") throw new Error("INVALID_REQUEST: rerun_failed_once must be boolean");
+  if (req.group_scoring_mode !== undefined) {
+    if (req.group_scoring_mode !== "SUM" && req.group_scoring_mode !== "BINARY_ALL_OR_NOT") {
+      throw new Error("INVALID_REQUEST: group_scoring_mode must be SUM|BINARY_ALL_OR_NOT");
+    }
+  }
 }
 
 function computeScoringPlan(req: JudgeRequest): {

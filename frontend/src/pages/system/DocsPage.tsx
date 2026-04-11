@@ -126,7 +126,7 @@ export const DocsPage: React.FC = () => {
               </div>
             </Card>
 
-            <Card className="p-3 mb-3 border border-primary/35 bg-[linear-gradient(160deg,rgba(16,185,129,0.1),rgba(30,64,175,0.08)_60%,rgba(15,23,42,0.5))]">
+            <Card className="p-3 mb-3 border border-border">
               <div className="text-sm font-mono text-text-primary mb-1">{tx("Режим новачка", "Newbie mode")}</div>
               <div className="text-xs text-text-secondary mb-3">{tx("Обери свій сценарій і переходь по кнопках 1 → 2 → 3 → 4.", "Pick your scenario and follow buttons 1 → 2 → 3 → 4.")}</div>
 

@@ -55,6 +55,13 @@ export class ContestSubmission {
   @Column({ type: "varchar", length: 64, nullable: true, name: "compile_error_kind" })
   compileErrorKind?: string | null;
 
+  @Column({
+    type: "text",
+    nullable: true,
+    name: "group_scores",
+  })
+  groupScores?: string | null;
+
   @Index("idx_contest_submissions_phase")
   @Column({
     type: "enum",

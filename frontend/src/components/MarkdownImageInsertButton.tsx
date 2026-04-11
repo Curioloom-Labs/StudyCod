@@ -99,6 +99,7 @@ export const MarkdownImageInsertButton: React.FC<MarkdownImageInsertButtonProps>
         disabled={uploading}
         className={className || "ml-2 text-xs"}
         title={tr("Додати фото в Markdown", "Insert image into Markdown")}
+        aria-label={tr("Додати фото в Markdown", "Insert image into Markdown")}
       >
         <ImagePlus className="w-3 h-3 mr-1" />
         {uploading ? tr("Завантаження...", "Uploading...") : tr("Додати фото", "Add image")}

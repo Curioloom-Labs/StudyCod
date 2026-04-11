@@ -1207,12 +1207,12 @@ export const StudentTaskPage: React.FC = () => {
             </div>
             <div className="flex gap-2 items-center">
               {}
-              {timeRemaining !== null && task.lesson.type === "CONTROL" && !task.hasGrade && <div className={`text-sm font-mono mr-4 flex items-center ${timeRemaining <= 5 ? "text-accent-error" : timeRemaining <= 10 ? "text-yellow-500" : "text-text-primary"}`}>
+              {timeRemaining !== null && task.lesson.type === "CONTROL" && !task.hasGrade && <div className={`text-sm font-mono mr-4 flex items-center ${timeRemaining <= 5 ? "text-accent-error" : timeRemaining <= 10 ? "text-accent-warning" : "text-text-primary"}`}>
                   <Clock className="w-4 h-4 mr-1" />
                   {Math.floor(timeRemaining)} хв
                 </div>}
               {}
-              {deadlineRemaining !== null && !task.isClosed && <div className={`text-sm font-mono mr-4 flex items-center ${deadlineRemaining <= 300 ? "text-accent-error" : deadlineRemaining <= 600 ? "text-yellow-500" : "text-text-primary"}`}>
+              {deadlineRemaining !== null && !task.isClosed && <div className={`text-sm font-mono mr-4 flex items-center ${deadlineRemaining <= 300 ? "text-accent-error" : deadlineRemaining <= 600 ? "text-accent-warning" : "text-text-primary"}`}>
                   <Clock className="w-4 h-4 mr-1" />
                   {deadlineRemaining > 3600 ? t("timeHhMm", {
               h: Math.floor(deadlineRemaining / 3600),
@@ -1234,7 +1234,7 @@ export const StudentTaskPage: React.FC = () => {
               {task.isClosed && <div className="text-xs font-mono text-accent-error mr-4">
                   {t("taskClosed")}
                 </div>}
-                {!hideControlResults && task.grade && <div className={`text-sm font-mono font-bold mr-4 flex items-center ${task.grade.total >= 85 ? "text-accent-success" : task.grade.total >= 65 ? "text-accent-warn" : task.grade.total >= 40 ? "text-yellow-500" : "text-accent-error"}`}>
+                {!hideControlResults && task.grade && <div className={`text-sm font-mono font-bold mr-4 flex items-center ${task.grade.total >= 85 ? "text-accent-success" : task.grade.total >= 65 ? "text-accent-warn" : task.grade.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>
                   {t("grade")}: {task.grade.total}/100
                 </div>}
               {!hideControlResults && lastScoring && typeof scoringPct === "number" && <div className="min-w-[180px] mr-3">
@@ -1294,7 +1294,7 @@ export const StudentTaskPage: React.FC = () => {
                     <Send className="w-3 h-3 mr-1" />
                   {submitting ? tr("Перевірка...", "Checking...") : tr("Відправити", "Submit")}
                   </Button>
-                  {canComplete && <Button variant="ghost" onClick={handleComplete} disabled={submitting} className="text-xs border border-accent-warn text-accent-warn hover:bg-accent-warn/10" title={tr("Завершити завдання достроково (закриє можливість редагування)", "Complete the task early (will disable editing)")}>
+                  {canComplete && <Button variant="ghost" onClick={handleComplete} disabled={submitting} className="text-xs border border-accent-warn text-accent-warn hover:bg-accent-warn/10" title={tr("Завершити завдання достроково (закриє можливість редагування)", "Complete the task early (will disable editing)")} aria-label={tr("Завершити завдання достроково", "Complete task early")}>
                     {tr("✓ Завершити", "✓ Complete")}
                     </Button>}
                 </>}
@@ -1330,7 +1330,6 @@ export const StudentTaskPage: React.FC = () => {
                     {tr("Після прочитання теорії ви зможете перейти до практичного завдання", "After reading theory you can proceed to the practice task")}
                   </p>
                   <Button variant="primary" onClick={() => {
-            console.log("Theory acknowledged");
             setTheoryAcknowledged(true);
           }} className="text-base px-8 py-3 font-semibold whitespace-nowrap shadow-md hover:shadow-lg transition-all">
                     {tr("✓ Я прочитав теорію", "✓ I have read the theory")}
@@ -1420,7 +1419,7 @@ export const StudentTaskPage: React.FC = () => {
                       </div>}
                     {quizSubmitted && quizGrade !== null && <Card className="p-6 bg-gradient-to-br from-primary/20 to-secondary/20 border-primary">
                         <div className="text-center">
-                          <div className={`text-3xl font-mono mb-2 font-bold ${quizGrade >= 85 ? "text-accent-success" : quizGrade >= 65 ? "text-accent-warn" : quizGrade >= 40 ? "text-yellow-500" : "text-accent-error"}`}>
+                          <div className={`text-3xl font-mono mb-2 font-bold ${quizGrade >= 85 ? "text-accent-success" : quizGrade >= 65 ? "text-accent-warn" : quizGrade >= 40 ? "text-accent-warning" : "text-accent-error"}`}>
                             {quizGrade}/100
                           </div>
                           <div className="text-sm text-text-secondary mb-4">

@@ -308,7 +308,7 @@ export const ClassDetailsPage: React.FC = () => {
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {topics.length === 0 ? <p className="text-text-secondary text-sm">{t('noTopics')}</p> : topics.map(topic => <div key={topic.id} className="p-2 border border-border hover:bg-bg-hover transition-fast cursor-pointer" onClick={() => navigate(`/edu/topics/${topic.id}`)}>
+              {topics.length === 0 ? <p className="text-text-secondary text-sm">{t('noTopics')}</p> : topics.map(topic => <button type="button" key={topic.id} className="w-full p-2 text-left border border-border hover:bg-bg-hover transition-fast" onClick={() => navigate(`/edu/topics/${topic.id}`)}>
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-mono text-text-primary">{topic.title}</div>
                       <span className="text-xs text-text-muted px-2 py-1 border border-border">
@@ -327,7 +327,7 @@ export const ClassDetailsPage: React.FC = () => {
                           {t('tasksCount')}: {totalCount}
                         </div>;
               })()}
-                  </div>)}
+                  </button>)}
             </div>
           </Card>
         </div>

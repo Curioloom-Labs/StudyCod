@@ -15,7 +15,7 @@ const getGradeColor = (grade: number): string => {
   if (grade <= 0) return "text-text-muted";
   if (grade >= 85) return "text-accent-success";
   if (grade >= 65) return "text-accent-warn";
-  if (grade >= 40) return "text-yellow-500";
+  if (grade >= 40) return "text-accent-warning";
   return "text-accent-error";
 };
 export const StudentDashboardPage: React.FC<Props> = ({

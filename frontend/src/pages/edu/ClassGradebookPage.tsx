@@ -74,7 +74,7 @@ export const ClassGradebookPage: React.FC = () => {
     if (grade === null) return "text-text-muted";
     if (grade >= 85) return "text-accent-success font-bold";
     if (grade >= 65) return "text-accent-warn font-semibold";
-    if (grade >= 40) return "text-yellow-500 font-semibold";
+    if (grade >= 40) return "text-accent-warning font-semibold";
     return "text-accent-error font-semibold";
   };
   const handleGradeClick = async (student: GradebookStudent, taskId: number, grade: GradebookGrade | undefined, taskTitle: string) => {
@@ -96,11 +96,6 @@ export const ClassGradebookPage: React.FC = () => {
   const handleSaveGrade = async () => {
     if (!editingGrade || !classId) return;
     const gradeNum = Number.isFinite(Number(gradeValue)) ? Math.round(Number(gradeValue)) : NaN;
-    console.log('[ClassGradebookPage] handleSaveGrade:', {
-      gradeValue,
-      gradeNum,
-      isNaN: isNaN(gradeNum)
-    });
     if (isNaN(gradeNum) || gradeNum < 0 || gradeNum > 100) {
       showToast({ type: "error", message: t('gradeRange') });
       return;
@@ -108,11 +103,6 @@ export const ClassGradebookPage: React.FC = () => {
     setSaving(true);
     try {
       if (editingGrade.isControlWork) {
-        console.log('[ClassGradebookPage] Updating control work grade:', {
-          controlWorkId: editingGrade.taskId,
-          studentId: editingGrade.studentId,
-          grade: gradeNum
-        });
         await updateControlWorkGrade(editingGrade.taskId, editingGrade.studentId, gradeNum);
       } else if (editingGrade.isSummaryGrade) {
         if (!editingGrade.gradeId) {
@@ -126,14 +116,12 @@ export const ClassGradebookPage: React.FC = () => {
             total: gradeNum,
             feedback: feedback || undefined
           };
-          console.log('[ClassGradebookPage] Updating grade:', update);
           await updateGrade(editingGrade.gradeId, update);
         } else {
           const payload = {
             total: gradeNum,
             feedback: feedback || undefined
           };
-          console.log('[ClassGradebookPage] Creating grade:', payload);
           await createManualGrade(editingGrade.taskId, editingGrade.studentId, payload);
         }
       }

@@ -11,6 +11,19 @@ function fmtSigned(value: number): string {
   return `${rounded >= 0 ? "+" : ""}${rounded.toFixed(3)}`;
 }
 
+function getEventAppliedDelta(event: IadEvent): number {
+  const parsed = Number(event.appliedDelta);
+  if (Number.isFinite(parsed)) return parsed;
+  const fallback = Number(event.delta ?? 0);
+  return event.applied ? fallback : 0;
+}
+
+function getEventRuleDelta(event: IadEvent): number {
+  const parsed = Number(event.potentialDelta);
+  if (Number.isFinite(parsed)) return parsed;
+  return Number(event.delta ?? 0);
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -205,7 +218,7 @@ export const IadPage: React.FC = () => {
     const calc = (days: 7 | 14) => {
       const from = now - days * 24 * 60 * 60 * 1000;
       const events = (details.recentEvents || []).filter((e) => new Date(e.createdAt).getTime() >= from);
-      const deltas = events.map((e) => Number(e.delta ?? 0));
+      const deltas = events.map((e) => getEventAppliedDelta(e));
       const net = deltas.reduce((s, d) => s + d, 0);
       const absAvg = deltas.length ? deltas.reduce((s, d) => s + Math.abs(d), 0) / deltas.length : 0;
       const volatility = stdDev(deltas);
@@ -291,6 +304,11 @@ export const IadPage: React.FC = () => {
                   <div className="text-xs text-text-secondary">{tr("Поточний IAD", "Current IAD")}</div>
                   <div className="text-3xl font-mono text-primary mt-1">{(details.currentIad ?? details.currentDifus ?? 0).toFixed(3)}</div>
                   <div className="text-xs text-text-secondary mt-1">{tr("Мова", "Language")}: <span className="text-text-primary">{details.lang}</span> · {levelLabel}</div>
+                  {details.limitState === "max" ? <div className="text-[11px] text-accent-warn mt-1">
+                    {tr("Значення на верхній межі 1.0: частина позитивних подій може не підвищувати IAD далі.", "Value is at the upper limit 1.0: some positive events may no longer increase IAD.")}
+                  </div> : details.limitState === "min" ? <div className="text-[11px] text-accent-warn mt-1">
+                    {tr("Значення на нижній межі 0.0: частина негативних подій може не знижувати IAD далі.", "Value is at the lower limit 0.0: some negative events may no longer decrease IAD.")}
+                  </div> : null}
                 </div>
                 <div className="text-xs text-text-secondary">
                   {tr("Оновлено", "Updated")}: {details.updatedAt ? new Date(details.updatedAt).toLocaleString(locale) : "—"}
@@ -596,8 +614,8 @@ export const IadPage: React.FC = () => {
               <div className="text-sm font-mono text-text-primary mb-2">{tr("Чому IAD змінюється", "Why IAD changes")}</div>
               <div className="text-xs text-text-secondary mb-3">
                 {tr(
-                  "Події нижче показують останні оцінки для активної мови та їх реальний внесок у IAD. Мітка «Вплинуло» означає, що оцінка вже врахована у поточному значенні.",
-                  "Events below show recent grades for the active language and their actual contribution to IAD. The “Applied” marker means the grade is already reflected in the current value."
+                  "Події нижче показують останні оцінки для активної мови. Δ в рядку — це фактичний застосований внесок; для незастосованих подій показується окрема підказка з дельтою за правилом.",
+                  "Events below show recent grades for the active language. Row Δ is the actually applied contribution; for pending events, a separate hint shows the rule delta."
                 )}
               </div>
 
@@ -605,28 +623,37 @@ export const IadPage: React.FC = () => {
                 {details.recentEvents.length === 0 ? (
                   <div className="text-xs text-text-secondary">{tr("Поки немає подій.", "No events yet.")}</div>
                 ) : (
-                  details.recentEvents.map((event) => (
-                    <div key={event.gradeId} className="border border-border rounded-lg p-3 bg-bg-code/70 text-xs">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-text-primary truncate">{event.taskTitle || `#${event.taskId}`}</div>
-                          <div className="text-text-secondary mt-0.5">{reasonLabel(event)}</div>
+                  details.recentEvents.map((event) => {
+                    const appliedDelta = getEventAppliedDelta(event);
+                    const ruleDelta = getEventRuleDelta(event);
+                    const eventDirection = appliedDelta > 0 ? "up" : appliedDelta < 0 ? "down" : "flat";
+                    const deltaClass = appliedDelta > 0 ? "text-accent-success" : appliedDelta < 0 ? "text-accent-error" : "text-text-secondary";
+                    return (
+                      <div key={event.gradeId} className="border border-border rounded-lg p-3 bg-bg-code/70 text-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-text-primary truncate">{event.taskTitle || `#${event.taskId}`}</div>
+                            <div className="text-text-secondary mt-0.5">{reasonLabel(event)}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-text-primary">{tr("Оцінка", "Grade")}: {event.grade}</div>
+                            <div className={deltaClass}>{fmtSigned(appliedDelta)}</div>
+                            {!event.applied ? <div className="text-[11px] text-text-secondary">
+                              {tr("Після застосування за правилом", "After apply (rule)")}: {fmtSigned(ruleDelta)}
+                            </div> : null}
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-text-primary">{tr("Оцінка", "Grade")}: {event.grade}</div>
-                          <div className={event.delta >= 0 ? "text-accent-success" : "text-accent-error"}>{fmtSigned(event.delta)}</div>
-                        </div>
-                      </div>
 
-                      <div className="mt-2 flex items-center justify-between text-[11px] text-text-secondary">
-                        <span className="inline-flex items-center gap-1">
-                          {event.direction === "up" ? <TrendingUp className="w-3.5 h-3.5 text-accent-success" /> : event.direction === "down" ? <TrendingDown className="w-3.5 h-3.5 text-accent-error" /> : <Minus className="w-3.5 h-3.5" />}
-                          {event.applied ? tr("Вплинуло на поточний IAD", "Applied to current IAD") : tr("Ще не застосовано", "Not applied yet")}
-                        </span>
-                        <span>{new Date(event.createdAt).toLocaleString(locale)}</span>
+                        <div className="mt-2 flex items-center justify-between text-[11px] text-text-secondary">
+                          <span className="inline-flex items-center gap-1">
+                            {eventDirection === "up" ? <TrendingUp className="w-3.5 h-3.5 text-accent-success" /> : eventDirection === "down" ? <TrendingDown className="w-3.5 h-3.5 text-accent-error" /> : <Minus className="w-3.5 h-3.5" />}
+                            {event.applied ? tr("Вплинуло на поточний IAD", "Applied to current IAD") : tr("Ще не застосовано", "Not applied yet")}
+                          </span>
+                          <span>{new Date(event.createdAt).toLocaleString(locale)}</span>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </Card>

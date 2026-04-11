@@ -138,7 +138,7 @@ export const SummaryGradesPage: React.FC = () => {
                           <button onClick={e => {
                     e.stopPropagation();
                     handleDeleteGrade(g.id, g.studentName);
-                  }} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:text-red-600 p-1" title={tr("Видалити оцінку", "Delete grade")}>
+                  }} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:opacity-85 p-1" title={tr("Видалити оцінку", "Delete grade")}>
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -156,7 +156,7 @@ export const SummaryGradesPage: React.FC = () => {
                       setEditingGrade(null);
                     }
                   }} autoFocus className="w-16 px-2 py-1 bg-bg-base border border-primary text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
-                          </div> : <div className="text-lg font-mono text-primary cursor-pointer hover:bg-bg-hover px-1 rounded" onClick={() => {
+                          </div> : <button type="button" className="text-lg font-mono text-primary hover:bg-bg-hover px-1 rounded" onClick={() => {
                   setEditingGrade({
                     id: g.id,
                     studentId: g.studentId,
@@ -164,7 +164,7 @@ export const SummaryGradesPage: React.FC = () => {
                   });
                 }} title={tr("Натисніть для редагування", "Click to edit")}>
                             {g.grade}
-                          </div>}
+                          </button>}
                       </div>;
             })}
                 </div>

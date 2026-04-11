@@ -28,6 +28,12 @@
     "cross-env": "^10.1.0",
     "module-alias": "^2.3.4"
   },
+  "overrides": {
+    "esbuild": "0.27.7",
+    "path-to-regexp": "8.4.2",
+    "minimatch": "9.0.9",
+    "brace-expansion": "2.0.3"
+  },
   "_moduleAliases": {
     "@shared": "../shared",
     "services": "../backend/src/services",

@@ -4,9 +4,12 @@ import { AppDataSource } from "../data-source";
 import { AuthRequest, authOptional, authRequired } from "../middleware/authMiddleware";
 import { certificateService } from "../services/certificates/CertificateService";
 import { CertificateVerificationService } from "../services/certificates/CertificateVerificationService";
+import { logger } from "../utils/logger";
 
 const certificateRouter = Router();
 const verificationService = new CertificateVerificationService();
+
+const CERTIFICATE_TEMPLATE_TEXT_LIMIT = 5_000_000;
 
 certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: Response) => {
   try {
@@ -16,8 +19,8 @@ certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: 
       contestId: z.number().int().positive().optional(),
       name: z.string().min(2).max(180),
       type: z.enum(["studycod", "custom"]),
-      htmlTemplate: z.string().max(500_000).optional(),
-      cssTemplate: z.string().max(500_000).optional(),
+      htmlTemplate: z.string().max(CERTIFICATE_TEMPLATE_TEXT_LIMIT).optional(),
+      cssTemplate: z.string().max(CERTIFICATE_TEMPLATE_TEXT_LIMIT).optional(),
       fields: z.array(
         z.object({
           fieldKey: z.enum([
@@ -40,7 +43,23 @@ certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: 
     });
 
     const parsed = schema.safeParse(req.body ?? {});
-    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    if (!parsed.success) {
+      const tooLargeIssue = parsed.error.issues.find((issue: z.ZodIssue) => {
+        const key = String(issue.path?.[0] ?? "");
+        return issue.code === "too_big" && (key === "htmlTemplate" || key === "cssTemplate");
+      });
+
+      if (tooLargeIssue) {
+        return res.status(413).json({
+          message: "TEMPLATE_TOO_LARGE",
+          detail: `Template HTML/CSS is too large. Max allowed per field is ${CERTIFICATE_TEMPLATE_TEXT_LIMIT} characters.`,
+          limit: CERTIFICATE_TEMPLATE_TEXT_LIMIT,
+          errors: parsed.error.issues,
+        });
+      }
+
+      return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    }
 
     if (parsed.data.type === "custom" && !String(parsed.data.htmlTemplate ?? "").trim()) {
       return res.status(400).json({ message: "HTML_TEMPLATE_REQUIRED" });
@@ -57,7 +76,15 @@ certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: 
     });
 
     return res.json(result);
-  } catch {
+  } catch (error: any) {
+    logger.error("[certificate] failed to create template", {
+      userId: req.userId ?? null,
+      userType: req.userType ?? null,
+      code: error?.code,
+      errno: error?.errno,
+      sqlState: error?.sqlState,
+      message: error?.message,
+    });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

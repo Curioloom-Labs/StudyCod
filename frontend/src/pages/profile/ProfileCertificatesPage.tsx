@@ -45,7 +45,7 @@ export const ProfileCertificatesPage: React.FC = () => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <Card className="p-4 border border-border/70 bg-[linear-gradient(145deg,rgba(16,185,129,0.12),rgba(59,130,246,0.08)_45%,rgba(15,23,42,0.45))] mb-4">
+      <Card className="p-4 border border-border/70 mb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-text-primary font-mono">
             <Award className="w-5 h-5 text-primary" />
@@ -74,27 +74,30 @@ export const ProfileCertificatesPage: React.FC = () => {
           <div className="text-sm text-text-secondary">{tr("Поки що сертифікатів немає.", "No certificates yet.")}</div>
         ) : (
           <div className="overflow-auto border border-border">
-            <table className="min-w-[980px] w-full text-sm font-mono">
+            <table className="min-w-[640px] md:min-w-[980px] w-full text-xs sm:text-sm font-mono">
+              <caption className="sr-only">
+                {tr("Список сертифікатів користувача", "List of user certificates")}
+              </caption>
               <thead className="bg-bg-hover">
                 <tr>
-                  <th className="p-2 border-b border-border text-left">ID</th>
+                  <th className="hidden md:table-cell p-2 border-b border-border text-left">ID</th>
                   <th className="p-2 border-b border-border text-left">{tr("Контест", "Contest")}</th>
                   <th className="p-2 border-b border-border text-center">{tr("Бали", "Score")}</th>
                   <th className="p-2 border-b border-border text-center">{tr("Місце", "Place")}</th>
                   <th className="p-2 border-b border-border text-center">{tr("Статус", "Status")}</th>
-                  <th className="p-2 border-b border-border text-center">{tr("Видано", "Issued")}</th>
+                  <th className="hidden lg:table-cell p-2 border-b border-border text-center">{tr("Видано", "Issued")}</th>
                   <th className="p-2 border-b border-border text-right">{tr("Дії", "Actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.certificateId} className="odd:bg-bg-base even:bg-bg-surface">
-                    <td className="p-2 border-b border-border">{row.certificateId}</td>
+                    <td className="hidden md:table-cell p-2 border-b border-border">{row.certificateId}</td>
                     <td className="p-2 border-b border-border">{row.contestTitle}</td>
                     <td className="p-2 border-b border-border text-center">{row.score}/{row.maxScore}</td>
                     <td className="p-2 border-b border-border text-center">{row.place ?? "—"}</td>
                     <td className="p-2 border-b border-border text-center">{row.status}</td>
-                    <td className="p-2 border-b border-border text-center">{fmtDateTime(row.issuedAt ?? row.createdAt, i18n.language)}</td>
+                    <td className="hidden lg:table-cell p-2 border-b border-border text-center">{fmtDateTime(row.issuedAt ?? row.createdAt, i18n.language)}</td>
                     <td className="p-2 border-b border-border text-right">
                       <Link
                         className="text-primary hover:underline"

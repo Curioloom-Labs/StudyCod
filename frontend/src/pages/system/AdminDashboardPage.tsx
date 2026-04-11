@@ -3439,7 +3439,7 @@ export const AdminDashboardPage: React.FC = () => {
                             <Button variant="secondary" size="sm" onClick={() => {
                         setUserToDelete(user.id);
                         setShowDeleteUserConfirm(true);
-                      }} className="flex items-center gap-1 text-red-500 hover:text-red-700">
+                      }} className="flex items-center gap-1 text-accent-error hover:opacity-85">
                               <Trash2 className="w-3 h-3" />
                             </Button>
                           </div>
@@ -3487,7 +3487,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <Button variant="secondary" size="sm" onClick={() => {
                   setClassToDelete(classItem.id);
                   setShowDeleteClassConfirm(true);
-                }} className="flex items-center gap-1 text-red-500 hover:text-red-700">
+                }} className="flex items-center gap-1 text-accent-error hover:opacity-85">
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
@@ -3552,6 +3552,7 @@ export const AdminDashboardPage: React.FC = () => {
                     onClick={syncMaterialsFromRepoMenu}
                     disabled={materialsRepoSyncing || materialsSaving || materialsReordering}
                     className="flex items-center gap-2"
+                    aria-label="Sync topics/theory from repo menu"
                     title="Sync topics/theory from repo menu (theories/*_theory.yml)"
                   >
                     <RefreshCcw className={`w-4 h-4 ${materialsRepoSyncing ? "animate-spin" : ""}`} />
@@ -3642,7 +3643,7 @@ export const AdminDashboardPage: React.FC = () => {
                         <Button variant="secondary" onClick={() => setMaterialPreview(p => !p)}>
                           {materialPreview ? "Hide preview" : "Preview"}
                         </Button>
-                        {materialsAutoSaveState !== "idle" && <div className={`text-xs font-mono ${materialsAutoSaveState === "error" ? "text-red-500" : "text-text-secondary"}`}>
+                        {materialsAutoSaveState !== "idle" && <div className={`text-xs font-mono ${materialsAutoSaveState === "error" ? "text-accent-error" : "text-text-secondary"}`}>
                             {materialsAutoSaveState === "saving" ? "Auto-saving…" : materialsAutoSaveState === "saved" ? "Auto-saved" : "Auto-save failed"}
                           </div>}
                         <Button onClick={handleSaveMaterial} disabled={materialsSaving || !materialsDirty}>
@@ -3652,7 +3653,7 @@ export const AdminDashboardPage: React.FC = () => {
                         <Button variant="secondary" onClick={() => {
                   setMaterialToDelete(materialsSelectedTopic);
                   setShowDeleteMaterialConfirm(true);
-                }} className="text-red-500 hover:text-red-700">
+                }} className="text-accent-error hover:opacity-85">
                           <Trash2 className="w-4 h-4 mr-2" />
                           Delete
                         </Button>
@@ -3861,7 +3862,7 @@ export const AdminDashboardPage: React.FC = () => {
                 <div className="mt-3 space-y-2">
                   {libraryTasks.map(task => {
                 const isSelected = librarySelectedTaskId === task.id;
-                const statusClass = task.status === "PENDING" ? "border-amber-400/60 text-amber-200 bg-amber-400/10" : task.status === "APPROVED" ? "border-emerald-400/60 text-emerald-200 bg-emerald-400/10" : task.status === "REJECTED" ? "border-red-400/60 text-red-200 bg-red-400/10" : "border-border text-text-secondary bg-bg-secondary";
+                const statusClass = task.status === "PENDING" ? "border-accent-warning/60 text-accent-warning bg-accent-warning/10" : task.status === "APPROVED" ? "border-accent-success/60 text-accent-success bg-accent-success/10" : task.status === "REJECTED" ? "border-accent-error/60 text-accent-error bg-accent-error/10" : "border-border text-text-secondary bg-bg-secondary";
                 return <button key={task.id} onClick={() => selectLibraryTask(task.id)} className={`w-full text-left rounded-md border px-3 py-2 transition-fast ${isSelected ? "border-primary bg-bg-code" : "border-border hover:bg-bg-secondary"}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -3896,7 +3897,7 @@ export const AdminDashboardPage: React.FC = () => {
                           Author: {librarySelectedTask.author?.username || "Unknown"}{librarySelectedTask.author?.email ? ` (${librarySelectedTask.author.email})` : ""}
                         </div>
                       </div>
-                      <div className={`px-3 py-1 text-xs font-mono border rounded-md ${librarySelectedTask.status === "PENDING" ? "border-amber-400/60 bg-amber-400/10 text-amber-200" : librarySelectedTask.status === "APPROVED" ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-200" : librarySelectedTask.status === "REJECTED" ? "border-red-400/60 bg-red-400/10 text-red-200" : "border-border bg-bg-code text-text-secondary"}`}>
+                      <div className={`px-3 py-1 text-xs font-mono border rounded-md ${librarySelectedTask.status === "PENDING" ? "border-accent-warning/60 bg-accent-warning/10 text-accent-warning" : librarySelectedTask.status === "APPROVED" ? "border-accent-success/60 bg-accent-success/10 text-accent-success" : librarySelectedTask.status === "REJECTED" ? "border-accent-error/60 bg-accent-error/10 text-accent-error" : "border-border bg-bg-code text-text-secondary"}`}>
                         {librarySelectedTask.status}
                       </div>
                     </div>
@@ -3926,7 +3927,7 @@ export const AdminDashboardPage: React.FC = () => {
 
                     {librarySelectedTask.status === "REJECTED" && <div>
                         <div className="text-xs font-mono text-text-secondary mb-1">Rejection reason</div>
-                        <div className="rounded-md border border-red-400/40 bg-red-400/10 p-3 text-sm text-red-100 whitespace-pre-wrap">
+                        <div className="rounded-md border border-accent-error/40 bg-accent-error/10 p-3 text-sm text-accent-error whitespace-pre-wrap">
                           {librarySelectedTask.rejectionReason || "-"}
                         </div>
                       </div>}
@@ -3941,7 +3942,7 @@ export const AdminDashboardPage: React.FC = () => {
                             <CheckCircle className="w-4 h-4" />
                             Approve
                           </Button>
-                          <Button variant="secondary" onClick={handleRejectLibraryTask} disabled={libraryActing || librarySelectedTask.status !== "PENDING"} className="flex items-center gap-2 text-red-500 hover:text-red-700">
+                          <Button variant="secondary" onClick={handleRejectLibraryTask} disabled={libraryActing || librarySelectedTask.status !== "PENDING"} className="flex items-center gap-2 text-accent-error hover:opacity-85">
                             <XCircle className="w-4 h-4" />
                             Reject
                           </Button>
@@ -4560,7 +4561,7 @@ export const AdminDashboardPage: React.FC = () => {
                             }}
                           >
                             {obj.type === "image" ? (
-                              obj.imageUrl ? <img src={obj.imageUrl} alt="" className="w-full h-full object-contain pointer-events-none" /> : <span className="text-[11px]">Image</span>
+                              obj.imageUrl ? <img src={obj.imageUrl} alt="Certificate element image" className="w-full h-full object-contain pointer-events-none" /> : <span className="text-[11px]">Image</span>
                             ) : obj.type === "shape" ? null : (
                               <span className="truncate" style={{ fontSize: `${obj.fontSize}px`, fontWeight: obj.fontWeight }}>{obj.text || "Text"}</span>
                             )}
@@ -4755,7 +4756,7 @@ export const AdminDashboardPage: React.FC = () => {
                             <div className="text-xs font-mono text-text-secondary truncate">{c.userEmail}</div>
                             <div className="text-sm font-mono text-text-primary truncate">{c.subject}</div>
                           </div>
-                          <div className={`text-[10px] font-mono px-2 py-0.5 rounded border ${c.status === "OPEN" ? "border-emerald-400/60 text-emerald-200 bg-emerald-400/10" : "border-border text-text-secondary bg-bg-secondary"}`}>
+                          <div className={`text-[10px] font-mono px-2 py-0.5 rounded border ${c.status === "OPEN" ? "border-accent-success/60 text-accent-success bg-accent-success/10" : "border-border text-text-secondary bg-bg-secondary"}`}>
                             {c.status}
                           </div>
                         </div>
@@ -4875,7 +4876,7 @@ export const AdminDashboardPage: React.FC = () => {
                     Коли увімкнено — сайт блокується для всіх, крім SYSTEM_ADMIN. Доступними залишаються /api/auth/* та /api/admin/*.
                   </p>
                 </div>
-                <div className={`px-3 py-1 text-xs font-mono border rounded-md ${maintenanceState?.enabled ? "border-amber-400/60 bg-amber-400/10 text-amber-200" : "border-border bg-bg-code text-text-secondary"}`}>
+                <div className={`px-3 py-1 text-xs font-mono border rounded-md ${maintenanceState?.enabled ? "border-accent-warning/60 bg-accent-warning/10 text-accent-warning" : "border-border bg-bg-code text-text-secondary"}`}>
                   {maintenanceState?.enabled ? "ENABLED" : "DISABLED"}
                 </div>
               </div>
@@ -4988,7 +4989,7 @@ export const AdminDashboardPage: React.FC = () => {
           }}>
               Cancel
             </Button>
-            <Button onClick={handleDeleteMaterial} className="text-red-500 hover:text-red-700">
+            <Button onClick={handleDeleteMaterial} className="text-accent-error hover:opacity-85">
               Delete
             </Button>
           </div>
@@ -5108,7 +5109,7 @@ export const AdminDashboardPage: React.FC = () => {
                 <Button variant="secondary" onClick={() => setShowTheoryHistory(false)} disabled={theoryRollbackBusy}>
                   Close
                 </Button>
-                <Button onClick={handleRollbackTheory} disabled={theoryRollbackBusy || !theorySelectedVersion} className="text-amber-300">
+                <Button onClick={handleRollbackTheory} disabled={theoryRollbackBusy || !theorySelectedVersion} className="text-accent-warning">
                   {theoryRollbackBusy ? "Rolling back…" : "Rollback"}
                 </Button>
               </div>
@@ -5246,7 +5247,7 @@ export const AdminDashboardPage: React.FC = () => {
             <Button variant="secondary" onClick={() => setShowDeleteUserConfirm(false)}>
               Cancel
             </Button>
-            <Button variant="secondary" onClick={handleDeleteUser} className="text-red-500 hover:text-red-700">
+            <Button variant="secondary" onClick={handleDeleteUser} className="text-accent-error hover:opacity-85">
               Delete
             </Button>
           </div>
@@ -5345,7 +5346,7 @@ export const AdminDashboardPage: React.FC = () => {
             <Button variant="secondary" onClick={() => setShowDeleteClassConfirm(false)}>
               Cancel
             </Button>
-            <Button variant="secondary" onClick={handleDeleteClass} className="text-red-500 hover:text-red-700">
+            <Button variant="secondary" onClick={handleDeleteClass} className="text-accent-error hover:opacity-85">
               Delete
             </Button>
           </div>

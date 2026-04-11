@@ -103,6 +103,7 @@ export type ContestCheckResult = {
   maxScore: number;
   compileError: string | null;
   compileErrorKind: string | null;
+  groupScores?: Array<{ group: string; score: number; maxScore: number }> | null;
 };
 
 export type ContestRunResult = {
@@ -133,6 +134,7 @@ export type ContestSubmissionListItem = {
   testsPassed: number | null;
   testsTotal: number | null;
   compileErrorKind: string | null;
+  groupScores?: Array<{ group: string; score: number; maxScore: number }> | null;
 };
 
 export type ContestAdminParticipant = {

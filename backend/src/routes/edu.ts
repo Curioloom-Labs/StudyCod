@@ -159,6 +159,7 @@ const registerTeacherSchema = z.object({
   password: z.string().min(6),
   language: z.string().optional()
 });
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const createLessonBodySchema = z.object({
   type: z.string().transform(v => v.trim().toUpperCase()).refine(v => v === "LESSON" || v === "CONTROL"),
@@ -298,6 +299,7 @@ eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
     }
     const hash = await bcrypt.hash(password, 10);
     const verificationToken = crypto.randomBytes(32).toString("hex");
+    const verificationExpires = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
     const user = userRepo().create({
       username,
       email,
@@ -305,7 +307,8 @@ eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
       lang: normalizeLang(language),
       userMode: "EDUCATIONAL",
       emailVerified: false,
-      emailVerificationToken: verificationToken
+      emailVerificationToken: verificationToken,
+      emailVerificationExpires: verificationExpires
     });
     await userRepo().save(user);
     const locale = resolveRequestLocale(req);

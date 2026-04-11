@@ -32,7 +32,7 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Початок серії перемог",
     flavorEn: "The beginning of your streak",
     Icon: Star,
-    unlockedTone: "from-emerald-500/25 via-teal-500/10 to-transparent",
+    unlockedTone: "from-accent-success/25 via-primary/10 to-transparent",
   },
   50: {
     nameUk: "Стабільний ритм",
@@ -40,7 +40,7 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Рухаємось без зупинок",
     flavorEn: "Consistent and unstoppable",
     Icon: Shield,
-    unlockedTone: "from-cyan-500/25 via-sky-500/10 to-transparent",
+    unlockedTone: "from-secondary/25 via-accent-info/10 to-transparent",
   },
   100: {
     nameUk: "Сотка",
@@ -48,7 +48,7 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Потужний рубіж досягнуто",
     flavorEn: "A major milestone unlocked",
     Icon: Medal,
-    unlockedTone: "from-violet-500/25 via-indigo-500/10 to-transparent",
+    unlockedTone: "from-accent-info/25 via-secondary/10 to-transparent",
   },
   250: {
     nameUk: "Майстер",
@@ -56,7 +56,7 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Твоя форма вже еталон",
     flavorEn: "Your form is now elite",
     Icon: Crown,
-    unlockedTone: "from-fuchsia-500/25 via-purple-500/10 to-transparent",
+    unlockedTone: "from-primary/25 via-secondary/10 to-transparent",
   },
   500: {
     nameUk: "Легенда",
@@ -64,7 +64,7 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Півтисячі — це серйозно",
     flavorEn: "500 solved — serious level",
     Icon: Rocket,
-    unlockedTone: "from-amber-500/25 via-orange-500/10 to-transparent",
+    unlockedTone: "from-accent-warning/25 via-accent-warn/10 to-transparent",
   },
   1000: {
     nameUk: "Космічний рівень",
@@ -72,17 +72,17 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "1000+ — режим боса",
     flavorEn: "1000+ solved — boss mode",
     Icon: Gem,
-    unlockedTone: "from-pink-500/25 via-rose-500/10 to-transparent",
+    unlockedTone: "from-accent-error/25 via-accent-warning/10 to-transparent",
   },
 };
 
 const BADGE_RARITY: Record<BadgeMilestone, BadgeRarityMeta> = {
-  25: { uk: "Звичайний", en: "Common", chipTone: "border-slate-500/40 bg-slate-500/10 text-slate-300" },
-  50: { uk: "Рідкісний", en: "Rare", chipTone: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300" },
-  100: { uk: "Епічний", en: "Epic", chipTone: "border-violet-500/40 bg-violet-500/10 text-violet-300" },
-  250: { uk: "Міфічний", en: "Mythic", chipTone: "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300" },
-  500: { uk: "Легендарний", en: "Legendary", chipTone: "border-amber-500/40 bg-amber-500/10 text-amber-300" },
-  1000: { uk: "Артефакт", en: "Artifact", chipTone: "border-rose-500/40 bg-rose-500/10 text-rose-300" },
+  25: { uk: "Звичайний", en: "Common", chipTone: "border-border bg-bg-code text-text-secondary" },
+  50: { uk: "Рідкісний", en: "Rare", chipTone: "border-secondary/45 bg-secondary/12 text-secondary" },
+  100: { uk: "Епічний", en: "Epic", chipTone: "border-accent-info/45 bg-accent-info/12 text-accent-info" },
+  250: { uk: "Міфічний", en: "Mythic", chipTone: "border-primary/45 bg-primary/12 text-primary" },
+  500: { uk: "Легендарний", en: "Legendary", chipTone: "border-accent-warning/45 bg-accent-warning/12 text-accent-warning" },
+  1000: { uk: "Артефакт", en: "Artifact", chipTone: "border-accent-error/45 bg-accent-error/12 text-accent-error" },
 };
 
 function fmtDateTime(iso: string | null | undefined, locale: string) {
@@ -257,11 +257,11 @@ export const PublicProfilePage: React.FC = () => {
               };
               return (
                 <>
-            <Card className="p-5 border border-border/70 bg-[linear-gradient(145deg,rgba(16,185,129,0.12),rgba(30,64,175,0.08)_45%,rgba(15,23,42,0.45))]">
+            <Card className="p-5 border border-border/70">
               <div className="flex flex-col md:flex-row md:items-center gap-4">
                 <div className="w-20 h-20 rounded-xl border border-border overflow-hidden flex items-center justify-center text-2xl font-mono text-text-primary bg-bg-base/80">
                   {profile.avatarUrl ? (
-                    <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                    <img src={profile.avatarUrl} alt={`${tr("Аватар", "Avatar")}: ${profile.username}`} className="w-full h-full object-cover" />
                   ) : (
                     profile.username.slice(0, 1).toUpperCase()
                   )}

@@ -1,5 +1,68 @@
 export type SupportedLanguage = "JAVA" | "PYTHON" | "CPP";
 
+function hasCreateVerbForScaffolding(text: string): boolean {
+  return /(створ(и|іть|ити)|додай(те)?|зроб(и|іть|ити)|налашт(уй|уйте|увати)|setup|configure|create|add)/i.test(text);
+}
+
+function hasFileOpsNouns(text: string): boolean {
+  return /(файл(и|ів|у|ом)?|каталог(и|ів|у|ом)?|папк(а|и|у|ою|ах)?|директор(ія|ії|ію|іями)?|проєкт(у|ом|і)?|project|folder|directory|ide|vscode|visual\s+studio|clion|cmake)/i.test(text);
+}
+
+function hasScaffoldingPathHints(text: string): boolean {
+  return /(\bsrc\b|\binclude\b|cmakelists\.txt|makefile|pom\.xml|build\.gradle)/i.test(text);
+}
+
+function hasExplicitCreateNamedFile(text: string): boolean {
+  return /(створ(и|іть|ити)|add|create)\b[^\n.!?]{0,80}\b[a-z0-9_.-]+\.(cpp|h|hpp|java|py|txt|md)\b/i.test(text);
+}
+
+function isNonJudgeableScaffoldingText(practicalText: string): boolean {
+  const text = String(practicalText ?? "").toLowerCase();
+  const hasCreateVerb = hasCreateVerbForScaffolding(text);
+  return hasCreateVerb && (hasFileOpsNouns(text) || hasScaffoldingPathHints(text) || hasExplicitCreateNamedFile(text));
+}
+
+function splitPracticalTaskToClauses(practicalTask: string): string[] {
+  return String(practicalTask ?? "")
+    .split(/\r?\n+/)
+    .flatMap((line) => line.split(/(?:[.!?…]+\s+)|(?:;\s+)/g))
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function inferLanguageForGenericOutputHint(text: string): "uk" | "en" {
+  const hasCyrillic = /[а-яіїєґ]/i.test(text);
+  if (hasCyrillic) return "uk";
+  return "en";
+}
+
+export function rewriteNonJudgeablePracticalTaskToJudgeable(practicalTask: string): string | null {
+  const source = String(practicalTask ?? "").trim();
+  if (!source) return null;
+
+  if (!isNonJudgeableScaffoldingText(source)) {
+    return source;
+  }
+
+  const clauses = splitPracticalTaskToClauses(source);
+  const kept = clauses.filter((clause) => !isNonJudgeableScaffoldingText(clause));
+  if (kept.length === 0) return null;
+
+  let rewritten = kept.join(". ").replace(/\s+/g, " ").trim();
+  if (rewritten.length < 16) return null;
+  if (!/[.!?…:]$/.test(rewritten)) rewritten = `${rewritten}.`;
+
+  if (!/(вивед|output|print|stdout)/i.test(rewritten)) {
+    const lang = inferLanguageForGenericOutputHint(source);
+    rewritten += lang === "uk"
+      ? " Виведіть результат у stdout згідно з умовою."
+      : " Output the result to stdout according to the statement.";
+  }
+
+  if (isNonJudgeableScaffoldingText(rewritten)) return null;
+  return rewritten;
+}
+
 export function getCurriculumPolicyViolationForGeneratedTask(params: {
   lang: SupportedLanguage;
   topicIndex?: number | null;
@@ -12,6 +75,7 @@ export function getCurriculumPolicyViolationForGeneratedTask(params: {
     : null;
 
   const text = `${String(params.title ?? "")}\n${String(params.practicalTask ?? "")}`.toLowerCase();
+  const practicalText = String(params.practicalTask ?? "").toLowerCase();
 
   if (!text.trim()) return null;
 
@@ -19,10 +83,7 @@ export function getCurriculumPolicyViolationForGeneratedTask(params: {
   // Reject tasks that require creating files/folders, IDE configuration, or project scaffolding.
   // (These cannot be reliably auto-tested from stdin/stdout.)
   {
-    const hasCreateVerb = /(створ(и|іть|ити)|зроб(и|іть|ити)|налашт(уй|уйте|увати)|створити|налаштування|setup|configure|create)/i.test(text);
-    const hasFileOpsNouns = /(файл(и|ів|у|ом)?|каталог(и|ів|у|ом)?|папк(а|и|у|ою|ах)?|директор(ія|ії|ію|іями)?|проєкт(у|ом|і)?|project|folder|directory|ide|vscode|visual\s+studio|clion|cmake)/i.test(text);
-    const mentionsTypicalPathsOrFiles = /(\bsrc\b|\binclude\b|cmakelists\.txt|makefile|main\.cpp|\.cpp\b|\.h\b|\.hpp\b)/i.test(text);
-    if (hasCreateVerb && (hasFileOpsNouns || mentionsTypicalPathsOrFiles)) {
+    if (isNonJudgeableScaffoldingText(practicalText)) {
       return "NON_JUDGEABLE_TASK: Task requires file/project/IDE actions (create folders/files, setup project). Personal tasks must be solvable by writing code in a single file and checked by stdout.";
     }
   }

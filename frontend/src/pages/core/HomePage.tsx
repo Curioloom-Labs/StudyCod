@@ -348,12 +348,12 @@ export const HomePage: React.FC<Props> = ({
           <div className="border border-border bg-bg-surface overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
               <div className="p-5 md:p-6 border-b lg:border-b-0 lg:border-r border-border">
-                <div className="text-xs font-mono text-text-secondary">{tr("Далі", "Next")}</div>
-                <div className="mt-2 text-base md:text-lg font-mono text-text-primary leading-relaxed" title={nextTitle}>
+                <div className="text-xs font-mono font-medium tracking-[0.04em] uppercase text-text-secondary">{tr("Далі", "Next")}</div>
+                <div className="mt-2 text-lg font-mono font-semibold text-text-primary leading-[1.35]" title={nextTitle}>
                   {loading ? tr("Завантаження…", "Loading…") : nextTitle}
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] font-mono text-text-muted">
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-mono text-text-muted">
                   <span>{eta}</span>
                   <span className="text-border">•</span>
                   <span>{tr("Сесія", "Session")}: {resumeTitle}</span>
@@ -374,10 +374,10 @@ export const HomePage: React.FC<Props> = ({
 
               <div>
                 <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
-                  <div className="text-xs font-mono text-text-secondary">{queueTitle}</div>
+                  <div className="text-xs font-mono font-medium tracking-[0.04em] uppercase text-text-secondary">{queueTitle}</div>
                   <button
                     onClick={openNext}
-                    className="text-[11px] font-mono border border-border px-2 py-1 hover:bg-bg-hover transition-fast"
+                    className="text-xs font-mono font-medium border border-border px-2 py-1 hover:bg-bg-hover transition-fast"
                   >
                     {tr("Відкрити далі", "Open next")}
                   </button>
@@ -389,7 +389,7 @@ export const HomePage: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className={`grid gap-3 ${isStudent && (!hasControlInAverage || averageGrade === null) ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-4"}`}>
+          <div className={`grid gap-3 ${isStudent && (!hasControlInAverage || averageGrade === null) ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"}`}>
             <div className="border border-border bg-bg-surface px-3 py-2.5">
               <div className="text-[11px] font-mono text-text-secondary">{tr("Роль", "Role")}</div>
               <div className="mt-1 text-sm font-mono text-text-primary truncate">
@@ -421,23 +421,23 @@ export const HomePage: React.FC<Props> = ({
     );
   }
 
-  return <div className="flex items-center justify-center bg-bg-base p-6">
-            <div className="max-w-2xl w-full space-y-6">
+  return <div className="w-full bg-bg-base px-4 py-6 md:px-8 md:py-10">
+            <div className="max-w-5xl w-full mx-auto space-y-8">
                 {}
-                <div className="text-center mb-8">
-                    <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="mb-2 md:mb-4">
+                    <div className="flex items-center gap-3 mb-3">
                         <Logo size={48} />
                         <h1 className="text-2xl font-mono text-text-primary">
                             StudyCod {isEducational ? "EDU" : ""}
                         </h1>
                     </div>
-                    <p className="text-sm font-mono text-text-secondary">
+                    <p className="text-base text-text-secondary leading-[1.65]">
                         {t('hello')}, {user.username}
                     </p>
                 </div>
 
                 {}
-                {isTeacher && !loading && <div className="grid grid-cols-2 gap-4">
+                {isTeacher && !loading && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Card className="p-4">
                             <Users className="w-5 h-5 text-primary" />
                             <p className="text-xs">{t("classesCount")}</p>
@@ -451,7 +451,7 @@ export const HomePage: React.FC<Props> = ({
                     </div>}
 
                 {}
-                {isStudent && !loading && <div className="grid grid-cols-2 gap-4">
+                {isStudent && !loading && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {averageGrade !== null && hasControlInAverage && <Card className="p-4 cursor-pointer hover:bg-bg-hover transition-fast" onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")}>
                                 <TrendingUp className="w-5 h-5 text-primary" />
                                 <p className="text-xs">{tr("Середній бал", "Average grade")}</p>
@@ -465,9 +465,9 @@ export const HomePage: React.FC<Props> = ({
                     </div>}
 
                 {}
-                {isStudent && recentGrades.length > 0 && <Card className="p-4">
+                {isStudent && recentGrades.length > 0 && <Card className="p-4 space-y-2">
                         <h3 className="text-sm mb-3">{tr("Останні оцінки", "Recent grades")}</h3>
-                        {recentGrades.filter(g => g.task || g.topicTask).map(g => <div key={g.id} className="flex justify-between text-sm">
+                        {recentGrades.filter(g => g.task || g.topicTask).map(g => <div key={g.id} className="flex justify-between text-sm py-1 border-b border-border/60 last:border-b-0">
                                     <span>
                                         {g.task?.title || g.topicTask?.title || tr("Невідоме завдання", "Unknown task")}
                                     </span>
@@ -510,12 +510,12 @@ export const HomePage: React.FC<Props> = ({
                 {!isEducational && !isStudent && !isTeacher && allTasks.length > 0 && <Card className="p-4">
                         <h3 className="text-sm font-mono text-text-primary mb-3">{tr("Мої завдання", "My tasks")}</h3>
                         <div className="space-y-2 max-h-64 overflow-y-auto">
-                            {allTasks.map(task => <div key={task.id} onClick={() => {
+                            {allTasks.map(task => <button type="button" key={task.id} onClick={() => {
             sessionStorage.setItem("openTaskId", task.id.toString());
             startTransition(() => {
               onNavigate("tasks");
             });
-          }} className="p-3 border border-border hover:border-primary/50 hover:bg-bg-hover transition-fast cursor-pointer rounded">
+          }} className="w-full p-3 text-left border border-border hover:border-primary/50 hover:bg-bg-hover transition-fast rounded">
                                     <div className="flex items-center justify-between mb-1">
                                         <span className="text-sm font-mono text-text-primary truncate flex-1">
                                             {task.title}
@@ -527,7 +527,7 @@ export const HomePage: React.FC<Props> = ({
                                     <div className="text-xs font-mono text-text-muted">
                                         {new Date(task.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
                                     </div>
-                                </div>)}
+                                </button>)}
                         </div>
                     </Card>}
 
@@ -554,10 +554,10 @@ const QueueTasks: React.FC<{
   const trLocal = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
 
   if (loading) {
-    return <div className="px-4 py-4 text-xs font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
+    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
   }
   if (!tasks.length) {
-    return <div className="px-4 py-4 text-xs font-mono text-text-secondary">{trLocal("Немає завдань у черзі.", "No tasks in the queue.")}</div>;
+    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Немає завдань у черзі.", "No tasks in the queue.")}</div>;
   }
 
   return (
@@ -570,7 +570,7 @@ const QueueTasks: React.FC<{
         >
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-xs font-mono text-text-primary truncate">{task.title}</div>
+              <div className="text-sm font-mono text-text-primary truncate">{task.title}</div>
               <div className="text-[11px] font-mono text-text-muted mt-0.5">
                 {new Date(task.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
               </div>
@@ -598,10 +598,10 @@ const QueueLessons: React.FC<{
   const trLocal = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
 
   if (loading) {
-    return <div className="px-4 py-4 text-xs font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
+    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
   }
   if (!lessons.length) {
-    return <div className="px-4 py-4 text-xs font-mono text-text-secondary">{trLocal("Немає уроків.", "No lessons yet.")}</div>;
+    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Немає уроків.", "No lessons yet.")}</div>;
   }
 
   const sorted = lessons
@@ -626,7 +626,7 @@ const QueueLessons: React.FC<{
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-xs font-mono text-text-primary truncate">{lesson.title}</div>
+                <div className="text-sm font-mono text-text-primary truncate">{lesson.title}</div>
                 <div className="text-[11px] font-mono text-text-muted mt-0.5">
                   {lesson.deadline
                     ? `${trLocal("Дедлайн", "Deadline")}: ${new Date(lesson.deadline).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}`
@@ -653,10 +653,10 @@ const QueueClasses: React.FC<{
   const trLocal = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
 
   if (loading) {
-    return <div className="px-4 py-4 text-xs font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
+    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
   }
   if (!classes.length) {
-    return <div className="px-4 py-4 text-xs font-mono text-text-secondary">{trLocal("Поки що немає класів.", "No classes yet.")}</div>;
+    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Поки що немає класів.", "No classes yet.")}</div>;
   }
 
   return (
@@ -669,7 +669,7 @@ const QueueClasses: React.FC<{
         >
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-xs font-mono text-text-primary truncate">{cls.name}</div>
+              <div className="text-sm font-mono text-text-primary truncate">{cls.name}</div>
               <div className="text-[11px] font-mono text-text-muted mt-0.5">
                 {trLocal("Учнів", "Students")}: {cls.studentsCount}
               </div>

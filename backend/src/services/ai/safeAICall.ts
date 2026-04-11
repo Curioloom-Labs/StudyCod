@@ -3,7 +3,7 @@ import { getLLMOrchestrator } from '../llm/LLMOrchestrator';
 import { AIResponseValidator, AIValidationError, makeAIValidationError } from '../llm/AIResponseValidator';
 import type { AiTaskGenerationResult, AiTheoryResult, AiQuizResult, TestDataExample } from '../llm/LLMOrchestrator';
 import { logger } from '../../utils/logger';
-import { getCurriculumPolicyViolationForGeneratedTask } from './curriculumPolicy';
+import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from './curriculumPolicy';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -424,12 +424,46 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
 
             // Curriculum stage policy enforcement (e.g., prevent tasks requiring concepts not taught yet).
             {
-              const violation = getCurriculumPolicyViolationForGeneratedTask({
+              let violation = getCurriculumPolicyViolationForGeneratedTask({
                 lang: (sanitizedParams as any).lang,
                 topicIndex: (sanitizedParams as any).topicIndex,
                 title: (result as any)?.title,
                 practicalTask: (result as any)?.practicalTask
               });
+
+              if (violation && violation.includes('NON_JUDGEABLE_TASK')) {
+                const originalPracticalTask = typeof (result as any)?.practicalTask === 'string'
+                  ? String((result as any).practicalTask)
+                  : '';
+                const rewrittenPracticalTask = rewriteNonJudgeablePracticalTaskToJudgeable(originalPracticalTask);
+
+                if (rewrittenPracticalTask && rewrittenPracticalTask !== originalPracticalTask) {
+                  const rewrittenViolation = getCurriculumPolicyViolationForGeneratedTask({
+                    lang: (sanitizedParams as any).lang,
+                    topicIndex: (sanitizedParams as any).topicIndex,
+                    title: (result as any)?.title,
+                    practicalTask: rewrittenPracticalTask
+                  });
+
+                  if (!rewrittenViolation) {
+                    (result as any).practicalTask = rewrittenPracticalTask;
+                    violation = null;
+                    logger.info('[ai] auto-rewrote non-judgeable practicalTask', {
+                      mode,
+                      requestId: options?.requestId ?? null,
+                      attempt,
+                      lang: (sanitizedParams as any).lang,
+                      topicIndex: (sanitizedParams as any).topicIndex,
+                      title: (result as any)?.title,
+                      beforePreview: sanitizeText(originalPracticalTask, 220),
+                      afterPreview: sanitizeText(rewrittenPracticalTask, 220)
+                    });
+                  } else {
+                    violation = rewrittenViolation;
+                  }
+                }
+              }
+
               if (violation) {
                 throw makeAIValidationError('generateTask', `Task generation validation failed: ${violation}`, {
                   topicIndex: (sanitizedParams as any).topicIndex,
@@ -564,7 +598,27 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           isSemanticValidationError(errorMsg);
 
         if (looksLikeValidationError) {
-          logger.warn('[ai] invalid response', { mode, requestId: options?.requestId ?? null, error: error.message });
+          // Some validation errors are transient/model-specific. For generation modes, retry a few times
+          // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
+          const canRetryValidation = (mode === 'generateTask' || mode === 'generateTestData') && attempt < maxAttempts;
+          if (canRetryValidation) {
+            logger.debug('[ai] invalid response (retrying)', {
+              mode,
+              requestId: options?.requestId ?? null,
+              attempt,
+              maxAttempts,
+              error: error.message
+            });
+          } else {
+            logger.warn('[ai] invalid response', {
+              mode,
+              requestId: options?.requestId ?? null,
+              attempt,
+              maxAttempts,
+              error: error.message
+            });
+          }
+
           if (options?.logRawResponse && error.rawResponse) {
             logger.debug('[ai] raw response', {
               mode,
@@ -573,9 +627,6 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             });
           }
 
-          // Some validation errors are transient/model-specific. For generation modes, retry a few times
-          // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
-          const canRetryValidation = (mode === 'generateTask' || mode === 'generateTestData') && attempt < maxAttempts;
           if (canRetryValidation) {
             const backoff = Math.min(2000, 250 * attempt) + Math.floor(Math.random() * 250);
             lastRetryAfterMs = backoff;
