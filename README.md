@@ -90,7 +90,3 @@ Evaluation is designed, in particular, for solutions written in **Java** and **P
 - **Pupils and students** — to learn not only to write code but to solve problems and think algorithmically.
 - **Teachers** — to prepare materials faster, provide practice, observe progress, and maintain transparent assessment.
 - **Educational initiatives** — as a foundation for courses, clubs, distance learning, and research in the field of EdTech and AI.
-
-- `POST /auth/login`
-- `POST /auth/contest-login`
-- `POST /auth/register`
