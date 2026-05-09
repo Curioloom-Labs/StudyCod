@@ -13,6 +13,13 @@ import { useUIMode } from "../../components/interface/UIModeProvider";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
+function buildApiUrl(path: string): string {
+  const base = String(import.meta.env.VITE_API_URL || window.location.origin || "")
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "");
+  return `${base}/api${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 interface Props {
   user: User;
   onUserChange: (u: User) => void;
@@ -731,8 +738,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       setLinkingGoogle(true);
                       try {
                         await prepareGoogleLinkSession();
-                        const base = import.meta.env.VITE_API_URL || window.location.origin;
-                        window.location.href = `${base}/auth/google?link=true`;
+                        window.location.href = buildApiUrl("/auth/google?link=true");
                       } catch (e: unknown) {
                         setLinkingGoogle(false);
                         showToast({

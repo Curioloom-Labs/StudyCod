@@ -38,6 +38,13 @@ type TurnstileApi = {
   remove?: (widgetId?: TurnstileWidgetId) => void;
 };
 
+function buildApiUrl(path: string): string {
+  const base = String(import.meta.env.VITE_API_URL || window.location.origin || "")
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "");
+  return `${base}/api${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 declare global {
   interface Window {
     turnstile?: TurnstileApi;
@@ -537,8 +544,7 @@ export const AuthPage: React.FC<Props> = ({
                   </div>
                 </div>
                 <button type="button" onClick={() => {
-            const base = import.meta.env.VITE_API_URL || window.location.origin;
-            window.location.href = `${base}/auth/google`;
+            window.location.href = buildApiUrl("/auth/google");
           }} className="mt-4 w-full flex items-center justify-center gap-2 border border-border bg-bg-code hover:bg-bg-hover px-4 py-2 text-sm font-mono text-text-primary transition-fast">
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />

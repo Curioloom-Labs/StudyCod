@@ -69,6 +69,10 @@ export const LessonDetailsPage: React.FC = () => {
   const location = useLocation();
   const { element: viewportEl } = useWorkspaceViewport();
   const [searchParams] = useSearchParams();
+  const requestedType = React.useMemo(() => {
+    const raw = searchParams.get("type");
+    return raw === "TOPIC" || raw === "CONTROL" || raw === "LESSON" ? raw : undefined;
+  }, [searchParams]);
   const currentLessonPath = `${location.pathname}${location.search}`;
   const handleBackNavigation = React.useCallback(() => {
     const fromRaw = (location.state as {
@@ -228,20 +232,21 @@ export const LessonDetailsPage: React.FC = () => {
     saveResume(viewportEl?.scrollTop);
   }, [user?.id, lessonIdNum, resumeStep]);
   useEffect(() => {
+    let cancelled = false;
     const initialize = async () => {
-      await loadUser();
+      setLoading(true);
+      const loadedUser = await loadUser();
+      if (cancelled) return;
       if (lessonId) {
-        await loadLesson();
-        setHasAutoRedirected(false);
+        await loadLesson(loadedUser);
+        if (!cancelled) setHasAutoRedirected(false);
       }
     };
     initialize();
-  }, [lessonId, searchParams]);
-  useEffect(() => {
-    if (user && lessonId && lesson && user.userMode === "EDUCATIONAL" && user.studentId) {
-      loadLesson();
-    }
-  }, [user?.id, user?.studentId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonId, requestedType]);
   useEffect(() => {
     if (lesson && user?.userMode === "EDUCATIONAL" && user?.studentId && !hasAutoRedirected) {
       if (lesson.type === "LESSON" && lesson.tasks.length === 1) {
@@ -363,33 +368,26 @@ export const LessonDetailsPage: React.FC = () => {
     };
   }, [reportRedirectSeconds, navigate]);
 
-  const loadUser = async () => {
+  const loadUser = async (): Promise<User | null> => {
     try {
       const u = await getMe();
       setUser(u);
+      return u;
     } catch (error) {
       console.error("Failed to load user:", error);
+      return null;
     }
   };
-  const loadLesson = async () => {
+  const loadLesson = async (userContext: User | null = user) => {
     if (!lessonId) return;
     try {
-      const requestedType = (searchParams.get("type") || undefined) as "TOPIC" | "CONTROL" | "LESSON" | undefined;
       const data = await getLesson(parseInt(lessonId, 10), requestedType);
       setLesson(data);
-      if (data.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId) {
-        try {
-          const statusData = await getControlWorkStatus(parseInt(lessonId, 10));
-          setControlWorkStatus(statusData.status);
-        } catch (error: unknown) {
-          console.error("Failed to load control work status:", error);
-        }
-      }
       if (data.quizJson) {
         try {
           const quiz = JSON.parse(data.quizJson);
           setQuizQuestions(quiz);
-          if (user?.userMode === "EDUCATIONAL" && user?.studentId) {
+          if (userContext?.userMode === "EDUCATIONAL" && userContext?.studentId) {
             const isQuizSubmitted = data.quizSubmitted === true;
             if (isQuizSubmitted) {
               setStudentQuizSubmitted(true);
@@ -437,16 +435,16 @@ export const LessonDetailsPage: React.FC = () => {
         showToast({ type: "error", message: getErrorMessage(error, tr("Урок не знайдено. Повертаємо до списку уроків.", "Lesson not found. Redirecting to lessons.")) });
 
         const parsedLessonId = lessonId ? Number.parseInt(lessonId, 10) : null;
-        if (user?.id && parsedLessonId !== null) {
-          const state = loadResumeState(user.id);
+        if (userContext?.id && parsedLessonId !== null) {
+          const state = loadResumeState(userContext.id);
           if (state?.kind === "edu_lesson" && state.lessonId === parsedLessonId) {
-            clearResumeState(user.id);
+            clearResumeState(userContext.id);
           }
         }
 
         clearControlExamSession();
         setLesson(null);
-        navigate(user?.studentId ? "/edu/lessons" : "/edu", {
+        navigate(userContext?.studentId ? "/edu/lessons" : "/edu", {
           replace: true
         });
       }

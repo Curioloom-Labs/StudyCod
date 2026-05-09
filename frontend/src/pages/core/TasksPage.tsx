@@ -612,12 +612,12 @@ export const TasksPage: React.FC<Props> = ({
       { path: "script.js", content: byPath.get("script.js") ?? "" }
     ];
   }, [active?.webTemplateFiles, useFiles, files, code]);
-  const entryContentFromFiles = (fs: CodeFile[]): string => {
+  const entryContentFromFiles = useCallback((fs: CodeFile[]): string => {
     const hit = fs.find(f => f.path === entryFile);
     return hit?.content ?? "";
-  };
+  }, [entryFile]);
 
-  const deriveEditorFromTask = (t: Task): { useFiles: boolean; files: CodeFile[]; code: string } => {
+  const deriveEditorFromTask = useCallback((t: Task): { useFiles: boolean; files: CodeFile[]; code: string } => {
     if (t.taskMode === "WEB") {
       const wf = Array.isArray(t.webTemplateFiles) ? t.webTemplateFiles.map(f => ({ path: String(f.path), content: String(f.content ?? "") })) : [];
       const normalized = normalizeFiles(wf as CodeFile[]);
@@ -637,7 +637,7 @@ export const TasksPage: React.FC<Props> = ({
     const resolvedUseFiles = f.length > 0;
     const resolvedCode = resolvedUseFiles ? entryContentFromFiles(f) : codeSingle;
     return { useFiles: resolvedUseFiles, files: f, code: resolvedCode };
-  };
+  }, [entryContentFromFiles]);
 
   const currentCodeText = useFiles ? entryContentFromFiles(files) : code;
   const segmentedPractice = useMemo(() => splitPracticeByHeadings(getPracticeText(active)), [active?.id, active?.practiceText, active?.descriptionMarkdown]);
@@ -1072,8 +1072,12 @@ export const TasksPage: React.FC<Props> = ({
   }, [requestedTaskIdFromUrl, tasks, active?.id, deriveEditorFromTask]);
 
   useEffect(() => {
+    if (requestedTaskIdFromUrl && active?.id !== requestedTaskIdFromUrl) {
+      const requestedExists = tasks.some((task) => task.id === requestedTaskIdFromUrl);
+      if (requestedExists) return;
+    }
     syncTaskSelectionToUrl(active?.id ?? null);
-  }, [active?.id, syncTaskSelectionToUrl]);
+  }, [active?.id, requestedTaskIdFromUrl, syncTaskSelectionToUrl, tasks]);
 
   const sidebarStatusMeta = useCallback((status: Task["status"]) => {
     switch (status) {
@@ -1221,7 +1225,10 @@ export const TasksPage: React.FC<Props> = ({
           const filtered = data.filter(t => true);
           setTasks(filtered);
           if (filtered.length > 0 && !active) {
-            const firstTask = filtered[0];
+            const requested = requestedTaskIdFromUrl
+              ? filtered.find((task) => task.id === requestedTaskIdFromUrl)
+              : null;
+            const firstTask = requested ?? filtered[0];
             setActive(firstTask);
             const next = deriveEditorFromTask(firstTask);
             setUseFiles(next.useFiles);
@@ -1242,7 +1249,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [uiLanguage]);
+  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage]);
   useEffect(() => {
     if (tasks.length > 0 && !active) {
       const openTaskId = sessionStorage.getItem("openTaskId");
@@ -1250,6 +1257,9 @@ export const TasksPage: React.FC<Props> = ({
 
       const resume = loadResumeState(user.id);
       const preferredId = (() => {
+        if (requestedTaskIdFromUrl) {
+          return requestedTaskIdFromUrl;
+        }
         if (openTaskId) {
           const v = parseInt(openTaskId, 10);
           return Number.isFinite(v) ? v : null;
@@ -1274,7 +1284,7 @@ export const TasksPage: React.FC<Props> = ({
       const hasTheory = computeHasTheory(taskToOpen);
       setTheoryAcknowledged(!hasTheory);
     }
-  }, [tasks.length, active]);
+  }, [tasks.length, active, requestedTaskIdFromUrl]);
   useEffect(() => {
     if (active) {
       const hasTheory = computeHasTheory(active);

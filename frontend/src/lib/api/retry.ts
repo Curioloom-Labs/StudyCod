@@ -20,12 +20,9 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
   shouldRetry: (error, retryCount) => {
     if (retryCount <= 0) return false;
 
-    // Don't retry client errors (4xx) except for 429 (rate limit)
+    // Don't retry client errors (4xx). Rate limits are intentional back-pressure;
+    // retrying them here amplifies request bursts during UI toggles.
     if (error.response?.status && error.response.status >= 400 && error.response.status < 500) {
-      if (error.response.status === 429) {
-        // Always retry rate limit errors
-        return true;
-      }
       return false;
     }
 

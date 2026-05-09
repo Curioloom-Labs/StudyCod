@@ -156,6 +156,11 @@ export const TeacherClassAppealsPage: React.FC = () => {
     return undefined;
   }, [filterMode]);
 
+  const queryAppealId = useMemo(() => {
+    const parsed = Number.parseInt(String(searchParams.get("appealId") || ""), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+
   const loadAppeals = useCallback(async () => {
     if (!Number.isFinite(classIdNum) || classIdNum <= 0) return [] as GradeAppealItem[];
     const list = await getClassGradeAppeals(classIdNum, requestStatuses);
@@ -194,8 +199,7 @@ export const TeacherClassAppealsPage: React.FC = () => {
         if (!mounted) return;
         setClassName(cls?.name || "");
 
-        const qAppealId = Number.parseInt(String(searchParams.get("appealId") || ""), 10);
-        const initialId = Number.isFinite(qAppealId) && qAppealId > 0 ? qAppealId : (list[0]?.id ?? null);
+        const initialId = queryAppealId ?? (list[0]?.id ?? null);
 
         if (initialId) {
           setSelectedAppealId(initialId);
@@ -215,17 +219,25 @@ export const TeacherClassAppealsPage: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [classIdNum, loadAppeals, searchParams, tr]);
+  }, [classIdNum, loadAppeals, tr]);
+
+  useEffect(() => {
+    if (!queryAppealId) return;
+    if (queryAppealId === selectedAppealId) return;
+    setSelectedAppealId(queryAppealId);
+  }, [queryAppealId, selectedAppealId]);
 
   useEffect(() => {
     if (!selectedAppealId) return;
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set("appealId", String(selectedAppealId));
-      return next;
-    }, { replace: true });
+    if (queryAppealId !== selectedAppealId) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set("appealId", String(selectedAppealId));
+        return next;
+      }, { replace: true });
+    }
     void loadAppealDetail(selectedAppealId);
-  }, [loadAppealDetail, selectedAppealId, setSearchParams]);
+  }, [loadAppealDetail, queryAppealId, selectedAppealId, setSearchParams]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

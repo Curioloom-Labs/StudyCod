@@ -723,7 +723,7 @@ const AppContent: React.FC = React.memo(() => {
       {(() => {
       if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
       if (resolvedPage === "home") {
-        return <HomePage user={user} onNavigate={handleSetPage} />;
+        return <HomePage user={user} onNavigate={handleSetPage} suppressFocusAutoResume={ui.mode === "focus"} />;
       }
       if (resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       if (resolvedPage === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
@@ -897,6 +897,10 @@ const AppContent: React.FC = React.memo(() => {
       }
       if (target === "continue") {
         handleGoHomeOrResume();
+        return;
+      }
+      if (target === "lessons") {
+        navigate("/edu/lessons");
         return;
       }
       const pageTarget = toMomentumPageTarget(target);

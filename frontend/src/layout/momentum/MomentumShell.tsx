@@ -61,7 +61,7 @@ export const MomentumShell: React.FC<Props> = ({
   const primaryHomeId: MomentumNavTarget = isEducational && isStudent ? "lessons" : "continue";
   const primaryHomeLabel = isEducational && isStudent ? t("lessons") : t("session");
 
-  const items: NavItem[] = [
+  const items = React.useMemo<NavItem[]>(() => [
     {
       id: primaryHomeId,
       label: primaryHomeLabel,
@@ -122,7 +122,7 @@ export const MomentumShell: React.FC<Props> = ({
       icon: UserIcon,
       show: true
     }
-  ];
+  ], [isEducational, isStudent, isTeacher, primaryHomeId, primaryHomeLabel, t, user.role]);
 
   const [workspaceViewportEl, setWorkspaceViewportEl] = React.useState<HTMLDivElement | null>(null);
 

@@ -77,6 +77,17 @@ export const StudentAppealsPage: React.FC = () => {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
+  const queryTargetType = useMemo(() => String(searchParams.get("targetType") || "").toUpperCase(), [searchParams]);
+  const queryTargetId = useMemo(() => {
+    const parsed = Number.parseInt(String(searchParams.get("targetId") || ""), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+  const queryOpenCreate = useMemo(() => searchParams.get("new") === "1", [searchParams]);
+  const queryAppealId = useMemo(() => {
+    const parsed = Number.parseInt(String(searchParams.get("appealId") || ""), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+
   const selectedAppealStatusClass = useMemo(() => {
     const status = selectedAppeal?.status;
     if (!status) return "border-border text-text-muted";
@@ -266,26 +277,19 @@ export const StudentAppealsPage: React.FC = () => {
       const targets = buildTargetOptions(gradesData);
       setTargetOptions(targets);
 
-      const qTargetType = String(searchParams.get("targetType") || "").toUpperCase();
-      const qTargetId = Number.parseInt(String(searchParams.get("targetId") || ""), 10);
-      const qOpenCreate = searchParams.get("new") === "1";
-
-      if (qOpenCreate) {
-        const fromQuery = targets.find(t => t.targetType === qTargetType && t.targetId === qTargetId);
+      if (queryOpenCreate) {
+        const fromQuery = targets.find(t => t.targetType === queryTargetType && t.targetId === queryTargetId);
         if (fromQuery) {
           setCreateTarget(fromQuery.value);
         } else if (targets.length > 0) {
           setCreateTarget(targets[0].value);
         }
         setShowCreateModal(true);
-      } else if (targets.length > 0 && !createTarget) {
-        setCreateTarget(targets[0].value);
+      } else if (targets.length > 0) {
+        setCreateTarget(prev => prev || targets[0].value);
       }
 
-      const qAppealId = Number.parseInt(String(searchParams.get("appealId") || ""), 10);
-      const initialId = Number.isFinite(qAppealId) && qAppealId > 0
-        ? qAppealId
-        : (appealsData[0]?.id ?? null);
+      const initialId = queryAppealId ?? (appealsData[0]?.id ?? null);
 
       if (initialId) {
         setSelectedAppealId(initialId);
@@ -297,7 +301,7 @@ export const StudentAppealsPage: React.FC = () => {
     } catch (error: unknown) {
       showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося завантажити апеляції", "Failed to load appeals")) });
     }
-  }, [buildTargetOptions, createTarget, loadAppeals, searchParams, tr]);
+  }, [buildTargetOptions, loadAppeals, queryOpenCreate, queryTargetId, queryTargetType, tr]);
 
   useEffect(() => {
     let mounted = true;
@@ -313,14 +317,22 @@ export const StudentAppealsPage: React.FC = () => {
   }, [loadData]);
 
   useEffect(() => {
+    if (!queryAppealId) return;
+    if (queryAppealId === selectedAppealId) return;
+    setSelectedAppealId(queryAppealId);
+  }, [queryAppealId, selectedAppealId]);
+
+  useEffect(() => {
     if (!selectedAppealId) return;
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set("appealId", String(selectedAppealId));
-      return next;
-    }, { replace: true });
+    if (queryAppealId !== selectedAppealId) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set("appealId", String(selectedAppealId));
+        return next;
+      }, { replace: true });
+    }
     void loadAppealDetail(selectedAppealId);
-  }, [loadAppealDetail, selectedAppealId, setSearchParams]);
+  }, [loadAppealDetail, queryAppealId, selectedAppealId, setSearchParams]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

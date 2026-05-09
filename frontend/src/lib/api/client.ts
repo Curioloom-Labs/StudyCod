@@ -12,6 +12,7 @@ type MaintenanceErrorData = {
   title?: unknown;
   message?: unknown;
   until?: unknown;
+};
 
 const RETRY_CONFIG = {
   maxRetries: 3,
@@ -21,11 +22,9 @@ const RETRY_CONFIG = {
   shouldRetry: (error: AxiosError, retryCount: number) => {
     if (retryCount <= 0) return false;
 
-    // Don't retry client errors (4xx) except for 429 (rate limit)
+    // Don't retry client errors (4xx). Rate limits are intentional back-pressure;
+    // retrying them here amplifies request bursts during UI toggles.
     if (error.response?.status && error.response.status >= 400 && error.response.status < 500) {
-      if (error.response.status === 429) {
-        return true;
-      }
       return false;
     }
 
@@ -42,7 +41,7 @@ const RETRY_CONFIG = {
     return false;
   }
 };
-};
+
 function emitMaintenance(payload: MaintenancePayload) {
   if (typeof window === "undefined") return;
   try {
