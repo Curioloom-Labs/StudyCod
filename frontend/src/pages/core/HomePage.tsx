@@ -6,7 +6,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { Logo } from "../../components/Logo";
 import type { User, Task } from "../../types";
-import { ArrowRight, FileText, GraduationCap, BookOpen, Users, TrendingUp, Clock as ClockIcon } from "lucide-react";
+import { ArrowRight, FileText, GraduationCap, BookOpen, Users, TrendingUp, Clock as ClockIcon, CheckCircle2, TimerReset, Layers3, Gauge, Sparkles } from "lucide-react";
 import { listTasks } from "../../lib/api/tasks";
 import { getClasses, getStudentLessons, getStudentGrades, type Class, type Lesson, type Grade, type SummaryGrade } from "../../lib/api/edu";
 import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezone";
@@ -164,7 +164,14 @@ export const HomePage: React.FC<Props> = ({
   const hasControlInAverage = useMemo(() => {
     return averageGradeData.items.some((it) => it.kind === "CONTROL");
   }, [averageGradeData.items]);
-
+  const personalStats = useMemo(() => {
+    const total = allTasks.length;
+    const done = allTasks.filter(task => task.status === "GRADED").length;
+    const review = allTasks.filter(task => task.status === "SUBMITTED").length;
+    const open = Math.max(0, total - done - review);
+    const progress = total > 0 ? Math.round(done / total * 100) : 0;
+    return { total, done, review, open, progress };
+  }, [allTasks]);
   const openResume = () => {
     const r = resolveResumeRoute(user, resume);
     if (r.type === "path") {
@@ -223,6 +230,9 @@ export const HomePage: React.FC<Props> = ({
     const days = Math.floor(hours / 24);
     return tr(`${days} дн тому`, `${days}d ago`);
   }, [resume, i18n.language]);
+  const sessionLabel = resumeMeta
+    ? tr(`Остання активність ${resumeMeta}`, `Last activity ${resumeMeta}`)
+    : tr("Готово до нової сесії", "Ready for a new session");
 
   const focusResumeActive = useMemo(() => {
     if (ui.mode !== "focus") return false;
@@ -344,30 +354,62 @@ export const HomePage: React.FC<Props> = ({
 
     return (
       <div className="p-4 md:p-8">
-        <div className="mx-auto w-full max-w-5xl space-y-4">
+        <div className="mx-auto w-full max-w-6xl space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-mono font-medium uppercase tracking-[0.04em] text-primary">
+                <Sparkles className="w-3.5 h-3.5" />
+                {tr("Momentum home", "Momentum home")}
+              </div>
+              <h1 className="mt-3 text-2xl md:text-3xl font-mono font-semibold text-text-primary">
+                {tr("Привіт", "Hello")}, {user.username}
+              </h1>
+              <p className="mt-1 text-sm font-mono text-text-secondary">{sessionLabel}</p>
+            </div>
+            <button
+              onClick={openResume}
+              className="inline-flex items-center justify-center gap-2 border border-border bg-bg-surface px-4 py-2 text-sm font-mono text-text-primary hover:border-primary/60 hover:bg-bg-hover transition-fast"
+            >
+              {tr("Продовжити останнє", "Resume last")}
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
           <div className="border border-border bg-bg-surface overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-              <div className="p-5 md:p-6 border-b lg:border-b-0 lg:border-r border-border">
-                <div className="text-xs font-mono font-medium tracking-[0.04em] uppercase text-text-secondary">{tr("Далі", "Next")}</div>
-                <div className="mt-2 text-lg font-mono font-semibold text-text-primary leading-[1.35]" title={nextTitle}>
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
+              <div className="p-5 md:p-7 border-b xl:border-b-0 xl:border-r border-border">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-mono font-medium tracking-[0.04em] uppercase text-text-secondary">{tr("Наступний крок", "Next step")}</div>
+                  <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-text-muted">
+                    <TimerReset className="w-3.5 h-3.5" />
+                    {eta}
+                  </div>
+                </div>
+                <div className="mt-4 text-xl md:text-2xl font-mono font-semibold text-text-primary leading-[1.3]" title={nextTitle}>
                   {loading ? tr("Завантаження…", "Loading…") : nextTitle}
                 </div>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
+                  {!isEducational
+                    ? tr("Відкрий задачу, продовж код і перевір рішення без зайвої навігації.", "Open a task, keep coding, and check the solution without extra navigation.")
+                    : isTeacher
+                      ? tr("Швидкий вхід у класи, перевірки та навчальний потік.", "Fast access to classes, reviews, and teaching flow.")
+                      : tr("Повернись до уроку або контрольної з мінімумом зайвих кроків.", "Return to a lesson or control work with minimal friction.")}
+                </p>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-mono text-text-muted">
-                  <span>{eta}</span>
-                  <span className="text-border">•</span>
-                  <span>{tr("Сесія", "Session")}: {resumeTitle}</span>
-                  {resumeMeta ? <><span className="text-border">•</span><span>{tr("Оновлено", "Updated")}: {resumeMeta}</span></> : null}
-                </div>
-
-                <div className="mt-5">
+                <div className="mt-5 flex flex-wrap items-center gap-2">
                   <button
                     onClick={openNext}
                     disabled={loading}
-                    className="px-4 py-2 text-sm font-mono border border-primary bg-primary/10 text-primary hover:bg-primary/15 transition-fast disabled:opacity-50 inline-flex items-center gap-2"
+                    className="px-4 py-2 text-sm font-mono border border-primary bg-primary text-bg-base hover:opacity-90 transition-fast disabled:opacity-50 inline-flex items-center gap-2"
                   >
-                    {tr("Відкрити", "Open")}
+                    {tr("Відкрити далі", "Open next")}
                     <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={openResume}
+                    className="px-4 py-2 text-sm font-mono border border-border bg-bg-base text-text-secondary hover:text-text-primary hover:border-primary/50 transition-fast inline-flex items-center gap-2"
+                  >
+                    {tr("Остання сесія", "Last session")}
                   </button>
                 </div>
               </div>
@@ -375,14 +417,9 @@ export const HomePage: React.FC<Props> = ({
               <div>
                 <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
                   <div className="text-xs font-mono font-medium tracking-[0.04em] uppercase text-text-secondary">{queueTitle}</div>
-                  <button
-                    onClick={openNext}
-                    className="text-xs font-mono font-medium border border-border px-2 py-1 hover:bg-bg-hover transition-fast"
-                  >
-                    {tr("Відкрити далі", "Open next")}
-                  </button>
+                  <div className="text-[11px] font-mono text-text-muted">{tr("до 20 елементів", "up to 20 items")}</div>
                 </div>
-                <div className="max-h-[280px] overflow-y-auto">
+                <div className="max-h-[320px] overflow-y-auto">
                   {queueBody}
                 </div>
               </div>
@@ -390,30 +427,11 @@ export const HomePage: React.FC<Props> = ({
           </div>
 
           <div className={`grid gap-3 ${isStudent && (!hasControlInAverage || averageGrade === null) ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"}`}>
-            <div className="border border-border bg-bg-surface px-3 py-2.5">
-              <div className="text-[11px] font-mono text-text-secondary">{tr("Роль", "Role")}</div>
-              <div className="mt-1 text-sm font-mono text-text-primary truncate">
-                {user.role === "SYSTEM_ADMIN" ? "Admin" : isTeacher ? tr("Вчитель", "Teacher") : isStudent ? tr("Учень", "Student") : tr("Персональний", "Personal")}
-              </div>
-            </div>
-
-            <div className="border border-border bg-bg-surface px-3 py-2.5">
-              <div className="text-[11px] font-mono text-text-secondary">{tr("Активне", "Active")}</div>
-              <div className="mt-1 text-sm font-mono text-text-primary">
-                {!isEducational ? allTasks.length : isTeacher ? classes.length : activeLessons}
-              </div>
-            </div>
-
-            <div className="border border-border bg-bg-surface px-3 py-2.5">
-              <div className="text-[11px] font-mono text-text-secondary">{tr("Остання сесія", "Last session")}</div>
-              <div className="mt-1 text-sm font-mono text-text-primary truncate">{resumeMeta ?? tr("щойно", "just now")}</div>
-            </div>
-
+            <MetricTile icon={Gauge} label={tr("Роль", "Role")} value={user.role === "SYSTEM_ADMIN" ? "Admin" : isTeacher ? tr("Вчитель", "Teacher") : isStudent ? tr("Учень", "Student") : tr("Personal", "Personal")} />
+            <MetricTile icon={Layers3} label={tr("Активне", "Active")} value={!isEducational ? String(personalStats.open) : isTeacher ? String(classes.length) : String(activeLessons)} />
+            <MetricTile icon={CheckCircle2} label={tr("Готово", "Done")} value={!isEducational ? `${personalStats.done}/${personalStats.total || 0}` : resumeMeta ?? tr("щойно", "just now")} />
             {!(isStudent && (!hasControlInAverage || averageGrade === null)) ? (
-              <div className="border border-border bg-bg-surface px-3 py-2.5">
-                <div className="text-[11px] font-mono text-text-secondary">{tr("Середній бал", "Average")}</div>
-                <div className="mt-1 text-sm font-mono text-text-primary">{averageGrade !== null ? averageGrade.toFixed(1) : "—"}</div>
-              </div>
+              <MetricTile icon={TrendingUp} label={isStudent ? tr("Середній бал", "Average") : tr("Прогрес", "Progress")} value={isStudent && averageGrade !== null ? averageGrade.toFixed(1) : `${personalStats.progress}%`} />
             ) : null}
           </div>
         </div>
@@ -543,6 +561,22 @@ export const HomePage: React.FC<Props> = ({
                 </div>
             </div>
         </div>;
+};
+
+const MetricTile: React.FC<{
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}> = ({ icon: Icon, label, value }) => {
+  return (
+    <div className="border border-border bg-bg-surface px-3 py-3 min-h-[76px]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[11px] font-mono text-text-secondary truncate">{label}</div>
+        <Icon className="w-4 h-4 text-primary shrink-0" />
+      </div>
+      <div className="mt-2 text-base font-mono text-text-primary truncate">{value}</div>
+    </div>
+  );
 };
 
 const QueueTasks: React.FC<{

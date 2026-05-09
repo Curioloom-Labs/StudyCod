@@ -896,7 +896,7 @@ const AppContent: React.FC = React.memo(() => {
         return;
       }
       if (target === "continue") {
-        handleGoHomeOrResume();
+        handleGoHome();
         return;
       }
       if (target === "lessons") {
