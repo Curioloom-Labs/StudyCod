@@ -16,6 +16,7 @@ import {
 } from "../../lib/api/admin";
 import { Mail, RefreshCcw, Send, Trash2, CheckCircle2, Circle } from "lucide-react";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { toast } from "../../lib/toast";
 const getApiErrorMessage = (error: unknown): string | null => {
   const message = getErrorMessageFromUnknown(error, "");
   return message || null;
@@ -130,7 +131,7 @@ export const AdminMailWorkspace: React.FC = () => {
   const send = async () => {
     const to = parseEmails(composeTo);
     if (!to.length || !composeSubject.trim()) {
-      alert("To + Subject are required");
+      toast.error("To + Subject are required");
       return;
     }
     setSending(true);
@@ -149,9 +150,9 @@ export const AdminMailWorkspace: React.FC = () => {
       setComposeSubject("");
       setComposeText("");
       await loadMessages(activeFolder);
-      alert("Message sent");
+      toast.success("Message sent");
     } catch (e: unknown) {
-      alert(getApiErrorMessage(e) || "Failed to send");
+      toast.error(getApiErrorMessage(e) || "Failed to send");
     } finally {
       setSending(false);
     }

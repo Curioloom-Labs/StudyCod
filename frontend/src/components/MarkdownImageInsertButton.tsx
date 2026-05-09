@@ -4,6 +4,7 @@ import { ImagePlus } from "lucide-react";
 import { Button } from "./ui/Button";
 import { uploadStatementImage } from "../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../lib/safeError";
+import { toast } from "../lib/toast";
 const getApiErrorMessage = (error: unknown): string | null => {
   const message = getErrorMessageFromUnknown(error, "");
   return message || null;
@@ -69,11 +70,11 @@ export const MarkdownImageInsertButton: React.FC<MarkdownImageInsertButtonProps>
     } catch (error: unknown) {
       const message = getApiErrorMessage(error);
       if (message === "UNSUPPORTED_IMAGE_TYPE") {
-        alert(tr("Підтримуються лише PNG, JPG, WEBP, GIF, AVIF", "Only PNG, JPG, WEBP, GIF, AVIF are supported"));
+        toast.error(tr("Підтримуються лише PNG, JPG, WEBP, GIF, AVIF", "Only PNG, JPG, WEBP, GIF, AVIF are supported"));
       } else if (message === "IMAGE_TOO_LARGE") {
-        alert(tr("Зображення завелике (максимум 8MB)", "Image is too large (maximum 8MB)"));
+        toast.error(tr("Зображення завелике (максимум 8MB)", "Image is too large (maximum 8MB)"));
       } else {
-        alert(tr("Не вдалося завантажити зображення", "Failed to upload image"));
+        toast.error(tr("Не вдалося завантажити зображення", "Failed to upload image"));
       }
     } finally {
       setUploading(false);

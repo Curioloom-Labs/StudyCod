@@ -291,11 +291,11 @@ export const IadPage: React.FC = () => {
         </div>
 
         {loading ? (
-          <Card className="p-6 text-sm text-text-secondary">{tr("Завантаження...", "Loading...")}</Card>
+          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Завантаження...", "Loading...")}</Card>
         ) : error ? (
-          <Card className="p-6 text-sm text-accent-error">{error}</Card>
+          <Card className="p-4 sm:p-6 text-sm text-accent-error">{error}</Card>
         ) : !details ? (
-          <Card className="p-6 text-sm text-text-secondary">{tr("Дані недоступні", "Data unavailable")}</Card>
+          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Дані недоступні", "Data unavailable")}</Card>
         ) : (
           <>
             <Card className="p-5 border border-border/70 bg-bg-surface/80">

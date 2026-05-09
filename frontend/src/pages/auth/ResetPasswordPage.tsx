@@ -56,9 +56,7 @@ export const ResetPasswordPage: React.FC = () => {
       setLoading(false);
     }
   };
-  return <div className="min-h-screen flex items-center justify-center bg-bg-base" style={{
-    minWidth: "1280px"
-  }}>
+  return <div className="min-h-screen flex items-center justify-center bg-bg-base px-4 py-6">
       <div className="w-full max-w-md bg-bg-surface border border-border p-8">
         <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 border border-primary flex items-center justify-center font-mono text-xl text-primary">

@@ -585,7 +585,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-6">
         <Card className="p-4">
           <Skeleton className="h-8 w-2/3 mb-3" />
           <Skeleton className="h-4 w-full mb-2" />
@@ -598,7 +598,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   if (error && !statement) {
     return (
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-6">
         <Card className="p-4 text-sm text-accent-error">{error}</Card>
       </div>
     );
@@ -607,14 +607,14 @@ export const ContestProblemSolvePage: React.FC = () => {
   if (!statement) return null;
 
   return (
-    <div className="p-3 space-y-2">
-      <div className="flex items-center justify-between gap-2 px-1">
-        <Button variant="ghost" onClick={() => navigate(`/contests/${contestId ?? ""}`)}>
+    <div className="p-2 sm:p-3 space-y-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+        <Button variant="ghost" onClick={() => navigate(`/contests/${contestId ?? ""}`)} className="w-full sm:w-auto">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to contest
         </Button>
 
-        <div className="text-xs text-text-secondary">
+        <div className="text-xs text-text-secondary w-full sm:w-auto">
           {error ? <span className="text-accent-error">{error}</span> : null}
           {subsLoading ? <span className="ml-3">Syncing submissions...</span> : null}
         </div>

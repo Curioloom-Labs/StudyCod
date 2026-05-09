@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColum
 import { User } from "./User";
 import { Student } from "./Student";
 import { EduLesson } from "./EduLesson";
+import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
 export type ClassLanguage = "JAVA" | "PYTHON" | "CPP";
 @Entity("classes")
 export class Class {
@@ -21,6 +22,13 @@ export class Class {
     enum: ["JAVA", "PYTHON", "CPP"]
   })
   language!: ClassLanguage;
+  @Column({
+    type: "enum",
+    enum: GRADING_SYSTEMS,
+    name: "grading_system",
+    default: DEFAULT_GRADING_SYSTEM
+  })
+  gradingSystem!: GradingSystem;
   @OneToMany(() => Student, s => s.class)
   students!: Student[];
   @OneToMany(() => EduLesson, l => l.class)

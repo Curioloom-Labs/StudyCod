@@ -1469,7 +1469,7 @@ export const TaskLibraryPage: React.FC = () => {
   const allVisibleDraftsSelected = visibleDraftTasks.length > 0 && selectedVisibleDraftCount === visibleDraftTasks.length;
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
           <div className="flex items-center gap-3">
@@ -1497,7 +1497,7 @@ export const TaskLibraryPage: React.FC = () => {
                 </Button>
               ) : null}
 
-              <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="ml-0 flex w-full flex-wrap items-center gap-2 md:ml-auto md:w-auto">
                 <Badge color="info">
                   {tr("Показано", "Shown")}: {visibleTasks.length}
                 </Badge>
@@ -1520,7 +1520,7 @@ export const TaskLibraryPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Filters */}
           <Card className="p-4 lg:col-span-3 lg:sticky lg:top-4 lg:self-start">
-            <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm font-mono text-text-primary flex items-center gap-2">
                 {tr("Фільтри", "Filters")}
                 <button
@@ -1954,6 +1954,7 @@ export const TaskLibraryPage: React.FC = () => {
                               }}
                               title={isFav ? tr("Прибрати з обраного", "Remove from favorites") : tr("Додати в обране", "Add to favorites")}
                               aria-pressed={isFav}
+                              aria-label={isFav ? tr("Прибрати з обраного", "Remove from favorites") : tr("Додати в обране", "Add to favorites")}
                             >
                               <Star className={"w-4 h-4 " + (isFav ? "text-accent-warn" : "text-text-secondary")} fill={isFav ? "currentColor" : "none"} />
                             </Button>
@@ -1966,6 +1967,7 @@ export const TaskLibraryPage: React.FC = () => {
                                 handleDownload(task.id);
                               }}
                               title={tr("Експортувати архів", "Export archive")}
+                              aria-label={tr("Експортувати архів", "Export archive")}
                             >
                               <Download className="w-4 h-4" />
                             </Button>

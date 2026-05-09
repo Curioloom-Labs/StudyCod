@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { Award, Flame, Medal, Sparkles, Trophy, History, Star, Shield, Crown, Rocket, Gem } from "lucide-react";
+import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles } from "lucide-react";
 import type { User, CourseLanguage, Grade, PublicProfilePrivacy } from "../../types";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { getEmailSubscription, updateEmailSubscription, updateProfile } from "../../lib/api/profile";
+import { prepareGoogleLinkSession } from "../../lib/api/auth";
 import { listGrades } from "../../lib/api/grades";
 import { listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem } from "../../lib/api/library";
 import { useUIMode } from "../../components/interface/UIModeProvider";
@@ -32,7 +33,6 @@ type BadgeMeta = {
   flavorUk: string;
   flavorEn: string;
   Icon: React.ComponentType<{ className?: string }>;
-  unlockedTone: string;
 };
 
 type BadgeRarityMeta = {
@@ -57,7 +57,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Початок серії перемог",
     flavorEn: "The beginning of your streak",
     Icon: Star,
-    unlockedTone: "from-accent-success/25 via-primary/10 to-transparent",
   },
   50: {
     nameUk: "Стабільний ритм",
@@ -65,7 +64,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Рухаємось без зупинок",
     flavorEn: "Consistent and unstoppable",
     Icon: Shield,
-    unlockedTone: "from-secondary/25 via-accent-info/10 to-transparent",
   },
   100: {
     nameUk: "Сотка",
@@ -73,7 +71,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Потужний рубіж досягнуто",
     flavorEn: "A major milestone unlocked",
     Icon: Medal,
-    unlockedTone: "from-accent-info/25 via-secondary/10 to-transparent",
   },
   250: {
     nameUk: "Майстер",
@@ -81,7 +78,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Твоя форма вже еталон",
     flavorEn: "Your form is now elite",
     Icon: Crown,
-    unlockedTone: "from-primary/25 via-secondary/10 to-transparent",
   },
   500: {
     nameUk: "Легенда",
@@ -89,7 +85,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Півтисячі — це серйозно",
     flavorEn: "500 solved — serious level",
     Icon: Rocket,
-    unlockedTone: "from-accent-warning/25 via-accent-warn/10 to-transparent",
   },
   1000: {
     nameUk: "Космічний рівень",
@@ -97,7 +92,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "1000+ — режим боса",
     flavorEn: "1000+ solved — boss mode",
     Icon: Gem,
-    unlockedTone: "from-accent-error/25 via-accent-warning/10 to-transparent",
   },
 };
 
@@ -132,19 +126,10 @@ const ProgressBadge: React.FC<{ milestone: BadgeMilestone; solvedCount: number; 
       className={
         "group rounded-2xl border p-3 transition-fast relative overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary/60 " +
         (unlocked
-          ? `border-primary/60 bg-gradient-to-br ${meta.unlockedTone} shadow-[0_0_28px_rgba(16,185,129,0.16)]`
+          ? "border-primary/60 bg-bg-surface/80"
           : "border-border bg-bg-base/70 opacity-70")
       }
     >
-      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_45%)]" />
-
-      {unlocked ? (
-        <>
-          <Sparkles className="pointer-events-none absolute left-2 top-2 w-3 h-3 text-primary/80 opacity-75 group-hover:opacity-100 transition-fast" />
-          <Sparkles className="pointer-events-none absolute right-3 bottom-3 w-2.5 h-2.5 text-primary/70 opacity-60 animate-pulse" />
-        </>
-      ) : null}
-
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="inline-flex items-center gap-1 text-xs font-mono text-text-secondary">
           <Icon className={`w-3.5 h-3.5 ${unlocked ? "text-primary" : "text-text-muted"}`} />
@@ -163,11 +148,10 @@ const ProgressBadge: React.FC<{ milestone: BadgeMilestone; solvedCount: number; 
         className={
           "mx-auto relative w-14 h-14 rounded-full border flex items-center justify-center text-lg font-mono " +
           (unlocked
-            ? "border-primary/60 text-primary bg-primary/10 shadow-[0_0_24px_rgba(16,185,129,0.2)]"
+            ? "border-primary/60 text-primary bg-primary/10"
             : "border-border text-text-muted bg-bg-surface")
         }
       >
-        {unlocked ? <span className="absolute -inset-1 rounded-full border border-primary/35 animate-pulse" /> : null}
         <Icon className="w-6 h-6 relative z-[1]" />
       </div>
 
@@ -253,6 +237,12 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   }, []);
 
   const loadGrades = useCallback(async () => {
+    if (isEducational) {
+      setGrades([]);
+      setGradesLoading(false);
+      return;
+    }
+
     setGradesLoading(true);
     try {
       const data = await listGrades();
@@ -262,7 +252,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     } finally {
       setGradesLoading(false);
     }
-  }, []);
+  }, [isEducational]);
 
   const loadLibraryTasks = useCallback(async (nextCourse: CourseLanguage) => {
     setLibraryLoading(true);
@@ -327,7 +317,8 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     return { librarySolved, badgesUnlocked, totalGrades, avgGrade, excellent };
   }, [solvedLibraryTasks, validGrades]);
 
-  const currentIad = Number(user.iad ?? user.difus ?? 0);
+  const legacyIad = (user as User & { iad?: number | null }).iad;
+  const currentIad = Number(legacyIad ?? user.difus ?? 0);
 
   const recentHistory = useMemo(() => {
     return [...solvedLibraryTasks]
@@ -504,7 +495,11 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                   </div>
                 </div>
               </div>
-              {profileStats.totalGrades === 0 ? (
+              {isEducational && isStudent ? (
+                <div className="mt-2 text-[11px] text-text-secondary">
+                  {tr("Оцінки в EDU дивись у розділі «Мій журнал».", "In EDU, check your grades in “My Journal”.")}
+                </div>
+              ) : profileStats.totalGrades === 0 ? (
                 <div className="mt-2 text-[11px] text-text-secondary">
                   {tr("Середній бал показується після появи навчальних оцінок.", "Average is shown once learning grades are available.")}
                 </div>
@@ -512,7 +507,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
             </Card>
           </div>
 
-          <Card className="p-5 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+          <Card className="p-5 border border-border/70 bg-bg-surface/80">
             <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
               <Award className="w-4 h-4 text-primary" />
               {tr("Бейджі прогресу", "Progress badges")}
@@ -732,10 +727,22 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 <div className="space-y-3">
                   <h3 className="text-sm font-mono text-text-primary">{t("googleConnection")}</h3>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setLinkingGoogle(true);
-                      const base = import.meta.env.VITE_API_URL || window.location.origin;
-                      window.location.href = `${base}/auth/google?link=true`;
+                      try {
+                        await prepareGoogleLinkSession();
+                        const base = import.meta.env.VITE_API_URL || window.location.origin;
+                        window.location.href = `${base}/auth/google?link=true`;
+                      } catch (e: unknown) {
+                        setLinkingGoogle(false);
+                        showToast({
+                          type: "error",
+                          message: getErrorMessageFromUnknown(
+                            e,
+                            tr("Не вдалося підготувати підключення Google.", "Failed to prepare Google linking.")
+                          )
+                        });
+                      }
                     }}
                     disabled={linkingGoogle}
                     className="w-full flex items-center justify-center gap-2 border border-border bg-bg-code hover:bg-bg-hover px-4 py-2 text-sm font-mono text-text-primary transition-fast disabled:opacity-50"
@@ -756,7 +763,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
               ) : null}
             </Card>
 
-            <Card className="p-5 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+            <Card className="p-5 border border-border/70 bg-bg-surface/80">
               <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
                 <History className="w-4 h-4 text-primary" />
                 {tr("Історія виконаних задач", "Solved tasks history")}

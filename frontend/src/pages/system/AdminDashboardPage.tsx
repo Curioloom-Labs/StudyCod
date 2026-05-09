@@ -7,7 +7,7 @@ import { createCertificateTemplate, getCertificateTemplateById, listCertificateT
 import { AdminMailWorkspace } from "../../components/admin/AdminMailWorkspace";
 import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
-import { getAdminUsers, getAdminUser, createAdminUser, updateAdminUser, updateUserRole, deleteAdminUser, getAdminClasses, createAdminClass, updateAdminClass, deleteAdminClass, getAdminStats, getAdminSupportTickets, replyAdminSupportTicket, getAdminMaintenance, enableAdminMaintenance, disableAdminMaintenance, getAdminSupportConversations, getAdminSupportConversation, postAdminSupportConversationMessage, getAdminLibraryTasks, approveAdminLibraryTask, rejectAdminLibraryTask, getAdminMaterialTopics, getAdminMaterialsDiagnostics, createAdminMaterialTopic, updateAdminMaterialTopic, deleteAdminMaterialTopic, reorderAdminMaterialTopics, importAdminMaterialTopicsYaml, syncAdminMaterialTopicsFromRepo, importAdminMaterialTopicsLegacy, exportAdminMaterialTopicsYaml, sendAdminBroadcastEmail, type AdminBroadcastDryRunResult, type AdminBroadcastSendResult, getAdminTheoryBlockRevisions, getAdminTheoryBlockRevision, rollbackAdminTheoryBlockRevision, translateAdminTheoryBlockToEn, type AdminTheoryBlockRevision, type MaintenanceState, type AdminUser, type AdminClass, type AdminStats, type AdminSupportTicket, type CreateUserData, type UpdateUserData, type CreateClassData, type AdminSupportChatConversation, type AdminSupportChatMessage, type AdminLibraryTask, type AdminLibraryTaskStatus, type AdminMaterialTopic, type AdminMaterialsDiagnostics, type AdminMaterialsLanguage } from "../../lib/api/admin";
+import { getAdminUsers, getAdminUser, createAdminUser, updateAdminUser, updateUserRole, deleteAdminUser, getAdminClasses, createAdminClass, updateAdminClass, deleteAdminClass, getAdminStats, getAdminJudgeLoad, getAdminJudgeDeadLetter, replayAdminJudgeDeadLetter, getAdminSupportTickets, replyAdminSupportTicket, getAdminMaintenance, enableAdminMaintenance, disableAdminMaintenance, getAdminSupportConversations, getAdminSupportConversation, postAdminSupportConversationMessage, getAdminLibraryTasks, approveAdminLibraryTask, rejectAdminLibraryTask, getAdminMaterialTopics, getAdminMaterialsDiagnostics, createAdminMaterialTopic, updateAdminMaterialTopic, deleteAdminMaterialTopic, reorderAdminMaterialTopics, importAdminMaterialTopicsYaml, syncAdminMaterialTopicsFromRepo, importAdminMaterialTopicsLegacy, exportAdminMaterialTopicsYaml, sendAdminBroadcastEmail, type AdminBroadcastDryRunResult, type AdminBroadcastSendResult, getAdminTheoryBlockRevisions, getAdminTheoryBlockRevision, rollbackAdminTheoryBlockRevision, translateAdminTheoryBlockToEn, type AdminTheoryBlockRevision, type MaintenanceState, type AdminUser, type AdminClass, type AdminStats, type AdminJudgeLoad, type AdminJudgeDeadLetterItem, type AdminJudgeDeadLetterReplayResult, type AdminSupportTicket, type CreateUserData, type UpdateUserData, type CreateClassData, type AdminSupportChatConversation, type AdminSupportChatMessage, type AdminLibraryTask, type AdminLibraryTaskStatus, type AdminMaterialTopic, type AdminMaterialsDiagnostics, type AdminMaterialsLanguage } from "../../lib/api/admin";
 import { downloadSupportChatAttachment } from "../../lib/api/support";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
@@ -103,12 +103,12 @@ const parseUserMode = (value: string): UserMode | null => {
 };
 
 const parseUserLanguage = (value: string): UserLanguage | null => {
-  if (value === "JAVA" || value === "PYTHON") return value;
+  if (value === "JAVA" || value === "PYTHON" || value === "CPP") return value;
   return null;
 };
 
 const parseClassLanguage = (value: string): ClassLanguage | null => {
-  if (value === "JAVA" || value === "PYTHON") return value;
+  if (value === "JAVA" || value === "PYTHON" || value === "CPP") return value;
   return null;
 };
 
@@ -1272,6 +1272,13 @@ export const AdminDashboardPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("stats");
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [judgeLoad, setJudgeLoad] = useState<AdminJudgeLoad | null>(null);
+  const [judgeDeadLetterItems, setJudgeDeadLetterItems] = useState<AdminJudgeDeadLetterItem[]>([]);
+  const [judgeDeadLetterTotal, setJudgeDeadLetterTotal] = useState(0);
+  const [judgeDeadLetterLimit, setJudgeDeadLetterLimit] = useState("20");
+  const [judgeDeadLetterLoading, setJudgeDeadLetterLoading] = useState(false);
+  const [judgeDeadLetterReplaying, setJudgeDeadLetterReplaying] = useState(false);
+  const [judgeDeadLetterLastReplay, setJudgeDeadLetterLastReplay] = useState<AdminJudgeDeadLetterReplayResult | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersPage, setUsersPage] = useState(1);
   const [usersTotal, setUsersTotal] = useState(0);
@@ -1638,6 +1645,68 @@ export const AdminDashboardPage: React.FC = () => {
       window.clearTimeout(timer);
     };
   }, [activeTab, materialsSelectedTopic?.id, materialDraft?.theoryTitle, materialDraft?.theoryContent, materialsTheoryDirty, materialsSaving, materialsReordering]);
+
+  const parseJudgeDeadLetterLimit = (max = 200): number => {
+    const parsed = Number.parseInt(judgeDeadLetterLimit, 10);
+    if (!Number.isFinite(parsed)) return 20;
+    return Math.max(1, Math.min(max, parsed));
+  };
+
+  const refreshJudgeDeadLetter = async (silent = false) => {
+    const limit = parseJudgeDeadLetterLimit(200);
+    if (!silent) setJudgeDeadLetterLoading(true);
+    try {
+      const data = await getAdminJudgeDeadLetter({ limit });
+      setJudgeDeadLetterItems(data.items || []);
+      setJudgeDeadLetterTotal(Number.isFinite(data.total) ? data.total : (data.items || []).length);
+    } catch (error: unknown) {
+      if (!silent) {
+        showToast({ type: "error", message: getErrorMessage(error, "Failed to load dead-letter queue") });
+      }
+    } finally {
+      if (!silent) setJudgeDeadLetterLoading(false);
+    }
+  };
+
+  const handleReplayJudgeDeadLetter = async () => {
+    const limit = parseJudgeDeadLetterLimit(500);
+    setJudgeDeadLetterReplaying(true);
+    try {
+      const replay = await replayAdminJudgeDeadLetter({ limit });
+      setJudgeDeadLetterLastReplay(replay);
+
+      const [latestLoad, latestDeadLetter] = await Promise.all([
+        getAdminJudgeLoad().catch(() => null),
+        getAdminJudgeDeadLetter({ limit: parseJudgeDeadLetterLimit(200) }).catch(() => null)
+      ]);
+
+      if (latestLoad) {
+        setJudgeLoad(latestLoad);
+      }
+
+      if (latestDeadLetter) {
+        setJudgeDeadLetterItems(latestDeadLetter.items || []);
+        setJudgeDeadLetterTotal(Number.isFinite(latestDeadLetter.total) ? latestDeadLetter.total : (latestDeadLetter.items || []).length);
+      }
+
+      if (replay.mode !== "distributed") {
+        showToast({
+          type: "info",
+          message: "Dead-letter replay is available only in distributed queue mode"
+        });
+      } else {
+        showToast({
+          type: replay.moved > 0 ? "success" : "info",
+          message: `DLQ replay: moved=${replay.moved}, skipped=${replay.skipped}, remaining=${replay.remaining}`
+        });
+      }
+    } catch (error: unknown) {
+      showToast({ type: "error", message: getErrorMessage(error, "Failed to replay dead-letter jobs") });
+    } finally {
+      setJudgeDeadLetterReplaying(false);
+    }
+  };
+
   const loadTeachers = async () => {
     try {
       const teachersData = await getAdminUsers({
@@ -1647,14 +1716,27 @@ export const AdminDashboardPage: React.FC = () => {
       setTeachers(teachersData.users);
     } catch (error) {
       console.error("Failed to load teachers:", error);
+      showToast({ type: "error", message: getErrorMessage(error, "Failed to load teachers") });
     }
   };
   const loadData = async () => {
     setLoading(true);
     try {
       if (activeTab === "stats") {
-        const statsData = await getAdminStats();
+        const deadLetterLimit = parseJudgeDeadLetterLimit(200);
+        const [statsData, judgeLoadData, deadLetterData] = await Promise.all([
+          getAdminStats(),
+          getAdminJudgeLoad().catch(() => null),
+          getAdminJudgeDeadLetter({ limit: deadLetterLimit }).catch(() => null)
+        ]);
         setStats(statsData);
+        setJudgeLoad(judgeLoadData);
+        setJudgeDeadLetterItems(deadLetterData?.items || []);
+        setJudgeDeadLetterTotal(
+          Number.isFinite(deadLetterData?.total ?? NaN)
+            ? Number(deadLetterData?.total)
+            : (deadLetterData?.items || []).length
+        );
       } else if (activeTab === "users") {
         const usersData = await getAdminUsers({
           page: usersPage,
@@ -1736,6 +1818,11 @@ export const AdminDashboardPage: React.FC = () => {
           message: "Access denied. Only SYSTEM_ADMIN can access this page."
         });
         navigate("/");
+      } else {
+        showToast({
+          type: "error",
+          message: getErrorMessage(error, "Failed to load admin data")
+        });
       }
     } finally {
       setLoading(false);
@@ -3260,17 +3347,22 @@ export const AdminDashboardPage: React.FC = () => {
   }
   return <div className="h-full flex flex-col bg-bg-base">
       {}
-      <div className="border-b border-border p-4 bg-bg-secondary">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border p-3 sm:p-4 bg-bg-secondary">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-mono font-bold text-text-primary flex items-center gap-2">
             <Shield className="w-6 h-6" />
             Admin Panel
           </h1>
+          <Button variant="secondary" onClick={() => navigate("/?app=home")}>
+            {t("toHome", {
+              defaultValue: "Exit admin panel"
+            })}
+          </Button>
         </div>
       </div>
 
       {}
-      <div className="flex gap-2 p-4 border-b border-border bg-bg-secondary">
+      <div className="flex gap-2 p-3 sm:p-4 border-b border-border bg-bg-secondary overflow-x-auto whitespace-nowrap">
         <Button variant={activeTab === "stats" ? "primary" : "secondary"} onClick={() => setActiveTab("stats")} className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4" />
           Statistics
@@ -3321,7 +3413,7 @@ export const AdminDashboardPage: React.FC = () => {
       </div>
 
       {}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-3 sm:p-4">
         {}
         {activeTab === "stats" && stats && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Card className="p-4">
@@ -3366,16 +3458,126 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
               <p className="text-3xl font-bold text-text-primary">{stats.classes.total}</p>
             </Card>
+
+            <Card className="p-4 md:col-span-2 lg:col-span-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-mono font-semibold text-text-primary">Judge Queue Load</h3>
+                <BarChart3 className="w-5 h-5 text-text-secondary" />
+              </div>
+
+              {!judgeLoad ? (
+                <p className="text-sm text-text-secondary">No judge metrics available right now.</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-xs text-text-muted">
+                    mode=<span className="text-text-primary font-mono">{judgeLoad.mode}</span> · sampled at {new Date(judgeLoad.sampledAt).toLocaleString()}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">Active</div>
+                      <div className="text-lg font-mono text-text-primary">{judgeLoad.active}</div>
+                    </div>
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">Queued</div>
+                      <div className="text-lg font-mono text-text-primary">{judgeLoad.queued}</div>
+                    </div>
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">Peak active</div>
+                      <div className="text-lg font-mono text-text-primary">{judgeLoad.peakActive}</div>
+                    </div>
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">Peak queue</div>
+                      <div className="text-lg font-mono text-text-primary">{judgeLoad.peakQueueLength}</div>
+                    </div>
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">Avg exec</div>
+                      <div className="text-lg font-mono text-text-primary">{judgeLoad.avgExecutionTimeMs}ms</div>
+                    </div>
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">Avg wait</div>
+                      <div className="text-lg font-mono text-text-primary">{judgeLoad.avgQueueWaitTimeMs}ms</div>
+                    </div>
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">DLQ size</div>
+                      <div className="text-lg font-mono text-accent-warning">{judgeLoad.deadLetterQueueLength}</div>
+                    </div>
+                    <div className="border border-border p-2 bg-bg-surface">
+                      <div className="text-[11px] text-text-muted">Retry cap</div>
+                      <div className="text-lg font-mono text-text-primary">{judgeLoad.maxRetries}</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-text-secondary">
+                    started={judgeLoad.started} · completed={judgeLoad.totalCompleted} · rejected={judgeLoad.totalRejectedQueueFull} · requeued={judgeLoad.totalRequeuedExpired} · dead-lettered={judgeLoad.totalDeadLettered} · limits {judgeLoad.maxConcurrent}/{judgeLoad.maxQueueSize}
+                  </div>
+
+                  <div className="pt-2 border-t border-border space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="text-xs font-mono text-text-primary">
+                        Dead-letter operations · total={judgeDeadLetterTotal}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={500}
+                          value={judgeDeadLetterLimit}
+                          onChange={e => setJudgeDeadLetterLimit(e.target.value)}
+                          className="w-24"
+                        />
+                        <Button variant="secondary" onClick={() => void refreshJudgeDeadLetter()} disabled={judgeDeadLetterLoading}>
+                          {judgeDeadLetterLoading ? "Refreshing..." : "Refresh DLQ"}
+                        </Button>
+                        <Button onClick={() => void handleReplayJudgeDeadLetter()} disabled={judgeDeadLetterReplaying || judgeLoad.mode !== "distributed"}>
+                          {judgeDeadLetterReplaying ? "Replaying..." : "Replay DLQ"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {judgeDeadLetterLastReplay ? (
+                      <div className="text-xs text-text-secondary">
+                        last replay: moved={judgeDeadLetterLastReplay.moved} · skipped={judgeDeadLetterLastReplay.skipped} · remaining={judgeDeadLetterLastReplay.remaining} · queued={judgeDeadLetterLastReplay.queued}
+                      </div>
+                    ) : null}
+
+                    <div className="max-h-52 overflow-y-auto border border-border bg-bg-base">
+                      {judgeDeadLetterItems.length === 0 ? (
+                        <div className="p-3 text-xs text-text-secondary">No dead-letter jobs.</div>
+                      ) : (
+                        <div className="divide-y divide-border">
+                          {judgeDeadLetterItems.map(item => (
+                            <div key={item.jobId} className="p-2 text-xs font-mono space-y-1">
+                              <div className="flex flex-wrap items-center gap-2 text-text-primary">
+                                <span>job={item.jobId}</span>
+                                {item.submissionId ? <span>submission={item.submissionId}</span> : null}
+                                <span>state={item.state || "unknown"}</span>
+                                <span>attempts={item.attempts}</span>
+                              </div>
+                              <div className="text-text-muted">
+                                updated={item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "—"}
+                                {item.finishedAt ? ` · finished=${new Date(item.finishedAt).toLocaleString()}` : ""}
+                              </div>
+                              {item.error ? (
+                                <div className="text-accent-warning break-words">error={String(item.error).slice(0, 220)}</div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>}
 
         {}
         {activeTab === "users" && <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-secondary" />
                 <Input type="text" placeholder="Search users (name, email, ID)..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <select value={usersFilter.role || ""} onChange={e => setUsersFilter({
               ...usersFilter,
               role: e.target.value || undefined
@@ -3402,21 +3604,22 @@ export const AdminDashboardPage: React.FC = () => {
 
             <Card className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="min-w-[640px] md:min-w-[760px] w-full">
+                  <caption className="sr-only">User management table</caption>
                   <thead className="bg-bg-secondary border-b border-border">
                     <tr>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">ID</th>
+                      <th className="hidden md:table-cell px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">ID</th>
                       <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Username</th>
                       <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Email</th>
                       <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Role</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Mode</th>
-                      <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Language</th>
+                      <th className="hidden lg:table-cell px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Mode</th>
+                      <th className="hidden xl:table-cell px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Language</th>
                       <th className="px-4 py-2 text-left text-sm font-mono font-semibold text-text-primary">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredUsers.map(user => <tr key={user.id} className="border-b border-border hover:bg-bg-secondary transition-fast">
-                        <td className="px-4 py-2 text-sm text-text-primary font-mono">{user.id}</td>
+                        <td className="hidden md:table-cell px-4 py-2 text-sm text-text-primary font-mono">{user.id}</td>
                         <td className="px-4 py-2 text-sm text-text-primary">{user.username}</td>
                         <td className="px-4 py-2 text-sm text-text-secondary">{user.email || "-"}</td>
                         <td className="px-4 py-2">
@@ -3429,8 +3632,8 @@ export const AdminDashboardPage: React.FC = () => {
                             <option value="SYSTEM_ADMIN">ADMIN</option>
                           </select>
                         </td>
-                        <td className="px-4 py-2 text-sm text-text-secondary">{user.userMode}</td>
-                        <td className="px-4 py-2 text-sm text-text-secondary">{user.lang}</td>
+                        <td className="hidden lg:table-cell px-4 py-2 text-sm text-text-secondary">{user.userMode}</td>
+                        <td className="hidden xl:table-cell px-4 py-2 text-sm text-text-secondary">{user.lang}</td>
                         <td className="px-4 py-2">
                           <div className="flex gap-2">
                             <Button variant="secondary" size="sm" onClick={() => openEditUser(user)} className="flex items-center gap-1">
@@ -4667,20 +4870,20 @@ export const AdminDashboardPage: React.FC = () => {
 
               <div className="border border-border bg-bg-base rounded-lg overflow-hidden">
                 <div className="px-2 py-1 text-xs text-text-secondary border-b border-border">Full template preview</div>
-                <iframe
+                            <iframe
                   title="admin-global-certificate-preview"
-                  className="w-full h-[75vh] min-h-[620px] bg-white"
+                              className="w-full h-[70vh] min-h-[360px] md:min-h-[620px] bg-white"
                   sandbox="allow-scripts"
                   srcDoc={globalCertPublishPreviewSrcDoc}
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button variant="secondary" onClick={() => void loadCertificateTemplateLibrary()} disabled={certificateTemplateLibraryLoading}>
-                  {certificateTemplateLibraryLoading ? "Refreshing..." : "Refresh library"}
+                  {certificateTemplateLibraryLoading ? "Refreshing template library..." : "Refresh templates"}
                 </Button>
                 <Button onClick={publishGlobalStudyCodTemplate} disabled={globalCertPublishBusy}>
-                  {globalCertPublishBusy ? "Publishing..." : "Publish template"}
+                  {globalCertPublishBusy ? "Publishing template..." : "Publish as active template"}
                 </Button>
               </div>
 
@@ -4691,14 +4894,15 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="text-sm font-mono font-semibold text-text-primary">Template library</div>
               {certificateTemplateLibraryError ? <div className="text-xs font-mono text-accent-error">{certificateTemplateLibraryError}</div> : null}
               <div className="max-h-[260px] overflow-auto border border-border rounded bg-bg-base">
-                <table className="min-w-[720px] w-full text-[11px] font-mono">
+                <table className="min-w-[560px] md:min-w-[720px] w-full text-[11px] font-mono">
+                  <caption className="sr-only">Certificate template library</caption>
                   <thead className="bg-bg-hover">
                     <tr>
-                      <th className="p-1.5 border-b border-border text-left">ID</th>
+                      <th className="hidden md:table-cell p-1.5 border-b border-border text-left">ID</th>
                       <th className="p-1.5 border-b border-border text-left">Name</th>
                       <th className="p-1.5 border-b border-border text-left">Type</th>
-                      <th className="p-1.5 border-b border-border text-left">Contest</th>
-                      <th className="p-1.5 border-b border-border text-left">Version</th>
+                      <th className="hidden lg:table-cell p-1.5 border-b border-border text-left">Contest</th>
+                      <th className="hidden sm:table-cell p-1.5 border-b border-border text-left">Version</th>
                       <th className="p-1.5 border-b border-border text-left">Status</th>
                       <th className="p-1.5 border-b border-border text-left">Actions</th>
                     </tr>
@@ -4707,21 +4911,21 @@ export const AdminDashboardPage: React.FC = () => {
                     {certificateTemplateLibrary.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="p-2 text-text-secondary">
-                          {certificateTemplateLibraryLoading ? "Loading templates..." : "No templates found"}
+                          {certificateTemplateLibraryLoading ? "Loading template library..." : "No templates yet. Publish one to get started."}
                         </td>
                       </tr>
                     ) : (
                       certificateTemplateLibrary.map((tpl) => (
                         <tr key={`admin-cert-tpl-${tpl.id}`} className="odd:bg-bg-base even:bg-bg-surface">
-                          <td className="p-1.5 border-b border-border">{tpl.id}</td>
+                          <td className="hidden md:table-cell p-1.5 border-b border-border">{tpl.id}</td>
                           <td className="p-1.5 border-b border-border truncate max-w-[280px]" title={tpl.name}>{tpl.name}</td>
                           <td className="p-1.5 border-b border-border">{tpl.type}</td>
-                          <td className="p-1.5 border-b border-border">{tpl.contestId ?? "—"}</td>
-                          <td className="p-1.5 border-b border-border">{tpl.version}</td>
+                          <td className="hidden lg:table-cell p-1.5 border-b border-border">{tpl.contestId ?? "—"}</td>
+                          <td className="hidden sm:table-cell p-1.5 border-b border-border">{tpl.version}</td>
                           <td className="p-1.5 border-b border-border">{tpl.isActive ? "Active" : "Inactive"}</td>
                           <td className="p-1.5 border-b border-border">
                             <Button variant="secondary" onClick={() => void loadGlobalTemplateFromLibrary(tpl.id)}>
-                              Load into editor
+                              Open in editor
                             </Button>
                           </td>
                         </tr>
@@ -4931,7 +5135,7 @@ export const AdminDashboardPage: React.FC = () => {
           })} rows={4} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast rounded-md" placeholder="Optional" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-mono text-text-primary mb-1">Language</label>
               <select value={newMaterialTopic.language} onChange={e => {
@@ -5184,6 +5388,7 @@ export const AdminDashboardPage: React.FC = () => {
           }} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono">
               <option value="JAVA">JAVA</option>
               <option value="PYTHON">PYTHON</option>
+              <option value="CPP">CPP</option>
             </select>
           </div>
           <div className="flex justify-end gap-2">
@@ -5228,6 +5433,7 @@ export const AdminDashboardPage: React.FC = () => {
           }} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono">
                 <option value="JAVA">JAVA</option>
                 <option value="PYTHON">PYTHON</option>
+                <option value="CPP">CPP</option>
               </select>
             </div>
             <div className="flex justify-end gap-2">
@@ -5273,6 +5479,7 @@ export const AdminDashboardPage: React.FC = () => {
           }} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono">
               <option value="JAVA">JAVA</option>
               <option value="PYTHON">PYTHON</option>
+              <option value="CPP">CPP</option>
             </select>
           </div>
           <div>
@@ -5315,6 +5522,7 @@ export const AdminDashboardPage: React.FC = () => {
           }} className="w-full px-3 py-2 border border-border bg-bg-secondary text-text-primary font-mono">
                 <option value="JAVA">JAVA</option>
                 <option value="PYTHON">PYTHON</option>
+                <option value="CPP">CPP</option>
               </select>
             </div>
             <div>

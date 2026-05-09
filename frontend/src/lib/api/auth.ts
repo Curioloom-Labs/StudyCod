@@ -70,6 +70,10 @@ export async function exchangeGoogleCookie(flow?: "success" | "complete"): Promi
   };
 }
 
+export async function prepareGoogleLinkSession(): Promise<void> {
+  await api.post("/auth/google/link-session");
+}
+
 export async function verifyEmail(token: string): Promise<{
   token: string;
   user: User;

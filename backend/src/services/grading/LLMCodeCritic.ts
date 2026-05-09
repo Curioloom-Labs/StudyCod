@@ -1,5 +1,5 @@
 import { CodeSubmission, LLMCodeCritiqueResult } from './interfaces';
-import { getLLMOrchestrator } from '../llm/LLMOrchestrator';
+import { getLLMProvider } from '../llm/provider';
 import { logger } from '../../utils/logger';
 export interface ILLMCodeCritic {
   critique(submission: CodeSubmission, taskDescription?: string): Promise<LLMCodeCritiqueResult>;
@@ -10,7 +10,6 @@ export class LLMCodeCritic implements ILLMCodeCritic {
       code,
       language
     } = submission;
-    const orchestrator = getLLMOrchestrator();
     const langName = language === "JAVA" ? "Java" : "Python";
     const systemPrompt = `Ти досвідчений code reviewer. Аналізуй код студента на:
 1. Читабельність та зрозумілість
@@ -52,9 +51,6 @@ ${code}
 - Відповідай ТІЛЬКИ JSON без markdown блоків
 `.trim();
     try {
-      const {
-        getLLMProvider
-      } = await import('../llm/provider');
       const provider = getLLMProvider();
       const response = await provider.generateJSON<{
         readability: string;

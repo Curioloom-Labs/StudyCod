@@ -225,8 +225,8 @@ export const ContestsPage: React.FC = () => {
   }, [contests, q]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
         <div>
           <div className="mb-2">
             <Button variant="ghost" onClick={() => navigate("/")}
@@ -248,7 +248,7 @@ export const ContestsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="w-full max-w-xl flex items-start gap-2">
+        <div className="w-full lg:max-w-xl flex flex-col sm:flex-row sm:items-start gap-2">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
             <input
@@ -256,11 +256,12 @@ export const ContestsPage: React.FC = () => {
               onChange={(e) => setQ(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none"
               placeholder={tr("Пошук...", "Search...")}
+              aria-label={tr("Пошук контестів", "Search contests")}
             />
           </div>
 
           {hasToken ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -301,7 +302,7 @@ export const ContestsPage: React.FC = () => {
 
           <Input label={tr("Код доступу", "Join code")} value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder={tr("Введіть код...", "Enter code...")} />
 
-          <div className="flex items-center justify-end gap-2 pt-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
             <Button
               variant="ghost"
               onClick={() => {
@@ -334,8 +335,9 @@ export const ContestsPage: React.FC = () => {
           <Input label={tr("Назва", "Title")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder={tr("Напр. Spring contest", "e.g. Spring contest")} />
 
           <div className="flex flex-col gap-1.5 w-full">
-            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Опис", "Description")}</label>
+            <label htmlFor="contest-create-description" className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Опис", "Description")}</label>
             <textarea
+              id="contest-create-description"
               value={newDescription}
               onChange={(e) => setNewDescription(e.target.value)}
               rows={5}
@@ -346,8 +348,9 @@ export const ContestsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Доступ", "Visibility")}</label>
+              <label htmlFor="contest-create-visibility" className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Доступ", "Visibility")}</label>
               <select
+                id="contest-create-visibility"
                 className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono focus:outline-none"
                 value={newVisibility}
                 onChange={(e) => setNewVisibility(e.target.value as ContestVisibility)}
@@ -381,8 +384,9 @@ export const ContestsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Старт", "Start")}</label>
+              <label htmlFor="contest-create-start" className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Старт", "Start")}</label>
               <input
+                id="contest-create-start"
                 type="datetime-local"
                 value={newStartsAt}
                 onChange={(e) => setNewStartsAt(e.target.value)}
@@ -390,8 +394,9 @@ export const ContestsPage: React.FC = () => {
               />
             </div>
             <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Фініш", "End")}</label>
+              <label htmlFor="contest-create-end" className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Фініш", "End")}</label>
               <input
+                id="contest-create-end"
                 type="datetime-local"
                 value={newEndsAt}
                 onChange={(e) => setNewEndsAt(e.target.value)}
@@ -411,7 +416,7 @@ export const ContestsPage: React.FC = () => {
             </label>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
             <Button
               variant="ghost"
               onClick={() => {
@@ -438,7 +443,7 @@ export const ContestsPage: React.FC = () => {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-6 text-sm text-text-secondary">{tr("Поки що немає контестів.", "No contests yet.")}</div>
+            <div className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Поки що немає контестів.", "No contests yet.")}</div>
           ) : (
             <div className="divide-y divide-border">
               {filtered.map((c) => {
@@ -467,7 +472,7 @@ export const ContestsPage: React.FC = () => {
                     onClick={() => navigate(`/contests/${c.id}`)}
                     className="w-full text-left p-4 hover:bg-bg-hover transition-fast"
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="font-mono text-text-primary truncate">{c.title}</div>
@@ -494,7 +499,7 @@ export const ContestsPage: React.FC = () => {
                         {c.description ? <div className="text-sm text-text-secondary mt-2 line-clamp-2">{c.description}</div> : null}
                       </div>
 
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 sm:self-start">
                         <Button
                           variant="ghost"
                           onClick={(e) => {

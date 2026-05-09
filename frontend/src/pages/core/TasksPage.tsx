@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { listTasks, generateTask, saveDraft, submitTask, resetTopic, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
 import { Button } from "../../components/ui/Button";
@@ -19,6 +20,7 @@ import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewpo
 import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
 import { FailureRecoveryCard, type FailureRecoveryData } from "../../components/FailureRecoveryCard";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
+import { useMediaQuery } from "../../utils/useMediaQuery";
 interface Props {
   user: User;
 }
@@ -199,11 +201,13 @@ export const TasksPage: React.FC<Props> = ({
   } = useTranslation();
   const uiLanguage = i18n.language === "en" ? "en" : "uk";
   const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
+  const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
   const { element: viewportEl } = useWorkspaceViewport();
   const {
     openTheory,
     isOpen: isTheoryOpen
   } = useTheoryModal();
+  const [searchParams, setSearchParams] = useSearchParams();
   const safeServerMessage = (value: unknown) => {
     return typeof value === "string" ? value : String(value ?? "");
   };
@@ -357,6 +361,7 @@ export const TasksPage: React.FC<Props> = ({
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [mfAddToken, setMfAddToken] = useState(0);
   const [consoleOutput, setConsoleOutput] = useState("");
+  const [consoleClipboardState, setConsoleClipboardState] = useState<"idle" | "copied" | "failed">("idle");
   const [stdin, setStdin] = useState("");
   const [loading, setLoading] = useState(false);
   const [generationPhase, setGenerationPhase] = useState<TaskGenerationPhase | null>(null);
@@ -450,6 +455,28 @@ export const TasksPage: React.FC<Props> = ({
   const canGenerateFirst = lessonStatus === "NOT_STARTED";
   const canGenerate = canGenerateFirst || canGenerateNew;
   const cooldownSecondsLeft = Math.max(0, Math.ceil((generateCooldownUntilMs - clockMs) / 1000));
+
+  const requestedTaskIdFromUrl = useMemo(() => {
+    const raw = searchParams.get("task");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return Math.floor(parsed);
+  }, [searchParams]);
+
+  const syncTaskSelectionToUrl = useCallback((taskId: number | null) => {
+    const nextSearch = new URLSearchParams(searchParams);
+    if (taskId && taskId > 0) {
+      nextSearch.set("task", String(taskId));
+    } else {
+      nextSearch.delete("task");
+    }
+
+    if (nextSearch.toString() === searchParams.toString()) return;
+    setSearchParams(nextSearch, {
+      replace: true
+    });
+  }, [searchParams, setSearchParams]);
 
   const entryFile = user.course === "JAVA" ? "Main.java" : user.course === "PYTHON" ? "main.py" : "main.cpp";
   const isWebTask = active?.taskMode === "WEB";
@@ -1018,7 +1045,129 @@ export const TasksPage: React.FC<Props> = ({
     setUIState("idle");
     const hasTheory = computeHasTheory(task);
     setTheoryAcknowledged(!hasTheory);
-  }, [deriveEditorFromTask]);
+    syncTaskSelectionToUrl(task.id);
+    if (isCompactViewport) {
+      setShowTaskHistory(false);
+    }
+  }, [deriveEditorFromTask, isCompactViewport, syncTaskSelectionToUrl]);
+
+  useEffect(() => {
+    if (!requestedTaskIdFromUrl) return;
+    if (!tasks.length) return;
+    if (active?.id === requestedTaskIdFromUrl) return;
+
+    const requested = tasks.find((task) => task.id === requestedTaskIdFromUrl);
+    if (!requested) return;
+
+    setActive(requested);
+    const next = deriveEditorFromTask(requested);
+    setUseFiles(next.useFiles);
+    setFiles(next.files);
+    setCode(next.code);
+    setAiResult(null);
+    setConsoleOutput("");
+    setUIState("idle");
+    const hasTheory = computeHasTheory(requested);
+    setTheoryAcknowledged(!hasTheory);
+  }, [requestedTaskIdFromUrl, tasks, active?.id, deriveEditorFromTask]);
+
+  useEffect(() => {
+    syncTaskSelectionToUrl(active?.id ?? null);
+  }, [active?.id, syncTaskSelectionToUrl]);
+
+  const sidebarStatusMeta = useCallback((status: Task["status"]) => {
+    switch (status) {
+      case "GRADED":
+        return {
+          label: tr("Готово", "Done"),
+          dotClass: "bg-accent-success",
+          pillClass: "border-accent-success/50 bg-accent-success/10 text-accent-success"
+        };
+      case "SUBMITTED":
+        return {
+          label: tr("На перевірці", "Review"),
+          dotClass: "bg-secondary",
+          pillClass: "border-secondary/50 bg-secondary/10 text-secondary"
+        };
+      default:
+        return {
+          label: tr("В роботі", "In progress"),
+          dotClass: "bg-accent-warn",
+          pillClass: "border-accent-warn/50 bg-accent-warn/10 text-accent-warn"
+        };
+    }
+  }, []);
+
+  const sidebarStats = useMemo(() => {
+    const total = sidebarTasks.length;
+    const completed = sidebarTasks.filter((item) => item.status === "GRADED").length;
+    const reviewing = sidebarTasks.filter((item) => item.status === "SUBMITTED").length;
+    const inProgress = Math.max(0, total - completed - reviewing);
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return {
+      total,
+      completed,
+      reviewing,
+      inProgress,
+      progress
+    };
+  }, [sidebarTasks]);
+
+  const canGenerateFromSidebar = sidebarStats.total === 0 ? canGenerate : canGenerateNew;
+  const generateSidebarLabel = sidebarStats.total === 0
+    ? tr("Згенерувати завдання", "Generate task")
+    : tr("Згенерувати нове", "Generate new");
+  const generateSidebarHint = !canGenerateFromSidebar
+    ? blockedReason ?? tr("Заверши поточне завдання, щоб згенерувати нове.", "Finish the current task before generating a new one.")
+    : cooldownSecondsLeft > 0
+      ? tr(`Зачекай ${cooldownSecondsLeft} с`, `Wait ${cooldownSecondsLeft}s`)
+      : undefined;
+  const sidebarFooterHint = blockedReason
+    ? blockedReason
+    : canGenerateFromSidebar
+      ? tr("Готово до генерації нового завдання.", "Ready to generate a new task.")
+      : tr("Заверши поточне завдання, щоб відкрити генерацію.", "Finish the current task to unlock generation.");
+
+  const sidebarStatusProgressByTask = useCallback((status: Task["status"]): number => {
+    if (status === "GRADED") return 100;
+    if (status === "SUBMITTED") return 74;
+    return 34;
+  }, []);
+
+  const lessonStatusMeta = useMemo(() => {
+    if (lessonStatus === "COMPLETED") {
+      return {
+        label: tr("Урок завершено", "Lesson completed"),
+        hint: tr("Можна переходити до нового завдання.", "You can move to a new task."),
+        pillClass: "border-accent-success/50 bg-accent-success/10 text-accent-success"
+      };
+    }
+    if (lessonStatus === "IN_PROGRESS") {
+      return {
+        label: tr("Урок в процесі", "Lesson in progress"),
+        hint: tr("Закрий поточні задачі для переходу далі.", "Finish current tasks to move forward."),
+        pillClass: "border-accent-warning/50 bg-accent-warning/10 text-accent-warning"
+      };
+    }
+    return {
+      label: tr("Урок не розпочато", "Lesson not started"),
+      hint: tr("Стартуй із першої задачі.", "Start with the first task."),
+      pillClass: "border-border/70 bg-bg-base/60 text-text-secondary"
+    };
+  }, [lessonStatus]);
+
+  const sidebarFocusItem = useMemo(() => {
+    for (const section of sidebarSections) {
+      const candidate = section.items.find((item) => item.status !== "GRADED") || section.items[0];
+      if (candidate) {
+        return {
+          sectionTitle: section.title,
+          item: candidate
+        };
+      }
+    }
+    return null;
+  }, [sidebarSections]);
 
   useEffect(() => {
     try {
@@ -1730,15 +1879,27 @@ export const TasksPage: React.FC<Props> = ({
   };
   const focusWorkspaceArea = (area: "mission" | "tasks" | "output" | "live") => {
     if (area === "tasks") {
+      if (isCompactViewport) {
+        setDockCollapsed(true);
+        setDockPopOut(false);
+      }
       setShowTaskHistory(true);
       tasksColumnRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
       return;
     }
     if (area === "output") {
+      if (isCompactViewport) {
+        setShowTaskHistory(false);
+      }
       setDockPopOut(false);
       setDockCollapsed(false);
       consoleColumnRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
       return;
+    }
+    if (isCompactViewport) {
+      setShowTaskHistory(false);
+      setDockCollapsed(true);
+      setDockPopOut(false);
     }
     setActiveCenterTab(area === "live" ? "activity" : "mission");
     centerColumnRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
@@ -1751,11 +1912,98 @@ export const TasksPage: React.FC<Props> = ({
     return activeCenterTab === "mission";
   };
 
+  useEffect(() => {
+    if (!isCompactViewport) return;
+    setDockPopOut(false);
+    setDockCollapsed(true);
+    setShowTaskHistory(false);
+  }, [isCompactViewport]);
+
   const canQuickGenerate = canGenerate && !loading && cooldownSecondsLeft <= 0;
   const canQuickSave = Boolean(active && (isPersonalControlQuizTask ? true : currentCodeText.trim()));
   const canQuickRun = Boolean(active && theoryAcknowledged && currentCodeText.trim());
   const canQuickCheck = Boolean(canEdit && !submitting && theoryAcknowledged && currentCodeText.trim());
   const hasTheoryForActive = computeHasTheory(active);
+  const activeTaskStatusMeta = active ? sidebarStatusMeta(active.status) : null;
+  const activeLessonInTopic = Number(active?.lessonInTopic ?? NaN);
+  const hasActiveLessonInTopic = Number.isFinite(activeLessonInTopic) && activeLessonInTopic > 0;
+  const activeTaskModeLabel = active?.taskMode === "WEB"
+    ? tr("WEB-проєкт", "WEB project")
+    : tr("Code задача", "Code task");
+
+  const consoleStateMeta = useMemo(() => {
+    if (uiState === "evaluating") {
+      return {
+        label: submitting
+          ? tr("Йде перевірка", "Checking")
+          : loading
+            ? tr("Генерація", "Generating")
+            : quizLoading || quizSubmitting
+              ? tr("Тест обробляється", "Quiz processing")
+              : tr("Виконується", "Running"),
+        toneClass: "border-primary/45 bg-primary/10 text-primary"
+      };
+    }
+    if (uiState === "error") {
+      return {
+        label: tr("Потребує уваги", "Needs attention"),
+        toneClass: "border-accent-error/45 bg-accent-error/10 text-accent-error"
+      };
+    }
+    if (uiState === "logic-warning") {
+      return {
+        label: tr("Потрібна дія", "Action required"),
+        toneClass: "border-accent-logic-warning/45 bg-accent-logic-warning/10 text-accent-logic-warning"
+      };
+    }
+    if (uiState === "success") {
+      return {
+        label: tr("Оновлено", "Updated"),
+        toneClass: "border-accent-success/45 bg-accent-success/10 text-accent-success"
+      };
+    }
+    return {
+      label: tr("Готово", "Ready"),
+      toneClass: "border-border/70 bg-bg-base/70 text-text-secondary"
+    };
+  }, [uiState, submitting, loading, quizLoading, quizSubmitting]);
+
+  const activeSectionProgress = useMemo(() => {
+    const section = sidebarSections.find((candidate) => candidate.items.some((item) => isSidebarItemActive(item)));
+    if (!section) return null;
+    const total = section.items.length;
+    const completed = section.items.filter((item) => item.status === "GRADED").length;
+    const reviewing = section.items.filter((item) => item.status === "SUBMITTED").length;
+    const inProgress = Math.max(0, total - completed - reviewing);
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return {
+      sectionTitle: section.title,
+      total,
+      completed,
+      reviewing,
+      inProgress,
+      progress
+    };
+  }, [sidebarSections, isSidebarItemActive]);
+
+  const hasConsoleOutput = consoleOutput.trim().length > 0;
+  const consoleLineCount = useMemo(() => {
+    if (!hasConsoleOutput) return 0;
+    return consoleOutput.split(/\r?\n/).length;
+  }, [consoleOutput, hasConsoleOutput]);
+
+  const consoleClipboardLabel =
+    consoleClipboardState === "copied"
+      ? tr("Скопійовано", "Copied")
+      : consoleClipboardState === "failed"
+        ? tr("Помилка", "Failed")
+        : tr("Копіювати", "Copy");
+
+  const isMacPlatform = typeof navigator !== "undefined" && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
+  const modKeyLabel = isMacPlatform ? "⌘" : "Ctrl";
+  const saveShortcutLabel = `${modKeyLabel}+S`;
+  const runShortcutLabel = `${modKeyLabel}+Enter`;
+  const checkShortcutLabel = `${modKeyLabel}+Shift+Enter`;
 
   const runFromRail = () => {
     if (!editorOpen) {
@@ -1763,6 +2011,9 @@ export const TasksPage: React.FC<Props> = ({
       return;
     }
     handleRun();
+    if (isCompactViewport) {
+      focusWorkspaceArea("output");
+    }
   };
 
   const checkFromRail = () => {
@@ -1771,6 +2022,9 @@ export const TasksPage: React.FC<Props> = ({
       return;
     }
     handleSubmit();
+    if (isCompactViewport) {
+      focusWorkspaceArea("output");
+    }
   };
 
   const saveFromRail = () => {
@@ -1784,6 +2038,88 @@ export const TasksPage: React.FC<Props> = ({
     }
     handleSaveDraft();
   };
+
+  const clearConsoleFromToolbar = () => {
+    setConsoleOutput("");
+    if (uiState !== "evaluating") {
+      setUIState("idle");
+    }
+    setConsoleClipboardState("idle");
+  };
+
+  const copyConsoleFromToolbar = async () => {
+    if (!hasConsoleOutput) return;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(consoleOutput);
+        setConsoleClipboardState("copied");
+        return;
+      }
+      setConsoleClipboardState("failed");
+    } catch {
+      setConsoleClipboardState("failed");
+    }
+  };
+
+  useEffect(() => {
+    if (consoleClipboardState === "idle") return;
+    const timeout = window.setTimeout(() => {
+      setConsoleClipboardState("idle");
+    }, 1800);
+    return () => window.clearTimeout(timeout);
+  }, [consoleClipboardState]);
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const node = target as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return node.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const key = event.key.toLowerCase();
+      const withMod = event.metaKey || event.ctrlKey;
+      const editableTarget = isEditableTarget(event.target);
+
+      if (withMod && key === "s") {
+        event.preventDefault();
+        if (canQuickSave) saveFromRail();
+        return;
+      }
+
+      if (withMod && key === "enter") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          if (canQuickCheck) checkFromRail();
+        } else if (canQuickRun) {
+          runFromRail();
+        }
+        return;
+      }
+
+      if (!withMod && event.altKey && !event.shiftKey && !editableTarget) {
+        if (key === "1") {
+          event.preventDefault();
+          focusWorkspaceArea("mission");
+        } else if (key === "2") {
+          event.preventDefault();
+          focusWorkspaceArea("tasks");
+        } else if (key === "3") {
+          event.preventDefault();
+          focusWorkspaceArea("output");
+        } else if (key === "4") {
+          event.preventDefault();
+          focusWorkspaceArea("live");
+        }
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [canQuickCheck, canQuickRun, canQuickSave, checkFromRail, focusWorkspaceArea, runFromRail, saveFromRail]);
+
   const railItems: Array<{ id: WorkspaceArea; label: string; Icon: LucideIcon }> = [
     { id: "mission", label: tr("Місія", "Mission"), Icon: LayoutDashboard },
     { id: "tasks", label: tr("Задачі", "Tasks"), Icon: FolderCode },
@@ -1803,6 +2139,72 @@ export const TasksPage: React.FC<Props> = ({
     ["examples", tr("Приклади", "Examples")],
     ["notes", tr("Нотатки", "Notes")]
   ];
+  const consoleStatusCard = (() => {
+    if (uiState === "idle" || uiState === "success") return null;
+
+    if (uiState === "evaluating") {
+      const waitingTitle = submitting
+        ? tr("Перевірка триває", "Check in progress")
+        : loading
+          ? tr("Генеруємо завдання", "Generating task")
+          : quizLoading || quizSubmitting
+            ? tr("Опрацьовуємо тест", "Processing quiz")
+            : tr("Виконуємо дію", "Working");
+      const waitingDetails = submitting
+        ? tr("Оновлюємо результат у цій консолі. Зазвичай це займає до 30 секунд.", "Results will appear in this console. This usually takes up to 30 seconds.")
+        : tr("Зачекай завершення операції. Статус оновиться автоматично.", "Wait for the operation to finish. Status updates automatically.");
+      return (
+        <div className="border border-primary/35 bg-bg-code p-2">
+          <div className="text-[11px] font-mono text-primary">{waitingTitle}</div>
+          <div className="mt-1 text-xs font-mono text-text-secondary">
+            {waitingDetails}
+          </div>
+          <div className="mt-1 text-[10px] font-mono text-text-muted">
+            {tr("Якщо очікування затягнулось, збережи чернетку й повтори дію.", "If this takes unusually long, save your draft and retry.")}
+          </div>
+        </div>
+      );
+    }
+
+    if (uiState === "error") {
+      return (
+        <div className="border border-accent-error/40 bg-bg-code p-2">
+          <div className="text-[11px] font-mono text-accent-error">{tr("Є помилка, потрібне відновлення", "Error detected, recovery needed")}</div>
+          <div className="mt-1 text-xs font-mono text-text-secondary">
+            {tr("Прочитай останній рядок у консолі, виправ проблему та повтори «Перевірити».", "Read the latest console line, fix the issue, then run Check again.")}
+          </div>
+          {canQuickSave && (
+            <div className="mt-2">
+              <Button variant="ghost" onClick={handleSaveDraft} className="text-xs">
+                {tr("Зберегти перед повтором", "Save before retry")}
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="border border-accent-logic-warning/40 bg-bg-code p-2">
+        <div className="text-[11px] font-mono text-accent-logic-warning">{tr("Потрібна дія перед продовженням", "Action required before continuing")}</div>
+        <div className="mt-1 text-xs font-mono text-text-secondary">
+          {tr("Це не системна помилка. Виконай підказку в консолі та повтори дію.", "This is not a system failure. Follow the console hint and retry the action.")}
+        </div>
+      </div>
+    );
+  })();
+  const inlineFailureMessage = (consoleOutput || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean) || "";
+  const showInlineFailureRecovery = (uiState === "error" || uiState === "logic-warning") && inlineFailureMessage.length > 0;
+  const openOutputRecovery = () => {
+    setDockCollapsed(false);
+    setDockPopOut(false);
+    requestAnimationFrame(() => {
+      consoleColumnRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    });
+  };
 
     return <div className={`relative w-full px-2 sm:px-3 pb-3 ${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)]" : "h-[calc(100dvh-3rem)] md:min-h-[760px]"}`}>
       <div className={`${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)] overflow-visible" : "h-full overflow-hidden"} rounded-3xl bg-bg-surface border border-border/60 shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex`}>
@@ -1843,21 +2245,24 @@ export const TasksPage: React.FC<Props> = ({
               label: tr("Зберегти", "Save"),
               Icon: Save,
               onClick: saveFromRail,
-              enabled: canQuickSave
+              enabled: canQuickSave,
+              shortcut: saveShortcutLabel
             },
             {
               id: "run",
               label: tr("Запустити", "Run"),
               Icon: PlayCircle,
               onClick: runFromRail,
-              enabled: canQuickRun
+              enabled: canQuickRun,
+              shortcut: runShortcutLabel
             },
             {
               id: "check",
               label: tr("Перевірити", "Check"),
               Icon: CheckCircle2,
               onClick: checkFromRail,
-              enabled: canQuickCheck
+              enabled: canQuickCheck,
+              shortcut: checkShortcutLabel
             },
             {
               id: "theory",
@@ -1882,14 +2287,14 @@ export const TasksPage: React.FC<Props> = ({
               <button
                 onClick={action.onClick}
                 disabled={!action.enabled}
-                title={action.hint || action.label}
-                aria-label={action.label}
+                 title={action.hint || (action.shortcut ? `${action.label} (${action.shortcut})` : action.label)}
+                 aria-label={action.label}
                 className={`w-11 h-11 rounded-xl border transition-fast flex items-center justify-center ${action.enabled ? "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary" : "border-transparent text-text-muted/40 cursor-not-allowed"}`}
               >
                 <action.Icon className="w-4 h-4" />
               </button>
               <div className="absolute left-[48px] top-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary opacity-0 pointer-events-none group-hover:opacity-100 transition-fast whitespace-nowrap z-20">
-                {action.label}
+                 {action.shortcut ? `${action.label} · ${action.shortcut}` : action.label}
               </div>
             </div>
           ))}
@@ -1902,28 +2307,46 @@ export const TasksPage: React.FC<Props> = ({
               <span className="px-2 py-1 rounded-lg border border-border text-text-secondary">{tr("IDE режим", "IDE mode")}</span>
               <span className="px-2 py-1 rounded-lg border border-border text-text-secondary">{tr("Mission control", "Mission control")}</span>
             </div>
-            <div className="text-[11px] text-text-secondary whitespace-nowrap">
-              {tr("Стан уроку", "Lesson state")}: <span className="text-text-primary">{lessonStatus}</span>
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-muted">
+                {tr("Стан уроку", "Lesson state")}
+              </span>
+              <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono ${lessonStatusMeta.pillClass}`}>
+                {lessonStatusMeta.label}
+              </span>
+            </div>
+            <div className="hidden xl:flex items-center gap-1 text-[10px] text-text-muted font-mono">
+              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{runShortcutLabel}</span>
+              <span>{tr("запуск", "run")}</span>
+              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{checkShortcutLabel}</span>
+              <span>{tr("перевірка", "check")}</span>
+              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{saveShortcutLabel}</span>
+              <span>{tr("зберегти", "save")}</span>
             </div>
           </div>
 
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 flex flex-col">
             <div className="flex-1 min-h-0 flex flex-col bg-bg-base">
 
       <TaskGenerationOverlay open={loading} phase={generationPhase} />
 
       {}
-      <div className="flex-1 min-h-0 flex overflow-x-hidden">
+      <div className="flex-1 min-h-0 flex overflow-x-hidden relative">
         {}
         <div
           ref={tasksColumnRef}
           style={{ order: columnOrder.tasks }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => handleColumnDrop("tasks")}
-          className={`bg-bg-surface border-r border-border transition-slow ease-in-out flex flex-col ${showTaskHistory ? "w-[clamp(220px,42vw,320px)] sm:w-[clamp(240px,32vw,320px)]" : "w-12"}`}
+          className={`bg-bg-surface border-r border-border transition-slow ease-in-out flex flex-col overflow-hidden ${isCompactViewport ? `${showTaskHistory ? "w-[min(94vw,380px)] shadow-[0_16px_48px_rgba(0,0,0,0.45)]" : "w-0 border-r-0 pointer-events-none"} absolute inset-y-0 left-0 z-30` : showTaskHistory ? "w-[clamp(220px,42vw,320px)] sm:w-[clamp(240px,32vw,320px)]" : "w-12"}`}
         >
-          <div className="flex items-center justify-between p-3 border-b border-border">
-            {showTaskHistory && <h2 className="text-sm font-mono text-text-primary">{tr("Завдання", "Tasks")}</h2>}
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/70 bg-bg-base/40">
+            {showTaskHistory ? <div className="min-w-0">
+                <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-text-muted">
+                  {tr("Панель прогресу", "Progress panel")}
+                </div>
+                <h2 className="text-sm font-mono text-text-primary">{tr("Завдання", "Tasks")}</h2>
+              </div> : null}
             <div className="flex items-center gap-1 ml-auto">
               <button
                 type="button"
@@ -1936,72 +2359,193 @@ export const TasksPage: React.FC<Props> = ({
               >
                 <GripVertical className="w-3.5 h-3.5" />
               </button>
-              <button type="button" onClick={() => setShowTaskHistory(!showTaskHistory)} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" aria-label={showTaskHistory ? tr("Згорнути список завдань", "Collapse task list") : tr("Розгорнути список завдань", "Expand task list")}>
-              {showTaskHistory ? <ChevronLeft className="w-3 h-3 text-text-secondary" /> : <ChevronRight className="w-3 h-3 text-text-secondary" />}
+              <button type="button" onClick={() => {
+            const next = !showTaskHistory;
+            setShowTaskHistory(next);
+            if (isCompactViewport && next) {
+              setDockCollapsed(true);
+              setDockPopOut(false);
+            }
+          }} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" aria-label={showTaskHistory ? tr("Згорнути список завдань", "Collapse task list") : tr("Розгорнути список завдань", "Expand task list")}>
+                {showTaskHistory ? <ChevronLeft className="w-3 h-3 text-text-secondary" /> : <ChevronRight className="w-3 h-3 text-text-secondary" />}
               </button>
             </div>
           </div>
           {showTaskHistory && <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                {sidebarTasks.length === 0 && <div className="space-y-3">
-                    <div className="text-xs text-text-muted font-mono text-center py-4">
-                      {tr("Немає завдань", "No tasks")}
+              <div className="p-3 border-b border-border/70 bg-bg-surface/75">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted">
+                      {tr("Статус проходження", "Progress status")}
                     </div>
-                    <Button variant="primary" onClick={handleGenerate} disabled={loading || !canGenerate || cooldownSecondsLeft > 0} className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2" title={!canGenerate ? blockedReason ?? undefined : cooldownSecondsLeft > 0 ? tr(`Зачекай ${cooldownSecondsLeft} с`, `Wait ${cooldownSecondsLeft}s`) : undefined}>
-                      <Plus className="w-4 h-4" />
-                      {tr("Згенерувати завдання", "Generate task")}
-                    </Button>
-                    {cooldownSecondsLeft > 0 && <div className="mt-2 text-[10px] font-mono text-text-muted text-center">
+                    <div className={`mt-1 inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono tracking-wide ${lessonStatusMeta.pillClass}`}>
+                      {lessonStatusMeta.label}
+                    </div>
+                    <div className="text-[10px] font-mono text-text-muted mt-1">
+                      {lessonStatusMeta.hint}
+                    </div>
+                  </div>
+                  <Badge color={sidebarStats.progress >= 100 ? "success" : sidebarStats.progress >= 50 ? "info" : "warn"}>
+                    {sidebarStats.progress}%
+                  </Badge>
+                </div>
+                <div className="mt-2 h-1.5 rounded-full bg-bg-hover overflow-hidden">
+                  <div
+                    className={`h-full transition-slow ${sidebarStats.progress >= 100 ? "bg-accent-success" : "bg-primary"}`}
+                    style={{ width: `${sidebarStats.progress}%` }}
+                  />
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1 text-[10px] font-mono">
+                  <div className="rounded-md border border-border/70 bg-bg-base/50 px-2 py-1">
+                    <div className="text-text-primary">{sidebarStats.completed}</div>
+                    <div className="text-text-muted">{tr("Готово", "Done")}</div>
+                  </div>
+                  <div className="rounded-md border border-border/70 bg-bg-base/50 px-2 py-1">
+                    <div className="text-text-primary">{sidebarStats.reviewing}</div>
+                    <div className="text-text-muted">{tr("На перевірці", "Review")}</div>
+                  </div>
+                  <div className="rounded-md border border-border/70 bg-bg-base/50 px-2 py-1">
+                    <div className="text-text-primary">{sidebarStats.inProgress}</div>
+                    <div className="text-text-muted">{tr("Активні", "Active")}</div>
+                  </div>
+                </div>
+
+                <div className="mt-2 rounded-xl border border-border/70 bg-bg-base/35 p-2.5">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted">
+                    {tr("Фокус-сесія", "Focus session")}
+                  </div>
+                  {sidebarFocusItem ? <button
+                      type="button"
+                      onClick={() => openSidebarTask(sidebarFocusItem.item.openTask)}
+                      className="mt-1 w-full text-left rounded-lg border border-border/60 bg-bg-surface/55 px-2 py-1.5 hover:bg-bg-hover transition-fast"
+                    >
+                      <div className="text-xs font-mono text-text-primary truncate">{sidebarFocusItem.item.renderTitle}</div>
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px] font-mono text-text-secondary min-w-0">
+                        <span className="truncate">{sidebarFocusItem.sectionTitle}</span>
+                        {sidebarFocusItem.item.stageLabel ? <>
+                            <span className="text-text-muted">•</span>
+                            <span className="truncate">{sidebarFocusItem.item.stageLabel}</span>
+                          </> : null}
+                      </div>
+                    </button> : <div className="mt-1 text-[10px] font-mono text-text-secondary">
+                      {tr("Усі задачі закриті — можна генерувати нову.", "All tasks are done — you can generate a new one.")}
+                    </div>}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+                {sidebarTasks.length === 0 && <div className="rounded-xl border border-border/70 bg-bg-base/40 p-4 text-center">
+                    <div className="text-xs text-text-muted font-mono">
+                      {tr("Поки що тут порожньо", "Nothing here yet")}
+                    </div>
+                    <div className="mt-1 text-[11px] text-text-secondary">
+                      {tr("Згенеруй перше завдання, щоб почати місію.", "Generate your first task to start the mission.")}
+                    </div>
+                    {cooldownSecondsLeft > 0 && <div className="mt-2 text-[10px] font-mono text-text-muted">
                         {tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)}
-                      </div>}
-                    {lessonStatus !== "NOT_STARTED" && <div className="text-[10px] font-mono text-text-muted text-center">
-                        {tr(`Статус уроку: ${lessonStatus}`, `Lesson status: ${lessonStatus}`)}
                       </div>}
                   </div>}
                 {sidebarTasks.length > 0 && sidebarSections.map(section => (
                   <div key={section.key} className="space-y-1.5">
-                    <div className="px-1 pb-1 pt-2 text-[10px] font-mono uppercase tracking-wider text-text-muted border-b border-border/60">
-                      {section.title}
+                    <div className="sticky top-0 z-10 px-2 py-1.5 rounded-lg border border-border/70 bg-bg-base/85 backdrop-blur-sm flex items-center justify-between gap-2">
+                      <div className="min-w-0 text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted truncate">
+                        {section.title}
+                      </div>
+                      <span className="text-[10px] font-mono text-text-secondary">{section.items.length}</span>
                     </div>
-                    {section.items.map(item => <button type="button" key={item.id} className={`w-full p-3 text-left border transition-fast bg-bg-surface ${isSidebarItemActive(item) ? "border-primary bg-bg-hover" : "border-border hover:border-primary/50"}`} onClick={() => {
-                        openSidebarTask(item.openTask);
-                      }}>
-                        {item.isGroupedControl ? <div className="mb-1 inline-flex items-center rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
-                            {tr("Control work", "Control work")}
-                          </div> : isPersonalControlQuizByTask(item.openTask) ? <div className="mb-1 inline-flex items-center rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
-                            {tr("Quiz step", "Quiz step")}
-                          </div> : null}
-                        <div className="flex justify-between items-start mb-1">
-                          <div className="text-xs font-mono text-text-primary truncate flex-1">
-                            {item.renderTitle}
+                    {section.items.map(item => {
+                      const isActive = isSidebarItemActive(item);
+                      const statusMeta = sidebarStatusMeta(item.status);
+                      const itemProgress = sidebarStatusProgressByTask(item.status);
+                      const lessonInTopic = Number(item.openTask.lessonInTopic ?? NaN);
+                      const lessonChip = Number.isFinite(lessonInTopic) && lessonInTopic > 0
+                        ? tr(`Урок ${lessonInTopic}`, `Lesson ${lessonInTopic}`)
+                        : null;
+                      return <button type="button" key={item.id} className={`group relative w-full rounded-xl border p-3 text-left transition-fast ${isActive ? "border-primary/70 bg-primary/10 shadow-[0_0_0_1px_rgba(34,211,238,0.08)]" : "border-border/70 bg-bg-surface/70 hover:border-primary/45 hover:bg-bg-hover/60"}`} onClick={() => {
+                          openSidebarTask(item.openTask);
+                        }} aria-current={isActive ? "true" : undefined}>
+                          <span className={`absolute left-0 top-0 h-full w-1 rounded-l-xl transition-fast ${isActive ? "bg-primary" : "bg-transparent group-hover:bg-primary/45"}`} />
+                          <div className="pl-2">
+                            {item.isGroupedControl ? <div className="mb-1 inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
+                                {tr("Control work", "Control work")}
+                              </div> : isPersonalControlQuizByTask(item.openTask) ? <div className="mb-1 inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
+                                {tr("Quiz step", "Quiz step")}
+                              </div> : null}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-mono text-text-primary truncate">
+                                  {item.renderTitle}
+                                </div>
+                                {item.stageLabel ? <div className="mt-0.5 text-[10px] font-mono text-text-secondary truncate">
+                                    {item.stageLabel}
+                                  </div> : null}
+                              </div>
+                              <span className={`mt-0.5 h-2.5 w-2.5 rounded-full ${statusMeta.dotClass}`} />
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-[10px] font-mono text-text-muted">
+                                  {new Date(item.createdAt).toLocaleDateString(locale)}
+                                </span>
+                                {lessonChip ? <span className="inline-flex items-center rounded border border-border/70 bg-bg-base/60 px-1.5 py-0.5 text-[9px] font-mono text-text-secondary">
+                                    {lessonChip}
+                                  </span> : null}
+                              </div>
+                              <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${statusMeta.pillClass}`}>
+                                {statusMeta.label}
+                              </span>
+                            </div>
+                            <div className="mt-2 h-1.5 rounded-full bg-bg-hover overflow-hidden">
+                              <div
+                                className={`h-full transition-slow ${item.status === "GRADED" ? "bg-accent-success" : item.status === "SUBMITTED" ? "bg-secondary" : "bg-accent-warn"}`}
+                                style={{ width: `${itemProgress}%` }}
+                              />
+                            </div>
                           </div>
-                          <Badge color={item.status === "GRADED" ? "success" : item.status === "SUBMITTED" ? "info" : "warn"}>
-                            {item.status === "GRADED" ? "✓" : item.status === "SUBMITTED" ? "…" : "○"}
-                          </Badge>
-                        </div>
-                        {item.stageLabel ? <div className="text-[10px] font-mono text-text-secondary mb-1">
-                            {item.stageLabel}
-                          </div> : null}
-                        <div className="text-[10px] font-mono text-text-muted">
-                          {new Date(item.createdAt).toLocaleDateString(locale)}
-                        </div>
-                      </button>)}
+                        </button>;
+                    })}
                   </div>
                 ))}
               </div>
-              {}
-              {active && <div className="p-3 border-t border-border">
-                  <Button variant="primary" onClick={handleGenerate} disabled={loading || !canGenerateNew || cooldownSecondsLeft > 0} className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2" title={!canGenerateNew ? blockedReason ?? tr("Заборонено: урок ще не завершено", "Disabled: lesson is not completed") : cooldownSecondsLeft > 0 ? tr(`Зачекай ${cooldownSecondsLeft} с`, `Wait ${cooldownSecondsLeft}s`) : undefined}>
-                    <Plus className="w-4 h-4" />
-                    {tr("Згенерувати нове", "Generate new")}
-                  </Button>
-                  <div className="mt-2 text-[10px] font-mono text-text-muted text-center">
-                    {tr(`Статус уроку: ${lessonStatus}`, `Lesson status: ${lessonStatus}`)}
-                    {blockedReason ? <div className="mt-1">{blockedReason}</div> : null}
-                    {cooldownSecondsLeft > 0 ? <div className="mt-1">{tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)}</div> : null}
-                  </div>
-                </div>}
+
+              <div className="p-3 border-t border-border/70 bg-gradient-to-b from-bg-base/35 to-bg-base/60">
+                <Button
+                  variant="primary"
+                  onClick={handleGenerate}
+                  disabled={loading || !canGenerateFromSidebar || cooldownSecondsLeft > 0}
+                  className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2"
+                  title={generateSidebarHint}
+                >
+                  <Plus className="w-4 h-4" />
+                  {generateSidebarLabel}
+                </Button>
+                <div className="mt-2 text-[10px] font-mono text-text-muted text-center leading-relaxed">
+                  <div className="px-1">{sidebarFooterHint}</div>
+                  {cooldownSecondsLeft > 0 ? <div className="mt-1">{tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)}</div> : null}
+                </div>
+              </div>
             </div>}
+
+          {!showTaskHistory ? <div className="flex-1 flex items-center justify-center p-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTaskHistory(true);
+                  if (isCompactViewport) {
+                    setDockCollapsed(true);
+                    setDockPopOut(false);
+                  }
+                }}
+                className="w-full rounded-xl border border-border/70 bg-bg-base/55 px-1.5 py-2 hover:bg-bg-hover transition-fast"
+                title={tr("Розгорнути панель задач", "Expand tasks panel")}
+                aria-label={tr("Розгорнути панель задач", "Expand tasks panel")}
+              >
+                <div className="text-[9px] font-mono text-text-secondary text-center">{sidebarStats.progress}%</div>
+                <div className="mt-1 h-1 rounded-full bg-bg-hover overflow-hidden">
+                  <div className={`h-full transition-slow ${sidebarStats.progress >= 100 ? "bg-accent-success" : "bg-primary"}`} style={{ width: `${sidebarStats.progress}%` }} />
+                </div>
+              </button>
+            </div> : null}
       </div>
 
         {}
@@ -2012,13 +2556,13 @@ export const TasksPage: React.FC<Props> = ({
           onDrop={() => handleColumnDrop("center")}
           className={`flex-1 min-h-0 flex flex-col ${isPersonalControlQuizTask ? "overflow-visible" : "overflow-hidden"}`}
         >
-          <div className="h-11 border-b border-border/60 bg-bg-surface/65 px-2 flex items-end justify-between gap-2 overflow-auto">
+          <div className="h-11 border-b border-border/60 bg-gradient-to-b from-bg-surface/85 to-bg-surface/65 px-2 flex items-end justify-between gap-2 overflow-auto">
             <div className="flex items-end gap-1 overflow-auto">
             {centerTabItems.map(([id, label, Icon]) => (
               <button
                 key={id}
                 onClick={() => setActiveCenterTab(id)}
-                className={`h-9 mb-1 rounded-t-xl border border-b-0 px-3 flex items-center gap-2 text-xs ${activeCenterTab === id ? "border-border bg-bg-base text-text-primary" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-hover/70"}`}
+                className={`h-9 mb-1 rounded-t-xl border border-b-0 px-3 flex items-center gap-2 text-xs transition-fast ${activeCenterTab === id ? "border-border bg-bg-base text-text-primary shadow-[0_-1px_0_rgba(255,255,255,0.04)]" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-hover/70"}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 {label}
@@ -2040,16 +2584,51 @@ export const TasksPage: React.FC<Props> = ({
 
         {activeCenterTab === "mission" ? (active ? <>
               {}
-              <div className="border-b border-border bg-bg-surface p-4 flex-shrink-0">
-                <div className="flex items-center justify-between mb-3">
-                <div>
-                    <h1 className="text-lg font-mono text-text-primary mb-1">{active.title}</h1>
-                    <div className="text-xs font-mono text-text-muted">
-                      {active.kind === "CONTROL" ? tr("Контроль знань", "Knowledge check") : tr("Тема", "Topic")}{" "}
-                      · {tr("Difus:", "Difficulty:")} {user.difus}
+              <div className="border-b border-border/70 bg-gradient-to-b from-bg-surface to-bg-surface/75 p-4 flex-shrink-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
+                <div className="min-w-0">
+                    <div className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/50 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted">
+                      {tr("Mission focus", "Mission focus")}
+                    </div>
+                    <h1 className="mt-2 text-lg font-mono text-text-primary mb-1 truncate">{active.title}</h1>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-text-secondary">
+                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
+                        {active.kind === "CONTROL" ? tr("Контроль знань", "Knowledge check") : tr("Тема", "Topic")}
+                      </span>
+                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
+                        {activeTaskModeLabel}
+                      </span>
+                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
+                        {tr("Difus:", "Difficulty:")} {user.difus}
+                      </span>
+                      {hasActiveLessonInTopic ? <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
+                          {tr(`Урок ${activeLessonInTopic}`, `Lesson ${activeLessonInTopic}`)}
+                        </span> : null}
+                      {activeTaskStatusMeta ? <span className={`inline-flex items-center rounded-md border px-2 py-0.5 ${activeTaskStatusMeta.pillClass}`}>
+                          {activeTaskStatusMeta.label}
+                        </span> : null}
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-text-secondary">
+                      {activeSectionProgress ? <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/45 px-2 py-0.5">
+                          {tr("Тема", "Topic")} · {activeSectionProgress.sectionTitle}: {activeSectionProgress.completed}/{activeSectionProgress.total} ({activeSectionProgress.progress}%)
+                        </span> : null}
+                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/45 px-2 py-0.5">
+                        {tr("Загальний прогрес", "Overall progress")}: {sidebarStats.completed}/{sidebarStats.total}
+                      </span>
+                      {sidebarStats.reviewing > 0 ? <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/45 px-2 py-0.5">
+                          {tr("На перевірці", "In review")}: {sidebarStats.reviewing}
+                        </span> : null}
+                    </div>
+
+                    <div className="mt-2 h-1.5 w-full max-w-[380px] rounded-full bg-bg-hover overflow-hidden">
+                      <div
+                        className={`h-full transition-slow ${sidebarStats.progress >= 100 ? "bg-accent-success" : "bg-primary"}`}
+                        style={{ width: `${sidebarStats.progress}%` }}
+                      />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     {(() => {
                   const hasTheory = computeHasTheory(active);
                   if (!hasTheory) return null;
@@ -2095,8 +2674,8 @@ export const TasksPage: React.FC<Props> = ({
                       return;
                     }
                     handleSaveDraft();
-                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2">
-                          <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")}
+                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2" title={saveShortcutLabel}>
+                          <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{saveShortcutLabel}</span>
                         </Button>
                         <Button variant="secondary" onClick={() => {
                     if (!editorOpen) {
@@ -2104,8 +2683,8 @@ export const TasksPage: React.FC<Props> = ({
                       return;
                     }
                     handleRun();
-                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2">
-                          <PlayCircle className="w-4 h-4 mr-2" /> {tr("Запустити", "Run")}
+                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2" title={runShortcutLabel}>
+                          <PlayCircle className="w-4 h-4 mr-2" /> {tr("Запустити", "Run")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{runShortcutLabel}</span>
                         </Button>
                         <Button variant="primary" onClick={() => {
                     if (!editorOpen) {
@@ -2113,9 +2692,9 @@ export const TasksPage: React.FC<Props> = ({
                       return;
                     }
                     handleSubmit();
-                  }} disabled={!canEdit || submitting || !theoryAcknowledged || !currentCodeText.trim()} className="text-sm px-6 py-2">
+                  }} disabled={!canEdit || submitting || !theoryAcknowledged || !currentCodeText.trim()} className="text-sm px-6 py-2" title={checkShortcutLabel}>
                           <CheckCircle2 className="w-4 h-4 mr-2" />{" "}
-                          {tr("Перевірити", "Check")}
+                          {tr("Перевірити", "Check")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{checkShortcutLabel}</span>
                         </Button>
                       </>}
                       </> : aiResult.total < 6 ? <>
@@ -2128,6 +2707,29 @@ export const TasksPage: React.FC<Props> = ({
                       </> : null}
                   </div>
                 </div>
+
+                {showInlineFailureRecovery && <div role={uiState === "error" ? "alert" : "status"} aria-live={uiState === "error" ? "assertive" : "polite"} className={`mt-3 p-3 border ${uiState === "error" ? "border-accent-error/50 bg-bg-code" : "border-accent-logic-warning/50 bg-bg-code"}`}>
+                    <div className={`text-xs font-mono ${uiState === "error" ? "text-accent-error" : "text-accent-logic-warning"}`}>
+                      {uiState === "error" ? tr("Помилка біля цієї дії", "Error near this action") : tr("Потрібен крок перед повтором", "Action needed before retry")}
+                    </div>
+                    <div className="mt-1 text-xs font-mono text-text-secondary break-words">
+                      {inlineFailureMessage}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button variant="ghost" onClick={openOutputRecovery} className="text-xs">
+                        {tr("Відкрити вивід", "Open output")}
+                      </Button>
+                      {canQuickCheck && <Button variant="secondary" onClick={checkFromRail} className="text-xs">
+                          {tr("Повторити перевірку", "Retry check")}
+                        </Button>}
+                      {!canQuickCheck && canQuickRun && <Button variant="secondary" onClick={runFromRail} className="text-xs">
+                          {tr("Повторити запуск", "Retry run")}
+                        </Button>}
+                      {canQuickSave && <Button variant="ghost" onClick={saveFromRail} className="text-xs">
+                          {tr("Зберегти перед повтором", "Save before retry")}
+                        </Button>}
+                    </div>
+                  </div>}
 
                 </div>
 
@@ -2185,7 +2787,7 @@ export const TasksPage: React.FC<Props> = ({
                     </div>
                   </section>
                 ) : (
-                <div className="h-full min-h-0 grid grid-cols-12 gap-3">
+                <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3">
                 {missionBlockOrder.map((block) => (
                   <section
                     key={block}
@@ -2194,10 +2796,16 @@ export const TasksPage: React.FC<Props> = ({
                       if (draggingMissionBlock) moveMissionBlock(draggingMissionBlock, block);
                       setDraggingMissionBlock(null);
                     }}
-                    className="col-span-6 min-h-0 h-full rounded-2xl border border-border/70 bg-bg-surface/80 overflow-hidden flex flex-col"
+                    className="col-span-1 lg:col-span-6 min-h-0 h-full rounded-2xl border border-border/70 bg-bg-surface/80 overflow-hidden flex flex-col"
                   >
                     <div className="h-8 px-3 border-b border-border/60 bg-bg-surface/70 flex items-center justify-between text-[11px] text-text-secondary uppercase tracking-wider">
-                      <span>{block === "statement" ? tr("Блок задачі", "Task block") : tr("Блок редактора", "Editor block")}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        {block === "statement" ? <FolderCode className="w-3.5 h-3.5" /> : <TerminalSquare className="w-3.5 h-3.5" />}
+                        <span>{block === "statement" ? tr("Блок задачі", "Task block") : tr("Блок редактора", "Editor block")}</span>
+                        <span className="hidden xl:inline text-[10px] normal-case tracking-normal text-text-muted">
+                          {block === "statement" ? tr("умова / приклади", "statement / examples") : tr("код / виконання", "code / execution")}
+                        </span>
+                      </span>
                       <span
                         draggable
                         onDragStart={() => setDraggingMissionBlock(block)}
@@ -2240,7 +2848,7 @@ export const TasksPage: React.FC<Props> = ({
                               const practice = segmentedPractice[activeSegment] || fallbackPractice;
                               if (hasTheory && !theoryAcknowledged) {
                                 return <div className="text-xs font-mono text-text-secondary">
-                                  {tr("Спочатку прочитай теорію у модальному вікні.", "Read the theory in the modal first.")}
+                                  {tr("Прочитай теорію, щоб відкрити повну умову та приклади.", "Read the theory to unlock the full statement and examples.")}
                                 </div>;
                               }
                               if (isPersonalControlQuizTask) {
@@ -2248,7 +2856,7 @@ export const TasksPage: React.FC<Props> = ({
                                   return <div className="text-xs font-mono text-text-secondary">{tr("Завантаження тесту...", "Loading quiz...")}</div>;
                                 }
                                 if (!personalQuiz) {
-                                  return <div className="text-xs font-mono text-text-secondary">{tr("Не вдалося завантажити тест. Спробуй оновити сторінку.", "Failed to load quiz. Try refreshing the page.")}</div>;
+                                  return <div className="text-xs font-mono text-text-secondary">{tr("Не вдалося завантажити тест. Онови сторінку. Якщо не допоможе — відкрий задачу ще раз.", "We couldn't load the quiz. Refresh the page. If that doesn't help, reopen the task.")}</div>;
                                 }
                                 return <div className="space-y-3">
                                   {personalQuiz.questions.map((q) => {
@@ -2415,17 +3023,22 @@ export const TasksPage: React.FC<Props> = ({
                   <div className="rounded-xl border border-border bg-bg-code/70 p-3">
                     <div className="text-xs text-text-secondary mb-2">{tr("Останні задачі", "Recent tasks")}</div>
                     <div className="space-y-2">
-                      {tasks.slice(0, 8).map((t) => <div key={t.id} className="text-xs flex items-center justify-between gap-2 border border-border rounded-lg px-2 py-1.5">
-                          <span className="text-text-primary truncate">{t.title}</span>
-                          <span className="text-text-secondary">{t.status}</span>
-                        </div>)}
+                      {tasks.slice(0, 8).map((t) => {
+                        const statusMeta = sidebarStatusMeta(t.status);
+                        return <div key={t.id} className="text-xs flex items-center justify-between gap-2 border border-border rounded-lg px-2 py-1.5">
+                            <span className="text-text-primary truncate">{t.title}</span>
+                            <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${statusMeta.pillClass}`}>
+                              {statusMeta.label}
+                            </span>
+                          </div>;
+                      })}
                     </div>
                   </div>
                   <div className="rounded-xl border border-border bg-bg-code/70 p-3">
                     <div className="text-xs text-text-secondary mb-2">{tr("Поточний стан", "Current status")}</div>
                     <div className="text-xs text-text-primary space-y-1">
                       <div>{tr("Активна задача", "Active task")}: {active?.title ?? "—"}</div>
-                      <div>{tr("Статус UI", "UI status")}: {uiState}</div>
+                      <div>{tr("Статус UI", "UI status")}: <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-mono ${consoleStateMeta.toneClass}`}>{consoleStateMeta.label}</span></div>
                       <div>{tr("Сабміт", "Submit")}: {submitting ? tr("в процесі", "in progress") : tr("очікування", "idle")}</div>
                       <div>{tr("Режим редактора", "Editor mode")}: {useFiles ? "multi-file" : "single-file"}</div>
                     </div>
@@ -2435,7 +3048,7 @@ export const TasksPage: React.FC<Props> = ({
             </div>}
         </div>
 
-        {!dockCollapsed && !dockPopOut ? (
+        {!isCompactViewport && !dockCollapsed && !dockPopOut ? (
           <div
             style={{ order: consoleResizerOrder }}
             onMouseDown={(e) => startDockResize(e, consoleResizeEdge)}
@@ -2445,14 +3058,22 @@ export const TasksPage: React.FC<Props> = ({
 
         {!dockPopOut ? <div
           ref={consoleColumnRef}
-          style={{ width: dockCollapsed ? 46 : dockWidth, order: columnOrder.console }}
+          style={isCompactViewport ? {
+          order: columnOrder.console
+        } : {
+          width: dockCollapsed ? 46 : dockWidth,
+          order: columnOrder.console
+        }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => handleColumnDrop("console")}
-          className="border-l border-border bg-bg-surface flex flex-col flex-shrink-0 relative"
+          className={`border-l border-border bg-bg-surface flex flex-col flex-shrink-0 relative overflow-hidden ${isCompactViewport ? `${dockCollapsed ? "w-0 border-l-0 pointer-events-none" : "w-[min(92vw,420px)] shadow-[0_16px_48px_rgba(0,0,0,0.45)]"} absolute inset-y-0 right-0 z-30` : ""}`}
         >
-          <div className="p-3 border-b border-border flex items-center justify-between">
-            <div className="text-sm font-mono text-text-primary flex items-center gap-2">
+          <div className="p-3 border-b border-border/70 bg-gradient-to-b from-bg-surface to-bg-surface/75 flex items-center justify-between">
+            <div className="text-sm font-mono text-text-primary flex items-center gap-2 min-w-0">
                     <Play className="w-4 h-4" /> {tr("Консоль", "Console")}
+                    <span className={`ml-1 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${consoleStateMeta.toneClass}`}>
+                      {consoleStateMeta.label}
+                    </span>
             </div>
             <div className="flex items-center gap-1">
               <span
@@ -2464,10 +3085,17 @@ export const TasksPage: React.FC<Props> = ({
               >
                 <GripVertical className="w-3.5 h-3.5" />
               </span>
-              <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockCollapsed(v => !v)} title={dockCollapsed ? tr("Розгорнути", "Expand") : tr("Згорнути", "Collapse")}>
+              <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockCollapsed(v => {
+                const next = !v;
+                if (isCompactViewport && !next) {
+                  setShowTaskHistory(false);
+                  setDockPopOut(false);
+                }
+                return next;
+              })} title={dockCollapsed ? tr("Розгорнути", "Expand") : tr("Згорнути", "Collapse")}>
                 {dockCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
               </button>
-              {!dockCollapsed ? <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockPopOut(true)} title={tr("В окреме вікно", "Pop out")}>
+              {!dockCollapsed && !isCompactViewport ? <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockPopOut(true)} title={tr("В окреме вікно", "Pop out")}>
                   <SquareArrowOutUpRight className="w-3.5 h-3.5" />
                 </button> : null}
               {aiResult && <Badge color={aiResult.total >= 85 ? "success" : aiResult.total >= 65 ? "warn" : aiResult.total >= 40 ? "warn" : "error"}>
@@ -2476,7 +3104,7 @@ export const TasksPage: React.FC<Props> = ({
             </div>
                 </div>
           {!dockCollapsed ? <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-            <div className="border border-border bg-bg-code p-2">
+            <div className="border border-border/70 bg-bg-code/90 rounded-xl p-2">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <div className="text-[10px] font-mono text-text-secondary">
                   {tr("Вхідні дані (stdin)", "Input (stdin)")}
@@ -2501,8 +3129,39 @@ export const TasksPage: React.FC<Props> = ({
               </div>
               <textarea value={stdin} onChange={e => setStdin(e.target.value)} placeholder={tr("Введіть дані для програми...", "Enter input for your program...")} className="w-full h-20 bg-transparent border border-border p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
             </div>
-            <div className="font-mono text-xs text-text-primary whitespace-pre-wrap">
-                  {consoleOutput || tr("Натисни «Перевірити», щоб отримати оцінку.", "Press “Check” to get a grade.")}
+            {consoleStatusCard}
+              <div className="border border-border/70 bg-bg-code/85 rounded-xl p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-muted">
+                    {tr("Вивід", "Output")}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono text-text-muted">
+                      {tr("Рядків", "Lines")}: {consoleLineCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={copyConsoleFromToolbar}
+                      disabled={!hasConsoleOutput}
+                      className="text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={tr("Скопіювати вивід у буфер", "Copy output to clipboard")}
+                    >
+                      {consoleClipboardLabel}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearConsoleFromToolbar}
+                      disabled={!hasConsoleOutput}
+                      className="text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={tr("Очистити вивід", "Clear output")}
+                    >
+                      {tr("Очистити", "Clear")}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 font-mono text-xs text-text-primary whitespace-pre-wrap max-h-[260px] overflow-auto pr-1">
+                  {consoleOutput || tr("Спершу натисни «Запуск», потім «Перевірити», щоб отримати оцінку.", "Run first, then press Check to get a grade.")}
+                </div>
             </div>
                   {aiResult && <div className="mt-4 pt-4 border-t border-border space-y-2">
                 {(() => {
@@ -2647,18 +3306,6 @@ export const TasksPage: React.FC<Props> = ({
                   })()}
                     </div>}
             {}
-            {uiState === "evaluating" && <div className="mt-4 text-xs font-mono text-secondary animate-pulse">
-                {tr("Оцінювання...", "Evaluating...")}
-              </div>}
-            {uiState === "success" && <div className="mt-4 text-xs font-mono text-accent-success">
-                {tr("✓ Успішно", "✓ Success")}
-              </div>}
-            {uiState === "error" && <div className="mt-4 text-xs font-mono text-accent-error">
-                {tr("✗ Помилка", "✗ Error")}
-                </div>}
-            {uiState === "logic-warning" && <div className="mt-4 text-xs font-mono text-accent-logic-warning">
-                {tr("⚠ Попередження", "⚠ Warning")}
-            </div>}
           </div> : <div className="flex-1 min-h-0 p-1 flex items-start justify-center">
               <button
                 className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center mt-2"
@@ -2672,6 +3319,17 @@ export const TasksPage: React.FC<Props> = ({
         </div> : null}
       </div>
 
+      {isCompactViewport && (showTaskHistory || (!dockCollapsed && !dockPopOut)) ? <button
+          type="button"
+          aria-label={tr("Закрити бокові панелі", "Close side panels")}
+          className="absolute inset-0 z-20 bg-black/45 backdrop-blur-[1px]"
+          onClick={() => {
+            setShowTaskHistory(false);
+            setDockCollapsed(true);
+            setDockPopOut(false);
+          }}
+        /> : null}
+
       {dockPopOut ? <div className="fixed right-2 sm:right-4 top-16 sm:top-20 w-[min(92vw,430px)] h-[min(72vh,640px)] z-40 rounded-2xl border border-border bg-bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-text-secondary uppercase tracking-widest">{tr("Консоль (вікно)", "Console (pop-out)")}</div>
@@ -2680,7 +3338,7 @@ export const TasksPage: React.FC<Props> = ({
             </button>
           </div>
           <div className="h-[calc(100%-2rem)] overflow-auto border border-border rounded-xl bg-bg-code p-3 text-xs font-mono text-text-primary whitespace-pre-wrap">
-            {consoleOutput || tr("Натисни «Перевірити», щоб отримати оцінку.", "Press “Check” to get a grade.")}
+            {consoleOutput || tr("Спершу натисни «Запуск», потім «Перевірити», щоб отримати оцінку.", "Run first, then press Check to get a grade.")}
           </div>
         </div> : null}
 

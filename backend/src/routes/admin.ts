@@ -14,6 +14,13 @@ import adminBroadcastRouter from "./adminBroadcast";
 import adminMailRouter from "./adminMail";
 import { logger } from "../utils/logger";
 import { getUserIadForLang } from "../utils/iad";
+import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS } from "../types/GradingSystem";
+import { getExecutionQueueMode } from "../services/execution/distributedJudgeQueueSingleton";
+import {
+  getJudgeDeadLetterQueue,
+  getJudgeExecutionMetrics,
+  replayJudgeDeadLetterQueue,
+} from "../services/judgeWorker";
 const adminRouter = Router();
 adminRouter.use("/support", adminSupportRouter);
 adminRouter.use("/maintenance", adminMaintenanceRouter);
@@ -65,11 +72,13 @@ const updateUserRoleSchema = z.object({
 const createClassSchema = z.object({
   name: z.string().min(1).max(255),
   language: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
+  gradingSystem: z.enum(GRADING_SYSTEMS).optional(),
   teacherId: z.number().int().positive()
 });
 const updateClassSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   language: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
+  gradingSystem: z.enum(GRADING_SYSTEMS).optional(),
   teacherId: z.number().int().positive().optional()
 });
 adminRouter.post("/users", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
@@ -372,7 +381,8 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
     const cls = classRepo().create({
       teacher: teacher,
       name: data.name,
-      language: normalizeLang(data.language || teacher.lang)
+      language: normalizeLang(data.language || teacher.lang),
+      gradingSystem: data.gradingSystem || DEFAULT_GRADING_SYSTEM
     });
     await classRepo().save(cls);
     return res.status(201).json({
@@ -381,6 +391,7 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
         id: cls.id,
         name: cls.name,
         language: cls.language,
+        gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         teacherId: teacher.id,
         teacherName: teacher.username,
         createdAt: cls.createdAt
@@ -406,6 +417,7 @@ adminRouter.get("/classes", authRequired, systemAdminGuard, async (req: AuthRequ
         id: cls.id,
         name: cls.name,
         language: cls.language,
+        gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         teacherId: cls.teacher.id,
         teacherName: cls.teacher.username,
         createdAt: cls.createdAt,
@@ -448,6 +460,7 @@ adminRouter.patch("/classes/:id", authRequired, systemAdminGuard, async (req: Au
     }
     if (data.name) cls.name = data.name;
     if (data.language) cls.language = normalizeLang(data.language);
+    if (data.gradingSystem) cls.gradingSystem = data.gradingSystem;
     if (data.teacherId && data.teacherId !== cls.teacher.id) {
       const teacher = await userRepo().findOne({
         where: {
@@ -468,6 +481,7 @@ adminRouter.patch("/classes/:id", authRequired, systemAdminGuard, async (req: Au
         id: cls.id,
         name: cls.name,
         language: cls.language,
+        gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         teacherId: cls.teacher.id,
         teacherName: cls.teacher.username,
         updatedAt: cls.updatedAt
@@ -543,6 +557,79 @@ adminRouter.get("/stats", authRequired, systemAdminGuard, async (req: AuthReques
     });
   } catch (error: any) {
     logger.error("[admin] GET /stats error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({
+      message: "INTERNAL_SERVER_ERROR"
+    });
+  }
+});
+
+adminRouter.get("/judge/load", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const metrics = getJudgeExecutionMetrics();
+    const mode = getExecutionQueueMode();
+
+    return res.json({
+      mode,
+      active: metrics.active,
+      queued: metrics.queued,
+      peakActive: metrics.peakActive,
+      peakQueueLength: metrics.peakQueueLength,
+      maxConcurrent: metrics.maxConcurrent,
+      maxQueueSize: metrics.maxQueueSize,
+      maxRetries: metrics.maxRetries,
+      avgExecutionTimeMs: Math.round(metrics.avgExecutionTimeMs),
+      avgQueueWaitTimeMs: Math.round(metrics.averageQueueWaitTime),
+      totalRejectedQueueFull: metrics.totalRejectedQueueFull,
+      totalRequeuedExpired: metrics.totalRequeuedExpired,
+      totalDeadLettered: metrics.totalDeadLettered,
+      deadLetterQueueLength: metrics.deadLetterQueueLength,
+      totalCompleted: metrics.totalCompleted,
+      started: metrics.started,
+      sampledAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error("[admin] GET /judge/load error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({
+      message: "INTERNAL_SERVER_ERROR"
+    });
+  }
+});
+
+adminRouter.get("/judge/dead-letter", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const limitRaw = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.max(1, Math.min(200, limitRaw))
+      : 50;
+
+    const result = await getJudgeDeadLetterQueue(limit);
+    return res.json({
+      ...result,
+      limit,
+      sampledAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error("[admin] GET /judge/dead-letter error", { requestId: req.requestId, userId: req.userId, error });
+    return res.status(500).json({
+      message: "INTERNAL_SERVER_ERROR"
+    });
+  }
+});
+
+adminRouter.post("/judge/dead-letter/replay", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const bodyLimit = Number.parseInt(String((req.body as any)?.limit ?? ""), 10);
+    const limit = Number.isFinite(bodyLimit)
+      ? Math.max(1, Math.min(500, bodyLimit))
+      : 20;
+
+    const result = await replayJudgeDeadLetterQueue(limit);
+    return res.json({
+      ...result,
+      replayedAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error("[admin] POST /judge/dead-letter/replay error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });

@@ -6,6 +6,9 @@ import { AppDataSource } from '../data-source';
 import { User } from '../entities/User';
 import { UserMode, UserRole } from '../entities/User';
 import { logger } from '../utils/logger';
+import { resolveUiLocaleFromHeaders, UiLocale } from '../utils/uiLocale';
+import { isJtiRevoked, wasTokenIssuedBeforeRevocation } from '../services/auth/jwtRevocation';
+
 export interface AuthRequest extends Request<ParamsFlatDictionary, any, any, any, Record<string, any>> {
   userId?: number;
   studentId?: number;
@@ -19,6 +22,7 @@ export interface AuthRequest extends Request<ParamsFlatDictionary, any, any, any
   userRole?: UserRole | null;
   userMode?: UserMode | null;
   lang?: string;
+  uiLanguage?: UiLocale;
   iad?: number;
   difus?: number;
   requestId?: string;
@@ -31,18 +35,44 @@ type JwtPayload = {
   lang?: string;
   role?: UserRole;
   userMode?: UserMode;
+  jti?: string;
+  iat?: number;
 };
+
+async function syncStudentUiLanguage(studentId: number, uiLanguage: UiLocale, requestId?: string): Promise<void> {
+  try {
+    await AppDataSource.query(
+      "UPDATE `students` SET `ui_language` = ? WHERE `id` = ? AND (`ui_language` IS NULL OR `ui_language` <> ?)",
+      [uiLanguage, studentId, uiLanguage]
+    );
+  } catch (err: any) {
+    logger.warn("[auth] Failed to sync student ui_language", {
+      requestId,
+      studentId,
+      uiLanguage,
+      err: err?.message || err
+    });
+  }
+}
 
 async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promise<"ok" | "not-found" | "invalid"> {
   if (payload.type === "STUDENT" && payload.studentId) {
+    const uiLanguage = resolveUiLocaleFromHeaders(req.headers, "en");
     req.studentId = payload.studentId;
     req.userType = "STUDENT";
     req.principalId = payload.studentId;
     req.lang = payload.lang;
+    req.uiLanguage = uiLanguage;
     req.userRole = null;
     req.userMode = "EDUCATIONAL";
+
+    // Best-effort sync, non-blocking for request path.
+    void syncStudentUiLanguage(payload.studentId, uiLanguage, req.requestId);
+
     return "ok";
   }
+
+  req.uiLanguage = resolveUiLocaleFromHeaders(req.headers, "en");
 
   const userId = Number(payload.userId);
   if (!Number.isFinite(userId) || userId <= 0) return "invalid";
@@ -74,6 +104,26 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
   const token = authHeader.slice('Bearer '.length);
   try {
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    
+    // Check if JWT has been revoked
+    if (payload.jti && await isJtiRevoked(payload.jti)) {
+      logger.warn('[auth] Revoked token used', { jti: payload.jti, userId: payload.userId, studentId: payload.studentId });
+      return res.status(401).json({
+        message: 'Token has been revoked'
+      });
+    }
+    
+    // Check if token was issued before user's token revocation timestamp
+    if (payload.userId && payload.iat) {
+      const wasRevoked = await wasTokenIssuedBeforeRevocation(payload.userId, payload.iat * 1000);
+      if (wasRevoked) {
+        logger.warn('[auth] Token issued before revocation timestamp', { userId: payload.userId });
+        return res.status(401).json({
+          message: 'Token is no longer valid'
+        });
+      }
+    }
+    
     const status = await hydrateAuthContext(req, payload);
     if (status === "not-found") {
       return res.status(401).json({
@@ -105,6 +155,21 @@ export const authOptional = async (req: AuthRequest, _res: Response, next: NextF
   const token = authHeader.slice("Bearer ".length);
   try {
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    
+    // Check if JWT has been revoked
+    if (payload.jti && await isJtiRevoked(payload.jti)) {
+      logger.warn('[auth] Revoked token used in optional auth', { jti: payload.jti });
+      return next();
+    }
+    
+    // Check if token was issued before user's token revocation timestamp
+    if (payload.userId && payload.iat) {
+      const wasRevoked = await wasTokenIssuedBeforeRevocation(payload.userId, payload.iat * 1000);
+      if (wasRevoked) {
+        return next();
+      }
+    }
+    
     const status = await hydrateAuthContext(req, payload);
     if (status !== "ok") {
       return next();

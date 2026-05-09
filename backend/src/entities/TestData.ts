@@ -4,6 +4,7 @@ import { TopicTask } from "./TopicTask";
 import { Task } from "./Task";
 import { LibraryTask } from "./LibraryTask";
 export type TestKind = "SAMPLE" | "JUDGE";
+export type TestSource = "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
 @Entity("test_data")
 export class TestData {
   @PrimaryGeneratedColumn()
@@ -64,6 +65,15 @@ export class TestData {
     default: "JUDGE"
   })
   kind!: TestKind;
+
+  // Provenance marker for safe cleanup / filtering.
+  @Column({
+    type: "enum",
+    enum: ["MANUAL", "AI_GENERATED", "LIBRARY_IMPORTED"],
+    default: "MANUAL"
+  })
+  source!: TestSource;
+
   @Column({
     type: "int",
     default: 1

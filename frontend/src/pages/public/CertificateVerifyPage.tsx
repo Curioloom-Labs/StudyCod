@@ -53,9 +53,9 @@ export const CertificateVerifyPage: React.FC = () => {
   }, [load]);
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 max-w-3xl mx-auto">
       <Card className="p-5 border border-border/70 mb-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="font-mono text-text-primary">{tr("Перевірка сертифіката", "Certificate verification")}</div>
           <Button variant="secondary" onClick={() => void load()} disabled={loading}>
             <RefreshCw className="w-4 h-4 mr-2" />

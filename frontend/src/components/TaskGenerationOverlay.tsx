@@ -193,19 +193,12 @@ export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenera
 
   return (
     <div
-      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-bg-base/80 backdrop-blur-sm"
       role="status"
       aria-live="polite"
       aria-label={tr("Генерація завдання", "Task generation")}
     >
       <div className="relative w-[min(520px,calc(100vw-32px))] overflow-hidden border border-border bg-bg-surface shadow-2xl">
-        {/* Glow + flicker */}
-        <div className="absolute inset-0 terminal-glow pointer-events-none" />
-        <div className="absolute inset-0 terminal-flicker pointer-events-none" />
-
-        {/* Scanline */}
-        <div className="absolute -top-24 left-0 right-0 h-24 terminal-scanline pointer-events-none" />
-
         {/* Header */}
         <div className="relative px-5 pt-5 pb-4 border-b border-border">
           <div className="flex items-center gap-2">
@@ -234,7 +227,6 @@ export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenera
               className={`absolute inset-y-0 left-0 ${activePhase === "error" ? "bg-accent-error/70" : "bg-primary/70"} transition-all duration-500`}
               style={{ width: `${progressPercent}%` }}
             />
-            <div className="absolute inset-y-0 left-0 w-[45%] bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
           </div>
         </div>
 

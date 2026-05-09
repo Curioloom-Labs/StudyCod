@@ -10,7 +10,7 @@ export interface AdminUser {
   lastName: string | null;
   userMode: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
   role: "USER" | "TEACHER" | "SYSTEM_ADMIN";
-  lang: "JAVA" | "PYTHON";
+  lang: "JAVA" | "PYTHON" | "CPP";
   iad: number;
   difus?: number;
   avatarUrl: string | null;
@@ -32,7 +32,7 @@ export interface AdminUserResponse {
 export interface AdminClass {
   id: number;
   name: string;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   teacherId: number;
   teacherName: string;
   createdAt: string;
@@ -55,6 +55,54 @@ export interface AdminStats {
   classes: {
     total: number;
   };
+}
+
+export interface AdminJudgeLoad {
+  mode: "distributed" | "local";
+  active: number;
+  queued: number;
+  peakActive: number;
+  peakQueueLength: number;
+  maxConcurrent: number;
+  maxQueueSize: number;
+  maxRetries: number;
+  avgExecutionTimeMs: number;
+  avgQueueWaitTimeMs: number;
+  totalRejectedQueueFull: number;
+  totalRequeuedExpired: number;
+  totalDeadLettered: number;
+  deadLetterQueueLength: number;
+  totalCompleted: number;
+  started: number;
+  sampledAt: string;
+}
+
+export interface AdminJudgeDeadLetterItem {
+  jobId: string;
+  submissionId: string | null;
+  state: string | null;
+  attempts: number;
+  updatedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+}
+
+export interface AdminJudgeDeadLetterResponse {
+  mode: "distributed" | "local";
+  total: number;
+  limit: number;
+  sampledAt: string;
+  items: AdminJudgeDeadLetterItem[];
+}
+
+export interface AdminJudgeDeadLetterReplayResult {
+  mode: "distributed" | "local";
+  moved: number;
+  skipped: number;
+  remaining: number;
+  queued: number;
+  limit: number;
+  replayedAt: string;
 }
 export type SupportTicketStatus = "OPEN" | "ANSWERED" | "CLOSED";
 export type MaintenanceState = {
@@ -107,7 +155,7 @@ export interface CreateUserData {
   lastName?: string;
   userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
   role?: "USER" | "TEACHER" | "SYSTEM_ADMIN";
-  lang?: "JAVA" | "PYTHON";
+  lang?: "JAVA" | "PYTHON" | "CPP";
   emailVerified?: boolean;
 }
 export interface UpdateUserData {
@@ -115,19 +163,19 @@ export interface UpdateUserData {
   password?: string;
   firstName?: string;
   lastName?: string;
-  lang?: "JAVA" | "PYTHON";
+  lang?: "JAVA" | "PYTHON" | "CPP";
 }
 export interface UpdateUserRoleData {
   role: "USER" | "TEACHER" | "SYSTEM_ADMIN";
 }
 export interface CreateClassData {
   name: string;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   teacherId: number;
 }
 export interface UpdateClassData {
   name?: string;
-  language?: "JAVA" | "PYTHON";
+  language?: "JAVA" | "PYTHON" | "CPP";
   teacherId?: number;
 }
 export async function getAdminUsers(params?: {
@@ -181,6 +229,25 @@ export async function deleteAdminClass(id: number): Promise<void> {
 }
 export async function getAdminStats(): Promise<AdminStats> {
   const res = await api.get("/admin/stats");
+  return res.data;
+}
+
+export async function getAdminJudgeLoad(): Promise<AdminJudgeLoad> {
+  const res = await api.get("/admin/judge/load");
+  return res.data;
+}
+
+export async function getAdminJudgeDeadLetter(params?: {
+  limit?: number;
+}): Promise<AdminJudgeDeadLetterResponse> {
+  const res = await api.get("/admin/judge/dead-letter", { params });
+  return res.data;
+}
+
+export async function replayAdminJudgeDeadLetter(data?: {
+  limit?: number;
+}): Promise<AdminJudgeDeadLetterReplayResult> {
+  const res = await api.post("/admin/judge/dead-letter/replay", data || {});
   return res.data;
 }
 export async function getAdminSupportTickets(): Promise<{
@@ -259,7 +326,7 @@ export type AdminLibraryTask = {
   title: string;
   description: string;
   template: string;
-  lang: "JAVA" | "PYTHON";
+  lang: "JAVA" | "PYTHON" | "CPP";
   maxAttempts: number;
   status: AdminLibraryTaskStatus;
   rejectionReason: string | null;

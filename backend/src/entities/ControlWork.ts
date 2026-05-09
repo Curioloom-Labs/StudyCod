@@ -51,6 +51,12 @@ export class ControlWork {
   })
   isAssigned!: boolean;
   @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "assigned_student_ids"
+  })
+  assignedStudentIds?: number[] | null;
+  @Column({
     type: "datetime",
     nullable: true,
     name: "deadline"

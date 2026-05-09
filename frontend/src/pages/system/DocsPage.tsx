@@ -86,15 +86,15 @@ export const DocsPage: React.FC = () => {
     return sections.find(s => s.id === selectedId) || sections[0];
   }, [selectedId, sections]);
   return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-      <header className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">
-        <div className="flex items-center gap-3">
+      <header className="min-h-16 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 md:px-6 py-2 flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
           <Button variant="ghost" onClick={() => {
           if (window.history.length > 1) navigate(-1);else navigate("/");
         }}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {t("back")}
           </Button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <BookOpen className="w-5 h-5 text-primary" />
             <div className="text-lg font-mono text-text-primary">StudyCod Wiki</div>
           </div>
@@ -109,9 +109,9 @@ export const DocsPage: React.FC = () => {
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto">
-        <div className="grid grid-cols-[360px,1fr]">
+        <div className="grid grid-cols-1 lg:grid-cols-[320px,1fr]">
           {}
-          <div className="border-r border-border bg-bg-surface/40 p-4">
+          <div className="border-b lg:border-b-0 lg:border-r border-border bg-bg-surface/40 p-3 sm:p-4">
             <Card className="p-3 mb-3">
               <div className="text-sm font-mono text-text-primary mb-2">{t("filter")}</div>
               <div className="flex gap-2 mb-3">
@@ -154,8 +154,8 @@ export const DocsPage: React.FC = () => {
           </div>
 
           {}
-          <div className="p-6">
-            <Card className="p-6">
+          <div className="p-3 sm:p-4 md:p-6">
+            <Card className="p-4 sm:p-6">
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
                   <div className="text-xl font-mono text-text-primary">{selected.title}</div>

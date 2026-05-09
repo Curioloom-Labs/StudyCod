@@ -44,9 +44,9 @@ export const ProfileCertificatesPage: React.FC = () => {
   }, [load]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">
       <Card className="p-4 border border-border/70 mb-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-text-primary font-mono">
             <Award className="w-5 h-5 text-primary" />
             {tr("Мої сертифікати", "My certificates")}
@@ -74,7 +74,7 @@ export const ProfileCertificatesPage: React.FC = () => {
           <div className="text-sm text-text-secondary">{tr("Поки що сертифікатів немає.", "No certificates yet.")}</div>
         ) : (
           <div className="overflow-auto border border-border">
-            <table className="min-w-[640px] md:min-w-[980px] w-full text-xs sm:text-sm font-mono">
+            <table className="min-w-[620px] md:min-w-[860px] w-full text-xs sm:text-sm font-mono">
               <caption className="sr-only">
                 {tr("Список сертифікатів користувача", "List of user certificates")}
               </caption>

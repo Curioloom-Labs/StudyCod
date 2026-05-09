@@ -25,7 +25,7 @@ export const EmailPreferencesResultPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bg-base text-text-primary flex items-center justify-center p-4">
-      <Card className="w-full max-w-xl p-6 border border-border/70 bg-bg-surface/90">
+      <Card className="w-full max-w-xl p-4 sm:p-6 border border-border/70 bg-bg-surface/90">
         <div className="flex items-start gap-3">
           {ok ? <CheckCircle2 className="w-6 h-6 text-accent-success mt-0.5" /> : <XCircle className="w-6 h-6 text-accent-error mt-0.5" />}
           <div>

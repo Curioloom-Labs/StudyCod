@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { ClassGradingSystem } from "../gradingSystems";
 
 type EduUserPayload = {
   id: number;
@@ -70,6 +71,7 @@ export interface Class {
   id: number;
   name: string;
   language: "JAVA" | "PYTHON" | "CPP";
+  gradingSystem: ClassGradingSystem;
   studentsCount: number;
   createdAt: string;
 }
@@ -101,6 +103,7 @@ export interface Lesson {
     title: string;
     timeLimitMinutes?: number | null;
     deadline?: string | null;
+    deadlineTimezone?: string | null;
     tasksCount: number;
     hasTheory?: boolean;
     hasPractice?: boolean;
@@ -131,14 +134,25 @@ export interface Lesson {
       isCorrect: boolean;
     }>;
   } | null;
+  reportOnly?: boolean;
+  reportReason?: "COMPLETED" | "DEADLINE_EXPIRED" | null;
+  controlReport?: {
+    finalGrade: number | null;
+    theoryGrade: number | null;
+    practiceGrade: number | null;
+    formulaSnapshot: string | null;
+  } | null;
   studentControlProgress?: {
     totalTasks: number;
     completedTasks: number;
     currentTaskOrder: number | null;
+    currentTaskId: number | null;
+    completedTaskIds: number[];
     unlockedTaskIds: number[];
     reviewAvailable: boolean;
   };
   deadline?: string | null;
+  deadlineTimezone?: string | null;
   tasks?: Array<{
     id: number;
     title: string;
@@ -148,9 +162,12 @@ export interface Lesson {
     webTemplateFiles?: WebTaskFile[] | null;
     webValidationRules?: WebTaskRule[] | null;
     deadline?: string | null;
+    deadlineTimezone?: string | null;
     maxAttempts?: number;
     isClosed?: boolean;
     testDataCount?: number;
+    attemptsUsed?: number;
+    progressCompleted?: boolean;
     hasGrade?: boolean;
     grade?: {
       id: number;
@@ -193,12 +210,14 @@ export interface TaskWithGrade {
   savedCode?: string;
   maxAttempts?: number;
   deadline?: string | null;
+  deadlineTimezone?: string | null;
   isClosed?: boolean;
   attemptsUsed?: number;
   lesson: {
     id: number;
     title: string;
     type: "TOPIC" | "CONTROL" | "LESSON";
+    deadlineTimezone?: string | null;
     hasTheory: boolean;
     theory?: string;
     timeLimitMinutes?: number;
@@ -301,9 +320,17 @@ export interface LearningFirstFailure {
   errorKind: string;
 }
 
+export interface LearningFailureAnalysis {
+  summary: string;
+  likelyRootCause: string;
+  nextSteps: string[];
+  confidence: "low" | "medium" | "high";
+}
+
 export interface LearningFeedback {
   verdict?: string | null;
   firstFailure?: LearningFirstFailure | null;
+  analysis?: LearningFailureAnalysis | null;
 }
 export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
   token?: string;
@@ -321,16 +348,35 @@ export async function registerTeacher(username: string, email: string, password:
   }
   return res.data;
 }
-export async function createClass(name: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<Class> {
+export async function createClass(name: string, language: "JAVA" | "PYTHON" | "CPP", gradingSystem?: ClassGradingSystem): Promise<Class> {
   const res = await api.post("/edu/classes", {
     name,
-    language
+    language,
+    gradingSystem
   });
   return res.data.class;
 }
 export async function getClasses(): Promise<Class[]> {
   const res = await api.get("/edu/classes");
   return res.data.classes;
+}
+export interface ClassDetails {
+  id: number;
+  name: string;
+  language: "JAVA" | "PYTHON" | "CPP";
+  gradingSystem: ClassGradingSystem;
+  createdAt: string;
+  updatedAt: string;
+}
+export async function getClass(classId: number): Promise<ClassDetails> {
+  const res = await api.get(`/edu/classes/${classId}`);
+  return res.data.class;
+}
+export async function updateClassGradingSystem(classId: number, gradingSystem: ClassGradingSystem): Promise<ClassDetails> {
+  const res = await api.put(`/edu/classes/${classId}/grading-system`, {
+    gradingSystem
+  });
+  return res.data.class;
 }
 export interface AddStudentsRequest {
   students: Array<{
@@ -617,18 +663,49 @@ export async function completeTaskFiles(taskId: number, files: CodeFile[], bindi
   const res = await api.post(`/edu/tasks/${taskId}/complete`, { files, ...(binding ?? {}) });
   return res.data;
 }
-export async function generateTestData(taskId: number, count: number): Promise<{
+
+export type HintFeedbackSignal = "up" | "down";
+export type HintFeedbackReasonCode = "HELPFUL" | "NOT_SPECIFIC" | "INCORRECT" | "TOO_HARD" | "TOO_VERBOSE" | "OTHER";
+
+export async function submitHintFeedback(taskId: number, payload: {
+  submissionId?: string;
+  codeHash: string;
+  strategyVariant?: "A" | "B";
+  verdict?: string | null;
+  signal: HintFeedbackSignal;
+  reasonCode?: HintFeedbackReasonCode;
+  reasonText?: string;
+  hintsShown?: number;
+  hintsTotal?: number;
+}): Promise<{
+  message: string;
+  stored: boolean;
+  id?: number | null;
+  strategyVariant?: "A" | "B";
+}> {
+  const res = await api.post(`/edu/tasks/${taskId}/hints-feedback`, payload);
+  return res.data;
+}
+
+export async function generateTestData(taskId: number, count: number, options?: {
+  replaceGenerated?: boolean;
+}): Promise<{
   count: number;
+  skippedDuplicates?: number;
+  replacedGeneratedCount?: number;
   testData: Array<{
     id: number;
     input: string;
     expectedOutput: string;
     points: number;
     isHidden?: boolean;
+    source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+    subtask?: string | null;
   }>;
 }> {
   const res = await api.post(`/edu/tasks/${taskId}/test-data/generate`, {
-    count
+    count,
+    ...(typeof options?.replaceGenerated === "boolean" ? { replaceGenerated: options.replaceGenerated } : {})
   });
   return res.data;
 }
@@ -637,6 +714,7 @@ export interface TestDataItem {
   expectedOutput: string;
   points: number;
   isHidden?: boolean;
+  subtask?: string | null;
 }
 export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{
   count: number;
@@ -652,11 +730,62 @@ export interface TestData {
   expectedOutput?: string;
   points: number;
   isHidden?: boolean;
+  source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+  subtask?: string | null;
+  isInputTruncated?: boolean;
+  inputFullLength?: number;
+  isExpectedOutputTruncated?: boolean;
+  expectedOutputFullLength?: number;
 }
-export async function getTestData(taskId: number): Promise<{
+export interface TestDataPagination {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+}
+export interface GetTestDataOptions {
+  preview?: boolean;
+  previewChars?: number;
+  limit?: number;
+  offset?: number;
+  source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED" | "ALL";
+}
+export async function getTestData(taskId: number, options?: GetTestDataOptions): Promise<{
   testData: TestData[];
+  pagination?: TestDataPagination;
 }> {
-  const res = await api.get(`/edu/tasks/${taskId}/test-data`);
+  const params = new URLSearchParams();
+  if (options?.preview) {
+    params.set("preview", "1");
+  }
+  if (typeof options?.previewChars === "number" && Number.isFinite(options.previewChars)) {
+    params.set("previewChars", String(Math.trunc(options.previewChars)));
+  }
+  if (typeof options?.limit === "number" && Number.isFinite(options.limit)) {
+    params.set("limit", String(Math.trunc(options.limit)));
+  }
+  if (typeof options?.offset === "number" && Number.isFinite(options.offset)) {
+    params.set("offset", String(Math.trunc(options.offset)));
+  }
+  if (typeof options?.source === "string" && options.source !== "ALL") {
+    params.set("source", options.source);
+  }
+  const query = params.toString();
+  const res = await api.get(`/edu/tasks/${taskId}/test-data${query ? `?${query}` : ""}`);
+  return res.data;
+}
+export async function deleteGeneratedTestData(taskId: number): Promise<{
+  message: string;
+  deleted: number;
+}> {
+  const res = await api.delete(`/edu/tasks/${taskId}/test-data/generated`);
+  return res.data;
+}
+export async function getTestDataItem(taskId: number, testDataId: number): Promise<{
+  testData: TestData;
+}> {
+  const res = await api.get(`/edu/tasks/${taskId}/test-data/${testDataId}`);
   return res.data;
 }
 export async function updateTestData(taskId: number, testDataId: number, update: {
@@ -664,6 +793,7 @@ export async function updateTestData(taskId: number, testDataId: number, update:
   expectedOutput?: string;
   points?: number;
   isHidden?: boolean;
+  subtask?: string | null;
 }): Promise<{
   message: string;
   testData: TestData;
@@ -728,6 +858,7 @@ export async function getMyStudentInfo(): Promise<{
       id: number;
       name: string;
       language: "JAVA" | "PYTHON" | "CPP";
+      gradingSystem?: ClassGradingSystem;
     };
   };
 }> {
@@ -749,11 +880,174 @@ export type SummaryGrade = {
 export interface StudentGradesResponse {
   grades: Grade[];
   summaryGrades: SummaryGrade[];
+  gradingSystem?: ClassGradingSystem;
 }
 export async function getStudentGrades(studentId: number): Promise<StudentGradesResponse> {
   const res = await api.get(`/edu/students/${studentId}/grades`);
   return res.data;
 }
+
+export type GradeAppealTargetType = "EDU_GRADE" | "SUMMARY_GRADE";
+export type GradeAppealStatus =
+  | "SUBMITTED"
+  | "IN_REVIEW"
+  | "NEEDS_INFO"
+  | "RESOLVED_ACCEPTED"
+  | "RESOLVED_PARTIAL"
+  | "RESOLVED_REJECTED"
+  | "CANCELLED";
+export type GradeAppealReasonCode =
+  | "CHECK_TEST_RESULTS"
+  | "CHECK_FEEDBACK"
+  | "CHECK_CALCULATION"
+  | "CHECK_THEMATIC"
+  | "OTHER";
+
+export interface GradeAppealItem {
+  id: number;
+  status: GradeAppealStatus;
+  targetType: GradeAppealTargetType;
+  targetId: number | null;
+  targetTitle: string;
+  classId: number | null;
+  className: string | null;
+  studentId: number | null;
+  studentName: string;
+  reasonCode: GradeAppealReasonCode;
+  reasonText: string;
+  desiredOutcome: string | null;
+  resolutionText: string | null;
+  previousGrade: number | null;
+  newGrade: number | null;
+  gradeChanged: boolean;
+  startedReviewAt: string | null;
+  resolvedAt: string | null;
+  lastMessageAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  slaDueAt?: string | null;
+  slaRemainingSeconds?: number | null;
+  slaState?: "ON_TRACK" | "AT_RISK" | "OVERDUE" | "CLOSED";
+  escalationLevel?: "NONE" | "WARNING" | "ESCALATED";
+  isEscalated?: boolean;
+  canStudentReply: boolean;
+  canStudentCancel: boolean;
+  canTeacherReply: boolean;
+  canTeacherResolve: boolean;
+}
+
+export interface GradeAppealMessageItem {
+  id: number;
+  senderType: "STUDENT" | "TEACHER" | "SYSTEM";
+  senderName: string;
+  senderUserId: number | null;
+  senderStudentId: number | null;
+  text: string;
+  createdAt: string | null;
+}
+
+export async function createGradeAppeal(payload: {
+  targetType: GradeAppealTargetType;
+  targetId: number;
+  reasonCode: GradeAppealReasonCode;
+  reasonText: string;
+  desiredOutcome?: string;
+}): Promise<{
+  message: string;
+  appeal: GradeAppealItem;
+}> {
+  const res = await api.post("/edu/appeals", payload);
+  return res.data;
+}
+
+export async function getMyGradeAppeals(): Promise<GradeAppealItem[]> {
+  const res = await api.get("/edu/appeals/mine");
+  return res.data.appeals || [];
+}
+
+export async function getMyGradeAppeal(appealId: number): Promise<{
+  appeal: GradeAppealItem;
+  messages: GradeAppealMessageItem[];
+}> {
+  const res = await api.get(`/edu/appeals/${appealId}`);
+  return {
+    appeal: res.data.appeal,
+    messages: res.data.messages || []
+  };
+}
+
+export async function postMyGradeAppealMessage(appealId: number, text: string): Promise<{
+  message: string;
+  item: GradeAppealMessageItem;
+}> {
+  const res = await api.post(`/edu/appeals/${appealId}/messages`, { text });
+  return res.data;
+}
+
+export async function cancelMyGradeAppeal(appealId: number, reason?: string): Promise<{
+  message: string;
+  appeal: GradeAppealItem;
+}> {
+  const res = await api.patch(`/edu/appeals/${appealId}/cancel`, {
+    reason: reason?.trim() || undefined
+  });
+  return res.data;
+}
+
+export async function getClassGradeAppeals(classId: number, status?: GradeAppealStatus[]): Promise<GradeAppealItem[]> {
+  const params = new URLSearchParams();
+  if (Array.isArray(status) && status.length > 0) {
+    params.set("status", status.join(","));
+  }
+  const query = params.toString();
+  const res = await api.get(`/edu/classes/${classId}/appeals${query ? `?${query}` : ""}`);
+  return res.data.appeals || [];
+}
+
+export async function getClassGradeAppeal(classId: number, appealId: number): Promise<{
+  appeal: GradeAppealItem;
+  messages: GradeAppealMessageItem[];
+}> {
+  const res = await api.get(`/edu/classes/${classId}/appeals/${appealId}`);
+  return {
+    appeal: res.data.appeal,
+    messages: res.data.messages || []
+  };
+}
+
+export async function updateClassGradeAppealStatus(classId: number, appealId: number, payload: {
+  status: "IN_REVIEW" | "NEEDS_INFO";
+  message?: string;
+}): Promise<{
+  message: string;
+  appeal: GradeAppealItem;
+}> {
+  const res = await api.patch(`/edu/classes/${classId}/appeals/${appealId}/status`, payload);
+  return res.data;
+}
+
+export async function postClassGradeAppealMessage(classId: number, appealId: number, text: string): Promise<{
+  message: string;
+  item: GradeAppealMessageItem;
+}> {
+  const res = await api.post(`/edu/classes/${classId}/appeals/${appealId}/messages`, { text });
+  return res.data;
+}
+
+export async function resolveClassGradeAppeal(classId: number, appealId: number, payload: {
+  outcome: "RESOLVED_ACCEPTED" | "RESOLVED_PARTIAL" | "RESOLVED_REJECTED";
+  resolutionText: string;
+  applyGradeChange?: boolean;
+  newGrade?: number;
+  message?: string;
+}): Promise<{
+  message: string;
+  appeal: GradeAppealItem;
+}> {
+  const res = await api.post(`/edu/classes/${classId}/appeals/${appealId}/resolve`, payload);
+  return res.data;
+}
+
 export interface TaskGrade {
   student: {
     id: number;
@@ -978,6 +1272,7 @@ export interface GradebookLesson {
 export interface GradebookResponse {
   students: GradebookStudent[];
   lessons: GradebookLesson[];
+  gradingSystem: ClassGradingSystem;
 }
 export async function getClassGradebook(classId: number): Promise<GradebookResponse> {
   const res = await api.get(`/edu/classes/${classId}/gradebook`);
@@ -1035,13 +1330,29 @@ export interface TopicTaskStudentWork {
     isManuallyGraded: boolean;
     isCompleted: boolean;
     submittedCode: string | null;
-    testResults: string | null;
     createdAt: string | null;
     updatedAt: string | null;
   }>;
+  submissionsTotal: number;
+  hasMore: boolean;
+  nextCursor: number | null;
 }
-export async function getTopicTaskStudentWork(taskId: number, studentId: number): Promise<TopicTaskStudentWork> {
-  const res = await api.get(`/edu/topic-tasks/${taskId}/students/${studentId}/work`);
+
+export interface GetTopicTaskStudentWorkOptions {
+  limit?: number;
+  beforeId?: number;
+}
+
+export async function getTopicTaskStudentWork(taskId: number, studentId: number, options?: GetTopicTaskStudentWorkOptions): Promise<TopicTaskStudentWork> {
+  const params = new URLSearchParams();
+  if (options?.limit && Number.isFinite(options.limit)) {
+    params.set("limit", String(Math.trunc(options.limit)));
+  }
+  if (options?.beforeId && Number.isFinite(options.beforeId)) {
+    params.set("beforeId", String(Math.trunc(options.beforeId)));
+  }
+  const qs = params.toString();
+  const res = await api.get(`/edu/topic-tasks/${taskId}/students/${studentId}/work${qs ? `?${qs}` : ""}`);
   return res.data;
 }
 
@@ -1202,4 +1513,502 @@ export async function getControlWorkStatus(lessonId: number): Promise<{
 }> {
   const res = await api.get(`/edu/lessons/${lessonId}/control-work-status`);
   return res.data;
+}
+
+export type MasteryStatus = "NOT_STARTED" | "IN_PROGRESS" | "MASTERED";
+export type RecommendedDifficulty = "EASY" | "MEDIUM" | "HARD";
+
+export interface StudentMasteryTopic {
+  topicId: number;
+  title: string;
+  order: number;
+  status: MasteryStatus;
+  masteryPercent: number;
+  averageScore: number;
+  attemptedTasks: number;
+  completedTasks: number;
+  totalTasks: number;
+  recommendedDifficulty: RecommendedDifficulty;
+  nextTaskId: number | null;
+  nextTaskTitle: string | null;
+  lastActivityAt: string | null;
+}
+
+export interface StudentTaskRecommendation {
+  topicId: number;
+  topicTitle: string;
+  taskId: number;
+  taskTitle: string;
+  reason: string;
+  priority: number;
+  estimatedEffort: "short" | "medium" | "long";
+}
+
+export interface StudentMasteryPathResponse {
+  locale: "uk" | "en";
+  student: {
+    id: number;
+    classId: number;
+    className: string;
+    language: "JAVA" | "PYTHON" | "CPP";
+  };
+  summary: {
+    topicsTotal: number;
+    masteredTopics: number;
+    inProgressTopics: number;
+    notStartedTopics: number;
+    averageMasteryPercent: number;
+  };
+  topics: StudentMasteryTopic[];
+  nextRecommendations: StudentTaskRecommendation[];
+  generatedAt: string;
+}
+
+export interface StudentSkillGraphNode {
+  id: string;
+  topicId: number;
+  label: string;
+  order: number;
+  status: MasteryStatus;
+  statusLabel: string;
+  masteryPercent: number;
+  averageScore: number;
+  recommendedDifficulty: RecommendedDifficulty;
+  nextTaskId: number | null;
+  nextTaskTitle: string | null;
+}
+
+export interface StudentSkillGraphResponse {
+  locale: "uk" | "en";
+  summary: StudentMasteryPathResponse["summary"];
+  nodes: StudentSkillGraphNode[];
+  edges: Array<{
+    from: string;
+    to: string;
+    relation: "PREREQUISITE";
+  }>;
+  recommendedPath: string[];
+  generatedAt: string;
+}
+
+export interface StudentNextTaskResponse {
+  locale: "uk" | "en";
+  message: string;
+  recommendation: StudentTaskRecommendation | null;
+  alternatives: StudentTaskRecommendation[];
+  generatedAt: string;
+}
+
+export interface CohortTaskInsight {
+  taskId: number;
+  title: string;
+  type: "PRACTICE" | "CONTROL";
+  avgScore: number;
+  completionRate: number;
+  passRate: number;
+  attemptedStudents: number;
+  commonErrorKinds: Array<{ kind: string; count: number }>;
+}
+
+export interface CohortTopicInsight {
+  topicId: number;
+  title: string;
+  order: number;
+  tasksTotal: number;
+  avgScore: number;
+  completionRate: number;
+  passRate: number;
+  weakTasks: CohortTaskInsight[];
+  commonErrorKinds: Array<{ kind: string; count: number }>;
+}
+
+export interface CohortAnalyticsResponse {
+  locale: "uk" | "en";
+  classId: number;
+  className: string;
+  studentsCount: number;
+  overview: {
+    avgScore: number;
+    completionRate: number;
+    passRate: number;
+    riskStudentsCount: number;
+    tasksTracked: number;
+  };
+  riskStudents: Array<{
+    studentId: number;
+    studentName: string;
+    avgScore: number;
+    completionRate: number;
+    weakTasks: number;
+  }>;
+  topics: CohortTopicInsight[];
+  commonErrorKinds: Array<{ kind: string; count: number }>;
+  generatedAt: string;
+}
+
+export interface TeacherCopilotSuggestion {
+  id: string;
+  type: "REMEDIATION" | "PACING" | "FOCUS_SUPPORT" | "ASSESSMENT" | "ENRICHMENT";
+  priority: "high" | "medium" | "low";
+  title: string;
+  rationale: string;
+  actions: string[];
+  relatedTopicId: number | null;
+  relatedStudentIds: number[];
+}
+
+export interface TeacherCopilotResponse {
+  locale: "uk" | "en";
+  classId: number;
+  className: string;
+  generatedBy: string;
+  summary: {
+    avgScore: number;
+    completionRate: number;
+    passRate: number;
+    riskStudentsCount: number;
+  };
+  suggestions: TeacherCopilotSuggestion[];
+  generatedAt: string;
+}
+
+export interface HintsQualityResponse {
+  locale: "uk" | "en";
+  classId: number;
+  windowDays: number;
+  totalFeedback: number;
+  positiveCount: number;
+  negativeCount: number;
+  positiveRate: number;
+  helpfulnessScore: number;
+  byReason: Array<{
+    reasonCode: string;
+    count: number;
+    positiveRate: number;
+  }>;
+  byVariant: Array<{
+    variant: "A" | "B";
+    count: number;
+    positiveRate: number;
+  }>;
+  generatedAt: string;
+}
+
+export interface TeacherDigestResponse {
+  locale: "uk" | "en";
+  classId: number;
+  className: string;
+  windowDays: number;
+  period: {
+    from: string;
+    to: string;
+  };
+  overview: CohortAnalyticsResponse["overview"];
+  appeals: {
+    total: number;
+    active: number;
+    resolved: number;
+    newInWindow: number;
+    overdueActive: number;
+    escalatedActive: number;
+    avgResolutionHours: number;
+  };
+  hints: HintsQualityResponse;
+  recommendations: TeacherCopilotSuggestion[];
+  generatedAt: string;
+}
+
+export interface RiskInterventionPlanResponse {
+  locale: "uk" | "en";
+  classId: number;
+  className: string;
+  dryRun: boolean;
+  studentsTargeted: Array<{
+    studentId: number;
+    studentName: string;
+  }>;
+  tasksSelected: Array<{
+    taskId: number;
+    title: string;
+    topicId: number;
+    topicTitle: string;
+  }>;
+  deadlineAppliedAt: string | null;
+  updatedTasks: number;
+  generatedAt: string;
+}
+
+export type TeacherOSAlertSeverity = "critical" | "warning" | "info";
+
+export interface TeacherOSAlert {
+  id: string;
+  severity: TeacherOSAlertSeverity;
+  title: string;
+  description: string;
+  metric?: string;
+}
+
+export interface TeacherOSSnapshotQuery {
+  responseLanguage?: "uk" | "en";
+  days?: number;
+  limitStudents?: number;
+  maxTasksPerStudent?: number;
+  topicId?: number;
+  deadlineDays?: number;
+}
+
+export interface TeacherOSSnapshotResponse {
+  locale: "uk" | "en";
+  classId: number;
+  className: string;
+  generatedAt: string;
+  analytics: CohortAnalyticsResponse | null;
+  copilot: TeacherCopilotResponse | null;
+  hints: HintsQualityResponse | null;
+  digest: TeacherDigestResponse | null;
+  riskPlan: RiskInterventionPlanResponse | null;
+  activeAppeals: GradeAppealItem[];
+  alerts: TeacherOSAlert[];
+}
+
+function withResponseLanguage(lang?: "uk" | "en"): string {
+  if (!lang) return "";
+  const params = new URLSearchParams();
+  params.set("responseLanguage", lang);
+  return `?${params.toString()}`;
+}
+
+export async function getStudentMasteryPath(responseLanguage?: "uk" | "en"): Promise<StudentMasteryPathResponse> {
+  const res = await api.get(`/edu/students/me/mastery-path${withResponseLanguage(responseLanguage)}`);
+  return res.data;
+}
+
+export async function getStudentSkillGraph(responseLanguage?: "uk" | "en"): Promise<StudentSkillGraphResponse> {
+  const res = await api.get(`/edu/students/me/skill-graph${withResponseLanguage(responseLanguage)}`);
+  return res.data;
+}
+
+export async function getStudentNextTaskRecommendation(responseLanguage?: "uk" | "en"): Promise<StudentNextTaskResponse> {
+  const res = await api.get(`/edu/students/me/next-task${withResponseLanguage(responseLanguage)}`);
+  return res.data;
+}
+
+export async function getClassCohortAnalytics(classId: number, responseLanguage?: "uk" | "en"): Promise<CohortAnalyticsResponse> {
+  const res = await api.get(`/edu/classes/${classId}/cohort-analytics${withResponseLanguage(responseLanguage)}`);
+  return res.data;
+}
+
+export async function getTeacherCopilotRecommendations(classId: number, responseLanguage?: "uk" | "en"): Promise<TeacherCopilotResponse> {
+  const res = await api.get(`/edu/classes/${classId}/teacher-copilot${withResponseLanguage(responseLanguage)}`);
+  return res.data;
+}
+
+function withInsightsQuery(params: {
+  responseLanguage?: "uk" | "en";
+  days?: number;
+  limitStudents?: number;
+  maxTasksPerStudent?: number;
+  topicId?: number;
+  deadlineDays?: number;
+}): string {
+  const query = new URLSearchParams();
+  if (params.responseLanguage) query.set("responseLanguage", params.responseLanguage);
+  if (typeof params.days === "number" && Number.isFinite(params.days)) query.set("days", String(Math.trunc(params.days)));
+  if (typeof params.limitStudents === "number" && Number.isFinite(params.limitStudents)) query.set("limitStudents", String(Math.trunc(params.limitStudents)));
+  if (typeof params.maxTasksPerStudent === "number" && Number.isFinite(params.maxTasksPerStudent)) query.set("maxTasksPerStudent", String(Math.trunc(params.maxTasksPerStudent)));
+  if (typeof params.topicId === "number" && Number.isFinite(params.topicId)) query.set("topicId", String(Math.trunc(params.topicId)));
+  if (typeof params.deadlineDays === "number" && Number.isFinite(params.deadlineDays)) query.set("deadlineDays", String(Math.trunc(params.deadlineDays)));
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function getClassHintsQuality(classId: number, params?: {
+  responseLanguage?: "uk" | "en";
+  days?: number;
+}): Promise<HintsQualityResponse> {
+  const res = await api.get(`/edu/classes/${classId}/hints-quality${withInsightsQuery({
+    responseLanguage: params?.responseLanguage,
+    days: params?.days,
+  })}`);
+  return res.data;
+}
+
+export async function getTeacherDigest(classId: number, params?: {
+  responseLanguage?: "uk" | "en";
+  days?: number;
+}): Promise<TeacherDigestResponse> {
+  const res = await api.get(`/edu/classes/${classId}/teacher-digest${withInsightsQuery({
+    responseLanguage: params?.responseLanguage,
+    days: params?.days,
+  })}`);
+  return res.data;
+}
+
+export async function getRiskInterventionPlan(classId: number, params?: {
+  responseLanguage?: "uk" | "en";
+  limitStudents?: number;
+  maxTasksPerStudent?: number;
+  topicId?: number;
+  deadlineDays?: number;
+}): Promise<RiskInterventionPlanResponse> {
+  const res = await api.get(`/edu/classes/${classId}/risk-interventions${withInsightsQuery({
+    responseLanguage: params?.responseLanguage,
+    limitStudents: params?.limitStudents,
+    maxTasksPerStudent: params?.maxTasksPerStudent,
+    topicId: params?.topicId,
+    deadlineDays: params?.deadlineDays,
+  })}`);
+  return res.data;
+}
+
+export async function applyRiskInterventionPlan(classId: number, payload?: {
+  dryRun?: boolean;
+  limitStudents?: number;
+  maxTasksPerStudent?: number;
+  topicId?: number;
+  deadlineDays?: number;
+}): Promise<RiskInterventionPlanResponse> {
+  const res = await api.post(`/edu/classes/${classId}/risk-interventions/apply`, payload || {});
+  return res.data;
+}
+
+export async function getTeacherOSSnapshot(classId: number, params?: TeacherOSSnapshotQuery): Promise<TeacherOSSnapshotResponse> {
+  const language = params?.responseLanguage;
+  const activeAppealStatuses: GradeAppealStatus[] = ["SUBMITTED", "IN_REVIEW", "NEEDS_INFO"];
+
+  const [
+    analyticsResult,
+    copilotResult,
+    hintsResult,
+    digestResult,
+    riskPlanResult,
+    activeAppealsResult,
+  ] = await Promise.allSettled([
+    getClassCohortAnalytics(classId, language),
+    getTeacherCopilotRecommendations(classId, language),
+    getClassHintsQuality(classId, {
+      responseLanguage: language,
+      days: params?.days,
+    }),
+    getTeacherDigest(classId, {
+      responseLanguage: language,
+      days: params?.days,
+    }),
+    getRiskInterventionPlan(classId, {
+      responseLanguage: language,
+      limitStudents: params?.limitStudents,
+      maxTasksPerStudent: params?.maxTasksPerStudent,
+      topicId: params?.topicId,
+      deadlineDays: params?.deadlineDays,
+    }),
+    getClassGradeAppeals(classId, activeAppealStatuses),
+  ]);
+
+  const analytics = analyticsResult.status === "fulfilled" ? analyticsResult.value : null;
+  const copilot = copilotResult.status === "fulfilled" ? copilotResult.value : null;
+  const hints = hintsResult.status === "fulfilled" ? hintsResult.value : null;
+  const digest = digestResult.status === "fulfilled" ? digestResult.value : null;
+  const riskPlan = riskPlanResult.status === "fulfilled" ? riskPlanResult.value : null;
+  const activeAppeals = activeAppealsResult.status === "fulfilled" ? activeAppealsResult.value : [];
+
+  const locale: "uk" | "en" =
+    language ||
+    digest?.locale ||
+    analytics?.locale ||
+    copilot?.locale ||
+    hints?.locale ||
+    riskPlan?.locale ||
+    "uk";
+
+  const className =
+    digest?.className ||
+    analytics?.className ||
+    copilot?.className ||
+    riskPlan?.className ||
+    "";
+
+  const tr = (uk: string, en: string) => (locale === "en" ? en : uk);
+  const alerts: TeacherOSAlert[] = [];
+
+  if (digest) {
+    if (digest.appeals.escalatedActive > 0) {
+      alerts.push({
+        id: "appeals-escalated",
+        severity: "critical",
+        title: tr("Ескальовані апеляції", "Escalated appeals"),
+        description: tr("Потрібна термінова реакція викладача", "Needs immediate teacher attention"),
+        metric: String(digest.appeals.escalatedActive),
+      });
+    }
+
+    if (digest.appeals.overdueActive > 0) {
+      alerts.push({
+        id: "appeals-overdue",
+        severity: "critical",
+        title: tr("Прострочені апеляції", "Overdue appeals"),
+        description: tr("SLA порушено — опрацюйте в першу чергу", "SLA breached — process first"),
+        metric: String(digest.appeals.overdueActive),
+      });
+    }
+  }
+
+  if (analytics && analytics.overview.riskStudentsCount > 0) {
+    alerts.push({
+      id: "risk-students",
+      severity: analytics.overview.riskStudentsCount >= 5 ? "critical" : "warning",
+      title: tr("Група ризику", "At-risk group"),
+      description: tr("Учні потребують цільової підтримки", "Students need targeted support"),
+      metric: `${analytics.overview.riskStudentsCount}`,
+    });
+  }
+
+  if (hints && hints.totalFeedback > 0 && hints.helpfulnessScore < 0) {
+    alerts.push({
+      id: "hints-quality",
+      severity: "warning",
+      title: tr("Погіршилась якість підказок", "Hints quality dropped"),
+      description: tr("Негативний баланс реакцій учнів", "Negative student feedback balance"),
+      metric: `${Math.round(hints.helpfulnessScore)}`,
+    });
+  }
+
+  if (riskPlan && riskPlan.studentsTargeted.length > 0 && riskPlan.tasksSelected.length > 0) {
+    alerts.push({
+      id: "risk-plan-ready",
+      severity: "info",
+      title: tr("План втручання готовий", "Intervention plan is ready"),
+      description: tr("Можна застосувати план одним кліком", "Plan can be applied in one click"),
+      metric: `${riskPlan.studentsTargeted.length}/${riskPlan.tasksSelected.length}`,
+    });
+  }
+
+  if (alerts.length === 0) {
+    alerts.push({
+      id: "all-clear",
+      severity: "info",
+      title: tr("Критичних сигналів немає", "No critical signals"),
+      description: tr("Система стабільна, можна рухатись за планом", "System is stable, follow the current plan"),
+    });
+  }
+
+  const severityRank: Record<TeacherOSAlertSeverity, number> = {
+    critical: 0,
+    warning: 1,
+    info: 2,
+  };
+  alerts.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
+
+  return {
+    locale,
+    classId,
+    className,
+    generatedAt: new Date().toISOString(),
+    analytics,
+    copilot,
+    hints,
+    digest,
+    riskPlan,
+    activeAppeals,
+    alerts,
+  };
 }

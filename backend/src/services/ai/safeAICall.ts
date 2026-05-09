@@ -142,6 +142,7 @@ function sanitizeParams(mode: AIMode, params: any): any {
   if ('taskDescription' in p) p.taskDescription = sanitizeText(p.taskDescription, 8000);
   if ('taskTitle' in p) p.taskTitle = sanitizeText(p.taskTitle, 200);
   if ('description' in p) p.description = sanitizeText(p.description, 8000);
+  if ('responseLanguage' in p) p.responseLanguage = sanitizeText(p.responseLanguage, 64);
 
   if (mode === 'generateTask') {
     p.numInTopic = typeof p.numInTopic === 'number' ? Math.max(1, Math.floor(p.numInTopic)) : p.numInTopic;

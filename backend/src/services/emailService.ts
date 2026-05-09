@@ -4,6 +4,8 @@ import type { IncomingMessage } from "http";
 import jwt from "jsonwebtoken";
 import { logger } from "../utils/logger";
 import { BACKEND_PUBLIC_URL, JWT_SECRET } from "../config";
+import { DEFAULT_GRADING_SYSTEM, type GradingSystem } from "../types/GradingSystem";
+import { formatGradeForSystem as formatGradeForGradingSystem, gradingSystemDisplayLabel } from "../utils/gradingScale";
 
 /**
  * Production Email Service
@@ -298,6 +300,124 @@ StudyCod: ${this.getFrontendUrl()}`;
       text,
     });
   }
+
+  async sendGradeChangedEmail(opts: {
+    to: string;
+    event: "created" | "updated";
+    kind: "task" | "summary" | "control";
+    itemTitle: string;
+    grade: number;
+    maxGrade?: number;
+    gradingSystem?: GradingSystem | null;
+    className?: string | null;
+    feedback?: string | null;
+    studentName?: string | null;
+    locale?: "uk" | "en";
+  }): Promise<void> {
+    const lng = this.normalizeLocale(opts.locale);
+    const grade = Math.max(0, Math.min(100, Math.round(Number(opts.grade) || 0)));
+    const gradingSystem = opts.gradingSystem || DEFAULT_GRADING_SYSTEM;
+    const gradeDisplay = formatGradeForGradingSystem(grade, gradingSystem);
+    const gradingSystemLabel = gradingSystemDisplayLabel(gradingSystem, lng);
+
+    const kindUk = opts.kind === "control"
+      ? "контрольної роботи"
+      : opts.kind === "summary"
+        ? "підсумкової оцінки"
+        : "завдання";
+
+    const kindEn = opts.kind === "control"
+      ? "control work"
+      : opts.kind === "summary"
+        ? "summary grade"
+        : "task";
+
+    const subject = this.t(
+      lng,
+      opts.event === "updated" ? "Оцінку оновлено в StudyCod" : "Нова оцінка в StudyCod",
+      opts.event === "updated" ? "Grade updated in StudyCod" : "New grade in StudyCod"
+    );
+
+    const title = this.t(
+      lng,
+      opts.event === "updated" ? "Оцінку оновлено" : "Нова оцінка",
+      opts.event === "updated" ? "Grade updated" : "New grade"
+    );
+
+    const greeting = opts.studentName
+      ? this.t(lng, `Привіт, ${opts.studentName}!`, `Hi, ${opts.studentName}!`)
+      : undefined;
+
+    const itemTitle = this.escapeHtml(String(opts.itemTitle || "").trim() || this.t(lng, "Завдання", "Task"));
+    const className = String(opts.className || "").trim();
+    const feedback = String(opts.feedback || "").trim();
+
+    const classHtml = className
+      ? `<p style="margin:8px 0 0 0;"><b>${this.t(lng, "Клас", "Class")}:</b> ${this.escapeHtml(className)}</p>`
+      : "";
+
+    const scaleHtml = `<p style="margin:8px 0 0 0;"><b>${this.t(lng, "Шкала", "Scale")}:</b> ${this.escapeHtml(gradingSystemLabel)}</p>`;
+
+    const feedbackHtml = feedback
+      ? `<p style="margin:12px 0 6px 0;"><b>${this.t(lng, "Коментар вчителя", "Teacher comment")}:</b></p>
+<div style="margin:0;padding:12px;border:1px solid #1f3552;border-radius:10px;background:#08111d;color:#dbe9ff;white-space:pre-wrap;">${this.escapeHtml(feedback)}</div>`
+      : "";
+
+    const statusUk = opts.event === "updated" ? "оновлену" : "нову";
+    const statusEn = opts.event === "updated" ? "updated" : "new";
+
+    const contentHtml = lng === "en"
+      ? `<p>You have a ${statusEn} ${kindEn}.</p>
+<p style="margin:8px 0 0 0;"><b>Item:</b> ${itemTitle}</p>
+    <p style="margin:8px 0 0 0;"><b>Grade:</b> ${this.escapeHtml(gradeDisplay)}</p>
+    ${scaleHtml}
+${classHtml}
+${feedbackHtml}`
+      : `<p>Вам виставлено ${statusUk} оцінку для ${kindUk}.</p>
+<p style="margin:8px 0 0 0;"><b>Елемент:</b> ${itemTitle}</p>
+    <p style="margin:8px 0 0 0;"><b>Оцінка:</b> ${this.escapeHtml(gradeDisplay)}</p>
+    ${scaleHtml}
+${classHtml}
+${feedbackHtml}`;
+
+    const html = this.buildBaseEmail({
+      title,
+      preheader: subject,
+      greeting,
+      contentHtml,
+      cta: {
+        label: this.t(lng, "Відкрити StudyCod", "Open StudyCod"),
+        url: this.getFrontendUrl()
+      },
+      footer: this.t(lng, "Оповіщення про оцінювання StudyCod", "StudyCod grading notification"),
+      locale: lng
+    });
+
+    const textLines = [
+      lng === "en"
+        ? `You have a ${statusEn} ${kindEn}.`
+        : `Вам виставлено ${statusUk} оцінку для ${kindUk}.`,
+      `${lng === "en" ? "Item" : "Елемент"}: ${String(opts.itemTitle || "").trim() || this.t(lng, "Завдання", "Task")}`,
+      `${lng === "en" ? "Grade" : "Оцінка"}: ${gradeDisplay}`,
+      `${lng === "en" ? "Scale" : "Шкала"}: ${gradingSystemLabel}`,
+      className ? `${lng === "en" ? "Class" : "Клас"}: ${className}` : "",
+      feedback ? `${lng === "en" ? "Teacher comment" : "Коментар вчителя"}: ${feedback}` : "",
+      "",
+      this.getFrontendUrl()
+    ].filter(Boolean);
+
+    await this.sendEmail({
+      to: opts.to,
+      subject,
+      html,
+      text: textLines.join("\n"),
+      fromOverride: this.notificationsFromEmail,
+      headers: {
+        "X-StudyCod-Category": "grade-notification"
+      }
+    });
+  }
+
   private escapeHtml(input: unknown): string {
     const s = String(input ?? "");
     return s

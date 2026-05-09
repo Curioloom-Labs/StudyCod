@@ -4,6 +4,7 @@ import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { decodeEscapedInputText, normalizeMarkdownEscapes } from "../utils/inputTextNormalization";
 const MATH_MARKUP_RE = /(\$\$[^$]+?\$\$)|(\$[^$\n]+?\$)|\\\(|\\\[|\\begin\{/;
+const CODE_FENCE_RE = /(^|\n)\s*```[^\n]*\n/;
 
 let katexCssLoadPromise: Promise<unknown> | null = null;
 
@@ -374,7 +375,7 @@ const EmbeddedVideo: React.FC<{
             allowFullScreen={descriptor.allowFullScreen !== false}
             referrerPolicy="strict-origin-when-cross-origin"
           />
-        </div> : <video controls preload="metadata" className="block w-full bg-black" src={descriptor.sourceUrl} />}
+        </div> : <video controls preload="metadata" className="block w-full bg-bg-code" src={descriptor.sourceUrl} />}
       {String(caption || "").trim() ? <div className="border-t border-border px-3 py-2 text-xs text-text-secondary">{caption}</div> : null}
     </div>;
 };
@@ -419,10 +420,12 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     rehypeKatex: null
   });
   const hasMathMarkup = useMemo(() => MATH_MARKUP_RE.test(content), [content]);
+  const hasCodeFences = useMemo(() => CODE_FENCE_RE.test(content), [content]);
 
   // Lazily load heavy syntax highlighting only when MarkdownView is actually used.
   // This avoids pulling ~hundreds of KB into the initial bundle.
   useEffect(() => {
+    if (!hasCodeFences) return;
     let cancelled = false;
 
     Promise.all([
@@ -469,7 +472,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasCodeFences]);
 
   useEffect(() => {
     if (!hasMathMarkup) {

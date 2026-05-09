@@ -3,12 +3,13 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import session from "express-session";
+import { RedisStore } from "connect-redis";
 import passport from "passport";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import jwt from "jsonwebtoken";
 import { AppDataSource } from "./data-source";
 import { setupGoogleStrategy } from "./middleware/googleAuth";
-import { applyDbPatches } from "./utils/dbPatches";
 import { authRouter } from "./routes/auth";
 import { profileRouter } from "./routes/profile";
 import { tasksRouter } from "./routes/tasks";
@@ -29,19 +30,93 @@ import { requestContextMiddleware } from "./middleware/requestContext";
 import { placementGate } from "./middleware/placementGate";
 import { authMiddleware } from "./middleware/authMiddleware";
 import { forbidContestModeUsers } from "./middleware/contestModeGuard";
-import { PORT, CORS_ORIGIN, CORS_ORIGINS, SESSION_SECRET, IS_PRODUCTION, TRUST_PROXY } from "./config";
+import { PORT, CORS_ORIGIN, CORS_ORIGINS, SESSION_SECRET, IS_PRODUCTION, TRUST_PROXY, JWT_SECRET } from "./config";
 import { logger } from "./utils/logger";
 import { HttpError } from "./utils/httpError";
 import { spawn } from "child_process";
 import * as fsSync from "fs";
 import * as path from "path";
 import { resolveJudgeSandboxConfig, resolveJudgeWorkerEntry } from "./services/judgeWorker/workerPaths";
+import { getExecutionQueueMode } from "./services/execution/distributedJudgeQueueSingleton";
+import { getJudgeExecutionMetrics } from "./services/judgeWorker";
 import { getOpenRouterRuntimeDiagnostics } from "./services/llm/OpenRouterProvider";
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
-import { executionScheduler } from "./services/execution/executionSchedulerSingleton";
 import { startCertificateQueueWorker } from "./services/certificates/CertificateQueueWorker";
+import {
+  LEGACY_MIGRATION_HISTORY_BASELINE,
+  getLegacyMigrationHistoryRowByName,
+  getLegacyMigrationHistoryRowByTableName,
+  stampLegacyMigrationHistory,
+} from "./migrations/legacyMigrationHistory";
+import { createRedisRateLimitStore } from "./middleware/routeRateLimit";
+import { getRedisClientForStore, getRedisKeyPrefix, getSharedRedisClient, isRedisEnabled } from "./services/redis/sharedRedis";
+import { shutdownRedis } from "./services/redis/sharedRedis";
+import { seedTopicsIfNeeded } from "./utils/seedTopics";
 const app = express();
+
+// Graceful shutdown handlers for SIGTERM (Kubernetes, systemd, etc.) and SIGINT (Ctrl+C)
+process.on("SIGTERM", async () => {
+  logger.info("[shutdown] SIGTERM received, gracefully shutting down...");
+  try {
+    await shutdownRedis();
+  } catch (err: any) {
+    logger.warn("[shutdown] Redis shutdown error", { error: err?.message });
+  }
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("[shutdown] SIGINT received, gracefully shutting down...");
+  try {
+    await shutdownRedis();
+  } catch (err: any) {
+    logger.warn("[shutdown] Redis shutdown error", { error: err?.message });
+  }
+  process.exit(0);
+});
+if (isRedisEnabled()) {
+  void getSharedRedisClient();
+}
+
+function createSessionStore(): session.Store | undefined {
+  const mode = String((env as any).__sessionStore ?? process.env.SESSION_STORE ?? "").trim().toLowerCase();
+  if (mode !== "redis") {
+    logger.info("[session] using in-memory store", { mode: mode || "memory" });
+    return undefined;
+  }
+
+  try {
+    const redisClient = getRedisClientForStore();
+    if (!redisClient) {
+      const message = "[session] SESSION_STORE=redis requested but redis is unavailable";
+      logger.error(message);
+      if (IS_PRODUCTION) {
+        throw new Error(message);
+      }
+      logger.warn("[session] falling back to in-memory store in non-production");
+      return undefined;
+    }
+
+    void getSharedRedisClient().then(client => {
+      if (client) {
+        logger.info("[session] using redis store");
+      } else {
+        logger.warn("[session] redis unavailable; session store will fallback to in-process behavior until reconnect");
+      }
+    });
+
+    return new RedisStore({
+      client: redisClient,
+      prefix: `${getRedisKeyPrefix()}sess:`
+    });
+  } catch (err: any) {
+    logger.error("[session] redis store initialization failed", {
+      message: err?.message
+    });
+    return undefined;
+  }
+}
 
 const serverStartedAt = new Date();
 
@@ -70,6 +145,41 @@ function isDisconnectError(err: any): boolean {
   return code === "EPIPE" || code === "ECONNRESET" || code === "ERR_STREAM_DESTROYED";
 }
 
+type GlobalRateLimitJwtPayload = {
+  userId?: number;
+  studentId?: number;
+  type?: "USER" | "STUDENT";
+};
+
+function resolveGlobalRateLimitKey(req: express.Request): string {
+  const authHeader = typeof req.headers.authorization === "string"
+    ? req.headers.authorization
+    : "";
+
+  if (authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice("Bearer ".length).trim();
+    if (token) {
+      try {
+        const payload = jwt.verify(token, JWT_SECRET) as GlobalRateLimitJwtPayload;
+        if (payload?.type === "STUDENT") {
+          const studentId = Number(payload.studentId);
+          if (Number.isFinite(studentId) && studentId > 0) {
+            return `student:${studentId}`;
+          }
+        }
+        const userId = Number(payload?.userId);
+        if (Number.isFinite(userId) && userId > 0) {
+          return `user:${userId}`;
+        }
+      } catch {
+        // Ignore invalid/expired tokens and fallback to IP-based limiting.
+      }
+    }
+  }
+
+  return req.ip ?? "unknown";
+}
+
 // In production behind a reverse proxy, clients can disconnect while we are still computing.
 // Writing a response to a closed socket may produce EPIPE/ECONNRESET; do not crash the process.
 process.on("uncaughtException", (err: any) => {
@@ -91,6 +201,10 @@ process.on("unhandledRejection", (reason: any) => {
   logger.error("Unhandled rejection", {
     reason
   });
+
+  // Unknown rejected promises can leave the process in a bad state.
+  // Let the orchestrator restart the service after we log the failure.
+  setTimeout(() => process.exit(1), 100);
 });
 
 app.set("trust proxy", TRUST_PROXY);
@@ -100,9 +214,14 @@ app.use(helmet({
 // NOTE: In express-rate-limit, limit=0 means "allow 0 requests" (i.e. always 429).
 // We only enable global rate limiting in production.
 if (IS_PRODUCTION) {
+  const globalRateLimitStore = createRedisRateLimitStore("global");
   app.use(rateLimit({
     windowMs: 60 * 1000,
     limit: 300,
+    keyGenerator: req => resolveGlobalRateLimitKey(req),
+    store: globalRateLimitStore,
+    passOnStoreError: true,
+    skip: req => req.path === "/health" || req.path === "/api/health",
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res, _next, options) => {
@@ -172,7 +291,9 @@ app.use(express.urlencoded({
 }));
 app.use(requestContextMiddleware);
 app.use(maintenanceMiddleware);
+const sessionStore = createSessionStore();
 app.use(session({
+  store: sessionStore,
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -223,17 +344,22 @@ app.get(["/internal/load", "/api/internal/load"], (_req, res) => {
     return res.status(404).json({ error: "NOT_FOUND", status: 404 });
   }
 
-  const m = executionScheduler.getMetrics();
+  const m = getJudgeExecutionMetrics();
   res.json({
+    mode: getExecutionQueueMode(),
     active: m.active,
     queued: m.queued,
     peakActive: m.peakActive,
     peakQueueLength: m.peakQueueLength,
     maxConcurrent: m.maxConcurrent,
     maxQueueSize: m.maxQueueSize,
+    maxRetries: m.maxRetries,
     avgExecutionTimeMs: Math.round(m.avgExecutionTimeMs),
     avgQueueWaitTimeMs: Math.round(m.averageQueueWaitTime),
     totalRejectedQueueFull: m.totalRejectedQueueFull,
+    totalRequeuedExpired: m.totalRequeuedExpired,
+    totalDeadLettered: m.totalDeadLettered,
+    deadLetterQueueLength: m.deadLetterQueueLength,
     totalCompleted: m.totalCompleted,
   });
 });
@@ -339,15 +465,28 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
       let outSize = 0;
       let errSize = 0;
       const MAX_BYTES = 1024 * 1024;
+      // Prevent child process from keeping parent alive if orphaned
+      child.unref();
+
       const kill = () => {
         try {
-          child.kill("SIGKILL");
+          // Try SIGTERM first (graceful), then SIGKILL as fallback
+          const wasKilled = child.kill("SIGTERM");
+          if (!wasKilled) return;
+          setTimeout(() => {
+            if (!child.killed) {
+              try {
+                child.kill("SIGKILL");
+              } catch {}
+            }
+          }, 500);
         } catch {}
       };
+      const timeoutMs = Math.max(1000, Number(process.env.JUDGE_HEALTH_TIMEOUT_MS ?? 5000));
       const timeout = setTimeout(() => {
         kill();
         reject(new Error("JUDGE_HEALTH_TIMEOUT"));
-      }, 2000);
+      }, timeoutMs);
       child.stdout?.on("data", (b: Buffer) => {
         outSize += b.length;
         if (outSize > MAX_BYTES) {
@@ -457,27 +596,249 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
     status: Number.isFinite(status) ? status : 500
   });
 });
-AppDataSource.initialize().then(async () => {
-  logger.info("Data Source initialized");
-  await applyDbPatches();
-  startCertificateQueueWorker();
-  const {
-    seedTopicsIfNeeded
-  } = await import("./utils/seedTopics");
-  const shouldSeed = String(process.env.SEED_TOPICS_ON_STARTUP ?? "true").toLowerCase() !== "false";
-  if (shouldSeed) {
-    await seedTopicsIfNeeded();
-  } else {
-    logger.info("[seed-topics] skipped (SEED_TOPICS_ON_STARTUP=false)");
+
+type StartupMigrationOutcome = {
+  attempted: boolean;
+  succeeded: boolean;
+  appliedNames: string[];
+  attemptCount: number;
+  autoStampedMigrations: string[];
+  errorMessage?: string;
+  remediationHint?: string;
+};
+
+function isLegacyTableExistsMigrationError(error: any): boolean {
+  const code = String(error?.code || "").trim().toUpperCase();
+  const message = String(error?.message || "");
+  return code === "ER_TABLE_EXISTS_ERROR" || /already exists/i.test(message);
+}
+
+function extractFailedMigrationName(error: any): string | undefined {
+  const directName = String(error?.migration?.name || "").trim();
+  if (directName) return directName;
+
+  const message = String(error?.message || "");
+  const stack = String(error?.stack || "");
+  const source = `${message}\n${stack}`;
+  const match = source.match(/Migration\s+"([^"]+)"\s+failed/i);
+  const parsedName = String(match?.[1] || "").trim();
+  return parsedName || undefined;
+}
+
+function extractAlreadyExistingTableName(error: any): string | undefined {
+  const rawMessage = String(
+    error?.message ||
+    error?.sqlMessage ||
+    error?.driverError?.message ||
+    error?.driverError?.sqlMessage ||
+    ""
+  );
+
+  const quotedMatch = rawMessage.match(/Table\s+'([^']+)'\s+already exists/i);
+  if (quotedMatch?.[1]) {
+    return String(quotedMatch[1]).trim().toLowerCase();
   }
-  app.listen(PORT, () => {
-    logger.info("Server listening", {
-      port: PORT
+
+  const sqlRaw = String(error?.sql || error?.query || error?.driverError?.sql || "");
+  const createMatch = sqlRaw.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?`?([a-zA-Z0-9_]+)`?/i);
+  if (createMatch?.[1]) {
+    return String(createMatch[1]).trim().toLowerCase();
+  }
+
+  return undefined;
+}
+
+function getStartupMigrationRemediationHint(error: any): string | undefined {
+  if (!isLegacyTableExistsMigrationError(error)) return undefined;
+
+  return "Legacy schema detected (tables exist without migration history). Run `npm run db:bootstrap-migration-history` once before restarting backend workers.";
+}
+
+async function runStartupMigrations(): Promise<StartupMigrationOutcome> {
+  if (!env.__runMigrationsOnStartup) {
+    logger.info("[startup:migrations] skipped (RUN_MIGRATIONS_ON_STARTUP=false)");
+    return {
+      attempted: false,
+      succeeded: false,
+      appliedNames: [],
+      attemptCount: 0,
+      autoStampedMigrations: []
+    };
+  }
+
+  const autoBootstrapLegacyHistory = Boolean(env.__autoBootstrapMigrationHistoryOnStartup);
+  const maxRecoveryAttempts = 6;
+  const autoStampedMigrations: string[] = [];
+  const autoStampAttempted = new Set<string>();
+
+  for (let attempt = 1; attempt <= maxRecoveryAttempts; attempt += 1) {
+    try {
+      const hasPending = await AppDataSource.showMigrations();
+      const applied = await AppDataSource.runMigrations({
+        transaction: "all"
+      });
+
+      logger.info("[startup:migrations] completed", {
+        attempt,
+        hadPending: hasPending,
+        appliedCount: applied.length,
+        appliedNames: applied.map(m => m.name),
+        autoStampedMigrations
+      });
+
+      return {
+        attempted: true,
+        succeeded: true,
+        appliedNames: applied.map(m => m.name),
+        attemptCount: attempt,
+        autoStampedMigrations
+      };
+    } catch (error: any) {
+      const remediationHint = getStartupMigrationRemediationHint(error);
+      const failedMigrationName = extractFailedMigrationName(error);
+      const failedTableName = extractAlreadyExistingTableName(error);
+      const legacyMigrationRowByName = getLegacyMigrationHistoryRowByName(failedMigrationName);
+      const legacyMigrationRowByTableName = getLegacyMigrationHistoryRowByTableName(failedTableName);
+      const candidateMigrationNames = [
+        legacyMigrationRowByName?.name,
+        legacyMigrationRowByTableName?.name,
+      ]
+        .map(name => String(name || "").trim())
+        .filter(Boolean)
+        .filter((name, idx, all) => all.indexOf(name) === idx)
+        .filter(name => !autoStampAttempted.has(name));
+
+      const baselineFallbackNames = candidateMigrationNames.length === 0
+        ? LEGACY_MIGRATION_HISTORY_BASELINE
+          .map(row => row.name)
+          .filter(name => !autoStampAttempted.has(name))
+        : [];
+
+      const migrationsToAutoStamp = candidateMigrationNames.length > 0
+        ? candidateMigrationNames
+        : baselineFallbackNames;
+
+      const canAutoStampLegacyHistory =
+        autoBootstrapLegacyHistory &&
+        isLegacyTableExistsMigrationError(error) &&
+        migrationsToAutoStamp.length > 0;
+
+      if (canAutoStampLegacyHistory) {
+        for (const migrationName of migrationsToAutoStamp) {
+          autoStampAttempted.add(migrationName);
+        }
+
+        try {
+          const stampResult = await stampLegacyMigrationHistory(AppDataSource, {
+            names: migrationsToAutoStamp
+          });
+
+          for (const migrationName of migrationsToAutoStamp) {
+            if (!autoStampedMigrations.includes(migrationName)) {
+              autoStampedMigrations.push(migrationName);
+            }
+          }
+
+          logger.warn("[startup:migrations] auto-stamped legacy migration history row", {
+            attempt,
+            failedMigrationName,
+            failedTableName,
+            migrationCount: migrationsToAutoStamp.length,
+            migrations: migrationsToAutoStamp,
+            mode: candidateMigrationNames.length > 0 ? "targeted" : "baseline-fallback",
+            inserted: stampResult.inserted,
+            exists: stampResult.exists,
+            skippedUnknown: stampResult.skippedUnknown
+          });
+
+          continue;
+        } catch (stampError: any) {
+          logger.error("[startup:migrations] failed to auto-stamp legacy migration history row", {
+            attempt,
+            failedMigrationName,
+            failedTableName,
+            migrationCount: migrationsToAutoStamp.length,
+            migrations: migrationsToAutoStamp,
+            message: stampError?.message,
+            code: stampError?.code
+          });
+        }
+      }
+
+      logger.error("[startup:migrations] failed", {
+        attempt,
+        message: error?.message,
+        code: error?.code,
+        failedMigrationName,
+        failedTableName,
+        autoBootstrapLegacyHistory,
+        remediationHint
+      });
+
+      return {
+        attempted: true,
+        succeeded: false,
+        appliedNames: [],
+        attemptCount: attempt,
+        autoStampedMigrations,
+        errorMessage: String(error?.message || "MIGRATION_FAILED"),
+        remediationHint
+      };
+    }
+  }
+
+  return {
+    attempted: true,
+    succeeded: false,
+    appliedNames: [],
+    attemptCount: maxRecoveryAttempts,
+    autoStampedMigrations,
+    errorMessage: "MIGRATION_RECOVERY_ATTEMPTS_EXHAUSTED"
+  };
+}
+
+async function bootstrap(): Promise<void> {
+  try {
+    await AppDataSource.initialize();
+    logger.info("Data Source initialized");
+
+    const migrationOutcome = await runStartupMigrations();
+    logger.info("[startup:db] strict migration mode", {
+      migrationAttempted: migrationOutcome.attempted,
+      migrationSucceeded: migrationOutcome.succeeded,
+      migrationAppliedCount: migrationOutcome.appliedNames.length,
+      migrationAttemptCount: migrationOutcome.attemptCount,
+      migrationAutoStampedCount: migrationOutcome.autoStampedMigrations.length,
+      migrationAutoStamped: migrationOutcome.autoStampedMigrations
     });
-  });
-}).catch(err => {
-  logger.error("Database initialization error", {
-    err
-  });
-  process.exit(1);
-});
+
+    if (migrationOutcome.attempted && !migrationOutcome.succeeded) {
+      const remediationSuffix = migrationOutcome.remediationHint
+        ? ` | ${migrationOutcome.remediationHint}`
+        : "";
+      throw new Error(`Startup migrations failed: ${migrationOutcome.errorMessage || "MIGRATION_FAILED"}${remediationSuffix}`);
+    }
+
+    startCertificateQueueWorker();
+
+    const shouldSeed = String(process.env.SEED_TOPICS_ON_STARTUP ?? "true").toLowerCase() !== "false";
+    if (shouldSeed) {
+      await seedTopicsIfNeeded();
+    } else {
+      logger.info("[seed-topics] skipped (SEED_TOPICS_ON_STARTUP=false)");
+    }
+
+    app.listen(PORT, () => {
+      logger.info("Server listening", {
+        port: PORT
+      });
+    });
+  } catch (err) {
+    logger.error("Database initialization error", {
+      err
+    });
+    process.exit(1);
+  }
+}
+
+void bootstrap();

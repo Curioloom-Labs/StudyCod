@@ -243,16 +243,16 @@ export const SupportPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg-base text-text-primary p-6">
+    <div className="min-h-[100dvh] bg-bg-base text-text-primary p-3 sm:p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-xl font-mono font-bold">{tr("Технічна підтримка", "Technical support")}</h1>
             <p className="text-sm text-text-secondary mt-1">
               {tr("Чат із підтримкою (можна додавати файли).", "Chat with support (attachments are allowed).")}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => loadConversations()} disabled={loading}>
               {tr("Оновити", "Refresh")}
             </Button>

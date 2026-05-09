@@ -5,6 +5,7 @@ import type { LLMProvider } from './LLMProvider';
 import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
 import { AIResponseValidator, AIValidationError } from './AIResponseValidator';
 import { logger } from '../../utils/logger';
+import { redisKey, runWithRedis } from '../redis/sharedRedis';
 
 export type LLMTaskLanguage = "JAVA" | "PYTHON" | "CPP";
 
@@ -85,6 +86,19 @@ function cloneTaskAnchor(anchor: TaskAnchor): TaskAnchor {
   };
 }
 
+function isTaskAnchor(value: unknown): value is TaskAnchor {
+  if (!value || typeof value !== 'object') return false;
+  const raw = value as Record<string, unknown>;
+  return typeof raw.topic === 'string'
+    && typeof raw.coreOperation === 'string'
+    && Array.isArray(raw.allowedScope)
+    && Array.isArray(raw.forbiddenScope);
+}
+
+function taskAnchorRedisKey(cacheKey: string): string {
+  return redisKey('llm-anchor', cacheKey);
+}
+
 function buildTaskAnchorCacheKey(params: {
   topicTitle: string;
   lang: LLMTaskLanguage;
@@ -121,6 +135,21 @@ function getDifficultyPrompt(difus: number): string {
   if (difus < 0.8) return "Рівень: ВИЩЕ СЕРЕДНЬОГО. Потрібно трохи подумати. Можна додати неочевидний момент в умові.";
   return "Рівень: СКЛАДНИЙ. Завдання на логічне мислення. Вимагає оптимізації або обробки граничних випадків.";
 }
+
+function normalizeResponseLanguage(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 64);
+}
+
+function buildResponseLanguageInstruction(responseLanguage: string | null, isEnglishUI: boolean): string {
+  if (!responseLanguage) return "";
+  return isEnglishUI
+    ? `\n\nIMPORTANT RESPONSE LANGUAGE: Write all explanatory text in ${responseLanguage}. Keep source code syntax unchanged.`
+    : `\n\nВАЖЛИВО: Пиши весь пояснювальний текст мовою "${responseLanguage}". Синтаксис коду залишай мовою програмування.`;
+}
+
 function isCloudflareError(error: any): boolean {
   if (!error) return false;
   const message = error.message || String(error);
@@ -181,7 +210,7 @@ export class LLMOrchestrator {
     this.localProvider = new LocalLLMProvider();
   }
 
-  private getCachedTaskAnchor(cacheKey: string): TaskAnchor | null {
+  private async getCachedTaskAnchor(cacheKey: string): Promise<TaskAnchor | null> {
     if (!LLM_TASK_ANCHOR_CACHE_ENABLED) return null;
     const record = LLMOrchestrator.taskAnchorCache.get(cacheKey);
     if (!record) return null;
@@ -192,11 +221,40 @@ export class LLMOrchestrator {
     return cloneTaskAnchor(record.anchor);
   }
 
+  private async getCachedTaskAnchorFromRedis(cacheKey: string): Promise<TaskAnchor | null> {
+    if (!LLM_TASK_ANCHOR_CACHE_ENABLED) return null;
+    const raw = await runWithRedis('llm anchor cache get', async redis => {
+      return await redis.get(taskAnchorRedisKey(cacheKey));
+    });
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!isTaskAnchor(parsed)) return null;
+      const anchor = cloneTaskAnchor(parsed);
+      LLMOrchestrator.taskAnchorCache.set(cacheKey, {
+        anchor,
+        expiresAt: Date.now() + LLM_TASK_ANCHOR_CACHE_TTL_MS,
+      });
+      return anchor;
+    } catch {
+      return null;
+    }
+  }
+
   private setCachedTaskAnchor(cacheKey: string, anchor: TaskAnchor): void {
     if (!LLM_TASK_ANCHOR_CACHE_ENABLED) return;
+    const normalizedAnchor = cloneTaskAnchor(anchor);
     LLMOrchestrator.taskAnchorCache.set(cacheKey, {
-      anchor: cloneTaskAnchor(anchor),
+      anchor: normalizedAnchor,
       expiresAt: Date.now() + LLM_TASK_ANCHOR_CACHE_TTL_MS
+    });
+
+    void runWithRedis('llm anchor cache set', async redis => {
+      await redis.set(taskAnchorRedisKey(cacheKey), JSON.stringify(normalizedAnchor), {
+        PX: LLM_TASK_ANCHOR_CACHE_TTL_MS,
+      });
+      return true;
     });
 
     // Prevent unbounded growth if service stays hot for a long time.
@@ -412,7 +470,7 @@ export class LLMOrchestrator {
       forbiddenScope: ['multi-task структура', 'мета-повідомлення компілятора', 'створення файлів/проєктів']
     };
 
-    const cachedAnchor = this.getCachedTaskAnchor(cacheKey);
+    const cachedAnchor = await this.getCachedTaskAnchor(cacheKey);
     if (cachedAnchor) {
       logger.debug('[llm] using cached task anchor', {
         userId: params.userId,
@@ -421,6 +479,17 @@ export class LLMOrchestrator {
         lang: params.lang
       });
       return cachedAnchor;
+    }
+
+    const redisCachedAnchor = await this.getCachedTaskAnchorFromRedis(cacheKey);
+    if (redisCachedAnchor) {
+      logger.debug('[llm] using redis-cached task anchor', {
+        userId: params.userId,
+        topicId: params.topicId,
+        topic: expectedTopic,
+        lang: params.lang
+      });
+      return redisCachedAnchor;
     }
 
     const maxAnchorAttempts = 2;
@@ -803,6 +872,7 @@ ${uniquenessBlock}
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
@@ -820,6 +890,7 @@ ${uniquenessBlock}
         taskDescription: params.taskDescription,
         taskType: params.taskType,
         difficulty: params.difficulty,
+        responseLanguage: params.responseLanguage,
         userId: params.userId,
         topicId: params.topicId
       }, {
@@ -884,16 +955,36 @@ ${uniquenessBlock}
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    responseLanguage?: string;
+    language?: "uk" | "en";
     userId?: number;
     topicId?: number;
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<AiTheoryResult> {
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
-    const systemPrompt = `Ти досвідчений викладач програмування. Відповідай українською мовою у форматі Markdown.`;
+    const isEnglish = params.language === "en";
+    const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
+    const systemPrompt = isEnglish
+      ? `You are an experienced programming teacher. Return theoretical explanation in Markdown.`
+      : `Ти досвідчений викладач програмування. Повертай теоретичне пояснення у форматі Markdown.`;
     let userPrompt: string;
     const context = params.taskDescription && params.taskType ? `\n\nКОНТЕКСТ (НЕ ПЕРЕПОВІДАЙ, НЕ ФОРМУЛЮЙ УМОВУ, НЕ ДОДАВАЙ ЗАВДАННЯ):\n${params.taskDescription}` : "";
-    userPrompt = `Згенеруй ТІЛЬКИ теоретичне пояснення теми "${params.topicTitle}" для мови ${langName}.${context}
+    if (isEnglish) {
+      const enContext = params.taskDescription && params.taskType
+        ? `\n\nCONTEXT (DO NOT RESTATE AS A TASK):\n${params.taskDescription}`
+        : "";
+      userPrompt = `Generate ONLY theoretical explanation for topic "${params.topicTitle}" for ${langName}.${enContext}
+
+REQUIREMENTS (mandatory):
+- Do NOT include practical tasks.
+- Do NOT write problem statements.
+- Do NOT use imperative instruction style ("solve", "compute", "implement", etc.).
+- Do NOT add sections like "Practice", "Task", "Exercise", "Problem".
+- Allowed: concept explanations, syntax notes, short code snippets as illustration.
+- Format: Markdown only.${responseLanguageInstruction}`;
+    } else {
+      userPrompt = `Згенеруй ТІЛЬКИ теоретичне пояснення теми "${params.topicTitle}" для мови ${langName}.${context}
 
 ВИМОГИ (обов'язково):
 - НЕ додавай практичних завдань.
@@ -901,7 +992,8 @@ ${uniquenessBlock}
 - НЕ використовуй імперативи типу: "виконайте", "обчисліть", "знайдіть", "написати програму", "введіть/прочитайте".
 - НЕ додавай секцій "Практика", "Завдання", "Вправа", "Умова".
 - МОЖНА: пояснення понять, синтаксис, короткі приклади коду (як ілюстрація).
-- Формат: Markdown. Без вступів на кшталт "Ось теорія".`;
+- Формат: Markdown. Без вступів на кшталт "Ось теорія".${responseLanguageInstruction}`;
+    }
     try {
       const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
@@ -923,6 +1015,7 @@ ${uniquenessBlock}
     lang: LLMTaskLanguage;
     prevTopics: string;
     count?: number;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
@@ -938,6 +1031,7 @@ ${uniquenessBlock}
         lang: params.lang,
         prevTopics: params.prevTopics,
         count: params.count,
+        responseLanguage: params.responseLanguage,
         userId: params.userId,
         topicId: params.topicId
       }, {
@@ -1000,21 +1094,35 @@ ${uniquenessBlock}
     lang: LLMTaskLanguage;
     prevTopics: string;
     count?: number;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
+    language?: "uk" | "en";
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<AiQuizResult> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.lang === "JAVA" ? "Java" : "Python";
+    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
     const questionCount = params.count || 12;
-    const systemPrompt = `Ти екзаменатор з програмування. Створюй тестові питання з правильними відповідями. Відповідай ТІЛЬКИ у форматі JSON масиву без додаткових пояснень, коментарів або тексту до або після JSON.`;
-    let userPrompt = `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
+    const isEnglish = params.language === "en";
+    const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
+    const systemPrompt = isEnglish
+      ? `You are a programming examiner. Produce quiz questions with exactly one correct answer. Return ONLY a JSON array and no extra text.`
+      : `Ти екзаменатор з програмування. Створюй тестові питання з правильною відповіддю. Відповідай ТІЛЬКИ JSON-масивом без додаткового тексту.`;
+    let userPrompt = isEnglish
+      ? `Create a quiz only for ${langName}. Topics: ${params.prevTopics}.
+REQUIREMENTS:
+- EXACTLY ${questionCount} questions
+- Each question has exactly 5 options
+- Output format: ONLY valid JSON array
+- Each item format: {"q": "question", "options": ["A", "B", "C", "D", "E"], "correct": 0}
+- Return ONLY JSON array, no markdown, no explanations.${responseLanguageInstruction}`
+      : `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
 ВИМОГИ:
 - Кількість питань: РІВНО ${questionCount}
-- Кожне питання має рівно 5 варіантів відповіді (А, Б, В, Г, Д)
+- Кожне питання має рівно 5 варіантів відповіді
 - Формат: ТІЛЬКИ ВАЛІДНИЙ JSON масив без жодного додаткового тексту
 - Кожне питання має формат: {"q": "питання", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
-- Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown, без code blocks`;
+- Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown.${responseLanguageInstruction}`;
     let lastError: Error | null = null;
     const maxRetries = 2;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -1134,6 +1242,7 @@ ${uniquenessBlock}
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
     language: LLMTaskLanguage;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
@@ -1152,6 +1261,7 @@ ${uniquenessBlock}
         taskType: params.taskType,
         difficulty: params.difficulty,
         language: params.language,
+        responseLanguage: params.responseLanguage,
         userId: params.userId,
         topicId: params.topicId
       }, {
@@ -1216,6 +1326,7 @@ ${uniquenessBlock}
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
     language: LLMTaskLanguage;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
@@ -1229,6 +1340,7 @@ ${uniquenessBlock}
     const difficultyPrompt = getDifficultyPrompt(difficulty / 5);
     const taskTypeText = params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
     const isEnglish = params.userLanguage === "en";
+    const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const teacherTaskTitle = (params.taskTitle || "").trim();
     const effectiveTitle = teacherTaskTitle || params.topicTitle;
     const systemPrompt = isEnglish
@@ -1266,7 +1378,7 @@ REQUIREMENTS:
   - "Examples" (each example has an Input block and an Output block)
 - The task should be related to the topic "${params.topicTitle}"
 
-Return ONLY the task description in Markdown format without additional comments.` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${effectiveTitle}" для мови ${langName}.
+Return ONLY the task description in Markdown format without additional comments.${responseLanguageInstruction}` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${effectiveTitle}" для мови ${langName}.
 
 ТЕМА: "${params.topicTitle}"
 ${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTaskTitle}"\nКРИТИЧНО: Використай назву вчителя як ОСНОВНУ ідею та не вигадуй іншу назву.` : ""}
@@ -1301,7 +1413,7 @@ ${difficultyPrompt}
 - В output виводь лише потрібні значення (числа/рядки) у вказаному порядку.
 - НЕ використовуй мітки на кшталт "Ціле число:", "Рядок:".
 
-Поверни ТІЛЬКИ умову завдання у форматі Markdown без додаткових коментарів.`;
+Поверни ТІЛЬКИ умову завдання у форматі Markdown без додаткових коментарів.${responseLanguageInstruction}`;
     try {
       const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
@@ -1325,6 +1437,7 @@ ${difficultyPrompt}
     taskTitle?: string;
     language: LLMTaskLanguage;
     description?: string;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
@@ -1342,6 +1455,7 @@ ${difficultyPrompt}
         topicTitle: params.topicTitle,
         language: params.language,
         description: params.description,
+        responseLanguage: params.responseLanguage,
         userId: params.userId,
         topicId: params.topicId
       }, {
@@ -1415,6 +1529,7 @@ ${difficultyPrompt}
     taskTitle?: string;
     language: LLMTaskLanguage;
     description?: string;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
@@ -1425,6 +1540,7 @@ ${difficultyPrompt}
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
     const isEnglish = params.userLanguage === 'en';
+    const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const todoText = isEnglish ? 'implement the solution according to the statement' : 'реалізуйте рішення задачі згідно з умовою';
     const teacherTaskTitle = (params.taskTitle || '').trim();
     const effectiveTitle = teacherTaskTitle || params.topicTitle;
@@ -1487,7 +1603,7 @@ int main() {
   return 0;
 }
 
-Return ONLY the code, no explanations.` : `Створи порожній шаблон коду для завдання "${effectiveTitle}" на мові ${langName}.
+Return ONLY the code, no explanations.${responseLanguageInstruction}` : `Створи порожній шаблон коду для завдання "${effectiveTitle}" на мові ${langName}.
 
 ТЕМА: "${params.topicTitle}"
 ${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTaskTitle}"` : ""}
@@ -1568,7 +1684,7 @@ public class Main {
 }
 \`\`\`
 
-Поверни ТІЛЬКИ код без markdown блоків та пояснень.`;
+Поверни ТІЛЬКИ код без markdown блоків та пояснень.${responseLanguageInstruction}`;
     try {
       const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,

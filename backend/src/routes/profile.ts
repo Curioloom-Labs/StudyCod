@@ -234,6 +234,7 @@ function buildUserDto(user: User) {
     contestHandles: pickContestHandlesForCourse(handlesByCourse, user.lang),
     contestHandlesByCourse: handlesByCourse,
     publicProfilePrivacy: profileMeta.privacy,
+    timezone: profileMeta.timezone,
     email: user.email ?? null,
     marketingEmailsEnabled: Boolean(user.marketingEmailsEnabled),
     userMode: user.userMode,
@@ -1089,6 +1090,7 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
           lastName: student.lastName,
           middleName: student.middleName,
           email: student.email,
+          timezone: null,
           marketingEmailsEnabled: Boolean(student.marketingEmailsEnabled)
         });
       }
@@ -1165,6 +1167,7 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         lastName: student.lastName,
         middleName: student.middleName,
         email: student.email,
+        timezone: null,
         marketingEmailsEnabled: Boolean(student.marketingEmailsEnabled)
       });
     }

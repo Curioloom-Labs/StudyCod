@@ -10,9 +10,11 @@ import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { emailService } from "../services/emailService";
 import { maintenanceService } from "../services/maintenanceService";
 import { JWT_SECRET, FRONTEND_URL } from "../config";
+import { isGoogleOAuthEnabled } from "../config/googleOAuth";
 import { logger } from "../utils/logger";
 import { getUserIadForLang } from "../utils/iad";
 import { env } from "../env";
+import { generateJti } from "../services/auth/jwtRevocation";
 export const authRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 
@@ -29,6 +31,7 @@ const GOOGLE_EXCHANGE_CODE_TTL_MS = 3 * 60 * 1000;
 const GOOGLE_EXCHANGE_COOKIE_NAME = "__sc_google_exchange";
 const GOOGLE_EXCHANGE_COOKIE_PATH = "/api/auth/google";
 const pendingGoogleExchangeCodes = new Map<string, PendingGoogleExchange>();
+const GOOGLE_LINK_SESSION_KEY = "googleLinkUserId";
 
 function parseBool(raw: unknown, fallback: boolean): boolean {
   const s = String(raw ?? "").trim().toLowerCase();
@@ -180,6 +183,18 @@ function cleanupExpiredGoogleExchangeCodes(nowMs = Date.now()): void {
   }
 }
 
+function peekGoogleExchangeCode(codeRaw: unknown): PendingGoogleExchange | null {
+  const code = typeof codeRaw === "string" ? codeRaw.trim() : "";
+  if (!code) return null;
+  const pending = pendingGoogleExchangeCodes.get(code) ?? null;
+  if (!pending) return null;
+  if (pending.expiresAtMs <= Date.now()) {
+    pendingGoogleExchangeCodes.delete(code);
+    return null;
+  }
+  return pending;
+}
+
 function issueGoogleExchangeCode(flow: GoogleExchangeFlow, token: string): string {
   cleanupExpiredGoogleExchangeCodes();
   const code = crypto.randomBytes(32).toString("base64url");
@@ -194,10 +209,9 @@ function issueGoogleExchangeCode(flow: GoogleExchangeFlow, token: string): strin
 function consumeGoogleExchangeCode(codeRaw: unknown): PendingGoogleExchange | null {
   const code = typeof codeRaw === "string" ? codeRaw.trim() : "";
   if (!code) return null;
-  const pending = pendingGoogleExchangeCodes.get(code) ?? null;
+  const pending = peekGoogleExchangeCode(code);
   if (!pending) return null;
   pendingGoogleExchangeCodes.delete(code);
-  if (pending.expiresAtMs <= Date.now()) return null;
   return pending;
 }
 
@@ -208,6 +222,7 @@ function isGoogleExchangeFlowAllowed(expectedFlow: GoogleExchangeFlow | null, ac
 
 export const __authGoogleExchangeTestOnly = {
   issueGoogleExchangeCode,
+  peekGoogleExchangeCode,
   consumeGoogleExchangeCode,
   cleanupExpiredGoogleExchangeCodes,
   getCookieValue,
@@ -226,10 +241,28 @@ function signUserToken(user: User): string {
     userId: user.id,
     lang: user.lang,
     role: user.role,
-    userMode: user.userMode
+    userMode: user.userMode,
+    jti: generateJti()
   }, JWT_SECRET, {
     expiresIn: "7d"
   });
+}
+
+function getGoogleLinkUserIdFromSession(req: Request): number | null {
+  const raw = Number((req.session as any)?.[GOOGLE_LINK_SESSION_KEY] ?? 0);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  return raw;
+}
+
+function clearGoogleLinkSession(req: Request): void {
+  if (req.session) {
+    delete (req.session as any)[GOOGLE_LINK_SESSION_KEY];
+  }
+}
+
+function redirectToGoogleError(res: Response, reason?: string): void {
+  const suffix = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+  res.redirect(`${FRONTEND_URL}/auth/google/error${suffix}`);
 }
 authRouter.get("/maintenance", async (_req: Request, res: Response) => {
   const state = await maintenanceService.getStateCached();
@@ -450,9 +483,42 @@ authRouter.post("/login", async (req: AuthRequest, res: Response) => {
     });
   }
 });
-authRouter.get("/google", passport.authenticate("google", {
-  scope: ["profile", "email"]
-}));
+authRouter.post("/google/link-session", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType === "STUDENT") {
+      return res.status(403).json({ message: "ONLY_USER_ACCOUNTS_CAN_LINK_GOOGLE" });
+    }
+    if (!isGoogleOAuthEnabled()) {
+      return res.status(503).json({ message: "GOOGLE_OAUTH_DISABLED" });
+    }
+    (req.session as any)[GOOGLE_LINK_SESSION_KEY] = req.userId;
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    logger.error("[auth] Google link-session error", { requestId: req.requestId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+authRouter.get("/google", (req: Request, res: Response, next) => {
+  if (!isGoogleOAuthEnabled()) {
+    return redirectToGoogleError(res, "GOOGLE_OAUTH_DISABLED");
+  }
+
+  const isLinkFlow = String(req.query.link ?? "").trim().toLowerCase() === "true";
+  if (isLinkFlow && !getGoogleLinkUserIdFromSession(req)) {
+    return redirectToGoogleError(res, "GOOGLE_LINK_SESSION_REQUIRED");
+  }
+
+  return passport.authenticate("google", {
+    scope: ["profile", "email"]
+  })(req, res, next);
+});
 
 authRouter.post("/contest-login", async (req: AuthRequest, res: Response) => {
   try {
@@ -482,17 +548,66 @@ authRouter.post("/contest-login", async (req: AuthRequest, res: Response) => {
   }
 });
 
-authRouter.get("/google/callback", passport.authenticate("google", {
-  failureRedirect: `${FRONTEND_URL}/auth/google/error`
-}), async (req: Request, res: Response) => {
+authRouter.get("/google/callback", (req: Request, res: Response, next) => {
+  if (!isGoogleOAuthEnabled()) {
+    return redirectToGoogleError(res, "GOOGLE_OAUTH_DISABLED");
+  }
+  return passport.authenticate("google", {
+    failureRedirect: `${FRONTEND_URL}/auth/google/error`
+  })(req, res, next);
+}, async (req: Request, res: Response) => {
   try {
+    const googleLinkUserId = getGoogleLinkUserIdFromSession(req);
+    clearGoogleLinkSession(req);
+
     const user = req.user as User & {
       isNewUser?: boolean;
+      isGoogleLinkFlow?: boolean;
+      linkUserId?: number;
+      email?: string | null;
+      avatarUrl?: string | null;
+      googleId?: string | null;
     };
+    if (googleLinkUserId) {
+      const currentUser = await userRepo().findOne({
+        where: {
+          id: googleLinkUserId
+        }
+      });
+      if (!currentUser) {
+        return redirectToGoogleError(res, "GOOGLE_LINK_USER_NOT_FOUND");
+      }
+
+      const linkedGoogleId = String(user?.googleId ?? "").trim();
+      if (!linkedGoogleId) {
+        return redirectToGoogleError(res, "GOOGLE_ID_REQUIRED");
+      }
+
+      const existingByGoogle = await userRepo().findOne({
+        where: {
+          googleId: linkedGoogleId
+        }
+      });
+      if (existingByGoogle && existingByGoogle.id !== currentUser.id) {
+        return redirectToGoogleError(res, "GOOGLE_ACCOUNT_ALREADY_LINKED");
+      }
+
+      currentUser.googleId = linkedGoogleId;
+      if (!currentUser.email && user.email) currentUser.email = user.email;
+      if (!currentUser.avatarUrl && user.avatarUrl) currentUser.avatarUrl = user.avatarUrl;
+      await userRepo().save(currentUser);
+
+      const token = signUserToken(currentUser);
+      const code = issueGoogleExchangeCode("success", token);
+      setGoogleExchangeCookie(res, code);
+      return res.redirect(`${FRONTEND_URL}/auth/google/success?code=${encodeURIComponent(code)}`);
+    }
+
     if (user.isNewUser) {
       const tempToken = jwt.sign({
         ...user,
-        temp: true
+        temp: true,
+        jti: generateJti()
       }, JWT_SECRET, {
         expiresIn: "10m"
       });
@@ -513,13 +628,14 @@ authRouter.post("/google/exchange-code", async (req: AuthRequest, res: Response)
   try {
     const { code, flow } = req.body as { code?: unknown; flow?: unknown };
     const expectedFlow = flow === "success" || flow === "complete" ? flow : null;
-    const pending = consumeGoogleExchangeCode(code);
+    const pending = peekGoogleExchangeCode(code);
     if (!pending) {
       return res.status(400).json({ message: "INVALID_OR_EXPIRED_CODE" });
     }
     if (!isGoogleExchangeFlowAllowed(expectedFlow, pending.flow)) {
       return res.status(400).json({ message: "INVALID_CODE_FLOW" });
     }
+    consumeGoogleExchangeCode(code);
     return res.json({ token: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-code error", { requestId: req.requestId, err });
@@ -531,14 +647,16 @@ authRouter.post("/google/exchange-cookie", async (req: AuthRequest, res: Respons
     const { flow } = req.body as { flow?: unknown };
     const expectedFlow = flow === "success" || flow === "complete" ? flow : null;
     const code = getCookieValue(req.headers.cookie, GOOGLE_EXCHANGE_COOKIE_NAME);
-    clearGoogleExchangeCookie(res);
-    const pending = consumeGoogleExchangeCode(code);
+    const pending = peekGoogleExchangeCode(code);
     if (!pending) {
+      clearGoogleExchangeCookie(res);
       return res.status(400).json({ message: "INVALID_OR_EXPIRED_CODE" });
     }
     if (!isGoogleExchangeFlowAllowed(expectedFlow, pending.flow)) {
       return res.status(400).json({ message: "INVALID_CODE_FLOW" });
     }
+    clearGoogleExchangeCookie(res);
+    consumeGoogleExchangeCode(code);
     return res.json({ token: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-cookie error", { requestId: req.requestId, err });

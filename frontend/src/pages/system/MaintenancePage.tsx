@@ -167,9 +167,9 @@ export const MaintenancePage: React.FC<{
   onAdminLogin
 }) => {
   const countdown = useCountdown(state.until);
-  return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex items-center justify-center p-6">
-      <Card className="w-full max-w-3xl p-6 md:p-8">
-        <div className="flex items-start justify-between gap-4">
+  return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex items-center justify-center p-3 sm:p-6">
+      <Card className="w-full max-w-3xl p-4 sm:p-6 md:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-xs font-mono text-text-secondary uppercase tracking-wider">StudyCod</div>
             <h1 className="mt-2 text-3xl md:text-4xl font-mono font-bold text-text-primary">{state.title}</h1>
@@ -196,7 +196,7 @@ export const MaintenancePage: React.FC<{
                   Орієнтовно до: <span className="text-text-primary font-mono">{countdown.until.toLocaleString()}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3 font-mono">
+              <div className="flex flex-wrap items-center gap-3 font-mono sm:justify-end">
                 <div className="px-3 py-2 border border-border rounded-lg bg-bg-surface">
                   <div className="text-lg font-bold">{countdown.parts.d}</div>
                   <div className="text-[10px] text-text-secondary">days</div>

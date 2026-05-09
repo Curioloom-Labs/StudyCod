@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "axios";
+import { getRetryDelayMs, sleep, getRetryCount, setRetryCount } from "./retry";
 type MaintenancePayload = {
   maintenance: true;
   title: string;
@@ -11,6 +12,36 @@ type MaintenanceErrorData = {
   title?: unknown;
   message?: unknown;
   until?: unknown;
+
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 100,
+  maxDelayMs: 5000,
+  backoffFactor: 2,
+  shouldRetry: (error: AxiosError, retryCount: number) => {
+    if (retryCount <= 0) return false;
+
+    // Don't retry client errors (4xx) except for 429 (rate limit)
+    if (error.response?.status && error.response.status >= 400 && error.response.status < 500) {
+      if (error.response.status === 429) {
+        return true;
+      }
+      return false;
+    }
+
+    // Retry server errors (5xx)
+    if (error.response?.status && error.response.status >= 500) {
+      return true;
+    }
+
+    // Retry on network error or timeout
+    if (error.code === "ECONNABORTED" || error.code === "ENOTFOUND" || error.code === "ECONNREFUSED" || error.message?.includes("timeout")) {
+      return true;
+    }
+
+    return false;
+  }
+};
 };
 function emitMaintenance(payload: MaintenancePayload) {
   if (typeof window === "undefined") return;
@@ -35,6 +66,19 @@ function getDefaultBaseUrl(): string {
   }
   return "http://localhost:3000";
 }
+
+function buildLoginRedirectTarget(): string {
+  if (typeof window === "undefined") return "/?auth=login";
+
+  const isContestArea = window.location.pathname.startsWith("/contest");
+  if (isContestArea) return "/contest";
+
+  const nextRaw = `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
+  const next = nextRaw.startsWith("/") ? nextRaw : "/";
+  const nextParam = next === "/" ? "" : `&next=${encodeURIComponent(next)}`;
+  return `/?auth=login${nextParam}`;
+}
+
 export const api = axios.create({
   baseURL: joinApiBase(import.meta.env.VITE_API_URL || getDefaultBaseUrl()),
   withCredentials: true
@@ -89,8 +133,7 @@ api.interceptors.response.use((response: AxiosResponse) => {
   if (error.response?.status === 401) {
     localStorage.removeItem("token");
     if (typeof window !== "undefined") {
-      const isContestArea = window.location.pathname.startsWith("/contest");
-      window.location.href = isContestArea ? "/contest" : "/auth";
+      window.location.href = buildLoginRedirectTarget();
     }
   }
   if (error.response?.status === 503) {
@@ -104,5 +147,24 @@ api.interceptors.response.use((response: AxiosResponse) => {
       });
     }
   }
+
+  // Implement retry logic for transient failures
+  const config = error.config as InternalAxiosRequestConfig;
+  if (!config) {
+    return Promise.reject(error);
+  }
+
+  const retryCount = getRetryCount(config);
+  const shouldRetry = RETRY_CONFIG.shouldRetry(error, RETRY_CONFIG.maxRetries - retryCount);
+
+  if (shouldRetry && retryCount < RETRY_CONFIG.maxRetries) {
+    const delayMs = getRetryDelayMs(retryCount + 1, RETRY_CONFIG);
+    setRetryCount(config, retryCount + 1);
+
+    return sleep(delayMs).then(() => {
+      return api.request(config);
+    });
+  }
+
   return Promise.reject(error);
 });

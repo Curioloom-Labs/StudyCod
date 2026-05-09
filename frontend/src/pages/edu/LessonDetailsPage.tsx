@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
-import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, updateTestData, deleteTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type Task, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade, type TaskGrade } from "../../lib/api/edu";
+import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, getTestDataItem, updateTestData, deleteTestData, deleteGeneratedTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type Task, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade, type TaskGrade } from "../../lib/api/edu";
 import { GlobalTimer } from "../../components/GlobalTimer";
 import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock } from "lucide-react";
 import { getMe } from "../../lib/api/profile";
 import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import type { User } from "../../types";
-import { isDeadlineExpired } from "../../utils/timezone";
+import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezone";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
-import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
+import { buildResumeState, clearResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { activateControlExamSession, clearControlExamSession } from "../../lib/controlExamSession";
 
 type QuizOptionKey = "А" | "Б" | "В" | "Г" | "Д";
 type QuizQuestion = {
@@ -48,6 +49,11 @@ const getResponseMessage = (error: unknown): string | null => {
   const message = Reflect.get(data, "message");
   return typeof message === "string" ? message : null;
 };
+const parsePageSize = (value: string): 20 | 50 | 100 => {
+  const parsed = Number.parseInt(value, 10);
+  if (parsed === 20 || parsed === 50 || parsed === 100) return parsed;
+  return 20;
+};
 export const LessonDetailsPage: React.FC = () => {
   const {
     t,
@@ -60,8 +66,21 @@ export const LessonDetailsPage: React.FC = () => {
     lessonId: string;
   }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { element: viewportEl } = useWorkspaceViewport();
   const [searchParams] = useSearchParams();
+  const currentLessonPath = `${location.pathname}${location.search}`;
+  const handleBackNavigation = React.useCallback(() => {
+    const fromRaw = (location.state as {
+      from?: unknown;
+    } | null)?.from;
+    const from = typeof fromRaw === "string" ? fromRaw : null;
+    if (from && from.startsWith("/edu/")) {
+      navigate(from);
+      return;
+    }
+    navigate("/edu/lessons");
+  }, [location.state, navigate]);
   const [lesson, setLesson] = useState<Lesson & {
     tasks: NonNullable<Lesson["tasks"]>;
   } | null>(null);
@@ -96,6 +115,13 @@ export const LessonDetailsPage: React.FC = () => {
   const [showTestDataModal, setShowTestDataModal] = useState(false);
   const [testDataTaskId, setTestDataTaskId] = useState<number | null>(null);
   const [testDataList, setTestDataList] = useState<TestData[]>([]);
+  const [testDataPageSize, setTestDataPageSize] = useState<20 | 50 | 100>(20);
+  const [testDataOffset, setTestDataOffset] = useState(0);
+  const [testDataTotal, setTestDataTotal] = useState(0);
+  const [testDataHasMore, setTestDataHasMore] = useState(false);
+  const [testDataSourceFilter, setTestDataSourceFilter] = useState<"ALL" | "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED">("ALL");
+  const [replaceGeneratedOnGenerate, setReplaceGeneratedOnGenerate] = useState(true);
+  const [clearingGeneratedTests, setClearingGeneratedTests] = useState(false);
   const [editingTestIndex, setEditingTestIndex] = useState<number | null>(null);
   const [editingTest, setEditingTest] = useState<{
     input: string;
@@ -123,7 +149,10 @@ export const LessonDetailsPage: React.FC = () => {
   const [studentQuizReview, setStudentQuizReview] = useState<StudentQuizReview | null>(null);
   const [hasAutoRedirected, setHasAutoRedirected] = useState(false);
   const [controlWorkStatus, setControlWorkStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | null>(null);
+  const [showControlStartWarning, setShowControlStartWarning] = useState(false);
+  const [reportRedirectSeconds, setReportRedirectSeconds] = useState<number | null>(null);
   const createDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const TEST_DATA_PREVIEW_CHARS = 600;
 
   const lessonIdNum = React.useMemo(() => {
     const n = Number(lessonId);
@@ -143,6 +172,7 @@ export const LessonDetailsPage: React.FC = () => {
     (scrollTop?: number) => {
       if (!user) return;
       if (lessonIdNum == null) return;
+      if (!lesson || lesson.id !== lessonIdNum) return;
       saveResumeState(
         buildResumeState({
           userId: user.id,
@@ -153,7 +183,7 @@ export const LessonDetailsPage: React.FC = () => {
         })
       );
     },
-    [user?.id, lessonIdNum, resumeStep]
+    [user?.id, lesson?.id, lessonIdNum, resumeStep]
   );
 
   useEffect(() => {
@@ -224,35 +254,115 @@ export const LessonDetailsPage: React.FC = () => {
     }
   }, [lesson, user, hasAutoRedirected, navigate]);
   useEffect(() => {
-    if (lesson && lesson.type === "CONTROL" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && user?.userMode === "EDUCATIONAL" && user?.studentId && controlWorkStatus !== "COMPLETED") {
-      const initializeTimer = async () => {
-        try {
-          const statusData = await getControlWorkStatus(parseInt(lessonId!, 10));
-          setControlWorkStatus(statusData.status);
-          if (statusData.status === "COMPLETED") {
-            return;
-          }
-          const status = await getLessonAttemptStatus(parseInt(lessonId!, 10));
+    if (!(lesson && lesson.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId && lessonId)) {
+      return;
+    }
+
+    const initializeControlState = async () => {
+      try {
+        const statusData = await getControlWorkStatus(parseInt(lessonId, 10));
+        setControlWorkStatus(statusData.status);
+
+        if (statusData.status === "COMPLETED") {
+          setRemainingSeconds(null);
+          return;
+        }
+
+        if (lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null) {
+          const status = await getLessonAttemptStatus(parseInt(lessonId, 10));
           if (status.hasActiveAttempt && status.remainingSeconds > 0) {
             setRemainingSeconds(status.remainingSeconds);
             setControlWorkStatus("IN_PROGRESS");
           } else {
             setRemainingSeconds(null);
           }
-        } catch (error: unknown) {
-          console.error("Failed to initialize timer:", error);
-          const status = getResponseStatus(error);
-          const message = getResponseMessage(error);
-          if (status !== 500 || message !== "DATABASE_TABLE_NOT_CREATED") {
-            if (lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null) {
-              setRemainingSeconds(lesson.timeLimitMinutes * 60);
-            }
+        } else {
+          setRemainingSeconds(null);
+        }
+      } catch (error: unknown) {
+        console.error("Failed to initialize control state:", error);
+        const status = getResponseStatus(error);
+        const message = getResponseMessage(error);
+        if (status !== 500 || message !== "DATABASE_TABLE_NOT_CREATED") {
+          if (lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null) {
+            setRemainingSeconds(lesson.timeLimitMinutes * 60);
           }
         }
-      };
-      initializeTimer();
-    }
+      }
+    };
+
+    initializeControlState();
   }, [lesson, user, lessonId]);
+
+  useEffect(() => {
+    if (!(lesson?.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId)) {
+      setShowControlStartWarning(false);
+      return;
+    }
+
+    const reportOnlyByDeadline = lesson.reportOnly === true && lesson.reportReason === "DEADLINE_EXPIRED";
+    const reportOnlyByCompletion = lesson.reportOnly === true && lesson.reportReason === "COMPLETED" && controlWorkStatus !== "NOT_STARTED";
+
+    if (reportOnlyByDeadline || reportOnlyByCompletion) {
+      setShowControlStartWarning(false);
+      return;
+    }
+
+    setShowControlStartWarning(controlWorkStatus === "NOT_STARTED");
+  }, [lesson?.id, lesson?.type, lesson?.reportOnly, lesson?.reportReason, user?.id, user?.studentId, controlWorkStatus]);
+
+  useEffect(() => {
+    if (!(lesson?.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId)) {
+      return;
+    }
+
+    const reportOnlyByDeadline = lesson.reportOnly === true && lesson.reportReason === "DEADLINE_EXPIRED";
+    const reportOnlyByCompletion = lesson.reportOnly === true && lesson.reportReason === "COMPLETED" && controlWorkStatus !== "NOT_STARTED";
+    const reportOnlyControl = reportOnlyByDeadline || reportOnlyByCompletion;
+
+    if (controlWorkStatus === "IN_PROGRESS" && !reportOnlyControl) {
+      activateControlExamSession(lesson.id);
+      return;
+    }
+
+    if (controlWorkStatus === "COMPLETED" || reportOnlyControl) {
+      clearControlExamSession();
+    }
+  }, [lesson?.id, lesson?.type, lesson?.reportOnly, lesson?.reportReason, controlWorkStatus, user?.id, user?.studentId]);
+
+  useEffect(() => {
+    if (!(lesson?.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId)) {
+      setReportRedirectSeconds(null);
+      return;
+    }
+
+    const reportOnlyByDeadline = lesson.reportOnly === true && lesson.reportReason === "DEADLINE_EXPIRED";
+    const reportOnlyByCompletion = lesson.reportOnly === true && lesson.reportReason === "COMPLETED" && controlWorkStatus !== "NOT_STARTED";
+    const shouldShowReport = controlWorkStatus === "COMPLETED" || reportOnlyByDeadline || reportOnlyByCompletion;
+
+    setReportRedirectSeconds(shouldShowReport ? 12 : null);
+  }, [lesson?.id, lesson?.type, lesson?.reportOnly, lesson?.reportReason, controlWorkStatus, user?.id, user?.studentId]);
+
+  useEffect(() => {
+    if (reportRedirectSeconds === null) return;
+
+    if (reportRedirectSeconds <= 0) {
+      clearControlExamSession();
+      navigate("/edu/lessons", {
+        replace: true
+      });
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setReportRedirectSeconds(prev => prev === null ? null : prev - 1);
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [reportRedirectSeconds, navigate]);
+
   const loadUser = async () => {
     try {
       const u = await getMe();
@@ -324,7 +434,21 @@ export const LessonDetailsPage: React.FC = () => {
       console.error("Failed to load lesson:", error);
       const status = getResponseStatus(error);
       if (status === 404 || status === 403) {
-        showToast({ type: "error", message: getErrorMessage(error, tr("Урок не знайдено", "Lesson not found")) });
+        showToast({ type: "error", message: getErrorMessage(error, tr("Урок не знайдено. Повертаємо до списку уроків.", "Lesson not found. Redirecting to lessons.")) });
+
+        const parsedLessonId = lessonId ? Number.parseInt(lessonId, 10) : null;
+        if (user?.id && parsedLessonId !== null) {
+          const state = loadResumeState(user.id);
+          if (state?.kind === "edu_lesson" && state.lessonId === parsedLessonId) {
+            clearResumeState(user.id);
+          }
+        }
+
+        clearControlExamSession();
+        setLesson(null);
+        navigate(user?.studentId ? "/edu/lessons" : "/edu", {
+          replace: true
+        });
       }
     } finally {
       setLoading(false);
@@ -352,11 +476,27 @@ export const LessonDetailsPage: React.FC = () => {
   };
   const handleGenerateTests = async (taskId: number, count: number) => {
     try {
-      await generateTestData(taskId, count);
-      showToast({ type: "success", message: tr(`Згенеровано ${count} тестових даних`, `Generated ${count} test cases`) });
+      const result = await generateTestData(taskId, count, {
+        replaceGenerated: replaceGeneratedOnGenerate
+      });
+      const extras: string[] = [];
+      if ((result.replacedGeneratedCount || 0) > 0) {
+        extras.push(tr(`замінено AI: ${result.replacedGeneratedCount}`, `replaced AI: ${result.replacedGeneratedCount}`));
+      }
+      if ((result.skippedDuplicates || 0) > 0) {
+        extras.push(tr(`дублі пропущено: ${result.skippedDuplicates}`, `duplicates skipped: ${result.skippedDuplicates}`));
+      }
+      showToast({
+        type: "success",
+        message: extras.length > 0
+          ? `${tr(`Згенеровано ${result.count} тестових даних`, `Generated ${result.count} test cases`)} (${extras.join(", ")})`
+          : tr(`Згенеровано ${result.count} тестових даних`, `Generated ${result.count} test cases`)
+      });
       await loadLesson();
       if (showTestDataModal && testDataTaskId === taskId) {
-        await loadTestData(taskId);
+        await loadTestData(taskId, {
+          offset: 0
+        });
       }
     } catch (error: unknown) {
       console.error("Failed to generate tests:", error);
@@ -390,7 +530,9 @@ export const LessonDetailsPage: React.FC = () => {
         isHidden: importIsHidden
       }));
       await addTestData(testDataTaskId, payload);
-      await loadTestData(testDataTaskId);
+      await loadTestData(testDataTaskId, {
+        offset: testDataOffset
+      });
       await loadLesson();
       setImportFiles([]);
       setImportInputKey(k => k + 1);
@@ -401,28 +543,87 @@ export const LessonDetailsPage: React.FC = () => {
       setImportingFiles(false);
     }
   };
-  const loadTestData = async (taskId: number) => {
+  const loadTestData = async (
+    taskId: number,
+    options?: {
+      offset?: number;
+      pageSize?: 20 | 50 | 100;
+      source?: "ALL" | "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+    }
+  ) => {
+    const nextOffset = options?.offset ?? testDataOffset;
+    const nextPageSize = options?.pageSize ?? testDataPageSize;
+    const nextSource = options?.source ?? testDataSourceFilter;
     setLoadingTestData(true);
     try {
-      const data = await getTestData(taskId);
+      const data = await getTestData(taskId, {
+        preview: true,
+        previewChars: TEST_DATA_PREVIEW_CHARS,
+        limit: nextPageSize,
+        offset: nextOffset,
+        source: nextSource
+      });
       setTestDataList(data.testData);
+      setTestDataOffset(nextOffset);
+      setTestDataPageSize(nextPageSize);
+      setTestDataSourceFilter(nextSource);
+      if (data.pagination) {
+        setTestDataTotal(data.pagination.total);
+        setTestDataHasMore(data.pagination.hasMore);
+      } else {
+        setTestDataTotal((data.testData || []).length);
+        setTestDataHasMore(false);
+      }
     } catch (error: unknown) {
       console.error("Failed to load test data:", error);
       showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося завантажити тести", "Failed to load tests")) });
+      setTestDataList([]);
+      setTestDataTotal(0);
+      setTestDataHasMore(false);
     } finally {
       setLoadingTestData(false);
+    }
+  };
+  const handleStartEditTest = async (index: number, testDataId: number) => {
+    if (!testDataTaskId) return;
+    try {
+      const data = await getTestDataItem(testDataTaskId, testDataId);
+      const test = data.testData;
+      setEditingTestIndex(index);
+      setEditingTest({
+        input: test.input,
+        expectedOutput: test.expectedOutput || "",
+        points: test.points,
+        isHidden: test.isHidden === true
+      });
+    } catch (error: unknown) {
+      console.error("Failed to load full test data:", error);
+      showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося завантажити повний тест", "Failed to load full test")) });
     }
   };
   const handleOpenTestDataModal = async (taskId: number) => {
     setTestDataTaskId(taskId);
     setShowTestDataModal(true);
-    await loadTestData(taskId);
+    setTestDataPageSize(20);
+    setTestDataOffset(0);
+    setTestDataTotal(0);
+    setTestDataHasMore(false);
+    setTestDataSourceFilter("ALL");
+    setReplaceGeneratedOnGenerate(true);
+    setClearingGeneratedTests(false);
+    await loadTestData(taskId, {
+      offset: 0,
+      pageSize: 20,
+      source: "ALL"
+    });
   };
   const handleSaveTest = async (testDataId: number, index: number) => {
     if (!testDataTaskId || !editingTest) return;
     try {
       await updateTestData(testDataTaskId, testDataId, editingTest);
-      await loadTestData(testDataTaskId);
+      await loadTestData(testDataTaskId, {
+        offset: testDataOffset
+      });
       setEditingTestIndex(null);
       setEditingTest(null);
     } catch (error: unknown) {
@@ -435,7 +636,12 @@ export const LessonDetailsPage: React.FC = () => {
     if (!confirm(tr("Видалити цей тест?", "Delete this test?"))) return;
     try {
       await deleteTestData(testDataTaskId, testDataId);
-      await loadTestData(testDataTaskId);
+      const nextOffset = testDataOffset > 0 && testDataList.length <= 1
+        ? Math.max(0, testDataOffset - testDataPageSize)
+        : testDataOffset;
+      await loadTestData(testDataTaskId, {
+        offset: nextOffset
+      });
       await loadLesson();
     } catch (error: unknown) {
       console.error("Failed to delete test:", error);
@@ -446,12 +652,37 @@ export const LessonDetailsPage: React.FC = () => {
     if (!testDataTaskId || !editingTest) return;
     try {
       await addTestData(testDataTaskId, [editingTest]);
-      await loadTestData(testDataTaskId);
+      await loadTestData(testDataTaskId, {
+        offset: testDataOffset
+      });
       setEditingTestIndex(null);
       setEditingTest(null);
     } catch (error: unknown) {
       console.error("Failed to add test:", error);
       showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося додати тест", "Failed to add test")) });
+    }
+  };
+  const handleClearGeneratedTests = async () => {
+    if (!testDataTaskId) return;
+    if (!confirm(tr("Видалити всі AI-згенеровані тести для цього завдання?", "Delete all AI-generated tests for this task?"))) {
+      return;
+    }
+    setClearingGeneratedTests(true);
+    try {
+      const result = await deleteGeneratedTestData(testDataTaskId);
+      await loadTestData(testDataTaskId, {
+        offset: 0
+      });
+      await loadLesson();
+      showToast({
+        type: "success",
+        message: tr(`Видалено AI-тестів: ${result.deleted}`, `Deleted AI tests: ${result.deleted}`)
+      });
+    } catch (error: unknown) {
+      console.error("Failed to clear generated tests:", error);
+      showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося очистити AI-тести", "Failed to clear AI tests")) });
+    } finally {
+      setClearingGeneratedTests(false);
     }
   };
   const handleOpenTaskSettings = async (taskId: number) => {
@@ -504,14 +735,24 @@ export const LessonDetailsPage: React.FC = () => {
         {tr("Урок не знайдено", "Lesson not found")}
       </div>;
   }
+
+  const isStudentControlWork = lesson.type === "CONTROL" && !!user?.studentId;
+  const isStudentTimedControlWork = isStudentControlWork && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null;
+  const controlWorkAttemptStarted = !isStudentControlWork || controlWorkStatus === "IN_PROGRESS" || controlWorkStatus === "COMPLETED";
+  const reportOnlyByDeadline = lesson.reportOnly === true && lesson.reportReason === "DEADLINE_EXPIRED";
+  const reportOnlyByCompletion = lesson.reportOnly === true && lesson.reportReason === "COMPLETED" && controlWorkStatus !== "NOT_STARTED";
+  const isReportOnlyControl = isStudentControlWork && (reportOnlyByDeadline || reportOnlyByCompletion);
+  const isActiveControlExam = isStudentControlWork && controlWorkStatus === "IN_PROGRESS" && !isReportOnlyControl;
+  const shouldShowStudentTheoryBlock = isStudentControlWork && !!lesson.controlHasTheory && controlWorkAttemptStarted && !isReportOnlyControl && controlWorkStatus !== "COMPLETED" && (!lesson.controlHasPractice || !studentQuizSubmitted);
+
   return <>
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            {t("back")}
-          </Button>
+      <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          {!isActiveControlExam && <Button variant="ghost" onClick={handleBackNavigation}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              {t("back")}
+            </Button>}
           <h1 className="text-2xl font-mono text-text-primary">{lesson.title}</h1>
           <span className="text-xs text-text-muted px-2 py-1 border border-border">
             {lesson.type === "TOPIC" ? t("topic") : lesson.type === "CONTROL" ? tr("Контрольна", "Control work") : t("lesson")}
@@ -534,7 +775,7 @@ export const LessonDetailsPage: React.FC = () => {
           {lesson.type === "TOPIC" && Array.isArray(lesson.controlWorks) && lesson.controlWorks.length > 0 && <Card className="p-4 mb-6">
             <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Контрольні роботи", "Control works")}</h2>
             <div className="space-y-3">
-            {lesson.controlWorks!.map((cw: ControlWorkListItem) => <div key={cw.id} className="p-3 border border-border bg-bg-base flex items-start justify-between gap-3">
+            {lesson.controlWorks!.map((cw: ControlWorkListItem) => <div key={cw.id} className="p-3 border border-border bg-bg-base flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-text-muted px-2 py-1 border border-border">{tr("Контрольна", "Control work")}</span>
@@ -545,15 +786,22 @@ export const LessonDetailsPage: React.FC = () => {
                       {cw.timeLimitMinutes ? <span>{tr("Обмеження", "Limit")}: {cw.timeLimitMinutes} {t("min")}</span> : null}
                       {cw.deadline ? <span>
                           {tr("Дедлайн", "Deadline")}:{" "}
-                          {new Date(cw.deadline).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
+                          {formatDeadlineForDisplay(cw.deadline, cw.deadlineTimezone || lesson.deadlineTimezone || undefined, {
+                    dateStyle: "short",
+                    timeStyle: "short"
+                  })}
                         </span> : null}
                         {cw.studentGrade !== null && cw.studentGrade !== undefined && <span className="text-text-primary">
                           {t("grade")}: <span className="font-bold">{cw.studentGrade}</span>/100
                         </span>}
                     </div>
                   </div>
-                  <Button variant="ghost" onClick={() => navigate(`/edu/lessons/${cw.id}?type=CONTROL`)}>
-                    {t("open")}
+                  <Button variant="ghost" onClick={() => navigate(`/edu/lessons/${cw.id}?type=CONTROL`, {
+                  state: {
+                    from: currentLessonPath
+                  }
+                })}>
+                    {cw.studentStatus === "COMPLETED" ? tr("Рапорт", "Report") : t("open")}
                   </Button>
                 </div>)}
             </div>
@@ -561,7 +809,7 @@ export const LessonDetailsPage: React.FC = () => {
 
         {}
         {}
-        {lesson.type === "CONTROL" && lesson.controlHasTheory && (controlWorkStatus !== "COMPLETED" || studentQuizSubmitted) && <Card className="p-4 mb-6">
+        {lesson.type === "CONTROL" && lesson.controlHasTheory && controlWorkAttemptStarted && (!isStudentControlWork || shouldShowStudentTheoryBlock) && <Card className="p-4 mb-6">
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Теоретична частина (Питання)", "Theory part (Questions)")}</h2>}
             
             {}
@@ -695,7 +943,7 @@ export const LessonDetailsPage: React.FC = () => {
                 } catch (e) {
                   console.error("Failed to check control work status:", e);
                 }
-                showToast({ type: "success", message: tr("Тест відправлено. Результати будуть доступні у фінальному огляді контрольної.", "Quiz submitted. Results will be available in the final control-work review.") });
+                showToast({ type: "success", message: tr("Тест відправлено. Відкриваємо практичний блок.", "Quiz submitted. Opening the practice block.") });
                 await loadLesson();
               } catch (error: unknown) {
                 console.error("Failed to submit quiz:", error);
@@ -785,98 +1033,60 @@ export const LessonDetailsPage: React.FC = () => {
           </Card>}
 
         {}
-        {lesson.type === "CONTROL" && controlWorkStatus === "COMPLETED" && <Card className="p-4 mb-6 border-accent-success">
+        {lesson.type === "CONTROL" && (controlWorkStatus === "COMPLETED" || isReportOnlyControl) && <Card className="p-4 mb-6 border-accent-success">
             <div className="text-lg font-mono text-accent-success mb-3">
-              {tr("Контрольна робота завершена — фінальний огляд", "Control work completed — final review")}
+              {tr("Рапорт за контрольну роботу", "Control work report")}
             </div>
 
-            <div className="space-y-4">
-              <div className="p-3 border border-border bg-bg-base">
-                <div className="text-sm font-mono text-text-primary mb-2">{tr("Огляд тесту", "Quiz review")}</div>
-                {studentQuizReview?.questions && Array.isArray(studentQuizReview.questions) ? <>
-                    <div className="text-xs text-text-secondary mb-3">
-                      {tr("Результат", "Result")}: {studentQuizReview.correctAnswers}/{studentQuizReview.totalQuestions}
-                    </div>
-                    <div className="space-y-3">
-                      {studentQuizReview.questions.map(q => <div key={q.index} className="p-3 border border-border bg-bg-surface/40">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="text-sm font-mono text-text-primary">
-                              {q.index + 1}. {q.question || tr("Питання", "Question")}
-                            </div>
-                            <div className={`text-xs font-mono px-2 py-1 border ${q.isCorrect ? "border-accent-success text-accent-success" : "border-accent-error text-accent-error"}`}>
-                              {q.isCorrect ? tr("✓ Правильно", "✓ Correct") : tr("✗ Неправильно", "✗ Incorrect")}
-                            </div>
-                          </div>
-                          <div className="mt-2 space-y-1 text-xs">
-                            {Object.entries(q.options || {}).map(([key, value]) => {
-                    const k = String(key).toUpperCase();
-                    const correct = String(q.correct || "").toUpperCase();
-                    const student = q.student ? String(q.student).toUpperCase() : null;
-                    const isCorrect = k === correct;
-                    const isStudent = student ? k === student : false;
-                    const cls = isCorrect ? "text-accent-success" : isStudent ? "text-accent-error" : "text-text-secondary";
-                    return <div key={key} className={`flex items-center gap-2 ${cls}`}>
-                                  <span className="font-mono">{key})</span>
-                                  <span>{String(value)}</span>
-                                  {isCorrect && <span className="ml-2">✓</span>}
-                                  {isStudent && !isCorrect && <span className="ml-2">{tr("• ваш вибір", "• your choice")}</span>}
-                                </div>;
-                  })}
-                          </div>
-                        </div>)}
-                    </div>
-                  </> : <div className="text-xs text-text-secondary">
-                    {tr("Тестових відповідей не знайдено.", "No quiz answers found.")}
-                  </div>}
-              </div>
+            {isReportOnlyControl && lesson.reportReason === "DEADLINE_EXPIRED" && <div className="mb-4 p-3 border border-accent-warning/40 bg-accent-warning/10 text-sm text-text-secondary">
+                {tr("Дедлайн минув. Контрольну повторно відкрити не можна — доступний лише рапорт.", "Deadline has passed. Reopening the control work is not allowed — report only.")}
+              </div>}
 
-              <div className="p-3 border border-border bg-bg-base">
-                <div className="text-sm font-mono text-text-primary mb-2">{tr("Огляд задач", "Task review")}</div>
-                <div className="space-y-2">
-                  {lesson.tasks.map(task => {
-                const grade = task.grade;
-                return <div key={task.id} className="p-3 border border-border bg-bg-surface/40 flex items-center justify-between gap-3">
-                        <div className="text-sm font-mono text-text-primary">{task.title}</div>
-                        {grade ? <div className="text-xs font-mono text-text-secondary text-right">
-                          <div>{t("grade")}: <span className="text-text-primary font-bold">{grade.total}</span>/100</div>
-                            <div>{tr("Тести", "Tests")}: {grade.testsPassed}/{grade.testsTotal}</div>
-                          </div> : <div className="text-xs text-text-muted">{tr("Немає оцінки", "No grade")}</div>}
-                      </div>;
-              })}
-                </div>
+            <div className="grid gap-3 sm:grid-cols-3 mb-4">
+              {lesson.controlHasTheory && <div className="p-3 border border-border bg-bg-base">
+                  <div className="text-xs text-text-muted mb-1">{tr("Блок 1 (тест)", "Block 1 (quiz)")}</div>
+                  <div className="text-2xl font-mono text-text-primary">{lesson.controlReport?.theoryGrade ?? "—"}</div>
+                </div>}
+              {lesson.controlHasPractice && <div className="p-3 border border-border bg-bg-base">
+                  <div className="text-xs text-text-muted mb-1">{tr("Блок 2 (практика)", "Block 2 (practice)")}</div>
+                  <div className="text-2xl font-mono text-text-primary">{lesson.controlReport?.practiceGrade ?? "—"}</div>
+                </div>}
+              <div className="p-3 border border-primary/40 bg-primary/10">
+                <div className="text-xs text-text-muted mb-1">{tr("Підсумкова оцінка", "Final grade")}</div>
+                <div className="text-2xl font-mono text-text-primary">{lesson.controlReport?.finalGrade ?? "—"}</div>
               </div>
+            </div>
+
+            {lesson.controlReport?.formulaSnapshot && <div className="mb-4 text-xs text-text-secondary">
+                {tr("Формула", "Formula")}: <code className="bg-bg-hover px-1 rounded">{lesson.controlReport.formulaSnapshot}</code>
+              </div>}
+
+            <div className="text-xs text-text-muted mb-4">
+              {tr("У рапорті не показуються розв’язки, відповіді тесту та деталі запусків — лише оцінки блоків і підсумок.", "The report hides solutions, quiz answers, and run details — it shows only block grades and final score.")}
+            </div>
+
+            {reportRedirectSeconds !== null && <div className="text-xs text-text-secondary mb-4">
+                {tr(
+                  `Автоматичний перехід на головний екран через ${Math.max(0, reportRedirectSeconds)} с.`,
+                  `Automatic redirect to the home screen in ${Math.max(0, reportRedirectSeconds)}s.`
+                )}
+              </div>}
+
+            <div className="flex justify-end">
+              <Button onClick={() => {
+            clearControlExamSession();
+            navigate("/edu/lessons", {
+              replace: true
+            });
+          }}>
+                {tr("На головний екран", "Go to home screen")}
+              </Button>
             </div>
           </Card>}
 
-        {}
-        {lesson.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId && controlWorkStatus === "NOT_STARTED" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && <Card className="p-4 mb-6 border-primary/40">
-              <div className="text-lg font-mono text-text-primary mb-2">{tr("Контрольна ще не розпочата", "Control work not started")}</div>
-              <div className="text-text-secondary mb-3">
-                {tr("Натисніть «Почати контрольну», щоб запустити таймер. Після старту час піде одразу.", "Click “Start control work” to start the timer. Time starts immediately after you start.")}
-              </div>
-              <Button onClick={async () => {
-          try {
-            const attempt = await startLessonAttempt(parseInt(lessonId!, 10));
-            setRemainingSeconds(attempt.remainingSeconds);
-            setControlWorkStatus("IN_PROGRESS");
-          } catch (error: unknown) {
-            console.error("Failed to start attempt:", error);
-            const status = getResponseStatus(error);
-            const message = getResponseMessage(error);
-            if (status === 409 && message === "CONTROL_WORK_COMPLETED") {
-              setControlWorkStatus("COMPLETED");
-            } else {
-              showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося почати контрольну", "Failed to start control work")) });
-            }
-          }
-        }}>
-                {tr("Почати контрольну", "Start control work")}
-              </Button>
-            </Card>}
-
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-xl font-mono text-text-primary">
-            {t("tasks")} ({lesson.tasks.length})
+            {lesson.type === "CONTROL" ? tr("Блок 2: Практика", "Block 2: Practice") : t("tasks")} ({lesson.tasks.length})
           </h2>
           {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => {
           if (lesson.type === "LESSON" && lesson.tasks.length > 0) {
@@ -895,35 +1105,42 @@ export const LessonDetailsPage: React.FC = () => {
               <p className="text-text-secondary">{t("noTasks")}</p>
             </Card> : (() => {
           const isStudentControlFlow = lesson.type === "CONTROL" && !!user?.studentId;
-          const quizGatePassed = !lesson.controlHasTheory || studentQuizSubmitted || controlWorkStatus === "COMPLETED";
-          const unlockedTaskIds = Array.isArray(lesson.studentControlProgress?.unlockedTaskIds) ? lesson.studentControlProgress!.unlockedTaskIds : [];
+          const quizGatePassed = !lesson.controlHasTheory || studentQuizSubmitted || controlWorkStatus === "COMPLETED" || isReportOnlyControl;
+          const currentTaskId = lesson.studentControlProgress?.currentTaskId ?? null;
+          const completedTaskIds = new Set<number>(Array.isArray(lesson.studentControlProgress?.completedTaskIds) ? lesson.studentControlProgress!.completedTaskIds : []);
 
-          let visibleTasks = [...lesson.tasks] as Array<(typeof lesson.tasks)[number]>;
-          if (isStudentControlFlow && controlWorkStatus !== "COMPLETED") {
-            if (!quizGatePassed) {
-              visibleTasks = [];
-            } else if (unlockedTaskIds.length > 0) {
-              visibleTasks = lesson.tasks.filter(t => unlockedTaskIds.includes(t.id));
-            } else {
-              const firstIncomplete = lesson.tasks.find(t => !t.hasGrade);
-              visibleTasks = firstIncomplete ? [firstIncomplete] : [];
-            }
+          if (isStudentControlFlow && !controlWorkAttemptStarted) {
+            return <Card className="p-8 text-center">
+                <p className="text-text-secondary">{tr("Натисніть «Почати контрольну», щоб відкрити тест і задачі.", "Click “Start control work” to unlock the quiz and tasks.")}</p>
+              </Card>;
           }
 
-          if (isStudentControlFlow && controlWorkStatus !== "COMPLETED" && !quizGatePassed) {
+          if (isStudentControlFlow && (controlWorkStatus === "COMPLETED" || isReportOnlyControl)) {
+            return <Card className="p-6 text-center">
+                <p className="text-text-secondary">{tr("Практичний блок закрито. Доступний лише рапорт за контрольну.", "Practice block is closed. Only the control-work report is available.")}</p>
+              </Card>;
+          }
+
+          if (isStudentControlFlow && !quizGatePassed) {
             return <Card className="p-8 text-center">
                 <p className="text-text-secondary">{tr("Спершу відправте тест, щоб відкрити першу задачу.", "Submit the quiz first to unlock the first task.")}</p>
               </Card>;
           }
 
-          return visibleTasks.map(task => {
+          return lesson.tasks.map(task => {
           const isExpired = task.deadline && isDeadlineExpired(task.deadline);
           const hasGrade = task.hasGrade || false;
           const showOverdue = isExpired && !hasGrade;
           const showViewButton = hasGrade || showOverdue;
-          const showTaskGrade = lesson.type !== "CONTROL" || controlWorkStatus === "COMPLETED";
+          const showTaskGrade = lesson.type !== "CONTROL" || controlWorkStatus === "COMPLETED" || isReportOnlyControl;
+          const attemptsUsed = typeof task.attemptsUsed === "number" ? task.attemptsUsed : null;
+          const maxAttempts = typeof task.maxAttempts === "number" ? task.maxAttempts : null;
+          const attemptsExhausted = attemptsUsed !== null && maxAttempts !== null && attemptsUsed >= maxAttempts;
+          const progressCompleted = (task.progressCompleted === true) || completedTaskIds.has(task.id) || attemptsExhausted || task.grade?.isCompleted === true;
+          const isActiveControlTask = isStudentControlFlow ? !progressCompleted && currentTaskId === task.id : false;
+          const isLockedControlTask = isStudentControlFlow ? !progressCompleted && !isActiveControlTask : false;
           return <Card key={task.id} className={`p-4 ${showOverdue ? 'border-accent-error/50 bg-accent-error/5' : ''}`}>
-                <div className="flex items-start justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-lg font-mono text-text-primary">{task.title}</h3>
@@ -934,20 +1151,35 @@ export const LessonDetailsPage: React.FC = () => {
                       {task.deadline && !isExpired && <span className="text-xs px-2 py-1 bg-bg-hover text-text-secondary border border-border rounded flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {t("until")}{" "}
-                          {new Date(task.deadline).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
+                          {formatDeadlineForDisplay(task.deadline, task.deadlineTimezone || lesson.deadlineTimezone || undefined, {
+                  dateStyle: "short",
+                  timeStyle: "short"
+                })}
                         </span>}
                         {showTaskGrade && hasGrade && task.grade && <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${task.grade.total >= 85 ? 'bg-accent-success/20 text-accent-success border border-accent-success/30' : task.grade.total >= 65 ? 'bg-accent-warn/20 text-accent-warn border border-accent-warn/30' : task.grade.total >= 40 ? 'bg-accent-warning/20 text-accent-warning border border-accent-warning/30' : 'bg-accent-error/20 text-accent-error border border-accent-error/30'}`}>
                           {t("grade")}: {task.grade.total}/100
+                        </span>}
+                        {isStudentControlFlow && isActiveControlTask && <span className="text-xs px-2 py-1 border border-primary/40 text-primary rounded">
+                          {tr("Активне", "Active")}
+                        </span>}
+                        {isStudentControlFlow && progressCompleted && <span className="text-xs px-2 py-1 border border-accent-success/40 text-accent-success rounded">
+                          {attemptsExhausted ? tr("Спроби вичерпано", "Attempts exhausted") : tr("Завершено", "Completed")}
+                        </span>}
+                        {isStudentControlFlow && isLockedControlTask && <span className="text-xs px-2 py-1 border border-border text-text-muted rounded">
+                          {tr("Очікує черги", "Waiting")}
                         </span>}
                     </div>
                     <div className="text-sm text-text-secondary mb-2 line-clamp-2">
                       {task.description}
                     </div>
-                    <div className="text-xs text-text-muted">
-                      {t("tests")}: {task.testDataCount || 0}
+                    <div className="text-xs text-text-muted space-y-1">
+                      <div>{t("tests")}: {task.testDataCount || 0}</div>
+                      {isStudentControlFlow && maxAttempts !== null && attemptsUsed !== null && <div>
+                          {tr("Спроби", "Attempts")}: {attemptsUsed}/{maxAttempts}
+                        </div>}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {user?.userMode === "EDUCATIONAL" && !user?.studentId ? <>
                         <Button variant="ghost" onClick={() => handleViewGrades(task.id)} className="text-xs">
                           <Users className="w-4 h-4 mr-1" />
@@ -961,8 +1193,35 @@ export const LessonDetailsPage: React.FC = () => {
                           <Settings className="w-4 h-4 mr-1" />
                           {t("settings")}
                         </Button>
-                      </> : <Button variant={showViewButton ? "ghost" : "primary"} onClick={() => {
-                  navigate(`/edu/tasks/${task.id}`);
+                      </> : isStudentControlFlow ? <Button
+                        variant={isActiveControlTask ? "primary" : "ghost"}
+                        disabled={!isActiveControlTask}
+                        onClick={() => {
+                          if (!isActiveControlTask) return;
+                          navigate(`/edu/tasks/${task.id}`, {
+                            state: {
+                              from: currentLessonPath
+                            }
+                          });
+                        }}
+                        className="text-xs"
+                      >
+                        {isActiveControlTask ? <>
+                            <Play className="w-4 h-4 mr-1" />
+                            {tr("Відкрити", "Open")}
+                          </> : progressCompleted ? <>
+                            <FileText className="w-4 h-4 mr-1" />
+                            {tr("Завершено", "Completed")}
+                          </> : <>
+                            <FileText className="w-4 h-4 mr-1" />
+                            {tr("Заблоковано", "Locked")}
+                          </>}
+                      </Button> : <Button variant={showViewButton ? "ghost" : "primary"} onClick={() => {
+                  navigate(`/edu/tasks/${task.id}`, {
+                    state: {
+                      from: currentLessonPath
+                    }
+                  });
                 }} className="text-xs">
                         {showViewButton ? <>
                             <FileText className="w-4 h-4 mr-1" />
@@ -980,9 +1239,63 @@ export const LessonDetailsPage: React.FC = () => {
         </div>
       </div>
 
+      {lesson.type === "CONTROL" && user?.userMode === "EDUCATIONAL" && user?.studentId && showControlStartWarning && !isReportOnlyControl && <Modal open={showControlStartWarning} onClose={() => {
+      handleBackNavigation();
+    }} closable={false} title={tr("Початок контрольної роботи", "Start control work")} showCloseButton={false} overlayClassName="!p-0 !items-stretch !justify-stretch !bg-bg-base/95" panelClassName="!w-screen !h-screen !max-w-none !max-h-none !rounded-none !border-0 !bg-bg-base" bodyClassName="!px-0 !py-0 !h-full">
+          <div className="h-full w-full flex items-center justify-center p-4 sm:p-8">
+            <div className="w-full max-w-3xl border border-border bg-bg-surface p-6 sm:p-8">
+              <p className="text-text-primary font-mono text-base sm:text-lg leading-relaxed">
+                {tr("Ви починаєте контрольну роботу. Після початку ви не зможете повернутись назад або змінити відповіді в попередніх блоках.", "You are starting a control work. After start, you won't be able to go back or change answers in previous blocks.")}
+              </p>
+
+              {lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && <div className="mt-4 text-sm text-text-secondary font-mono">
+                  {tr(`Ліміт часу: ${lesson.timeLimitMinutes} хв.`, `Time limit: ${lesson.timeLimitMinutes} min.`)}
+                </div>}
+
+              <div className="flex flex-wrap gap-2 justify-end mt-8">
+                <Button variant="ghost" onClick={handleBackNavigation}>
+                  {tr("Скасувати", "Cancel")}
+                </Button>
+                <Button onClick={async () => {
+              if (!lessonId) return;
+              try {
+                const parsedLessonId = parseInt(lessonId, 10);
+                const attempt = await startLessonAttempt(parsedLessonId);
+                if (lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null) {
+                  setRemainingSeconds(attempt.remainingSeconds);
+                } else {
+                  setRemainingSeconds(null);
+                }
+                activateControlExamSession(parsedLessonId);
+                setControlWorkStatus("IN_PROGRESS");
+                setShowControlStartWarning(false);
+              } catch (error: unknown) {
+                console.error("Failed to start attempt:", error);
+                const status = getResponseStatus(error);
+                const message = getResponseMessage(error);
+                if (status === 409 && message === "CONTROL_WORK_COMPLETED") {
+                  setControlWorkStatus("COMPLETED");
+                  setShowControlStartWarning(false);
+                  await loadLesson();
+                } else if (status === 403 && message === "CONTROL_WORK_DEADLINE_PASSED") {
+                  setShowControlStartWarning(false);
+                  showToast({ type: "info", message: tr("Дедлайн контрольної вже минув. Доступний лише рапорт.", "The control-work deadline has already passed. Report only is available.") });
+                  await loadLesson();
+                } else {
+                  showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося почати контрольну", "Failed to start control work")) });
+                }
+              }
+            }}>
+                  {tr("Почати", "Start")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Modal>}
+
       {}
       {showCreateTask && <Modal open={showCreateTask} onClose={() => setShowCreateTask(false)} title={tr("Створити завдання", "Create task")} showCloseButton={false}>
-          <div className="p-6 max-w-3xl max-h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 max-w-3xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Створити завдання", "Create task")}</h2>
             <div className="space-y-4">
               <div>
@@ -1021,7 +1334,7 @@ export const LessonDetailsPage: React.FC = () => {
               template: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] font-mono text-sm" />
               </div>
-              <div className="flex gap-2 justify-end">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <Button variant="ghost" onClick={() => setShowCreateTask(false)}>
                   {t("cancel")}
                 </Button>
@@ -1047,7 +1360,7 @@ export const LessonDetailsPage: React.FC = () => {
         correct: "А"
       });
     }} title={editingQuestionIndex !== null ? tr("Редагувати питання", "Edit question") : tr("Додати питання", "Add question")} showCloseButton={false}>
-          <div className="p-6 max-w-2xl max-h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
@@ -1063,7 +1376,7 @@ export const LessonDetailsPage: React.FC = () => {
                   {tr("Варіанти відповідей", "Answer options")} *
                 </label>
                 <div className="space-y-2">
-                  {Object.entries(newQuestion.options).map(([key, value]) => <div key={key} className="flex items-center gap-2">
+                    {Object.entries(newQuestion.options).map(([key, value]) => <div key={key} className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <span className="font-mono w-6 text-text-secondary">{key})</span>
                       <input type="text" value={value} onChange={e => setNewQuestion({
                   ...newQuestion,
@@ -1081,7 +1394,7 @@ export const LessonDetailsPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="flex gap-2 justify-end mt-6">
+            <div className="flex flex-wrap gap-2 justify-end mt-6">
               <Button variant="ghost" onClick={() => {
             setShowAddQuestion(false);
             setEditingQuestionIndex(null);
@@ -1150,10 +1463,10 @@ export const LessonDetailsPage: React.FC = () => {
 
       {}
       {showGrades && <Modal open={showGrades} onClose={() => setShowGrades(false)} title={tr("Оцінки учнів", "Student grades")} showCloseButton={false}>
-          <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Оцінки учнів", "Student grades")}</h2>
             <div className="space-y-2">
-              {grades.map((item, index) => <div key={index} className="p-3 border border-border bg-bg-surface flex items-center justify-between">
+              {grades.map((item, index) => <div key={index} className="p-3 border border-border bg-bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-mono text-text-primary">
                       {item.student.lastName} {item.student.firstName} {item.student.middleName || ""}
@@ -1186,6 +1499,13 @@ export const LessonDetailsPage: React.FC = () => {
       setShowTestDataModal(false);
       setTestDataTaskId(null);
       setTestDataList([]);
+      setTestDataPageSize(20);
+      setTestDataOffset(0);
+      setTestDataTotal(0);
+      setTestDataHasMore(false);
+      setTestDataSourceFilter("ALL");
+      setReplaceGeneratedOnGenerate(true);
+      setClearingGeneratedTests(false);
       setEditingTestIndex(null);
       setEditingTest(null);
       setImportFiles([]);
@@ -1194,14 +1514,32 @@ export const LessonDetailsPage: React.FC = () => {
       setImportingFiles(false);
       setImportInputKey(k => k + 1);
     }} title={tr("Управління тестами", "Test management")} showCloseButton={false}>
-          <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="p-4 sm:p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h2 className="text-xl font-mono text-text-primary">{tr("Тестові дані", "Test data")}</h2>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input type="number" min="1" max="50" value={newTestCount} onChange={e => setNewTestCount(parseInt(e.target.value) || 10)} className="w-20 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                 <Button variant="ghost" onClick={() => handleGenerateTests(testDataTaskId, newTestCount)} className="text-xs">
                   <Sparkles className="w-4 h-4 mr-1" />
                   {tr("Згенерувати", "Generate")} {newTestCount}
+                </Button>
+                <label className="flex items-center gap-2 text-xs font-mono text-text-secondary px-2">
+                  <input
+                    type="checkbox"
+                    checked={replaceGeneratedOnGenerate}
+                    onChange={e => setReplaceGeneratedOnGenerate(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  {tr("Замінювати попередні AI-тести", "Replace previous AI tests")}
+                </label>
+                <Button
+                  variant="ghost"
+                  onClick={handleClearGeneratedTests}
+                  disabled={clearingGeneratedTests}
+                  className="text-xs"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  {clearingGeneratedTests ? tr("Очищення...", "Clearing...") : tr("Очистити AI", "Clear AI")}
                 </Button>
                 <Button variant="ghost" onClick={() => {
               setEditingTestIndex(-1);
@@ -1241,13 +1579,87 @@ export const LessonDetailsPage: React.FC = () => {
               </p>
             </Card>
 
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div className="text-xs font-mono text-text-secondary">
+                {testDataTotal > 0
+                  ? tr(
+                      `Показано ${Math.min(testDataOffset + 1, testDataTotal)}-${Math.min(testDataOffset + testDataList.length, testDataTotal)} з ${testDataTotal}`,
+                      `Showing ${Math.min(testDataOffset + 1, testDataTotal)}-${Math.min(testDataOffset + testDataList.length, testDataTotal)} of ${testDataTotal}`
+                    )
+                  : ""}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-mono text-text-secondary">{tr("Джерело", "Source")}</span>
+                <select
+                  value={testDataSourceFilter}
+                  onChange={async (e) => {
+                    if (!testDataTaskId) return;
+                    const source = e.target.value as "ALL" | "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+                    await loadTestData(testDataTaskId, {
+                      offset: 0,
+                      source
+                    });
+                  }}
+                  className="px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs focus:outline-none"
+                >
+                  <option value="ALL">{tr("Усі", "All")}</option>
+                  <option value="MANUAL">{tr("Вручну", "Manual")}</option>
+                  <option value="AI_GENERATED">{tr("AI", "AI")}</option>
+                  <option value="LIBRARY_IMPORTED">{tr("З бібліотеки", "From library")}</option>
+                </select>
+                <span className="text-xs font-mono text-text-secondary">{tr("Розмір сторінки", "Page size")}</span>
+                <select
+                  value={testDataPageSize}
+                  onChange={async (e) => {
+                    if (!testDataTaskId) return;
+                    const pageSize = parsePageSize(e.target.value);
+                    await loadTestData(testDataTaskId, {
+                      offset: 0,
+                      pageSize
+                    });
+                  }}
+                  className="px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs focus:outline-none"
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <Button
+                  variant="ghost"
+                  className="text-xs"
+                  disabled={loadingTestData || testDataOffset <= 0}
+                  onClick={async () => {
+                    if (!testDataTaskId) return;
+                    await loadTestData(testDataTaskId, {
+                      offset: Math.max(0, testDataOffset - testDataPageSize)
+                    });
+                  }}
+                >
+                  {tr("Назад", "Prev")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-xs"
+                  disabled={loadingTestData || !testDataHasMore}
+                  onClick={async () => {
+                    if (!testDataTaskId) return;
+                    await loadTestData(testDataTaskId, {
+                      offset: testDataOffset + testDataPageSize
+                    });
+                  }}
+                >
+                  {tr("Вперед", "Next")}
+                </Button>
+              </div>
+            </div>
+
             {loadingTestData ? <div className="text-center py-8 text-text-secondary font-mono">
                 {t("loading")}
               </div> : <div className="space-y-3">
                 {}
                 {editingTestIndex === -1 && <Card className="p-4 border-2 border-primary">
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                         <h3 className="text-sm font-mono text-text-primary">{tr("Новий тест", "New test")}</h3>
                         <Button variant="ghost" onClick={() => {
                   setEditingTestIndex(null);
@@ -1274,7 +1686,7 @@ export const LessonDetailsPage: React.FC = () => {
                   expectedOutput: e.target.value
                 })} placeholder={tr("Наприклад: 15", "Example: 15")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                         <div className="flex-1">
                           <label className="block text-xs font-mono text-text-secondary mb-1">
                             {tr("Бали", "Points")} (1-100)
@@ -1305,7 +1717,9 @@ export const LessonDetailsPage: React.FC = () => {
                     <p className="text-xs text-text-muted">
                       {tr("Згенеруйте тести автоматично або додайте їх вручну", "Generate tests automatically or add them manually")}
                     </p>
-                  </Card> : testDataList.map((test, index) => <Card key={test.id} className="p-4">
+                  </Card> : testDataList.map((test, index) => {
+                    const displayIndex = testDataOffset + index + 1;
+                    return <Card key={test.id} className="p-4">
                       {editingTestIndex === index ? <div className="space-y-3">
                           <div>
                             <label className="block text-xs font-mono text-text-secondary mb-1">
@@ -1325,7 +1739,7 @@ export const LessonDetailsPage: React.FC = () => {
                   expectedOutput: e.target.value
                 })} placeholder={tr("Наприклад: 15", "Example: 15")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[80px] resize-y" />
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                             <div className="flex-1">
                               <label className="block text-xs font-mono text-text-secondary mb-1">
                                 {tr("Бали", "Points")} (1-100)
@@ -1353,34 +1767,36 @@ export const LessonDetailsPage: React.FC = () => {
                               {t("save")}
                             </Button>
                           </div>
-                        </div> : <div className="flex items-start justify-between gap-4">
+                        </div> : <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                           <div className="flex-1 space-y-2">
+                            <div className="text-xs font-mono text-text-secondary">
+                              {tr("Тест", "Test")} #{displayIndex}
+                            </div>
                             <div>
                               <span className="text-xs font-mono text-text-muted">{tr("Вхід", "Input")}:</span>
                               <pre className="text-xs font-mono text-text-secondary bg-bg-code p-2 rounded mt-1 whitespace-pre-wrap">
                                 {test.input}
                               </pre>
+                              {test.isInputTruncated ? <div className="text-[11px] text-text-muted mt-1">{tr("Показано скорочений превʼю-текст", "Showing truncated preview text")}</div> : null}
                             </div>
                             <div>
                               <span className="text-xs font-mono text-text-muted">{tr("Очікуваний вивід", "Expected output")}:</span>
                               <pre className="text-xs font-mono text-text-secondary bg-bg-code p-2 rounded mt-1 whitespace-pre-wrap">
                                 {test.expectedOutput}
                               </pre>
+                              {test.isExpectedOutputTruncated ? <div className="text-[11px] text-text-muted mt-1">{tr("Показано скорочений превʼю-текст", "Showing truncated preview text")}</div> : null}
                             </div>
                             <div className="text-xs font-mono text-text-muted">
                               {tr("Бали", "Points")}: <span className="text-text-primary">{test.points}</span>
+                              {test.source === "AI_GENERATED" ? <span className="ml-2">• {tr("джерело: AI", "source: AI")}</span> : null}
+                              {test.source === "LIBRARY_IMPORTED" ? <span className="ml-2">• {tr("джерело: бібліотека", "source: library")}</span> : null}
+                              {test.source === "MANUAL" ? <span className="ml-2">• {tr("джерело: вручну", "source: manual")}</span> : null}
                               {test.isHidden ? <span className="ml-2 text-violet-400">• {tr("прихований", "hidden")}</span> : null}
                             </div>
                           </div>
                           <div className="flex gap-2">
                             <button onClick={() => {
-                  setEditingTestIndex(index);
-                  setEditingTest({
-                    input: test.input,
-                    expectedOutput: test.expectedOutput || "",
-                    points: test.points,
-                    isHidden: test.isHidden === true
-                  });
+                  handleStartEditTest(index, test.id);
                 }} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")} aria-label={t("edit")}>
                               <Edit2 className="w-4 h-4 text-primary" />
                             </button>
@@ -1389,7 +1805,8 @@ export const LessonDetailsPage: React.FC = () => {
                             </button>
                           </div>
                         </div>}
-                    </Card>)}
+                    </Card>;
+                  })}
               </div>}
           </div>
         </Modal>}
@@ -1399,7 +1816,7 @@ export const LessonDetailsPage: React.FC = () => {
       setShowTaskSettings(false);
       setSettingsTask(null);
     }} title={tr("Налаштування завдання", "Task settings")} showCloseButton={false}>
-          <div className="p-6 max-w-2xl">
+          <div className="p-4 sm:p-6 max-w-2xl">
             <h2 className="text-xl font-mono text-text-primary mb-4">{settingsTask.title}</h2>
             <div className="space-y-4">
               <div>
@@ -1436,7 +1853,7 @@ export const LessonDetailsPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex gap-2 justify-end mt-6">
+              <div className="flex flex-wrap gap-2 justify-end mt-6">
                 <Button variant="ghost" onClick={() => {
               setShowTaskSettings(false);
               setSettingsTask(null);

@@ -6,7 +6,7 @@ export type TheoryTopic = {
   title: string;
   order: number;
   description: string | null;
-  language: "JAVA" | "PYTHON";
+  language: "JAVA" | "PYTHON" | "CPP";
   theory: {
     id: number;
     title: string;
@@ -16,7 +16,7 @@ export type TheoryTopic = {
   } | null;
 };
 
-export async function getTheoryTopics(language: "JAVA" | "PYTHON"): Promise<TheoryTopic[]> {
+export async function getTheoryTopics(language: "JAVA" | "PYTHON" | "CPP"): Promise<TheoryTopic[]> {
   const res = await api.get("/theory", {
     params: {
       language,

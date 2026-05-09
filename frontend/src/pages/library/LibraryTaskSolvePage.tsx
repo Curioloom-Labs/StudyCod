@@ -13,6 +13,7 @@ import { WebPreviewPane } from "../../components/WebPreviewPane";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
+import { useMediaQuery } from "../../utils/useMediaQuery";
 import {
   checkLibraryWebTask,
   checkLibraryTask,
@@ -208,6 +209,7 @@ function verdictChip(verdictRaw: string | null | undefined, tr: TrFn) {
 export const LibraryTaskSolvePage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
+  const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
   const navigate = useNavigate();
   const location = useLocation();
   const hasToken = useMemo(() => {
@@ -293,6 +295,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<LibraryCheckResult | null>(null);
+  const [actionRecovery, setActionRecovery] = useState<{
+    tone: "error" | "warning";
+    message: string;
+    retry: "run" | "check" | "save";
+  } | null>(null);
   const [showCompactStatuses, setShowCompactStatuses] = useState(false);
   const [compactFailedOnly, setCompactFailedOnly] = useState(true);
 
@@ -612,6 +619,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
     }
     setRunning(true);
     setRunResult(null);
+    setActionRecovery(null);
     try {
       if (isWebTask) {
         setRunResult({ stdout: tr("Оновлено превʼю у сусідній панелі.", "Preview refreshed in the panel."), stderr: "", exitCode: 0, success: true });
@@ -629,11 +637,17 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setResultsOpen(true);
     } catch (e: unknown) {
       console.error("Run failed", e);
+      const message = getErrorMessageFromUnknown(e, tr("Помилка виконання", "Execution error"));
       setRunResult({
         stdout: "",
-        stderr: getErrorMessageFromUnknown(e, tr("Помилка виконання", "Execution error")),
+        stderr: message,
         exitCode: 1,
         success: false,
+      });
+      setActionRecovery({
+        tone: "error",
+        message: tr(`Не вдалося запустити код: ${message}`, `Run failed: ${message}`),
+        retry: "run",
       });
       setResultsTab("run");
       setResultsOpen(true);
@@ -650,6 +664,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
     }
     setChecking(true);
     setCheckResult(null);
+    setActionRecovery(null);
     try {
       if (isWebTask) {
         const r = await checkLibraryWebTask(effectiveTaskId, toWebPreviewFiles());
@@ -676,16 +691,28 @@ export const LibraryTaskSolvePage: React.FC = () => {
       const data = err.response?.data;
       const isHtml = typeof data === "string" && data.trim().toLowerCase().startsWith("<html");
       if (status === 502 || status === 503 || status === 504 || isHtml) {
+        const message = tr(
+          "Сервер перевірки тимчасово недоступний (помилка шлюзу). Спробуйте ще раз через кілька секунд.",
+          "Check service is temporarily unavailable (gateway error). Please try again in a few seconds."
+        );
         showToast({
           type: "error",
-          message: tr(
-            "Сервер перевірки тимчасово недоступний (помилка шлюзу). Спробуйте ще раз через кілька секунд.",
-            "Check service is temporarily unavailable (gateway error). Please try again in a few seconds."
-          ),
+          message,
+        });
+        setActionRecovery({
+          tone: "warning",
+          message,
+          retry: "check",
         });
       } else {
         const msg = typeof data === "object" && data !== null && "message" in data ? String((data as { message?: unknown }).message ?? "") : "";
-        showToast({ type: "error", message: msg || tr("Не вдалося перевірити", "Failed to check") });
+        const message = msg || tr("Не вдалося перевірити", "Failed to check");
+        showToast({ type: "error", message });
+        setActionRecovery({
+          tone: "error",
+          message,
+          retry: "check",
+        });
       }
     } finally {
       setChecking(false);
@@ -699,6 +726,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       return;
     }
     try {
+      setActionRecovery(null);
       if (isWebTask) {
         await saveLibraryWebTaskDraft(effectiveTaskId, toWebPreviewFiles());
       } else {
@@ -716,7 +744,13 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setLastSavedCode(nextCode);
       showToast({ type: "success", message: tr("Збережено", "Saved") });
     } catch (e: unknown) {
-      showToast({ type: "error", message: getErrorMessageFromUnknown(e, tr("Не вдалося зберегти", "Failed to save")) });
+      const message = getErrorMessageFromUnknown(e, tr("Не вдалося зберегти", "Failed to save"));
+      showToast({ type: "error", message });
+      setActionRecovery({
+        tone: "error",
+        message,
+        retry: "save",
+      });
     }
   };
 
@@ -732,10 +766,69 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setCode(next);
     }
   };
+  const isMacPlatform = typeof navigator !== "undefined" && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
+  const modKeyLabel = isMacPlatform ? "⌘" : "Ctrl";
+  const saveShortcutLabel = `${modKeyLabel}+S`;
+  const runShortcutLabel = `${modKeyLabel}+Enter`;
+  const checkShortcutLabel = `${modKeyLabel}+Shift+Enter`;
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const node = target as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return node.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (!task) return;
+
+      const key = event.key.toLowerCase();
+      const withMod = event.metaKey || event.ctrlKey;
+      const editableTarget = isEditableTarget(event.target);
+
+      if (withMod && key === "s") {
+        event.preventDefault();
+        if (!loading) {
+          void manualSave();
+        }
+        return;
+      }
+
+      if (withMod && key === "enter") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          if (!checking && !running) {
+            void doCheck();
+          }
+        } else if (!running && !checking) {
+          void doRun();
+        }
+        return;
+      }
+
+      if (!withMod && event.altKey && !event.shiftKey && !editableTarget) {
+        if (key === "1") {
+          event.preventDefault();
+          scrollToSection("mission");
+        } else if (key === "2") {
+          event.preventDefault();
+          scrollToSection("task");
+        } else if (key === "3") {
+          event.preventDefault();
+          scrollToSection("console");
+        }
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [checking, doCheck, doRun, loading, manualSave, running, scrollToSection, task]);
 
   if (!taskKey) {
     return (
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-6">
         <div className="max-w-6xl mx-auto">
           <Card className="p-4">
             <div className="text-sm text-text-secondary">{tr("Некоректне посилання", "Invalid link")}</div>
@@ -746,7 +839,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   }
 
   return (
-    <div className="relative min-h-[calc(100dvh-3rem)] w-full px-3 pb-3">
+    <div className="relative min-h-[calc(100dvh-3rem)] w-full px-2 sm:px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <div className="min-h-[calc(100dvh-3.75rem)] rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex">
         <aside className="hidden xl:flex w-[58px] border-r border-border/60 bg-bg-surface/70 flex-col items-center py-3 gap-2">
           <div className="group relative">
@@ -786,18 +879,26 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
         <div className="flex-1 min-w-0 min-h-0 overflow-auto p-3 md:p-4">
           <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <Button variant="ghost" onClick={goBackToLibrary}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-mono text-text-primary">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg sm:text-2xl font-mono text-text-primary truncate">
               {tr("Розв'язання: ", "Solve: ")}
               {task?.title || "..."}
             </h1>
+            <div className="hidden lg:flex items-center gap-1 text-[10px] text-text-muted font-mono mt-1">
+              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{runShortcutLabel}</span>
+              <span>{tr("запуск", "run")}</span>
+              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{checkShortcutLabel}</span>
+              <span>{tr("перевірка", "check")}</span>
+              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{saveShortcutLabel}</span>
+              <span>{tr("зберегти", "save")}</span>
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 ml-auto">
             <Button variant="ghost" onClick={resetToTemplate} disabled={!task || loading} title={tr("Скинути", "Reset")} aria-label={tr("Скинути код до шаблону", "Reset code to template")} className="h-11 w-11 p-0"
               >
               <RotateCcw className="w-4 h-4" />
@@ -832,7 +933,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
             <div className="flex flex-col xl:flex-row gap-3 items-start">
             <div className="w-full xl:w-5/12 space-y-3">
               <div ref={statementSectionRef}>
-              <Card className="p-4 space-y-3 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+              <Card className="p-4 space-y-3 border border-border/70 bg-bg-surface/80">
                 <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-sm font-mono text-text-primary">{tr("Умова", "Description")}</div>
@@ -849,7 +950,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
               </Card>
               </div>
 
-              <Card className="p-4 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+              <Card className="p-4 overflow-auto border border-border/70 bg-bg-surface/80">
                 <div className="text-sm font-mono text-text-primary mb-2 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" /> {tr("Підказки", "Hints")}
                 </div>
@@ -865,17 +966,17 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
             <div className="w-full xl:w-7/12 space-y-3">
             <div ref={editorSectionRef}>
-            <Card className="p-4 flex flex-col border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
-              <div className="flex items-center justify-between gap-3 mb-3">
+            <Card className="p-4 flex flex-col border border-border/70 bg-bg-surface/80">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3">
                 <div className="text-sm font-mono text-text-primary">
                   {tr("Код", "Code")} ({FRIENDLY_LANG[judgeLanguage] || judgeLanguage})
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
                   {!isWebTask ? (
                     <select
                       value={judgeLanguage}
                       onChange={(e) => setJudgeLanguage(e.target.value as JudgeLanguage)}
-                      className="px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
+                      className="w-full sm:w-auto px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
                       title={tr("Мова розв'язку", "Solution language")}
                     >
                       {getAllowedJudgeLanguages(task).map((l) => (
@@ -885,7 +986,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
                       ))}
                     </select>
                   ) : null}
-                <div className="flex gap-2">
+                <div className={`flex flex-wrap gap-2 ${isCompactViewport ? "w-full" : ""}`}>
                   {!useFiles ? (
                     <Button
                       variant="secondary"
@@ -900,17 +1001,50 @@ export const LibraryTaskSolvePage: React.FC = () => {
                       {tr("Додати файл", "Add file")}
                     </Button>
                   ) : null}
-                  <Button onClick={doRun} disabled={running || checking}>
+                  <Button onClick={doRun} disabled={running || checking} title={runShortcutLabel}>
                     <Play className="w-4 h-4 mr-2" />
-                    {running ? tr("Виконання...", "Running...") : tr("Запустити", "Run")}
+                    {running ? tr("Виконання...", "Running...") : tr("Запустити", "Run")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{runShortcutLabel}</span>
                   </Button>
-                  <Button onClick={doCheck} disabled={checking || running}>
+                  <Button onClick={doCheck} disabled={checking || running} title={checkShortcutLabel}>
                     <CheckCircle2 className="w-4 h-4 mr-2" />
-                    {checking ? tr("Перевірка...", "Checking...") : tr("Перевірити", "Check")}
+                    {checking ? tr("Перевірка...", "Checking...") : tr("Перевірити", "Check")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{checkShortcutLabel}</span>
                   </Button>
                 </div>
                 </div>
               </div>
+
+              {actionRecovery ? (
+                <div
+                  role={actionRecovery.tone === "error" ? "alert" : "status"}
+                  aria-live={actionRecovery.tone === "error" ? "assertive" : "polite"}
+                  className={`mb-3 p-3 border ${actionRecovery.tone === "error" ? "border-accent-error/50 bg-bg-code" : "border-accent-warning/50 bg-bg-code"}`}
+                >
+                  <div className={`text-xs font-mono ${actionRecovery.tone === "error" ? "text-accent-error" : "text-accent-warning"}`}>
+                    {actionRecovery.tone === "error" ? tr("Проблема біля кнопок запуску", "Problem near run/check controls") : tr("Тимчасова проблема перевірки", "Temporary check issue")}
+                  </div>
+                  <div className="mt-1 text-xs font-mono text-text-secondary break-words">{actionRecovery.message}</div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {actionRecovery.retry === "run" ? (
+                      <Button variant="secondary" onClick={() => void doRun()} disabled={running || checking} className="text-xs">
+                        {tr("Повторити запуск", "Retry run")}
+                      </Button>
+                    ) : null}
+                    {actionRecovery.retry === "check" ? (
+                      <Button variant="secondary" onClick={() => void doCheck()} disabled={running || checking} className="text-xs">
+                        {tr("Повторити перевірку", "Retry check")}
+                      </Button>
+                    ) : null}
+                    {actionRecovery.retry === "save" ? (
+                      <Button variant="secondary" onClick={() => void manualSave()} disabled={loading} className="text-xs">
+                        {tr("Повторити збереження", "Retry save")}
+                      </Button>
+                    ) : null}
+                    <Button variant="ghost" onClick={() => scrollToSection("console")} className="text-xs">
+                      {tr("Перейти до виводу", "Go to output")}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
 
               {(runResult || checkResult) ? (
                 <div className="mb-3 p-3 border border-border bg-bg-base rounded flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
@@ -1042,7 +1176,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
             </div>
 
             <div ref={outputSectionRef}>
-              <Card className="p-4 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+              <Card className="p-4 overflow-auto border border-border/70 bg-bg-surface/80">
                 <div className="text-sm font-mono text-text-primary mb-2">{tr("Результат запуску", "Run output")}</div>
                 {!runResult ? (
                   <div className="text-sm text-text-secondary">{tr("Поки що немає", "Nothing yet")}</div>
@@ -1069,7 +1203,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
               </Card>
             </div>
 
-            <Card className="p-4 overflow-auto border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+            <Card className="p-4 overflow-auto border border-border/70 bg-bg-surface/80">
               <div className="text-sm font-mono text-text-primary mb-2">{tr("Перевірка (тести)", "Check (tests)")}</div>
               {!checkResult ? (
                 <div className="text-sm text-text-secondary">{tr("Натисніть 'Перевірити'", "Click 'Check'")}</div>
@@ -1430,7 +1564,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
               title={tr("Повна умова задачі", "Full task statement")}
               description={tr("Умова та теорія задачі.", "Task statement and theory.")}
             >
-              <div className="space-y-5">
+              <div className="space-y-5 p-4 sm:p-6">
                 <div>
                   <div className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2">{tr("Умова", "Description")}</div>
                   {task?.description?.trim() ? (

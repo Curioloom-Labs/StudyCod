@@ -85,14 +85,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center flex-wrap gap-2">
+        <div className="flex w-full lg:w-auto items-center flex-wrap gap-2 justify-start lg:justify-end">
           <label htmlFor="contest-editor-language" className="sr-only">Language</label>
           <select
             id="contest-editor-language"
             value={language}
             onChange={(e) => onLanguageChange(e.target.value as JudgeLanguage)}
             aria-label="Select solution language"
-            className="h-11 px-3 rounded-xl bg-bg-base border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-secondary/50"
+            className="h-11 w-full sm:w-auto px-3 rounded-xl bg-bg-base border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-secondary/50"
           >
             {(allowedLangs.length ? allowedLangs : ["java"]).map((lang) => (
               <option key={lang} value={lang}>
@@ -135,13 +135,13 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       <div className="border-t border-border/60 bg-bg-base/55 px-4 py-3">
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="text-[11px] uppercase tracking-wider text-text-secondary">Run input (stdin)</div>
-          <div className="text-[11px] text-text-muted">Use examples from the problem panel for quick checks</div>
+          <div className="hidden sm:block text-[11px] text-text-muted">Use examples from the problem panel for quick checks</div>
         </div>
         <textarea
           value={runInput}
           onChange={(e) => onRunInputChange(e.target.value)}
           aria-label="Custom run input"
-          className="w-full min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
+            className="w-full min-h-[120px] sm:min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
           placeholder="Paste input to validate edge cases before submit..."
         />
       </div>

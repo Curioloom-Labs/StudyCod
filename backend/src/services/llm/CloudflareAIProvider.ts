@@ -26,6 +26,7 @@ export class CloudflareAIProvider implements LLMProvider {
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
     language: "JAVA" | "PYTHON" | "CPP";
+    responseLanguage?: string;
   }, lang: "uk" | "en"): { prompt: string; systemPrompt: string } {
     const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
     const isEnglish = lang === "en";
@@ -33,6 +34,12 @@ export class CloudflareAIProvider implements LLMProvider {
     const systemPrompt = isEnglish
       ? "You create judgeable programming tasks with deterministic stdin/stdout. Output must be strictly specified."
       : "Ти створюєш задачі для судді: детермінований stdin/stdout, строгий формат виводу без зайвих слів.";
+    const responseLanguage = typeof params.responseLanguage === "string" ? params.responseLanguage.trim().slice(0, 64) : "";
+    const responseLanguageInstruction = responseLanguage
+      ? (isEnglish
+        ? `\n\nIMPORTANT RESPONSE LANGUAGE: Write explanatory text in ${responseLanguage}.`
+        : `\n\nВАЖЛИВО: Пиши пояснювальний текст мовою \"${responseLanguage}\".`)
+      : "";
 
     const prompt = isEnglish
       ? `Write a detailed ${taskTypeText} programming task about topic "${params.topicTitle}" for ${langName}.
@@ -49,7 +56,7 @@ FORMAT (Markdown headings required):
 ## Output
 ## Examples (at least 3; each example contains raw Input/Output blocks)
 
-Return ONLY the Markdown statement.`
+Return ONLY the Markdown statement.${responseLanguageInstruction}`
       : `Створи детальну умову ${taskTypeText} задачі по темі "${params.topicTitle}" для мови ${langName}.
 
 КРИТИЧНО ДЛЯ АВТОТЕСТІВ:
@@ -64,7 +71,7 @@ Return ONLY the Markdown statement.`
 ## Вихідні дані
 ## Приклади (мінімум 3; кожен приклад має «Input» і «Output» у code-block)
 
-Поверни ТІЛЬКИ Markdown-текст умови.`;
+Поверни ТІЛЬКИ Markdown-текст умови.${responseLanguageInstruction}`;
 
     return { prompt, systemPrompt };
   }
@@ -421,6 +428,7 @@ ${JSON.stringify(schema, null, 2)}
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
   }, options?: LLMGenerateOptions): Promise<{
@@ -445,6 +453,7 @@ ${JSON.stringify(schema, null, 2)}
     lang: "JAVA" | "PYTHON" | "CPP";
     prevTopics: string;
     count?: number;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
   }, options?: LLMGenerateOptions): Promise<{
@@ -470,6 +479,7 @@ ${JSON.stringify(schema, null, 2)}
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
     language: "JAVA" | "PYTHON" | "CPP";
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
   }, options?: LLMGenerateOptions): Promise<{
@@ -480,7 +490,8 @@ ${JSON.stringify(schema, null, 2)}
       topicTitle: params.topicTitle,
       taskType: params.taskType,
       difficulty: params.difficulty,
-      language: params.language
+      language: params.language,
+      responseLanguage: params.responseLanguage
     }, lang);
     const response = await this.callCloudflareWorker('generate-task-condition', {
       prompt: built.prompt,
@@ -502,6 +513,7 @@ ${JSON.stringify(schema, null, 2)}
     topicTitle: string;
     language: "JAVA" | "PYTHON" | "CPP";
     description?: string;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
   }, options?: LLMGenerateOptions): Promise<{

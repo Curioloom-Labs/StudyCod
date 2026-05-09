@@ -3,6 +3,9 @@ import { Class } from "./Class";
 import { User } from "./User";
 import { EduGrade } from "./EduGrade";
 import { SummaryGrade } from "./SummaryGrade";
+
+export type StudentUiLanguage = "uk" | "en";
+
 @Entity("students")
 export class Student {
   @PrimaryGeneratedColumn()
@@ -46,6 +49,14 @@ export class Student {
     length: 255
   })
   email!: string;
+
+  @Column({
+    type: "enum",
+    enum: ["uk", "en"],
+    default: "en",
+    name: "ui_language"
+  })
+  uiLanguage!: StudentUiLanguage;
 
   /**
    * Global broadcast/marketing emails subscription.

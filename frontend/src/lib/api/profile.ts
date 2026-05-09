@@ -1,9 +1,189 @@
 import { api } from "./client";
 import type { User, CourseLanguage, PublicProfile, PublicProfilePrivacy, IadDetails } from "../../types";
-export async function getMe(): Promise<User> {
-  const res = await api.get("/profile/me");
-  return res.data as User;
+
+const GET_ME_CACHE_TTL_MS = 60000;
+const GET_ME_STALE_FALLBACK_MS = 5 * 60 * 1000;
+const GET_ME_SNAPSHOT_STORAGE_KEY = "studycod.userSnapshot";
+
+type CachedUser = {
+  token: string | null;
+  fetchedAt: number;
+  user: User;
+};
+
+type GetMeOptions = {
+  force?: boolean;
+  cacheTtlMs?: number;
+};
+
+let cachedGetMeUser: CachedUser | null = null;
+let inFlightGetMeRequest: Promise<User> | null = null;
+let inFlightGetMeToken: string | null = null;
+
+const getCurrentToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem("token");
+  } catch {
+    return null;
+  }
+};
+
+const getErrorStatus = (error: unknown): number | null => {
+  if (!error || typeof error !== "object") return null;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return null;
+  const status = Reflect.get(response, "status");
+  return typeof status === "number" ? status : null;
+};
+
+const canUseFreshCache = (entry: CachedUser | null, token: string | null, ttlMs: number): entry is CachedUser => {
+  if (!entry) return false;
+  if (entry.token !== token) return false;
+  return Date.now() - entry.fetchedAt <= ttlMs;
+};
+
+const isTransientGetMeFailure = (status: number | null): boolean => {
+  return status === null || status === 429 || status >= 500;
+};
+
+const persistUserSnapshot = (entry: CachedUser): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(GET_ME_SNAPSHOT_STORAGE_KEY, JSON.stringify(entry));
+  } catch {
+    // ignore storage errors
+  }
+};
+
+const readUserSnapshot = (): CachedUser | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(GET_ME_SNAPSHOT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const token = Reflect.get(parsed, "token");
+    const fetchedAt = Number(Reflect.get(parsed, "fetchedAt"));
+    const user = Reflect.get(parsed, "user");
+    if (typeof fetchedAt !== "number" || !Number.isFinite(fetchedAt)) return null;
+    if (!user || typeof user !== "object") return null;
+
+    return {
+      token: typeof token === "string" ? token : null,
+      fetchedAt,
+      user: user as User,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const clearUserSnapshot = (): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(GET_ME_SNAPSHOT_STORAGE_KEY);
+  } catch {
+    // ignore storage errors
+  }
+};
+
+const rememberUser = (user: User): User => {
+  const next: CachedUser = {
+    token: getCurrentToken(),
+    fetchedAt: Date.now(),
+    user,
+  };
+  cachedGetMeUser = next;
+  persistUserSnapshot(next);
+  return user;
+};
+
+const getStaleFallbackUser = (token: string | null): User | null => {
+  const now = Date.now();
+
+  if (cachedGetMeUser && cachedGetMeUser.token === token && now - cachedGetMeUser.fetchedAt <= GET_ME_STALE_FALLBACK_MS) {
+    return cachedGetMeUser.user;
+  }
+
+  const snapshot = readUserSnapshot();
+  if (snapshot && snapshot.token === token && now - snapshot.fetchedAt <= GET_ME_STALE_FALLBACK_MS) {
+    cachedGetMeUser = snapshot;
+    return snapshot.user;
+  }
+
+  return null;
+};
+
+export function clearGetMeCache(options?: { clearSnapshot?: boolean }): void {
+  cachedGetMeUser = null;
+  inFlightGetMeRequest = null;
+  inFlightGetMeToken = null;
+  if (options?.clearSnapshot) {
+    clearUserSnapshot();
+  }
 }
+
+export function primeGetMeCache(user: User): void {
+  rememberUser(user);
+}
+
+export async function getMe(options?: GetMeOptions): Promise<User> {
+  const force = options?.force === true;
+  const cacheTtlMs = Number.isFinite(Number(options?.cacheTtlMs))
+    ? Math.max(0, Number(options?.cacheTtlMs))
+    : GET_ME_CACHE_TTL_MS;
+  const token = getCurrentToken();
+
+  if (!force && canUseFreshCache(cachedGetMeUser, token, cacheTtlMs)) {
+    return cachedGetMeUser.user;
+  }
+
+  if (!force && !cachedGetMeUser) {
+    const snapshot = readUserSnapshot();
+    if (snapshot) {
+      cachedGetMeUser = snapshot;
+      if (canUseFreshCache(snapshot, token, cacheTtlMs)) {
+        return snapshot.user;
+      }
+    }
+  }
+
+  if (inFlightGetMeRequest && inFlightGetMeToken === token) {
+    return inFlightGetMeRequest;
+  }
+
+  const request = api.get("/profile/me")
+    .then((res) => rememberUser(res.data as User))
+    .catch((error: unknown) => {
+      const status = getErrorStatus(error);
+
+      if (status === 401 || status === 403) {
+        clearGetMeCache({ clearSnapshot: true });
+        throw error;
+      }
+
+      if (!force && isTransientGetMeFailure(status)) {
+        const fallback = getStaleFallbackUser(token);
+        if (fallback) return fallback;
+      }
+
+      throw error;
+    })
+    .finally(() => {
+      if (inFlightGetMeRequest === request) {
+        inFlightGetMeRequest = null;
+        inFlightGetMeToken = null;
+      }
+    });
+
+  inFlightGetMeRequest = request;
+  inFlightGetMeToken = token;
+
+  return request;
+}
+
 export async function updateProfile(data: {
   course?: CourseLanguage;
   avatarUrl?: string | null;
@@ -17,7 +197,7 @@ export async function updateProfile(data: {
   publicProfilePrivacy?: PublicProfilePrivacy;
 }): Promise<User> {
   const res = await api.put("/profile/me", data);
-  return res.data as User;
+  return rememberUser(res.data as User);
 }
 
 export async function completePlacement(data: {
@@ -28,7 +208,7 @@ export async function completePlacement(data: {
   masteredUntilTopicIndex?: number | null;
 }): Promise<User> {
   const res = await api.put("/profile/placement", data);
-  return res.data as User;
+  return rememberUser(res.data as User);
 }
 
 export type PlacementCodingChallenge = {

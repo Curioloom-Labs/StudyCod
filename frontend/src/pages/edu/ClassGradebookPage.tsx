@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -8,8 +8,12 @@ import { ArrowLeft, Calculator, Download, Edit2, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemInputHint, gradingSystemLabel, normalizeGradingSystem, parseGradeInputToRaw100, type ClassGradingSystem } from "../../lib/gradingSystems";
 
 type GradebookGrade = GradebookStudent["grades"][number];
+
+const THEMATIC_CANONICAL_NAME = "THEMATIC";
+const PRACTICE_WORK_PAGE_SIZE = 20;
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return getErrorMessageFromUnknown(error, fallback);
@@ -21,6 +25,7 @@ export const ClassGradebookPage: React.FC = () => {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const isEn = i18n.language?.toLowerCase().startsWith("en");
   const {
     classId
   } = useParams<{
@@ -47,10 +52,12 @@ export const ClassGradebookPage: React.FC = () => {
   const [showControlWorkDetails, setShowControlWorkDetails] = useState(false);
   const [showWorkModal, setShowWorkModal] = useState(false);
   const [workLoading, setWorkLoading] = useState(false);
+  const [loadingMorePracticeWork, setLoadingMorePracticeWork] = useState(false);
   const [practiceWork, setPracticeWork] = useState<TopicTaskStudentWork | null>(null);
   const [controlWorkWork, setControlWorkWork] = useState<ControlWorkStudentWork | null>(null);
   const [aiDetection, setAiDetection] = useState<TopicTaskAIDetectionResponse | null>(null);
   const [aiDetectLoading, setAiDetectLoading] = useState(false);
+  const workLoadTokenRef = useRef(0);
   const [showCreateThematic, setShowCreateThematic] = useState(false);
   const [thematicTopicId, setThematicTopicId] = useState<number | null>(null);
   const [calculatingThematic, setCalculatingThematic] = useState(false);
@@ -70,16 +77,18 @@ export const ClassGradebookPage: React.FC = () => {
       setLoading(false);
     }
   };
-  const getGradeColor = (grade: number | null) => {
-    if (grade === null) return "text-text-muted";
-    if (grade >= 85) return "text-accent-success font-bold";
-    if (grade >= 65) return "text-accent-warn font-semibold";
-    if (grade >= 40) return "text-accent-warning font-semibold";
-    return "text-accent-error font-semibold";
+  const getGradeColor = (grade: number | null, system: ClassGradingSystem) => {
+    const tone = getGradeToneForSystem(grade, system);
+    if (tone === "success") return "text-accent-success font-bold";
+    if (tone === "warn") return "text-accent-warn font-semibold";
+    if (tone === "warning") return "text-accent-warning font-semibold";
+    if (tone === "error") return "text-accent-error font-semibold";
+    return "text-text-muted";
   };
   const handleGradeClick = async (student: GradebookStudent, taskId: number, grade: GradebookGrade | undefined, taskTitle: string) => {
-    const isControlWork = grade?.lessonType === "CONTROL" || grade?.isControlWork || taskTitle.includes("Контрольна робота");
-    const isSummaryGrade = grade?.lessonType === "SUMMARY" || grade?.isSummaryGrade || taskTitle === "Тематична";
+    const activeGradingSystem = normalizeGradingSystem(gradebook?.gradingSystem || DEFAULT_GRADING_SYSTEM);
+    const isControlWork = grade?.lessonType === "CONTROL" || grade?.isControlWork;
+    const isSummaryGrade = grade?.lessonType === "SUMMARY" || grade?.isSummaryGrade;
     setEditingGrade({
       studentId: student.studentId,
       taskId: taskId,
@@ -90,14 +99,15 @@ export const ClassGradebookPage: React.FC = () => {
       isControlWork: isControlWork,
       isSummaryGrade
     });
-    setGradeValue(grade?.grade?.toString() || "");
+    setGradeValue(grade?.grade === null || grade?.grade === undefined ? "" : formatGradeForSystem(grade.grade, activeGradingSystem));
     setFeedback("");
   };
   const handleSaveGrade = async () => {
     if (!editingGrade || !classId) return;
-    const gradeNum = Number.isFinite(Number(gradeValue)) ? Math.round(Number(gradeValue)) : NaN;
-    if (isNaN(gradeNum) || gradeNum < 0 || gradeNum > 100) {
-      showToast({ type: "error", message: t('gradeRange') });
+    const activeGradingSystem = normalizeGradingSystem(gradebook?.gradingSystem || DEFAULT_GRADING_SYSTEM);
+    const gradeNum = parseGradeInputToRaw100(gradeValue, activeGradingSystem);
+    if (gradeNum === null) {
+      showToast({ type: "error", message: `${tr("Некоректна оцінка", "Invalid grade")}. ${gradingSystemInputHint(activeGradingSystem, !!isEn)}` });
       return;
     }
     setSaving(true);
@@ -170,34 +180,85 @@ export const ClassGradebookPage: React.FC = () => {
   };
   const handleViewWork = async () => {
     if (!editingGrade) return;
+    const currentGrade = editingGrade;
+    const loadToken = workLoadTokenRef.current + 1;
+    workLoadTokenRef.current = loadToken;
     setWorkLoading(true);
+    setLoadingMorePracticeWork(false);
     setPracticeWork(null);
     setControlWorkWork(null);
     setAiDetection(null);
     setAiDetectLoading(false);
     setShowWorkModal(true);
     try {
-      if (editingGrade.isControlWork) {
-        const data = await getControlWorkStudentWork(editingGrade.taskId, editingGrade.studentId);
+      if (currentGrade.isControlWork) {
+        const data = await getControlWorkStudentWork(currentGrade.taskId, currentGrade.studentId);
+        if (workLoadTokenRef.current !== loadToken) return;
         setControlWorkWork(data);
-      } else if (!editingGrade.isSummaryGrade) {
-        setAiDetectLoading(true);
-        const workPromise = getTopicTaskStudentWork(editingGrade.taskId, editingGrade.studentId);
-        const detectPromise = getTopicTaskAIDetection(editingGrade.taskId, editingGrade.studentId).catch(err => {
-          console.warn("[ClassGradebookPage] AI detector failed:", err);
-          return null;
+      } else if (!currentGrade.isSummaryGrade) {
+        const data = await getTopicTaskStudentWork(currentGrade.taskId, currentGrade.studentId, {
+          limit: PRACTICE_WORK_PAGE_SIZE
         });
-        const [data, detect] = await Promise.all([workPromise, detectPromise]);
+        if (workLoadTokenRef.current !== loadToken) return;
         setPracticeWork(data);
-        if (detect) setAiDetection(detect);
+
+        setAiDetectLoading(true);
+        void getTopicTaskAIDetection(currentGrade.taskId, currentGrade.studentId)
+          .then(detect => {
+            if (workLoadTokenRef.current !== loadToken) return;
+            setAiDetection(detect);
+          })
+          .catch(err => {
+            console.warn("[ClassGradebookPage] AI detector failed:", err);
+          })
+          .finally(() => {
+            if (workLoadTokenRef.current !== loadToken) return;
+            setAiDetectLoading(false);
+          });
       }
     } catch (error: unknown) {
+      if (workLoadTokenRef.current !== loadToken) return;
       console.error("Failed to load student work:", error);
       showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося завантажити роботу учня", "Failed to load student work")) });
       setShowWorkModal(false);
     } finally {
-      setWorkLoading(false);
-      setAiDetectLoading(false);
+      if (workLoadTokenRef.current === loadToken) {
+        setWorkLoading(false);
+      }
+    }
+  };
+
+  const handleLoadMorePracticeWork = async () => {
+    if (!editingGrade || editingGrade.isControlWork || editingGrade.isSummaryGrade) return;
+    if (!practiceWork?.hasMore || loadingMorePracticeWork) return;
+
+    const beforeId = practiceWork.nextCursor ?? practiceWork.submissions[practiceWork.submissions.length - 1]?.id;
+    if (!beforeId) return;
+
+    setLoadingMorePracticeWork(true);
+    try {
+      const data = await getTopicTaskStudentWork(editingGrade.taskId, editingGrade.studentId, {
+        limit: PRACTICE_WORK_PAGE_SIZE,
+        beforeId
+      });
+
+      setPracticeWork(prev => {
+        if (!prev) return data;
+        const seen = new Set(prev.submissions.map(s => s.id));
+        const appended = data.submissions.filter(s => !seen.has(s.id));
+        return {
+          ...prev,
+          submissions: [...prev.submissions, ...appended],
+          submissionsTotal: data.submissionsTotal ?? prev.submissionsTotal,
+          hasMore: data.hasMore,
+          nextCursor: data.nextCursor
+        };
+      });
+    } catch (error: unknown) {
+      console.error("Failed to load more submissions:", error);
+      showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося підвантажити спроби", "Failed to load more submissions")) });
+    } finally {
+      setLoadingMorePracticeWork(false);
     }
   };
 
@@ -228,7 +289,7 @@ export const ClassGradebookPage: React.FC = () => {
       }
       setCalculatingThematic(true);
       await createSummaryGrade(parseInt(classId, 10), {
-        name: "Тематична",
+        name: THEMATIC_CANONICAL_NAME,
         topicId: thematicTopicId
       });
       setShowCreateThematic(false);
@@ -249,7 +310,7 @@ export const ClassGradebookPage: React.FC = () => {
     setCalculatingThematic(true);
     try {
       await createSummaryGrade(parseInt(classId, 10), {
-        name: "Тематична",
+        name: THEMATIC_CANONICAL_NAME,
         topicId
       });
       await loadGradebook();
@@ -274,7 +335,7 @@ export const ClassGradebookPage: React.FC = () => {
     try {
       for (const topic of topics) {
         await createSummaryGrade(parseInt(classId, 10), {
-          name: "Тематична",
+          name: THEMATIC_CANONICAL_NAME,
           topicId: topic.id
         });
       }
@@ -289,10 +350,11 @@ export const ClassGradebookPage: React.FC = () => {
   };
   const exportToCSV = () => {
     if (!gradebook) return;
+    const activeGradingSystem = normalizeGradingSystem(gradebook.gradingSystem || DEFAULT_GRADING_SYSTEM);
     const headers = [tr("Учень", "Student"), ...gradebook.lessons.flatMap(l => l.tasks.map(t => `${l.title} - ${t.title}`))];
     const rows = gradebook.students.map(student => {
       const studentName = student.studentName;
-      const grades = student.grades.map(g => g.grade ?? "");
+      const grades = student.grades.map(g => g.grade === null || g.grade === undefined ? "" : formatGradeForSystem(g.grade, activeGradingSystem));
       return [studentName, ...grades];
     });
     const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
@@ -314,6 +376,7 @@ export const ClassGradebookPage: React.FC = () => {
         {t('failedToLoad')}
       </div>;
   }
+  const activeGradingSystem = normalizeGradingSystem(gradebook.gradingSystem || DEFAULT_GRADING_SYSTEM);
   const filteredLessons = selectedLesson === "all" ? gradebook.lessons : gradebook.lessons.filter(l => l.type === "TOPIC" && l.id === selectedLesson || l.type === "CONTROL" && l.parentId === selectedLesson || l.type === "SUMMARY" && l.parentId === selectedLesson);
   const allTasks = filteredLessons.flatMap(l => l.tasks.map(t => ({
     ...t,
@@ -322,9 +385,9 @@ export const ClassGradebookPage: React.FC = () => {
     lessonType: l.type
   })));
   return <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 p-6 pb-4">
+      <div className="flex-shrink-0 p-3 sm:p-4 md:p-6 pb-3 sm:pb-4">
         <div className="max-w-full mx-auto">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-6">
             <div className="flex items-center gap-4">
               <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -332,7 +395,10 @@ export const ClassGradebookPage: React.FC = () => {
               </Button>
               <h1 className="text-2xl font-mono text-text-primary">{t('gradebook')}</h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <span className="px-2 py-1 text-[10px] border border-border text-text-muted">
+                {tr("Шкала", "Scale")}: {gradingSystemLabel(activeGradingSystem, !!isEn)}
+              </span>
               <Button variant="ghost" onClick={() => setShowCreateThematic(true)} disabled={calculatingThematic}>
                 {tr("Порахувати тематичну", "Calculate thematic")}
               </Button>
@@ -383,19 +449,19 @@ export const ClassGradebookPage: React.FC = () => {
       </div>
 
       {}
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 pb-3 sm:pb-6">
         <div className="max-w-full mx-auto">
           {}
           <Card className="p-0">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[calc(100dvh-260px)]">
               <div className="min-w-full">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-border bg-bg-surface">
-                      <th className="px-4 py-3 text-left text-sm font-mono text-text-primary sticky left-0 bg-bg-surface z-10 border-r border-border">
+                      <th className="px-4 py-3 text-left text-sm font-mono text-text-primary sticky left-0 top-0 bg-bg-surface z-30 border-r border-border">
                         {t('student')}
                       </th>
-                      {allTasks.map(task => <th key={`${task.type}-${task.id}`} className="px-3 py-3 text-center text-xs font-mono text-text-secondary border-r border-border min-w-[80px] relative group" title={`${task.lessonTitle} - ${task.title}`}>
+                      {allTasks.map(task => <th key={`${task.type}-${task.id}`} className="px-3 py-3 text-center text-xs font-mono text-text-secondary border-r border-border min-w-[80px] relative group sticky top-0 bg-bg-surface z-20" title={`${task.lessonTitle} - ${task.title}`}>
                           <div className="flex flex-col items-center justify-center gap-1">
                             <div className="w-full max-w-[140px] text-center truncate px-1">
                               {task.title}
@@ -411,7 +477,7 @@ export const ClassGradebookPage: React.FC = () => {
                           return;
                         }
                         try {
-                          const isControlWork = task.type === "CONTROL" || task.title.includes("Контрольна робота");
+                          const isControlWork = task.type === "CONTROL";
                           if (isControlWork) {
                             await unassignControlWork(task.id);
                           } else {
@@ -463,8 +529,8 @@ export const ClassGradebookPage: React.FC = () => {
                         </td>
                         {allTasks.map(task => {
                       const grade = student.grades.find(g => g.taskId === task.id && g.lessonType === task.lessonType);
-                      return <td key={`${task.type}-${task.id}`} onClick={() => handleGradeClick(student, task.id, grade, task.title)} className={`px-3 py-2 text-center text-sm font-mono border-r border-border cursor-pointer hover:bg-bg-hover transition-fast ${getGradeColor(grade?.grade ?? null)}`} title={t('gradeFor')}>
-                              {grade?.grade === null || grade?.grade === undefined ? "-" : grade.grade}
+                      return <td key={`${task.type}-${task.id}`} onClick={() => handleGradeClick(student, task.id, grade, task.title)} className={`px-3 py-2 text-center text-sm font-mono border-r border-border cursor-pointer hover:bg-bg-hover transition-fast ${getGradeColor(grade?.grade ?? null, activeGradingSystem)}`} title={t('gradeFor')}>
+                              {formatGradeForSystem(grade?.grade ?? null, activeGradingSystem)}
                             </td>;
                     })}
                       </tr>)}
@@ -486,7 +552,7 @@ export const ClassGradebookPage: React.FC = () => {
       setGradeValue("");
       setFeedback("");
     }} title={t('edit')}>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="mb-4">
               <p className="text-sm text-text-secondary mb-1">{t('student')}:</p>
               <p className="text-text-primary font-mono">{editingGrade.studentName}</p>
@@ -497,9 +563,9 @@ export const ClassGradebookPage: React.FC = () => {
             </div>
             <div className="mb-4">
               <label className="block text-sm text-text-secondary mb-2">
-                {t('grade')} (0-100):
+                {t('grade')} ({gradingSystemInputHint(activeGradingSystem, !!isEn)}):
               </label>
-              <input type="number" min="0" max="100" value={gradeValue} onChange={e => setGradeValue(e.target.value)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary" placeholder={t('enterGrade')} autoFocus />
+              <input type="text" value={gradeValue} onChange={e => setGradeValue(e.target.value)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary" placeholder={gradingSystemInputHint(activeGradingSystem, !!isEn)} autoFocus />
             </div>
             <div className="mb-6">
               <label className="block text-sm text-text-secondary mb-2">
@@ -507,7 +573,7 @@ export const ClassGradebookPage: React.FC = () => {
               </label>
               <textarea value={feedback} onChange={e => setFeedback(e.target.value)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary" rows={3} placeholder={t('feedback')} />
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-wrap gap-2 justify-end">
               {!editingGrade.isSummaryGrade && <Button variant="ghost" onClick={handleViewWork} disabled={saving}>
                   {tr("Переглянути роботу", "View work")}
                 </Button>}
@@ -531,15 +597,19 @@ export const ClassGradebookPage: React.FC = () => {
 
       {}
       {showWorkModal && <Modal open={showWorkModal} onClose={() => {
+      workLoadTokenRef.current += 1;
       setShowWorkModal(false);
       setPracticeWork(null);
       setControlWorkWork(null);
       setAiDetection(null);
+      setAiDetectLoading(false);
+      setLoadingMorePracticeWork(false);
     }} title={editingGrade ? `${editingGrade.studentName} — ${editingGrade.taskTitle}` : tr("Робота учня", "Student work")}>
-          <div className="p-6 max-h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 max-h-[80vh] overflow-y-auto">
             {workLoading ? <div className="text-sm font-mono text-text-secondary">{tr("Завантаження...", "Loading...")}</div> : practiceWork ? <div className="space-y-4">
                 <div className="text-xs text-text-muted">
-                  {tr("Спроби:", "Submissions:")} {practiceWork.submissions.length}
+                  {tr("Спроби:", "Submissions:")} {practiceWork.submissionsTotal}
+                  {practiceWork.submissions.length < practiceWork.submissionsTotal ? ` · ${tr("показано", "shown")}: ${practiceWork.submissions.length}` : ""}
                 </div>
 
                 {editingGrade && !editingGrade.isControlWork && !editingGrade.isSummaryGrade && <div className="text-xs text-text-muted space-y-1">
@@ -558,11 +628,12 @@ export const ClassGradebookPage: React.FC = () => {
                       </div>;
                 })()}
                   </div>}
-                {practiceWork.submissions.length === 0 ? <div className="text-sm text-text-secondary">{tr("Немає відправлених спроб.", "No submissions yet.")}</div> : practiceWork.submissions.map((s, idx) => <Card key={s.id} className="p-4">
+                {practiceWork.submissions.length === 0 ? <div className="text-sm text-text-secondary">{tr("Немає відправлених спроб.", "No submissions yet.")}</div> : <>
+                    {practiceWork.submissions.map((s, idx) => <Card key={s.id} className="p-4">
                       <div className="flex items-start justify-between gap-4 mb-3">
                         <div>
                           <div className="text-sm font-mono text-text-primary">
-                            {tr("Спроба", "Submission")} #{practiceWork.submissions.length - idx}
+                            {tr("Спроба", "Submission")} #{Math.max(1, practiceWork.submissionsTotal - idx)}
                           </div>
                           <div className="text-xs text-text-muted">
                             {s.createdAt ? new Date(s.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA") : "—"}
@@ -585,9 +656,16 @@ export const ClassGradebookPage: React.FC = () => {
                         </pre>
                       </div>
                     </Card>)}
+
+                    {practiceWork.hasMore && <div className="flex justify-center pt-2">
+                        <Button variant="ghost" onClick={() => void handleLoadMorePracticeWork()} disabled={loadingMorePracticeWork}>
+                          {loadingMorePracticeWork ? tr("Завантаження...", "Loading...") : tr("Показати старіші спроби", "Load older submissions")}
+                        </Button>
+                      </div>}
+                  </>}
               </div> : controlWorkWork ? <div className="space-y-6">
                 <Card className="p-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <div className="text-xs text-text-muted">{tr("Фінальна оцінка", "Final grade")}</div>
                       <div className="text-2xl font-mono text-text-primary">{controlWorkWork.summaryGrade?.grade ?? "—"}</div>
@@ -677,11 +755,11 @@ export const ClassGradebookPage: React.FC = () => {
       setShowControlWorkDetails(false);
       setControlWorkDetails(null);
     }} title={controlWorkDetails.controlWork.title}>
-          <div className="p-6 max-h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 max-h-[80vh] overflow-y-auto">
             {}
             <div className="mb-6">
               <h3 className="text-lg font-mono text-text-primary mb-4">{tr("Загальна оцінка", "Overall grade")}</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-3 border border-border bg-bg-surface">
                   <div className="text-sm text-text-secondary mb-1">{tr("Фінальна оцінка", "Final grade")}</div>
                   <div className="text-2xl font-mono font-bold text-text-primary">
@@ -739,7 +817,7 @@ export const ClassGradebookPage: React.FC = () => {
             <div className="mt-6 p-4 border border-border bg-bg-surface">
               <h4 className="text-sm font-mono text-text-primary mb-2">{tr("Формула розрахунку", "Formula")}:</h4>
               {controlWorkDetails.controlWork.hasTheory && controlWorkDetails.summaryGrade?.theoryGrade !== null ? <div className="text-xs text-text-secondary">
-                  {tr("Оцінка = (Тест + 1.3 × середнє за практичні) / 2", "Grade = (Quiz + 1.3 × practice average) / 2")}
+                  {tr("За замовчуванням: Оцінка = 0.35 × Тест + 0.65 × середнє за практичні (або користувацька формула контрольної).", "Default: Grade = 0.35 × Quiz + 0.65 × practice average (or control work custom formula).")}
                 </div> : <div className="text-xs text-text-secondary">
                   {tr("Оцінка = середнє за практичні завдання", "Grade = practice tasks average")}
                 </div>}
@@ -752,7 +830,7 @@ export const ClassGradebookPage: React.FC = () => {
       setShowCreateThematic(false);
       setThematicTopicId(null);
     }} title={tr("Порахувати тематичну", "Calculate thematic")} showCloseButton={false}>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="mb-4">
               <label className="block text-sm text-text-secondary mb-2">{tr("Тема", "Topic")} *</label>
               <select value={thematicTopicId || ""} onChange={e => setThematicTopicId(e.target.value ? parseInt(e.target.value, 10) : null)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary">
@@ -765,7 +843,7 @@ export const ClassGradebookPage: React.FC = () => {
                 {tr("Буде створено/перераховано одну “Тематичну” для обраної теми та додано в журнал.", "One “Thematic” grade will be created/recalculated for the selected topic and added to the gradebook.")}
               </div>
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-wrap gap-2 justify-end">
               <Button variant="ghost" onClick={() => {
             setShowCreateThematic(false);
             setThematicTopicId(null);

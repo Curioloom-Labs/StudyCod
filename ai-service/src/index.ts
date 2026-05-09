@@ -5,6 +5,7 @@ import fs from 'fs';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import { logger } from '../../backend/src/utils/logger';
 
 // IMPORTANT: Load env only from ai-service/.env.
 // We intentionally do NOT load ../.env or ../backend/.env to avoid “external .env” surprises.
@@ -35,6 +36,15 @@ import { getLLMOrchestrator } from '../../backend/src/services/llm/LLMOrchestrat
 const PORT = process.env.AI_SERVICE_PORT ? parseInt(process.env.AI_SERVICE_PORT, 10) : 3001;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const app = express();
+function safePreview(value: unknown, max = 200): string {
+  try {
+    const raw = typeof value === 'string' ? value : JSON.stringify(value);
+    if (!raw) return '';
+    return raw.length > max ? `${raw.slice(0, max)}…` : raw;
+  } catch {
+    return '[unserializable]';
+  }
+}
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   credentials: true
@@ -92,11 +102,11 @@ app.post('/', async (req: Request, res: Response) => {
         break;
       case 'generate-task-condition':
         result = await orchestrator.generateTaskCondition(parsedParams);
-        console.log('[AI Service] generateTaskCondition result:', {
+        logger.info('[AI Service] generateTaskCondition result', {
           hasDescription: !!result?.description,
           descriptionType: typeof result?.description,
           descriptionLength: result?.description?.length,
-          fullResult: JSON.stringify(result).substring(0, 200)
+          fullResult: safePreview(result)
         });
         break;
       case 'generate-task-template':
@@ -143,19 +153,19 @@ app.post('/', async (req: Request, res: Response) => {
           error: `Unknown mode: ${mode}`
         });
     }
-    console.log('[AI Service] Sending response', {
+    logger.info('[AI Service] Sending response', {
       mode,
       hasResult: !!result,
       resultType: typeof result,
       resultKeys: result && typeof result === 'object' ? Object.keys(result) : null,
-      resultPreview: result && typeof result === 'object' ? JSON.stringify(result).substring(0, 200) : result
+      resultPreview: result && typeof result === 'object' ? safePreview(result) : result
     });
     res.json({
       success: true,
       data: result
     });
   } catch (error: any) {
-    console.error('[AI Service] Unified endpoint error:', error);
+    logger.error('[AI Service] Unified endpoint error', { error });
     res.status(500).json({
       success: false,
       error: error.message || 'AI generation failed'
@@ -180,7 +190,7 @@ app.post('/api/v1/generate-task', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('[AI Service] generateTask error:', error);
+    logger.error('[AI Service] generateTask error', { error });
     res.status(500).json({
       success: false,
       error: error.message || 'AI generation failed'
@@ -205,7 +215,7 @@ app.post('/api/v1/generate-theory', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('[AI Service] generateTheory error:', error);
+    logger.error('[AI Service] generateTheory error', { error });
     res.status(500).json({
       success: false,
       error: error.message || 'AI generation failed'
@@ -230,7 +240,7 @@ app.post('/api/v1/generate-quiz', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('[AI Service] generateQuiz error:', error);
+    logger.error('[AI Service] generateQuiz error', { error });
     res.status(500).json({
       success: false,
       error: error.message || 'AI generation failed'
@@ -255,7 +265,7 @@ app.post('/api/v1/generate-task-condition', async (req: Request, res: Response) 
       data: result
     });
   } catch (error: any) {
-    console.error('[AI Service] generateTaskCondition error:', error);
+    logger.error('[AI Service] generateTaskCondition error', { error });
     res.status(500).json({
       success: false,
       error: error.message || 'AI generation failed'
@@ -280,7 +290,7 @@ app.post('/api/v1/generate-task-template', async (req: Request, res: Response) =
       data: result
     });
   } catch (error: any) {
-    console.error('[AI Service] generateTaskTemplate error:', error);
+    logger.error('[AI Service] generateTaskTemplate error', { error });
     res.status(500).json({
       success: false,
       error: error.message || 'AI generation failed'
@@ -305,7 +315,7 @@ app.post('/api/v1/generate-test-data', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('[AI Service] generateTestData error:', error);
+    logger.error('[AI Service] generateTestData error', { error });
     res.status(500).json({
       success: false,
       error: error.message || 'AI generation failed'
@@ -313,7 +323,7 @@ app.post('/api/v1/generate-test-data', async (req: Request, res: Response) => {
   }
 });
 app.use((err: any, _req: Request, res: Response, _next: express.NextFunction) => {
-  console.error('[AI Service] Unhandled error:', err);
+  logger.error('[AI Service] Unhandled error', { err });
   res.status(500).json({
     success: false,
     error: IS_PRODUCTION ? 'Internal server error' : err.message
@@ -321,6 +331,6 @@ app.use((err: any, _req: Request, res: Response, _next: express.NextFunction) =>
 });
 app.listen(PORT, () => {
   if (!IS_PRODUCTION) {
-    console.log(`StudyCod AI Service listening on http://localhost:${PORT}`);
+    logger.info(`StudyCod AI Service listening on http://localhost:${PORT}`);
   }
 });

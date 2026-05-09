@@ -1051,8 +1051,8 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
   }, [load]);
 
   return (
-    <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
-      <div className="flex items-center justify-between gap-3 mb-3">
+    <Card className="p-4 border border-border/70 bg-bg-surface/80">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="font-mono text-text-primary flex items-center gap-2">
           <Flame className="w-4 h-4 text-primary" />
           {tr("Таблиця", "Standings")}
@@ -1077,7 +1077,7 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
         <div className="space-y-2">
           {rows.map((r) => (
             <div key={r.participantId} className="rounded-xl border border-border bg-bg-base/80 p-3">
-              <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-lg border border-primary/50 bg-primary/10 text-primary text-xs font-bold">
                     #{r.rank}
@@ -3093,14 +3093,15 @@ export const ContestPage: React.FC = () => {
         <div className="text-sm text-text-secondary">{tr("Немає подач", "No submissions")}</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3">
-          <div className={`border border-border overflow-auto ${adminSubsFullPage ? "max-h-[calc(100vh-250px)]" : "max-h-[72vh]"}`}>
-            <table className="min-w-[700px] w-full text-xs font-mono">
+          <div className={`border border-border overflow-auto ${adminSubsFullPage ? "max-h-[42vh] sm:max-h-[calc(100vh-250px)]" : "max-h-[50vh] sm:max-h-[72vh]"}`}>
+            <table className="min-w-[560px] md:min-w-[700px] w-full text-xs font-mono">
+              <caption className="sr-only">{tr("Таблиця подач учасника", "Participant submissions table")}</caption>
               <thead className="bg-bg-hover sticky top-0">
                 <tr>
-                  <th className="p-2 border-b border-border text-left">#</th>
+                  <th className="hidden sm:table-cell p-2 border-b border-border text-left">#</th>
                   <th className="p-2 border-b border-border text-left">{tr("Час", "Time")}</th>
                   <th className="p-2 border-b border-border text-center">{tr("Задача", "Problem")}</th>
-                  <th className="p-2 border-b border-border text-center">{tr("Фаза", "Phase")}</th>
+                  <th className="hidden md:table-cell p-2 border-b border-border text-center">{tr("Фаза", "Phase")}</th>
                   <th className="p-2 border-b border-border text-center">{tr("Вердикт", "Verdict")}</th>
                   <th className="p-2 border-b border-border text-center">{tr("Бали", "Score")}</th>
                 </tr>
@@ -3112,10 +3113,10 @@ export const ContestPage: React.FC = () => {
                     className={`cursor-pointer odd:bg-bg-base even:bg-bg-surface hover:bg-bg-hover ${adminSubsCodeViewer?.id === s.id ? "!bg-primary/10" : ""}`}
                     onClick={() => setAdminSubsCodeViewer(s)}
                   >
-                    <td className="p-2 border-b border-border">{s.id}</td>
+                    <td className="hidden sm:table-cell p-2 border-b border-border">{s.id}</td>
                     <td className="p-2 border-b border-border">{fmtDateTime(s.createdAt, i18n.language)}</td>
                     <td className="p-2 border-b border-border text-center">{s.problem?.label ?? "—"}</td>
-                    <td className="p-2 border-b border-border text-center">
+                    <td className="hidden md:table-cell p-2 border-b border-border text-center">
                       {(() => {
                         const p = submissionPhaseChip(s.phase, tr);
                         return <StatusChip glyph={p.glyph} label={p.label} tone={p.tone} />;
@@ -3154,7 +3155,7 @@ export const ContestPage: React.FC = () => {
                     <span className="px-2 py-1 rounded border border-border bg-bg-base">{adminSubsCodeViewer.score}/{adminSubsCodeViewer.maxScore}</span>
                   ) : null}
                 </div>
-                <div className={`border border-border overflow-hidden ${adminSubsFullPage ? "h-[calc(100vh-280px)] min-h-[480px]" : "h-[62vh] min-h-[420px]"}`}>
+                <div className={`border border-border overflow-hidden ${adminSubsFullPage ? "h-[48vh] sm:h-[56vh] md:h-[calc(100vh-280px)] min-h-[240px] md:min-h-[480px]" : "h-[42vh] sm:h-[54vh] md:h-[62vh] min-h-[220px] md:min-h-[420px]"}`}>
                   <CodeEditor
                     language={toCodeEditorLanguage(adminSubsCodeViewer.language)}
                     value={adminSubsCodeViewer.submittedCode || ""}
@@ -3496,8 +3497,8 @@ export const ContestPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-3 mb-4">
+    <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" onClick={() => navigate("/contests")}
           title={tr("Назад до списку", "Back to list")}
         >
@@ -3505,7 +3506,7 @@ export const ContestPage: React.FC = () => {
           {tr("Контести", "Contests")}
         </Button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
           <Button variant={tab === "problems" ? "secondary" : "ghost"} onClick={() => setTab("problems")}
             title={tr("Задачі", "Problems")}
           >
@@ -3538,7 +3539,7 @@ export const ContestPage: React.FC = () => {
         <div className="space-y-4">
           {addError ? <div className="text-sm text-accent-error">{addError}</div> : null}
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant={addMode === "CREATE" ? "secondary" : "ghost"} onClick={() => setAddMode("CREATE")}>
               {tr("Нова", "Create")}
             </Button>
@@ -3650,7 +3651,7 @@ export const ContestPage: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={adding}>
               {tr("Скасувати", "Cancel")}
             </Button>
@@ -3781,7 +3782,7 @@ export const ContestPage: React.FC = () => {
             {tr("Дозволити дорішування після завершення", "Allow upsolve after finish")}
           </label>
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" onClick={() => setSettingsOpen(false)} disabled={settingsSaving}>
               {tr("Скасувати", "Cancel")}
             </Button>
@@ -3888,7 +3889,7 @@ export const ContestPage: React.FC = () => {
             ) : null}
           </div>
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" onClick={cancelRosterCsvImportPreview}>
               {tr("Скасувати", "Cancel")}
             </Button>
@@ -4021,9 +4022,9 @@ export const ContestPage: React.FC = () => {
           {tab === "problems" ? (
             <>
               <Card className="p-4">
-              <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="font-mono text-text-primary">{tr("Задачі", "Problems")}</div>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   {hasToken && data.access.canAccessContent ? (
                     <Button variant="secondary" onClick={loadProgress} disabled={progressLoading}>
                       <RefreshCw className="w-4 h-4 mr-2" />
@@ -4082,11 +4083,14 @@ export const ContestPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="overflow-auto">
-                  <table className="min-w-[860px] w-full text-sm font-mono border border-border">
+                  <table className="min-w-[620px] md:min-w-[760px] w-full text-sm font-mono border border-border">
+                    <caption className="sr-only">
+                      {tr("Прогрес учасника за задачами контесту", "Participant progress by contest problem")}
+                    </caption>
                     <thead className="bg-bg-hover">
                       <tr>
                         <th className="p-2 border-b border-border text-left">{tr("Задача", "Problem")}</th>
-                        <th className="p-2 border-b border-border text-left">{tr("Назва", "Title")}</th>
+                        <th className="hidden lg:table-cell p-2 border-b border-border text-left">{tr("Назва", "Title")}</th>
                         <th className="p-2 border-b border-border text-center">{tr("Бали", "Points")}</th>
                         <th className="p-2 border-b border-border text-center">{tr("Кращий", "Best")}</th>
                         <th className="p-2 border-b border-border text-center">{tr("Остання подача", "Last")}</th>
@@ -4123,7 +4127,7 @@ export const ContestPage: React.FC = () => {
                                 {p.label}
                               </button>
                             </td>
-                            <td className="p-2 border-b border-border">
+                            <td className="hidden lg:table-cell p-2 border-b border-border">
                               <div className="truncate max-w-[520px]">{p.title}</div>
                             </td>
                             <td className="p-2 border-b border-border text-center">{p.points != null ? p.points : "—"}</td>
@@ -4142,14 +4146,14 @@ export const ContestPage: React.FC = () => {
                                     })()}
                                     <span className="text-text-secondary">{lastScoreText}</span>
                                   </div>
-                                  <div className="text-xs text-text-secondary">{fmtDateTime(last.createdAt, i18n.language)}</div>
+                                  <div className="hidden md:block text-xs text-text-secondary">{fmtDateTime(last.createdAt, i18n.language)}</div>
                                 </div>
                               ) : (
                                 "—"
                               )}
                             </td>
                             <td className="p-2 border-b border-border text-right">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex flex-wrap items-center justify-end gap-2">
                                 {hasToken && data.access.canManage && p.libraryTaskId ? (
                                   <Button
                                     variant="ghost"
@@ -4164,7 +4168,7 @@ export const ContestPage: React.FC = () => {
                                   disabled={disabled}
                                   onClick={() => navigate(`/contests/${data.contest.id}/problems/${p.id}`)}
                                 >
-                                  {tr("Відкрити", "Open")}
+                                  {tr("Відкрити задачу", "Open problem")}
                                 </Button>
                               </div>
                             </td>
@@ -4199,9 +4203,9 @@ export const ContestPage: React.FC = () => {
               {hasToken && data.access.canManage ? (
                 <>
                   <Card className="p-4">
-                    <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="font-mono text-text-primary flex items-center gap-2"><Award className="w-4 h-4 text-primary" />{tr("Сертифікати", "Certificates")}</div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                         {certificateUiSimpleMode ? (
                           <Button
                             variant={certificateGlobalSettingsOpen ? "secondary" : "ghost"}
@@ -5435,13 +5439,14 @@ export const ContestPage: React.FC = () => {
                         </Button>
                       </div>
                       <div className="max-h-[240px] overflow-auto border border-border rounded bg-bg-base">
-                        <table className="min-w-[620px] w-full text-[11px] font-mono">
+                        <table className="min-w-[540px] md:min-w-[680px] w-full text-[11px] font-mono">
+                          <caption className="sr-only">{tr("Бібліотека шаблонів сертифіката", "Certificate template library")}</caption>
                           <thead className="bg-bg-hover">
                             <tr>
-                              <th className="p-1.5 border-b border-border text-left">ID</th>
+                              <th className="hidden md:table-cell p-1.5 border-b border-border text-left">ID</th>
                               <th className="p-1.5 border-b border-border text-left">{tr("Назва", "Name")}</th>
                               <th className="p-1.5 border-b border-border text-left">{tr("Тип", "Type")}</th>
-                              <th className="p-1.5 border-b border-border text-left">{tr("Контест", "Contest")}</th>
+                              <th className="hidden lg:table-cell p-1.5 border-b border-border text-left">{tr("Контест", "Contest")}</th>
                               <th className="p-1.5 border-b border-border text-left">{tr("Статус", "Status")}</th>
                               <th className="p-1.5 border-b border-border text-right">{tr("Дія", "Action")}</th>
                             </tr>
@@ -5458,10 +5463,10 @@ export const ContestPage: React.FC = () => {
                             ) : (
                               certificateTemplatesCatalog.map((tpl) => (
                                 <tr key={`cert-tpl-${tpl.id}`} className="odd:bg-bg-base even:bg-bg-surface">
-                                  <td className="p-1.5 border-b border-border">{tpl.id}</td>
+                                  <td className="hidden md:table-cell p-1.5 border-b border-border">{tpl.id}</td>
                                   <td className="p-1.5 border-b border-border truncate max-w-[250px]" title={tpl.name}>{tpl.name}</td>
                                   <td className="p-1.5 border-b border-border">{tpl.type}</td>
-                                  <td className="p-1.5 border-b border-border">{tpl.contestId ?? "—"}</td>
+                                  <td className="hidden lg:table-cell p-1.5 border-b border-border">{tpl.contestId ?? "—"}</td>
                                   <td className="p-1.5 border-b border-border">{tpl.isActive ? tr("Активний", "Active") : tr("Неактивний", "Inactive")}</td>
                                   <td className="p-1.5 border-b border-border text-right">
                                     <Button variant="ghost" onClick={() => void applyTemplateFromCatalog(tpl)}>
@@ -5505,7 +5510,7 @@ export const ContestPage: React.FC = () => {
                   </Card>
 
                   <Card className="p-4">
-                    <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="font-mono text-text-primary flex items-center gap-2"><KeyRound className="w-4 h-4 text-primary" />{tr("Генерація контест-акаунтів", "Contest account generation")}</div>
                     </div>
 
@@ -5606,26 +5611,27 @@ export const ContestPage: React.FC = () => {
                     {generatedAccounts.length > 0 ? (
                       <>
                       <div className="overflow-auto border border-border max-h-[260px] mb-3">
-                        <table className="min-w-[760px] w-full text-sm font-mono">
+                        <table className="min-w-[620px] md:min-w-[760px] w-full text-sm font-mono">
+                          <caption className="sr-only">{tr("Згенеровані облікові записи учасників", "Generated participant accounts")}</caption>
                           <thead className="bg-bg-hover">
                             <tr>
                               <th className="p-2 border-b border-border text-left">{tr("ПІБ", "Full name")}</th>
-                              <th className="p-2 border-b border-border text-left">email</th>
+                              <th className="hidden md:table-cell p-2 border-b border-border text-left">email</th>
                               <th className="p-2 border-b border-border text-left">username</th>
                               <th className="p-2 border-b border-border text-left">password</th>
-                              <th className="p-2 border-b border-border text-left">userId</th>
-                              <th className="p-2 border-b border-border text-left">participantId</th>
+                              <th className="hidden lg:table-cell p-2 border-b border-border text-left">userId</th>
+                              <th className="hidden lg:table-cell p-2 border-b border-border text-left">participantId</th>
                             </tr>
                           </thead>
                           <tbody>
                             {generatedAccounts.map((a) => (
                               <tr key={`${a.userId}-${a.participantId}-${a.email ?? ""}`} className="odd:bg-bg-base even:bg-bg-surface">
                                 <td className="p-2 border-b border-border">{a.fullName ?? "—"}</td>
-                                <td className="p-2 border-b border-border">{a.email ?? "—"}</td>
+                                <td className="hidden md:table-cell p-2 border-b border-border">{a.email ?? "—"}</td>
                                 <td className="p-2 border-b border-border">{a.username}</td>
                                 <td className="p-2 border-b border-border">{a.password}</td>
-                                <td className="p-2 border-b border-border">{a.userId}</td>
-                                <td className="p-2 border-b border-border">{a.participantId}</td>
+                                <td className="hidden lg:table-cell p-2 border-b border-border">{a.userId}</td>
+                                <td className="hidden lg:table-cell p-2 border-b border-border">{a.participantId}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -5652,7 +5658,7 @@ export const ContestPage: React.FC = () => {
                   </Card>
 
                   <Card className="p-4">
-                    <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="font-mono text-text-primary flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />{tr("Організатори та пауза", "Organizers and pause")}</div>
                       <Button variant="secondary" onClick={loadOrganizers} disabled={organizersLoading}>
                         <RefreshCw className="w-4 h-4 mr-2" />
@@ -5695,7 +5701,7 @@ export const ContestPage: React.FC = () => {
                     ) : (
                       <div className="space-y-2">
                         {organizers.map((o) => (
-                          <div key={o.userId} className="flex items-center justify-between gap-2 border border-border bg-bg-base px-3 py-2">
+                          <div key={o.userId} className="flex flex-col gap-2 border border-border bg-bg-base px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                             <div className="text-sm font-mono text-text-primary">
                               #{o.userId} · {o.username} {" "}
                               <Link to={`/u/${encodeURIComponent(o.username)}`} className="text-primary hover:underline">
@@ -5712,7 +5718,7 @@ export const ContestPage: React.FC = () => {
                   </Card>
 
                   <Card className="p-4">
-                    <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="font-mono text-text-primary">{tr("Анулювання задач", "Problem annulments")}</div>
                       <Button variant="secondary" onClick={loadAnnulments} disabled={annulmentsLoading}>
                         <RefreshCw className="w-4 h-4 mr-2" />
@@ -5786,7 +5792,7 @@ export const ContestPage: React.FC = () => {
                   </Card>
 
                   <Card className="p-4">
-                    <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="font-mono text-text-primary flex items-center gap-2"><Users2 className="w-4 h-4 text-primary" />{tr("Модерація учасників", "Participant moderation")}</div>
                       <Button variant="secondary" onClick={loadAdminParticipants} disabled={adminParticipantsLoading}>
                         <RefreshCw className="w-4 h-4 mr-2" />
@@ -5822,13 +5828,14 @@ export const ContestPage: React.FC = () => {
                       <div className="text-sm text-text-secondary">{tr("Поки що немає учасників", "No participants yet")}</div>
                     ) : (
                       <div className="overflow-auto border border-border">
-                        <table className="min-w-[860px] w-full text-sm font-mono">
+                        <table className="min-w-[620px] md:min-w-[760px] w-full text-sm font-mono">
+                          <caption className="sr-only">{tr("Учасники контесту та їх статус", "Contest participants and status")}</caption>
                           <thead className="bg-bg-hover">
                             <tr>
-                              <th className="p-2 border-b border-border text-left">#</th>
+                              <th className="hidden sm:table-cell p-2 border-b border-border text-left">#</th>
                               <th className="p-2 border-b border-border text-left">{tr("Учасник", "Participant")}</th>
-                              <th className="p-2 border-b border-border text-left">{tr("Тип", "Type")}</th>
-                              <th className="p-2 border-b border-border text-left">{tr("Контест-акаунт", "Contest account")}</th>
+                              <th className="hidden md:table-cell p-2 border-b border-border text-left">{tr("Тип", "Type")}</th>
+                              <th className="hidden lg:table-cell p-2 border-b border-border text-left">{tr("Контест-акаунт", "Contest account")}</th>
                               <th className="p-2 border-b border-border text-left">{tr("Статус", "Status")}</th>
                               <th className="p-2 border-b border-border text-right">{tr("Дія", "Action")}</th>
                             </tr>
@@ -5836,10 +5843,10 @@ export const ContestPage: React.FC = () => {
                           <tbody>
                             {adminParticipants.map((p) => (
                               <tr key={p.id} className="odd:bg-bg-base even:bg-bg-surface">
-                                <td className="p-2 border-b border-border">{p.id}</td>
+                                <td className="hidden sm:table-cell p-2 border-b border-border">{p.id}</td>
                                 <td className="p-2 border-b border-border">{p.displayName}</td>
-                                <td className="p-2 border-b border-border">{p.principalType}</td>
-                                <td className="p-2 border-b border-border">{p.contestAccountHandle ? p.contestAccountHandle : "—"}</td>
+                                <td className="hidden md:table-cell p-2 border-b border-border">{p.principalType}</td>
+                                <td className="hidden lg:table-cell p-2 border-b border-border">{p.contestAccountHandle ? p.contestAccountHandle : "—"}</td>
                                 <td className="p-2 border-b border-border">
                                   {p.isDisqualified ? (
                                     <Badge color="warn">{tr("Дискваліфіковано", "Disqualified")}</Badge>
@@ -5848,7 +5855,7 @@ export const ContestPage: React.FC = () => {
                                   )}
                                 </td>
                                 <td className="p-2 border-b border-border text-right">
-                                  <div className="flex items-center justify-end gap-2">
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
                                     <Button variant="secondary" onClick={() => openAdminSubmissions(p, { fullPage: true })}>
                                       <Eye className="w-4 h-4 mr-2" />
                                       {tr("Подачі", "Submissions")}
@@ -5877,12 +5884,12 @@ export const ContestPage: React.FC = () => {
                   </Card>
 
                   {adminSubsParticipant && !adminSubsFullPage ? (
-                    <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
-                      <div className="flex items-center justify-between gap-3 mb-3">
+                    <Card className="p-4 border border-border/70 bg-bg-surface/80">
+                      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="font-mono text-text-primary">
                           {tr("Інспектор подач", "Submission inspector")}: {adminSubsParticipant.displayName} (#{adminSubsParticipant.id})
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                           <Button variant="secondary" onClick={() => openAdminSubmissions(adminSubsParticipant)} disabled={adminSubsLoading}>
                             <RefreshCw className="w-4 h-4 mr-2" />
                             {tr("Оновити", "Refresh")}
@@ -5906,11 +5913,11 @@ export const ContestPage: React.FC = () => {
                   {adminSubsParticipant && adminSubsFullPage ? (
                     <div className="fixed inset-0 z-50 bg-bg-base">
                       <div className="h-full flex flex-col">
-                        <div className="border-b border-border bg-bg-surface/95 backdrop-blur px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="border-b border-border bg-bg-surface/95 backdrop-blur px-3 py-3 sm:px-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="font-mono text-text-primary text-sm md:text-base">
                             {tr("Інспектор подач", "Submission inspector")}: {adminSubsParticipant.displayName} (#{adminSubsParticipant.id})
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                             <Button variant="secondary" onClick={() => openAdminSubmissions(adminSubsParticipant)} disabled={adminSubsLoading}>
                               <RefreshCw className="w-4 h-4 mr-2" />
                               {tr("Оновити", "Refresh")}
@@ -5924,7 +5931,7 @@ export const ContestPage: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4">
+                        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
                           {adminInspectorBody}
                         </div>
                       </div>
@@ -5936,7 +5943,7 @@ export const ContestPage: React.FC = () => {
           ) : (
             <div className="space-y-4">
               <Card className="p-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-xs text-text-secondary">
                     {tr("Питання та оголошення зберігаються на сервері в межах цього контесту.", "Questions and announcements are persisted on the server for this contest.")}
                   </div>

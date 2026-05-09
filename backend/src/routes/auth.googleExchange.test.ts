@@ -47,6 +47,21 @@ test("flow mismatch guard works for expected vs actual flow", () => {
   assert.equal(__authGoogleExchangeTestOnly.isGoogleExchangeFlowAllowed("complete", "success"), false);
 });
 
+test("peek does not consume a valid google exchange code", () => {
+  __authGoogleExchangeTestOnly._clearPendingCodes();
+
+  const code = __authGoogleExchangeTestOnly.issueGoogleExchangeCode("complete", "temp-token");
+  const peeked = __authGoogleExchangeTestOnly.peekGoogleExchangeCode(code);
+  const consumed = __authGoogleExchangeTestOnly.consumeGoogleExchangeCode(code);
+
+  assert.ok(peeked);
+  assert.equal(peeked?.flow, "complete");
+  assert.equal(peeked?.token, "temp-token");
+  assert.ok(consumed);
+  assert.equal(consumed?.flow, "complete");
+  assert.equal(__authGoogleExchangeTestOnly._pendingCodeCount(), 0);
+});
+
 test("cookie parser reads and decodes cookie values", () => {
   const header = "x=1; __sc_google_exchange=abc%2B123%3D%3D; y=2";
   const parsed = __authGoogleExchangeTestOnly.getCookieValue(header, "__sc_google_exchange");

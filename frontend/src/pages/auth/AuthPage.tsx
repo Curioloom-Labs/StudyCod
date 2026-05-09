@@ -62,6 +62,18 @@ export const AuthPage: React.FC<Props> = ({
   const navigate = useNavigate();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const topMenuButtonClass = "inline-flex h-8 items-center justify-center rounded-md border border-border/80 bg-bg-code/70 px-3 text-[11px] font-mono uppercase tracking-[0.08em] text-text-secondary transition-fast hover:-translate-y-[1px] hover:border-primary/50 hover:bg-bg-hover/80 hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/60";
+  const authIdPrefix = React.useId();
+  const fieldIds = React.useMemo(() => ({
+    emailSentEmail: `${authIdPrefix}-email-sent`,
+    username: `${authIdPrefix}-username`,
+    registerEmail: `${authIdPrefix}-register-email`,
+    firstName: `${authIdPrefix}-first-name`,
+    lastName: `${authIdPrefix}-last-name`,
+    birthDay: `${authIdPrefix}-birth-day`,
+    birthMonth: `${authIdPrefix}-birth-month`,
+    password: `${authIdPrefix}-password`,
+    forgotPasswordEmail: `${authIdPrefix}-forgot-password-email`
+  }), [authIdPrefix]);
   const [theme, setTheme] = useState<"dark" | "light">(() => getCurrentTheme());
   const [userMode, setUserMode] = useState<UserMode>(() => initialUserMode ?? "PERSONAL");
   const [mode, setMode] = useState<Mode>(() => initialMode ?? "login");
@@ -343,17 +355,17 @@ export const AuthPage: React.FC<Props> = ({
         <div className="mb-3 flex flex-wrap items-center justify-end gap-2 rounded-lg border border-border/60 bg-bg-code/35 p-1.5">
           {showBackToLanding ? <button type="button" onClick={() => navigate("/", {
           replace: true
-        })} className={topMenuButtonClass} title={t("toHome")}>
+        })} className={topMenuButtonClass} title={t("toHome")} aria-label={t("toHome")}>
               {t("toHome")}
             </button> : null}
-          <button type="button" onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className={topMenuButtonClass} title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
+          <button type="button" onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className={topMenuButtonClass} title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")} aria-label={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
             {i18n.language === "uk" ? "EN" : "UA"}
           </button>
           <button type="button" onClick={() => {
           const next = theme === "dark" ? "light" : "dark";
           applyTheme(next);
           setTheme(next);
-        }} className={topMenuButtonClass} title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+        }} className={topMenuButtonClass} title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
             {theme === "dark" ? "Light" : "Dark"}
           </button>
         </div>
@@ -372,7 +384,7 @@ export const AuthPage: React.FC<Props> = ({
           </h1>
         </div>
         <div className="flex mb-4 border border-border bg-bg-code p-1">
-          <button onClick={() => {
+          <button type="button" onClick={() => {
           setUserMode("PERSONAL");
           setMode("login");
           setError(null);
@@ -380,7 +392,7 @@ export const AuthPage: React.FC<Props> = ({
         }} className={`flex-1 py-2 text-xs font-mono transition-fast ${userMode === "PERSONAL" ? "bg-bg-hover text-text-primary border border-border" : "text-text-secondary hover:text-text-primary"}`}>
             Personal
           </button>
-          <button onClick={() => {
+          <button type="button" onClick={() => {
           setUserMode("EDUCATIONAL");
           setMode("login");
           setError(null);
@@ -388,7 +400,7 @@ export const AuthPage: React.FC<Props> = ({
         }} className={`flex-1 py-2 text-xs font-mono transition-fast ${userMode === "EDUCATIONAL" ? "bg-bg-hover text-text-primary border border-border" : "text-text-secondary hover:text-text-primary"}`}>
             EDU ({t("teacher")})
           </button>
-          <button onClick={() => {
+          <button type="button" onClick={() => {
           setUserMode("CONTEST");
           setMode("login");
           setError(null);
@@ -410,8 +422,8 @@ export const AuthPage: React.FC<Props> = ({
               {success || tr("Перевірте вашу пошту для підтвердження email. Після підтвердження ви зможете увійти.", "Check your inbox to verify your email. After verification you can log in.")}
             </div>
             <div>
-              <label className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
-              <input type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" />
+              <label htmlFor={fieldIds.emailSentEmail} className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
+              <input id={fieldIds.emailSentEmail} type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" />
             </div>
             <Button type="button" onClick={handleResendEmail} className="w-full" disabled={loading}>
               {loading ? tr("Відправка...", "Sending...") : tr("Відправити лист повторно", "Resend email")}
@@ -425,41 +437,41 @@ export const AuthPage: React.FC<Props> = ({
             </button>
           </div> : <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-xs font-mono text-text-secondary mb-1 block">{t("username")}</label>
-              <input className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={username} onChange={e => setUsername(e.target.value)} required />
+              <label htmlFor={fieldIds.username} className="text-xs font-mono text-text-secondary mb-1 block">{t("username")}</label>
+              <input id={fieldIds.username} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={username} onChange={e => setUsername(e.target.value)} required />
             </div>
             {mode === "register" && <>
                 <div>
-                  <label className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
-                  <input type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={email} onChange={e => setEmail(e.target.value)} required />
+                  <label htmlFor={fieldIds.registerEmail} className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
+                  <input id={fieldIds.registerEmail} type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={email} onChange={e => setEmail(e.target.value)} required />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs font-mono text-text-secondary mb-1 block">{t("firstName")}</label>
-                    <input type="text" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={firstName} onChange={e => setFirstName(e.target.value)} required />
+                    <label htmlFor={fieldIds.firstName} className="text-xs font-mono text-text-secondary mb-1 block">{t("firstName")}</label>
+                    <input id={fieldIds.firstName} type="text" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={firstName} onChange={e => setFirstName(e.target.value)} required />
                   </div>
                   <div>
-                    <label className="text-xs font-mono text-text-secondary mb-1 block">{t("lastName")}</label>
-                    <input type="text" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={lastName} onChange={e => setLastName(e.target.value)} required />
+                    <label htmlFor={fieldIds.lastName} className="text-xs font-mono text-text-secondary mb-1 block">{t("lastName")}</label>
+                    <input id={fieldIds.lastName} type="text" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={lastName} onChange={e => setLastName(e.target.value)} required />
                   </div>
                 </div>
                 <div>
                   <label className="text-xs font-mono text-text-secondary mb-1 block">{tr("День народження (без року)", "Birth day (no year)")}</label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs font-mono text-text-secondary mb-1 block">{tr("День", "Day")}</label>
-                      <input type="number" min="1" max="31" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={birthDay} onChange={e => setBirthDay(e.target.value ? Number(e.target.value) : "")} placeholder="1-31" required />
+                      <label htmlFor={fieldIds.birthDay} className="text-xs font-mono text-text-secondary mb-1 block">{tr("День", "Day")}</label>
+                      <input id={fieldIds.birthDay} type="number" min="1" max="31" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={birthDay} onChange={e => setBirthDay(e.target.value ? Number(e.target.value) : "")} placeholder="1-31" required />
                     </div>
                     <div>
-                      <label className="text-xs font-mono text-text-secondary mb-1 block">{tr("Місяць", "Month")}</label>
-                      <input type="number" min="1" max="12" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={birthMonth} onChange={e => setBirthMonth(e.target.value ? Number(e.target.value) : "")} placeholder="1-12" required />
+                      <label htmlFor={fieldIds.birthMonth} className="text-xs font-mono text-text-secondary mb-1 block">{tr("Місяць", "Month")}</label>
+                      <input id={fieldIds.birthMonth} type="number" min="1" max="12" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={birthMonth} onChange={e => setBirthMonth(e.target.value ? Number(e.target.value) : "")} placeholder="1-12" required />
                     </div>
                   </div>
                 </div>
               </>}
             <div>
-              <label className="text-xs font-mono text-text-secondary mb-1 block">{t("password")}</label>
-              <input type="password" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={password} onChange={e => setPassword(e.target.value)} required />
+              <label htmlFor={fieldIds.password} className="text-xs font-mono text-text-secondary mb-1 block">{t("password")}</label>
+              <input id={fieldIds.password} type="password" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
           {mode === "register" && <div>
               <label className="text-xs font-mono text-text-secondary mb-2 block">{t("programmingLanguage")}</label>
@@ -542,8 +554,8 @@ export const AuthPage: React.FC<Props> = ({
         {}
         {showForgotPassword && <div className="mt-4 space-y-4">
             <div>
-              <label className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
-              <input type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="your@email.com" />
+              <label htmlFor={fieldIds.forgotPasswordEmail} className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
+              <input id={fieldIds.forgotPasswordEmail} type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="your@email.com" />
             </div>
             {error && <div className="text-xs font-mono text-accent-error border border-accent-error bg-bg-code px-3 py-2">
                 {error}

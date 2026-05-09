@@ -3,6 +3,13 @@ import type { JudgeRequest, JudgeResponse } from "./types";
 import { HttpError } from "../../utils/httpError";
 import { logger } from "../../utils/logger";
 import { executionScheduler } from "../execution/executionSchedulerSingleton";
+import { distributedJudgeQueue, getExecutionQueueMode } from "../execution/distributedJudgeQueueSingleton";
+import {
+  isDistributedQueueUnavailableError,
+  type DistributedDeadLetterListResult,
+  type DistributedDeadLetterReplayResult,
+} from "../execution/DistributedJudgeQueue";
+import type { ExecutionSchedulerSnapshot } from "../execution/ExecutionScheduler";
 const client = new JudgeClient();
 export interface JudgeWithSemaphoreOptions {
   /**
@@ -108,15 +115,39 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
       }
     }
 
-    let res: JudgeResponse;
-    try {
-      res = await executionScheduler.schedule(
+    const scheduleLocal = () =>
+      executionScheduler.schedule(
         () => client.judge(req, { signal: controller.signal }),
         {
           signal: controller.signal,
           label: enqueueLabel,
         }
       );
+
+    let res: JudgeResponse;
+    try {
+      if (distributedJudgeQueue.isEnabled()) {
+        try {
+          res = await distributedJudgeQueue.execute(req, {
+            signal: controller.signal,
+            timeoutMs,
+            label: enqueueLabel,
+          });
+        } catch (distributedError: unknown) {
+          if (isDistributedQueueUnavailableError(distributedError)) {
+            logger.warn("[judge] distributed queue unavailable, fallback to local scheduler", {
+              submissionId: req.submission_id,
+              language: req.language,
+              error: distributedError instanceof Error ? distributedError.message : String(distributedError)
+            });
+            res = await scheduleLocal();
+          } else {
+            throw distributedError;
+          }
+        }
+      } else {
+        res = await scheduleLocal();
+      }
     } catch (e: any) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/JUDGE_TIMEOUT/i.test(msg) || /JUDGE_ABORTED/i.test(msg)) {
@@ -145,13 +176,14 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
     const slowMs = Number(process.env.JUDGE_LOG_SLOW_MS || 1500);
     if (Number.isFinite(slowMs) && finishedAt - startedAt >= slowMs) {
       const totalMs = finishedAt - startedAt;
-      const snap = executionScheduler.snapshot();
+      const snap = getJudgeExecutionMetrics();
       logger.warn('[judge] slow', {
         submissionId: req.submission_id,
         language: req.language,
         tests: req.tests?.length ?? 0,
         totalMs,
         verdict: res.verdict,
+        mode: getExecutionQueueMode(),
         active: snap.active,
         queued: snap.queued,
         avgExecutionTimeMs: Math.round(snap.avgExecutionTimeMs)
@@ -161,6 +193,126 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
   } catch (e: any) {
     if (e instanceof HttpError) throw e;
     throw toJudgeUnavailable(e);
+  }
+}
+
+export function getJudgeExecutionMetrics(): ExecutionSchedulerSnapshot {
+  if (distributedJudgeQueue.isEnabled()) {
+    return distributedJudgeQueue.snapshot();
+  }
+  return executionScheduler.snapshot();
+}
+
+type JudgeDeadLetterItem = {
+  jobId: string;
+  submissionId: string | null;
+  state: string | null;
+  attempts: number;
+  updatedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+};
+
+export type JudgeDeadLetterListResponse = {
+  mode: "distributed" | "local";
+  total: number;
+  items: JudgeDeadLetterItem[];
+};
+
+export type JudgeDeadLetterReplayResponse = {
+  mode: "distributed" | "local";
+  moved: number;
+  skipped: number;
+  remaining: number;
+  queued: number;
+  limit: number;
+};
+
+function toIso(ms: number | null): string | null {
+  if (!Number.isFinite(ms ?? NaN) || (ms ?? 0) <= 0) return null;
+  return new Date(ms as number).toISOString();
+}
+
+function mapDeadLetterItems(data: DistributedDeadLetterListResult): JudgeDeadLetterItem[] {
+  return data.items.map(item => ({
+    jobId: item.jobId,
+    submissionId: item.submissionId,
+    state: item.state,
+    attempts: item.attempts,
+    updatedAt: toIso(item.updatedAtMs),
+    finishedAt: toIso(item.finishedAtMs),
+    error: item.error,
+  }));
+}
+
+export async function getJudgeDeadLetterQueue(limit = 50): Promise<JudgeDeadLetterListResponse> {
+  const mode = getExecutionQueueMode();
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.floor(limit))) : 50;
+
+  if (!distributedJudgeQueue.isEnabled()) {
+    return {
+      mode,
+      total: 0,
+      items: [],
+    };
+  }
+
+  try {
+    const data = await distributedJudgeQueue.listDeadLetterJobs(safeLimit);
+    return {
+      mode,
+      total: data.total,
+      items: mapDeadLetterItems(data),
+    };
+  } catch (error: unknown) {
+    if (isDistributedQueueUnavailableError(error)) {
+      return {
+        mode: "local",
+        total: 0,
+        items: [],
+      };
+    }
+    throw error;
+  }
+}
+
+export async function replayJudgeDeadLetterQueue(limit = 20): Promise<JudgeDeadLetterReplayResponse> {
+  const mode = getExecutionQueueMode();
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(500, Math.floor(limit))) : 20;
+
+  if (!distributedJudgeQueue.isEnabled()) {
+    return {
+      mode,
+      moved: 0,
+      skipped: 0,
+      remaining: 0,
+      queued: executionScheduler.snapshot().queued,
+      limit: safeLimit,
+    };
+  }
+
+  try {
+    const result: DistributedDeadLetterReplayResult = await distributedJudgeQueue.replayDeadLetter(safeLimit);
+    return {
+      mode,
+      moved: result.moved,
+      skipped: result.skipped,
+      remaining: result.remaining,
+      queued: result.queued,
+      limit: safeLimit,
+    };
+  } catch (error: unknown) {
+    if (isDistributedQueueUnavailableError(error)) {
+      return {
+        mode: "local",
+        moved: 0,
+        skipped: 0,
+        remaining: 0,
+        queued: executionScheduler.snapshot().queued,
+        limit: safeLimit,
+      };
+    }
+    throw error;
   }
 }
 

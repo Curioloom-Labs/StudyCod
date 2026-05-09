@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
@@ -40,8 +40,12 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleData, setGoogleData] = useState<GoogleTokenPayload | null>(null);
+  const exchangeAttemptKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (legacyToken) return;
+    const attemptKey = code ? `code:${code}` : "cookie:complete";
+    if (exchangeAttemptKeyRef.current === attemptKey) return;
+    exchangeAttemptKeyRef.current = attemptKey;
     let cancelled = false;
     setResolvingCode(true);
     setError(null);
@@ -89,7 +93,8 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({
       }
       setGoogleData(payload);
     } catch (err) {
-      console.error("Error decoding token:", err);
+      setGoogleData(null);
+      setError(getErrorMessageFromUnknown(err, tr("Не вдалося обробити Google-токен. Спробуйте ще раз.", "Failed to process Google token. Please try again.")));
     }
   }, [token, resolvingCode]);
   const handleSubmit = async (e: React.FormEvent) => {
@@ -167,9 +172,7 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({
         </div>
       </div>;
   }
-  return <div className="min-h-screen flex items-center justify-center bg-bg-base" style={{
-    minWidth: "1280px"
-  }}>
+  return <div className="min-h-screen flex items-center justify-center bg-bg-base px-4 py-6">
       <div className="w-full max-w-md bg-bg-surface border border-border p-8">
         <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 border border-primary flex items-center justify-center font-mono text-xl text-primary">

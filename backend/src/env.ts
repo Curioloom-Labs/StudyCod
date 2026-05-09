@@ -80,6 +80,10 @@ const EnvSchema = z.object({
   DB_NAME: z.string().optional(),
   DB_POOL_SIZE: z.string().optional(),
   TRUST_PROXY: z.string().optional(),
+  SESSION_STORE: z.string().optional(),
+  REDIS_URL: z.string().optional(),
+  REDIS_ENABLED: z.string().optional(),
+  REDIS_KEY_PREFIX: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_BACKUP_API_KEYS: z.string().optional(),
   OPENROUTER_MODEL: z.string().optional(),
@@ -120,6 +124,13 @@ const EnvSchema = z.object({
   MAX_CONCURRENT_EXECUTIONS: z.string().optional(),
   MAX_EXECUTION_QUEUE_SIZE: z.string().optional(),
   EXECUTION_SCHEDULER_LOG_INTERVAL_MS: z.string().optional(),
+  EXECUTION_QUEUE_MODE: z.string().optional(),
+  EXECUTION_QUEUE_POLL_INTERVAL_MS: z.string().optional(),
+  EXECUTION_QUEUE_CLAIM_TTL_MS: z.string().optional(),
+  EXECUTION_QUEUE_RESULT_TTL_MS: z.string().optional(),
+  EXECUTION_QUEUE_RESULT_POLL_MS: z.string().optional(),
+  EXECUTION_QUEUE_MAX_RETRIES: z.string().optional(),
+  EXECUTION_QUEUE_DLQ_MAX_ITEMS: z.string().optional(),
 
   // Per-user submission rate limit (short + long windows)
   RATE_LIMIT_SHORT_WINDOW_MS: z.string().optional(),
@@ -129,6 +140,10 @@ const EnvSchema = z.object({
 
   // Retry-After header for overload responses
   OVERLOAD_RETRY_AFTER_SECONDS: z.string().optional(),
+
+  // Database startup flow
+  RUN_MIGRATIONS_ON_STARTUP: z.string().optional(),
+  AUTO_BOOTSTRAP_MIGRATION_HISTORY_ON_STARTUP: z.string().optional(),
 
   // Web task feature flags/limits
   WEB_TASKS_ENABLED: z.string().optional(),
@@ -163,6 +178,26 @@ const EnvSchema = z.object({
       if (raw === "false") return 0;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n >= 0 ? n : isProduction ? 1 : 0;
+    })(),
+    __sessionStore: (() => {
+      const isTest = (env.NODE_ENV ?? "").trim().toLowerCase() === "test";
+      if (isTest) return "memory";
+      return ((env.SESSION_STORE ?? "") || "memory").trim().toLowerCase();
+    })(),
+    __redisUrl: ((env.REDIS_URL ?? "") || "redis://127.0.0.1:6379").trim(),
+    __redisEnabled: (() => {
+      const isTest = (env.NODE_ENV ?? "").trim().toLowerCase() === "test";
+      const raw = (env.REDIS_ENABLED ?? "").trim();
+      if (raw) return parseBoolEnv(raw);
+      if (isTest) return false;
+      const hasRedisUrl = ((env.REDIS_URL ?? "") || "").trim().length > 0;
+      const sessionWantsRedis = ((env.SESSION_STORE ?? "") || "").trim().toLowerCase() === "redis";
+      return hasRedisUrl || sessionWantsRedis;
+    })(),
+    __redisKeyPrefix: (() => {
+      const raw = ((env.REDIS_KEY_PREFIX ?? "") || "studycod:").trim();
+      if (!raw) return "studycod:";
+      return raw.endsWith(":") ? raw : `${raw}:`;
     })(),
     __judgeWorkerEntry: (env.JUDGE_WORKER_ENTRY ?? "").trim(),
     __turnstileEnforceContestSubmit: parseBoolEnv(env.TURNSTILE_ENFORCE_CONTEST_SUBMIT),
@@ -201,6 +236,61 @@ const EnvSchema = z.object({
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 10_000;
     })(),
+    __executionQueueMode: (() => {
+      const isTest = (env.NODE_ENV ?? "").trim().toLowerCase() === "test";
+      const raw = (env.EXECUTION_QUEUE_MODE ?? "").trim().toLowerCase();
+      if (raw === "local" || raw === "memory" || raw === "in-process" || raw === "inprocess") {
+        return "local" as const;
+      }
+      if (raw === "redis" || raw === "distributed") {
+        return "distributed" as const;
+      }
+      if (isTest) return "local" as const;
+
+      const redisEnabledRaw = (env.REDIS_ENABLED ?? "").trim();
+      const redisExplicitlyEnabled = redisEnabledRaw ? parseBoolEnv(redisEnabledRaw) : false;
+      const hasRedisUrl = ((env.REDIS_URL ?? "") || "").trim().length > 0;
+      const sessionWantsRedis = ((env.SESSION_STORE ?? "") || "").trim().toLowerCase() === "redis";
+      return redisExplicitlyEnabled || hasRedisUrl || sessionWantsRedis
+        ? ("distributed" as const)
+        : ("local" as const);
+    })(),
+    __executionQueuePollIntervalMs: (() => {
+      const raw = (env.EXECUTION_QUEUE_POLL_INTERVAL_MS ?? "").trim();
+      if (!raw) return 100;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 20 ? n : 100;
+    })(),
+    __executionQueueClaimTtlMs: (() => {
+      const raw = (env.EXECUTION_QUEUE_CLAIM_TTL_MS ?? "").trim();
+      if (!raw) return 180_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 30_000 ? n : 180_000;
+    })(),
+    __executionQueueResultTtlMs: (() => {
+      const raw = (env.EXECUTION_QUEUE_RESULT_TTL_MS ?? "").trim();
+      if (!raw) return 300_000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 30_000 ? n : 300_000;
+    })(),
+    __executionQueueResultPollMs: (() => {
+      const raw = (env.EXECUTION_QUEUE_RESULT_POLL_MS ?? "").trim();
+      if (!raw) return 40;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 10 ? n : 40;
+    })(),
+    __executionQueueMaxRetries: (() => {
+      const raw = (env.EXECUTION_QUEUE_MAX_RETRIES ?? "").trim();
+      if (!raw) return 2;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 2;
+    })(),
+    __executionQueueDeadLetterMaxItems: (() => {
+      const raw = (env.EXECUTION_QUEUE_DLQ_MAX_ITEMS ?? "").trim();
+      if (!raw) return 1000;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 10 ? n : 1000;
+    })(),
 
     __rateLimitShortWindowMs: (() => {
       const raw = (env.RATE_LIMIT_SHORT_WINDOW_MS ?? "").trim();
@@ -231,6 +321,17 @@ const EnvSchema = z.object({
       if (!raw) return 3;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 3;
+    })(),
+
+    __runMigrationsOnStartup: (() => {
+      const raw = (env.RUN_MIGRATIONS_ON_STARTUP ?? "").trim();
+      if (!raw) return true;
+      return parseBoolEnv(raw);
+    })(),
+    __autoBootstrapMigrationHistoryOnStartup: (() => {
+      const raw = (env.AUTO_BOOTSTRAP_MIGRATION_HISTORY_ON_STARTUP ?? "").trim();
+      if (!raw) return true;
+      return parseBoolEnv(raw);
     })(),
 
     __webTasksEnabled: parseBoolEnv(env.WEB_TASKS_ENABLED),

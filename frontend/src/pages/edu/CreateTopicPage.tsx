@@ -62,9 +62,9 @@ export const CreateTopicPage: React.FC = () => {
       showToast({ type: "error", message: raw || tr("Не вдалося створити тему", "Failed to create topic") });
     }
   };
-  return <div className="p-6">
+  return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
           <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
@@ -72,7 +72,7 @@ export const CreateTopicPage: React.FC = () => {
           <h1 className="text-2xl font-mono text-text-primary">{tr("Створити тему", "Create topic")}</h1>
         </div>
 
-        <Card className="p-6 space-y-6">
+        <Card className="p-4 sm:p-6 space-y-6">
           <div>
             <label className="block text-sm font-mono text-text-secondary mb-2">
               {tr("Назва теми *", "Topic title *")}
@@ -91,7 +91,7 @@ export const CreateTopicPage: React.FC = () => {
             <label className="block text-sm font-mono text-text-secondary mb-2">
               {tr("Мова програмування", "Programming language")}
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Button variant={language === "JAVA" ? "primary" : "ghost"} onClick={() => setLanguage("JAVA")} className="flex-1">
                 Java
               </Button>
@@ -104,7 +104,7 @@ export const CreateTopicPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 justify-end">
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
               {tr("Скасувати", "Cancel")}
             </Button>

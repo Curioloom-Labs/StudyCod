@@ -93,9 +93,9 @@ export const CreateLessonPage: React.FC = () => {
       setGeneratingTheory(false);
     }
   };
-  return <div className="p-6">
+  return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
           <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
@@ -103,10 +103,10 @@ export const CreateLessonPage: React.FC = () => {
           <h1 className="text-2xl font-mono text-text-primary">{tr("Створити урок", "Create lesson")}</h1>
         </div>
 
-        <Card className="p-6 space-y-6">
+        <Card className="p-4 sm:p-6 space-y-6">
           <div>
             <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Тип", "Type")}</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Button variant={type === "LESSON" ? "primary" : "ghost"} onClick={() => setType("LESSON")} className="flex-1">
                 {tr("Урок", "Lesson")}
               </Button>
@@ -130,7 +130,7 @@ export const CreateLessonPage: React.FC = () => {
             </label>
             {hasTheory && <div className="mt-2">
                 <textarea value={theory} onChange={e => setTheory(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px]" placeholder={tr("Введіть теорію або згенеруйте через ШІ...", "Write theory or generate it with AI...")} />
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-col sm:flex-row gap-2">
                   <input type="text" value={topicTitle} onChange={e => setTopicTitle(e.target.value)} placeholder={tr("Назва теми для генерації", "Topic name for generation")} className="flex-1 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                   <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory} className="text-xs">
                     <Sparkles className="w-4 h-4 mr-1" />
@@ -159,7 +159,7 @@ export const CreateLessonPage: React.FC = () => {
               </label>
             </div>}
 
-          <div className="flex gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 justify-end">
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
               {tr("Скасувати", "Cancel")}
             </Button>

@@ -7,6 +7,8 @@ import { AppDataSource } from "../../data-source";
 import { Student } from "../../entities/Student";
 import { JWT_SECRET } from "../../config";
 import { logger } from "../../utils/logger";
+import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
+import { generateJti } from "../../services/auth/jwtRevocation";
 
 const router = Router();
 
@@ -39,11 +41,18 @@ router.post("/student-login", async (req: Request, res: Response) => {
       });
     }
 
+    const uiLanguage = resolveUiLocaleFromHeaders(req.headers, "en");
+    if (student.uiLanguage !== uiLanguage) {
+      student.uiLanguage = uiLanguage;
+      await studentRepo().save(student);
+    }
+
     const token = jwt.sign(
       {
         studentId: student.id,
         type: "STUDENT",
-        classId: student.class.id
+        classId: student.class.id,
+        jti: generateJti()
       },
       JWT_SECRET,
       { expiresIn: "30d" }
@@ -60,7 +69,8 @@ router.post("/student-login", async (req: Request, res: Response) => {
         email: student.email,
         classId: student.class.id,
         className: student.class.name,
-        language: student.class.language
+        language: student.class.language,
+        uiLanguage: student.uiLanguage
       }
     });
   } catch (error) {

@@ -210,6 +210,8 @@ export const PublicLandingPage: React.FC = () => {
           <div className="mt-10 flex items-center justify-between text-xs font-mono text-text-muted border-t border-border pt-6">
             <div>© {new Date().getFullYear()} StudyCod</div>
             <div className="flex items-center gap-3">
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/privacy")}>{t("footerPrivacyPolicy")}</button>
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/terms")}>{t("footerTermsOfUse")}</button>
               <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/support")}>{t("landingSupport")}</button>
               <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/docs")}>{t("help")}</button>
             </div>

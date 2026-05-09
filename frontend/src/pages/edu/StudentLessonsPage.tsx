@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
 import { getMyStudentInfo, getStudentLessons, getMyAnnouncements, type Lesson, type ClassAnnouncementDto } from "../../lib/api/edu";
-import { BookOpen, Clock, FileText } from "lucide-react";
+import { BookOpen, Clock, FileText, MessageSquare } from "lucide-react";
 type StudentClassInfo = {
   id: number;
   name: string;
@@ -14,11 +14,20 @@ type StudentClassInfo = {
 };
 export const StudentLessonsPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     t,
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const currentLessonsPath = `${location.pathname}${location.search}`;
+  const openLesson = (id: number, type: "TOPIC" | "CONTROL") => {
+    navigate(`/edu/lessons/${id}?type=${type}`, {
+      state: {
+        from: currentLessonsPath
+      }
+    });
+  };
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [classInfo, setClassInfo] = useState<StudentClassInfo | null>(null);
@@ -45,15 +54,27 @@ export const StudentLessonsPage: React.FC = () => {
         {t("loading")}
       </div>;
   }
-  return <div className="p-6">
+  return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-mono text-text-primary mb-6">
-          {t("lessons")} {classInfo?.name && `• ${classInfo.name}`}
-        </h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <h1 className="text-2xl font-mono text-text-primary">
+            {t("lessons")} {classInfo?.name && `• ${classInfo.name}`}
+          </h1>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" onClick={() => navigate("/edu/journal")}>
+              <BookOpen className="w-4 h-4 mr-2" />
+              {t("myJournal")}
+            </Button>
+            <Button variant="ghost" onClick={() => navigate("/edu/appeals")}>
+              <MessageSquare className="w-4 h-4 mr-2" />
+              {tr("Апеляції", "Appeals")}
+            </Button>
+          </div>
+        </div>
 
         {}
         <Card className="p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
             <div className="text-lg font-mono text-text-primary">{tr("Оголошення", "Announcements")}</div>
             <Button variant="ghost" onClick={() => setShowAllAnnouncements(true)} disabled={announcements.length === 0}>
               {tr("Показати всі", "Show all")}
@@ -61,7 +82,7 @@ export const StudentLessonsPage: React.FC = () => {
           </div>
           {announcements.length === 0 ? <div className="text-sm text-text-secondary">{tr("Поки немає оголошень", "No announcements yet")}</div> : <div className="space-y-3">
               {announcements.slice(0, 3).map(a => <div key={a.id} className="p-3 border border-border bg-bg-surface">
-                  <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                     <div className="text-sm font-mono text-text-primary line-clamp-1">
                       {a.pinned ? "📌 " : ""}{a.title || tr("Оголошення", "Announcement")}
                     </div>
@@ -101,7 +122,7 @@ export const StudentLessonsPage: React.FC = () => {
               const topicControls = controlsByTopic.get(topic.id) || [];
               const uniqueKey = `${topic.type}-${topic.id}`;
               return <Card key={uniqueKey} className="p-4 hover:bg-bg-hover transition-fast">
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <BookOpen className="w-4 h-4 text-text-secondary" />
@@ -115,7 +136,7 @@ export const StudentLessonsPage: React.FC = () => {
 
                             {topicControls.length > 0 && <div className="mt-3 space-y-2">
                                 {topicControls.map(cw => <div key={`CONTROL-${cw.id}`} className="p-3 border border-border bg-bg-surface/60">
-                                    <div className="flex items-start justify-between gap-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                                       <div className="flex-1">
                                         <div className="flex items-center gap-2">
                                           <span className="text-xs text-text-muted px-2 py-1 border border-border">
@@ -132,7 +153,7 @@ export const StudentLessonsPage: React.FC = () => {
                                         </div>
                                       </div>
                                       <Button variant="ghost" onClick={() => {
-                            navigate(`/edu/lessons/${cw.id}?type=CONTROL`);
+                            openLesson(cw.id, "CONTROL");
                           }}>
                                         <FileText className="w-4 h-4 mr-2" />
                                         {t("open")}
@@ -143,7 +164,7 @@ export const StudentLessonsPage: React.FC = () => {
                           </div>
 
                           <Button variant="ghost" onClick={() => {
-                    navigate(`/edu/lessons/${topic.id}?type=TOPIC`);
+                    openLesson(topic.id, "TOPIC");
                   }}>
                             <FileText className="w-4 h-4 mr-2" />
                             {t("open")}
@@ -158,13 +179,13 @@ export const StudentLessonsPage: React.FC = () => {
                       </div>
                       <div className="space-y-2">
                         {orphanControls.map(cw => <div key={`CONTROL-${cw.id}`} className="p-3 border border-border bg-bg-surface/60">
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                               <div className="flex-1">
                                 <div className="text-sm font-mono text-text-primary">{cw.title}</div>
                                 <div className="text-xs text-text-muted mt-1">{tr("Завдань", "Tasks")}: {cw.tasksCount}</div>
                               </div>
                               <Button variant="ghost" onClick={() => {
-                      navigate(`/edu/lessons/${cw.id}?type=CONTROL`);
+                      openLesson(cw.id, "CONTROL");
                     }}>
                                 <FileText className="w-4 h-4 mr-2" />
                                 {t("open")}
@@ -179,9 +200,9 @@ export const StudentLessonsPage: React.FC = () => {
       </div>
 
       {showAllAnnouncements && <Modal open={showAllAnnouncements} onClose={() => setShowAllAnnouncements(false)} title={tr("Оголошення", "Announcements")}>
-          <div className="p-6 max-h-[80vh] overflow-y-auto space-y-3">
+          <div className="p-4 sm:p-6 max-h-[80vh] overflow-y-auto space-y-3">
             {announcements.length === 0 ? <div className="text-sm text-text-secondary">{tr("Поки немає оголошень", "No announcements yet")}</div> : announcements.map(a => <div key={a.id} className="p-3 border border-border bg-bg-surface">
-                  <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                     <div className="text-sm font-mono text-text-primary">
                       {a.pinned ? "📌 " : ""}{a.title || tr("Оголошення", "Announcement")}
                     </div>

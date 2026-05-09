@@ -15,8 +15,9 @@ export function setupGoogleStrategy() {
   passport.use(new GoogleStrategy({
     clientID: clientId,
     clientSecret: clientSecret,
-    callbackURL: callbackUrl
-  }, async (_accessToken, _refreshToken, profile, done) => {
+    callbackURL: callbackUrl,
+    passReqToCallback: true
+  }, async (req: any, _accessToken, _refreshToken, profile, done) => {
     try {
       const googleId = profile.id;
       const email = profile.emails?.[0]?.value || null;
@@ -32,6 +33,20 @@ export function setupGoogleStrategy() {
           birthDay = birthday.getDate();
           birthMonth = birthday.getMonth() + 1;
         }
+      }
+      const linkUserId = Number((req?.session as any)?.googleLinkUserId ?? 0);
+      if (Number.isFinite(linkUserId) && linkUserId > 0) {
+        return done(null, {
+          googleId,
+          email,
+          firstName,
+          lastName,
+          avatarUrl,
+          birthDay,
+          birthMonth,
+          isGoogleLinkFlow: true,
+          linkUserId
+        });
       }
       let user = await getUserRepository().findOne({
         where: {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getLLMProvider } from "../llm/provider";
+import { redisKey, runWithRedis } from "../redis/sharedRedis";
 
 export type AIDetectorLikelihood = "unlikely" | "possible" | "likely";
 
@@ -28,6 +29,7 @@ type CacheEntry = {
 
 const cacheByGradeId = new Map<number, CacheEntry>();
 const CACHE_TTL_MS = 15 * 60_000;
+const CACHE_TTL_SECONDS = Math.max(1, Math.ceil(CACHE_TTL_MS / 1000));
 
 function nowMs(): number {
   return Date.now();
@@ -37,6 +39,20 @@ function clampText(input: unknown, maxLen: number): string {
   const s = String(input ?? "");
   const cleaned = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
   return cleaned.length > maxLen ? cleaned.slice(0, maxLen) : cleaned;
+}
+
+function detectorRedisKey(gradeId: number): string {
+  return redisKey("ai-detector", "grade", gradeId);
+}
+
+function isCachedValue(value: unknown): value is Omit<AICodeDetectionResult, "cached"> {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  const likelihood = v.likelihood;
+  const score = v.score;
+  return (likelihood === "unlikely" || likelihood === "possible" || likelihood === "likely")
+    && typeof score === "number"
+    && Number.isFinite(score);
 }
 
 export async function detectAICode(params: {
@@ -56,6 +72,29 @@ export async function detectAICode(params: {
       ...cached.value,
       cached: true
     };
+  }
+
+  const cachedFromRedisRaw = await runWithRedis("ai detector cache get", async redis => {
+    return await redis.get(detectorRedisKey(params.gradeId));
+  });
+
+  if (typeof cachedFromRedisRaw === "string" && cachedFromRedisRaw.trim()) {
+    try {
+      const parsed = JSON.parse(cachedFromRedisRaw);
+      if (isCachedValue(parsed)) {
+        const value = parsed as Omit<AICodeDetectionResult, "cached">;
+        cacheByGradeId.set(params.gradeId, {
+          expiresAt: nowMs() + CACHE_TTL_MS,
+          value,
+        });
+        return {
+          ...value,
+          cached: true,
+        };
+      }
+    } catch {
+      // ignore malformed cache payloads
+    }
   }
 
   const model = (process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim() || "openai/gpt-4o-mini";
@@ -103,6 +142,13 @@ export async function detectAICode(params: {
   cacheByGradeId.set(params.gradeId, {
     expiresAt: nowMs() + CACHE_TTL_MS,
     value
+  });
+
+  await runWithRedis("ai detector cache set", async redis => {
+    await redis.set(detectorRedisKey(params.gradeId), JSON.stringify(value), {
+      EX: CACHE_TTL_SECONDS,
+    });
+    return true;
   });
 
   return {

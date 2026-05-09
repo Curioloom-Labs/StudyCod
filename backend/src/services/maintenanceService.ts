@@ -1,5 +1,8 @@
 import { AppDataSource } from "../data-source";
 import { MaintenanceState } from "../entities/MaintenanceState";
+import { redisKey, runWithRedis } from "./redis/sharedRedis";
+
+const MAINTENANCE_CACHE_KEY = redisKey("maintenance", "state");
 export type MaintenanceStateDto = {
   enabled: boolean;
   title: string;
@@ -22,6 +25,43 @@ class MaintenanceService {
     dto: MaintenanceStateDto;
   } | null = null;
   private readonly cacheTtlMs = 1500;
+
+  private setLocalCache(dto: MaintenanceStateDto): void {
+    this.cache = {
+      at: Date.now(),
+      dto,
+    };
+  }
+
+  private async getFromRedisCache(): Promise<MaintenanceStateDto | null> {
+    const raw = await runWithRedis("maintenance cache get", async redis => {
+      return await redis.get(MAINTENANCE_CACHE_KEY);
+    });
+
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    try {
+      const parsed = JSON.parse(raw) as MaintenanceStateDto;
+      if (!parsed || typeof parsed !== "object") return null;
+      if (typeof parsed.enabled !== "boolean") return null;
+      if (typeof parsed.title !== "string") return null;
+      if (typeof parsed.message !== "string") return null;
+      if (typeof parsed.updatedAt !== "string") return null;
+      if (parsed.until !== null && typeof parsed.until !== "string") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private async setRedisCache(dto: MaintenanceStateDto): Promise<void> {
+    await runWithRedis("maintenance cache set", async redis => {
+      await redis.set(MAINTENANCE_CACHE_KEY, JSON.stringify(dto), {
+        PX: this.cacheTtlMs,
+      });
+      return true;
+    });
+  }
+
   private repo() {
     return AppDataSource.getRepository(MaintenanceState);
   }
@@ -44,12 +84,20 @@ class MaintenanceService {
   async getStateCached(): Promise<MaintenanceStateDto> {
     const now = Date.now();
     if (this.cache && now - this.cache.at < this.cacheTtlMs) return this.cache.dto;
+
+    const redisCached = await this.getFromRedisCache();
+    if (redisCached) {
+      this.setLocalCache(redisCached);
+      return redisCached;
+    }
+
     const row = await this.getOrCreateSingleton();
     const dto = toDto(row);
     this.cache = {
       at: now,
-      dto
+      dto,
     };
+    await this.setRedisCache(dto);
     return dto;
   }
   async getState(): Promise<MaintenanceStateDto> {
@@ -68,10 +116,8 @@ class MaintenanceService {
     row.until = params.until;
     const saved = await this.repo().save(row);
     const dto = toDto(saved);
-    this.cache = {
-      at: Date.now(),
-      dto
-    };
+    this.setLocalCache(dto);
+    await this.setRedisCache(dto);
     return dto;
   }
   async disable(): Promise<MaintenanceStateDto> {
@@ -79,10 +125,8 @@ class MaintenanceService {
     row.enabled = false;
     const saved = await this.repo().save(row);
     const dto = toDto(saved);
-    this.cache = {
-      at: Date.now(),
-      dto
-    };
+    this.setLocalCache(dto);
+    await this.setRedisCache(dto);
     return dto;
   }
 }

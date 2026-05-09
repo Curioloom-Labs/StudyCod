@@ -106,17 +106,17 @@ export const SummaryGradesPage: React.FC = () => {
         {tr("Завантаження...", "Loading...")}
       </div>;
   }
-  return <div className="p-6">
+  return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>
             <h1 className="text-2xl font-mono text-text-primary">{tr("Проміжні оцінки", "Intermediate grades")}</h1>
           </div>
-          <Button onClick={() => setShowCreate(true)}>
+          <Button onClick={() => setShowCreate(true)} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             {tr("Створити", "Create")}
           </Button>
@@ -127,7 +127,7 @@ export const SummaryGradesPage: React.FC = () => {
           </Card> : <div className="space-y-6">
             {summaryGrades.map((group, index) => <Card key={index} className="p-4">
                 <h2 className="text-lg font-mono text-text-primary mb-4">{group.name}</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {group.grades.map(g => {
               const isEditing = editingGrade?.studentId === g.studentId && editingGrade?.id === g.id;
               return <div key={g.studentId} className="p-2 border border-border bg-bg-surface text-sm relative group">
@@ -174,7 +174,7 @@ export const SummaryGradesPage: React.FC = () => {
 
       {}
       {showCreate && <Modal open={showCreate} onClose={() => setShowCreate(false)} title={tr("Створити проміжну оцінку", "Create intermediate grade")} showCloseButton={false}>
-          <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Створити проміжну оцінку", "Create intermediate grade")}</h2>
             <div className="space-y-4">
               <div>
@@ -199,7 +199,7 @@ export const SummaryGradesPage: React.FC = () => {
                   {tr("Оцінки учнів", "Student grades")}
                 </label>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {students.map(student => <div key={student.id} className="flex items-center gap-3 p-2 border border-border">
+                  {students.map(student => <div key={student.id} className="flex flex-col sm:flex-row sm:items-center gap-2 p-2 border border-border">
                       <div className="flex-1 text-sm font-mono text-text-primary">
                         {student.lastName} {student.firstName} {student.middleName || ""}
                       </div>
@@ -221,7 +221,7 @@ export const SummaryGradesPage: React.FC = () => {
                     </div>)}
                 </div>
               </div>
-              <div className="flex gap-2 justify-end">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <Button variant="ghost" onClick={() => setShowCreate(false)}>
                   {tr("Скасувати", "Cancel")}
                 </Button>

@@ -10,7 +10,7 @@ import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
 import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
-import { generateTestData, getTestData, addTestData, updateTestData, deleteTestData, type TestData, updateControlWorkFormula } from "../../lib/api/edu";
+import { generateTestData, getTestData, getTestDataItem, addTestData, updateTestData, deleteTestData, deleteGeneratedTestData, type TestData, updateControlWorkFormula } from "../../lib/api/edu";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -56,6 +56,11 @@ const getErrorStatus = (error: unknown): number | null => {
   return typeof status === "number" ? status : null;
 };
 
+const DEFAULT_CONTROL_WORK_FORMULA = "0.35 * test + 0.65 * avg(practice)";
+const BALANCED_CONTROL_WORK_FORMULA = "0.5 * test + 0.5 * avg(practice)";
+const PRACTICE_ONLY_FORMULA = "avg(practice)";
+const QUIZ_ONLY_FORMULA = "test";
+
 export const ControlWorkDetailsPage: React.FC = () => {
   const {
     t,
@@ -81,6 +86,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const [generatingCondition, setGeneratingCondition] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [taskDifficulty, setTaskDifficulty] = useState(3);
+  const [aiResponseLanguage, setAiResponseLanguage] = useState(i18n.language?.toLowerCase().startsWith("en") ? "English" : "Українська");
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [hasTheory, setHasTheory] = useState(false);
@@ -107,18 +113,28 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const [showTestDataModal, setShowTestDataModal] = useState(false);
   const [testDataTaskId, setTestDataTaskId] = useState<number | null>(null);
   const [testDataList, setTestDataList] = useState<TestData[]>([]);
+  const [testDataPageSize, setTestDataPageSize] = useState<20 | 50 | 100>(20);
+  const [testDataOffset, setTestDataOffset] = useState(0);
+  const [testDataTotal, setTestDataTotal] = useState(0);
+  const [testDataHasMore, setTestDataHasMore] = useState(false);
+  const [testDataSourceFilter, setTestDataSourceFilter] = useState<"ALL" | "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED">("ALL");
+  const [loadingTestDataPage, setLoadingTestDataPage] = useState(false);
+  const [replaceGeneratedOnGenerate, setReplaceGeneratedOnGenerate] = useState(true);
+  const [clearingGeneratedTests, setClearingGeneratedTests] = useState(false);
   const [editingTestIndex, setEditingTestIndex] = useState<number | null>(null);
   const [editingTest, setEditingTest] = useState<{
     input: string;
     expectedOutput: string;
     points: number;
     isHidden?: boolean;
+    subtask?: string;
   } | null>(null);
   const [newTestCount, setNewTestCount] = useState(10);
   const [generatingTestData, setGeneratingTestData] = useState(false);
   const [importFiles, setImportFiles] = useState<File[]>([]);
   const [importPoints, setImportPoints] = useState(1);
   const [importIsHidden, setImportIsHidden] = useState(false);
+  const [importSubtask, setImportSubtask] = useState("");
   const [importingFiles, setImportingFiles] = useState(false);
   const [importInputKey, setImportInputKey] = useState(0);
   const [controlWorkTitle, setControlWorkTitle] = useState("");
@@ -128,6 +144,16 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const createDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const editDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const normalizeSubtask = (value: string | null | undefined): string | null => {
+    const normalized = String(value ?? "").trim();
+    return normalized.length > 0 ? normalized.slice(0, 64) : null;
+  };
+  const parsePageSize = (value: string): 20 | 50 | 100 => {
+    const parsed = Number.parseInt(value, 10);
+    if (parsed === 20 || parsed === 50 || parsed === 100) return parsed;
+    return 20;
+  };
+  const TEST_DATA_PREVIEW_CHARS = 600;
   const optionLabel = (key: "А" | "Б" | "В" | "Г" | "Д") => {
     const map: Record<"А" | "Б" | "В" | "Г" | "Д", "A" | "B" | "C" | "D" | "E"> = {
       А: "A",
@@ -150,6 +176,9 @@ export const ControlWorkDetailsPage: React.FC = () => {
     };
     return enToUk[upper] ?? null;
   };
+  useEffect(() => {
+    setAiResponseLanguage(prev => prev.trim().length > 0 ? prev : i18n.language?.toLowerCase().startsWith("en") ? "English" : "Українська");
+  }, [i18n.language]);
   useEffect(() => {
     const init = async () => {
       await loadUser();
@@ -299,7 +328,8 @@ export const ControlWorkDetailsPage: React.FC = () => {
         taskTitle: newTask.title.trim(),
         taskType: "CONTROL",
         difficulty: taskDifficulty,
-        language: userLanguage
+        language: userLanguage,
+        responseLanguage: aiResponseLanguage.trim() || undefined
       });
       setNewTask({
         ...newTask,
@@ -327,7 +357,9 @@ export const ControlWorkDetailsPage: React.FC = () => {
       }
       const res = await api.post(`/topics/${topicId}/tasks/generate-template`, {
         taskTitle: newTask.title.trim(),
-        description: newTask.description
+        description: newTask.description,
+        language: i18n.language === 'en' ? 'en' : 'uk',
+        responseLanguage: aiResponseLanguage.trim() || undefined
       });
       setNewTask({
         ...newTask,
@@ -528,7 +560,9 @@ export const ControlWorkDetailsPage: React.FC = () => {
     try {
       const res = await api.post(`/topics/control-works/${controlWorkId}/generate-quiz`, {
         topicTitle: quizTopicTitle.trim(),
-        count: quizCount
+        count: quizCount,
+        language: i18n.language === 'en' ? 'en' : 'uk',
+        responseLanguage: aiResponseLanguage.trim() || undefined
       });
       let questions = res.data?.questions;
       if (!questions) {
@@ -565,12 +599,63 @@ export const ControlWorkDetailsPage: React.FC = () => {
       setGeneratingQuiz(false);
     }
   };
+  const loadTestDataPage = async (
+    taskId: number,
+    options?: {
+      offset?: number;
+      pageSize?: 20 | 50 | 100;
+      source?: "ALL" | "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+    }
+  ) => {
+    const nextOffset = options?.offset ?? testDataOffset;
+    const nextPageSize = options?.pageSize ?? testDataPageSize;
+    const nextSource = options?.source ?? testDataSourceFilter;
+    setLoadingTestDataPage(true);
+    try {
+      const data = await getTestData(taskId, {
+        preview: true,
+        previewChars: TEST_DATA_PREVIEW_CHARS,
+        limit: nextPageSize,
+        offset: nextOffset,
+        source: nextSource
+      });
+      const list = data.testData || [];
+      setTestDataList(list);
+      setTestDataOffset(nextOffset);
+      setTestDataPageSize(nextPageSize);
+      setTestDataSourceFilter(nextSource);
+      if (data.pagination) {
+        setTestDataTotal(data.pagination.total);
+        setTestDataHasMore(data.pagination.hasMore);
+      } else {
+        setTestDataTotal(list.length);
+        setTestDataHasMore(false);
+      }
+    } catch (error) {
+      setTestDataList([]);
+      setTestDataTotal(0);
+      setTestDataHasMore(false);
+      throw error;
+    } finally {
+      setLoadingTestDataPage(false);
+    }
+  };
   const handleOpenTestData = async (taskId: number) => {
     setTestDataTaskId(taskId);
     setShowTestDataModal(true);
+    setTestDataPageSize(20);
+    setTestDataOffset(0);
+    setTestDataTotal(0);
+    setTestDataHasMore(false);
+    setTestDataSourceFilter("ALL");
+    setReplaceGeneratedOnGenerate(true);
+    setClearingGeneratedTests(false);
     try {
-      const data = await getTestData(taskId);
-      setTestDataList(data.testData || []);
+      await loadTestDataPage(taskId, {
+        offset: 0,
+        pageSize: 20,
+        source: "ALL"
+      });
     } catch (error: unknown) {
       console.error("Failed to load test data:", error);
       setTestDataList([]);
@@ -580,9 +665,24 @@ export const ControlWorkDetailsPage: React.FC = () => {
     if (!testDataTaskId) return;
     setGeneratingTestData(true);
     try {
-      const result = await generateTestData(testDataTaskId, newTestCount);
-      setTestDataList(result.testData || []);
-      showToast.success(tr(`Згенеровано ${result.count} тестів`, `Generated ${result.count} tests`));
+      const result = await generateTestData(testDataTaskId, newTestCount, {
+        replaceGenerated: replaceGeneratedOnGenerate
+      });
+      await loadTestDataPage(testDataTaskId, {
+        offset: 0
+      });
+      const extras: string[] = [];
+      if ((result.replacedGeneratedCount || 0) > 0) {
+        extras.push(tr(`замінено AI: ${result.replacedGeneratedCount}`, `replaced AI: ${result.replacedGeneratedCount}`));
+      }
+      if ((result.skippedDuplicates || 0) > 0) {
+        extras.push(tr(`дублі пропущено: ${result.skippedDuplicates}`, `duplicates skipped: ${result.skippedDuplicates}`));
+      }
+      showToast.success(
+        extras.length > 0
+          ? `${tr(`Згенеровано ${result.count} тестів`, `Generated ${result.count} tests`)} (${extras.join(", ")})`
+          : tr(`Згенеровано ${result.count} тестів`, `Generated ${result.count} tests`)
+      );
     } catch (error: unknown) {
       console.error("Failed to generate test data:", error);
       showToast.error(getErrorMessage(error, tr("Не вдалося згенерувати тести", "Failed to generate tests")));
@@ -598,8 +698,9 @@ export const ControlWorkDetailsPage: React.FC = () => {
         expectedOutput: "",
         points: 1
       }]);
-      const data = await getTestData(testDataTaskId);
-      setTestDataList(data.testData || []);
+      await loadTestDataPage(testDataTaskId, {
+        offset: testDataOffset
+      });
     } catch (error: unknown) {
       console.error("Failed to add test data:", error);
       showToast.error(getErrorMessage(error, tr("Не вдалося додати тест", "Failed to add test")));
@@ -625,10 +726,12 @@ export const ControlWorkDetailsPage: React.FC = () => {
         input: t.input,
         expectedOutput: t.expectedOutput,
         points: importPoints,
-        isHidden: importIsHidden
+        isHidden: importIsHidden,
+        subtask: normalizeSubtask(importSubtask)
       })));
-      const data = await getTestData(testDataTaskId);
-      setTestDataList(data.testData || []);
+      await loadTestDataPage(testDataTaskId, {
+        offset: testDataOffset
+      });
       setImportFiles([]);
       setImportInputKey(k => k + 1);
     } catch (error: unknown) {
@@ -641,9 +744,13 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const handleUpdateTestData = async (testDataId: number) => {
     if (!testDataTaskId || !editingTest) return;
     try {
-      await updateTestData(testDataTaskId, testDataId, editingTest);
-      const data = await getTestData(testDataTaskId);
-      setTestDataList(data.testData || []);
+      await updateTestData(testDataTaskId, testDataId, {
+        ...editingTest,
+        subtask: normalizeSubtask(editingTest.subtask)
+      });
+      await loadTestDataPage(testDataTaskId, {
+        offset: testDataOffset
+      });
       setEditingTestIndex(null);
       setEditingTest(null);
     } catch (error: unknown) {
@@ -651,16 +758,57 @@ export const ControlWorkDetailsPage: React.FC = () => {
       showToast.error(getErrorMessage(error, tr("Не вдалося оновити тест", "Failed to update test")));
     }
   };
+  const handleStartEditTestData = async (index: number, testDataId: number) => {
+    if (!testDataTaskId) return;
+    try {
+      const data = await getTestDataItem(testDataTaskId, testDataId);
+      const test = data.testData;
+      setEditingTestIndex(index);
+      setEditingTest({
+        input: test.input,
+        expectedOutput: test.expectedOutput || "",
+        points: test.points,
+        isHidden: test.isHidden === true,
+        subtask: test.subtask || ""
+      });
+    } catch (error: unknown) {
+      console.error("Failed to load full test data:", error);
+      showToast.error(getErrorMessage(error, tr("Не вдалося завантажити повний тест", "Failed to load full test")));
+    }
+  };
   const handleDeleteTestData = async (testDataId: number) => {
     if (!testDataTaskId) return;
     if (!confirm(tr("Видалити цей тест?", "Delete this test?"))) return;
     try {
       await deleteTestData(testDataTaskId, testDataId);
-      const data = await getTestData(testDataTaskId);
-      setTestDataList(data.testData || []);
+      const nextOffset = testDataOffset > 0 && testDataList.length <= 1
+        ? Math.max(0, testDataOffset - testDataPageSize)
+        : testDataOffset;
+      await loadTestDataPage(testDataTaskId, {
+        offset: nextOffset
+      });
     } catch (error: unknown) {
       console.error("Failed to delete test data:", error);
       showToast.error(getErrorMessage(error, tr("Не вдалося видалити тест", "Failed to delete test")));
+    }
+  };
+  const handleClearGeneratedTestData = async () => {
+    if (!testDataTaskId) return;
+    if (!confirm(tr("Видалити всі AI-згенеровані тести для цього завдання?", "Delete all AI-generated tests for this task?"))) {
+      return;
+    }
+    setClearingGeneratedTests(true);
+    try {
+      const result = await deleteGeneratedTestData(testDataTaskId);
+      await loadTestDataPage(testDataTaskId, {
+        offset: 0
+      });
+      showToast.success(tr(`Видалено AI-тестів: ${result.deleted}`, `Deleted AI tests: ${result.deleted}`));
+    } catch (error: unknown) {
+      console.error("Failed to clear generated tests:", error);
+      showToast.error(getErrorMessage(error, tr("Не вдалося очистити AI-тести", "Failed to clear AI tests")));
+    } finally {
+      setClearingGeneratedTests(false);
     }
   };
   if (loading) {
@@ -675,9 +823,13 @@ export const ControlWorkDetailsPage: React.FC = () => {
         </div>
       </div>;
   }
-  return <div className="flex-1 min-h-0 p-6 overflow-y-auto">
+  const savedFormula = (controlWork.formula || "").trim();
+  const formulaToPersist = formula.trim();
+  const formulaPreview = formulaToPersist || DEFAULT_CONTROL_WORK_FORMULA;
+  const formulaInputHasUnsupportedChars = formulaToPersist.length > 0 && !/^[0-9A-Za-z_+\-*/().,\s]+$/.test(formulaToPersist);
+  return <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
           <Button variant="ghost" onClick={() => navigate(-1)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {t("back")}
@@ -705,7 +857,13 @@ export const ControlWorkDetailsPage: React.FC = () => {
                 <h1 className="text-2xl font-mono text-text-primary">
                   {controlWork.title || tr(`Контрольна робота #${controlWork.id}`, `Control work #${controlWork.id}`)}
                 </h1>
-                {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button variant="ghost" size="sm" onClick={() => setEditingTitle(true)}>
+                {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditingTitle(true)}
+                aria-label={tr("Редагувати назву", "Edit title")}
+                title={tr("Редагувати назву", "Edit title")}
+              >
                     <Edit2 className="w-4 h-4" />
                   </Button>}
               </div>}
@@ -714,7 +872,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
 
         {}
         <Card className="p-4 mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-mono text-text-primary">{tr("Налаштування", "Settings")}</h2>
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button variant="ghost" onClick={() => setShowQuizSettings(true)}>
                 <Settings className="w-4 h-4 mr-2" />
@@ -740,15 +898,21 @@ export const ControlWorkDetailsPage: React.FC = () => {
             <div className="mt-2 pt-2 border-t border-border">
               <div className="text-xs font-mono text-text-primary mb-1">{tr("Формула оцінки", "Grading formula")}:</div>
               <div className="text-xs font-mono text-text-secondary bg-bg-hover p-2 rounded">
-                {controlWork.formula || tr("(за замовчуванням)", "(default)")}
+                {savedFormula || DEFAULT_CONTROL_WORK_FORMULA}
               </div>
+              {!savedFormula && <div className="text-[11px] text-text-muted mt-1">
+                  {tr("Використовується стандартна формула платформи", "Using platform default formula")}
+                </div>}
+              {savedFormula && <div className="text-[11px] text-text-muted mt-1">
+                  {tr("Користувацька формула", "Custom formula")}
+                </div>}
             </div>
           </div>
         </Card>
 
         {}
         <Card className="p-4 mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-mono text-text-primary">
               {tr("Теоретична частина", "Theory part")} ({quizQuestions.length} {tr("питань", "questions")})
             </h2>
@@ -806,10 +970,22 @@ export const ControlWorkDetailsPage: React.FC = () => {
                       </div>
                     </div>
                     {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex gap-2 ml-4">
-                        <Button variant="ghost" size="sm" onClick={() => handleEditQuestion(idx)}>
+                        <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditQuestion(idx)}
+                        aria-label={tr("Редагувати питання", "Edit question")}
+                        title={tr("Редагувати питання", "Edit question")}
+                      >
                           <Edit2 className="w-3 h-3" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteQuestion(idx)}>
+                        <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteQuestion(idx)}
+                        aria-label={tr("Видалити питання", "Delete question")}
+                        title={tr("Видалити питання", "Delete question")}
+                      >
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>}
@@ -820,7 +996,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
 
         {}
         {hasPractice && <Card className="p-4 mb-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h2 className="text-lg font-mono text-text-primary">
                 {tr("Практична частина", "Practice part")} ({controlWork.tasks?.length || 0} {tr("завдань", "tasks")})
               </h2>
@@ -840,7 +1016,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
 
             <div className="space-y-2">
               {!controlWork.tasks || controlWork.tasks.length === 0 ? <p className="text-text-secondary text-sm">{tr("Немає завдань", "No tasks")}</p> : controlWork.tasks.map(task => <div key={task.id} className="p-3 border border-border hover:bg-bg-hover transition-fast">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex-1">
                         <div className="text-sm font-mono text-text-primary">{task.title}</div>
                       </div>
@@ -888,6 +1064,11 @@ export const ControlWorkDetailsPage: React.FC = () => {
               ...newTask,
               title: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Назва завдання", "Task title")} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Мова відповіді AI", "AI response language")}</label>
+                <input type="text" value={aiResponseLanguage} onChange={e => setAiResponseLanguage(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Наприклад: Українська / English / Polski", "Example: English / Українська / Español")} />
               </div>
 
               <div>
@@ -969,6 +1150,11 @@ export const ControlWorkDetailsPage: React.FC = () => {
               ...newTask,
               title: e.target.value
             })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Назва завдання", "Task title")} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Мова відповіді AI", "AI response language")}</label>
+                <input type="text" value={aiResponseLanguage} onChange={e => setAiResponseLanguage(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Наприклад: Українська / English / Polski", "Example: English / Українська / Español")} />
               </div>
 
               <div>
@@ -1065,7 +1251,30 @@ export const ControlWorkDetailsPage: React.FC = () => {
                   {tr("Формула розрахунку оцінки", "Grading formula")}
                 </label>
                 <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="ghost" type="button" className="text-xs" onClick={() => setFormula(DEFAULT_CONTROL_WORK_FORMULA)}>
+                      {tr("Рекомендована", "Recommended")}
+                    </Button>
+                    <Button variant="ghost" type="button" className="text-xs" onClick={() => setFormula(BALANCED_CONTROL_WORK_FORMULA)}>
+                      {tr("Збалансована", "Balanced")}
+                    </Button>
+                    <Button variant="ghost" type="button" className="text-xs" onClick={() => setFormula(PRACTICE_ONLY_FORMULA)}>
+                      {tr("Лише практика", "Practice only")}
+                    </Button>
+                    <Button variant="ghost" type="button" className="text-xs" onClick={() => setFormula(QUIZ_ONLY_FORMULA)}>
+                      {tr("Лише тест", "Quiz only")}
+                    </Button>
+                    <Button variant="ghost" type="button" className="text-xs" onClick={() => setFormula("")}>
+                      {tr("Стандартна (порожнє поле)", "Default (empty field)")}
+                    </Button>
+                  </div>
                   <textarea value={formula} onChange={e => setFormula(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary min-h-[100px]" placeholder={tr("Наприклад: 0.35 * test + 0.65 * avg(practice)", "Example: 0.35 * test + 0.65 * avg(practice)")} />
+                  <div className="text-xs text-text-secondary bg-bg-hover p-2 rounded">
+                    <span className="font-semibold">{tr("Активна формула", "Active formula")}:</span> <code className="bg-bg-surface px-1 rounded">{formulaPreview}</code>
+                  </div>
+                  {formulaInputHasUnsupportedChars && <div className="text-xs text-accent-warn">
+                      {tr("Формула містить нетипові символи. Дозволено: числа, + - * /, дужки, test, avg(practice).", "Formula contains unsupported symbols. Allowed: numbers, + - * /, parentheses, test, avg(practice).")}
+                    </div>}
                   <div className="text-xs text-text-secondary space-y-1">
                     <p><strong>{tr("Змінні", "Variables")}:</strong></p>
                     <ul className="list-disc list-inside ml-2 space-y-1">
@@ -1075,6 +1284,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
                     <p className="mt-2"><strong>{tr("Приклади", "Examples")}:</strong></p>
                     <ul className="list-disc list-inside ml-2 space-y-1">
                       <li><code className="bg-bg-hover px-1 rounded">0.35 * test + 0.65 * avg(practice)</code> - {tr("рекомендовано: практика важить більше", "recommended: practice has higher weight")}</li>
+                      <li><code className="bg-bg-hover px-1 rounded">0.5 * test + 0.5 * avg(practice)</code> - {tr("рівні ваги", "equal weights")}</li>
                       <li><code className="bg-bg-hover px-1 rounded">avg(practice)</code> - {tr("тільки практика", "practice only")}</li>
                       <li><code className="bg-bg-hover px-1 rounded">test</code> - {tr("тільки тест", "quiz only")}</li>
                     </ul>
@@ -1113,6 +1323,13 @@ export const ControlWorkDetailsPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">
+                  {tr("Мова відповіді AI", "AI response language")}
+                </label>
+                <input type="text" value={aiResponseLanguage} onChange={e => setAiResponseLanguage(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Наприклад: Українська / English / Polski", "Example: English / Українська / Español")} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Кількість питань", "Number of questions")} *
                 </label>
                 <input type="number" min="1" max="50" value={quizCount} onChange={e => setQuizCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder="12" />
@@ -1138,23 +1355,50 @@ export const ControlWorkDetailsPage: React.FC = () => {
         setShowTestDataModal(false);
         setTestDataTaskId(null);
         setTestDataList([]);
+        setTestDataPageSize(20);
+        setTestDataOffset(0);
+        setTestDataTotal(0);
+        setTestDataHasMore(false);
+        setTestDataSourceFilter("ALL");
+        setLoadingTestDataPage(false);
+        setReplaceGeneratedOnGenerate(true);
+        setClearingGeneratedTests(false);
         setEditingTestIndex(null);
         setEditingTest(null);
         setImportFiles([]);
         setImportPoints(1);
         setImportIsHidden(false);
+        setImportSubtask("");
         setImportingFiles(false);
         setImportInputKey(k => k + 1);
       }} title={tr("Тестові дані для перевірки завдання", "Test data for task checking")}>
             <div className="space-y-4 max-h-[80vh] overflow-y-auto">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button onClick={handleGenerateTestData} disabled={generatingTestData} className="text-xs">
                     <Sparkles className="w-3 h-3 mr-1" />
                     {generatingTestData ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
                   </Button>
                   <input type="number" min="1" max="20" value={newTestCount} onChange={e => setNewTestCount(parseInt(e.target.value) || 10)} className="w-20 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs" placeholder={tr("Кількість", "Count")} />
                   <span className="text-xs text-text-secondary">{tr("тестів", "tests")}</span>
+                  <label className="flex items-center gap-2 text-xs font-mono text-text-secondary ml-1">
+                    <input
+                      type="checkbox"
+                      checked={replaceGeneratedOnGenerate}
+                      onChange={e => setReplaceGeneratedOnGenerate(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    {tr("Замінювати попередні AI-тести", "Replace previous AI tests")}
+                  </label>
+                  <Button
+                    variant="ghost"
+                    onClick={handleClearGeneratedTestData}
+                    disabled={clearingGeneratedTests}
+                    className="text-xs"
+                  >
+                    <X className="w-3 h-3 mr-1" />
+                    {clearingGeneratedTests ? tr("Очищення...", "Clearing...") : tr("Очистити AI", "Clear AI")}
+                  </Button>
                 </div>
                 <Button onClick={handleAddTestData} variant="ghost" className="text-xs">
                   <Plus className="w-3 h-3 mr-1" />
@@ -1167,10 +1411,14 @@ export const ControlWorkDetailsPage: React.FC = () => {
                   {tr("Імпорт тестів з файлів (.in/.out)", "Import tests from files (.in/.out)")}
                 </div>
                 <input key={importInputKey} type="file" multiple accept=".in,.out,text/plain" onChange={e => setImportFiles(Array.from(e.target.files || []))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs" />
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
                   <div>
                     <label className="block text-xs font-mono text-text-secondary mb-1">{tr("Бали", "Points")}</label>
                     <input type="number" min="1" max="100" value={importPoints} onChange={e => setImportPoints(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-mono text-text-secondary mb-1">{tr("Сабтаск", "Subtask")}</label>
+                    <input type="text" maxLength={64} value={importSubtask} onChange={e => setImportSubtask(e.target.value)} placeholder={tr("Напр. 1 або basics", "e.g. 1 or basics")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs" />
                   </div>
                   <label className="flex items-center gap-2 text-xs font-mono text-text-secondary">
                     <input type="checkbox" checked={importIsHidden} onChange={e => setImportIsHidden(e.target.checked)} className="h-4 w-4" />
@@ -1185,24 +1433,100 @@ export const ControlWorkDetailsPage: React.FC = () => {
                 </p>
               </Card>
 
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="text-xs font-mono text-text-secondary">
+                  {testDataTotal > 0
+                    ? tr(
+                        `Показано ${Math.min(testDataOffset + 1, testDataTotal)}-${Math.min(testDataOffset + testDataList.length, testDataTotal)} з ${testDataTotal}`,
+                        `Showing ${Math.min(testDataOffset + 1, testDataTotal)}-${Math.min(testDataOffset + testDataList.length, testDataTotal)} of ${testDataTotal}`
+                      )
+                    : ""}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-mono text-text-secondary">{tr("Джерело", "Source")}</span>
+                  <select
+                    value={testDataSourceFilter}
+                    onChange={async (e) => {
+                      if (!testDataTaskId) return;
+                      const source = e.target.value as "ALL" | "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+                      await loadTestDataPage(testDataTaskId, {
+                        offset: 0,
+                        source
+                      });
+                    }}
+                    className="px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs focus:outline-none"
+                  >
+                    <option value="ALL">{tr("Усі", "All")}</option>
+                    <option value="MANUAL">{tr("Вручну", "Manual")}</option>
+                    <option value="AI_GENERATED">{tr("AI", "AI")}</option>
+                    <option value="LIBRARY_IMPORTED">{tr("З бібліотеки", "From library")}</option>
+                  </select>
+                  <span className="text-xs font-mono text-text-secondary">{tr("Розмір сторінки", "Page size")}</span>
+                  <select
+                    value={testDataPageSize}
+                    onChange={async (e) => {
+                      if (!testDataTaskId) return;
+                      const pageSize = parsePageSize(e.target.value);
+                      await loadTestDataPage(testDataTaskId, {
+                        offset: 0,
+                        pageSize
+                      });
+                    }}
+                    className="px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs focus:outline-none"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <Button
+                    variant="ghost"
+                    className="text-xs"
+                    disabled={loadingTestDataPage || testDataOffset <= 0}
+                    onClick={async () => {
+                      if (!testDataTaskId) return;
+                      await loadTestDataPage(testDataTaskId, {
+                        offset: Math.max(0, testDataOffset - testDataPageSize)
+                      });
+                    }}
+                  >
+                    {tr("Назад", "Prev")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-xs"
+                    disabled={loadingTestDataPage || !testDataHasMore}
+                    onClick={async () => {
+                      if (!testDataTaskId) return;
+                      await loadTestDataPage(testDataTaskId, {
+                        offset: testDataOffset + testDataPageSize
+                      });
+                    }}
+                  >
+                    {tr("Вперед", "Next")}
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                {testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
+                {loadingTestDataPage ? <p className="text-text-secondary text-sm text-center py-4">{t("loading")}</p> : testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
                     {tr("Немає тестових даних. Згенеруйте або додайте вручну.", "No test data. Generate or add manually.")}
-                  </p> : testDataList.map((test, index) => <Card key={test.id} className="p-3">
+                  </p> : testDataList.map((test, index) => {
+                    const displayIndex = testDataOffset + index + 1;
+                    return <Card key={test.id} className="p-3">
                       {editingTestIndex === index ? <div className="space-y-2">
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <span className="text-xs font-mono text-text-secondary">
-                              {tr(`Тест #${index + 1}`, `Test #${index + 1}`)}
+                              {tr(`Тест #${displayIndex}`, `Test #${displayIndex}`)}
                             </span>
                             <div className="flex gap-1">
-                              <Button variant="ghost" onClick={() => handleUpdateTestData(test.id)} className="text-xs p-1 h-6 w-6" title={t("save")}>
-                                <Save className="w-3 h-3" />
+                              <Button variant="ghost" onClick={() => handleUpdateTestData(test.id)} className="h-10 w-10 p-0" title={t("save")} aria-label={t("save")}>
+                                <Save className="w-4 h-4" />
                               </Button>
                               <Button variant="ghost" onClick={() => {
                       setEditingTestIndex(null);
                       setEditingTest(null);
-                    }} className="text-xs p-1 h-6 w-6" title={t("cancel")}>
-                                <X className="w-3 h-3" />
+                    }} className="h-10 w-10 p-0" title={t("cancel")} aria-label={t("cancel")}>
+                                <X className="w-4 h-4" />
                               </Button>
                             </div>
                           </div>
@@ -1233,6 +1557,15 @@ export const ControlWorkDetailsPage: React.FC = () => {
                     points: parseInt(e.target.value) || 1
                   })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                           </div>
+                          <div>
+                            <label className="block text-xs font-mono text-text-secondary mb-1">
+                              {tr("Сабтаск (необов'язково)", "Subtask (optional)")}
+                            </label>
+                            <input type="text" maxLength={64} value={editingTest?.subtask || ""} onChange={e => setEditingTest({
+                    ...editingTest!,
+                    subtask: e.target.value
+                  })} placeholder={tr("Напр. 1 або easy", "e.g. 1 or easy")} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
+                          </div>
                               <div className="flex items-center gap-2">
                                 <input id={`cw-test-hidden-${test.id}`} type="checkbox" checked={editingTest?.isHidden === true} onChange={e => setEditingTest({
                         ...editingTest!,
@@ -1241,19 +1574,18 @@ export const ControlWorkDetailsPage: React.FC = () => {
                                 <label htmlFor={`cw-test-hidden-${test.id}`} className="text-xs font-mono text-text-secondary" title={tr("Прихований тест не показується учню, але впливає на оцінку.", "Hidden test is not shown to the student but affects scoring.")}>{tr("Прихований", "Hidden")}</label>
                               </div>
                         </div> : <div>
-                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                             <span className="text-xs font-mono text-text-secondary">
-                                  {tr(`Тест #${index + 1}`, `Test #${index + 1}`)} • {test.points} {tr("балів", "points")}{test.isHidden ? ` • ${tr("прихований", "hidden")}` : ""}
+                              {tr(`Тест #${displayIndex}`, `Test #${displayIndex}`)} • {test.points} {tr("балів", "points")}
+                              {test.source === "AI_GENERATED" ? ` • ${tr("джерело: AI", "source: AI")}` : ""}
+                              {test.source === "LIBRARY_IMPORTED" ? ` • ${tr("джерело: бібліотека", "source: library")}` : ""}
+                              {test.source === "MANUAL" ? ` • ${tr("джерело: вручну", "source: manual")}` : ""}
+                              {test.subtask ? ` • ${tr("сабтаск", "subtask")}: ${test.subtask}` : ""}
+                              {test.isHidden ? ` • ${tr("прихований", "hidden")}` : ""}
                             </span>
                             <div className="flex gap-2">
                               <button onClick={() => {
-                      setEditingTestIndex(index);
-                      setEditingTest({
-                        input: test.input,
-                            expectedOutput: test.expectedOutput || "",
-                            points: test.points,
-                            isHidden: test.isHidden === true
-                      });
+                      handleStartEditTestData(index, test.id);
                     }} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")} aria-label={t("edit")}>
                                 <Edit2 className="w-4 h-4 text-primary" />
                               </button>
@@ -1265,13 +1597,19 @@ export const ControlWorkDetailsPage: React.FC = () => {
                           <div className="text-xs font-mono">
                             <div className="text-text-secondary mb-1">
                               <strong>{tr("Вхід", "Input")}:</strong> {test.input || tr("(порожньо)", "(empty)")}
+                              {test.isInputTruncated ? ` ${tr("… (скорочено)", "… (truncated)")}` : ""}
                             </div>
                             <div className="text-text-secondary">
                               <strong>{tr("Вивід", "Output")}:</strong> {test.expectedOutput || tr("(порожньо)", "(empty)")}
+                              {test.isExpectedOutputTruncated ? ` ${tr("… (скорочено)", "… (truncated)")}` : ""}
                             </div>
+                            {test.subtask ? <div className="text-text-secondary mt-1">
+                                <strong>{tr("Сабтаск", "Subtask")}:</strong> {test.subtask}
+                              </div> : null}
                           </div>
                         </div>}
-                    </Card>)}
+                    </Card>;
+                  })}
               </div>
             </div>
           </Modal>}
@@ -1320,7 +1658,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
                       <input type="radio" name="correct" checked={newQuestion.correct === key} onChange={() => setNewQuestion({
                   ...newQuestion,
                   correct: key
-                })} className="w-4 h-4" />
+                })} className="w-4 h-4" aria-label={tr(`Позначити варіант ${optionLabel(key)} як правильний`, `Mark option ${optionLabel(key)} as correct`)} />
                     </div>
                   </div>)}
                 <p className="text-xs text-text-secondary mt-2">

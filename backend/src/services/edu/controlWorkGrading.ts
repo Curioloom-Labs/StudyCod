@@ -14,6 +14,21 @@ function clampGradeToInt(raw: unknown): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+const CONTROL_TASK_MAX_ATTEMPTS = 3;
+
+function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): number {
+  if (task.type === "CONTROL") {
+    return CONTROL_TASK_MAX_ATTEMPTS;
+  }
+
+  const parsed = Number(task.maxAttempts);
+  if (!Number.isFinite(parsed)) {
+    return 3;
+  }
+
+  return Math.max(1, Math.floor(parsed));
+}
+
 async function calculateControlGradeForNewSystemWithManager(
   manager: EntityManager,
   controlWorkId: number,
@@ -182,6 +197,15 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
     .getOne();
 
   if (summaryGrade) {
+    summaryGrade.controlWork = { id: controlWorkId } as any;
+    summaryGrade.topic = { id: controlWork.topic.id } as any;
+    summaryGrade.assessmentType = AssessmentType.CONTROL;
+    if (controlWork.topic.class?.id) {
+      summaryGrade.class = { id: controlWork.topic.class.id } as any;
+    }
+    if (!summaryGrade.name) {
+      summaryGrade.name = controlWork.title || `Контрольна робота #${controlWorkId}`;
+    }
     summaryGrade.grade = gradeData.finalGrade;
     if (theoryGrade !== null) {
       summaryGrade.theoryGrade = theoryGrade;
@@ -254,16 +278,42 @@ export async function markControlWorkAttemptCompletedIfReadyWithManager(
     const taskIds = controlTasks.map(t => t.id);
 
     if (taskIds.length > 0) {
-      const graded = await manager
+      const allTaskGrades = await manager
         .createQueryBuilder(EduGrade, "g")
         .setLock("pessimistic_read")
-        .select("DISTINCT g.topic_task_id", "topic_task_id")
+        .leftJoinAndSelect("g.topicTask", "topicTask")
         .where("g.student_id = :studentId", { studentId })
         .andWhere("g.topic_task_id IN (:...taskIds)", { taskIds })
-        .andWhere("g.total IS NOT NULL")
-        .getRawMany();
+        .orderBy("g.created_at", "DESC")
+        .getMany();
 
-      practiceCompleted = graded.length === taskIds.length;
+      const latestByTaskId = new Map<number, EduGrade>();
+      const attemptsByTaskId = new Map<number, number>();
+
+      for (const grade of allTaskGrades) {
+        const topicTaskId = (grade as any).topicTask?.id;
+        if (!topicTaskId) continue;
+        if (!latestByTaskId.has(topicTaskId)) {
+          latestByTaskId.set(topicTaskId, grade);
+        }
+        attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
+      }
+
+      for (const task of controlTasks) {
+        const latest = latestByTaskId.get(task.id);
+        const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+        const maxAttempts = resolveTaskMaxAttempts(task);
+        const taskCompleted = !!latest && (
+          latest.isCompleted === true ||
+          latest.isManuallyGraded === true ||
+          attemptsUsed >= maxAttempts
+        );
+
+        if (!taskCompleted) {
+          practiceCompleted = false;
+          break;
+        }
+      }
     }
   }
 

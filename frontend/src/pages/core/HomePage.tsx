@@ -9,7 +9,7 @@ import type { User, Task } from "../../types";
 import { ArrowRight, FileText, GraduationCap, BookOpen, Users, TrendingUp, Clock as ClockIcon } from "lucide-react";
 import { listTasks } from "../../lib/api/tasks";
 import { getClasses, getStudentLessons, getStudentGrades, type Class, type Lesson, type Grade, type SummaryGrade } from "../../lib/api/edu";
-import { isDeadlineExpired } from "../../utils/timezone";
+import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezone";
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import type { ResumeState } from "../../lib/resumeState";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "../../lib/resumeState";
@@ -629,7 +629,7 @@ const QueueLessons: React.FC<{
                 <div className="text-sm font-mono text-text-primary truncate">{lesson.title}</div>
                 <div className="text-[11px] font-mono text-text-muted mt-0.5">
                   {lesson.deadline
-                    ? `${trLocal("Дедлайн", "Deadline")}: ${new Date(lesson.deadline).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}`
+                    ? `${trLocal("Дедлайн", "Deadline")}: ${formatDeadlineForDisplay(lesson.deadline, lesson.deadlineTimezone || undefined, { dateStyle: "short", timeStyle: "short" })}`
                     : trLocal("Без дедлайну", "No deadline")}
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { CodeEditor } from "./CodeEditor";
 import { Button } from "./ui/Button";
 import { Modal } from "./ui/Modal";
@@ -67,6 +67,12 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   }, [normalized, activePath, entryFile]);
 
   const active = normalized.find(f => f.path === activePath) ?? normalized.find(f => f.path === entryFile) ?? normalized[0];
+  const panelAriaId = useId();
+
+  const tabIdForPath = useCallback((path: string) => {
+    const safePath = String(path || "").replace(/[^a-zA-Z0-9_-]/g, "-");
+    return `${panelAriaId}-tab-${safePath}`;
+  }, [panelAriaId]);
 
   const setActiveContent = (content: string) => {
     if (!active) return;
@@ -124,18 +130,23 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="flex items-center gap-2 border-b border-border bg-bg-surface px-2 py-2 flex-shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-border bg-bg-surface px-2 py-2 flex-shrink-0 overflow-x-auto" role="tablist" aria-label={tr("Файли редактора", "Editor files")}>
         {normalized
           .slice()
           .sort((a, b) => (a.path === entryFile ? -1 : b.path === entryFile ? 1 : a.path.localeCompare(b.path)))
           .map(f => {
             const isActive = f.path === activePath;
             const isEntry = f.path === entryFile;
+            const tabId = tabIdForPath(f.path);
             return (
               <div key={f.path} className="flex items-center">
                 <button
                   type="button"
                   onClick={() => setActivePath(f.path)}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`${panelAriaId}-panel`}
+                  id={tabId}
                   className={
                     "px-3 py-1.5 text-xs font-mono border transition-fast whitespace-nowrap " +
                     (isActive
@@ -153,6 +164,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
                     onClick={() => doRemove(f.path)}
                     className="ml-1 p-1 border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"
                     title="Remove file"
+                    aria-label={tr(`Видалити файл ${f.path}`, `Remove file ${f.path}`)}
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -169,7 +181,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
         ) : null}
       </div>
 
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0" id={`${panelAriaId}-panel`} role="tabpanel" aria-labelledby={active ? tabIdForPath(active.path) : undefined}>
         <div className={height ? "h-full" : "h-full"} style={height ? { height } : undefined}>
           <CodeEditor language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} />
         </div>

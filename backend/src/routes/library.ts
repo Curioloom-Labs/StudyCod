@@ -21,6 +21,7 @@ import type { CheckerSpec, JudgeLanguage, JudgeRequest as WorkerJudgeRequest, Ju
 import { In, Not } from "typeorm";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
+import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
 import { hasLibraryTaskEnTranslationColumns } from "../services/translation/translationSchema";
@@ -214,16 +215,6 @@ const DEFAULT_LIMITS_BY_LANG: Record<JudgeLanguage, { time_limit_ms: number; mem
   csharp: { time_limit_ms: 2000, memory_limit_mb: 1024, output_limit_kb: 64 },
   kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
 };
-
-function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec {
-  const hasFloatLike = outputs.some(s => {
-    const v = String(s ?? "");
-    return /(^|\s)[-+]?(?:\d*\.\d+|\d+\.\d*)(?:[eE][-+]?\d+)?(\s|$)/.test(v) || /(^|\s)[-+]?\d+(?:[eE][-+]?\d+)(\s|$)/.test(v);
-  });
-  return hasFloatLike
-    ? { type: "float", epsilon: 1e-6 }
-    : { type: "whitespace" };
-}
 
 function normalizeLang(input: any): LibraryTaskLang {
   const raw = String(input ?? "").toUpperCase().trim();
@@ -1745,6 +1736,7 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
           expectedOutput: String(t.expectedOutput ?? ""),
           isHidden: !!t.isHidden,
           kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+          source: "LIBRARY_IMPORTED",
           points: t.points ?? 1,
           subtask: typeof (t as any).subtask === "number" ? String((t as any).subtask) : null,
         })
@@ -1892,6 +1884,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
             expectedOutput: String(t.expectedOutput ?? ""),
             isHidden: !!t.isHidden,
             kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+            source: "LIBRARY_IMPORTED",
             points: t.points ?? 1,
             subtask: typeof (t as any).subtask === "number" ? String((t as any).subtask) : null,
           })
@@ -2056,6 +2049,7 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
           expectedOutput: t.expectedOutput,
           isHidden: !!t.isHidden,
           kind: (((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any),
+          source: "LIBRARY_IMPORTED",
           points: t.points,
           subtask: (t as any).subtask ?? null,
         })
@@ -2384,6 +2378,7 @@ async function importSingleLibraryArchive(params: {
           expectedOutput: String(t.expectedOutput ?? ""),
           isHidden: !!t.isHidden,
           kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+          source: "LIBRARY_IMPORTED",
           points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
           subtask: t.subtask == null ? null : String(t.subtask),
         })

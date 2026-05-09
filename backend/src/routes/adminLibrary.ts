@@ -8,6 +8,8 @@ import { TestData } from "../entities/TestData";
 import { TaskTheory } from "../entities/TaskTheory";
 import { LibraryTaskRevision } from "../entities/LibraryTaskRevision";
 import { logger } from "../utils/logger";
+import type { CheckerSpec } from "../services/judgeWorker/types";
+import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 
 const adminLibraryRouter = Router();
 
@@ -39,18 +41,6 @@ const DISABLED_JUDGE_LANGS = parseDisabledJudgeLanguagesEnv();
 function filterEnabledJudgeLanguages(langs: JudgeLanguage[]): JudgeLanguage[] {
   if (DISABLED_JUDGE_LANGS.size === 0) return langs;
   return langs.filter(l => !DISABLED_JUDGE_LANGS.has(l));
-}
-
-type CheckerSpec = { type: "exact" } | { type: "whitespace" } | { type: "float"; epsilon: number };
-
-function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec {
-  const hasFloatLike = outputs.some((s) => {
-    const text = String(s ?? "").trim();
-    if (!text) return false;
-    // Detect common float patterns: decimals or scientific notation.
-    return /[-+]?\d+\.\d+/.test(text) || /[-+]?\d+(?:\.\d+)?[eE][-+]?\d+/.test(text);
-  });
-  return hasFloatLike ? { type: "float", epsilon: 1e-6 } : { type: "whitespace" };
 }
 
 // Legacy: base language is not used to pick a default judge language anymore.

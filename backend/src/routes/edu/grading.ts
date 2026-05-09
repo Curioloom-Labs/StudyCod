@@ -11,9 +11,11 @@ import { SummaryGrade } from "../../entities/SummaryGrade";
 import { ControlWork } from "../../entities/ControlWork";
 import { detectAICode } from "../../services/ai/aiCodeDetector";
 import { markControlWorkAttemptCompletedIfReadyWithManager, saveControlSummaryGradeForNewSystemWithManager } from "../../services/edu/controlWorkGrading";
+import { notifyStudentGradeChange } from "../../services/edu/gradeNotificationService";
 import { AssessmentType } from "../../types/AssessmentType";
 import { logger } from "../../utils/logger";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
+import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 
 const router = Router();
 
@@ -61,6 +63,10 @@ function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function resolveRequestLocale(req: AuthRequest): "uk" | "en" {
+  return resolveUiLocaleFromHeaders(req.headers, "uk");
 }
 
 function disableCache(res: Response) {
@@ -128,6 +134,8 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
       .orderBy("grade.created_at", "DESC")
       .getOne();
 
+    const wasExistingGrade = Boolean(grade);
+
     if (grade) {
       grade.total = normalizedTotal;
       grade.feedback = feedback || null;
@@ -156,6 +164,26 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
         feedback: grade.feedback,
         isManuallyGraded: grade.isManuallyGraded
       }
+    });
+
+    void notifyStudentGradeChange({
+      student: {
+        id: student.id,
+        email: student.email,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        middleName: student.middleName,
+        uiLanguage: student.uiLanguage
+      },
+      kind: "task",
+      event: wasExistingGrade ? "updated" : "created",
+      itemTitle: task.title,
+      grade: normalizedTotal,
+      feedback: feedback || null,
+      className: task.topic.class?.name ?? null,
+      gradingSystem: task.topic.class?.gradingSystem ?? null,
+      fallbackLocale: resolveRequestLocale(req),
+      requestId: req.requestId
     });
 
     if (task.controlWork && task.controlWork.id) {
@@ -363,6 +391,8 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       .andWhere("summaryGrade.control_work_id = :controlWorkId", { controlWorkId })
       .getOne();
 
+    const wasExistingSummaryGrade = Boolean(summaryGrade);
+
     if (summaryGrade) {
       summaryGrade.grade = normalizedGrade;
       summaryGrade.controlWork = controlWork;
@@ -387,6 +417,25 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
     }
 
     res.json({ message: "GRADE_SAVED", summaryGrade: { id: summaryGrade.id, grade: summaryGrade.grade } });
+
+    void notifyStudentGradeChange({
+      student: {
+        id: student.id,
+        email: student.email,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        middleName: student.middleName,
+        uiLanguage: student.uiLanguage
+      },
+      kind: "control",
+      event: wasExistingSummaryGrade ? "updated" : "created",
+      itemTitle: controlWork.title || `Контрольна робота #${controlWork.id}`,
+      grade: normalizedGrade,
+      className: controlWork.topic.class?.name ?? null,
+      gradingSystem: controlWork.topic.class?.gradingSystem ?? null,
+      fallbackLocale: resolveRequestLocale(req),
+      requestId: req.requestId
+    });
   } catch (error: any) {
     logger.error("Error updating control work grade", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -409,6 +458,17 @@ router.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, async 
     if (isNaN(taskId) || isNaN(studentId)) {
       return res.status(400).json({ message: "INVALID_PARAMS" });
     }
+
+    const parsePositiveInt = (value: unknown): number | null => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const n = Number.parseInt(String(raw ?? ""), 10);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return n;
+    };
+
+    const parsedLimit = parsePositiveInt(req.query.limit);
+    const limit = parsedLimit ? Math.min(parsedLimit, 50) : 20;
+    const beforeId = parsePositiveInt(req.query.beforeId);
 
     const topicTask = await topicTaskRepo().findOne({
       where: { id: taskId },
@@ -436,10 +496,39 @@ router.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, async 
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const submissions = await gradeRepo().find({
-      where: { student: { id: studentId } as any, topicTask: { id: taskId } as any } as any,
-      order: { createdAt: "DESC" as any }
-    });
+    const submissionsQb = gradeRepo()
+      .createQueryBuilder("grade")
+      .select([
+        "grade.id",
+        "grade.total",
+        "grade.testsPassed",
+        "grade.testsTotal",
+        "grade.feedback",
+        "grade.isManuallyGraded",
+        "grade.isCompleted",
+        "grade.submittedCode",
+        "grade.createdAt",
+        "grade.updatedAt"
+      ])
+      .where("grade.student_id = :studentId", { studentId })
+      .andWhere("grade.topic_task_id = :taskId", { taskId })
+      .orderBy("grade.id", "DESC")
+      .limit(limit + 1);
+
+    if (beforeId) {
+      submissionsQb.andWhere("grade.id < :beforeId", { beforeId });
+    }
+
+    const submissionsChunk = await submissionsQb.getMany();
+    const hasMore = submissionsChunk.length > limit;
+    const submissionsPage = hasMore ? submissionsChunk.slice(0, limit) : submissionsChunk;
+    const nextCursor = hasMore && submissionsPage.length > 0 ? submissionsPage[submissionsPage.length - 1].id : null;
+
+    const submissionsTotal = await gradeRepo()
+      .createQueryBuilder("grade")
+      .where("grade.student_id = :studentId", { studentId })
+      .andWhere("grade.topic_task_id = :taskId", { taskId })
+      .getCount();
 
     res.json({
       task: {
@@ -455,7 +544,7 @@ router.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, async 
         lastName: student.lastName,
         middleName: student.middleName || null
       },
-      submissions: submissions.map(g => ({
+      submissions: submissionsPage.map(g => ({
         id: g.id,
         total: g.total,
         testsPassed: g.testsPassed,
@@ -464,10 +553,12 @@ router.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, async 
         isManuallyGraded: g.isManuallyGraded,
         isCompleted: g.isCompleted,
         submittedCode: g.submittedCode,
-        testResults: g.testResults,
         createdAt: g.createdAt ? g.createdAt.toISOString() : null,
         updatedAt: g.updatedAt ? g.updatedAt.toISOString() : null
-      }))
+      })),
+      submissionsTotal,
+      hasMore,
+      nextCursor
     });
   } catch (error: any) {
     logger.error("Error getting topic task student work", { requestId: req.requestId, err: error });
@@ -721,7 +812,7 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
       }
 
       if (total !== undefined) {
-        if (total < 0 || total > 12) {
+        if (total < 0 || total > 100) {
           throw new Error("INVALID_GRADE_VALUE");
         }
         grade.total = total;
@@ -746,6 +837,26 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
     res.json({
       message: "GRADE_UPDATED",
       grade: { id: updated.id, total: updated.total!, feedback: updated.feedback || undefined, isManuallyGraded: updated.isManuallyGraded }
+    });
+
+    void notifyStudentGradeChange({
+      student: {
+        id: updated.student.id,
+        email: updated.student.email,
+        firstName: updated.student.firstName,
+        lastName: updated.student.lastName,
+        middleName: updated.student.middleName,
+        uiLanguage: updated.student.uiLanguage
+      },
+      kind: "task",
+      event: "updated",
+      itemTitle: updated.topicTask?.title || updated.task?.title || `Task #${updated.id}`,
+      grade: updated.total ?? 0,
+      feedback: updated.feedback || null,
+      className: updated.student.class?.name ?? null,
+      gradingSystem: updated.student.class?.gradingSystem ?? null,
+      fallbackLocale: resolveRequestLocale(req),
+      requestId: req.requestId
     });
   } catch (error: any) {
     if (error?.message === "GRADE_NOT_FOUND") {

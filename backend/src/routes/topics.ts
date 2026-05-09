@@ -21,6 +21,8 @@ import multer from "multer";
 import AdmZip from "adm-zip";
 import { logger } from "../utils/logger";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
+import { normalizeAssignedStudentIds, normalizeTargetedAssignmentForStorage } from "../utils/assignmentVisibility";
+import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../services/edu/assignmentTargetsService";
 const topicsRouter = Router();
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
@@ -32,7 +34,22 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
-const CONTROL_WORK_REQUIRED_TASKS_COUNT = 3;
+const CONTROL_WORK_MAX_TASKS_COUNT = 3;
+const CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT = 1;
+const CONTROL_TASK_MAX_ATTEMPTS = 3;
+
+function normalizeTaskMaxAttempts(type: "PRACTICE" | "CONTROL", raw: unknown): number {
+  if (type === "CONTROL") {
+    return CONTROL_TASK_MAX_ATTEMPTS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return 3;
+  }
+
+  return Math.max(1, Math.floor(parsed));
+}
 
 async function countControlTasksForControlWork(controlWorkId: number): Promise<number> {
   return await taskRepo().count({
@@ -47,6 +64,71 @@ function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxM
   const raw = Number(process.env[envKey]);
   const value = Number.isFinite(raw) ? Math.floor(raw) : fallbackMs;
   return Math.max(minMs, Math.min(maxMs, value));
+}
+
+function normalizeResponseLanguage(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, 64);
+}
+
+function resolveSelectedStudentsForAssignment(allClassStudents: Student[], requestedStudentIdsRaw: unknown): {
+  selectedStudents: Student[];
+  assignedStudentIdsForStorage: number[] | null;
+  errorMessage?: string;
+  invalidStudentIds?: number[];
+} {
+  if (allClassStudents.length === 0) {
+    return {
+      selectedStudents: [],
+      assignedStudentIdsForStorage: null,
+      errorMessage: "CLASS_HAS_NO_STUDENTS"
+    };
+  }
+
+  if (requestedStudentIdsRaw === undefined || requestedStudentIdsRaw === null) {
+    return {
+      selectedStudents: allClassStudents,
+      assignedStudentIdsForStorage: null
+    };
+  }
+
+  if (!Array.isArray(requestedStudentIdsRaw)) {
+    return {
+      selectedStudents: [],
+      assignedStudentIdsForStorage: null,
+      errorMessage: "INVALID_STUDENT_IDS"
+    };
+  }
+
+  const requestedStudentIds = normalizeAssignedStudentIds(requestedStudentIdsRaw);
+  if (requestedStudentIds.length === 0) {
+    return {
+      selectedStudents: [],
+      assignedStudentIdsForStorage: null,
+      errorMessage: "STUDENTS_REQUIRED"
+    };
+  }
+
+  const classStudentById = new Map(allClassStudents.map(student => [student.id, student] as const));
+  const invalidStudentIds = requestedStudentIds.filter(id => !classStudentById.has(id));
+  if (invalidStudentIds.length > 0) {
+    return {
+      selectedStudents: [],
+      assignedStudentIdsForStorage: null,
+      errorMessage: "STUDENTS_NOT_IN_CLASS",
+      invalidStudentIds
+    };
+  }
+
+  const selectedStudents = requestedStudentIds.map(id => classStudentById.get(id)!).filter(Boolean);
+  const assignedStudentIdsForStorage = normalizeTargetedAssignmentForStorage(requestedStudentIds, allClassStudents.map(s => s.id));
+
+  return {
+    selectedStudents,
+    assignedStudentIdsForStorage
+  };
 }
 
 const TOPICS_AI_DISABLE_DEADLINE = String(process.env.TOPICS_AI_DISABLE_DEADLINE || "").trim() === "1";
@@ -393,10 +475,10 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       }
 
       const currentControlTasksCount = await countControlTasksForControlWork(controlWork.id);
-      if (currentControlTasksCount >= CONTROL_WORK_REQUIRED_TASKS_COUNT) {
+      if (currentControlTasksCount >= CONTROL_WORK_MAX_TASKS_COUNT) {
         return res.status(400).json({
           message: "CONTROL_WORK_MAX_TASKS_REACHED",
-          expected: CONTROL_WORK_REQUIRED_TASKS_COUNT,
+          expected: CONTROL_WORK_MAX_TASKS_COUNT,
           actual: currentControlTasksCount
         });
       }
@@ -417,7 +499,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webValidationProfile: normalizedTaskInput.webValidationProfile,
       type: type as "PRACTICE" | "CONTROL",
       order: order || 0,
-      maxAttempts: maxAttempts || (type === "CONTROL" ? 1 : 3),
+      maxAttempts: normalizeTaskMaxAttempts(type as "PRACTICE" | "CONTROL", maxAttempts),
       deadline: deadline ? new Date(deadline) : null
     });
     await taskRepo().save(task);
@@ -493,7 +575,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     const normalizedTaskInput = normalizeWebTaskInput(taskJson);
     const type: "PRACTICE" | "CONTROL" = taskJson.type === "CONTROL" ? "CONTROL" : "PRACTICE";
     const order = Number.isFinite(Number(taskJson.order)) ? Number(taskJson.order) : 0;
-    const maxAttempts = Number.isFinite(Number(taskJson.maxAttempts)) ? Math.max(1, Math.floor(Number(taskJson.maxAttempts))) : type === "CONTROL" ? 1 : 3;
+    const maxAttempts = normalizeTaskMaxAttempts(type, taskJson.maxAttempts);
 
     if (!title || !description || !normalizedTaskInput.template.trim()) {
       return res.status(400).json({ message: "INVALID_TASK_JSON" });
@@ -538,6 +620,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
           input: String(t.input ?? ""),
           expectedOutput: String(t.expectedOutput ?? ""),
           isHidden: !!t.isHidden,
+          source: "MANUAL",
           points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
           subtask: t.subtask == null ? null : String(t.subtask),
         }));
@@ -702,7 +785,9 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     task.webValidationRules = normalizedTaskInput.webValidationRules;
     (task as any).webValidationProfile = normalizedTaskInput.webValidationProfile;
     if (maxAttempts !== undefined) {
-      task.maxAttempts = maxAttempts;
+      task.maxAttempts = normalizeTaskMaxAttempts(task.type, maxAttempts);
+    } else if (task.type === "CONTROL" && task.maxAttempts !== CONTROL_TASK_MAX_ATTEMPTS) {
+      task.maxAttempts = CONTROL_TASK_MAX_ATTEMPTS;
     }
     await taskRepo().save(task);
     res.json({
@@ -747,7 +832,8 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       taskType,
       difficulty,
       language,
-      taskTitle
+      taskTitle,
+      responseLanguage
     } = req.body || {};
     if (!taskType || taskType !== "PRACTICE" && taskType !== "CONTROL") {
       return res.status(400).json({
@@ -762,6 +848,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficulty || 3,
       language: topic.language,
+      responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,
       topicId: topic.id
     }, {
@@ -828,7 +915,8 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
     }
     const {
       description,
-      taskTitle
+      taskTitle,
+      responseLanguage
     } = req.body || {};
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
     const aiStartedAt = Date.now();
@@ -837,6 +925,7 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       language: topic.language,
       description,
+      responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,
       topicId: topic.id
     }, {
@@ -998,7 +1087,8 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
     }
     const {
       topicTitle,
-      count
+      count,
+      responseLanguage
     } = req.body || {};
     const DEFAULT_QUIZ_COUNT = 12;
     const quizCount = count || DEFAULT_QUIZ_COUNT;
@@ -1020,6 +1110,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
       lang: language,
       prevTopics: quizTopicTitle.trim(),
       count: quizCount,
+      responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,
       topicId: controlWork.topic.id
     }, {
@@ -1268,7 +1359,8 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
       taskDescription,
       taskType,
       difficulty,
-      taskTitle
+      taskTitle,
+      responseLanguage
     } = req.body || {};
     if (!taskDescription || !taskType) {
       return res.status(400).json({
@@ -1291,6 +1383,7 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficultyNum,
       lang: topic.language,
+      responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,
       topicId: topic.id
     }, {
@@ -1497,10 +1590,39 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
         }
       } as any
     });
-    task.isAssigned = true;
-    task.deadline = deadlineDate;
-    await taskRepo().save(task);
-    const emailPromises = students.map(student =>
+
+    const assignmentSelection = resolveSelectedStudentsForAssignment(students, req.body?.studentIds);
+    if (assignmentSelection.errorMessage) {
+      return res.status(400).json({
+        message: assignmentSelection.errorMessage,
+        ...(assignmentSelection.invalidStudentIds && {
+          invalidStudentIds: assignmentSelection.invalidStudentIds
+        })
+      });
+    }
+
+    const {
+      selectedStudents,
+      assignedStudentIdsForStorage
+    } = assignmentSelection;
+
+    const concreteAssignedStudentIds = selectedStudents.map(student => student.id);
+
+    await AppDataSource.transaction("READ COMMITTED", async manager => {
+      const taskRepoManager = manager.getRepository(TopicTask);
+
+      task.isAssigned = true;
+      task.deadline = deadlineDate;
+      task.assignedStudentIds = assignedStudentIdsForStorage;
+      await taskRepoManager.save(task);
+
+      await syncTopicTaskAssignmentsWithManager(manager, {
+        topicTaskId: task.id,
+        isAssigned: true,
+        assignedStudentIds: concreteAssignedStudentIds
+      });
+    });
+    const emailPromises = selectedStudents.map(student =>
       emailService
         .sendTaskAssignmentEmail(
           student.email,
@@ -1520,7 +1642,7 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
     await Promise.allSettled(emailPromises);
     res.json({
       message: "TASK_ASSIGNED_SUCCESSFULLY",
-      assignedTo: students.length
+      assignedTo: selectedStudents.length
     });
   } catch (error: any) {
     logger.error("[topics] Error assigning task", { requestId: req.requestId, err: error });
@@ -1575,7 +1697,15 @@ topicsRouter.post("/tasks/:taskId/unassign", authRequired, async (req: AuthReque
       }
       lockedTask.isAssigned = false;
       lockedTask.deadline = null;
+      lockedTask.assignedStudentIds = null;
       await taskRepoManager.save(lockedTask);
+
+      await syncTopicTaskAssignmentsWithManager(manager, {
+        topicTaskId: lockedTask.id,
+        isAssigned: false,
+        assignedStudentIds: []
+      });
+
       await gradeRepoManager.delete({
         topicTask: {
           id: taskId
@@ -1673,10 +1803,10 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
 
     if (controlWork.hasPractice !== false) {
       const controlTasksCount = await countControlTasksForControlWork(controlWork.id);
-      if (controlTasksCount !== CONTROL_WORK_REQUIRED_TASKS_COUNT) {
+      if (controlTasksCount < CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT) {
         return res.status(400).json({
-          message: "CONTROL_WORK_REQUIRES_EXACTLY_THREE_TASKS",
-          expected: CONTROL_WORK_REQUIRED_TASKS_COUNT,
+          message: "CONTROL_WORK_REQUIRES_MINIMUM_PRACTICE_TASKS",
+          expected: CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT,
           actual: controlTasksCount
         });
       }
@@ -1689,10 +1819,70 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
         }
       } as any
     });
-    controlWork.isAssigned = true;
-    controlWork.deadline = deadlineDate;
-    await controlWorkRepo().save(controlWork);
-    const emailPromises = students.map(student =>
+
+    const assignmentSelection = resolveSelectedStudentsForAssignment(students, req.body?.studentIds);
+    if (assignmentSelection.errorMessage) {
+      return res.status(400).json({
+        message: assignmentSelection.errorMessage,
+        ...(assignmentSelection.invalidStudentIds && {
+          invalidStudentIds: assignmentSelection.invalidStudentIds
+        })
+      });
+    }
+
+    const {
+      selectedStudents,
+      assignedStudentIdsForStorage
+    } = assignmentSelection;
+
+    const controlTasks = await taskRepo().find({
+      where: {
+        controlWork: {
+          id: controlWork.id
+        } as any,
+        type: "CONTROL" as any
+      } as any,
+      order: {
+        order: "ASC"
+      }
+    });
+
+    const concreteAssignedStudentIds = selectedStudents.map(student => student.id);
+
+    await AppDataSource.transaction("READ COMMITTED", async manager => {
+      const controlWorkRepoManager = manager.getRepository(ControlWork);
+      const taskRepoManager = manager.getRepository(TopicTask);
+
+      controlWork.isAssigned = true;
+      controlWork.deadline = deadlineDate;
+      controlWork.assignedStudentIds = assignedStudentIdsForStorage;
+      await controlWorkRepoManager.save(controlWork);
+
+      await syncControlWorkAssignmentsWithManager(manager, {
+        controlWorkId: controlWork.id,
+        isAssigned: true,
+        assignedStudentIds: concreteAssignedStudentIds
+      });
+
+      if (controlTasks.length > 0) {
+        for (const task of controlTasks) {
+          task.isAssigned = true;
+          task.deadline = deadlineDate;
+          task.assignedStudentIds = assignedStudentIdsForStorage;
+        }
+        await taskRepoManager.save(controlTasks);
+
+        for (const task of controlTasks) {
+          await syncTopicTaskAssignmentsWithManager(manager, {
+            topicTaskId: task.id,
+            isAssigned: true,
+            assignedStudentIds: concreteAssignedStudentIds
+          });
+        }
+      }
+    });
+
+    const emailPromises = selectedStudents.map(student =>
       emailService
         .sendTaskAssignmentEmail(
           student.email,
@@ -1712,7 +1902,7 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
     await Promise.allSettled(emailPromises);
     res.json({
       message: "CONTROL_WORK_ASSIGNED_SUCCESSFULLY",
-      assignedTo: students.length
+      assignedTo: selectedStudents.length
     });
   } catch (error: any) {
     logger.error("[topics] Error assigning control work", { requestId: req.requestId, err: error });
@@ -1757,6 +1947,7 @@ topicsRouter.post("/control-works/:controlWorkId/unassign", authRequired, async 
     }
     await AppDataSource.transaction("SERIALIZABLE", async manager => {
       const controlWorkRepoManager = manager.getRepository(ControlWork);
+      const taskRepoManager = manager.getRepository(TopicTask);
       const summaryGradeRepoManager = manager.getRepository(SummaryGrade);
       const gradeRepoManager = manager.getRepository(EduGrade);
       const lockedControlWork = await manager.createQueryBuilder(ControlWork, "cw").setLock("pessimistic_write").where("cw.id = :controlWorkId", {
@@ -1767,7 +1958,41 @@ topicsRouter.post("/control-works/:controlWorkId/unassign", authRequired, async 
       }
       lockedControlWork.isAssigned = false;
       lockedControlWork.deadline = null;
+      lockedControlWork.assignedStudentIds = null;
       await controlWorkRepoManager.save(lockedControlWork);
+
+      await syncControlWorkAssignmentsWithManager(manager, {
+        controlWorkId,
+        isAssigned: false,
+        assignedStudentIds: []
+      });
+
+      const controlTasksRows = await taskRepoManager.find({
+        where: {
+          controlWork: {
+            id: controlWorkId
+          } as any,
+          type: "CONTROL" as any
+        } as any
+      });
+
+      if (controlTasksRows.length > 0) {
+        for (const task of controlTasksRows) {
+          task.isAssigned = false;
+          task.deadline = null;
+          task.assignedStudentIds = null;
+        }
+        await taskRepoManager.save(controlTasksRows);
+
+        for (const task of controlTasksRows) {
+          await syncTopicTaskAssignmentsWithManager(manager, {
+            topicTaskId: task.id,
+            isAssigned: false,
+            assignedStudentIds: []
+          });
+        }
+      }
+
       await summaryGradeRepoManager.delete({
         controlWork: {
           id: controlWorkId
@@ -1866,10 +2091,10 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
 
       if (cw?.isAssigned && cw.hasPractice !== false) {
         const currentControlTasksCount = await countControlTasksForControlWork(cw.id);
-        if (currentControlTasksCount <= CONTROL_WORK_REQUIRED_TASKS_COUNT) {
+        if (currentControlTasksCount <= CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT) {
           return res.status(400).json({
-            message: "CONTROL_WORK_ASSIGNED_REQUIRES_THREE_TASKS",
-            expected: CONTROL_WORK_REQUIRED_TASKS_COUNT,
+            message: "CONTROL_WORK_ASSIGNED_REQUIRES_MINIMUM_PRACTICE_TASKS",
+            expected: CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT,
             actual: currentControlTasksCount
           });
         }

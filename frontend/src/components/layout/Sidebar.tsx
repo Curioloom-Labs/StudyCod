@@ -47,7 +47,7 @@ export const Sidebar: React.FC<Props> = ({
         </div>
       </div>
       <nav className="flex-1 py-4 space-y-1">
-        {items.map(item => <button key={item.id} onClick={() => onChange(item.id)} className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-mono transition-fast ${current === item.id ? "bg-bg-hover text-primary border-r-2 border-primary" : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+        {items.map(item => <button key={item.id} onClick={() => onChange(item.id)} className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-mono transition-fast ${current === item.id ? "bg-bg-hover text-primary font-semibold" : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
             {item.icon}
             <span>{item.label}</span>
           </button>)}

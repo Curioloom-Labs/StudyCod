@@ -12,7 +12,7 @@ import { TaskTheory } from "../../entities/TaskTheory";
 import { executeCodeWithInput, compareOutput, filterStderr } from "../../services/codeExecutionService";
 import { generateAlgorithmicHints } from "../../services/ai/failureHints";
 import { judgeWithSemaphore } from "../../services/judgeWorker";
-import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../../services/judgeWorker/types";
+import type { JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../../services/judgeWorker/types";
 import { JudgeBusyError } from "../../services/judgeWorker/Semaphore";
 import { ControlWork } from "../../entities/ControlWork";
 import { SummaryGrade } from "../../entities/SummaryGrade";
@@ -21,12 +21,15 @@ import { AssessmentType } from "../../types/AssessmentType";
 import { markControlWorkAttemptCompletedIfReadyWithManager, saveControlSummaryGradeForNewSystemWithManager } from "../../services/edu/controlWorkGrading";
 import { logger } from "../../utils/logger";
 import { HttpError } from "../../utils/httpError";
+import { chooseDefaultCheckerFromExpectedOutputs } from "../../utils/checkerSpec";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { submissionRateLimitMiddleware } from "../../middleware/submissionRateLimit";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../../utils/multiFileSubmission";
 import { TopicNew } from "../../entities/TopicNew";
 import { IsNull } from "typeorm";
 import { buildLearningFirstFailure } from "../../services/learning/firstFailure";
+import { buildLearningFailureAnalysis } from "../../services/learning/failureAnalysis";
+import { EduHintFeedback, EDU_HINT_FEEDBACK_REASON_CODES, type EduHintFeedbackReasonCode } from "../../entities/EduHintFeedback";
 import { env } from "../../env";
 import {
   normalizeWebTaskFiles,
@@ -37,6 +40,10 @@ import {
   type WebTaskValidationRule,
 } from "../../services/webTaskValidationService";
 import { encodeWebTaskPayload } from "../../utils/webTaskPayload";
+import { isAssignedToStudent } from "../../utils/assignmentVisibility";
+import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
+import { applyHintStrategyVariant, resolveHintStrategyVariant, type HintStrategyVariant } from "../../services/edu/hintStrategy";
+import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../../services/edu/assignmentTargetsService";
 
 const router = Router();
 
@@ -45,14 +52,65 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
+const hintFeedbackRepo = () => AppDataSource.getRepository(EduHintFeedback);
 const taskTheoryRepo = () => AppDataSource.getRepository(TaskTheory);
 const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
+const lessonAttemptRepo = () => AppDataSource.getRepository(LessonAttempt);
 
 // Route-level rate limits (enabled in production by default).
 // These endpoints can be CPU/IO intensive (judge + AI hints), so keep them protected.
 const runLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 25, message: "RATE_LIMIT" });
 const submitLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, message: "RATE_LIMIT" });
 const completeLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, message: "RATE_LIMIT" });
+const hintFeedbackLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 20, message: "RATE_LIMIT" });
+
+type EduTaskTelemetryAction = "submit" | "complete";
+type EduTaskTelemetryStatus = "started" | "succeeded" | "failed" | "denied" | "invalid";
+
+function logEduTaskTelemetry(payload: {
+  requestId?: string;
+  action: EduTaskTelemetryAction;
+  status: EduTaskTelemetryStatus;
+  taskId: number | null;
+  studentId: number | null;
+  durationMs?: number;
+  verdict?: string | null;
+  testsPassed?: number | null;
+  testsTotal?: number | null;
+  score?: number | null;
+  maxScore?: number | null;
+  hintsCount?: number;
+  hintStrategyVariant?: HintStrategyVariant | null;
+  analysisConfidence?: "low" | "medium" | "high" | null;
+  errorCode?: string;
+  completedFromExisting?: boolean;
+}) {
+  logger.info("[telemetry.edu.task]", payload);
+}
+
+function logHintsFeedbackTelemetry(payload: {
+  requestId?: string;
+  taskId: number;
+  studentId: number;
+  submissionId: string | null;
+  strategyVariant: HintStrategyVariant;
+  signal: "up" | "down";
+  reasonCode: EduHintFeedbackReasonCode;
+  verdict: string | null;
+  hintsShown: number;
+  hintsTotal: number;
+  stored: boolean;
+  feedbackId: number | null;
+}) {
+  logger.info("[telemetry.edu.hints]", payload);
+}
+
+function isHintFeedbackTableMissingError(error: unknown): boolean {
+  const code = String((error as any)?.code ?? "").toUpperCase();
+  if (code === "ER_NO_SUCH_TABLE" || code === "42P01") return true;
+  const message = String((error as any)?.message ?? "").toLowerCase();
+  return message.includes("doesn't exist") || message.includes("no such table") || message.includes("relation") && message.includes("does not exist");
+}
 
 const webDraftStore = new Map<string, { files: ReturnType<typeof normalizeWebTaskFiles>; updatedAt: number }>();
 
@@ -156,6 +214,18 @@ const submitBodySchema = z
     message: "code or files required",
   });
 
+const hintFeedbackBodySchema = z.object({
+  submissionId: z.string().min(1).max(128).optional(),
+  codeHash: z.string().min(8).max(128),
+  strategyVariant: z.enum(["A", "B"]).optional(),
+  verdict: z.string().max(32).nullable().optional(),
+  signal: z.enum(["up", "down"]),
+  reasonCode: z.enum(EDU_HINT_FEEDBACK_REASON_CODES).optional(),
+  reasonText: z.string().trim().max(1000).optional(),
+  hintsShown: z.number().int().min(0).max(20).optional(),
+  hintsTotal: z.number().int().min(0).max(20).optional(),
+});
+
 function validationMessageFromZod(err: z.ZodError): string {
   // Preserve existing API message codes used by the frontend.
   for (const issue of err.issues) {
@@ -171,20 +241,36 @@ function validationMessageFromZod(err: z.ZodError): string {
   return "INVALID_INPUT";
 }
 
-function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec {
-  const hasFloatLike = outputs.some(s => {
-    const v = String(s ?? "");
-    return /(^|\s)[-+]?(?:\d*\.\d+|\d+\.\d*)(?:[eE][-+]?\d+)?(\s|$)/.test(v) || /(^|\s)[-+]?\d+(?:[eE][-+]?\d+)(\s|$)/.test(v);
+function normalizeEduSubtaskGroup(raw: unknown): string | null {
+  const normalized = String(raw ?? "").trim();
+  if (!normalized) return null;
+  return normalized.slice(0, 64);
+}
+
+function buildEduJudgeTests(tests: TestData[]): {
+  hasSubtasks: boolean;
+  judgeTests: WorkerJudgeRequest["tests"];
+} {
+  const subtasks = tests.map(t => normalizeEduSubtaskGroup((t as any).subtask));
+  const hasSubtasks = subtasks.some(Boolean);
+
+  const judgeTests = tests.map((t, idx) => {
+    const subtask = subtasks[idx];
+    const group = hasSubtasks ? (subtask || `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
+    return {
+      id: t.id,
+      input: t.input || "",
+      output: t.expectedOutput || "",
+      hidden: t.isHidden === true,
+      group,
+      weight: t.points || 1
+    };
   });
 
-  return hasFloatLike
-    ? {
-        type: "float",
-        epsilon: 1e-6
-      }
-    : {
-        type: "whitespace"
-      };
+  return {
+    hasSubtasks,
+    judgeTests
+  };
 }
 
 function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null }> {
@@ -199,10 +285,131 @@ function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; pa
     .filter(r => Number.isFinite(r.testId) && r.testId > 0);
 }
 
-async function assertControlTaskUnlockedForStudent(studentId: number, topicTask: TopicTask): Promise<void> {
+function isTopicTaskAssignedToStudent(topicTask: TopicTask, studentId: number): boolean {
+  if (isAssignedToStudent(topicTask.isAssigned, (topicTask as any).assignedStudentIds, studentId)) {
+    return true;
+  }
+
+  if (topicTask.type === "CONTROL" && topicTask.controlWork) {
+    return isAssignedToStudent(
+      topicTask.controlWork.isAssigned,
+      (topicTask.controlWork as any).assignedStudentIds,
+      studentId
+    );
+  }
+
+  return false;
+}
+
+async function assertTopicTaskAssignedToStudent(studentId: number, topicTask: TopicTask): Promise<void> {
+  if (!isTopicTaskAssignedToStudent(topicTask, studentId)) {
+    throw new HttpError(403, "TASK_NOT_ASSIGNED_TO_STUDENT", {
+      expose: true
+    });
+  }
+}
+
+type ControlTaskUnlockOptions = {
+  requireActiveAttempt?: boolean;
+};
+
+const CONTROL_TASK_MAX_ATTEMPTS = 3;
+
+function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): number {
+  if (task.type === "CONTROL") {
+    return CONTROL_TASK_MAX_ATTEMPTS;
+  }
+
+  const parsed = Number(task.maxAttempts);
+  if (!Number.isFinite(parsed)) {
+    return 3;
+  }
+
+  return Math.max(1, Math.floor(parsed));
+}
+
+function isControlTaskCompletedForProgress(params: {
+  task: TopicTask;
+  latestGrade: EduGrade | null;
+  attemptsUsed: number;
+}): boolean {
+  const {
+    task,
+    latestGrade,
+    attemptsUsed
+  } = params;
+  if (!latestGrade) return false;
+  const maxAttempts = resolveTaskMaxAttempts(task);
+  return latestGrade.isCompleted === true || latestGrade.isManuallyGraded === true || attemptsUsed >= maxAttempts;
+}
+
+function getAttemptRemainingSeconds(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">): number | null {
+  const limitMinutes = Number(attempt.timeLimitMinutes ?? 0);
+  if (!Number.isFinite(limitMinutes) || limitMinutes <= 0) {
+    return null;
+  }
+
+  const elapsedSeconds = Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000);
+  const totalSeconds = Math.floor(limitMinutes * 60);
+  return Math.max(0, totalSeconds - elapsedSeconds);
+}
+
+async function markAttemptCompletedIfTimedOut(attempt: LessonAttempt): Promise<boolean> {
+  if (attempt.status !== "IN_PROGRESS") {
+    return false;
+  }
+
+  const remainingSeconds = getAttemptRemainingSeconds(attempt);
+  if (remainingSeconds === null || remainingSeconds > 0) {
+    return false;
+  }
+
+  attempt.status = "COMPLETED";
+  attempt.finishedAt = new Date();
+  attempt.isFinished = true;
+  await lessonAttemptRepo().save(attempt);
+  return true;
+}
+
+async function assertControlTaskUnlockedForStudent(
+  studentId: number,
+  topicTask: TopicTask,
+  options: ControlTaskUnlockOptions = {}
+): Promise<void> {
   if (topicTask.type !== "CONTROL" || !topicTask.controlWork?.id) return;
 
+  if (topicTask.controlWork.deadline && new Date() > new Date(topicTask.controlWork.deadline)) {
+    throw new HttpError(403, "CONTROL_WORK_DEADLINE_PASSED", { expose: true });
+  }
+
   const controlWorkId = topicTask.controlWork.id;
+
+  const latestAttempt = await AppDataSource
+    .createQueryBuilder(LessonAttempt, "attempt")
+    .where("attempt.student_id = :studentId", { studentId })
+    .andWhere("attempt.control_work_id = :controlWorkId", { controlWorkId })
+    .orderBy("attempt.started_at", "DESC")
+    .getOne();
+
+  if (options.requireActiveAttempt) {
+    if (!latestAttempt) {
+      throw new HttpError(403, "CONTROL_WORK_NOT_STARTED", { expose: true });
+    }
+
+    if (latestAttempt.status === "COMPLETED") {
+      throw new HttpError(409, "CONTROL_WORK_COMPLETED", { expose: true });
+    }
+
+    if (latestAttempt.status !== "IN_PROGRESS") {
+      throw new HttpError(403, "CONTROL_WORK_NOT_STARTED", { expose: true });
+    }
+
+    const remainingSeconds = getAttemptRemainingSeconds(latestAttempt);
+    if (remainingSeconds !== null && remainingSeconds <= 0) {
+      await markAttemptCompletedIfTimedOut(latestAttempt);
+      throw new HttpError(403, "CONTROL_WORK_TIME_EXPIRED", { expose: true });
+    }
+  }
 
   if (topicTask.controlWork.hasTheory) {
     const summaryWithTheory = await AppDataSource
@@ -225,26 +432,53 @@ async function assertControlTaskUnlockedForStudent(studentId: number, topicTask:
     .addOrderBy("task.id", "ASC")
     .getMany();
 
-  const currentIndex = orderedControlTasks.findIndex(t => t.id === topicTask.id);
+  const visibleOrderedControlTasks = orderedControlTasks.filter(task => isTopicTaskAssignedToStudent(task, studentId));
+
+  const currentIndex = visibleOrderedControlTasks.findIndex(t => t.id === topicTask.id);
   if (currentIndex === -1) {
     throw new HttpError(403, "CONTROL_TASK_NOT_IN_WORK", { expose: true });
   }
 
-  if (currentIndex === 0) return;
+  const taskIds = visibleOrderedControlTasks.map(task => task.id);
+  if (!taskIds.length) {
+    throw new HttpError(403, "CONTROL_TASK_NOT_IN_WORK", { expose: true });
+  }
 
-  const prevTaskIds = orderedControlTasks.slice(0, currentIndex).map(t => t.id);
-  if (!prevTaskIds.length) return;
-
-  const completedPrev = await gradeRepo()
+  const allTaskGrades = await gradeRepo()
     .createQueryBuilder("g")
-    .select("DISTINCT g.topic_task_id", "topic_task_id")
+    .leftJoinAndSelect("g.topicTask", "topicTask")
     .where("g.student_id = :studentId", { studentId })
-    .andWhere("g.topic_task_id IN (:...taskIds)", { taskIds: prevTaskIds })
-    .andWhere("g.total IS NOT NULL")
-    .getRawMany();
+    .andWhere("g.topic_task_id IN (:...taskIds)", { taskIds })
+    .orderBy("g.created_at", "DESC")
+    .getMany();
 
-  if (completedPrev.length < prevTaskIds.length) {
-    throw new HttpError(403, "CONTROL_PREVIOUS_TASKS_REQUIRED", { expose: true });
+  const latestByTaskId = new Map<number, EduGrade>();
+  const attemptsByTaskId = new Map<number, number>();
+  for (const grade of allTaskGrades) {
+    const topicTaskId = (grade as any).topicTask?.id;
+    if (!topicTaskId) continue;
+    if (!latestByTaskId.has(topicTaskId)) {
+      latestByTaskId.set(topicTaskId, grade);
+    }
+    attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
+  }
+
+  const firstActiveTask = visibleOrderedControlTasks.find(task => {
+    const latestGrade = latestByTaskId.get(task.id) || null;
+    const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+    return !isControlTaskCompletedForProgress({
+      task,
+      latestGrade,
+      attemptsUsed
+    });
+  }) || null;
+
+  if (!firstActiveTask) {
+    throw new HttpError(409, "CONTROL_WORK_COMPLETED", { expose: true });
+  }
+
+  if (topicTask.id !== firstActiveTask.id) {
+    throw new HttpError(403, "CONTROL_ONLY_CURRENT_TASK_ALLOWED", { expose: true });
   }
 }
 
@@ -269,6 +503,8 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
+    const deadlineTimezone = extractTimezoneFromProfileMeta(topicTask.topic.class?.teacher?.timezone ?? null);
+
     // Access control
     if (req.studentId) {
       const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
@@ -276,7 +512,9 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         return res.status(403).json({ message: "ACCESS_DENIED" });
       }
 
-      await assertControlTaskUnlockedForStudent(req.studentId, topicTask);
+      await assertTopicTaskAssignedToStudent(req.studentId, topicTask);
+
+      await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
     } else if (req.userId) {
       const user = await userRepo().findOne({ where: { id: req.userId } });
       if (!user || (user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN")) {
@@ -472,9 +710,10 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         taskMode: (topicTask as any).taskMode ?? "CODE",
         webTemplateFiles: (topicTask as any).webTemplateFiles ?? null,
         webValidationRules: (topicTask as any).webValidationRules ?? null,
-        maxAttempts: topicTask.maxAttempts,
+        maxAttempts: resolveTaskMaxAttempts(topicTask),
         attemptsUsed: attemptsUsed ?? undefined,
         deadline: topicTask.deadline ? topicTask.deadline.toISOString() : null,
+        deadlineTimezone,
         isClosed: topicTask.isClosed,
         isAssigned: topicTask.isAssigned || false,
         type: topicTask.type,
@@ -486,6 +725,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
           id: lessonId,
           title: lessonTitle,
           type: lessonType,
+          deadlineTimezone,
           hasTheory,
           theory: theory || undefined,
           ...(includeTheoryDebug
@@ -550,6 +790,7 @@ router.get("/tasks/:taskId/web-template", authRequired, async (req: AuthRequest,
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
       .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topicTask.controlWork", "controlWork")
       .leftJoinAndSelect("topic.class", "class")
       .where("topicTask.id = :taskId", { taskId })
       .getOne();
@@ -567,6 +808,9 @@ router.get("/tasks/:taskId/web-template", authRequired, async (req: AuthRequest,
       if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
         return res.status(403).json({ message: "ACCESS_DENIED" });
       }
+
+      await assertTopicTaskAssignedToStudent(req.studentId, topicTask);
+      await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
     }
 
     const files = normalizeWebTaskFiles((topicTask as any).webTemplateFiles ?? []);
@@ -601,6 +845,7 @@ router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddlewa
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
       .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topicTask.controlWork", "controlWork")
       .leftJoinAndSelect("topic.class", "class")
       .where("topicTask.id = :taskId", { taskId })
       .getOne();
@@ -617,7 +862,9 @@ router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddlewa
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    await assertControlTaskUnlockedForStudent(req.studentId, topicTask);
+    await assertTopicTaskAssignedToStudent(req.studentId, topicTask);
+
+    await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
 
     const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
     assertWebFilesWithinLimits(files);
@@ -654,6 +901,7 @@ router.post("/tasks/:taskId/web-check", authRequired, submissionRateLimitMiddlew
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
       .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topicTask.controlWork", "controlWork")
       .leftJoinAndSelect("topic.class", "class")
       .where("topicTask.id = :taskId", { taskId })
       .getOne();
@@ -669,6 +917,9 @@ router.post("/tasks/:taskId/web-check", authRequired, submissionRateLimitMiddlew
     if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
+
+    await assertTopicTaskAssignedToStudent(req.studentId, topicTask);
+    await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
 
     const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
     assertWebFilesWithinLimits(files);
@@ -723,6 +974,10 @@ router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddle
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
+    await assertTopicTaskAssignedToStudent(req.studentId, topicTask);
+    await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
+    const maxAttemptsLimit = resolveTaskMaxAttempts(topicTask);
+
     if (topicTask.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
     if (topicTask.deadline && new Date() > new Date(topicTask.deadline)) {
       return res.status(403).json({ message: "DEADLINE_PASSED" });
@@ -734,7 +989,7 @@ router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddle
       .andWhere("grade.student_id = :studentId", { studentId: req.studentId })
       .getCount();
 
-    if (existingGradesCount >= topicTask.maxAttempts) {
+    if (existingGradesCount >= maxAttemptsLimit) {
       return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     }
 
@@ -780,7 +1035,7 @@ router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddle
         .andWhere("grade.student_id = :studentId", { studentId: req.studentId })
         .getCount();
 
-      if (countM >= topicTask.maxAttempts) {
+      if (countM >= maxAttemptsLimit) {
         throw new Error("MAX_ATTEMPTS_REACHED");
       }
 
@@ -849,6 +1104,7 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
       .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topicTask.controlWork", "controlWork")
       .leftJoinAndSelect("topic.class", "class")
       .where("topicTask.id = :taskId", { taskId })
       .getOne();
@@ -880,7 +1136,9 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    await assertControlTaskUnlockedForStudent(studentId, topicTask);
+    await assertTopicTaskAssignedToStudent(studentId, topicTask);
+
+    await assertControlTaskUnlockedForStudent(studentId, topicTask, { requireActiveAttempt: true });
 
     // For single-file we can run locally; for multi-file route through judge worker.
     if (!isMultiFile) {
@@ -927,14 +1185,42 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
 });
 
 router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware, submitLimiter, async (req: AuthRequest, res: Response) => {
+  const telemetryStartedAt = Date.now();
+  const telemetryTaskIdRaw = Number.parseInt(req.params.taskId, 10);
+  const telemetryTaskId = Number.isNaN(telemetryTaskIdRaw) ? null : telemetryTaskIdRaw;
+  const telemetryStudentId = req.studentId ?? null;
+  const telemetryBase = {
+    requestId: req.requestId,
+    action: "submit" as const,
+    taskId: telemetryTaskId,
+    studentId: telemetryStudentId
+  };
+  logEduTaskTelemetry({
+    ...telemetryBase,
+    status: "started"
+  });
   try {
     if (req.userType !== "STUDENT" || !req.studentId) {
+      logEduTaskTelemetry({
+        ...telemetryBase,
+        status: "denied",
+        durationMs: Date.now() - telemetryStartedAt,
+        errorCode: "ONLY_STUDENTS_CAN_ACCESS"
+      });
       return res.status(403).json({ message: "ONLY_STUDENTS_CAN_ACCESS" });
     }
 
     const studentId = req.studentId;
     const taskId = parseInt(req.params.taskId, 10);
-    if (isNaN(taskId)) return res.status(400).json({ message: "INVALID_TASK_ID" });
+    if (isNaN(taskId)) {
+      logEduTaskTelemetry({
+        ...telemetryBase,
+        status: "invalid",
+        durationMs: Date.now() - telemetryStartedAt,
+        errorCode: "INVALID_TASK_ID"
+      });
+      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    }
 
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
@@ -954,7 +1240,10 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    await assertControlTaskUnlockedForStudent(studentId, topicTask);
+    await assertTopicTaskAssignedToStudent(studentId, topicTask);
+
+    await assertControlTaskUnlockedForStudent(studentId, topicTask, { requireActiveAttempt: true });
+    const maxAttemptsLimit = resolveTaskMaxAttempts(topicTask);
 
     if (topicTask.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
     if (topicTask.deadline && new Date() > new Date(topicTask.deadline)) {
@@ -981,7 +1270,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       .andWhere("grade.student_id = :studentId", { studentId })
       .getCount();
 
-    if (existingGradesCount >= topicTask.maxAttempts) {
+    if (existingGradesCount >= maxAttemptsLimit) {
       return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     }
 
@@ -1006,6 +1295,11 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     const normalizedClientSubmissionId = normalizeClientSubmissionId((validatedBody.data as any).clientSubmissionId);
     const serverCodeHash = sha256Hex(persistedSubmitted);
     const codeForHints = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
+    const hintStrategyVariant = resolveHintStrategyVariant({
+      studentId,
+      taskId,
+      codeHash: serverCodeHash
+    });
 
     const tests = [...(topicTask.testData || [])].sort((a, b) => a.id - b.id);
     if (tests.length === 0) {
@@ -1044,19 +1338,18 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
 
     maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
 
+    const {
+      hasSubtasks,
+      judgeTests
+    } = buildEduJudgeTests(tests);
+
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_${studentId}_${taskId}_${Date.now()}`,
       language: judgeLang,
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
-      tests: tests.map(t => ({
-        id: t.id,
-        input: t.input || "",
-        output: t.expectedOutput || "",
-        hidden: t.isHidden === true,
-        group: t.isHidden === true ? "hidden" : "public",
-        weight: t.points || 1
-      })),
+      group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : undefined,
+      tests: judgeTests,
       limits: defaultLimitsByLang[judgeLang],
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
       debug: false,
@@ -1188,8 +1481,8 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
         });
 
         if (hints.length) {
-          hintsForUser = hints;
-          feedback = hints.map(h => `- ${h}`).join("\n");
+          hintsForUser = applyHintStrategyVariant(hints, hintStrategyVariant);
+          feedback = hintsForUser.map(h => `- ${h}`).join("\n");
         }
       } catch {
         // ignore hint failures
@@ -1230,7 +1523,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
         .andWhere("grade.student_id = :studentId", { studentId })
         .getCount();
 
-      if (existingGradesCountM >= topicTask.maxAttempts) {
+      if (existingGradesCountM >= maxAttemptsLimit) {
         throw new Error("MAX_ATTEMPTS_REACHED");
       }
 
@@ -1264,7 +1557,27 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       tests: learningFeedbackCandidates
     });
 
-    res.json({
+    const learningFailureAnalysis = buildLearningFailureAnalysis({
+      verdict: workerRes?.verdict ?? null,
+      firstFailure: learningFirstFailure,
+      hints: hintsForUser
+    });
+
+    logEduTaskTelemetry({
+      ...telemetryBase,
+      status: "succeeded",
+      durationMs: Date.now() - telemetryStartedAt,
+      verdict: workerRes?.verdict ?? null,
+      testsPassed: passed,
+      testsTotal: tests.length,
+      score: Number.isFinite(passedScore) ? passedScore : null,
+      maxScore: Number.isFinite(maxScore) ? maxScore : null,
+      hintsCount: hintsForUser.length,
+      hintStrategyVariant,
+      analysisConfidence: learningFailureAnalysis?.confidence ?? null
+    });
+
+    return res.json({
       grade: savedGrade,
       submissionMeta: {
         submissionId: String(savedGrade.id),
@@ -1273,6 +1586,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       },
       testResults: sanitizeTestResultsForStudent(testResultsDetailed),
       hints: hintsForUser,
+      hintStrategyVariant,
       scoring: {
         score: passedScore,
         maxScore,
@@ -1280,10 +1594,20 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       },
       learningFeedback: {
         verdict: workerRes?.verdict ?? null,
-        firstFailure: learningFirstFailure
+        firstFailure: learningFirstFailure,
+        analysis: learningFailureAnalysis
       }
     });
   } catch (error: any) {
+    const telemetryErrorCode = typeof error?.message === "string" && error.message.trim()
+      ? error.message.trim()
+      : "INTERNAL_SERVER_ERROR";
+    logEduTaskTelemetry({
+      ...telemetryBase,
+      status: "failed",
+      durationMs: Date.now() - telemetryStartedAt,
+      errorCode: telemetryErrorCode
+    });
     if (error?.message === "TASK_MANUALLY_GRADED_LOCKED") {
       return res.status(409).json({ message: "TASK_MANUALLY_GRADED_LOCKED" });
     }
@@ -1299,14 +1623,42 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
 });
 
 router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddleware, completeLimiter, async (req: AuthRequest, res: Response) => {
+  const telemetryStartedAt = Date.now();
+  const telemetryTaskIdRaw = Number.parseInt(req.params.taskId, 10);
+  const telemetryTaskId = Number.isNaN(telemetryTaskIdRaw) ? null : telemetryTaskIdRaw;
+  const telemetryStudentId = req.studentId ?? null;
+  const telemetryBase = {
+    requestId: req.requestId,
+    action: "complete" as const,
+    taskId: telemetryTaskId,
+    studentId: telemetryStudentId
+  };
+  logEduTaskTelemetry({
+    ...telemetryBase,
+    status: "started"
+  });
   try {
     if (req.userType !== "STUDENT" || !req.studentId) {
+      logEduTaskTelemetry({
+        ...telemetryBase,
+        status: "denied",
+        durationMs: Date.now() - telemetryStartedAt,
+        errorCode: "ONLY_STUDENTS_CAN_ACCESS"
+      });
       return res.status(403).json({ message: "ONLY_STUDENTS_CAN_ACCESS" });
     }
 
     const studentId = req.studentId;
     const taskId = parseInt(req.params.taskId, 10);
-    if (isNaN(taskId)) return res.status(400).json({ message: "INVALID_TASK_ID" });
+    if (isNaN(taskId)) {
+      logEduTaskTelemetry({
+        ...telemetryBase,
+        status: "invalid",
+        durationMs: Date.now() - telemetryStartedAt,
+        errorCode: "INVALID_TASK_ID"
+      });
+      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    }
 
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
@@ -1325,6 +1677,10 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
+
+    await assertTopicTaskAssignedToStudent(studentId, topicTask);
+    await assertControlTaskUnlockedForStudent(studentId, topicTask, { requireActiveAttempt: true });
+    const maxAttemptsLimit = resolveTaskMaxAttempts(topicTask);
 
     if (topicTask.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
     if (topicTask.deadline && new Date() > new Date(topicTask.deadline)) {
@@ -1352,7 +1708,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       .andWhere("grade.student_id = :studentId", { studentId })
       .getCount();
 
-    if (existingGradesCount >= topicTask.maxAttempts) {
+    if (existingGradesCount >= maxAttemptsLimit) {
       // Completing should not consume another attempt.
       if (!latestExisting) {
         return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
@@ -1387,7 +1743,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
           .andWhere("grade.student_id = :studentId", { studentId })
           .getCount();
 
-        if (countM < topicTask.maxAttempts) {
+        if (countM < maxAttemptsLimit) {
           // Attempts became available concurrently; let the request proceed through the normal (judge) path.
           throw new Error("ATTEMPTS_AVAILABLE");
         }
@@ -1483,6 +1839,11 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     const normalizedClientSubmissionId = normalizeClientSubmissionId((validatedBody.data as any).clientSubmissionId);
     const serverCodeHash = sha256Hex(persistedSubmitted);
     const codeForHints = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
+    const hintStrategyVariant = resolveHintStrategyVariant({
+      studentId,
+      taskId,
+      codeHash: serverCodeHash
+    });
 
     const tests = [...(topicTask.testData || [])].sort((a, b) => a.id - b.id);
     if (tests.length === 0) {
@@ -1521,19 +1882,18 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
 
     maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
 
+    const {
+      hasSubtasks,
+      judgeTests
+    } = buildEduJudgeTests(tests);
+
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_complete_${studentId}_${taskId}_${Date.now()}`,
       language: judgeLang,
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
-      tests: tests.map(t => ({
-        id: t.id,
-        input: t.input || "",
-        output: t.expectedOutput || "",
-        hidden: t.isHidden === true,
-        group: t.isHidden === true ? "hidden" : "public",
-        weight: t.points || 1
-      })),
+      group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : undefined,
+      tests: judgeTests,
       limits: defaultLimitsByLang[judgeLang],
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
       debug: false,
@@ -1665,8 +2025,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         });
 
         if (hints.length) {
-          hintsForUser = hints;
-          feedback = hints.map(h => `- ${h}`).join("\n");
+          hintsForUser = applyHintStrategyVariant(hints, hintStrategyVariant);
+          feedback = hintsForUser.map(h => `- ${h}`).join("\n");
         }
       } catch {
         // ignore hint failures
@@ -1706,7 +2066,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         .andWhere("grade.student_id = :studentId", { studentId })
         .getCount();
 
-      if (countM >= topicTask.maxAttempts) {
+      if (countM >= maxAttemptsLimit) {
         if (!latestExistingM) {
           throw new Error("MAX_ATTEMPTS_REACHED");
         }
@@ -1769,6 +2129,21 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         }
       }
 
+      logEduTaskTelemetry({
+        ...telemetryBase,
+        status: "succeeded",
+        durationMs: Date.now() - telemetryStartedAt,
+        verdict: null,
+        testsPassed: Number.isFinite(saved.testsPassed) ? saved.testsPassed : null,
+        testsTotal: Number.isFinite(saved.testsTotal) ? saved.testsTotal : null,
+        score: typeof (saved as any).score === "number" ? (saved as any).score : null,
+        maxScore: typeof (saved as any).maxScore === "number" ? (saved as any).maxScore : null,
+        hintsCount: 0,
+        hintStrategyVariant: null,
+        analysisConfidence: null,
+        completedFromExisting: true
+      });
+
       return res.json({
         requiresManualReview: false,
         grade: {
@@ -1786,6 +2161,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         },
         testResults: sanitizeTestResultsForStudent(parsedTestResults),
         hints: [],
+        hintStrategyVariant: null,
         scoring:
           typeof (saved as any).score === "number" && typeof (saved as any).maxScore === "number"
             ? {
@@ -1796,7 +2172,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
             : undefined,
         learningFeedback: {
           verdict: null,
-          firstFailure: null
+          firstFailure: null,
+          analysis: null
         }
       });
     }
@@ -1806,6 +2183,27 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     const learningFirstFailure = buildLearningFirstFailure({
       verdict: workerRes?.verdict ?? null,
       tests: learningFeedbackCandidates
+    });
+
+    const learningFailureAnalysis = buildLearningFailureAnalysis({
+      verdict: workerRes?.verdict ?? null,
+      firstFailure: learningFirstFailure,
+      hints: hintsForUser
+    });
+
+    logEduTaskTelemetry({
+      ...telemetryBase,
+      status: "succeeded",
+      durationMs: Date.now() - telemetryStartedAt,
+      verdict: workerRes?.verdict ?? null,
+      testsPassed: passed,
+      testsTotal: tests.length,
+      score: Number.isFinite(passedScore) ? passedScore : null,
+      maxScore: Number.isFinite(maxScore) ? maxScore : null,
+      hintsCount: hintsForUser.length,
+      hintStrategyVariant,
+      analysisConfidence: learningFailureAnalysis?.confidence ?? null,
+      completedFromExisting: false
     });
 
     return res.json({
@@ -1825,6 +2223,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       },
       testResults: sanitizeTestResultsForStudent(testResultsDetailed),
       hints: hintsForUser,
+      hintStrategyVariant,
       scoring: {
         score: passedScore,
         maxScore,
@@ -1832,10 +2231,20 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       },
       learningFeedback: {
         verdict: workerRes?.verdict ?? null,
-        firstFailure: learningFirstFailure
+        firstFailure: learningFirstFailure,
+        analysis: learningFailureAnalysis
       }
     });
   } catch (error: any) {
+    const telemetryErrorCode = typeof error?.message === "string" && error.message.trim()
+      ? error.message.trim()
+      : "INTERNAL_SERVER_ERROR";
+    logEduTaskTelemetry({
+      ...telemetryBase,
+      status: "failed",
+      durationMs: Date.now() - telemetryStartedAt,
+      errorCode: telemetryErrorCode
+    });
     if (error?.message === "TASK_MANUALLY_GRADED_LOCKED") {
       return res.status(409).json({ message: "TASK_MANUALLY_GRADED_LOCKED" });
     }
@@ -1846,6 +2255,154 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     }
     logger.error("Error completing task", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/tasks/:taskId/hints-feedback", authRequired, submissionRateLimitMiddleware, hintFeedbackLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType !== "STUDENT" || !req.studentId) {
+      return res.status(403).json({ message: "ONLY_STUDENTS_CAN_ACCESS" });
+    }
+
+    const studentId = req.studentId;
+    const taskId = Number.parseInt(req.params.taskId, 10);
+    if (Number.isNaN(taskId)) {
+      return res.status(400).json({ message: "INVALID_TASK_ID" });
+    }
+
+    const parsedBody = hintFeedbackBodySchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: parsedBody.error.issues });
+    }
+
+    const topicTask = await topicTaskRepo()
+      .createQueryBuilder("topicTask")
+      .leftJoinAndSelect("topicTask.topic", "topic")
+      .leftJoinAndSelect("topic.class", "class")
+      .where("topicTask.id = :taskId", { taskId })
+      .getOne();
+
+    if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+
+    const student = await studentRepo().findOne({ where: { id: studentId }, relations: ["class"] });
+    if (!student || !student.class || student.class.id !== topicTask.topic.class.id) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    await assertTopicTaskAssignedToStudent(studentId, topicTask);
+
+    const submissionId = normalizeClientSubmissionId(parsedBody.data.submissionId);
+    const codeHash = String(parsedBody.data.codeHash ?? "").trim();
+    const strategyVariant = parsedBody.data.strategyVariant ?? resolveHintStrategyVariant({
+      studentId,
+      taskId,
+      codeHash,
+    });
+    const signal = parsedBody.data.signal;
+    const reasonCode: EduHintFeedbackReasonCode = signal === "up"
+      ? "HELPFUL"
+      : (parsedBody.data.reasonCode ?? "OTHER");
+    const verdictRaw = parsedBody.data.verdict;
+    const verdict = verdictRaw ? String(verdictRaw).trim().toUpperCase().slice(0, 32) : null;
+    const hintsTotal = Math.max(0, Math.min(20, parsedBody.data.hintsTotal ?? 0));
+    const hintsShownRaw = parsedBody.data.hintsShown ?? hintsTotal;
+    const hintsShown = Math.max(0, Math.min(hintsTotal > 0 ? hintsTotal : 20, hintsShownRaw));
+    const reasonText = (() => {
+      const text = String(parsedBody.data.reasonText ?? "").trim();
+      return text.length > 0 ? text : null;
+    })();
+
+    let matchedGrade: EduGrade | null = null;
+    if (submissionId && /^\d+$/.test(submissionId)) {
+      const gradeId = Number.parseInt(submissionId, 10);
+      if (Number.isFinite(gradeId) && gradeId > 0) {
+        matchedGrade = await gradeRepo()
+          .createQueryBuilder("grade")
+          .where("grade.id = :gradeId", { gradeId })
+          .andWhere("grade.student_id = :studentId", { studentId })
+          .andWhere("grade.topic_task_id = :taskId", { taskId })
+          .getOne();
+      }
+    }
+
+    let stored = false;
+    let feedbackId: number | null = null;
+
+    try {
+      const repo = hintFeedbackRepo();
+      const existing = await repo
+        .createQueryBuilder("feedback")
+        .where("feedback.student_id = :studentId", { studentId })
+        .andWhere("feedback.topic_task_id = :taskId", { taskId })
+        .andWhere("feedback.code_hash = :codeHash", { codeHash })
+        .getOne();
+
+      const feedback = existing ?? repo.create({
+        student: { id: studentId } as any,
+        topicTask: { id: taskId } as any,
+        grade: matchedGrade ? ({ id: matchedGrade.id } as any) : null,
+        submissionId,
+        codeHash,
+      });
+
+      feedback.grade = matchedGrade ? ({ id: matchedGrade.id } as any) : null;
+      feedback.submissionId = submissionId;
+      feedback.codeHash = codeHash;
+      feedback.verdict = verdict;
+      feedback.signal = signal === "up" ? "UP" : "DOWN";
+      feedback.reasonCode = reasonCode;
+      feedback.reasonText = reasonText;
+      feedback.hintsShown = hintsShown;
+      feedback.hintsTotal = hintsTotal;
+
+      const saved = await repo.save(feedback);
+      stored = true;
+      feedbackId = saved.id;
+    } catch (storeError: unknown) {
+      if (!isHintFeedbackTableMissingError(storeError)) {
+        throw storeError;
+      }
+
+      logger.warn("[edu/hints-feedback] table missing, falling back to telemetry-only mode", {
+        requestId: req.requestId,
+        taskId,
+        studentId,
+      });
+    }
+
+    logHintsFeedbackTelemetry({
+      requestId: req.requestId,
+      taskId,
+      studentId,
+      submissionId,
+      strategyVariant,
+      signal,
+      reasonCode,
+      verdict,
+      hintsShown,
+      hintsTotal,
+      stored,
+      feedbackId,
+    });
+
+    return res.json({
+      message: "HINT_FEEDBACK_RECORDED",
+      stored,
+      id: feedbackId,
+      strategyVariant,
+    });
+  } catch (error: any) {
+    if (error instanceof HttpError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+
+    logger.error("Error recording hint feedback", {
+      requestId: req.requestId,
+      err: error,
+    });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -1886,7 +2443,15 @@ router.post("/topics/tasks/:taskId/unassign", authRequired, async (req: AuthRequ
       const gradeRepoM = manager.getRepository(EduGrade);
       task.isAssigned = false;
       task.deadline = null;
+      task.assignedStudentIds = null;
       await taskRepoM.save(task);
+
+      await syncTopicTaskAssignmentsWithManager(manager, {
+        topicTaskId: task.id,
+        isAssigned: false,
+        assignedStudentIds: []
+      });
+
       await gradeRepoM
         .createQueryBuilder()
         .delete()
@@ -1942,7 +2507,14 @@ router.post("/topics/control-works/:controlWorkId/unassign", authRequired, async
 
       controlWork.isAssigned = false;
       controlWork.deadline = null;
+      controlWork.assignedStudentIds = null;
       await cwRepoM.save(controlWork);
+
+      await syncControlWorkAssignmentsWithManager(manager, {
+        controlWorkId,
+        isAssigned: false,
+        assignedStudentIds: []
+      });
 
       const controlTasks = await taskRepoM
         .createQueryBuilder("task")
@@ -1953,7 +2525,14 @@ router.post("/topics/control-works/:controlWorkId/unassign", authRequired, async
       for (const t of controlTasks) {
         t.isAssigned = false;
         t.deadline = null;
+        t.assignedStudentIds = null;
         await taskRepoM.save(t);
+
+        await syncTopicTaskAssignmentsWithManager(manager, {
+          topicTaskId: t.id,
+          isAssigned: false,
+          assignedStudentIds: []
+        });
       }
 
       const controlTaskIds = controlTasks.map(t => t.id);

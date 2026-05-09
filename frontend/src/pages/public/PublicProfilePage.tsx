@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Award, Trophy, Code2, CheckCircle2, CalendarClock, Star, Shield, Medal, Crown, Rocket, Gem, Sparkles } from "lucide-react";
+import { ArrowLeft, Award, Trophy, Code2, CheckCircle2, CalendarClock, Star, Shield, Medal, Crown, Rocket, Gem } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { getPublicProfile } from "../../lib/api/profile";
 import type { PublicProfile } from "../../types";
@@ -16,7 +16,6 @@ type BadgeMeta = {
   flavorUk: string;
   flavorEn: string;
   Icon: React.ComponentType<{ className?: string }>;
-  unlockedTone: string;
 };
 
 type BadgeRarityMeta = {
@@ -32,7 +31,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Початок серії перемог",
     flavorEn: "The beginning of your streak",
     Icon: Star,
-    unlockedTone: "from-accent-success/25 via-primary/10 to-transparent",
   },
   50: {
     nameUk: "Стабільний ритм",
@@ -40,7 +38,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Рухаємось без зупинок",
     flavorEn: "Consistent and unstoppable",
     Icon: Shield,
-    unlockedTone: "from-secondary/25 via-accent-info/10 to-transparent",
   },
   100: {
     nameUk: "Сотка",
@@ -48,7 +45,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Потужний рубіж досягнуто",
     flavorEn: "A major milestone unlocked",
     Icon: Medal,
-    unlockedTone: "from-accent-info/25 via-secondary/10 to-transparent",
   },
   250: {
     nameUk: "Майстер",
@@ -56,7 +52,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Твоя форма вже еталон",
     flavorEn: "Your form is now elite",
     Icon: Crown,
-    unlockedTone: "from-primary/25 via-secondary/10 to-transparent",
   },
   500: {
     nameUk: "Легенда",
@@ -64,7 +59,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "Півтисячі — це серйозно",
     flavorEn: "500 solved — serious level",
     Icon: Rocket,
-    unlockedTone: "from-accent-warning/25 via-accent-warn/10 to-transparent",
   },
   1000: {
     nameUk: "Космічний рівень",
@@ -72,7 +66,6 @@ const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
     flavorUk: "1000+ — режим боса",
     flavorEn: "1000+ solved — boss mode",
     Icon: Gem,
-    unlockedTone: "from-accent-error/25 via-accent-warning/10 to-transparent",
   },
 };
 
@@ -116,19 +109,10 @@ const PublicProgressBadge: React.FC<{
       className={
         "group rounded-2xl border p-3 transition-fast relative overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary/60 " +
         (unlocked
-          ? `border-primary/60 bg-gradient-to-br ${meta.unlockedTone} shadow-[0_0_28px_rgba(16,185,129,0.16)]`
+          ? "border-primary/60 bg-bg-surface/80"
           : "border-border bg-bg-base/70 opacity-70")
       }
     >
-      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_45%)]" />
-
-      {unlocked ? (
-        <>
-          <Sparkles className="pointer-events-none absolute left-2 top-2 w-3 h-3 text-primary/80 opacity-75 group-hover:opacity-100 transition-fast" />
-          <Sparkles className="pointer-events-none absolute right-3 bottom-3 w-2.5 h-2.5 text-primary/70 opacity-60 animate-pulse" />
-        </>
-      ) : null}
-
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="inline-flex items-center gap-1 text-xs font-mono text-text-secondary">
           <Icon className={`w-3.5 h-3.5 ${unlocked ? "text-primary" : "text-text-muted"}`} />
@@ -147,11 +131,10 @@ const PublicProgressBadge: React.FC<{
         className={
           "mx-auto relative w-14 h-14 rounded-full border flex items-center justify-center text-lg font-mono " +
           (unlocked
-            ? "border-primary/60 text-primary bg-primary/10 shadow-[0_0_24px_rgba(16,185,129,0.2)]"
+            ? "border-primary/60 text-primary bg-primary/10"
             : "border-border text-text-muted bg-bg-surface")
         }
       >
-        {unlocked ? <span className="absolute -inset-1 rounded-full border border-primary/35 animate-pulse" /> : null}
         <Icon className="w-6 h-6 relative z-[1]" />
       </div>
 
@@ -242,11 +225,11 @@ export const PublicProfilePage: React.FC = () => {
         </div>
 
         {loading ? (
-          <Card className="p-6 text-sm text-text-secondary">{tr("Завантаження профілю...", "Loading profile...")}</Card>
+          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Завантаження профілю...", "Loading profile...")}</Card>
         ) : error ? (
-          <Card className="p-6 text-sm text-accent-error">{error}</Card>
+          <Card className="p-4 sm:p-6 text-sm text-accent-error">{error}</Card>
         ) : !profile ? (
-          <Card className="p-6 text-sm text-text-secondary">{tr("Профіль недоступний", "Profile is unavailable")}</Card>
+          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Профіль недоступний", "Profile is unavailable")}</Card>
         ) : (
           <>
             {(() => {
@@ -271,7 +254,7 @@ export const PublicProfilePage: React.FC = () => {
                   <div className="text-xs text-text-secondary mt-1 flex flex-wrap items-center gap-2">
                     <span>{tr("Мова", "Language")}: <span className="text-text-primary">{profile.lang}</span></span>
                     <span>·</span>
-                    <span>{tr("IAD", "IAD")}: <span className="text-text-primary">{profile.iad ?? profile.difus}</span></span>
+                    <span>{tr("IAD", "IAD")}: <span className="text-text-primary">{profile.difus}</span></span>
                     <span>·</span>
                     <span className="inline-flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> {tr("З нами з", "Joined")}: <span className="text-text-primary">{fmtDateTime(profile.joinedAt, locale)}</span></span>
                   </div>
@@ -340,7 +323,7 @@ export const PublicProfilePage: React.FC = () => {
             </div>
 
             {privacy.showLanguageBreakdown ? (
-              <Card className="p-5 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+              <Card className="p-5 border border-border/70 bg-bg-surface/80">
                 <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
                   <Code2 className="w-4 h-4 text-primary" />
                   {tr("Розвʼязані задачі за мовами", "Solved tasks by language")}
@@ -356,7 +339,7 @@ export const PublicProfilePage: React.FC = () => {
               </Card>
             ) : null}
 
-            <Card className="p-5 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+            <Card className="p-5 border border-border/70 bg-bg-surface/80">
               <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
                 <Award className="w-4 h-4 text-primary" />
                 {tr("Бейджі прогресу", "Progress badges")}
@@ -377,7 +360,7 @@ export const PublicProfilePage: React.FC = () => {
               </div>
             </Card>
 
-            <Card className="p-5 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+            <Card className="p-5 border border-border/70 bg-bg-surface/80">
               <div className="text-sm font-mono text-text-primary mb-3">{tr("Останні зараховані задачі", "Recent solved tasks")}</div>
               {!privacy.showSolvedHistory ? (
                 <div className="text-sm text-text-secondary">{tr("Власник профілю приховав історію розвʼязань.", "Profile owner has hidden solved history.")}</div>

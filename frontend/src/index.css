@@ -257,6 +257,7 @@
 @layer base {
   html {
     font-size: 100%;
+    -webkit-text-size-adjust: 100%;
   }
 
   * {
@@ -280,6 +281,7 @@
     font-size: var(--text-body-size);
     font-weight: var(--text-body-weight);
     line-height: var(--text-body-line-height);
+    overflow-x: hidden;
     overflow-y: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

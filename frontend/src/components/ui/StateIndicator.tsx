@@ -54,8 +54,13 @@ export const StateIndicator: React.FC<Props> = ({
     border,
     message: displayMessage
   } = config[state];
-  return <div className={`inline-flex items-center gap-2 px-3 py-1.5 border text-xs font-mono ${color} ${bg} ${border} ${className || ""} ${state === "evaluating" ? "animate-pulse" : ""}`}>
-      <Icon className={`w-3 h-3 ${state === "evaluating" ? "animate-spin" : ""}`} />
+  return <div
+    role={state === "error" ? "alert" : "status"}
+    aria-live={state === "error" ? "assertive" : "polite"}
+    aria-atomic="true"
+    aria-busy={state === "evaluating"}
+    className={`inline-flex items-center gap-2 px-3 py-1.5 border text-xs font-mono ${color} ${bg} ${border} ${className || ""} ${state === "evaluating" ? "animate-pulse" : ""}`}>
+      <Icon aria-hidden="true" className={`w-3 h-3 ${state === "evaluating" ? "animate-spin" : ""}`} />
       <span>{displayMessage}</span>
     </div>;
 };

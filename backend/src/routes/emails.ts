@@ -6,6 +6,7 @@ import { User } from "../entities/User";
 import { Student } from "../entities/Student";
 import { JWT_SECRET, FRONTEND_URL } from "../config";
 import { logger } from "../utils/logger";
+import { sendWeeklyTeacherDigestsForDate } from "../services/edu/teacherWeeklyDigestService";
 
 const router = Router();
 
@@ -131,6 +132,50 @@ router.get("/subscribe", async (req: Request, res: Response) => {
     logger.warn("[emails] subscribe failed", { err: err?.message || err });
     if (wantsJson(req)) return res.status(400).json({ message: "INVALID_TOKEN" });
     return res.redirect(302, frontendEmailPrefsUrl({ action: "subscribe", ok: false, reason: "INVALID_TOKEN" }));
+  }
+});
+
+router.post("/teacher-digest/check", async (req: Request, res: Response) => {
+  try {
+    const secret = req.headers["x-cron-secret"] || (req as any).body?.secret;
+    if (secret !== process.env.CRON_SECRET) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+
+    const rawDate = String((req as any).body?.date ?? "").trim();
+    const dryRun = Boolean((req as any).body?.dryRun);
+    const rawLimitClasses = (req as any).body?.limitClasses;
+    const rawWindowDays = (req as any).body?.windowDays;
+
+    const date = rawDate ? new Date(rawDate) : new Date();
+    if (Number.isNaN(date.getTime())) {
+      return res.status(400).json({ message: "BAD_DATE" });
+    }
+
+    const limitClasses = rawLimitClasses == null || rawLimitClasses === ""
+      ? undefined
+      : Number(rawLimitClasses);
+    const windowDays = rawWindowDays == null || rawWindowDays === ""
+      ? undefined
+      : Number(rawWindowDays);
+
+    const result = await sendWeeklyTeacherDigestsForDate(date, {
+      dryRun,
+      limitClasses: Number.isFinite(limitClasses) ? Number(limitClasses) : undefined,
+      windowDays: Number.isFinite(windowDays) ? Number(windowDays) : undefined,
+    });
+
+    return res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err: any) {
+    logger.error("[emails] POST /emails/teacher-digest/check error", {
+      requestId: (req as any).requestId,
+      message: err?.message,
+    });
+
+    return res.status(500).json({ message: "Internal server error" });
   }
 });
 

@@ -1,8 +1,10 @@
 import rateLimit, { RateLimitRequestHandler } from "express-rate-limit";
+import { RedisStore as RedisRateLimitStore } from "rate-limit-redis";
 import type { Response } from "express";
 import { IS_PRODUCTION } from "../config";
 import type { AuthRequest } from "./authMiddleware";
 import { logger } from "../utils/logger";
+import { createRedisSendCommand, getRedisKeyPrefix, isRedisEnabled } from "../services/redis/sharedRedis";
 
 function getRetryAfterSeconds(req: any, fallbackSeconds: number): number {
   const resetTime = req?.rateLimit?.resetTime as Date | undefined;
@@ -41,6 +43,15 @@ function jsonRateLimitHandler(message: string, fallbackWindowSeconds: number) {
   };
 }
 
+export function createRedisRateLimitStore(prefix: string) {
+  if (!isRedisEnabled()) return undefined;
+
+  return new RedisRateLimitStore({
+    sendCommand: createRedisSendCommand(),
+    prefix: `${getRedisKeyPrefix()}ratelimit:${prefix}:`
+  });
+}
+
 export type RouteLimiterOptions = {
   /** Whether limiter is enabled. Defaults to IS_PRODUCTION. */
   enabled?: boolean;
@@ -67,10 +78,13 @@ export function createRouteLimiter(opts: RouteLimiterOptions): RateLimitRequestH
   }
 
   const windowSeconds = Math.max(1, Math.round(opts.windowMs / 1000));
+  const store = createRedisRateLimitStore("route");
 
   return rateLimit({
     windowMs: opts.windowMs,
     limit: opts.limit,
+    store,
+    passOnStoreError: true,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: req => keyByPrincipalOrIp(req as unknown as AuthRequest),

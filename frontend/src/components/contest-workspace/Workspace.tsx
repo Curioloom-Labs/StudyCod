@@ -20,6 +20,7 @@ import { ProblemTab } from "./ProblemTab";
 import { ContestDashboard } from "./ContestDashboard";
 import type { ContestWorkspaceProps, WorkspaceTab, WorkspaceTabKind } from "./types";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { useMediaQuery } from "../../utils/useMediaQuery";
 
 type NavItem = { id: string; icon: LucideIcon; label: string };
 
@@ -96,11 +97,13 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   const [tabs, setTabs] = React.useState<WorkspaceTab[]>([tabTemplate("contest-overview"), tabTemplate("problem")]);
   const [activeTabId, setActiveTabId] = React.useState<string>("problem");
   const [draggingTab, setDraggingTab] = React.useState<string | null>(null);
+  const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
 
   const [dockCollapsed, setDockCollapsed] = React.useState(false);
   const [dockPopOut, setDockPopOut] = React.useState(false);
   const [dockWidth, setDockWidth] = React.useState(370);
   const [dockAttention, setDockAttention] = React.useState(false);
+  const [mobileDockOpen, setMobileDockOpen] = React.useState(false);
 
   const [shakeWrong, setShakeWrong] = React.useState(false);
   const [discussionText, setDiscussionText] = React.useState("");
@@ -166,6 +169,12 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
     if (!el) return;
     el.scrollTop = scrollMemory.current[activeTabId] ?? 0;
   }, [activeTabId]);
+
+  React.useEffect(() => {
+    if (!isCompactViewport) {
+      setMobileDockOpen(false);
+    }
+  }, [isCompactViewport]);
 
   const onScrollActive = React.useCallback(() => {
     const el = scrollerRef.current;
@@ -423,7 +432,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   };
 
   return (
-    <div className="relative h-[calc(100dvh-3.25rem)] min-h-[620px] md:min-h-[680px] w-full px-2 md:px-3 pb-3">
+    <div className="relative h-[calc(100dvh-3.25rem)] min-h-[calc(100dvh-4.25rem)] lg:min-h-[680px] w-full px-2 md:px-3 pb-3">
       <div className="h-full rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex flex-col">
         <header className="h-12 border-b border-border/60 bg-bg-surface px-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-2 text-xs">
@@ -459,15 +468,16 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
           <div className="mt-2 text-[11px] text-text-secondary">Next: {solveLoop.nextHint}</div>
         </div>
 
-        <div className="md:hidden px-2 py-2 border-b border-border/60 bg-bg-surface/55 flex items-center gap-2 overflow-x-auto">
+        <div className="lg:hidden px-2 py-2 border-b border-border/60 bg-bg-surface/55 flex items-center gap-2 overflow-x-auto">
           <button onClick={() => openTab("problem")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "problem" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Problem</button>
           <button onClick={() => openTab("contest-overview")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "contest-overview" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Overview</button>
           <button onClick={() => openTab("submissions")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "submissions" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Submissions</button>
           <button onClick={() => openTab("leaderboard")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "leaderboard" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Leaderboard</button>
+          <button onClick={() => setMobileDockOpen((v) => !v)} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${mobileDockOpen ? "border-secondary/60 text-secondary bg-secondary/10" : "border-border text-text-secondary"}`}>{mobileDockOpen ? "Hide output" : "Output"}</button>
         </div>
 
         <div className="flex-1 min-h-0 flex">
-          <aside className="hidden md:flex w-[64px] border-r border-border/60 bg-bg-surface/70 flex-col items-center py-3 gap-2">
+          <aside className="hidden lg:flex w-[64px] border-r border-border/60 bg-bg-surface/70 flex-col items-center py-3 gap-2">
           {RAIL_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
@@ -490,16 +500,27 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
 
           <div className="flex-1 min-w-0 min-h-0 flex">
             <section className="flex-1 min-w-0 min-h-0 flex flex-col">
-              <div className="h-12 border-b border-border/60 bg-bg-surface/65 px-2 hidden md:flex items-end gap-1 overflow-auto">
+              <div className="h-12 border-b border-border/60 bg-bg-surface/65 px-2 hidden lg:flex items-end gap-1 overflow-auto" role="tablist" aria-label="Workspace tabs">
               {tabs.map((tab) => (
                 <div
                   key={tab.id}
                   draggable
+                  role="tab"
+                  tabIndex={0}
+                  aria-selected={activeTabId === tab.id}
+                  aria-controls="workspace-tabpanel"
+                  id={`workspace-tab-${tab.id}`}
                   onDragStart={() => setDraggingTab(tab.id)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
                     if (draggingTab) moveTab(draggingTab, tab.id);
                     setDraggingTab(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setActiveTabId(tab.id);
+                    }
                   }}
                   className={`h-10 mb-1 rounded-t-xl border border-b-0 px-3 flex items-center gap-2 text-xs cursor-pointer select-none ${activeTabId === tab.id ? "border-border bg-bg-base text-text-primary" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-hover/70"}`}
                   onClick={() => setActiveTabId(tab.id)}
@@ -522,17 +543,37 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
               ))}
               </div>
 
-              <div ref={scrollerRef} onScroll={onScrollActive} className="flex-1 min-h-0 overflow-auto p-2 md:p-3">
+              <div
+                ref={scrollerRef}
+                onScroll={onScrollActive}
+                id="workspace-tabpanel"
+                role="tabpanel"
+                aria-labelledby={activeTab ? `workspace-tab-${activeTab.id}` : undefined}
+                className="flex-1 min-h-0 overflow-auto p-2 md:p-3">
                 {renderTabContent()}
+                {isCompactViewport && mobileDockOpen ? (
+                  <div className="mt-3 h-[min(52vh,460px)]">
+                    <OutputDock
+                      examples={examples}
+                      onPickExample={onRunInputChange}
+                      runResult={runResult}
+                      checkResult={checkResult}
+                      submissions={submissions}
+                      wsStatus={wsStatus}
+                      latestVerdict={latestVerdict}
+                      attention={dockAttention}
+                    />
+                  </div>
+                ) : null}
               </div>
             </section>
 
             {!focusMode ? (
               <>
-                {!dockCollapsed && !dockPopOut ? <div onMouseDown={startResize} className="w-1.5 cursor-col-resize bg-transparent hover:bg-secondary/30 transition-fast hidden md:block" /> : null}
+                {!dockCollapsed && !dockPopOut ? <div onMouseDown={startResize} className="w-1.5 cursor-col-resize bg-transparent hover:bg-secondary/30 transition-fast hidden lg:block" /> : null}
 
                 {!dockPopOut ? (
-                  <aside style={{ width: dockCollapsed ? 54 : dockWidth }} className="min-h-0 border-l border-border/60 bg-bg-surface/45 relative hidden md:block">
+                  <aside style={{ width: dockCollapsed ? 54 : dockWidth }} className="min-h-0 border-l border-border/60 bg-bg-surface/45 relative hidden lg:block">
                     <div className="absolute top-2 right-2 left-2 z-10 flex items-center justify-end gap-1">
                       <button className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed((v) => !v)} title={dockCollapsed ? "Expand dock" : "Collapse dock"} aria-label={dockCollapsed ? "Expand output dock" : "Collapse output dock"}>
                       {dockCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
@@ -593,7 +634,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
         </div>
       ) : null}
 
-      <div className="absolute bottom-4 left-3 md:left-[76px] right-3 md:right-4 pointer-events-none">
+      <div className="hidden lg:block absolute bottom-4 left-3 md:left-[76px] right-3 md:right-4 pointer-events-none">
         <div className="rounded-xl border border-border/70 bg-bg-surface/70 px-3 py-2 text-[11px] text-text-secondary flex items-center justify-between gap-3">
           <span>{contestTitle} · {statement.problem.label} · {statement.task.title}</span>
           <span className="text-text-secondary">stdin buffer: {runInput.length} chars · ws: {wsStatus}</span>

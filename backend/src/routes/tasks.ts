@@ -26,6 +26,7 @@ import { normalizeMarkdownText } from "../utils/markdownNormalize";
 import { inferNeedsInput } from "../utils/inferNeedsInput";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
+import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
 import { buildLearningFirstFailure } from "../services/learning/firstFailure";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
@@ -40,6 +41,7 @@ import {
   validateWebTaskSubmission,
 } from "../services/webTaskValidationService";
 import { decodeWebTaskPayload, encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTaskPayload";
+import { getSharedRedisClient, redisKey } from "../services/redis/sharedRedis";
 const tasksRouter = Router();
 
 type ApiCodeFile = { path: string; content: string };
@@ -168,18 +170,6 @@ function isIntroPythonFixedSumTask(taskDesc: string, title: string): boolean {
   if (!/Вступ\s+до\s+Python\s+та\s+інтерпретатора/i.test(t)) return false;
   if (taskNeedsInput(s)) return false;
   return /\ba\b[^\n]{0,80}(?:значенн\w*\s*)?5/i.test(s) && /\bb\b[^\n]{0,80}(?:значенн\w*\s*)?3/i.test(s) && /сум/i.test(s) && /вивед/i.test(s);
-}
-function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec {
-  const hasFloatLike = outputs.some(s => {
-    const v = String(s ?? "");
-    return /(^|\s)[-+]?(?:\d*\.\d+|\d+\.\d*)(?:[eE][-+]?\d+)?(\s|$)/.test(v) || /(^|\s)[-+]?\d+(?:[eE][-+]?\d+)(\s|$)/.test(v);
-  });
-  return hasFloatLike ? {
-    type: "float",
-    epsilon: 1e-6
-  } : {
-    type: "whitespace"
-  };
 }
 
 function inferEffectiveIoTypeForPersonalTask(task: Task, tests: Array<{ input?: string | null; expectedOutput?: string | null }>): TaskIoType {
@@ -319,6 +309,32 @@ const GENERATE_COOLDOWN_MAX_MS = (() => {
 const generateCooldownByUserLang = new Map<string, number>();
 const generateInFlightByUserLang = new Set<string>();
 
+const GENERATE_RESERVE_LUA = `
+local cooldownKey = KEYS[1]
+local inflightKey = KEYS[2]
+
+local nowMs = tonumber(ARGV[1])
+local cooldownMs = tonumber(ARGV[2])
+local inflightTtlMs = tonumber(ARGV[3])
+
+if redis.call('EXISTS', inflightKey) == 1 then
+  return {0, 2000}
+end
+
+local cooldownRaw = redis.call('GET', cooldownKey)
+if cooldownRaw then
+  local notBefore = tonumber(cooldownRaw) or 0
+  if notBefore > nowMs then
+    return {1, notBefore - nowMs}
+  end
+end
+
+redis.call('SET', inflightKey, tostring(nowMs), 'PX', inflightTtlMs)
+local nextNotBefore = nowMs + cooldownMs
+redis.call('SET', cooldownKey, tostring(nextNotBefore), 'PX', math.max(cooldownMs * 3, 60000))
+return {2, cooldownMs}
+`;
+
 function randomIntInclusive(min: number, max: number): number {
   const lo = Math.floor(Math.min(min, max));
   const hi = Math.floor(Math.max(min, max));
@@ -327,6 +343,70 @@ function randomIntInclusive(min: number, max: number): number {
 
 function makeGenerateThrottleKey(userId: number, lang: "JAVA" | "PYTHON" | "CPP"): string {
   return `${userId}:${lang}`;
+}
+
+function generateCooldownRedisKey(throttleKey: string): string {
+  return redisKey("tasks", "generate", "cooldown", throttleKey);
+}
+
+function generateInflightRedisKey(throttleKey: string): string {
+  return redisKey("tasks", "generate", "inflight", throttleKey);
+}
+
+async function reserveGenerateSlot(params: {
+  throttleKey: string;
+  nowMs: number;
+  cooldownMs: number;
+  inflightTtlMs: number;
+}): Promise<{ kind: "ok" | "inflight" | "cooldown"; retryAfterMs: number }> {
+  const redis = await getSharedRedisClient().catch(() => null);
+  if (redis) {
+    const raw = await redis.eval(GENERATE_RESERVE_LUA, {
+      keys: [
+        generateCooldownRedisKey(params.throttleKey),
+        generateInflightRedisKey(params.throttleKey),
+      ],
+      arguments: [
+        String(params.nowMs),
+        String(params.cooldownMs),
+        String(params.inflightTtlMs),
+      ],
+    }).catch(() => null);
+
+    const payload = Array.isArray(raw) ? raw : [];
+    const state = Number(payload[0] ?? 2);
+    const retryAfterMs = Math.max(200, Number(payload[1] ?? 0));
+
+    if (state === 0) {
+      return { kind: "inflight", retryAfterMs: Math.max(2000, retryAfterMs) };
+    }
+    if (state === 1) {
+      return { kind: "cooldown", retryAfterMs };
+    }
+    return { kind: "ok", retryAfterMs: 0 };
+  }
+
+  if (generateInFlightByUserLang.has(params.throttleKey)) {
+    return { kind: "inflight", retryAfterMs: 2000 };
+  }
+
+  const notBefore = generateCooldownByUserLang.get(params.throttleKey) ?? 0;
+  if (notBefore > params.nowMs) {
+    return { kind: "cooldown", retryAfterMs: Math.max(200, notBefore - params.nowMs) };
+  }
+
+  generateInFlightByUserLang.add(params.throttleKey);
+  generateCooldownByUserLang.set(params.throttleKey, params.nowMs + params.cooldownMs);
+  return { kind: "ok", retryAfterMs: 0 };
+}
+
+async function releaseGenerateSlot(throttleKey: string): Promise<void> {
+  generateInFlightByUserLang.delete(throttleKey);
+
+  const redis = await getSharedRedisClient().catch(() => null);
+  if (!redis) return;
+
+  await redis.del(generateInflightRedisKey(throttleKey)).catch(() => undefined);
 }
 
 function buildPersonalControlBatchPrefix(params: { lang: "JAVA" | "PYTHON" | "CPP"; startTopicIndex: number; endTopicIndex: number }): string {
@@ -433,6 +513,9 @@ async function buildLocalizedTheoryEnByBlockId(params: {
     .addSelect(["b.contentEn", "b.translationVersionEn", "b.translatedAtEn"])
     .getMany();
 
+  // Separate blocks that need translation from those that don't
+  const needsTranslation: typeof blocks = [];
+  
   for (const b of blocks) {
     const contentEn = String((b as any).contentEn ?? "");
     const isFresh =
@@ -442,25 +525,73 @@ async function buildLocalizedTheoryEnByBlockId(params: {
 
     if (isFresh) {
       out.set(b.id, contentEn);
-      continue;
+    } else {
+      needsTranslation.push(b);
     }
+  }
 
-    try {
-      const translated = await translateMarkdownUkToEn(String(b.content ?? ""));
-      if (translated.trim().length > 0 && !looksLikeTranslationProviderErrorText(translated)) {
+  // Batch translate remaining blocks (improves performance with many blocks)
+  if (needsTranslation.length > 0) {
+    const toTranslate = needsTranslation.map(b => ({
+      id: b.id,
+      markdown: String(b.content ?? "")
+    }));
+
+    const translatedMap = await (async () => {
+      const temp = new Map<number, string>();
+      const maxConcurrency = 5;
+      
+      for (let i = 0; i < toTranslate.length; i += maxConcurrency) {
+        const batch = toTranslate.slice(i, i + maxConcurrency);
+        const promises = batch.map(async (item) => {
+          try {
+            const translated = await translateMarkdownUkToEn(item.markdown);
+            if (translated.trim().length > 0 && !looksLikeTranslationProviderErrorText(translated)) {
+              temp.set(item.id, translated);
+            }
+          } catch (error: any) {
+            logger.warn("[tasks] translate theory block uk->en failed", {
+              requestId: params.req.requestId,
+              userId: params.req.userId,
+              theoryBlockId: item.id,
+              error: error?.message ?? String(error)
+            });
+          }
+        });
+
+        await Promise.all(promises);
+      }
+
+      return temp;
+    })();
+
+    // Batch update all translated blocks at once
+    const blocksToSave = needsTranslation
+      .filter(b => translatedMap.has(b.id))
+      .map(b => {
+        const translated = translatedMap.get(b.id)!;
         (b as any).contentEn = translated;
         (b as any).translationVersionEn = Number((b as any).version ?? 1);
         (b as any).translatedAtEn = new Date();
-        await theoryBlockRepo().save(b);
-        out.set(b.id, translated);
-      }
-    } catch (error: any) {
-      logger.warn("[tasks] translate theory block uk->en failed", {
-        requestId: params.req.requestId,
-        userId: params.req.userId,
-        theoryBlockId: b.id,
-        error: error?.message ?? String(error)
+        return b;
       });
+
+    if (blocksToSave.length > 0) {
+      try {
+        await theoryBlockRepo().save(blocksToSave);
+      } catch (error: any) {
+        logger.warn("[tasks] batch save translated theory blocks failed", {
+          requestId: params.req.requestId,
+          userId: params.req.userId,
+          count: blocksToSave.length,
+          error: error?.message ?? String(error)
+        });
+      }
+    }
+
+    // Add translated results to output
+    for (const [blockId, translated] of translatedMap.entries()) {
+      out.set(blockId, translated);
     }
   }
 
@@ -1928,21 +2059,27 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
     throttleKey = makeGenerateThrottleKey(userId, lang);
 
-    // Prevent parallel generation for the same user+language.
-    if (generateInFlightByUserLang.has(throttleKey)) {
+    const now = Date.now();
+    const cooldownMs = randomIntInclusive(GENERATE_COOLDOWN_MIN_MS, GENERATE_COOLDOWN_MAX_MS);
+    const inflightTtlMs = Math.max(15_000, Math.min(180_000, REQUEST_BUDGET_MS + 15_000));
+    const reservation = await reserveGenerateSlot({
+      throttleKey,
+      nowMs: now,
+      cooldownMs,
+      inflightTtlMs,
+    });
+
+    if (reservation.kind === "inflight") {
       res.setHeader("Retry-After", "2");
       return res.status(409).json({
         status: "blocked",
         message: "GENERATE_REQUEST_IN_PROGRESS",
-        retryAfterMs: 2000
+        retryAfterMs: reservation.retryAfterMs,
       });
     }
 
-    // Enforce interval between generation requests (default random 5-10s).
-    const now = Date.now();
-    const notBefore = generateCooldownByUserLang.get(throttleKey) ?? 0;
-    if (notBefore > now) {
-      const retryAfterMs = Math.max(200, notBefore - now);
+    if (reservation.kind === "cooldown") {
+      const retryAfterMs = reservation.retryAfterMs;
       res.setHeader("Retry-After", String(Math.max(1, Math.ceil(retryAfterMs / 1000))));
       return res.status(429).json({
         status: "blocked",
@@ -1950,12 +2087,6 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         retryAfterMs
       });
     }
-
-    generateInFlightByUserLang.add(throttleKey);
-    generateCooldownByUserLang.set(
-      throttleKey,
-      now + randomIntInclusive(GENERATE_COOLDOWN_MIN_MS, GENERATE_COOLDOWN_MAX_MS)
-    );
 
     // Opportunistic cleanup for expired cooldown entries.
     if (generateCooldownByUserLang.size > 1000) {
@@ -2657,7 +2788,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       message: "Internal server error"
     });
   } finally {
-    if (throttleKey) generateInFlightByUserLang.delete(throttleKey);
+    if (throttleKey) await releaseGenerateSlot(throttleKey);
   }
 });
 tasksRouter.post("/reset-topic", authMiddleware, async (req: AuthRequest, res: Response) => {

@@ -75,6 +75,13 @@ const safeLocalStorage = {
     } catch {
       // ignore
     }
+  },
+  remove(key: string) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
   }
 };
 
@@ -129,6 +136,10 @@ export function saveResumeState(next: ResumeState) {
   } catch {
     // ignore
   }
+}
+
+export function clearResumeState(userId: number) {
+  safeLocalStorage.remove(`${KEY_PREFIX}${userId}`);
 }
 
 export function resolveResumeRoute(user: User, state: ResumeState | null):

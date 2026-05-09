@@ -8,6 +8,7 @@ import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
+import { PlatformFooter } from "./components/layout/PlatformFooter";
 import { TerminalLoader } from "./components/ui/TerminalLoader";
 import type { MaintenancePayload } from "./pages/system/MaintenancePage";
 import { UIModeProvider, useUIMode } from "./components/interface/UIModeProvider";
@@ -19,9 +20,11 @@ import { applyTheme, getCurrentTheme, type AppTheme } from "./theme";
 import { getMaintenanceStatus } from "./lib/api/maintenance";
 import { getAdminMaintenance } from "./lib/api/admin";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
+import { getControlWorkStatus } from "./lib/api/edu";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
 import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
+import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
 const AuthPage = React.lazy(() => import("./pages/auth/AuthPage").then(mod => ({ default: mod.AuthPage })));
 const VerifyEmailPage = React.lazy(() => import("./pages/auth/VerifyEmailPage").then(mod => ({ default: mod.VerifyEmailPage })));
 const ResetPasswordPage = React.lazy(() => import("./pages/auth/ResetPasswordPage").then(mod => ({ default: mod.ResetPasswordPage })));
@@ -34,6 +37,7 @@ const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ d
 const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
 const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherDashboardPage").then(mod => ({ default: mod.TeacherDashboardPage })));
 const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassDetailsPage").then(mod => ({ default: mod.ClassDetailsPage })));
+const TeacherOSPage = React.lazy(() => import("./pages/edu/TeacherOSPage").then(mod => ({ default: mod.TeacherOSPage })));
 const CreateLessonPage = React.lazy(() => import("./pages/edu/CreateLessonPage").then(mod => ({ default: mod.CreateLessonPage })));
 const CreateTopicPage = React.lazy(() => import("./pages/edu/CreateTopicPage").then(mod => ({ default: mod.CreateTopicPage })));
 const TopicDetailsPage = React.lazy(() => import("./pages/edu/TopicDetailsPage").then(mod => ({ default: mod.TopicDetailsPage })));
@@ -43,12 +47,16 @@ const StudentLessonsPage = React.lazy(() => import("./pages/edu/StudentLessonsPa
 const LessonDetailsPage = React.lazy(() => import("./pages/edu/LessonDetailsPage").then(mod => ({ default: mod.LessonDetailsPage })));
 const StudentTaskPage = React.lazy(() => import("./pages/edu/StudentTaskPage").then(mod => ({ default: mod.StudentTaskPage })));
 const GradeDetailsPage = React.lazy(() => import("./pages/edu/GradeDetailsPage").then(mod => ({ default: mod.GradeDetailsPage })));
+const StudentAppealsPage = React.lazy(() => import("./pages/edu/StudentAppealsPage").then(mod => ({ default: mod.StudentAppealsPage })));
+const TeacherClassAppealsPage = React.lazy(() => import("./pages/edu/TeacherClassAppealsPage").then(mod => ({ default: mod.TeacherClassAppealsPage })));
 const SummaryGradesPage = React.lazy(() => import("./pages/edu/SummaryGradesPage").then(mod => ({ default: mod.SummaryGradesPage })));
 const ClassGradebookPage = React.lazy(() => import("./pages/edu/ClassGradebookPage").then(mod => ({ default: mod.ClassGradebookPage })));
 const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
 const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminDashboardPage").then(mod => ({ default: mod.AdminDashboardPage })));
 const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => ({ default: mod.DocsPage })));
 const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(mod => ({ default: mod.SupportPage })));
+const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
+const TermsOfUsePage = React.lazy(() => import("./pages/system/TermsOfUsePage").then(mod => ({ default: mod.TermsOfUsePage })));
 const MaintenancePage = React.lazy(() => import("./pages/system/MaintenancePage").then(mod => ({ default: mod.MaintenancePage })));
 const ProfileCertificatesPage = React.lazy(() => import("./pages/profile/ProfileCertificatesPage").then(mod => ({ default: mod.ProfileCertificatesPage })));
 const CertificateVerifyPage = React.lazy(() => import("./pages/public/CertificateVerifyPage").then(mod => ({ default: mod.CertificateVerifyPage })));
@@ -70,6 +78,18 @@ const PageLoader: React.FC = () => {
     </div>;
 };
 type Page = "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin";
+
+function isPageAvailableForUser(page: Page, user: User): boolean {
+  if (page === "admin") return user.role === "SYSTEM_ADMIN";
+  if (page === "teacher") return user.userMode === "EDUCATIONAL" && !user.studentId;
+  if (page === "student") return user.userMode === "EDUCATIONAL" && !!user.studentId;
+  if (page === "tasks" || page === "grades") return user.userMode !== "EDUCATIONAL";
+  return true;
+}
+
+function resolvePageForUser(page: Page, user: User): Page {
+  return isPageAvailableForUser(page, user) ? page : "home";
+}
 
 type MaintenanceStoragePayload = {
   title?: unknown;
@@ -124,12 +144,106 @@ const extractMaintenanceData = (error: unknown): { status: number | null; data: 
   return { status, data };
 };
 
+const getHttpStatusFromError = (error: unknown): number | null => {
+  if (!error || typeof error !== "object") return null;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return null;
+  const status = Reflect.get(response, "status");
+  return typeof status === "number" ? status : null;
+};
+
+const getRetryAfterSecondsFromError = (error: unknown): number | null => {
+  if (!error || typeof error !== "object") return null;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return null;
+
+  const headers = Reflect.get(response, "headers");
+  const headerValue = headers && typeof headers === "object"
+    ? Reflect.get(headers, "retry-after")
+    : null;
+  const retryAfterFromHeader = Number(headerValue);
+  if (Number.isFinite(retryAfterFromHeader) && retryAfterFromHeader > 0) {
+    return Math.ceil(retryAfterFromHeader);
+  }
+
+  const data = Reflect.get(response, "data");
+  if (!data || typeof data !== "object") return null;
+
+  const retryAfterSeconds = Number(Reflect.get(data, "retryAfterSeconds"));
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return Math.ceil(retryAfterSeconds);
+  }
+
+  const details = Reflect.get(data, "details");
+  if (details && typeof details === "object") {
+    const retryAfterMs = Number(Reflect.get(details, "retryAfterMs"));
+    if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+      return Math.ceil(retryAfterMs / 1000);
+    }
+  }
+
+  return null;
+};
+
+const isAuthErrorStatus = (status: number | null): boolean => {
+  return status === 401 || status === 403;
+};
+
+const delay = (ms: number) => new Promise<void>((resolve) => {
+  window.setTimeout(resolve, Math.max(0, ms));
+});
+
+const getCurrentUserWithRetry = async (maxAttempts = 3): Promise<User> => {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await getMe();
+    } catch (error: unknown) {
+      lastError = error;
+
+      const maintenance = extractMaintenanceData(error);
+      if (maintenance.status === 503 && maintenance.data?.maintenance === true) {
+        throw error;
+      }
+
+      const status = getHttpStatusFromError(error);
+      const shouldRetry = status === null || status === 429 || status >= 500;
+      const isLastAttempt = attempt >= maxAttempts - 1;
+      if (!shouldRetry || isLastAttempt) {
+        throw error;
+      }
+
+      const retryAfterSeconds = getRetryAfterSecondsFromError(error);
+      const backoffMs = Math.min(4000, 800 * (attempt + 1));
+      const retryAfterMs = retryAfterSeconds && retryAfterSeconds > 0
+        ? Math.min(8000, Math.max(1000, retryAfterSeconds * 1000))
+        : backoffMs;
+      await delay(retryAfterMs);
+    }
+  }
+
+  throw lastError ?? new Error("GET_ME_FAILED");
+};
+
 function asPage(value: string): Page | null {
   return value === "home" || value === "tasks" || value === "grades" || value === "profile" || value === "teacher" || value === "student" || value === "admin" ? value : null;
 }
 
 function toMomentumPageTarget(value: MomentumNavTarget): Page | null {
   return asPage(value);
+}
+
+function getRequestedAppPage(searchParams: URLSearchParams): Page | null {
+  return asPage(String(searchParams.get("app") ?? ""));
+}
+
+function getSafeNextAfterAuth(searchParams: URLSearchParams): string | null {
+  const raw = String(searchParams.get("next") ?? "").trim();
+  if (!raw) return null;
+  if (!raw.startsWith("/")) return null;
+  if (raw.startsWith("//")) return null;
+  return raw;
 }
 
 const AppContent: React.FC = React.memo(() => {
@@ -175,6 +289,11 @@ const AppContent: React.FC = React.memo(() => {
   const [adminMaintenanceEnabled, setAdminMaintenanceEnabled] = useState<boolean>(false);
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
   const [bootResumeHandled, setBootResumeHandled] = useState<boolean>(false);
+  const requestedAppPage = useMemo(() => getRequestedAppPage(searchParams), [searchParams]);
+  const resolvedPage = useMemo(() => {
+    if (!user) return page;
+    return resolvePageForUser(page, user);
+  }, [page, user?.id, user?.role, user?.userMode, user?.studentId]);
   useEffect(() => {
     const cleanupOldStorage = () => {
       const keys = Object.keys(localStorage);
@@ -202,11 +321,12 @@ const AppContent: React.FC = React.memo(() => {
   }, []);
   useEffect(() => {
     // Allow cross-area navigation (e.g., from /edu) to request a specific page.
+    if (!user) return;
     try {
       const requested = sessionStorage.getItem("studycod.openPage");
       if (!requested) return;
       const next = asPage(requested);
-      if (next) {
+      if (next && isPageAvailableForUser(next, user)) {
         startTransition(() => setPage(next));
       }
       sessionStorage.removeItem("studycod.openPage");
@@ -214,6 +334,39 @@ const AppContent: React.FC = React.memo(() => {
       // ignore
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (location.pathname !== "/") return;
+    if (!requestedAppPage) return;
+    if (!isPageAvailableForUser(requestedAppPage, user)) return;
+    if (requestedAppPage === page) return;
+    startTransition(() => setPage(requestedAppPage));
+  }, [user?.id, location.pathname, requestedAppPage]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (location.pathname !== "/") return;
+
+    const currentRequested = getRequestedAppPage(searchParams);
+    const target = resolvedPage === "home" ? null : resolvedPage;
+    if (currentRequested === target) return;
+
+    const nextSearch = new URLSearchParams(searchParams);
+    if (target) {
+      nextSearch.set("app", target);
+    } else {
+      nextSearch.delete("app");
+    }
+
+    const next = nextSearch.toString();
+    navigate({
+      pathname: "/",
+      search: next ? `?${next}` : ""
+    }, {
+      replace: true
+    });
+  }, [user?.id, location.pathname, resolvedPage, navigate, searchParams]);
   useEffect(() => {
     const handler = (e: Event) => {
       if (!(e instanceof CustomEvent)) return;
@@ -284,108 +437,131 @@ const AppContent: React.FC = React.memo(() => {
     return () => window.removeEventListener("studycod:adminMaintenance", handler as EventListener);
   }, []);
   useEffect(() => {
+    let cancelled = false;
     const token = localStorage.getItem("token");
     if (!token) {
       setBootResumeHandled(true);
       setLoading(false);
       return;
     }
-    getMe().then(u => {
-      setUser(u);
-      if (u.userMode === "CONTEST") {
-        navigate("/contest/contests", { replace: true });
-        setBootResumeHandled(true);
-        return;
-      }
-      const fromAuth = sessionStorage.getItem("fromAuth");
-      if (fromAuth && u.role === "SYSTEM_ADMIN") {
-        startTransition(() => {
-          setPage("admin");
-        });
-        sessionStorage.removeItem("fromAuth");
-      } else if (fromAuth && (!u.userMode || u.userMode === "PERSONAL")) {
-        // Post-auth routing must be presentation-agnostic.
-        const resume = resolveResumeRoute(u, loadResumeState(u.id));
-        if (resume.type === "path") {
-          navigate(resume.path, { replace: true });
-        } else if (resume.type === "appPage") {
-          if (resume.extras?.openTaskId) {
-            sessionStorage.setItem("openTaskId", resume.extras.openTaskId);
-          }
-          startTransition(() => setPage(resume.page));
-        }
-        sessionStorage.removeItem("fromAuth");
-      } else if (fromAuth && u.userMode === "EDUCATIONAL" && u.studentId) {
-        const resume = resolveResumeRoute(u, loadResumeState(u.id));
-        if (resume.type === "path") {
-          navigate(resume.path, { replace: true });
-        } else if (resume.type === "appPage") {
-          startTransition(() => setPage(resume.page));
-        }
-        sessionStorage.removeItem("fromAuth");
-      } else if (fromAuth && u.userMode === "EDUCATIONAL" && !u.studentId) {
-        const resume = resolveResumeRoute(u, loadResumeState(u.id));
-        if (resume.type === "path") {
-          navigate(resume.path, { replace: true });
-        } else if (resume.type === "appPage") {
-          startTransition(() => setPage(resume.page));
-        }
-        sessionStorage.removeItem("fromAuth");
-      } else {
-        // Boot-time resume: when opening the app root without an explicit intent,
-        // restore the last valid cognitive session immediately.
-        try {
-          const path = window.location.pathname;
-          const sp = new URLSearchParams(window.location.search);
-          const authIntent = sp.get("auth");
-          const nextAfterAuth = sp.get("next");
-          const requestedPage = sessionStorage.getItem("studycod.openPage");
+    const run = async () => {
+      try {
+        const u = await getCurrentUserWithRetry(6);
+        if (cancelled) return;
 
-          const isRootEntry = path === "/";
-          const hasExplicitIntent = Boolean(authIntent || nextAfterAuth || requestedPage);
-
-          if (isRootEntry && !hasExplicitIntent) {
-            const state = loadResumeState(u.id);
-            if (isResumableSession(u, state)) {
-              const resolved = resolveResumeRoute(u, state);
-              if (resolved.type === "path") {
-                navigate(resolved.path, { replace: true });
-              } else if (resolved.type === "appPage") {
-                if (resolved.extras?.openTaskId) {
-                  sessionStorage.setItem("openTaskId", resolved.extras.openTaskId);
-                }
-                startTransition(() => setPage(resolved.page));
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-      setBootResumeHandled(true);
-    }).catch(error => {
-      const extracted = extractMaintenanceData(error);
-      const isMaintenance = extracted.status === 503 && extracted.data?.maintenance === true;
-      if (isMaintenance) {
-        const d = extracted.data;
-        if (!d) {
+        setUser(u);
+        if (u.userMode === "CONTEST") {
+          navigate("/contest/contests", { replace: true });
           setBootResumeHandled(true);
           return;
         }
-        setMaintenance({
+        const fromAuth = sessionStorage.getItem("fromAuth");
+        if (fromAuth && u.role === "SYSTEM_ADMIN") {
+          startTransition(() => {
+            setPage("admin");
+          });
+          sessionStorage.removeItem("fromAuth");
+        } else if (fromAuth && (!u.userMode || u.userMode === "PERSONAL")) {
+          // Post-auth routing must be presentation-agnostic.
+          const resume = resolveResumeRoute(u, loadResumeState(u.id));
+          if (resume.type === "path") {
+            navigate(resume.path, { replace: true });
+          } else if (resume.type === "appPage") {
+            if (resume.extras?.openTaskId) {
+              sessionStorage.setItem("openTaskId", resume.extras.openTaskId);
+            }
+            startTransition(() => setPage(resume.page));
+          }
+          sessionStorage.removeItem("fromAuth");
+        } else if (fromAuth && u.userMode === "EDUCATIONAL" && u.studentId) {
+          const resume = resolveResumeRoute(u, loadResumeState(u.id));
+          if (resume.type === "path") {
+            navigate(resume.path, { replace: true });
+          } else if (resume.type === "appPage") {
+            startTransition(() => setPage(resume.page));
+          }
+          sessionStorage.removeItem("fromAuth");
+        } else if (fromAuth && u.userMode === "EDUCATIONAL" && !u.studentId) {
+          const resume = resolveResumeRoute(u, loadResumeState(u.id));
+          if (resume.type === "path") {
+            navigate(resume.path, { replace: true });
+          } else if (resume.type === "appPage") {
+            startTransition(() => setPage(resume.page));
+          }
+          sessionStorage.removeItem("fromAuth");
+        } else {
+          // Boot-time resume: when opening the app root without an explicit intent,
+          // restore the last valid cognitive session immediately.
+          try {
+            const path = window.location.pathname;
+            const sp = new URLSearchParams(window.location.search);
+            const authIntent = sp.get("auth");
+            const nextAfterAuth = sp.get("next");
+            const requestedPage = sessionStorage.getItem("studycod.openPage");
+
+            const isRootEntry = path === "/";
+            const hasExplicitIntent = Boolean(authIntent || nextAfterAuth || requestedPage);
+
+            if (isRootEntry && !hasExplicitIntent) {
+              const state = loadResumeState(u.id);
+              if (isResumableSession(u, state)) {
+                const resolved = resolveResumeRoute(u, state);
+                if (resolved.type === "path") {
+                  navigate(resolved.path, { replace: true });
+                } else if (resolved.type === "appPage") {
+                  if (resolved.extras?.openTaskId) {
+                    sessionStorage.setItem("openTaskId", resolved.extras.openTaskId);
+                  }
+                  startTransition(() => setPage(resolved.page));
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+        setBootResumeHandled(true);
+      } catch (error: unknown) {
+        if (cancelled) return;
+
+        const extracted = extractMaintenanceData(error);
+        const isMaintenance = extracted.status === 503 && extracted.data?.maintenance === true;
+        if (isMaintenance) {
+          const d = extracted.data;
+          if (!d) {
+            setBootResumeHandled(true);
+            return;
+          }
+          setMaintenance({
             title: String(d.title ?? t("maintenanceTitle")),
-          message: String(d.message ?? ""),
-          until: d.until ? String(d.until) : null
-        });
-        return;
+            message: String(d.message ?? ""),
+            until: d.until ? String(d.until) : null
+          });
+          setBootResumeHandled(true);
+          return;
+        }
+
+        const status = getHttpStatusFromError(error);
+        if (import.meta.env.DEV) {
+          console.error("Failed to get user:", getErrorMessageFromUnknown(error, "unknown error"));
+        }
+
+        if (isAuthErrorStatus(status)) {
+          localStorage.removeItem("token");
+          setUser(null);
+        }
+
+        setBootResumeHandled(true);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      if (import.meta.env.DEV) {
-        console.error("Failed to get user:", getErrorMessageFromUnknown(error, "unknown error"));
-      }
-      localStorage.removeItem("token");
-      setUser(null);
-      setBootResumeHandled(true);
-    }).finally(() => setLoading(false));
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
   useEffect(() => {
     if (!user || user.role !== "SYSTEM_ADMIN") return;
@@ -522,7 +698,7 @@ const AppContent: React.FC = React.memo(() => {
       </Suspense>;
     }
 
-    const nextAfterAuth = searchParams.get("next");
+    const nextAfterAuth = getSafeNextAfterAuth(searchParams);
     return <Suspense fallback={<PageLoader />}>
       <AuthPage initialMode={authIntent === "register" ? "register" : "login"} showBackToLanding={location.pathname === "/"} onAuth={(u: User) => {
         setUser(u);
@@ -545,15 +721,15 @@ const AppContent: React.FC = React.memo(() => {
   }
   const content = <Suspense fallback={<PageLoader />}>
       {(() => {
-      if (page === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
-      if (page === "home") {
+      if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
+      if (resolvedPage === "home") {
         return <HomePage user={user} onNavigate={handleSetPage} />;
       }
-      if (page === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
-      if (page === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
-      if (page === "teacher" && user.userMode === "EDUCATIONAL" && !user.studentId) return <TeacherDashboardPage />;
-      if (page === "student" && user.userMode === "EDUCATIONAL") return <StudentDashboardPage user={user} />;
-      if (page === "profile") return <ProfilePage user={user} onUserChange={setUser} />;
+      if (resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
+      if (resolvedPage === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
+      if (resolvedPage === "teacher" && user.userMode === "EDUCATIONAL" && !user.studentId) return <TeacherDashboardPage />;
+      if (resolvedPage === "student" && user.userMode === "EDUCATIONAL") return <StudentDashboardPage user={user} />;
+      if (resolvedPage === "profile") return <ProfilePage user={user} onUserChange={setUser} />;
       return null;
     })()}
     </Suspense>;
@@ -585,15 +761,15 @@ const AppContent: React.FC = React.memo(() => {
               </div>}
             {}
             {(!user.userMode || user.userMode === "PERSONAL") && <>
-                <button onClick={handleGoHome} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={handleGoHome} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <Home className="w-4 h-4" />
                   {t('home')}
                 </button>
-                <button onClick={() => handleSetPage("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('tasks')}
                 </button>
-                <button onClick={() => handleSetPage("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('grades')}
                 </button>
@@ -614,25 +790,31 @@ const AppContent: React.FC = React.memo(() => {
             </button>
 
             {}
-            {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <Shield className="w-4 h-4" />
                 Admin
               </button>}
 
             {}
-            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => handleSetPage("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => handleSetPage("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <GraduationCap className="w-4 h-4" />
                 {t('myClasses')}
               </button>}
 
             {user.userMode === "EDUCATIONAL" && user.studentId && <>
-                <button onClick={() => handleSetPage("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${page === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <BookOpen className="w-4 h-4" />
                   {t('myJournal')}
                 </button>
                 <button onClick={() => navigate("/edu/library")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <Library className="w-4 h-4" />
                   {t("library")}
+                </button>
+                <button onClick={() => {
+              navigate("/edu/appeals");
+            }} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4" />
+                  {i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції"}
                 </button>
                 <button onClick={() => {
               navigate("/edu/lessons");
@@ -647,7 +829,7 @@ const AppContent: React.FC = React.memo(() => {
             {}
             <div className="flex items-center gap-2">
               {}
-              <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
+              <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
                 {i18n.language === 'uk' ? 'EN' : 'UA'}
               </button>
 
@@ -656,7 +838,7 @@ const AppContent: React.FC = React.memo(() => {
                 {theme === "dark" ? "Light" : "Dark"}
               </button>
               
-              <button onClick={() => handleSetPage("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${page === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
+              <button onClick={() => handleSetPage("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${resolvedPage === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
                 <UserIcon className="w-4 h-4 text-text-secondary" />
               </button>
               <div className="relative" ref={navMenuRef}>
@@ -680,10 +862,11 @@ const AppContent: React.FC = React.memo(() => {
         <SwitchToMomentumNudge />
 
         <WorkspaceViewportProvider element={workspaceViewportEl}>
-          <main ref={setWorkspaceViewportRef} className={`flex-1 min-h-0 flex flex-col ${page === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+          <main ref={setWorkspaceViewportRef} className={`flex-1 min-h-0 flex flex-col ${resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
             {content}
           </main>
         </WorkspaceViewportProvider>
+        <PlatformFooter className="flex-shrink-0" />
         {user ? <Suspense fallback={null}>
             <PlacementEntry user={user} onUserChange={setUser} />
           </Suspense> : null}
@@ -693,7 +876,7 @@ const AppContent: React.FC = React.memo(() => {
       </div>;
   }
 
-      const momentumCurrent: MomentumNavTarget = page === "home" ? "continue" : page;
+        const momentumCurrent: MomentumNavTarget = resolvedPage === "home" ? "continue" : resolvedPage;
   return <>
       <MomentumShell user={user} current={momentumCurrent} onNavigate={target => {
       if (target === "library") {
@@ -737,11 +920,17 @@ const AppContent: React.FC = React.memo(() => {
 AppContent.displayName = "AppContent";
 export const App: React.FC = () => {
   const location = useLocation();
+  const topLevelRouteKey = useMemo(() => {
+    const path = location.pathname || "/";
+    if (/^\/edu(?:\/|$)/.test(path)) return "/edu";
+    if (/^\/contest(?:\/|$)/.test(path)) return "/contest";
+    return path;
+  }, [location.pathname]);
   return <TheoryModalProvider>
       <UIModeProvider>
         <ToastViewport />
         <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
+          <Routes location={location} key={topLevelRouteKey}>
           {import.meta.env.DEV ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <DevEditorPage />
@@ -777,11 +966,23 @@ export const App: React.FC = () => {
                   <DocsPage />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/support" element={<Suspense fallback={<PageLoader />}>
+          <Route path="/privacy" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
-                  <SupportPage />
+                  <PrivacyPolicyPage />
                 </AnimatedPage>
               </Suspense>} />
+          <Route path="/terms" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <TermsOfUsePage />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/support" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <SupportPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
           <Route path="/profile/certificates" element={<RequireToken>
                 <Suspense fallback={<PageLoader />}>
                   <AnimatedPage>
@@ -794,16 +995,35 @@ export const App: React.FC = () => {
                   <CertificateVerifyPage />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/library" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <TaskLibraryPage />
-                </AnimatedPage>
-              </Suspense>} />
-          <Route path="/library/solve/:taskKey" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <LibraryTaskSolvePage />
-                </AnimatedPage>
-              </Suspense>} />
+          <Route path="/library" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <TaskLibraryPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
+          <Route path="/library/solve/:taskKey" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <LibraryTaskSolvePage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
+          <Route path="/profile" element={<RequireToken>
+                <Navigate to="/?app=profile" replace />
+              </RequireToken>} />
+          <Route path="/tasks" element={<RequireToken>
+                <Navigate to="/?app=tasks" replace />
+              </RequireToken>} />
+          <Route path="/grades" element={<RequireToken>
+                <Navigate to="/?app=grades" replace />
+              </RequireToken>} />
+          <Route path="/admin" element={<RequireToken>
+                <Navigate to="/?app=admin" replace />
+              </RequireToken>} />
+          <Route path="/dashboard" element={<RequireToken>
+                <Navigate to="/" replace />
+              </RequireToken>} />
           <Route path="/contests" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <ContestsPage />
@@ -992,6 +1212,7 @@ const ContestRoutes: React.FC = React.memo(() => {
           </AnimatePresence>
         </Suspense>
       </main>
+      <PlatformFooter className="flex-shrink-0" />
     </div>;
 });
 ContestRoutes.displayName = "ContestRoutes";
@@ -1008,27 +1229,110 @@ const EduRoutes: React.FC = React.memo(() => {
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
   const [workspaceViewportEl, setWorkspaceViewportEl] = useState<HTMLElement | null>(null);
+  const [controlExamSession, setControlExamSession] = useState(() => getControlExamSession());
+  useEffect(() => {
+    const unsubscribe = subscribeControlExamSession(() => {
+      setControlExamSession(getControlExamSession());
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!controlExamSession) return;
+
+    let cancelled = false;
+    const controlWorkId = controlExamSession.controlWorkId;
+
+    const validateControlSession = async () => {
+      try {
+        const status = await getControlWorkStatus(controlWorkId);
+        if (cancelled) return;
+
+        if (status.status !== "IN_PROGRESS") {
+          clearControlExamSession();
+        }
+      } catch (error: unknown) {
+        if (cancelled) return;
+
+        const response = error && typeof error === "object" ? Reflect.get(error, "response") : null;
+        const rawStatus = response && typeof response === "object" ? Reflect.get(response, "status") : null;
+        const statusCode = typeof rawStatus === "number" ? rawStatus : null;
+
+        const isStaleSession = statusCode === 403 || statusCode === 404 || statusCode === 409;
+        if (isStaleSession) {
+          clearControlExamSession();
+          const currentPath = typeof window !== "undefined" ? window.location.pathname : location.pathname;
+          if (/^\/edu\/(lessons\/\d+|tasks\/\d+)\/?$/i.test(currentPath)) {
+            navigate("/edu/lessons", {
+              replace: true
+            });
+          }
+          return;
+        }
+
+        if (import.meta.env.DEV) {
+          console.warn("EduRoutes: failed to validate control exam session", error);
+        }
+      }
+    };
+
+    void validateControlSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [controlExamSession?.controlWorkId, navigate]);
+
+  useEffect(() => {
+    if (!controlExamSession) return;
+
+    if (!isPathAllowedInControlExam(location.pathname, controlExamSession.controlWorkId)) {
+      navigate(`/edu/lessons/${controlExamSession.controlWorkId}?type=CONTROL`, {
+        replace: true
+      });
+    }
+  }, [controlExamSession?.controlWorkId, location.pathname, navigate]);
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
       setLoading(false);
       return;
     }
-    getMe().then(u => {
-      if (u.userMode !== "EDUCATIONAL") {
-        navigate("/", {
-          replace: true
-        });
-        return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const u = await getCurrentUserWithRetry(6);
+        if (cancelled) return;
+
+        if (u.userMode !== "EDUCATIONAL") {
+          navigate("/", {
+            replace: true
+          });
+          return;
+        }
+        setUser(u);
+      } catch (error: unknown) {
+        if (cancelled) return;
+
+        const status = getHttpStatusFromError(error);
+        if (import.meta.env.DEV) {
+          console.error("EduRoutes: Failed to get user", error);
+        }
+        if (isAuthErrorStatus(status)) {
+          localStorage.removeItem("token");
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setUser(u);
-    }).catch(error => {
-      if (import.meta.env.DEV) {
-        console.error("EduRoutes: Failed to get user", error);
-      }
-      localStorage.removeItem("token");
-      setUser(null);
-    }).finally(() => setLoading(false));
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
   const handleAuth = useCallback((u: User) => {
     setUser(u);
@@ -1049,6 +1353,8 @@ const EduRoutes: React.FC = React.memo(() => {
     setWorkspaceViewportEl(el);
   }, []);
 
+  const isControlExamActive = !!controlExamSession;
+
   if (loading) {
     return <PageLoader />;
   }
@@ -1057,7 +1363,7 @@ const EduRoutes: React.FC = React.memo(() => {
         <AuthPage onAuth={handleAuth} />
       </Suspense>;
   }
-  const eduMain = <main className={`flex-1 min-h-0 flex flex-col ${/^\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+  const eduMain = <main className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
@@ -1066,19 +1372,24 @@ const EduRoutes: React.FC = React.memo(() => {
                     <TeacherDashboardPage />
                   </AnimatedPage>} />
             <Route path="classes/:classId" element={<AnimatedPage><ClassDetailsPage /></AnimatedPage>} />
+            <Route path="classes/:classId/teacher-os" element={<AnimatedPage><TeacherOSPage /></AnimatedPage>} />
             <Route path="classes/:classId/lessons/new" element={<AnimatedPage><CreateLessonPage /></AnimatedPage>} />
             <Route path="classes/:classId/topics/new" element={<AnimatedPage><CreateTopicPage /></AnimatedPage>} />
             <Route path="topics/:topicId" element={<AnimatedPage><TopicDetailsPage /></AnimatedPage>} />
             <Route path="library" element={<AnimatedPage><TaskLibraryPage /></AnimatedPage>} />
             <Route path="library/solve/:taskKey" element={<AnimatedPage><LibraryTaskSolvePage /></AnimatedPage>} />
             <Route path="control-works/:controlWorkId" element={<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>} />
-            <Route path="/classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
-            <Route path="/classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
-            <Route path="/lessons" element={<AnimatedPage><StudentLessonsPage /></AnimatedPage>} />
-            <Route path="/lessons/:lessonId" element={<AnimatedPage><LessonDetailsPage /></AnimatedPage>} />
-            <Route path="/tasks/:taskId" element={<AnimatedPage><StudentTaskPage /></AnimatedPage>} />
-            <Route path="/grades/:gradeId" element={<AnimatedPage><GradeDetailsPage /></AnimatedPage>} />
-            <Route path="/docs" element={<AnimatedPage><DocsPage /></AnimatedPage>} />
+            <Route path="classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
+            <Route path="classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
+            <Route path="classes/:classId/appeals" element={<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>} />
+            <Route path="journal" element={<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>} />
+            <Route path="student" element={<Navigate to="/edu/journal" replace />} />
+            <Route path="lessons" element={<AnimatedPage><StudentLessonsPage /></AnimatedPage>} />
+            <Route path="lessons/:lessonId" element={<AnimatedPage><LessonDetailsPage /></AnimatedPage>} />
+            <Route path="tasks/:taskId" element={<AnimatedPage><StudentTaskPage /></AnimatedPage>} />
+            <Route path="grades/:gradeId" element={<AnimatedPage><GradeDetailsPage /></AnimatedPage>} />
+            <Route path="appeals" element={<AnimatedPage><StudentAppealsPage /></AnimatedPage>} />
+            <Route path="docs" element={<AnimatedPage><DocsPage /></AnimatedPage>} />
             {}
             <Route path="*" element={<Navigate to={user.studentId ? "lessons" : ""} replace />} />
           </Routes>
@@ -1088,49 +1399,60 @@ const EduRoutes: React.FC = React.memo(() => {
 
   if (ui.mode === "classic") {
     return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-        <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="flex items-center gap-2">
-              <Logo size={24} className="text-primary" />
-              <span className="text-lg font-mono text-text-primary">StudyCod EDU</span>
+        {!isControlExamActive && <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="flex items-center gap-2">
+                <Logo size={24} className="text-primary" />
+                <span className="text-lg font-mono text-text-primary">StudyCod EDU</span>
+              </div>
+              <div className="hidden sm:block h-6 w-px bg-border" />
+              <div className="hidden sm:block px-3 py-1 border border-border text-sm font-mono text-text-secondary">
+                {courseLabel}
+              </div>
             </div>
-            <div className="hidden sm:block h-6 w-px bg-border" />
-            <div className="hidden sm:block px-3 py-1 border border-border text-sm font-mono text-text-secondary">
-              {courseLabel}
+            <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap">
+              <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
+                {i18n.language === 'uk' ? 'EN' : 'UA'}
+              </button>
+              <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+                {theme === "dark" ? "Light" : "Dark"}
+              </button>
+              <button onClick={() => navigate("/docs")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast flex items-center gap-2">
+                <HelpCircle className="w-4 h-4" />
+                {t("help")}
+              </button>
+              <button onClick={() => navigate("/")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast">
+                {t('toHome')}
+              </button>
             </div>
-          </div>
-          <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap">
-            <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
-              {i18n.language === 'uk' ? 'EN' : 'UA'}
-            </button>
-            <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-              {theme === "dark" ? "Light" : "Dark"}
-            </button>
-            <button onClick={() => navigate("/docs")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast flex items-center gap-2">
-              <HelpCircle className="w-4 h-4" />
-              {t("help")}
-            </button>
-            <button onClick={() => navigate("/")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast">
-              {t('toHome')}
-            </button>
-          </div>
-        </header>
+          </header>}
 
-        <SwitchToMomentumNudge />
+        {!isControlExamActive && <SwitchToMomentumNudge />}
         <WorkspaceViewportProvider element={workspaceViewportEl}>
           <div ref={setEduWorkspaceViewportRef} className="flex-1 min-h-0 overflow-y-auto">
             {eduMain}
           </div>
         </WorkspaceViewportProvider>
+        {!isControlExamActive && <PlatformFooter className="flex-shrink-0" />}
         <OnboardingEntry />
       </div>;
   }
 
   const momentumCurrent: MomentumNavTarget = /^\/edu\/library/.test(location.pathname)
     ? "library"
-    : "continue";
+    : /^\/edu\/journal/.test(location.pathname)
+      ? "student"
+      : /^\/edu\/(lessons|tasks|grades)\b/.test(location.pathname)
+        ? "lessons"
+        : "continue";
   return <>
-      <MomentumShell user={user} current={momentumCurrent} onNavigate={target => {
+      <MomentumShell user={user} current={momentumCurrent} navigationHidden={isControlExamActive} onNavigate={target => {
+      if (isControlExamActive && controlExamSession) {
+        navigate(`/edu/lessons/${controlExamSession.controlWorkId}?type=CONTROL`, {
+          replace: true
+        });
+        return;
+      }
       if (target === "library") {
         navigate("/edu/library");
         return;
@@ -1154,7 +1476,15 @@ const EduRoutes: React.FC = React.memo(() => {
         navigate("/edu");
         return;
       }
-      if (target === "student" || target === "continue") {
+      if (target === "student") {
+        navigate("/edu/journal");
+        return;
+      }
+      if (target === "lessons") {
+        navigate("/edu/lessons");
+        return;
+      }
+      if (target === "continue") {
         navigate("/edu/lessons");
         return;
       }
@@ -1198,8 +1528,12 @@ const GoogleAuthSuccessWrapper: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const token = searchParams.get("token");
   const code = searchParams.get("code");
+  const exchangeAttemptRef = useRef<string | null>(null);
   const isLikelyJwt = (value: string) => /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
   useEffect(() => {
+    const attemptKey = code ? `code:${code}` : token ? `token:${token}` : "cookie:success";
+    if (exchangeAttemptRef.current === attemptKey) return;
+    exchangeAttemptRef.current = attemptKey;
     let cancelled = false;
     const finishSuccess = (jwtToken: string) => {
       localStorage.setItem("token", jwtToken);
@@ -1264,10 +1598,24 @@ GoogleAuthSuccessWrapper.displayName = "GoogleAuthSuccessWrapper";
 const GoogleAuthErrorPage: React.FC = React.memo(() => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reason = String(searchParams.get("reason") ?? "").trim();
+  const message = (() => {
+    if (reason === "GOOGLE_OAUTH_DISABLED") {
+      return t("googleAuthError") + " " + "Google OAuth is not configured.";
+    }
+    if (reason === "GOOGLE_LINK_SESSION_REQUIRED") {
+      return t("googleAuthError") + " " + "Please start Google linking again from your profile.";
+    }
+    if (reason === "GOOGLE_ACCOUNT_ALREADY_LINKED") {
+      return t("googleAuthError") + " " + "This Google account is already linked to another profile.";
+    }
+    return t("googleAuthError");
+  })();
   return <div className="min-h-screen flex items-center justify-center bg-bg-base">
       <div className="w-full max-w-md bg-bg-surface border border-border p-8">
         <div className="text-xs font-mono text-accent-error border border-accent-error bg-bg-code px-3 py-2">
-          {t("googleAuthError")}
+          {message}
         </div>
         <Button onClick={() => navigate("/")} className="w-full mt-4">
           {t("backToHome")}

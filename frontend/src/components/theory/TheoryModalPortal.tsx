@@ -42,7 +42,7 @@ export const TheoryModalPortal: React.FC<Props> = ({
   }, [open]);
   if (!open) return null;
   if (typeof document === "undefined") return null;
-  return createPortal(<div className="fixed inset-0 z-[9999] bg-black/80" style={{
+  return createPortal(<div className="fixed inset-0 z-[9999] bg-bg-base/80" style={{
     backdropFilter: "blur(2px)"
   }} aria-modal="true" role="dialog" aria-labelledby={titleId}>
       <div className="absolute inset-0 flex items-center justify-center p-3">

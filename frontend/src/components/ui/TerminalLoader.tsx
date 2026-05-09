@@ -22,10 +22,6 @@ export const TerminalLoader: React.FC<Props> = ({
       duration: 0.28,
       ease
     }}>
-        {}
-        <div className="absolute -inset-8 terminal-glow" />
-
-        {}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute left-2 top-2 w-3 h-3 border-l border-t border-primary/80" />
           <div className="absolute right-2 top-2 w-3 h-3 border-r border-t border-primary/80" />
@@ -45,18 +41,6 @@ export const TerminalLoader: React.FC<Props> = ({
       }} />
 
         {}
-        <div className="absolute inset-0 terminal-scanline opacity-70" />
-
-        {}
-        <motion.div className="absolute left-2 right-2 h-[6px] bg-[linear-gradient(90deg,transparent,rgba(0,255,136,0.35),transparent)]" animate={{
-        y: [18, 56, 30, 64, 22]
-      }} transition={{
-        duration: 1.25,
-        ease: "linear",
-        repeat: Infinity
-      }} />
-
-        {}
         <motion.div className="absolute inset-0 flex items-center justify-center" animate={{
         opacity: [0.7, 1, 0.85, 1]
       }} transition={{
@@ -64,7 +48,7 @@ export const TerminalLoader: React.FC<Props> = ({
         ease: "linear",
         repeat: Infinity
       }}>
-          <div className="text-primary font-mono text-xs tracking-widest terminal-flicker select-none">
+          <div className="text-primary font-mono text-xs tracking-widest select-none">
             {"</>"}
           </div>
         </motion.div>

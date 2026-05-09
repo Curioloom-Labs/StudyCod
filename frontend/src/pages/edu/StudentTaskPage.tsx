@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Panel, Group, Separator } from "react-resizable-panels";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -22,7 +22,10 @@ import {
   saveWebTaskDraft,
   checkWebTask,
   submitWebTask,
+  submitHintFeedback,
   type CodeFile,
+  type HintFeedbackReasonCode,
+  type LearningFeedback,
   type WebTaskFile,
   type SubmissionMeta,
   type TaskWithGrade,
@@ -38,6 +41,7 @@ import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/re
 import { FailureRecoveryCard, type FailureRecoveryData } from "../../components/FailureRecoveryCard";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { useMediaQuery } from "../../utils/useMediaQuery";
 
 const textEncoder = new TextEncoder();
 type QuizOption = "А" | "Б" | "В" | "Г" | "Д";
@@ -58,6 +62,30 @@ const getErrorStatus = (error: unknown): number | null => {
   if (!response || typeof response !== "object") return null;
   const status = Reflect.get(response, "status");
   return typeof status === "number" ? status : null;
+};
+
+const getResponseMessage = (error: unknown): string | null => {
+  if (!error || typeof error !== "object") return null;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return null;
+  const data = Reflect.get(response, "data");
+  if (!data || typeof data !== "object") return null;
+  const message = Reflect.get(data, "message");
+  return typeof message === "string" ? message : null;
+};
+
+const CONTROL_TASK_REDIRECT_MESSAGES = new Set([
+  "CONTROL_WORK_COMPLETED",
+  "CONTROL_ONLY_CURRENT_TASK_ALLOWED",
+  "CONTROL_WORK_DEADLINE_PASSED",
+  "CONTROL_WORK_NOT_STARTED",
+  "CONTROL_WORK_TIME_EXPIRED"
+]);
+
+const shouldRedirectFromControlTaskError = (status: number | null, message: string | null): boolean => {
+  if (status !== 403 && status !== 409) return false;
+  if (!message) return false;
+  return CONTROL_TASK_REDIRECT_MESSAGES.has(message);
 };
 
 const parseQuizQuestions = (raw: string): QuizQuestion[] => {
@@ -114,7 +142,9 @@ export const StudentTaskPage: React.FC = () => {
     taskId: string;
   }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { element: viewportEl } = useWorkspaceViewport();
+  const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
   const [task, setTask] = useState<TaskWithGrade | null>(null);
   const [code, setCode] = useState("");
   const [useFiles, setUseFiles] = useState(false);
@@ -135,11 +165,14 @@ export const StudentTaskPage: React.FC = () => {
     }> | null;
   }>(null);
   const [hints, setHints] = useState<string[]>([]);
-  const [learningFeedback, setLearningFeedback] = useState<{
-    verdict?: string | null;
-    firstFailure?: FailureRecoveryData | null;
-  } | null>(null);
+  const [learningFeedback, setLearningFeedback] = useState<LearningFeedback | null>(null);
   const [learningFeedbackMeta, setLearningFeedbackMeta] = useState<SubmissionMeta | null>(null);
+  const [hintFeedbackSignal, setHintFeedbackSignal] = useState<"up" | "down" | null>(null);
+  const [hintFeedbackReasonCode, setHintFeedbackReasonCode] = useState<HintFeedbackReasonCode>("NOT_SPECIFIC");
+  const [hintFeedbackReasonText, setHintFeedbackReasonText] = useState("");
+  const [hintFeedbackSending, setHintFeedbackSending] = useState(false);
+  const [hintFeedbackSentKey, setHintFeedbackSentKey] = useState<string | null>(null);
+  const [hintFeedbackStored, setHintFeedbackStored] = useState<boolean | null>(null);
   const [revealedHints, setRevealedHints] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [testProgress, setTestProgress] = useState<Record<number, 'pending' | 'running' | 'passed' | 'failed'>>({});
@@ -175,6 +208,73 @@ export const StudentTaskPage: React.FC = () => {
     scrollTopByContainer?: Record<string, number>;
   }>({});
   const tr = useCallback((uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk, [i18n.language]);
+  const formatHintFeedbackReason = useCallback((code: HintFeedbackReasonCode): string => {
+    if (code === "NOT_SPECIFIC") return tr("Надто загально", "Too generic");
+    if (code === "INCORRECT") return tr("Некоректно / вводить в оману", "Incorrect / misleading");
+    if (code === "TOO_HARD") return tr("Надто складно", "Too hard");
+    if (code === "TOO_VERBOSE") return tr("Надто багато тексту", "Too verbose");
+    if (code === "OTHER") return tr("Інше", "Other");
+    return tr("Корисно", "Helpful");
+  }, [tr]);
+  const lessonBackPath = useMemo(() => {
+    const lessonId = task?.lesson?.id;
+    if (!lessonId) return "/edu/lessons";
+    const typeSuffix = task?.lesson?.type === "CONTROL"
+      ? "?type=CONTROL"
+      : task?.lesson?.type === "TOPIC"
+        ? "?type=TOPIC"
+        : "";
+    return `/edu/lessons/${lessonId}${typeSuffix}`;
+  }, [task?.lesson?.id, task?.lesson?.type]);
+  const navigateToLessonPage = useCallback((replace = true) => {
+    const fromRaw = (location.state as {
+      from?: unknown;
+    } | null)?.from;
+    const from = typeof fromRaw === "string" ? fromRaw : null;
+    if (from && from.startsWith("/edu/lessons")) {
+      navigate(from, {
+        replace
+      });
+      return;
+    }
+    navigate(lessonBackPath, {
+      replace
+    });
+  }, [location.state, navigate, lessonBackPath]);
+  const handleBack = useCallback(() => {
+    const fromRaw = (location.state as {
+      from?: unknown;
+    } | null)?.from;
+    const from = typeof fromRaw === "string" ? fromRaw : null;
+    if (from && from.startsWith("/edu/")) {
+      navigate(from);
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(lessonBackPath, {
+      replace: true
+    });
+  }, [location.state, navigate, lessonBackPath]);
+  const formatScoreGroupLabel = useCallback((rawGroup: string): string => {
+    const group = String(rawGroup ?? "").trim();
+    if (group === "public") return tr("публічні", "public");
+    if (group === "hidden") return tr("приховані", "hidden");
+    return `${tr("сабтаск", "subtask")} ${group}`;
+  }, [tr]);
+  const scoreGroupColorClass = useCallback((rawGroup: string): string => {
+    const group = String(rawGroup ?? "").trim();
+    if (group === "public") return "bg-primary";
+    if (group === "hidden") return "bg-violet-500";
+    const palette = ["bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-indigo-500", "bg-fuchsia-500", "bg-teal-500"];
+    let hash = 0;
+    for (let i = 0; i < group.length; i++) {
+      hash = (hash * 31 + group.charCodeAt(i)) >>> 0;
+    }
+    return palette[hash % palette.length];
+  }, []);
   const toastError = useCallback((message: string) => {
     showToast({ type: "error", message });
   }, []);
@@ -183,6 +283,14 @@ export const StudentTaskPage: React.FC = () => {
   }, []);
   const toastInfo = useCallback((message: string) => {
     showToast({ type: "info", message });
+  }, []);
+  const shouldLeaveControlTaskView = useCallback((taskData: TaskWithGrade | null): boolean => {
+    if (!taskData || taskData.lesson.type !== "CONTROL") return false;
+    if (taskData.grade?.isCompleted === true || taskData.grade?.isManuallyGraded === true) return true;
+    if (typeof taskData.maxAttempts === "number" && typeof taskData.attemptsUsed === "number" && taskData.attemptsUsed >= taskData.maxAttempts) {
+      return true;
+    }
+    return false;
   }, []);
   const taskRef = useRef(task);
   const codeRef = useRef(code);
@@ -545,7 +653,7 @@ export const StudentTaskPage: React.FC = () => {
     }
 
     const nameLower = file.name.toLowerCase();
-    const expectedExt = task?.language === "JAVA" ? ".java" : ".py";
+    const expectedExt = task?.language === "JAVA" ? ".java" : task?.language === "CPP" ? ".cpp" : ".py";
     const looksOk = nameLower.endsWith(expectedExt) || nameLower.endsWith(".txt");
     if (!looksOk) {
       const ok = confirm(tr(`Файл має інше розширення. Все одно імпортувати? (${file.name})`, `File extension looks different. Import anyway? (${file.name})`));
@@ -596,7 +704,6 @@ export const StudentTaskPage: React.FC = () => {
     if (timeRemaining === null || timeRemaining <= 0) return;
     if (!timeStarted) return;
     if (taskRef.current?.lesson.type !== "CONTROL") return;
-    if (taskRef.current?.hasGrade) return;
     const interval = setInterval(() => {
       const currentTask = taskRef.current;
       const currentCode = codeRef.current;
@@ -627,8 +734,8 @@ export const StudentTaskPage: React.FC = () => {
       setTheoryAcknowledged(false);
     }
   }, [task?.id]);
-  const loadTask = async () => {
-    if (!taskId) return;
+  const loadTask = async (): Promise<TaskWithGrade | null> => {
+    if (!taskId) return null;
     try {
       const data = await getTask(parseInt(taskId, 10));
       setTask(data);
@@ -673,6 +780,13 @@ export const StudentTaskPage: React.FC = () => {
       const entryFromData = data.language === "JAVA" ? "Main.java" : data.language === "CPP" ? "main.cpp" : "main.py";
 
       if (data.taskMode === "WEB") {
+        if (draftFiles && draftFiles.length > 0) {
+          const effective = ensureEntryFile("index.html", draftFiles, savedCode || data.template);
+          setUseFiles(true);
+          setFiles(effective);
+          setCode(effective.find(f => f.path === "index.html")?.content ?? "");
+          return data;
+        }
         try {
           const web = await getWebTaskTemplate(parseInt(taskId, 10));
           const webFiles = Array.isArray(web.files) ? web.files : [];
@@ -757,7 +871,7 @@ export const StudentTaskPage: React.FC = () => {
         setQuizSubmitted(false);
         setQuizGrade(null);
       }
-      if (data.lesson.type === "CONTROL" && data.lesson.timeLimitMinutes && !data.hasGrade) {
+      if (data.lesson.type === "CONTROL" && data.lesson.timeLimitMinutes) {
         const startTime = localStorage.getItem(`task_${taskId}_start_time`);
         if (startTime) {
           const elapsed = Math.floor((Date.now() - parseInt(startTime)) / 1000 / 60);
@@ -776,14 +890,18 @@ export const StudentTaskPage: React.FC = () => {
           setTimeStarted(new Date(now));
         }
       }
+      return data;
     } catch (error: unknown) {
       if (import.meta.env.DEV) {
         console.error("Failed to load task:", error);
       }
       const status = getErrorStatus(error);
-      if (status === 404 || status === 403) {
-        // task unavailable for current user
+      const message = getResponseMessage(error);
+      if (shouldRedirectFromControlTaskError(status, message)) {
+        toastInfo(tr("Доступ до цієї задачі контрольної закрито. Повертаємось до контрольної.", "Access to this control-work task is closed. Returning to control work."));
+        navigateToLessonPage(true);
       }
+      return null;
     } finally {
       setLoading(false);
     }
@@ -845,7 +963,13 @@ export const StudentTaskPage: React.FC = () => {
         console.error("Failed to submit quiz:", error);
       }
       const status = getErrorStatus(error);
+      const responseMessage = getResponseMessage(error);
       const message = getErrorMessage(error, t("failedToSubmitTest"));
+      if (shouldRedirectFromControlTaskError(status, responseMessage ?? message)) {
+        toastInfo(tr("Час контрольної вичерпано або доступ до етапу закрито. Повертаємось до контрольної.", "Control-work time has expired or stage access is closed. Returning to control work."));
+        navigateToLessonPage(true);
+        return;
+      }
       if (status === 409 && message === "QUIZ_ALREADY_SUBMITTED") {
         toastInfo(t("quizAlreadySubmitted"));
         await loadTask();
@@ -936,15 +1060,24 @@ export const StudentTaskPage: React.FC = () => {
       setLastScoring(hideControlResults ? null : result.scoring ?? null);
       setRevealedHints(0);
       setShowResults(!hideControlResults);
+      const attemptsAfterSubmit = typeof task?.attemptsUsed === "number" ? task.attemptsUsed + 1 : null;
+      const attemptsWillExhaust = typeof attemptsAfterSubmit === "number" && typeof task?.maxAttempts === "number" && attemptsAfterSubmit >= task.maxAttempts;
       if (result.requiresManualReview) {
         setConsoleOutput(t('taskSubmittedForReview'));
         toastInfo(t('taskSubmittedForReview'));
-        await loadTask();
+        const refreshedTask = await loadTask();
+        if (hideControlResults && (attemptsWillExhaust || shouldLeaveControlTaskView(refreshedTask))) {
+          toastInfo(tr("Етап завершено. Повертаємось до контрольної.", "Stage completed. Returning to control work."));
+          navigateToLessonPage(true);
+          return;
+        }
         setSubmitting(false);
         return;
       }
       if (hideControlResults) {
-        setConsoleOutput(tr("Рішення збережено. Результати будуть доступні у фінальному огляді контрольної.", "Solution saved. Results will be available in the final control-work review."));
+        const hiddenResultsMessage = tr("Рішення збережено. Результати будуть доступні у фінальному огляді контрольної.", "Solution saved. Results will be available in the final control-work review.");
+        setConsoleOutput(hiddenResultsMessage);
+        toastInfo(hiddenResultsMessage);
       } else if (result.grade.total !== null) {
         const scoring = result.scoring;
         const scoreLine = scoring && typeof scoring.score === "number" && typeof scoring.maxScore === "number" && scoring.maxScore > 0 ? ` ${tr("Бал", "Score")}: ${scoring.score}/${scoring.maxScore}.` : "";
@@ -952,12 +1085,27 @@ export const StudentTaskPage: React.FC = () => {
       } else {
         setConsoleOutput(t('taskSubmittedForReview'));
       }
-      await loadTask();
+      const refreshedTask = await loadTask();
+      if (hideControlResults) {
+        const shouldExitControlTask = attemptsWillExhaust || result.grade?.isManuallyGraded === true || shouldLeaveControlTaskView(refreshedTask);
+        if (shouldExitControlTask) {
+          toastInfo(tr("Етап завершено. Повертаємось до контрольної.", "Stage completed. Returning to control work."));
+          navigateToLessonPage(true);
+          return;
+        }
+      }
     } catch (error: unknown) {
       if (import.meta.env.DEV) {
         console.error("Failed to submit:", error);
       }
+      const status = getErrorStatus(error);
+      const responseMessage = getResponseMessage(error);
       const errorMessage = getErrorMessage(error, t('failedToSubmit'));
+      if (shouldRedirectFromControlTaskError(status, responseMessage ?? errorMessage)) {
+        toastInfo(tr("Час контрольної вичерпано або доступ до етапу закрито. Повертаємось до контрольної.", "Control-work time has expired or stage access is closed. Returning to control work."));
+        navigateToLessonPage(true);
+        return;
+      }
       setConsoleOutput(errorMessage);
       toastError(errorMessage);
     } finally {
@@ -966,7 +1114,7 @@ export const StudentTaskPage: React.FC = () => {
         setIsRunningTests(false);
       }
     }
-  }, [taskId, code, files, useFiles, currentCodeText, task?.lesson?.type, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, loadTask, t, toastError, toastInfo, isWebTask, toWebTaskFiles, tr]);
+  }, [taskId, code, files, useFiles, currentCodeText, task?.lesson?.type, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, loadTask, shouldLeaveControlTaskView, navigateToLessonPage, t, toastError, toastInfo, isWebTask, toWebTaskFiles, tr]);
   const handleComplete = useCallback(async () => {
     if (isWebTask) {
       toastError(tr("Для WEB-завдань використовуйте кнопку «Відправити».", "For WEB tasks, use the Submit button."));
@@ -1037,7 +1185,9 @@ export const StudentTaskPage: React.FC = () => {
         setConsoleOutput(t("taskCompletedEarlySent"));
         toastInfo(t("taskCompletedEarlySent"));
       } else if (hideControlResults) {
-        setConsoleOutput(tr("Рішення зафіксовано. Фінальний огляд контрольної доступний після завершення всіх етапів.", "Solution recorded. Final control-work review is available after all stages are completed."));
+        const hiddenResultsMessage = tr("Рішення зафіксовано. Фінальний огляд контрольної доступний після завершення всіх етапів.", "Solution recorded. Final control-work review is available after all stages are completed.");
+        setConsoleOutput(hiddenResultsMessage);
+        toastInfo(hiddenResultsMessage);
       } else if (result.grade.total !== null) {
         const scoring = result.scoring;
         const scoreLine = scoring && typeof scoring.score === "number" && typeof scoring.maxScore === "number" && scoring.maxScore > 0 ? ` ${tr("Бал", "Score")}: ${scoring.score}/${scoring.maxScore}.` : "";
@@ -1054,6 +1204,11 @@ export const StudentTaskPage: React.FC = () => {
         toastSuccess(t("taskCompletedEarly"));
       }
       await loadTask();
+      if (hideControlResults) {
+        toastInfo(tr("Етап завершено. Повертаємось до контрольної.", "Stage completed. Returning to control work."));
+        navigateToLessonPage(true);
+        return;
+      }
 
       // Count as a successful study session (used for the interface switch suggestion).
       recordSuccessfulStudySession({
@@ -1064,7 +1219,14 @@ export const StudentTaskPage: React.FC = () => {
       if (import.meta.env.DEV) {
         console.error("Failed to complete task:", error);
       }
+      const status = getErrorStatus(error);
+      const responseMessage = getResponseMessage(error);
       const errorMessage = getErrorMessage(error, t("failedToCompleteTask"));
+      if (shouldRedirectFromControlTaskError(status, responseMessage ?? errorMessage)) {
+        toastInfo(tr("Час контрольної вичерпано або доступ до етапу закрито. Повертаємось до контрольної.", "Control-work time has expired or stage access is closed. Returning to control work."));
+        navigateToLessonPage(true);
+        return;
+      }
       setConsoleOutput(errorMessage);
       toastError(errorMessage);
     } finally {
@@ -1073,7 +1235,7 @@ export const StudentTaskPage: React.FC = () => {
         setIsRunningTests(false);
       }
     }
-  }, [taskId, code, files, useFiles, currentCodeText, task?.lesson?.type, task?.isClosed, task?.deadline, task?.grade?.isManuallyGraded, task?.grade?.isCompleted, loadTask, t, toastError, toastInfo, toastSuccess, isWebTask, tr]);
+  }, [taskId, code, files, useFiles, currentCodeText, task?.lesson?.type, task?.isClosed, task?.deadline, task?.grade?.isManuallyGraded, task?.grade?.isCompleted, loadTask, navigateToLessonPage, t, toastError, toastInfo, toastSuccess, isWebTask, tr]);
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
@@ -1122,6 +1284,86 @@ export const StudentTaskPage: React.FC = () => {
     if (task.maxAttempts && task.attemptsUsed !== undefined && task.attemptsUsed >= task.maxAttempts) return false;
     return true;
   }, [task?.grade, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, task]);
+
+  const hintFeedbackContext = useMemo(() => {
+    const latest = latestSubmissionBindingRef.current;
+    if (!latest || !learningFeedbackMeta?.codeHash) return null;
+
+    const sameHash = String(latest.codeHash) === String(learningFeedbackMeta.codeHash);
+    const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
+    if (!sameHash || !sameId) return null;
+
+    const submissionId = learningFeedbackMeta.submissionId
+      ? String(learningFeedbackMeta.submissionId)
+      : latest.submissionId
+        ? String(latest.submissionId)
+        : undefined;
+
+    const hintsTotal = hints.length;
+    const hintsShown = Math.max(0, Math.min(hintsTotal, revealedHints));
+
+    return {
+      key: `${submissionId ?? "none"}:${String(learningFeedbackMeta.codeHash)}`,
+      submissionId,
+      codeHash: String(learningFeedbackMeta.codeHash),
+      verdict: learningFeedback?.verdict ?? null,
+      hintsShown,
+      hintsTotal,
+    };
+  }, [learningFeedbackMeta?.submissionId, learningFeedbackMeta?.codeHash, learningFeedback?.verdict, hints.length, revealedHints]);
+
+  const hintFeedbackKey = hintFeedbackContext?.key ?? null;
+  const hintFeedbackAlreadySent = hintFeedbackKey !== null && hintFeedbackSentKey === hintFeedbackKey;
+
+  useEffect(() => {
+    if (!hintFeedbackKey) return;
+    if (hintFeedbackSentKey === hintFeedbackKey) return;
+
+    setHintFeedbackSignal(null);
+    setHintFeedbackReasonCode("NOT_SPECIFIC");
+    setHintFeedbackReasonText("");
+    setHintFeedbackStored(null);
+  }, [hintFeedbackKey, hintFeedbackSentKey]);
+
+  const handleSendHintFeedback = useCallback(async (signal: "up" | "down") => {
+    if (!taskId || !hintFeedbackContext) return;
+    if (hintFeedbackSentKey === hintFeedbackContext.key) return;
+
+    const taskIdNum = Number.parseInt(taskId, 10);
+    if (!Number.isFinite(taskIdNum)) return;
+
+    const reasonCode: HintFeedbackReasonCode = signal === "up" ? "HELPFUL" : hintFeedbackReasonCode;
+    const reasonText = signal === "down" ? hintFeedbackReasonText.trim() : "";
+
+    setHintFeedbackSending(true);
+    try {
+      const response = await submitHintFeedback(taskIdNum, {
+        submissionId: hintFeedbackContext.submissionId,
+        codeHash: hintFeedbackContext.codeHash,
+        verdict: hintFeedbackContext.verdict,
+        signal,
+        reasonCode,
+        reasonText: reasonText || undefined,
+        hintsShown: hintFeedbackContext.hintsShown,
+        hintsTotal: hintFeedbackContext.hintsTotal,
+      });
+
+      setHintFeedbackSignal(signal);
+      setHintFeedbackStored(response?.stored ?? null);
+      setHintFeedbackSentKey(hintFeedbackContext.key);
+
+      if (signal === "up") {
+        toastSuccess(tr("Дякуємо! Врахуємо це при генерації наступних підказок.", "Thanks! We'll use this signal to improve future hints."));
+      } else {
+        toastSuccess(tr("Дякуємо за відгук — покращимо підказки.", "Thanks for the feedback — we'll improve the hints."));
+      }
+    } catch (error: unknown) {
+      toastError(getErrorMessage(error, tr("Не вдалося надіслати фідбек по підказках", "Failed to submit hints feedback")));
+    } finally {
+      setHintFeedbackSending(false);
+    }
+  }, [taskId, hintFeedbackContext, hintFeedbackSentKey, hintFeedbackReasonCode, hintFeedbackReasonText, toastError, toastSuccess, tr]);
+
   if (loading) {
     return <div className="h-full flex items-center justify-center text-text-primary font-mono">
         {t("loading")}
@@ -1166,8 +1408,8 @@ export const StudentTaskPage: React.FC = () => {
     return normalized.map(g => {
       const raw = totalMax > 0 ? g.score / totalMax * 100 : 0;
       const pct = Math.max(0, Math.min(100, raw));
-      const className = g.group === "public" ? "bg-primary" : g.group === "hidden" ? "bg-violet-500" : "bg-slate-500";
-      const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
+      const className = scoreGroupColorClass(g.group);
+      const label = formatScoreGroupLabel(g.group);
       return {
         key: g.group,
         label,
@@ -1180,15 +1422,15 @@ export const StudentTaskPage: React.FC = () => {
   const showScoringLegend = Array.isArray(scoringSegments) && scoringSegments.some(s => s.key === "public" || s.key === "hidden");
   return <div className="h-full min-h-0 flex flex-col bg-bg-base">
       {}
-      {!showTheory && <div className="border-b border-border bg-bg-surface p-4 flex-shrink-0">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-4">
+      {!showTheory && <div className="border-b border-border bg-bg-surface p-3 sm:p-4 flex-shrink-0">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-3">
+            <div className="flex items-start gap-3 sm:gap-4 min-w-0">
               <Button variant="ghost" onClick={() => {
             const hasTheory = task.lesson.hasTheory && task.lesson.theory && task.lesson.theory.trim().length > 0;
             if (theoryAcknowledged && hasTheory) {
               setTheoryAcknowledged(false);
             } else {
-              navigate(-1);
+              handleBack();
             }
           }}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1205,14 +1447,14 @@ export const StudentTaskPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="flex gap-2 items-center">
+            <div className="flex w-full md:w-auto flex-wrap gap-2 items-center justify-start md:justify-end">
               {}
-              {timeRemaining !== null && task.lesson.type === "CONTROL" && !task.hasGrade && <div className={`text-sm font-mono mr-4 flex items-center ${timeRemaining <= 5 ? "text-accent-error" : timeRemaining <= 10 ? "text-accent-warning" : "text-text-primary"}`}>
+              {timeRemaining !== null && task.lesson.type === "CONTROL" && <div className={`text-sm font-mono mr-0 md:mr-4 flex items-center ${timeRemaining <= 5 ? "text-accent-error" : timeRemaining <= 10 ? "text-accent-warning" : "text-text-primary"}`}>
                   <Clock className="w-4 h-4 mr-1" />
                   {Math.floor(timeRemaining)} хв
                 </div>}
               {}
-              {deadlineRemaining !== null && !task.isClosed && <div className={`text-sm font-mono mr-4 flex items-center ${deadlineRemaining <= 300 ? "text-accent-error" : deadlineRemaining <= 600 ? "text-accent-warning" : "text-text-primary"}`}>
+              {deadlineRemaining !== null && !task.isClosed && <div className={`text-sm font-mono mr-0 md:mr-4 flex items-center ${deadlineRemaining <= 300 ? "text-accent-error" : deadlineRemaining <= 600 ? "text-accent-warning" : "text-text-primary"}`}>
                   <Clock className="w-4 h-4 mr-1" />
                   {deadlineRemaining > 3600 ? t("timeHhMm", {
               h: Math.floor(deadlineRemaining / 3600),
@@ -1224,20 +1466,20 @@ export const StudentTaskPage: React.FC = () => {
             })}
                 </div>}
               {}
-              {task.maxAttempts !== undefined && task.attemptsUsed !== undefined && <div className="text-xs font-mono text-text-secondary mr-4">
+              {task.maxAttempts !== undefined && task.attemptsUsed !== undefined && <div className="text-xs font-mono text-text-secondary mr-0 md:mr-4">
                   {t("attempts")}: {task.attemptsUsed}/{task.maxAttempts}
                   {attemptsRemaining !== null && <>
                       {" "}· {tr("Залишилось", "Remaining")}: {attemptsRemaining}
                     </>}
                 </div>}
               {}
-              {task.isClosed && <div className="text-xs font-mono text-accent-error mr-4">
+              {task.isClosed && <div className="text-xs font-mono text-accent-error mr-0 md:mr-4">
                   {t("taskClosed")}
                 </div>}
-                {!hideControlResults && task.grade && <div className={`text-sm font-mono font-bold mr-4 flex items-center ${task.grade.total >= 85 ? "text-accent-success" : task.grade.total >= 65 ? "text-accent-warn" : task.grade.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>
+                {!hideControlResults && task.grade && <div className={`text-sm font-mono font-bold mr-0 md:mr-4 flex items-center ${task.grade.total >= 85 ? "text-accent-success" : task.grade.total >= 65 ? "text-accent-warn" : task.grade.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>
                   {t("grade")}: {task.grade.total}/100
                 </div>}
-              {!hideControlResults && lastScoring && typeof scoringPct === "number" && <div className="min-w-[180px] mr-3">
+              {!hideControlResults && lastScoring && typeof scoringPct === "number" && <div className="min-w-[150px] sm:min-w-[180px] mr-0 md:mr-3">
                   <div className="h-2 w-full bg-border rounded overflow-hidden">
                     {Array.isArray(scoringSegments) && scoringSegments.length > 0 ? <div className="h-2 w-full flex">
                         {scoringSegments.map(seg => <div key={seg.key} className={`h-2 ${seg.className}`} title={seg.title} style={{
@@ -1247,11 +1489,11 @@ export const StudentTaskPage: React.FC = () => {
                         width: `${scoringPct}%`
                       }} />}
                   </div>
-                  <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center justify-between">
+                  <div className="mt-1 text-[10px] font-mono text-text-muted flex flex-wrap items-center justify-between gap-2">
                     <span>{tr("Бал", "Score")}: <span className="text-text-secondary">{lastScoring.score}/{lastScoring.maxScore}</span></span>
                     <span>{scoringPct}%</span>
                   </div>
-                  {showScoringLegend && <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center gap-3">
+                  {showScoringLegend && <div className="mt-1 text-[10px] font-mono text-text-muted flex flex-wrap items-center gap-3">
                       <span className="inline-flex items-center gap-1" title={tr("Публічні тести", "Public tests")}> 
                         <span className="inline-block w-2 h-2 rounded-sm bg-primary" />
                         <span>{tr("публічні", "public")}</span>
@@ -1282,9 +1524,9 @@ export const StudentTaskPage: React.FC = () => {
                   >
                     {tr("Додати файл", "Add file")}
                   </Button>}
-                  <Button variant="ghost" onClick={handleRun} disabled={!canEdit || running} className="text-xs">
-                  <Play className="w-3 h-3 mr-1" /> {tr("Запустити", "Run")}
-                  </Button>
+                  {!hideControlResults && <Button variant="ghost" onClick={handleRun} disabled={!canEdit || running} className="text-xs">
+                      <Play className="w-3 h-3 mr-1" /> {tr("Запустити", "Run")}
+                    </Button>}
 
                   {!hideControlResults && testResults.length > 0 && <Button variant="ghost" onClick={() => setShowResults(true)} className="text-xs" title={tr("Переглянути результати тестування", "View test results")}>
                       <CheckCircle2 className="w-3 h-3 mr-1" /> {tr("Результати", "Results")}
@@ -1301,7 +1543,7 @@ export const StudentTaskPage: React.FC = () => {
             </div>
           </div>
 
-          <input key={importSolutionKey} ref={importInputRef} type="file" accept={task.language === "JAVA" ? ".java,.txt,text/plain" : ".py,.txt,text/plain"} onChange={e => handleImportSolutionFile(e.target.files?.[0] || null)} className="hidden" />
+          <input key={importSolutionKey} ref={importInputRef} type="file" accept={task.language === "JAVA" ? ".java,.txt,text/plain" : task.language === "CPP" ? ".cpp,.txt,text/plain" : ".py,.txt,text/plain"} onChange={e => handleImportSolutionFile(e.target.files?.[0] || null)} className="hidden" />
         </div>}
 
       {}
@@ -1309,14 +1551,14 @@ export const StudentTaskPage: React.FC = () => {
           {}
           <div className="border-b border-border bg-bg-surface p-4 flex-shrink-0">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" onClick={() => navigate(-1)}>
+              <Button variant="ghost" onClick={handleBack}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 {t("back")}
               </Button>
               <h1 className="text-lg font-mono text-text-primary">{task.title}</h1>
             </div>
           </div>
-              <div className="flex-1 overflow-y-auto p-8 pb-24" ref={setTheoryPaneEl}>
+              <div className="flex-1 overflow-y-auto p-4 sm:p-8 pb-32 sm:pb-24" ref={setTheoryPaneEl}>
                 <div className="max-w-4xl mx-auto">
                   <h2 className="text-2xl font-mono text-text-primary mb-6">{t("theory")}</h2>
                   <div className="prose prose-invert max-w-none text-text-secondary font-mono">
@@ -1324,22 +1566,22 @@ export const StudentTaskPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="bg-bg-surface p-4 flex-shrink-0 fixed bottom-0 left-0 right-0 z-30 shadow-lg">
-                <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+              <div className="bg-bg-surface p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex-shrink-0 fixed bottom-0 left-0 right-0 z-30 shadow-lg">
+                <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                   <p className="text-xs font-mono text-text-secondary flex-1">
                     {tr("Після прочитання теорії ви зможете перейти до практичного завдання", "After reading theory you can proceed to the practice task")}
                   </p>
                   <Button variant="primary" onClick={() => {
             setTheoryAcknowledged(true);
-          }} className="text-base px-8 py-3 font-semibold whitespace-nowrap shadow-md hover:shadow-lg transition-all">
+          }} className="text-sm sm:text-base px-5 sm:px-8 py-3 font-semibold whitespace-nowrap shadow-md hover:shadow-lg transition-all w-full sm:w-auto">
                     {tr("✓ Я прочитав теорію", "✓ I have read the theory")}
                   </Button>
                 </div>
               </div>
-            </div> : <Group className="flex-1 overflow-hidden">
+            </div> : <Group direction={isCompactViewport ? "vertical" : "horizontal"} className="flex-1 overflow-hidden">
             {}
-            <Panel defaultSize={25} minSize={15} maxSize={60} className="flex flex-col overflow-hidden bg-bg-base border-r border-border">
-              <div className="p-3 border-b border-border bg-bg-surface flex items-center justify-between flex-shrink-0">
+            <Panel defaultSize={isCompactViewport ? 34 : 25} minSize={isCompactViewport ? 20 : 15} maxSize={isCompactViewport ? 65 : 60} className={`flex flex-col overflow-hidden bg-bg-base ${isCompactViewport ? "border-b border-border" : "border-r border-border"}`}>
+              <div className="p-3 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
                 <div className="text-sm font-mono text-text-primary flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   {task.lesson.type === "CONTROL" && quizQuestions.length > 0 ? tr("Теоретична частина", "Theory part") : t("task")}
@@ -1403,7 +1645,7 @@ export const StudentTaskPage: React.FC = () => {
                         </div>
                       </Card>)}
                     {!quizSubmitted && <div className="sticky bottom-0 bg-bg-surface border-t border-border p-4 -mx-4 -mb-4 mt-6">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="text-sm text-text-secondary">
                             {Object.keys(quizAnswers).length < quizQuestions.length ? <span className="text-accent-warn">
                                 {tr("Залишилось відповісти на", "Remaining")}{" "}
@@ -1417,7 +1659,7 @@ export const StudentTaskPage: React.FC = () => {
                           </Button>
                         </div>
                       </div>}
-                    {quizSubmitted && quizGrade !== null && <Card className="p-6 bg-gradient-to-br from-primary/20 to-secondary/20 border-primary">
+                    {quizSubmitted && quizGrade !== null && <Card className="p-4 sm:p-6 bg-gradient-to-br from-primary/20 to-secondary/20 border-primary">
                         <div className="text-center">
                           <div className={`text-3xl font-mono mb-2 font-bold ${quizGrade >= 85 ? "text-accent-success" : quizGrade >= 65 ? "text-accent-warn" : quizGrade >= 40 ? "text-accent-warning" : "text-accent-error"}`}>
                             {quizGrade}/100
@@ -1440,14 +1682,14 @@ export const StudentTaskPage: React.FC = () => {
               </div>
             </Panel>
 
-            <Separator className="w-2 bg-border hover:bg-primary transition-colors cursor-col-resize flex-shrink-0 relative group">
+            <Separator className={`bg-border hover:bg-primary transition-colors flex-shrink-0 relative group ${isCompactViewport ? "h-2 w-full cursor-row-resize" : "w-2 cursor-col-resize"}`}>
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-0.5 h-8 bg-primary rounded-full" />
+                <div className={isCompactViewport ? "h-0.5 w-10 bg-primary rounded-full" : "w-0.5 h-8 bg-primary rounded-full"} />
               </div>
             </Separator>
 
             {}
-            <Panel defaultSize={50} minSize={20} maxSize={70} className="flex flex-col overflow-hidden bg-bg-code">
+            <Panel defaultSize={hideControlResults ? isCompactViewport ? 66 : 75 : isCompactViewport ? 40 : 50} minSize={isCompactViewport ? 25 : 20} maxSize={hideControlResults ? 85 : 70} className="flex flex-col overflow-hidden bg-bg-code">
               {isWebTask ? (
                 <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-0">
                   <div className="border-r border-border min-h-0">
@@ -1481,63 +1723,65 @@ export const StudentTaskPage: React.FC = () => {
               )}
             </Panel>
 
-            <Separator className="w-2 bg-border hover:bg-primary transition-colors cursor-col-resize flex-shrink-0 relative group">
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-0.5 h-8 bg-primary rounded-full" />
-              </div>
-            </Separator>
+            {!hideControlResults && <>
+                <Separator className={`bg-border hover:bg-primary transition-colors flex-shrink-0 relative group ${isCompactViewport ? "h-2 w-full cursor-row-resize" : "w-2 cursor-col-resize"}`}>
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className={isCompactViewport ? "h-0.5 w-10 bg-primary rounded-full" : "w-0.5 h-8 bg-primary rounded-full"} />
+                  </div>
+                </Separator>
 
-            {}
-            <Panel defaultSize={25} minSize={10} maxSize={50} className="flex flex-col overflow-hidden bg-bg-surface border-l border-border">
-              <div className="p-3 border-b border-border flex items-center justify-between flex-shrink-0">
-                <div className="text-sm font-mono text-text-primary flex items-center gap-2">
-                  <Play className="w-4 h-4" /> {tr("Консоль", "Console")}
-                </div>
-              </div>
-              <div className="flex-1 flex flex-col overflow-hidden">
                 {}
-                <div className="border-b border-border p-3 flex-shrink-0">
-                  <div className="text-xs font-mono text-text-secondary mb-2">{tr("Вхідні дані:", "Input:")}</div>
-                  <textarea value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані...", "Enter test input...")} className="w-full h-24 bg-bg-code border border-border rounded p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
-                </div>
-                {}
-                <div className="flex-1 overflow-y-auto p-4">
-                  {}
-                  {isRunningTests && Object.keys(testProgress).length > 0 ? <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-xs font-mono text-text-primary mb-3">
-                        <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                        <span>{tr("Перевіряємо код...", "Checking code...")}</span>
-                      </div>
-                      {Object.entries(testProgress).sort(([a], [b]) => parseInt(a) - parseInt(b)).map(([testId, status], index) => <div key={testId} className="flex items-center gap-2 text-xs font-mono">
-                            {status === 'pending' && <span className="text-text-muted">• {tr("Тест", "Test")} {index + 1}</span>}
-                            {status === 'running' && <>
-                                <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                                <span className="text-text-primary">{tr("Тест", "Test")} {index + 1}</span>
-                              </>}
-                            {status === 'passed' && <>
-                                <CheckCircle2 className="w-3 h-3 text-accent-success" />
-                                <span className="text-accent-success">{tr("Тест", "Test")} {index + 1}</span>
-                              </>}
-                            {status === 'failed' && <>
-                                <XCircle className="w-3 h-3 text-accent-error" />
-                                <span className="text-accent-error">{tr("Тест", "Test")} {index + 1}</span>
-                              </>}
-                          </div>)}
-                    </div> : consoleOutput ? <pre className="text-xs text-text-secondary whitespace-pre-wrap m-0" style={{
-              fontFamily: '"JetBrains Mono", "Fira Code", "Consolas", "Courier New", monospace'
-            }}>
-                      {consoleOutput}
-                    </pre> : <span className="text-text-muted italic">
-                      {tr("// Результат виконання з'явиться тут...", "// Program output will appear here...")}
-                    </span>}
-                </div>
-              </div>
-            </Panel>
+                <Panel defaultSize={isCompactViewport ? 26 : 25} minSize={isCompactViewport ? 16 : 10} maxSize={isCompactViewport ? 60 : 50} className={`flex flex-col overflow-hidden bg-bg-surface ${isCompactViewport ? "border-t border-border" : "border-l border-border"}`}>
+                  <div className="p-3 border-b border-border flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+                    <div className="text-sm font-mono text-text-primary flex items-center gap-2">
+                      <Play className="w-4 h-4" /> {tr("Консоль", "Console")}
+                    </div>
+                  </div>
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {}
+                    <div className="border-b border-border p-3 flex-shrink-0">
+                      <div className="text-xs font-mono text-text-secondary mb-2">{tr("Вхідні дані:", "Input:")}</div>
+                      <textarea value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані...", "Enter test input...")} className="w-full h-24 bg-bg-code border border-border rounded p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
+                    </div>
+                    {}
+                    <div className="flex-1 overflow-y-auto p-4">
+                      {}
+                      {isRunningTests && Object.keys(testProgress).length > 0 ? <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-mono text-text-primary mb-3">
+                            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                            <span>{tr("Перевіряємо код...", "Checking code...")}</span>
+                          </div>
+                          {Object.entries(testProgress).sort(([a], [b]) => parseInt(a) - parseInt(b)).map(([testId, status], index) => <div key={testId} className="flex items-center gap-2 text-xs font-mono">
+                                {status === 'pending' && <span className="text-text-muted">• {tr("Тест", "Test")} {index + 1}</span>}
+                                {status === 'running' && <>
+                                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                                    <span className="text-text-primary">{tr("Тест", "Test")} {index + 1}</span>
+                                  </>}
+                                {status === 'passed' && <>
+                                    <CheckCircle2 className="w-3 h-3 text-accent-success" />
+                                    <span className="text-accent-success">{tr("Тест", "Test")} {index + 1}</span>
+                                  </>}
+                                {status === 'failed' && <>
+                                    <XCircle className="w-3 h-3 text-accent-error" />
+                                    <span className="text-accent-error">{tr("Тест", "Test")} {index + 1}</span>
+                                  </>}
+                              </div>)}
+                        </div> : consoleOutput ? <pre className="text-xs text-text-secondary whitespace-pre-wrap m-0" style={{
+                  fontFamily: '"JetBrains Mono", "Fira Code", "Consolas", "Courier New", monospace'
+                }}>
+                          {consoleOutput}
+                        </pre> : <span className="text-text-muted italic">
+                          {tr("// Результат виконання з'явиться тут...", "// Program output will appear here...")}
+                        </span>}
+                    </div>
+                  </div>
+                </Panel>
+              </>}
           </Group>}
 
       {}
       {showResults && !hideControlResults && <Modal open={showResults} onClose={() => setShowResults(false)} title={tr("Результати тестування", "Test results")} showCloseButton={false}>
-          <div className="p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Результати тестування", "Test results")}</h2>
 
             {lastScoring && lastScoring.maxScore > 0 && <div className="mb-4 p-3 border border-border bg-bg-code">
@@ -1551,7 +1795,7 @@ export const StudentTaskPage: React.FC = () => {
                       width: `${Math.max(0, Math.min(100, Math.round(lastScoring.score / lastScoring.maxScore * 100)))}%`
                     }} />}
                 </div>
-                <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center justify-between">
+                <div className="mt-1 text-[10px] font-mono text-text-muted flex flex-wrap items-center justify-between gap-2">
                   <span>{tr("Бал", "Score")}: <span className="text-text-secondary">{lastScoring.score}/{lastScoring.maxScore}</span></span>
                   <span>{Math.max(0, Math.min(100, Math.round(lastScoring.score / lastScoring.maxScore * 100)))}%</span>
                 </div>
@@ -1568,8 +1812,8 @@ export const StudentTaskPage: React.FC = () => {
                 {Array.isArray(lastScoring.groupScores) && lastScoring.groupScores.length > 0 && <div className="mt-2 space-y-1">
                     {lastScoring.groupScores.map((g, idx) => {
                   const gpct = g.maxScore > 0 ? Math.round(g.score / g.maxScore * 100) : 0;
-                  const label = g.group === "public" ? tr("публічні", "public") : g.group === "hidden" ? tr("приховані", "hidden") : g.group;
-                  return <div key={`${g.group}-${idx}`} className="text-[10px] font-mono text-text-muted flex items-center justify-between">
+                  const label = formatScoreGroupLabel(g.group);
+                  return <div key={`${g.group}-${idx}`} className="text-[10px] font-mono text-text-muted flex flex-wrap items-center justify-between gap-2">
                           <span>{label}</span>
                           <span className="text-text-secondary">{g.score}/{g.maxScore} ({gpct}%)</span>
                         </div>;
@@ -1583,7 +1827,7 @@ export const StudentTaskPage: React.FC = () => {
                   {hints.slice(0, revealedHints).map((h, i) => <div key={i} className="text-xs font-mono text-text-primary whitespace-pre-wrap">
                         {i + 1}. {h}
                       </div>)}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {revealedHints < hints.length && <Button variant="ghost" onClick={() => setRevealedHints(v => Math.min(hints.length, v + 1))} className="text-xs">
                         {tr("Показати підказку", "Show hint")}
                       </Button>}
@@ -1594,8 +1838,113 @@ export const StudentTaskPage: React.FC = () => {
                         {tr("Сховати", "Hide")}
                       </Button>}
                   </div>
+
+                  {hintFeedbackContext && <div className="mt-3 border-t border-border/60 pt-3">
+                      <div className="text-[11px] font-mono text-text-secondary mb-2">
+                        {tr("Ці підказки були корисними?", "Were these hints useful?")}
+                      </div>
+
+                      {!hintFeedbackAlreadySent ? <>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="ghost"
+                              className="text-xs"
+                              disabled={hintFeedbackSending}
+                              onClick={() => {
+                                setHintFeedbackSignal("up");
+                                void handleSendHintFeedback("up");
+                              }}
+                            >
+                              👍 {tr("Так, корисно", "Yes, helpful")}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="text-xs"
+                              disabled={hintFeedbackSending}
+                              onClick={() => setHintFeedbackSignal("down")}
+                            >
+                              👎 {tr("Не дуже", "Not really")}
+                            </Button>
+                          </div>
+
+                          {hintFeedbackSignal === "down" && <div className="mt-2 space-y-2">
+                              <select
+                                value={hintFeedbackReasonCode}
+                                onChange={e => setHintFeedbackReasonCode(e.target.value as HintFeedbackReasonCode)}
+                                className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs focus:outline-none focus:border-primary"
+                              >
+                                {(["NOT_SPECIFIC", "INCORRECT", "TOO_HARD", "TOO_VERBOSE", "OTHER"] as HintFeedbackReasonCode[]).map(reason => <option key={reason} value={reason}>
+                                    {formatHintFeedbackReason(reason)}
+                                  </option>)}
+                              </select>
+
+                              <textarea
+                                value={hintFeedbackReasonText}
+                                onChange={e => setHintFeedbackReasonText(e.target.value)}
+                                rows={2}
+                                className="w-full px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-xs focus:outline-none focus:border-primary"
+                                placeholder={tr("Коротко: що саме не спрацювало?", "Briefly: what did not work?")}
+                              />
+
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  variant="ghost"
+                                  className="text-xs"
+                                  disabled={hintFeedbackSending}
+                                  onClick={() => void handleSendHintFeedback("down")}
+                                >
+                                  {hintFeedbackSending ? tr("Надсилання...", "Sending...") : tr("Надіслати відгук", "Send feedback")}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  className="text-xs"
+                                  disabled={hintFeedbackSending}
+                                  onClick={() => {
+                                    setHintFeedbackSignal(null);
+                                    setHintFeedbackReasonText("");
+                                  }}
+                                >
+                                  {tr("Скасувати", "Cancel")}
+                                </Button>
+                              </div>
+                            </div>}
+                        </> : <div className="text-[11px] font-mono text-accent-success">
+                          {hintFeedbackStored === false
+                            ? tr("Дякуємо! Відгук збережено в телеметрії.", "Thanks! Feedback captured in telemetry.")
+                            : tr("Дякуємо! Відгук збережено.", "Thanks! Feedback saved.")}
+                        </div>}
+                    </div>}
                 </div>
               </div>}
+
+            {(() => {
+              const latest = latestSubmissionBindingRef.current;
+              if (!latest || !learningFeedbackMeta?.codeHash) return null;
+              const sameHash = String(latest.codeHash) === String(learningFeedbackMeta.codeHash);
+              const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
+              if (!sameHash || !sameId) return null;
+              const analysis = learningFeedback?.analysis ?? null;
+              if (!analysis) return null;
+
+              return <div className="mb-4 p-3 border border-primary/30 bg-bg-code">
+                  <div className="text-xs font-mono text-primary mb-2">{tr("AI-розбір провалу", "AI failure analysis")}</div>
+                  <div className="text-xs font-mono text-text-secondary mb-2">
+                    <span className="text-text-primary">{tr("Зведення", "Summary")}:</span> {analysis.summary}
+                  </div>
+                  <div className="text-xs font-mono text-text-secondary mb-2">
+                    <span className="text-text-primary">{tr("Ймовірна причина", "Likely root cause")}:</span> {analysis.likelyRootCause}
+                  </div>
+                  {Array.isArray(analysis.nextSteps) && analysis.nextSteps.length > 0 && <div className="text-xs font-mono text-text-secondary">
+                      <div className="text-text-primary mb-1">{tr("Що зробити далі", "What to do next")}:</div>
+                      <ol className="list-decimal pl-4 space-y-1">
+                        {analysis.nextSteps.map((step, idx) => <li key={`${idx}-${step.slice(0, 24)}`}>{step}</li>)}
+                      </ol>
+                    </div>}
+                  <div className="mt-2 text-[10px] font-mono text-text-muted">
+                    {tr("Впевненість моделі", "Model confidence")}: {analysis.confidence}
+                  </div>
+                </div>;
+            })()}
 
             <FailureRecoveryCard
               verdict={(() => {
@@ -1631,7 +1980,7 @@ export const StudentTaskPage: React.FC = () => {
 
             <div className="space-y-3">
               {testResults.map((result, index) => <Card key={index} className="p-3">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                     <span className="text-sm font-mono text-text-primary">
                       {tr("Тест", "Test")} {index + 1}
                       {typeof result.testId === "number" ? <span className="text-text-muted"> (#{result.testId})</span> : null}

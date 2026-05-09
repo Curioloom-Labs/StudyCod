@@ -19,6 +19,7 @@ import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as 
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1 } from "../utils/multiFileSubmission";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
+import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 import { env } from "../env";
 import { FRONTEND_URL } from "../config";
 import { emailService } from "../services/emailService";
@@ -118,15 +119,6 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   const byPath = new Map<string, ApiCodeFile>();
   for (const f of out) byPath.set(f.path, f);
   return [...byPath.values()];
-}
-
-function chooseDefaultCheckerFromExpectedOutputs(outputs: string[]): CheckerSpec {
-  const hasFloatLike = outputs.some((s) => {
-    const text = String(s ?? "").trim();
-    if (!text) return false;
-    return /[-+]?\d+\.\d+/.test(text) || /[-+]?\d+(?:\.\d+)?[eE][-+]?\d+/.test(text);
-  });
-  return hasFloatLike ? { type: "float", epsilon: 1e-6 } : { type: "whitespace" };
 }
 
 function getAllowedJudgeLanguages(task: LibraryTask): JudgeLanguage[] {

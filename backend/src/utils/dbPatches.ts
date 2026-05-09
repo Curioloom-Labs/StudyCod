@@ -12,10 +12,14 @@ const console = {
 export async function applyDbPatches(): Promise<void> {
   await ensureUserModeEnums();
   await ensureCppLanguageEnums();
+  await ensureClassesGradingSystemColumn();
+  await ensureTargetedAssignmentsColumns();
   await ensureUsersDifusColumns();
   await ensureTestDataIsHiddenColumn();
   await ensureTestDataKindColumn();
   await ensureTestDataSubtaskColumn();
+  await ensureTestDataSourceColumn();
+  await ensureTestDataPaginationIndexes();
   await backfillTestDataKindFromIsHidden();
   await ensureTestDataTextColumns();
   await ensureEduGradesScoringColumns();
@@ -23,6 +27,7 @@ export async function applyDbPatches(): Promise<void> {
   await ensureUsersPlacementColumns();
   await ensureUsersContestHandleColumns();
   await ensureMarketingEmailsEnabledColumns();
+  await ensureStudentsUiLanguageColumn();
   await ensureUsersBirthdayGreetedYearColumn();
   await ensureTasksIoTypeColumn();
   await fixIntroPythonFixedSumTaskTests();
@@ -33,6 +38,10 @@ export async function applyDbPatches(): Promise<void> {
   await dropTheoryBlockRevisionsTableIfExists();
   await ensureSupportTicketsTable();
   await ensureSupportChatTables();
+  await ensureGradeAppealsTables();
+  await ensureEduHintFeedbackTable();
+  await ensureAppealsAndInsightsIndexes();
+  await ensureTeacherDigestDeliveriesTable();
   await migrateLegacySupportTicketsToChatIfNeeded();
   await ensureLibraryTasksTable();
   await ensureLibraryTasksOjColumns();
@@ -628,6 +637,61 @@ async function ensureCppLanguageEnums(): Promise<void> {
   await ensureEnumColumnHasValues({ table: "classes", column: "language", values });
   await ensureEnumColumnHasValues({ table: "topics_new", column: "language", values });
   await ensureEnumColumnHasValues({ table: "library_tasks", column: "lang", values });
+}
+
+async function ensureClassesGradingSystemColumn(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'classes'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const col = (await AppDataSource.query("SHOW COLUMNS FROM `classes` LIKE 'grading_system'")) as Array<any>;
+    if (!Array.isArray(col) || col.length === 0) {
+      logger.warn("[DB Patch] Column classes.grading_system is missing. Applying ALTER TABLE...");
+      await AppDataSource.query(
+        "ALTER TABLE `classes` ADD COLUMN `grading_system` ENUM('PERCENT_100','POINTS_12','POINTS_10','LETTER_AF','ECTS_AF','GPA_4') NOT NULL DEFAULT 'PERCENT_100' AFTER `language`"
+      );
+      logger.info("[DB Patch] Added column classes.grading_system");
+    }
+
+    await ensureEnumColumnHasValues({
+      table: "classes",
+      column: "grading_system",
+      values: ["PERCENT_100", "POINTS_12", "POINTS_10", "LETTER_AF", "ECTS_AF", "GPA_4"]
+    });
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure classes.grading_system column:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureTargetedAssignmentsColumns(): Promise<void> {
+  try {
+    const ensureJsonColumn = async (table: string, column: string): Promise<void> => {
+      const tableRows = (await AppDataSource.query(`SHOW TABLES LIKE '${table}'`)) as Array<any>;
+      if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+      const col = (await AppDataSource.query(`SHOW COLUMNS FROM \`${table}\` LIKE ?`, [column])) as Array<any>;
+      if (Array.isArray(col) && col.length > 0) return;
+
+      logger.warn(`[DB Patch] Column ${table}.${column} is missing. Applying ALTER TABLE...`);
+      await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` JSON NULL`);
+      logger.info(`[DB Patch] Added column ${table}.${column}`);
+    };
+
+    await ensureJsonColumn("topic_tasks", "assigned_student_ids");
+    await ensureJsonColumn("control_works", "assigned_student_ids");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure targeted assignment columns:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
 }
 
 async function ensureTheoryBlocksContentColumn(): Promise<void> {
@@ -1227,6 +1291,33 @@ async function ensureMarketingEmailsEnabledColumns(): Promise<void> {
   }
 }
 
+async function ensureStudentsUiLanguageColumn(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'students'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) return;
+
+    const col = (await AppDataSource.query("SHOW COLUMNS FROM `students` LIKE 'ui_language'")) as Array<any>;
+    if (!Array.isArray(col) || col.length === 0) {
+      logger.warn("[DB Patch] Column students.ui_language is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `students` ADD COLUMN `ui_language` ENUM('uk','en') NOT NULL DEFAULT 'en' AFTER `email`");
+      logger.info("[DB Patch] Added column students.ui_language");
+    }
+
+    await ensureEnumColumnHasValues({
+      table: "students",
+      column: "ui_language",
+      values: ["uk", "en"]
+    });
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure students.ui_language column:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
 async function ensureUsersBirthdayGreetedYearColumn(): Promise<void> {
   try {
     const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'users'")) as Array<any>;
@@ -1390,6 +1481,11 @@ async function ensureEduPerformanceIndexes(): Promise<void> {
       "edu_grades",
       "idx_edu_grades_student_topic_task_created_at",
       "CREATE INDEX `idx_edu_grades_student_topic_task_created_at` ON `edu_grades` (`student_id`, `topic_task_id`, `created_at`)"
+    );
+    await ensureIndex(
+      "edu_grades",
+      "idx_edu_grades_student_topic_task_id",
+      "CREATE INDEX `idx_edu_grades_student_topic_task_id` ON `edu_grades` (`student_id`, `topic_task_id`, `id`)"
     );
     await ensureIndex(
       "edu_grades",
@@ -1625,6 +1721,274 @@ async function ensureSupportChatTables(): Promise<void> {
   }
 }
 
+async function ensureGradeAppealsTables(): Promise<void> {
+  try {
+    const appealRows = (await AppDataSource.query("SHOW TABLES LIKE 'grade_appeals'")) as Array<any>;
+    if (!Array.isArray(appealRows) || appealRows.length === 0) {
+      console.warn("[DB Patch] Table grade_appeals is missing. Creating...");
+      await AppDataSource.query(`
+        CREATE TABLE grade_appeals (
+          id INT NOT NULL AUTO_INCREMENT,
+          student_id INT NOT NULL,
+          class_id INT NOT NULL,
+          teacher_user_id INT NULL,
+          edu_grade_id INT NULL,
+          summary_grade_id INT NULL,
+          resolved_by_user_id INT NULL,
+          target_type ENUM('EDU_GRADE','SUMMARY_GRADE') NOT NULL,
+          status ENUM('SUBMITTED','IN_REVIEW','NEEDS_INFO','RESOLVED_ACCEPTED','RESOLVED_PARTIAL','RESOLVED_REJECTED','CANCELLED') NOT NULL DEFAULT 'SUBMITTED',
+          reason_code ENUM('CHECK_TEST_RESULTS','CHECK_FEEDBACK','CHECK_CALCULATION','CHECK_THEMATIC','OTHER') NOT NULL,
+          reason_text TEXT NOT NULL,
+          desired_outcome TEXT NULL,
+          resolution_text TEXT NULL,
+          previous_grade INT NULL,
+          new_grade INT NULL,
+          grade_changed TINYINT(1) NOT NULL DEFAULT 0,
+          started_review_at DATETIME NULL,
+          resolved_at DATETIME NULL,
+          last_message_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (id),
+          INDEX idx_grade_appeals_student_status_created (student_id, status, created_at),
+          INDEX idx_grade_appeals_class_status_created (class_id, status, created_at),
+          INDEX idx_grade_appeals_edu_grade_status (edu_grade_id, status),
+          INDEX idx_grade_appeals_summary_grade_status (summary_grade_id, status),
+          INDEX idx_grade_appeals_last_message_at (last_message_at),
+          CONSTRAINT fk_grade_appeals_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+          CONSTRAINT fk_grade_appeals_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+          CONSTRAINT fk_grade_appeals_teacher_user FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE SET NULL,
+          CONSTRAINT fk_grade_appeals_edu_grade FOREIGN KEY (edu_grade_id) REFERENCES edu_grades(id) ON DELETE CASCADE,
+          CONSTRAINT fk_grade_appeals_summary_grade FOREIGN KEY (summary_grade_id) REFERENCES summary_grades(id) ON DELETE CASCADE,
+          CONSTRAINT fk_grade_appeals_resolved_user FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      console.log("[DB Patch] Created table grade_appeals");
+    }
+
+    const messageRows = (await AppDataSource.query("SHOW TABLES LIKE 'grade_appeal_messages'")) as Array<any>;
+    if (!Array.isArray(messageRows) || messageRows.length === 0) {
+      console.warn("[DB Patch] Table grade_appeal_messages is missing. Creating...");
+      await AppDataSource.query(`
+        CREATE TABLE grade_appeal_messages (
+          id INT NOT NULL AUTO_INCREMENT,
+          appeal_id INT NOT NULL,
+          sender_type ENUM('STUDENT','TEACHER','SYSTEM') NOT NULL,
+          sender_user_id INT NULL,
+          sender_student_id INT NULL,
+          text TEXT NOT NULL,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (id),
+          INDEX idx_grade_appeal_messages_appeal_created (appeal_id, created_at),
+          INDEX idx_grade_appeal_messages_sender_user (sender_user_id),
+          INDEX idx_grade_appeal_messages_sender_student (sender_student_id),
+          CONSTRAINT fk_grade_appeal_messages_appeal FOREIGN KEY (appeal_id) REFERENCES grade_appeals(id) ON DELETE CASCADE,
+          CONSTRAINT fk_grade_appeal_messages_sender_user FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE SET NULL,
+          CONSTRAINT fk_grade_appeal_messages_sender_student FOREIGN KEY (sender_student_id) REFERENCES students(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      console.log("[DB Patch] Created table grade_appeal_messages");
+    }
+
+    const lastMessageCol = (await AppDataSource.query("SHOW COLUMNS FROM `grade_appeals` LIKE 'last_message_at'")) as Array<any>;
+    if (!Array.isArray(lastMessageCol) || lastMessageCol.length === 0) {
+      console.warn("[DB Patch] Column grade_appeals.last_message_at is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `grade_appeals` ADD COLUMN `last_message_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) AFTER `resolved_at`");
+      await AppDataSource.query("ALTER TABLE `grade_appeals` ADD INDEX `idx_grade_appeals_last_message_at` (`last_message_at`)");
+      console.log("[DB Patch] Added column grade_appeals.last_message_at");
+    }
+  } catch (err: any) {
+    console.error("[DB Patch] Failed to ensure grade appeal tables:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureEduHintFeedbackTable(): Promise<void> {
+  try {
+    const tableRows = (await AppDataSource.query("SHOW TABLES LIKE 'edu_hint_feedback'")) as Array<any>;
+    if (!Array.isArray(tableRows) || tableRows.length === 0) {
+      logger.warn("[DB Patch] Table edu_hint_feedback is missing. Creating...");
+      await AppDataSource.query(`
+        CREATE TABLE edu_hint_feedback (
+          id INT NOT NULL AUTO_INCREMENT,
+          student_id INT NOT NULL,
+          topic_task_id INT NOT NULL,
+          grade_id INT NULL,
+          submission_id VARCHAR(128) NULL,
+          code_hash VARCHAR(128) NOT NULL,
+          verdict VARCHAR(32) NULL,
+          signal ENUM('UP','DOWN') NOT NULL,
+          reason_code ENUM('HELPFUL','NOT_SPECIFIC','INCORRECT','TOO_HARD','TOO_VERBOSE','OTHER') NULL,
+          reason_text TEXT NULL,
+          hints_shown INT NOT NULL DEFAULT 0,
+          hints_total INT NOT NULL DEFAULT 0,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (id),
+          UNIQUE KEY uq_edu_hint_feedback_student_task_code (student_id, topic_task_id, code_hash),
+          INDEX idx_edu_hint_feedback_topic_created (topic_task_id, created_at),
+          INDEX idx_edu_hint_feedback_grade (grade_id),
+          INDEX idx_edu_hint_feedback_signal_reason (signal, reason_code),
+          CONSTRAINT fk_edu_hint_feedback_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+          CONSTRAINT fk_edu_hint_feedback_topic_task FOREIGN KEY (topic_task_id) REFERENCES topic_tasks(id) ON DELETE CASCADE,
+          CONSTRAINT fk_edu_hint_feedback_grade FOREIGN KEY (grade_id) REFERENCES edu_grades(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+      logger.info("[DB Patch] Created table edu_hint_feedback");
+      return;
+    }
+
+    const hasColumn = async (columnName: string): Promise<boolean> => {
+      const rows = (await AppDataSource.query("SHOW COLUMNS FROM `edu_hint_feedback` LIKE ?", [columnName])) as Array<any>;
+      return Array.isArray(rows) && rows.length > 0;
+    };
+
+    const ensureColumn = async (columnName: string, sql: string): Promise<void> => {
+      if (await hasColumn(columnName)) return;
+      logger.warn(`[DB Patch] Column edu_hint_feedback.${columnName} is missing. Applying ALTER TABLE...`);
+      await AppDataSource.query(sql);
+      logger.info(`[DB Patch] Added column edu_hint_feedback.${columnName}`);
+    };
+
+    await ensureColumn("grade_id", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `grade_id` INT NULL AFTER `topic_task_id`");
+    await ensureColumn("submission_id", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `submission_id` VARCHAR(128) NULL AFTER `grade_id`");
+    await ensureColumn("code_hash", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `code_hash` VARCHAR(128) NOT NULL DEFAULT '' AFTER `submission_id`");
+    await ensureColumn("verdict", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `verdict` VARCHAR(32) NULL AFTER `code_hash`");
+    await ensureColumn("signal", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `signal` ENUM('UP','DOWN') NOT NULL DEFAULT 'UP' AFTER `verdict`");
+    await ensureColumn("reason_code", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `reason_code` ENUM('HELPFUL','NOT_SPECIFIC','INCORRECT','TOO_HARD','TOO_VERBOSE','OTHER') NULL AFTER `signal`");
+    await ensureColumn("reason_text", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `reason_text` TEXT NULL AFTER `reason_code`");
+    await ensureColumn("hints_shown", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `hints_shown` INT NOT NULL DEFAULT 0 AFTER `reason_text`");
+    await ensureColumn("hints_total", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `hints_total` INT NOT NULL DEFAULT 0 AFTER `hints_shown`");
+    await ensureColumn("created_at", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) AFTER `hints_total`");
+    await ensureColumn("updated_at", "ALTER TABLE `edu_hint_feedback` ADD COLUMN `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) AFTER `created_at`");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure edu_hint_feedback table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureAppealsAndInsightsIndexes(): Promise<void> {
+  const hasTable = async (table: string): Promise<boolean> => {
+    const rows = (await AppDataSource.query(`SHOW TABLES LIKE '${table}'`)) as Array<any>;
+    return Array.isArray(rows) && rows.length > 0;
+  };
+
+  const hasIndex = async (table: string, indexName: string): Promise<boolean> => {
+    const rows = (await AppDataSource.query(`SHOW INDEX FROM \`${table}\` WHERE Key_name = '${indexName}'`)) as Array<any>;
+    return Array.isArray(rows) && rows.length > 0;
+  };
+
+  const ensureIndex = async (table: string, indexName: string, createSql: string): Promise<void> => {
+    if (!(await hasTable(table))) return;
+    if (await hasIndex(table, indexName)) return;
+    logger.warn("[DB Patch] Missing index; creating...", { table, indexName });
+    await AppDataSource.query(createSql);
+    logger.info("[DB Patch] Index created", { table, indexName });
+  };
+
+  try {
+    await ensureIndex(
+      "grade_appeals",
+      "idx_grade_appeals_class_status_last_message_created",
+      "CREATE INDEX `idx_grade_appeals_class_status_last_message_created` ON `grade_appeals` (`class_id`, `status`, `last_message_at`, `created_at`)"
+    );
+
+    await ensureIndex(
+      "grade_appeals",
+      "idx_grade_appeals_student_last_message_created",
+      "CREATE INDEX `idx_grade_appeals_student_last_message_created` ON `grade_appeals` (`student_id`, `last_message_at`, `created_at`)"
+    );
+
+    await ensureIndex(
+      "edu_hint_feedback",
+      "idx_edu_hint_feedback_topic_created",
+      "CREATE INDEX `idx_edu_hint_feedback_topic_created` ON `edu_hint_feedback` (`topic_task_id`, `created_at`)"
+    );
+
+    await ensureIndex(
+      "edu_hint_feedback",
+      "idx_edu_hint_feedback_signal_reason",
+      "CREATE INDEX `idx_edu_hint_feedback_signal_reason` ON `edu_hint_feedback` (`signal`, `reason_code`)"
+    );
+
+    await ensureIndex(
+      "edu_hint_feedback",
+      "idx_edu_hint_feedback_grade",
+      "CREATE INDEX `idx_edu_hint_feedback_grade` ON `edu_hint_feedback` (`grade_id`)"
+    );
+
+    const hasUniqueHintKey = await hasIndex("edu_hint_feedback", "uq_edu_hint_feedback_student_task_code");
+    if (!hasUniqueHintKey && await hasTable("edu_hint_feedback")) {
+      await AppDataSource.query(`
+        DELETE old_feedback FROM edu_hint_feedback old_feedback
+        INNER JOIN edu_hint_feedback new_feedback
+          ON old_feedback.student_id = new_feedback.student_id
+         AND old_feedback.topic_task_id = new_feedback.topic_task_id
+         AND old_feedback.code_hash = new_feedback.code_hash
+         AND old_feedback.id < new_feedback.id
+      `);
+
+      await AppDataSource.query(
+        "ALTER TABLE `edu_hint_feedback` ADD UNIQUE KEY `uq_edu_hint_feedback_student_task_code` (`student_id`, `topic_task_id`, `code_hash`)"
+      );
+      logger.info("[DB Patch] Added unique index uq_edu_hint_feedback_student_task_code");
+    }
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure appeals/insights indexes:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureTeacherDigestDeliveriesTable(): Promise<void> {
+  try {
+    const rows = (await AppDataSource.query("SHOW TABLES LIKE 'teacher_digest_deliveries'")) as Array<any>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Table teacher_digest_deliveries is missing. Creating...");
+    await AppDataSource.query(`
+      CREATE TABLE teacher_digest_deliveries (
+        id INT NOT NULL AUTO_INCREMENT,
+        class_id INT NOT NULL,
+        teacher_user_id INT NOT NULL,
+        week_key VARCHAR(16) NOT NULL,
+        window_days INT NOT NULL DEFAULT 7,
+        status ENUM('RESERVED','SENT') NOT NULL DEFAULT 'RESERVED',
+        payload_json MEDIUMTEXT NULL,
+        last_error TEXT NULL,
+        sent_at DATETIME(6) NULL,
+        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_teacher_digest_deliveries_class_week (class_id, week_key),
+        INDEX idx_teacher_digest_deliveries_teacher_week (teacher_user_id, week_key),
+        INDEX idx_teacher_digest_deliveries_status_created (status, created_at),
+        CONSTRAINT fk_teacher_digest_deliveries_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+        CONSTRAINT fk_teacher_digest_deliveries_teacher FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    logger.info("[DB Patch] Created table teacher_digest_deliveries");
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure teacher_digest_deliveries table:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState,
+    });
+  }
+}
+
 async function migrateLegacySupportTicketsToChatIfNeeded(): Promise<void> {
   try {
     const tables = (await AppDataSource.query("SHOW TABLES LIKE 'support_tickets'")) as Array<any>;
@@ -1796,6 +2160,72 @@ async function ensureTestDataSubtaskColumn(): Promise<void> {
     logger.info("[DB Patch] Added column test_data.subtask");
   } catch (err: any) {
     logger.error("[DB Patch] Failed to ensure test_data.subtask column:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureTestDataSourceColumn(): Promise<void> {
+  try {
+    const tables = (await AppDataSource.query("SHOW TABLES LIKE 'test_data'")) as Array<any>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const rows = (await AppDataSource.query("SHOW COLUMNS FROM `test_data` LIKE 'source'")) as Array<any>;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      logger.warn("[DB Patch] Column test_data.source is missing. Applying ALTER TABLE...");
+      await AppDataSource.query("ALTER TABLE `test_data` ADD COLUMN `source` ENUM('MANUAL','AI_GENERATED','LIBRARY_IMPORTED') NOT NULL DEFAULT 'MANUAL' AFTER `kind`");
+      await AppDataSource.query("ALTER TABLE `test_data` ADD INDEX `idx_test_data_source` (`source`)");
+      logger.info("[DB Patch] Added column test_data.source");
+    }
+
+    await ensureEnumColumnHasValues({
+      table: "test_data",
+      column: "source",
+      values: ["MANUAL", "AI_GENERATED", "LIBRARY_IMPORTED"]
+    });
+
+    // Best-effort backfill for legacy rows attached directly to library tasks.
+    await AppDataSource.query(
+      "UPDATE `test_data` SET `source` = 'LIBRARY_IMPORTED' WHERE `library_task_id` IS NOT NULL AND (`source` IS NULL OR `source` = '' OR `source` = 'MANUAL')"
+    );
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure test_data.source column:", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      sqlState: err?.sqlState
+    });
+  }
+}
+
+async function ensureTestDataPaginationIndexes(): Promise<void> {
+  try {
+    const tables = (await AppDataSource.query("SHOW TABLES LIKE 'test_data'")) as Array<any>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const hasIndex = async (name: string): Promise<boolean> => {
+      const rows = (await AppDataSource.query("SHOW INDEX FROM `test_data` WHERE Key_name = ?", [name])) as Array<any>;
+      return Array.isArray(rows) && rows.length > 0;
+    };
+
+    if (!(await hasIndex("idx_test_data_topic_task_created_id"))) {
+      await AppDataSource.query(
+        "CREATE INDEX `idx_test_data_topic_task_created_id` ON `test_data` (`topic_task_id`, `created_at`, `id`)"
+      );
+      logger.info("[DB Patch] Added index idx_test_data_topic_task_created_id");
+    }
+
+    if (!(await hasIndex("idx_test_data_topic_task_source_created_id"))) {
+      await AppDataSource.query(
+        "CREATE INDEX `idx_test_data_topic_task_source_created_id` ON `test_data` (`topic_task_id`, `source`, `created_at`, `id`)"
+      );
+      logger.info("[DB Patch] Added index idx_test_data_topic_task_source_created_id");
+    }
+  } catch (err: any) {
+    logger.error("[DB Patch] Failed to ensure test_data pagination indexes:", {
       message: err?.message,
       code: err?.code,
       errno: err?.errno,

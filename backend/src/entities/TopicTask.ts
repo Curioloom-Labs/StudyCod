@@ -133,6 +133,12 @@ export class TopicTask {
     name: "is_assigned"
   })
   isAssigned!: boolean;
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "assigned_student_ids"
+  })
+  assignedStudentIds?: number[] | null;
   @OneToOne(() => TaskTheory, theory => theory.topicTask, {
     nullable: true
   })

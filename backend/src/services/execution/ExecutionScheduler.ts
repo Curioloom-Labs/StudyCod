@@ -4,13 +4,17 @@ import { logger } from "../../utils/logger";
 export type ExecutionSchedulerSnapshot = {
   maxConcurrent: number;
   maxQueueSize: number;
+  maxRetries: number;
   active: number;
   queued: number;
+  deadLetterQueueLength: number;
   peakActive: number;
   peakQueueLength: number;
   started: number;
   totalCompleted: number;
   totalRejectedQueueFull: number;
+  totalRequeuedExpired: number;
+  totalDeadLettered: number;
   avgExecutionTimeMs: number;
   emaExecutionTimeMs: number;
   averageQueueWaitTime: number;
@@ -106,13 +110,17 @@ export class ExecutionScheduler {
     return {
       maxConcurrent: this.maxConcurrent,
       maxQueueSize: this.maxQueueSize,
+      maxRetries: 0,
       active: this.active,
       queued: this.queue.length,
+      deadLetterQueueLength: 0,
       peakActive: this.peakActive,
       peakQueueLength: this.peakQueueLength,
       started: this.started,
       totalCompleted: this.completed,
       totalRejectedQueueFull: this.rejectedQueueFull,
+      totalRequeuedExpired: 0,
+      totalDeadLettered: 0,
       avgExecutionTimeMs: avg,
       emaExecutionTimeMs: this.emaExecMs,
       averageQueueWaitTime: avgQueueWait,

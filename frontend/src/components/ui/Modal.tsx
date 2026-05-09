@@ -103,18 +103,18 @@ export const Modal: React.FC<Props> = ({
   }, [resolvedOpen, isClosable]);
 
   const content = <AnimatePresence>
-      {resolvedOpen && <motion.div className={"fixed inset-0 z-50 flex items-center justify-center bg-black/80" + (overlayClassName ? ` ${overlayClassName}` : "")} onClick={isClosable ? () => onCloseRef.current() : undefined} style={{
+      {resolvedOpen && <motion.div className={"fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-bg-base/80 p-2 sm:p-4" + (overlayClassName ? ` ${overlayClassName}` : "")} onClick={isClosable ? () => onCloseRef.current() : undefined} style={{
       backdropFilter: "blur(2px)"
     }} variants={overlayVariants} initial="initial" animate="animate" exit="exit" transition={shouldReduceMotion ? reducedMotionTransition : undefined}>
-          <motion.div ref={panelRef} className={"bg-bg-surface border border-border max-w-[900px] w-[95vw] max-h-[95vh] flex flex-col overflow-hidden" + (panelClassName ? ` ${panelClassName}` : "")} onClick={e => e.stopPropagation()} variants={modalVariants} initial="initial" animate="animate" exit="exit" transition={shouldReduceMotion ? reducedMotionTransition : undefined} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
-            {title && <div className="px-6 py-4 border-b border-border flex-shrink-0">
+          <motion.div ref={panelRef} className={"bg-bg-surface border border-border max-w-[900px] w-full sm:w-[95vw] max-h-[calc(100dvh-1rem)] sm:max-h-[95vh] flex flex-col overflow-hidden" + (panelClassName ? ` ${panelClassName}` : "")} onClick={e => e.stopPropagation()} variants={modalVariants} initial="initial" animate="animate" exit="exit" transition={shouldReduceMotion ? reducedMotionTransition : undefined} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
+            {title && <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border flex-shrink-0">
                 <h2 id={titleId} className="text-lg font-mono text-text-primary">{title}</h2>
                 {description && <p id={descriptionId} className="text-sm text-text-secondary mt-2 whitespace-pre-line">{description}</p>}
               </div>}
-            <div className={"flex-1 overflow-y-auto px-6 py-4" + (bodyClassName ? ` ${bodyClassName}` : "")}>
+            <div className={"flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4" + (bodyClassName ? ` ${bodyClassName}` : "")}>
               {children}
             </div>
-            {shouldShowCloseButton && <div className="px-6 py-4 border-t border-border flex justify-end flex-shrink-0">
+            {shouldShowCloseButton && <div className="px-4 sm:px-6 py-3 sm:py-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-border flex justify-end flex-shrink-0">
                 <Button variant="ghost" onClick={() => onCloseRef.current()}>
                   {t('close')}
                 </Button>

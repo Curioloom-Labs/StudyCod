@@ -5,22 +5,25 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getClasses, createClass, type Class, getPendingReviews, updateGrade, type PendingReview } from "../../lib/api/edu";
-import { Plus, Users, BookOpen, FileText, CheckCircle, Clock } from "lucide-react";
+import { Plus, Users, BookOpen, FileText, CheckCircle, Clock, MessageSquare, Gauge } from "lucide-react";
 import { CodeEditor } from "../../components/CodeEditor";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
 export const TeacherDashboardPage: React.FC = () => {
   const {
     t,
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const isEn = i18n.language?.toLowerCase().startsWith("en");
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [newClassName, setNewClassName] = useState("");
   const [newClassLanguage, setNewClassLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("JAVA");
+  const [newClassGradingSystem, setNewClassGradingSystem] = useState<ClassGradingSystem>(DEFAULT_GRADING_SYSTEM);
   const [showPendingReviews, setShowPendingReviews] = useState(false);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [selectedReview, setSelectedReview] = useState<PendingReview | null>(null);
@@ -31,6 +34,7 @@ export const TeacherDashboardPage: React.FC = () => {
     if (value === "JAVA" || value === "PYTHON" || value === "CPP") return value;
     return null;
   };
+  const parseClassGradingSystem = (value: string): ClassGradingSystem => normalizeGradingSystem(value);
   useEffect(() => {
     loadClasses();
     loadPendingReviews();
@@ -56,11 +60,12 @@ export const TeacherDashboardPage: React.FC = () => {
   const handleCreateClass = async () => {
     if (!newClassName.trim()) return;
     try {
-      const newClass = await createClass(newClassName, newClassLanguage);
+      const newClass = await createClass(newClassName, newClassLanguage, newClassGradingSystem);
       setClasses([...classes, newClass]);
       setShowCreateClass(false);
       setNewClassName("");
       setNewClassLanguage("JAVA");
+      setNewClassGradingSystem(DEFAULT_GRADING_SYSTEM);
     } catch (error) {
       console.error("Failed to create class:", error);
       showToast({ type: "error", message: t('failedToCreateClass') });
@@ -68,7 +73,7 @@ export const TeacherDashboardPage: React.FC = () => {
   };
   const handleReviewGrade = async () => {
     if (!selectedReview) return;
-    if (reviewGrade < 1 || reviewGrade > 12) {
+    if (reviewGrade < 0 || reviewGrade > 100) {
       showToast({ type: "error", message: t('gradeMustBe') });
       return;
     }
@@ -95,11 +100,11 @@ export const TeacherDashboardPage: React.FC = () => {
         {t('loading')}
       </div>;
   }
-  return <div className="p-6">
+  return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-mono text-text-primary">{t('myClasses')}</h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="ghost" onClick={() => navigate("/edu/library")}>
               <BookOpen className="w-4 h-4 mr-2" />
               {tr("Бібліотека завдань", "Task library")}
@@ -123,11 +128,16 @@ export const TeacherDashboardPage: React.FC = () => {
             <Button onClick={() => setShowCreateClass(true)}>{t('createFirstClass')}</Button>
           </Card> : <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {classes.map(cls => <Card key={cls.id} className="p-4 hover:bg-bg-hover transition-fast cursor-pointer">
-                <div className="flex items-start justify-between mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
                   <h3 className="text-lg font-mono text-text-primary">{cls.name}</h3>
-                  <span className="text-xs text-text-muted px-2 py-1 border border-border">
-                    {cls.language}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs text-text-muted px-2 py-1 border border-border">
+                      {cls.language}
+                    </span>
+                    <span className="text-[10px] text-text-muted px-2 py-1 border border-border">
+                      {gradingSystemLabel(normalizeGradingSystem(cls.gradingSystem), !!isEn)}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-text-secondary">
                   <div className="flex items-center gap-1">
@@ -140,6 +150,18 @@ export const TeacherDashboardPage: React.FC = () => {
               navigate(`/edu/classes/${cls.id}`);
             }}>
                     {t('open')}
+                  </Button>
+                  <Button variant="ghost" className="flex-1 text-xs" onClick={() => {
+              navigate(`/edu/classes/${cls.id}/appeals`);
+            }}>
+                    <MessageSquare className="w-3 h-3 mr-1" />
+                    {tr("Апеляції", "Appeals")}
+                  </Button>
+                  <Button variant="ghost" className="flex-1 text-xs" onClick={() => {
+              navigate(`/edu/classes/${cls.id}/teacher-os`);
+            }}>
+                    <Gauge className="w-3 h-3 mr-1" />
+                    Teacher OS
                   </Button>
                 </div>
               </Card>)}
@@ -167,6 +189,16 @@ export const TeacherDashboardPage: React.FC = () => {
                 <option value="CPP">C++</option>
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-mono text-text-secondary mb-2">
+                {tr("Система оцінювання", "Grading system")}
+              </label>
+              <select value={newClassGradingSystem} onChange={e => setNewClassGradingSystem(parseClassGradingSystem(e.target.value))} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
+                {GRADING_SYSTEMS.map(system => <option key={system} value={system}>
+                    {gradingSystemLabel(system, !!isEn)}
+                  </option>)}
+              </select>
+            </div>
             <div className="flex gap-2 justify-end pt-4">
               <Button variant="ghost" onClick={() => setShowCreateClass(false)}>
                 {t('cancel')}
@@ -185,10 +217,10 @@ export const TeacherDashboardPage: React.FC = () => {
     }} title={tr("Завдання на перевірку", "Tasks to review")}>
           <div className="max-w-6xl max-h-[80vh] overflow-y-auto">
             {pendingReviews.length === 0 ? <div className="p-8 text-center">
-                <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                <CheckCircle className="w-12 h-12 mx-auto mb-4 text-accent-success" />
                 <p className="text-text-secondary">{tr("Немає завдань для перевірки", "No tasks to review")}</p>
               </div> : selectedReview ? <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <h3 className="text-lg font-mono text-text-primary">
                     {selectedReview.task?.title || tr("Завдання", "Task")}
                   </h3>
@@ -254,7 +286,7 @@ export const TeacherDashboardPage: React.FC = () => {
                 </div>
               </div> : <div className="space-y-3">
                 {pendingReviews.map(review => <Card key={review.gradeId} className="p-4 hover:bg-bg-hover transition-fast cursor-pointer" onClick={() => setSelectedReview(review)}>
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                       <div className="flex-1">
                         <h3 className="text-sm font-mono text-text-primary mb-1">
                           {review.task?.title || tr("Завдання", "Task")}

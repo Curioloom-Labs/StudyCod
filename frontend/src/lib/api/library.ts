@@ -2,7 +2,7 @@ import { api } from "./client";
 import i18n from "../../i18n";
 
 export type LibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
-export type LibraryTaskLang = "JAVA" | "PYTHON";
+export type LibraryTaskLang = "JAVA" | "PYTHON" | "CPP";
 export type LibraryTaskDifficulty = "EASY" | "MEDIUM" | "HARD";
 export type JudgeLanguage = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
 export type LibraryCheckerSpec = { type: "exact" } | { type: "whitespace" } | { type: "float"; epsilon: number };

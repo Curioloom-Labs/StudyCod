@@ -13,6 +13,8 @@ import { SummaryGrade } from "../../entities/SummaryGrade";
 import { AssessmentType, validateAssessmentType } from "../../types/AssessmentType";
 import { saveControlSummaryGradeForNewSystemWithManager } from "../../services/edu/controlWorkGrading";
 import { logger } from "../../utils/logger";
+import { isAssignedToStudent } from "../../utils/assignmentVisibility";
+import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
 
 const router = Router();
 
@@ -39,6 +41,70 @@ const quizSubmitBodySchema = z.object({
     z.record(z.string(), z.any()).refine(v => Object.keys(v).length <= 500)
   ])
 });
+
+function isControlWorkVisibleToStudent(controlWork: ControlWork, studentId: number): boolean {
+  return isAssignedToStudent(controlWork.isAssigned, (controlWork as any).assignedStudentIds, studentId);
+}
+
+function isControlTaskVisibleToStudent(task: TopicTask, controlWork: ControlWork, studentId: number): boolean {
+  if (task.type !== "CONTROL") return false;
+  if (task.isAssigned) {
+    return isAssignedToStudent(task.isAssigned, (task as any).assignedStudentIds, studentId);
+  }
+  return isAssignedToStudent(true, (controlWork as any).assignedStudentIds, studentId);
+}
+
+const CONTROL_TASK_MAX_ATTEMPTS = 3;
+
+function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): number {
+  if (task.type === "CONTROL") {
+    return CONTROL_TASK_MAX_ATTEMPTS;
+  }
+
+  const parsed = Number(task.maxAttempts);
+  if (!Number.isFinite(parsed)) {
+    return 3;
+  }
+
+  return Math.max(1, Math.floor(parsed));
+}
+
+function isControlTaskCompletedForProgress(task: TopicTask, latestGrade: EduGrade | null, attemptsUsed: number): boolean {
+  if (!latestGrade) return false;
+  const maxAttempts = resolveTaskMaxAttempts(task);
+  return latestGrade.isCompleted === true || latestGrade.isManuallyGraded === true || attemptsUsed >= maxAttempts;
+}
+
+function computePracticeAverageFromLatestGrades(controlTasks: TopicTask[], latestGradeByTaskId: Map<number, EduGrade>): number | null {
+  const gradedValues: number[] = [];
+  for (const task of controlTasks) {
+    const g = latestGradeByTaskId.get(task.id);
+    const total = g?.total;
+    if (total === null || total === undefined) continue;
+    const value = Number(total);
+    if (!Number.isFinite(value)) continue;
+    gradedValues.push(value);
+  }
+  if (gradedValues.length === 0) return null;
+  const avg = gradedValues.reduce((sum, v) => sum + v, 0) / gradedValues.length;
+  return clampGradeToInt(avg);
+}
+
+function getAttemptRemainingSeconds(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">): number | null {
+  const limitMinutes = Number(attempt.timeLimitMinutes ?? 0);
+  if (!Number.isFinite(limitMinutes) || limitMinutes <= 0) {
+    return null;
+  }
+
+  const elapsedSeconds = Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000);
+  const totalSeconds = Math.floor(limitMinutes * 60);
+  return Math.max(0, totalSeconds - elapsedSeconds);
+}
+
+function isTimedAttemptExpired(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">): boolean {
+  const remainingSeconds = getAttemptRemainingSeconds(attempt);
+  return remainingSeconds !== null && remainingSeconds <= 0;
+}
 
 router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response) => {
   try {
@@ -122,6 +188,12 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
             message: "ACCESS_DENIED"
           });
         }
+
+        if (!isControlWorkVisibleToStudent(controlWork, req.studentId)) {
+          return res.status(403).json({
+            message: "ACCESS_DENIED"
+          });
+        }
       } else if (req.userId) {
         const user = await userRepo().findOne({
           where: { id: req.userId }
@@ -147,6 +219,10 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
         .andWhere("task.type = :controlType", { controlType: "CONTROL" })
         .orderBy("task.order", "ASC")
         .getMany();
+
+      if (req.studentId) {
+        controlTasks = controlTasks.filter(task => isControlTaskVisibleToStudent(task, controlWork, req.studentId!));
+      }
 
       logger.debug("[GET /edu/lessons/:id] Control work tasks fetched", { requestId: req.requestId, controlWorkId: controlWork.id, count: controlTasks.length });
       controlTasks = controlTasks.filter(t => t.type === "CONTROL");
@@ -185,17 +261,32 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       let quizSubmitted: boolean | undefined = undefined;
       let quizGrade: number | null | undefined = undefined;
       let quizReview: any | null | undefined = undefined;
+      let reportOnly: boolean | undefined = undefined;
+      let reportReason: "COMPLETED" | "DEADLINE_EXPIRED" | null | undefined = undefined;
+      let controlReport:
+        | {
+            finalGrade: number | null;
+            theoryGrade: number | null;
+            practiceGrade: number | null;
+            formulaSnapshot: string | null;
+          }
+        | undefined = undefined;
       let studentControlProgress:
         | {
             totalTasks: number;
             completedTasks: number;
             currentTaskOrder: number | null;
+            currentTaskId: number | null;
+            completedTaskIds: number[];
             unlockedTaskIds: number[];
             reviewAvailable: boolean;
           }
         | undefined = undefined;
 
+      const controlDeadlineTimezone = extractTimezoneFromProfileMeta(controlWork.topic.class?.teacher?.timezone ?? null);
+
       const latestGradeByTaskId = new Map<number, EduGrade>();
+      const attemptsByTaskId = new Map<number, number>();
 
       if (req.studentId) {
         const sg = await summaryGradeRepo()
@@ -232,39 +323,98 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
 
           for (const g of allGrades) {
             const tid = (g as any).topicTask?.id;
-            if (!tid || latestGradeByTaskId.has(tid)) continue;
-            latestGradeByTaskId.set(tid, g);
+            if (!tid) continue;
+            if (!latestGradeByTaskId.has(tid)) {
+              latestGradeByTaskId.set(tid, g);
+            }
+            attemptsByTaskId.set(tid, (attemptsByTaskId.get(tid) || 0) + 1);
           }
         }
 
         const hasTheoryGate = !!controlWork.hasTheory;
         const theoryGatePassed = !hasTheoryGate || quizSubmitted === true;
-        const completedTasks = controlTasks.filter(t => {
-          const g = latestGradeByTaskId.get(t.id);
-          return !!g && g.total !== null && Number.isFinite(Number(g.total));
-        }).length;
+        const completedTaskIds = controlTasks
+          .filter(task => {
+            const latest = latestGradeByTaskId.get(task.id) || null;
+            const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+            return isControlTaskCompletedForProgress(task, latest, attemptsUsed);
+          })
+          .map(task => task.id);
+
+        const completedTaskIdsSet = new Set<number>(completedTaskIds);
+        const completedTasks = completedTaskIds.length;
+        const hasPracticePart = controlWork.hasPractice !== false;
 
         let currentTaskOrder: number | null = null;
+        let currentTaskId: number | null = null;
         const unlockedTaskIds: number[] = [];
 
         if (theoryGatePassed) {
           const firstIncompleteIndex = controlTasks.findIndex(t => {
-            const g = latestGradeByTaskId.get(t.id);
-            return !(g && g.total !== null && Number.isFinite(Number(g.total)));
+            return !completedTaskIdsSet.has(t.id);
           });
 
-          if (firstIncompleteIndex === -1) {
-            for (const t of controlTasks) unlockedTaskIds.push(t.id);
-          } else {
+          if (firstIncompleteIndex !== -1) {
             unlockedTaskIds.push(controlTasks[firstIncompleteIndex].id);
             currentTaskOrder = firstIncompleteIndex + 1;
+            currentTaskId = controlTasks[firstIncompleteIndex].id;
           }
         }
+
+        const latestAttempt = await lessonAttemptRepo()
+          .createQueryBuilder("attempt")
+          .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
+          .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
+          .orderBy("attempt.started_at", "DESC")
+          .getOne();
+
+        const practiceGatePassed = !hasPracticePart || completedTasks === controlTasks.length;
+        const fullyCompleted = theoryGatePassed && practiceGatePassed;
+        const hasAnyEvidence = quizSubmitted === true || completedTasks > 0;
+        const deadlineExpired = !!controlWork.deadline && new Date() > controlWork.deadline;
+        const latestAttemptTimedOut = !!latestAttempt && isTimedAttemptExpired(latestAttempt);
+        let completedByAttempt = latestAttempt?.status === "COMPLETED";
+
+        if (latestAttempt?.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !latestAttemptTimedOut) {
+          await lessonAttemptRepo().remove(latestAttempt);
+          completedByAttempt = false;
+        } else if (latestAttempt?.status === "IN_PROGRESS" && (fullyCompleted || latestAttemptTimedOut)) {
+          latestAttempt.status = "COMPLETED";
+          latestAttempt.finishedAt = new Date();
+          latestAttempt.isFinished = true;
+          await lessonAttemptRepo().save(latestAttempt);
+          completedByAttempt = true;
+        }
+
+        reportOnly = completedByAttempt || deadlineExpired;
+        reportReason = reportOnly ? completedByAttempt ? "COMPLETED" : "DEADLINE_EXPIRED" : null;
+
+        if (reportOnly) {
+          quizReview = null;
+        }
+
+        const theoryGradeSafe = sg?.theoryGrade === null || sg?.theoryGrade === undefined
+          ? null
+          : clampGradeToInt(sg.theoryGrade);
+        const finalGradeSafe = sg?.grade === null || sg?.grade === undefined
+          ? null
+          : clampGradeToInt(sg.grade);
+        const practiceGrade = computePracticeAverageFromLatestGrades(controlTasks, latestGradeByTaskId);
+        const formulaSnapshot = (sg?.formulaSnapshot || controlWork.formula || null) as string | null;
+
+        controlReport = {
+          finalGrade: finalGradeSafe,
+          theoryGrade: theoryGradeSafe,
+          practiceGrade,
+          formulaSnapshot
+        };
 
         studentControlProgress = {
           totalTasks: controlTasks.length,
           completedTasks,
           currentTaskOrder,
+          currentTaskId,
+          completedTaskIds,
           unlockedTaskIds,
           reviewAvailable: theoryGatePassed && completedTasks === controlTasks.length
         };
@@ -284,22 +434,37 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           hasPractice: controlWork.hasPractice !== false,
           timeLimitMinutes: controlWork.timeLimitMinutes || null,
           deadline: controlWork.deadline ? controlWork.deadline.toISOString() : null,
+          deadlineTimezone: controlDeadlineTimezone,
           quizJson: controlWork.quizJson || null,
           quizSubmitted,
           quizGrade,
           quizReview,
+          reportOnly,
+          reportReason,
+          controlReport,
           studentControlProgress,
           tasks: controlTasks.map(task => ({
             id: task.id,
             title: task.title,
             description: task.description,
             template: task.template,
-            maxAttempts: task.maxAttempts,
+            maxAttempts: resolveTaskMaxAttempts(task),
             deadline: task.deadline ? task.deadline.toISOString() : null,
+            deadlineTimezone: controlDeadlineTimezone,
             isClosed: task.isClosed,
             isAssigned: task.isAssigned || false,
             type: task.type,
             order: task.order,
+            attemptsUsed: (() => {
+              if (!req.studentId) return undefined;
+              return attemptsByTaskId.get(task.id) || 0;
+            })(),
+            progressCompleted: (() => {
+              if (!req.studentId) return undefined;
+              const latest = latestGradeByTaskId.get(task.id) || null;
+              const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+              return isControlTaskCompletedForProgress(task, latest, attemptsUsed);
+            })(),
             hasGrade: (() => {
               if (!req.studentId) return false;
               const g = latestGradeByTaskId.get(task.id);
@@ -380,7 +545,13 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
         }
       }
 
-      const practiceTasks = (topic.tasks || []).filter(t => t.type === "PRACTICE" && t.isAssigned);
+      const practiceTasks = (topic.tasks || []).filter(t =>
+        t.type === "PRACTICE" &&
+        t.isAssigned &&
+        (!req.studentId || isAssignedToStudent(t.isAssigned, (t as any).assignedStudentIds, req.studentId))
+      );
+
+      const topicDeadlineTimezone = extractTimezoneFromProfileMeta(topic.class?.teacher?.timezone ?? null);
 
       const topicControlWorks = await controlWorkRepo()
         .createQueryBuilder("cw")
@@ -390,13 +561,26 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
         .orderBy("cw.created_at", "ASC")
         .getMany();
 
-      const controlWorks = await Promise.all(topicControlWorks.map(async cw => {
-        const controlTasksCount = await topicTaskRepo().count({
+      const visibleTopicControlWorks = !req.studentId
+        ? topicControlWorks
+        : topicControlWorks.filter(cw => isControlWorkVisibleToStudent(cw, req.studentId!));
+
+      const controlWorks = await Promise.all(visibleTopicControlWorks.map(async cw => {
+        const controlTasks = await topicTaskRepo().find({
           where: {
             controlWork: { id: cw.id } as any,
             type: "CONTROL" as any
-          } as any
+          } as any,
+          order: {
+            order: "ASC"
+          }
         });
+
+        const visibleControlTasks = !req.studentId
+          ? controlTasks
+          : controlTasks.filter(task => isControlTaskVisibleToStudent(task, cw, req.studentId!));
+
+        const controlTasksCount = visibleControlTasks.length;
 
         let studentGrade: number | null = null;
         let studentStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" = "NOT_STARTED";
@@ -421,7 +605,66 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
             .getOne();
 
           if (attempt) {
-            studentStatus = attempt.status;
+            const hasTheoryPart = !!cw.hasTheory;
+            const hasPracticePart = cw.hasPractice !== false;
+            const hasTheoryGrade = sg?.theoryGrade !== null && sg?.theoryGrade !== undefined;
+            const theoryCompleted = !hasTheoryPart || hasTheoryGrade;
+            const hasTheoryEvidence = !!sg && (hasTheoryGrade || !!sg.quizAnswersJson);
+
+            let practiceCompleted = true;
+            let hasPracticeEvidence = false;
+
+            if (hasPracticePart && visibleControlTasks.length > 0) {
+              const taskIds = visibleControlTasks.map(task => task.id);
+              const allTaskGrades = await gradeRepo()
+                .createQueryBuilder("grade")
+                .leftJoinAndSelect("grade.topicTask", "topicTask")
+                .where("grade.student_id = :studentId", { studentId: req.studentId })
+                .andWhere("grade.topic_task_id IN (:...taskIds)", { taskIds })
+                .orderBy("grade.created_at", "DESC")
+                .getMany();
+
+              const latestByTaskId = new Map<number, EduGrade>();
+              const attemptsByTaskId = new Map<number, number>();
+
+              for (const grade of allTaskGrades) {
+                const topicTaskId = (grade as any).topicTask?.id;
+                if (!topicTaskId) continue;
+                if (!latestByTaskId.has(topicTaskId)) {
+                  latestByTaskId.set(topicTaskId, grade);
+                }
+                attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
+              }
+
+              hasPracticeEvidence = allTaskGrades.length > 0;
+
+              for (const task of visibleControlTasks) {
+                const latest = latestByTaskId.get(task.id) || null;
+                const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+                const completed = isControlTaskCompletedForProgress(task, latest, attemptsUsed);
+                if (!completed) {
+                  practiceCompleted = false;
+                  break;
+                }
+              }
+            }
+
+            const fullyCompleted = theoryCompleted && practiceCompleted;
+            const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
+            const attemptTimedOut = isTimedAttemptExpired(attempt);
+
+            if (attempt.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !attemptTimedOut) {
+              await lessonAttemptRepo().remove(attempt);
+              studentStatus = "NOT_STARTED";
+            } else if (attempt.status === "IN_PROGRESS" && (fullyCompleted || attemptTimedOut)) {
+              attempt.status = "COMPLETED";
+              attempt.finishedAt = new Date();
+              attempt.isFinished = true;
+              await lessonAttemptRepo().save(attempt);
+              studentStatus = "COMPLETED";
+            } else {
+              studentStatus = attempt.status;
+            }
           }
         }
 
@@ -430,6 +673,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           title: cw.title || `Контрольна робота #${cw.id}`,
           timeLimitMinutes: cw.timeLimitMinutes || null,
           deadline: cw.deadline ? cw.deadline.toISOString() : null,
+          deadlineTimezone: topicDeadlineTimezone,
           tasksCount: controlTasksCount,
           hasTheory: cw.hasTheory || false,
           hasPractice: cw.hasPractice !== false,
@@ -447,14 +691,16 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           order: topic.order,
           language: topic.language,
           type: "TOPIC",
+          deadlineTimezone: topicDeadlineTimezone,
           controlWorks,
           tasks: practiceTasks.map(task => ({
             id: task.id,
             title: task.title,
             description: task.description,
             template: task.template,
-            maxAttempts: task.maxAttempts,
+            maxAttempts: resolveTaskMaxAttempts(task),
             deadline: task.deadline ? task.deadline.toISOString() : null,
+            deadlineTimezone: topicDeadlineTimezone,
             isClosed: task.isClosed,
             isAssigned: task.isAssigned || false,
             type: task.type,
@@ -527,6 +773,18 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
       });
     }
 
+    if (!isControlWorkVisibleToStudent(controlWork, req.studentId)) {
+      return res.status(403).json({
+        message: "ACCESS_DENIED"
+      });
+    }
+
+    if (controlWork.deadline && new Date() > controlWork.deadline) {
+      return res.status(403).json({
+        message: "CONTROL_WORK_DEADLINE_PASSED"
+      });
+    }
+
     const attempt = await lessonAttemptRepo()
       .createQueryBuilder("attempt")
       .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
@@ -563,35 +821,56 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
     let hasPracticeEvidence = false;
 
     if (hasPracticePart) {
-      const controlTasks = await topicTaskRepo()
+      const controlTasks = (await topicTaskRepo()
         .createQueryBuilder("task")
         .where("task.topic_id = :topicId", { topicId: controlWork.topic.id })
         .andWhere("task.type = :controlType", { controlType: "CONTROL" })
         .andWhere("task.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-        .getMany();
+        .getMany()).filter(task => isControlTaskVisibleToStudent(task, controlWork, req.studentId!));
 
-      for (const task of controlTasks) {
-        const grade = await gradeRepo()
+      const taskIds = controlTasks.map(task => task.id);
+      if (taskIds.length > 0) {
+        const allTaskGrades = await gradeRepo()
           .createQueryBuilder("grade")
+          .leftJoinAndSelect("grade.topicTask", "topicTask")
           .where("grade.student_id = :studentId", { studentId: req.studentId })
-          .andWhere("grade.topic_task_id = :taskId", { taskId: task.id })
-          .andWhere("grade.total IS NOT NULL")
-          .getOne();
+          .andWhere("grade.topic_task_id IN (:...taskIds)", { taskIds })
+          .orderBy("grade.created_at", "DESC")
+          .getMany();
 
-        if (grade) {
-          hasPracticeEvidence = true;
-        } else {
-          practiceCompleted = false;
+        const latestByTaskId = new Map<number, EduGrade>();
+        const attemptsByTaskId = new Map<number, number>();
+
+        for (const grade of allTaskGrades) {
+          const topicTaskId = (grade as any).topicTask?.id;
+          if (!topicTaskId) continue;
+          if (!latestByTaskId.has(topicTaskId)) {
+            latestByTaskId.set(topicTaskId, grade);
+          }
+          attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
+        }
+
+        hasPracticeEvidence = allTaskGrades.length > 0;
+
+        for (const task of controlTasks) {
+          const latest = latestByTaskId.get(task.id) || null;
+          const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+          const completed = isControlTaskCompletedForProgress(task, latest, attemptsUsed);
+          if (!completed) {
+            practiceCompleted = false;
+            break;
+          }
         }
       }
     }
 
     const fullyCompleted = testCompleted && practiceCompleted;
     const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
+    const attemptTimedOut = isTimedAttemptExpired(attempt);
 
     let actualStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" = attempt.status;
 
-    if (attempt.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence) {
+    if (attempt.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !attemptTimedOut) {
       await lessonAttemptRepo().remove(attempt);
       return res.json({
         status: "NOT_STARTED",
@@ -599,10 +878,11 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
       });
     }
 
-    if (attempt.status === "IN_PROGRESS" && fullyCompleted) {
+    if (attempt.status === "IN_PROGRESS" && (fullyCompleted || attemptTimedOut)) {
       actualStatus = "COMPLETED";
       attempt.status = "COMPLETED";
       attempt.finishedAt = new Date();
+      attempt.isFinished = true;
       await lessonAttemptRepo().save(attempt);
     }
 
@@ -665,6 +945,12 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
       });
     }
 
+    if (!isControlWorkVisibleToStudent(controlWork, req.studentId)) {
+      return res.status(403).json({
+        message: "ACCESS_DENIED"
+      });
+    }
+
     const attempt = await lessonAttemptRepo()
       .createQueryBuilder("attempt")
       .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
@@ -682,12 +968,27 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
       });
     }
 
-    const elapsedSeconds = Math.floor((new Date().getTime() - attempt.startedAt.getTime()) / 1000);
-    const totalSeconds = attempt.timeLimitMinutes * 60;
-    const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+    const remainingSecondsRaw = getAttemptRemainingSeconds(attempt);
+    const remainingSeconds = remainingSecondsRaw === null ? 0 : remainingSecondsRaw;
+
+    if (remainingSecondsRaw !== null && remainingSecondsRaw <= 0) {
+      attempt.status = "COMPLETED";
+      attempt.finishedAt = new Date();
+      attempt.isFinished = true;
+      await lessonAttemptRepo().save(attempt);
+
+      return res.json({
+        hasActiveAttempt: false,
+        remainingSeconds: 0,
+        startedAt: attempt.startedAt.toISOString(),
+        timeLimitMinutes: attempt.timeLimitMinutes,
+        status: "COMPLETED",
+        finishedAt: attempt.finishedAt ? attempt.finishedAt.toISOString() : null
+      });
+    }
 
     return res.json({
-      hasActiveAttempt: attempt.status === "IN_PROGRESS" && remainingSeconds > 0,
+      hasActiveAttempt: attempt.status === "IN_PROGRESS" && (remainingSecondsRaw === null || remainingSeconds > 0),
       remainingSeconds: remainingSeconds,
       startedAt: attempt.startedAt.toISOString(),
       timeLimitMinutes: attempt.timeLimitMinutes,
@@ -743,6 +1044,18 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       });
     }
 
+    if (!isControlWorkVisibleToStudent(controlWork, req.studentId)) {
+      return res.status(403).json({
+        message: "ACCESS_DENIED"
+      });
+    }
+
+    if (controlWork.deadline && new Date() > controlWork.deadline) {
+      return res.status(403).json({
+        message: "CONTROL_WORK_DEADLINE_PASSED"
+      });
+    }
+
     const existingAttempt = await lessonAttemptRepo()
       .createQueryBuilder("attempt")
       .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
@@ -751,42 +1064,120 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       .getOne();
 
     if (existingAttempt) {
-      const elapsedSeconds = Math.floor((new Date().getTime() - existingAttempt.startedAt.getTime()) / 1000);
-      const totalSeconds = existingAttempt.timeLimitMinutes * 60;
-      const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+      const remainingSeconds = getAttemptRemainingSeconds(existingAttempt);
+      if (remainingSeconds === null || remainingSeconds > 0) {
+        return res.json({
+          attemptId: existingAttempt.id,
+          startedAt: existingAttempt.startedAt.toISOString(),
+          timeLimitMinutes: existingAttempt.timeLimitMinutes,
+          remainingSeconds: remainingSeconds ?? 0
+        });
+      }
 
-      return res.json({
-        attemptId: existingAttempt.id,
-        startedAt: existingAttempt.startedAt.toISOString(),
-        timeLimitMinutes: existingAttempt.timeLimitMinutes,
-        remainingSeconds: remainingSeconds
-      });
+      existingAttempt.status = "COMPLETED";
+      existingAttempt.finishedAt = new Date();
+      existingAttempt.isFinished = true;
+      await lessonAttemptRepo().save(existingAttempt);
     }
 
     const completedAttempt = await lessonAttemptRepo()
       .createQueryBuilder("attempt")
       .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
       .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
+      .orderBy("attempt.started_at", "DESC")
       .andWhere("attempt.status = :status", { status: "COMPLETED" })
       .getOne();
 
     if (completedAttempt) {
-      return res.status(409).json({
-        message: "CONTROL_WORK_COMPLETED"
-      });
+      const hasTheoryPart = !!controlWork.hasTheory;
+      const hasPracticePart = controlWork.hasPractice !== false;
+
+      let theoryCompleted = true;
+      let hasTheoryEvidence = false;
+
+      if (hasTheoryPart) {
+        const summary = await summaryGradeRepo()
+          .createQueryBuilder("sg")
+          .where("sg.student_id = :studentId", { studentId: req.studentId })
+          .andWhere("sg.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
+          .getOne();
+
+        const hasTheoryGrade = summary?.theoryGrade !== null && summary?.theoryGrade !== undefined;
+        const hasQuizAnswers = !!summary?.quizAnswersJson;
+
+        theoryCompleted = hasTheoryGrade;
+        hasTheoryEvidence = !!summary && (hasTheoryGrade || hasQuizAnswers);
+      }
+
+      let practiceCompleted = true;
+      let hasPracticeEvidence = false;
+
+      if (hasPracticePart) {
+        const controlTasks = (await topicTaskRepo()
+          .createQueryBuilder("task")
+          .where("task.topic_id = :topicId", { topicId: controlWork.topic.id })
+          .andWhere("task.type = :controlType", { controlType: "CONTROL" })
+          .andWhere("task.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
+          .orderBy("task.order", "ASC")
+          .getMany()).filter(task => isControlTaskVisibleToStudent(task, controlWork, req.studentId!));
+
+        const taskIds = controlTasks.map(task => task.id);
+        if (taskIds.length > 0) {
+          const allTaskGrades = await gradeRepo()
+            .createQueryBuilder("grade")
+            .leftJoinAndSelect("grade.topicTask", "topicTask")
+            .where("grade.student_id = :studentId", { studentId: req.studentId })
+            .andWhere("grade.topic_task_id IN (:...taskIds)", { taskIds })
+            .orderBy("grade.created_at", "DESC")
+            .getMany();
+
+          const latestByTaskId = new Map<number, EduGrade>();
+          const attemptsByTaskId = new Map<number, number>();
+
+          for (const grade of allTaskGrades) {
+            const topicTaskId = (grade as any).topicTask?.id;
+            if (!topicTaskId) continue;
+            if (!latestByTaskId.has(topicTaskId)) {
+              latestByTaskId.set(topicTaskId, grade);
+            }
+            attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
+          }
+
+          hasPracticeEvidence = allTaskGrades.length > 0;
+
+          for (const task of controlTasks) {
+            const latest = latestByTaskId.get(task.id) || null;
+            const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+            const completed = isControlTaskCompletedForProgress(task, latest, attemptsUsed);
+            if (!completed) {
+              practiceCompleted = false;
+              break;
+            }
+          }
+        }
+      }
+
+      const fullyCompleted = theoryCompleted && practiceCompleted;
+      const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
+
+      const completedAttemptTimedOut = isTimedAttemptExpired(completedAttempt);
+
+      if (!fullyCompleted && !hasAnyEvidence && !completedAttemptTimedOut) {
+        await lessonAttemptRepo().remove(completedAttempt);
+      } else {
+        return res.status(409).json({
+          message: "CONTROL_WORK_COMPLETED"
+        });
+      }
     }
 
-    if (!controlWork.timeLimitMinutes) {
-      return res.status(400).json({
-        message: "CONTROL_WORK_HAS_NO_TIME_LIMIT"
-      });
-    }
+    const normalizedTimeLimitMinutes = Math.max(0, Number(controlWork.timeLimitMinutes || 0));
 
     const attempt = lessonAttemptRepo().create({
       controlWork: controlWork,
       student: student,
       startedAt: new Date(),
-      timeLimitMinutes: controlWork.timeLimitMinutes,
+      timeLimitMinutes: normalizedTimeLimitMinutes,
       status: "IN_PROGRESS"
     });
 
@@ -864,6 +1255,48 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
       return res.status(403).json({
         message: "ACCESS_DENIED"
       });
+    }
+
+    if (!isControlWorkVisibleToStudent(controlWork, req.studentId)) {
+      return res.status(403).json({
+        message: "ACCESS_DENIED"
+      });
+    }
+
+    if (controlWork.deadline && new Date() > controlWork.deadline) {
+      return res.status(403).json({
+        message: "CONTROL_WORK_DEADLINE_PASSED"
+      });
+    }
+
+    const activeAttempt = await lessonAttemptRepo()
+      .createQueryBuilder("attempt")
+      .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
+      .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
+      .andWhere("attempt.status = :status", { status: "IN_PROGRESS" })
+      .orderBy("attempt.started_at", "DESC")
+      .getOne();
+
+    if (!activeAttempt) {
+      return res.status(403).json({
+        message: "CONTROL_WORK_NOT_STARTED"
+      });
+    }
+
+    if (Number(activeAttempt.timeLimitMinutes || 0) > 0) {
+      const elapsedSeconds = Math.floor((Date.now() - activeAttempt.startedAt.getTime()) / 1000);
+      const totalSeconds = activeAttempt.timeLimitMinutes * 60;
+      const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+
+      if (remainingSeconds <= 0) {
+        activeAttempt.status = "COMPLETED";
+        activeAttempt.finishedAt = new Date();
+        activeAttempt.isFinished = true;
+        await lessonAttemptRepo().save(activeAttempt);
+        return res.status(403).json({
+          message: "CONTROL_WORK_TIME_EXPIRED"
+        });
+      }
     }
 
     const existingSummaryGrade = await summaryGradeRepo()
@@ -961,6 +1394,13 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
 
       validateAssessmentType(AssessmentType.CONTROL, controlWork.id, "grade");
     } else {
+      summaryGrade.controlWork = controlWork;
+      summaryGrade.topic = controlWork.topic;
+      summaryGrade.class = controlWork.topic.class;
+      summaryGrade.assessmentType = AssessmentType.CONTROL;
+      if (!summaryGrade.name) {
+        summaryGrade.name = controlWork.title || `Контрольна робота #${controlWork.id}`;
+      }
       summaryGrade.theoryGrade = theoryGrade === null ? null : clampGradeToInt(theoryGrade);
       summaryGrade.grade = clampGradeToInt(theoryGrade);
       summaryGrade.formulaSnapshot = controlWork.formula || null;
@@ -992,24 +1432,42 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
     let isFullyCompleted = true;
 
     if (controlWork.hasPractice) {
-      const controlTasks = await topicTaskRepo()
+      const controlTasks = (await topicTaskRepo()
         .createQueryBuilder("task")
         .where("task.topic_id = :topicId", { topicId: controlWork.topic.id })
         .andWhere("task.type = :controlType", { controlType: "CONTROL" })
         .andWhere("task.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-        .getMany();
+        .getMany()).filter(task => isControlTaskVisibleToStudent(task, controlWork, req.studentId!));
 
-      for (const task of controlTasks) {
-        const grade = await gradeRepo()
+      const taskIds = controlTasks.map(task => task.id);
+      if (taskIds.length > 0) {
+        const allTaskGrades = await gradeRepo()
           .createQueryBuilder("grade")
+          .leftJoinAndSelect("grade.topicTask", "topicTask")
           .where("grade.student_id = :studentId", { studentId: req.studentId })
-          .andWhere("grade.topic_task_id = :taskId", { taskId: task.id })
-          .andWhere("grade.total IS NOT NULL")
-          .getOne();
+          .andWhere("grade.topic_task_id IN (:...taskIds)", { taskIds })
+          .orderBy("grade.created_at", "DESC")
+          .getMany();
 
-        if (!grade) {
-          isFullyCompleted = false;
-          break;
+        const latestByTaskId = new Map<number, EduGrade>();
+        const attemptsByTaskId = new Map<number, number>();
+        for (const grade of allTaskGrades) {
+          const topicTaskId = (grade as any).topicTask?.id;
+          if (!topicTaskId) continue;
+          if (!latestByTaskId.has(topicTaskId)) {
+            latestByTaskId.set(topicTaskId, grade);
+          }
+          attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
+        }
+
+        for (const task of controlTasks) {
+          const latest = latestByTaskId.get(task.id) || null;
+          const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
+          const completed = isControlTaskCompletedForProgress(task, latest, attemptsUsed);
+          if (!completed) {
+            isFullyCompleted = false;
+            break;
+          }
         }
       }
     }

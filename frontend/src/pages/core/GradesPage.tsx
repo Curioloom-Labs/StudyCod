@@ -220,7 +220,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
 
   return (
     <div className="h-full flex flex-col bg-bg-base">
-      <div className="border-b border-border bg-bg-surface p-4 flex items-center justify-between gap-3 flex-shrink-0">
+      <div className="border-b border-border bg-bg-surface p-3 sm:p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
         <div className="flex items-center gap-2 text-lg font-mono text-text-primary">
           <BarChart3 className="w-4 h-4 text-primary" />
           {tr("Журнал успішності", "Progress journal")}
@@ -248,7 +248,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
             </Card>
           </div>
 
-          <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+          <Card className="p-4 border border-border/70 bg-bg-surface/80">
             <div className="flex items-center gap-2 text-sm font-mono text-text-primary mb-3">
               <AlertTriangle className="w-4 h-4 text-accent-warn" />
               {tr("Теми, які варто повторити", "Topics worth retrying")}
@@ -264,7 +264,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
             ) : (
               <div className="space-y-2">
                 {topicsWithLowAverage.map((topic) => (
-                  <div key={`${topic.topicId ?? "single"}-${topic.topicTitle}`} className="rounded-xl border border-border bg-bg-base/70 p-3 flex flex-col md:flex-row md:items-center gap-3 justify-between">
+                  <div key={`${topic.topicId ?? "single"}-${topic.topicTitle}`} className="rounded-xl border border-border bg-bg-base/70 p-3 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                     <div>
                       <div className="text-sm font-mono text-text-primary">{topic.topicTitle}</div>
                       <div className="text-xs text-text-secondary mt-1 flex items-center gap-2">
@@ -286,7 +286,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
             )}
           </Card>
 
-          <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+          <Card className="p-4 border border-border/70 bg-bg-surface/80">
             <div className="text-sm font-mono text-text-primary mb-3">{tr("Topic heatmap", "Topic heatmap")}</div>
 
             {topicHeatmap.length === 0 ? (
@@ -308,7 +308,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
             )}
           </Card>
 
-          <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base">
+          <Card className="p-4 border border-border/70 bg-bg-surface/80">
             <div className="text-sm font-mono text-text-primary mb-2">{tr("Focus Quest (3 теми)", "Focus Quest (3 topics)")}</div>
             <div className="text-xs text-text-secondary mb-3">
               {tr(
@@ -322,7 +322,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
             ) : (
               <div className="space-y-2">
                 {focusQuest.map((topic) => (
-                  <div key={`quest-${topic.key}`} className="rounded-xl border border-border bg-bg-base/70 p-3 flex flex-col md:flex-row md:items-center gap-3 justify-between">
+                  <div key={`quest-${topic.key}`} className="rounded-xl border border-border bg-bg-base/70 p-3 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                     <div>
                       <div className="text-sm font-mono text-text-primary">{topic.topicTitle}</div>
                       <div className="text-xs text-text-secondary mt-1">
@@ -343,7 +343,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
             )}
           </Card>
 
-          <Card className="p-4 border border-border/70 bg-gradient-to-b from-bg-surface/80 to-bg-base overflow-hidden">
+          <Card className="p-4 border border-border/70 bg-bg-surface/80 overflow-hidden">
             <div className="text-sm font-mono text-text-primary mb-3">{tr("Останні оцінки (згруповано за темами)", "Recent grades (grouped by topic)")}</div>
 
             {recentGrades.length === 0 ? (
@@ -352,7 +352,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
               <div className="space-y-3">
                 {recentGradesByTopic.map((section) => (
                   <div key={section.key} className="border border-border/70 rounded-xl overflow-hidden">
-                    <div className="px-3 py-2 bg-bg-hover/70 flex items-center justify-between gap-3">
+                    <div className="px-3 py-2 bg-bg-hover/70 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-xs font-mono text-text-primary">{section.topicTitle}</div>
                       <div className="text-[11px] text-text-secondary">
                         {tr("Спроб", "Attempts")}: {section.rows.length} · {tr("Середній", "Average")}: <span className={gradeTone(section.avg)}>{section.avg}</span>
