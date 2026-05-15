@@ -1,6 +1,8 @@
 import { logger } from '../../utils/logger';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
+import { AppDataSource } from '../../data-source';
+import { User } from '../../entities/User';
 
 type KeyHealthState = {
   cooldownUntilMs: number;
@@ -628,7 +630,25 @@ export class OpenRouterProvider implements LLMProvider {
     modelCandidates: string[],
     mode: 'text' | 'json'
   ): Promise<{ response: OpenRouterResponse; model: string }> {
-    const candidates = normalizeAndDeduplicateModels(modelCandidates);
+    let candidates = normalizeAndDeduplicateModels(modelCandidates);
+
+    // If an admin-specific model is configured and the caller is an admin user,
+    // prefer the admin model as primary candidate.
+    try {
+      const adminModelRaw = String(process.env.OPENROUTER_ADMIN_MODEL || '').trim();
+      if (adminModelRaw && options?.userId) {
+        const user = await AppDataSource.getRepository(User).findOne({ where: { id: options.userId }, select: ['id', 'role'] });
+        if (user && user.role === 'SYSTEM_ADMIN') {
+          const adminModel = resolveTextModel(adminModelRaw);
+          // Prepend admin model if not already first candidate
+          const rest = candidates.filter(c => c !== adminModel);
+          candidates = [adminModel, ...rest];
+          logger.info('Using admin-specific OpenRouter model for SYSTEM_ADMIN user', { userId: options.userId, adminModel });
+        }
+      }
+    } catch (err: any) {
+      logger.warn('Failed to resolve admin model preference; continuing with default candidates', { err: String(err?.message || err) });
+    }
     if (candidates.length === 0) {
       throw new Error('AI_GENERATION_FAILED: No OpenRouter model candidates configured');
     }

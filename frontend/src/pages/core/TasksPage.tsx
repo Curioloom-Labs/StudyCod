@@ -199,8 +199,8 @@ export const TasksPage: React.FC<Props> = ({
   const {
     i18n
   } = useTranslation();
-  const uiLanguage = i18n.language === "en" ? "en" : "uk";
-  const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
+  const uiLanguage = typeof i18n.language === "string" && i18n.language.startsWith("en") ? "en" : "uk";
+  const locale = typeof i18n.language === "string" && i18n.language.startsWith("uk") ? "uk-UA" : "en-US";
   const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
   const { element: viewportEl } = useWorkspaceViewport();
   const {

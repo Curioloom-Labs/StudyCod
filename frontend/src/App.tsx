@@ -1555,12 +1555,12 @@ const GoogleAuthSuccessWrapper: React.FC = React.memo(() => {
             return;
           }
           localStorage.removeItem("token");
-          window.location.replace("/");
+          navigate("/auth/google/error?reason=INVALID_TOKEN", { replace: true });
           return;
         } catch {
           if (cancelled) return;
           localStorage.removeItem("token");
-          window.location.replace("/");
+          navigate("/auth/google/error?reason=EXCHANGE_FAILED", { replace: true });
           return;
         }
       }
@@ -1613,6 +1613,12 @@ const GoogleAuthErrorPage: React.FC = React.memo(() => {
     }
     if (reason === "GOOGLE_ACCOUNT_ALREADY_LINKED") {
       return t("googleAuthError") + " " + "This Google account is already linked to another profile.";
+    }
+    if (reason === "INVALID_TOKEN") {
+      return t("googleAuthError") + " " + "The received authorization token is invalid.";
+    }
+    if (reason === "EXCHANGE_FAILED") {
+      return t("googleAuthError") + " " + "Failed to exchange authorization code for a session. Please try again.";
     }
     return t("googleAuthError");
   })();

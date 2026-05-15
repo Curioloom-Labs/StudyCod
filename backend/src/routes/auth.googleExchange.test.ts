@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 
 import { __authGoogleExchangeTestOnly } from "./auth";
 
-test("google exchange code is one-time: first consume succeeds, second returns null", () => {
+test("google exchange code is one-time: first consume succeeds, second returns null", async () => {
   __authGoogleExchangeTestOnly._clearPendingCodes();
 
-  const code = __authGoogleExchangeTestOnly.issueGoogleExchangeCode("success", "jwt-token");
-  const first = __authGoogleExchangeTestOnly.consumeGoogleExchangeCode(code);
-  const second = __authGoogleExchangeTestOnly.consumeGoogleExchangeCode(code);
+  const code = await __authGoogleExchangeTestOnly.issueGoogleExchangeCode("success", "jwt-token");
+  const first = await __authGoogleExchangeTestOnly.consumeGoogleExchangeCode(code);
+  const second = await __authGoogleExchangeTestOnly.consumeGoogleExchangeCode(code);
 
   assert.ok(first);
   assert.equal(first?.flow, "success");
@@ -17,7 +17,7 @@ test("google exchange code is one-time: first consume succeeds, second returns n
   assert.equal(__authGoogleExchangeTestOnly._pendingCodeCount(), 0);
 });
 
-test("google exchange cleanup removes expired pending codes", () => {
+test("google exchange cleanup removes expired pending codes", async () => {
   __authGoogleExchangeTestOnly._clearPendingCodes();
 
   __authGoogleExchangeTestOnly._setPendingCode("expired-code", {
@@ -33,8 +33,8 @@ test("google exchange cleanup removes expired pending codes", () => {
 
   __authGoogleExchangeTestOnly.cleanupExpiredGoogleExchangeCodes();
 
-  assert.equal(__authGoogleExchangeTestOnly.consumeGoogleExchangeCode("expired-code"), null);
-  const fresh = __authGoogleExchangeTestOnly.consumeGoogleExchangeCode("fresh-code");
+  assert.equal(await __authGoogleExchangeTestOnly.consumeGoogleExchangeCode("expired-code"), null);
+  const fresh = await __authGoogleExchangeTestOnly.consumeGoogleExchangeCode("fresh-code");
   assert.ok(fresh);
   assert.equal(fresh?.flow, "success");
 });
@@ -47,12 +47,12 @@ test("flow mismatch guard works for expected vs actual flow", () => {
   assert.equal(__authGoogleExchangeTestOnly.isGoogleExchangeFlowAllowed("complete", "success"), false);
 });
 
-test("peek does not consume a valid google exchange code", () => {
+test("peek does not consume a valid google exchange code", async () => {
   __authGoogleExchangeTestOnly._clearPendingCodes();
 
-  const code = __authGoogleExchangeTestOnly.issueGoogleExchangeCode("complete", "temp-token");
-  const peeked = __authGoogleExchangeTestOnly.peekGoogleExchangeCode(code);
-  const consumed = __authGoogleExchangeTestOnly.consumeGoogleExchangeCode(code);
+  const code = await __authGoogleExchangeTestOnly.issueGoogleExchangeCode("complete", "temp-token");
+  const peeked = await __authGoogleExchangeTestOnly.peekGoogleExchangeCode(code);
+  const consumed = await __authGoogleExchangeTestOnly.consumeGoogleExchangeCode(code);
 
   assert.ok(peeked);
   assert.equal(peeked?.flow, "complete");

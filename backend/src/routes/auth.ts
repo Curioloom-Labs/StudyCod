@@ -18,19 +18,8 @@ import { generateJti } from "../services/auth/jwtRevocation";
 export const authRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 
-type GoogleExchangeFlow = "success" | "complete";
-type PendingGoogleExchange = {
-  flow: GoogleExchangeFlow;
-  token: string;
-  expiresAtMs: number;
-};
-
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-const GOOGLE_EXCHANGE_CODE_TTL_MS = 3 * 60 * 1000;
-const GOOGLE_EXCHANGE_COOKIE_NAME = "__sc_google_exchange";
-const GOOGLE_EXCHANGE_COOKIE_PATH = "/api/auth/google";
-const pendingGoogleExchangeCodes = new Map<string, PendingGoogleExchange>();
 const GOOGLE_LINK_SESSION_KEY = "googleLinkUserId";
 
 function parseBool(raw: unknown, fallback: boolean): boolean {
@@ -177,41 +166,108 @@ async function enforceAuthTurnstile(req: AuthRequest, res: Response, turnstileTo
   return true;
 }
 
-function cleanupExpiredGoogleExchangeCodes(nowMs = Date.now()): void {
-  for (const [code, pending] of pendingGoogleExchangeCodes.entries()) {
-    if (pending.expiresAtMs <= nowMs) pendingGoogleExchangeCodes.delete(code);
-  }
-}
+import { 
+  getSharedRedisClient, 
+  isRedisEnabled, 
+  redisKey 
+} from "../services/redis/sharedRedis";
 
-function peekGoogleExchangeCode(codeRaw: unknown): PendingGoogleExchange | null {
+type GoogleExchangeFlow = "success" | "complete";
+type PendingGoogleExchange = {
+  flow: GoogleExchangeFlow;
+  token: string;
+  expiresAtMs: number;
+};
+
+const GOOGLE_EXCHANGE_CODE_TTL_MS = 5 * 60 * 1000; // Increase to 5 minutes
+const GOOGLE_EXCHANGE_COOKIE_NAME = "__sc_google_exchange";
+const GOOGLE_EXCHANGE_COOKIE_PATH = "/api/auth/google";
+const pendingGoogleExchangeCodesFallback = new Map<string, PendingGoogleExchange>();
+
+async function peekGoogleExchangeCode(codeRaw: unknown): Promise<PendingGoogleExchange | null> {
   const code = typeof codeRaw === "string" ? codeRaw.trim() : "";
   if (!code) return null;
-  const pending = pendingGoogleExchangeCodes.get(code) ?? null;
+
+  if (isRedisEnabled()) {
+    try {
+      const redis = await getSharedRedisClient();
+      if (redis) {
+        const key = redisKey("auth", "google-exchange", code);
+        const data = await redis.get(key);
+        if (data) {
+          return JSON.parse(data) as PendingGoogleExchange;
+        }
+        return null;
+      }
+    } catch (err) {
+      logger.warn("[auth] Redis peekGoogleExchangeCode failed, falling back", { err });
+    }
+  }
+
+  const pending = pendingGoogleExchangeCodesFallback.get(code) ?? null;
   if (!pending) return null;
   if (pending.expiresAtMs <= Date.now()) {
-    pendingGoogleExchangeCodes.delete(code);
+    pendingGoogleExchangeCodesFallback.delete(code);
     return null;
   }
   return pending;
 }
 
-function issueGoogleExchangeCode(flow: GoogleExchangeFlow, token: string): string {
-  cleanupExpiredGoogleExchangeCodes();
+async function issueGoogleExchangeCode(flow: GoogleExchangeFlow, token: string): Promise<string> {
   const code = crypto.randomBytes(32).toString("base64url");
-  pendingGoogleExchangeCodes.set(code, {
+  const pending: PendingGoogleExchange = {
     flow,
     token,
     expiresAtMs: Date.now() + GOOGLE_EXCHANGE_CODE_TTL_MS
-  });
+  };
+
+  if (isRedisEnabled()) {
+    try {
+      const redis = await getSharedRedisClient();
+      if (redis) {
+        const key = redisKey("auth", "google-exchange", code);
+        await redis.set(key, JSON.stringify(pending), {
+          PX: GOOGLE_EXCHANGE_CODE_TTL_MS
+        });
+        return code;
+      }
+    } catch (err) {
+      logger.warn("[auth] Redis issueGoogleExchangeCode failed, falling back", { err });
+    }
+  }
+
+  // Cleanup map periodically
+  if (pendingGoogleExchangeCodesFallback.size > 1000) {
+    const now = Date.now();
+    for (const [k, v] of pendingGoogleExchangeCodesFallback.entries()) {
+      if (v.expiresAtMs <= now) pendingGoogleExchangeCodesFallback.delete(k);
+    }
+  }
+
+  pendingGoogleExchangeCodesFallback.set(code, pending);
   return code;
 }
 
-function consumeGoogleExchangeCode(codeRaw: unknown): PendingGoogleExchange | null {
+async function consumeGoogleExchangeCode(codeRaw: unknown): Promise<PendingGoogleExchange | null> {
   const code = typeof codeRaw === "string" ? codeRaw.trim() : "";
   if (!code) return null;
-  const pending = peekGoogleExchangeCode(code);
+
+  const pending = await peekGoogleExchangeCode(code);
   if (!pending) return null;
-  pendingGoogleExchangeCodes.delete(code);
+
+  if (isRedisEnabled()) {
+    try {
+      const redis = await getSharedRedisClient();
+      if (redis) {
+        const key = redisKey("auth", "google-exchange", code);
+        await redis.del(key);
+      }
+    } catch (err) {
+      logger.warn("[auth] Redis consumeGoogleExchangeCode failed", { err });
+    }
+  }
+  
+  pendingGoogleExchangeCodesFallback.delete(code);
   return pending;
 }
 
@@ -224,16 +280,21 @@ export const __authGoogleExchangeTestOnly = {
   issueGoogleExchangeCode,
   peekGoogleExchangeCode,
   consumeGoogleExchangeCode,
-  cleanupExpiredGoogleExchangeCodes,
+  cleanupExpiredGoogleExchangeCodes: () => {
+    const now = Date.now();
+    for (const [k, v] of pendingGoogleExchangeCodesFallback.entries()) {
+      if (v.expiresAtMs <= now) pendingGoogleExchangeCodesFallback.delete(k);
+    }
+  },
   getCookieValue,
   isGoogleExchangeFlowAllowed,
   _setPendingCode: (code: string, pending: PendingGoogleExchange) => {
-    pendingGoogleExchangeCodes.set(code, pending);
+    pendingGoogleExchangeCodesFallback.set(code, pending);
   },
   _clearPendingCodes: () => {
-    pendingGoogleExchangeCodes.clear();
+    pendingGoogleExchangeCodesFallback.clear();
   },
-  _pendingCodeCount: () => pendingGoogleExchangeCodes.size
+  _pendingCodeCount: () => pendingGoogleExchangeCodesFallback.size
 };
 
 function signUserToken(user: User): string {
@@ -598,7 +659,7 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
       await userRepo().save(currentUser);
 
       const token = signUserToken(currentUser);
-      const code = issueGoogleExchangeCode("success", token);
+      const code = await issueGoogleExchangeCode("success", token);
       setGoogleExchangeCookie(res, code);
       return res.redirect(`${FRONTEND_URL}/auth/google/success?code=${encodeURIComponent(code)}`);
     }
@@ -611,13 +672,19 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
       }, JWT_SECRET, {
         expiresIn: "10m"
       });
-      const code = issueGoogleExchangeCode("complete", tempToken);
+      const code = await issueGoogleExchangeCode("complete", tempToken);
       setGoogleExchangeCookie(res, code);
       return res.redirect(`${FRONTEND_URL}/auth/google/complete?code=${encodeURIComponent(code)}`);
     }
     const token = signUserToken(user);
-    const code = issueGoogleExchangeCode("success", token);
+    const code = await issueGoogleExchangeCode("success", token);
     setGoogleExchangeCookie(res, code);
+
+    logger.info("[auth] Google login success, redirecting to frontend", {
+      userId: user.id,
+      flow: "success"
+    });
+
     return res.redirect(`${FRONTEND_URL}/auth/google/success?code=${encodeURIComponent(code)}`);
   } catch (err) {
     logger.error("[auth] Google callback error", { requestId: (req as any).requestId, err });
@@ -628,14 +695,23 @@ authRouter.post("/google/exchange-code", async (req: AuthRequest, res: Response)
   try {
     const { code, flow } = req.body as { code?: unknown; flow?: unknown };
     const expectedFlow = flow === "success" || flow === "complete" ? flow : null;
-    const pending = peekGoogleExchangeCode(code);
+    const pending = await peekGoogleExchangeCode(code);
     if (!pending) {
+      logger.warn("[auth] Invalid or expired Google exchange code", { 
+        code: typeof code === "string" ? `${code.slice(0, 4)}...` : "non-string",
+        requestId: req.requestId 
+      });
       return res.status(400).json({ message: "INVALID_OR_EXPIRED_CODE" });
     }
     if (!isGoogleExchangeFlowAllowed(expectedFlow, pending.flow)) {
+      logger.warn("[auth] Google exchange flow mismatch", { 
+        expected: expectedFlow, 
+        actual: pending.flow,
+        requestId: req.requestId 
+      });
       return res.status(400).json({ message: "INVALID_CODE_FLOW" });
     }
-    consumeGoogleExchangeCode(code);
+    await consumeGoogleExchangeCode(code);
     return res.json({ token: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-code error", { requestId: req.requestId, err });
@@ -647,16 +723,25 @@ authRouter.post("/google/exchange-cookie", async (req: AuthRequest, res: Respons
     const { flow } = req.body as { flow?: unknown };
     const expectedFlow = flow === "success" || flow === "complete" ? flow : null;
     const code = getCookieValue(req.headers.cookie, GOOGLE_EXCHANGE_COOKIE_NAME);
-    const pending = peekGoogleExchangeCode(code);
+    const pending = await peekGoogleExchangeCode(code);
     if (!pending) {
+      logger.warn("[auth] Invalid or expired Google exchange cookie", { 
+        hasCookie: !!code,
+        requestId: req.requestId 
+      });
       clearGoogleExchangeCookie(res);
       return res.status(400).json({ message: "INVALID_OR_EXPIRED_CODE" });
     }
     if (!isGoogleExchangeFlowAllowed(expectedFlow, pending.flow)) {
+      logger.warn("[auth] Google exchange cookie flow mismatch", { 
+        expected: expectedFlow, 
+        actual: pending.flow,
+        requestId: req.requestId 
+      });
       return res.status(400).json({ message: "INVALID_CODE_FLOW" });
     }
     clearGoogleExchangeCookie(res);
-    consumeGoogleExchangeCode(code);
+    await consumeGoogleExchangeCode(code);
     return res.json({ token: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-cookie error", { requestId: req.requestId, err });
@@ -669,18 +754,25 @@ authRouter.get("/google/exchange-health", async (req: AuthRequest, res: Response
       return res.status(404).json({ message: "NOT_FOUND" });
     }
 
-    cleanupExpiredGoogleExchangeCodes();
     const cookieCode = getCookieValue(req.headers.cookie, GOOGLE_EXCHANGE_COOKIE_NAME);
+    const redisEnabledFlag = isRedisEnabled();
+    let redisReady = false;
+    if (redisEnabledFlag) {
+      const client = await getSharedRedisClient();
+      redisReady = !!client && client.isOpen;
+    }
 
     return res.json({
       ok: true,
+      redisEnabled: redisEnabledFlag,
+      redisReady,
       cookieExchangeEnabled: true,
       hasExchangeCookie: !!cookieCode,
       cookieName: GOOGLE_EXCHANGE_COOKIE_NAME,
       cookiePath: GOOGLE_EXCHANGE_COOKIE_PATH,
       cookieSameSite: googleExchangeCookieSameSite,
       cookieSecure: googleExchangeCookieSecure,
-      pendingCodes: pendingGoogleExchangeCodes.size,
+      pendingCodesInFallback: pendingGoogleExchangeCodesFallback.size,
       now: new Date().toISOString()
     });
   } catch (err) {

@@ -43,7 +43,7 @@ export const GradeDetailsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const safeServerMessage = (value: unknown) => {
     const msg = typeof value === "string" ? value : String(value ?? "");
-    if (i18n.language === "en" && /[А-Яа-яІіЇїЄєҐґ]/.test(msg)) return "";
+    if (typeof i18n.language === "string" && i18n.language.startsWith("en") && /[А-Яа-яІіЇїЄєҐґ]/.test(msg)) return "";
     return msg;
   };
   useEffect(() => {
