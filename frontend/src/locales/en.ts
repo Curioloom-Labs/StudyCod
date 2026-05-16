@@ -291,7 +291,7 @@ export default {
   deleteTask: 'Delete task',
 
   authEduForTeachersTitle: 'EDU is for teachers',
-  authEduForTeachersBody: 'EDU mode is intended for teachers who manage a class. If you are a student or learning on your own, choose Personal. Students usually get access to a class from their teacher.',
+  authEduForTeachersBody: 'EDU mode is intended for teachers who manage a class. If you are a student who is learning on your own, choose Personal. Students usually get access to a class from their teacher.',
 
   landingBadge: 'A platform to learn programming',
   landingTitle: 'A beginner-friendly start in programming',

@@ -128,7 +128,14 @@ function compactPromptText(raw: string, maxLength: number): string {
   return clipped.slice(0, cutAt).trim();
 }
 
-function getDifficultyPrompt(difus: number): string {
+function getDifficultyPrompt(difus: number, isEnglish: boolean = false): string {
+  if (isEnglish) {
+    if (difus < 0.2) return "Level: BEGINNER (Very easy). The task should be as simple as possible, focus only on syntax. No complex algorithms.";
+    if (difus < 0.4) return "Level: EASY. Simple task, minimum conditions. Focus on understanding the topic.";
+    if (difus < 0.6) return "Level: MEDIUM. Add 1-2 simple conditions or branching. Standard difficulty.";
+    if (difus < 0.8) return "Level: ABOVE MEDIUM. Requires some thinking. Can add an unobvious moment in the statement.";
+    return "Level: HARD. Task for logical thinking. Requires optimization or handling edge cases.";
+  }
   if (difus < 0.2) return "Рівень: ПОЧАТКОВИЙ (Дуже легко). Завдання має бути максимально простим, лише на відпрацювання синтаксису. Жодних складних алгоритмів.";
   if (difus < 0.4) return "Рівень: ЛЕГКИЙ. Просте завдання, мінімум умов. Фокус на розумінні теми.";
   if (difus < 0.6) return "Рівень: СЕРЕДНІЙ. Додай 1-2 прості умови або розгалуження. Стандартна складність.";
@@ -411,6 +418,7 @@ export class LLMOrchestrator {
     lang: LLMTaskLanguage;
     userId?: number;
     topicId?: number;
+    language?: "uk" | "en";
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<{
     topic: string;
@@ -420,36 +428,49 @@ export class LLMOrchestrator {
   }> {
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const isEnglish = params.language === "en";
     const anchorSchema = {
       type: "object",
       properties: {
         topic: {
           type: "string",
-          description: `Тема завдання (ОБОВ'ЯЗКОВО "${params.topicTitle}")`
+          description: isEnglish ? `Task topic (MUST be "${params.topicTitle}")` : `Тема завдання (ОБОВ'ЯЗКОВО "${params.topicTitle}")`
         },
         coreOperation: {
           type: "string",
-          description: "Одна чітке формулювання того, ЩО саме потрібно зробити"
+          description: isEnglish ? "One clear statement of exactly what needs to be done" : "Одна чітке формулювання того, ЩО саме потрібно зробити"
         },
         allowedScope: {
           type: "array",
           items: {
             type: "string"
           },
-          description: "Що дозволено робити, які дії дозволені"
+          description: isEnglish ? "What is allowed to be done, which actions are permitted" : "Що дозволено робити, які дії дозволені"
         },
         forbiddenScope: {
           type: "array",
           items: {
             type: "string"
           },
-          description: "Що категорично заборонено, які дії НЕ МОЖНА виконувати"
+          description: isEnglish ? "What is strictly forbidden, which actions MUST NOT be performed" : "Що категорично заборонено, які дії НЕ МОЖНА виконувати"
         }
       },
       required: ["topic", "coreOperation", "allowedScope", "forbiddenScope"]
     };
-    const systemPrompt = `Ти семантичний архітектор навчальних завдань. Створюй anchor для завдання. Відповідай ТІЛЬКИ JSON.`;
-    const userPrompt = `Створи semantic anchor для завдання з теми "${params.topicTitle}" (мова: ${langName}).
+    const systemPrompt = isEnglish
+      ? `You are a semantic architect of learning tasks. Create an anchor for a task. Return ONLY JSON.`
+      : `Ти семантичний архітектор навчальних завдань. Створюй anchor для завдання. Відповідай ТІЛЬКИ JSON.`;
+    const userPrompt = isEnglish
+      ? `Create a semantic anchor for a task on the topic "${params.topicTitle}" (language: ${langName}).
+
+CRITICALLY IMPORTANT:
+- The "topic" field in JSON MUST exactly match "${params.topicTitle}" (1:1)
+- coreOperation: ONE clear statement of what exactly needs to be done (not a list, not many actions)
+- allowedScope: what is allowed in the task
+- forbiddenScope: what is strictly forbidden (other topics, other operations)
+
+Return ONLY JSON without explanations.`
+      : `Створи semantic anchor для завдання з теми "${params.topicTitle}" (мова: ${langName}).
 
 КРИТИЧНО ВАЖЛИВО:
 - Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.topicTitle}" точно (1:1)
@@ -463,7 +484,12 @@ export class LLMOrchestrator {
       topicTitle: expectedTopic,
       lang: params.lang
     });
-    const fallbackAnchor = {
+    const fallbackAnchor = isEnglish ? {
+      topic: expectedTopic,
+      coreOperation: `Solve a problem on the topic "${expectedTopic}" and output the result to stdout`,
+      allowedScope: [expectedTopic, 'basic language constructs', 'stdout output'],
+      forbiddenScope: ['multi-task structure', 'compiler meta-messages', 'creating files/projects']
+    } : {
       topic: expectedTopic,
       coreOperation: `Розв'язати задачу з теми "${expectedTopic}" та вивести результат у stdout`,
       allowedScope: [expectedTopic, 'базові конструкції мови', 'вивід у stdout'],
@@ -584,51 +610,53 @@ export class LLMOrchestrator {
     difus?: number;
     userId?: number;
     topicId?: number;
+    language?: "uk" | "en";
     signal?: AbortSignal;
     semanticRetries?: number;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
-    const difficultyPrompt = getDifficultyPrompt(params.difus ?? 0);
+    const isEnglish = params.language === "en";
+    const difficultyPrompt = getDifficultyPrompt(params.difus ?? 0, isEnglish);
     const jsonSchema = {
       type: "object",
       properties: {
         title: {
           type: "string",
-          description: "Назва завдання"
+          description: isEnglish ? "Task title" : "Назва завдання"
         },
         topic: {
           type: "string",
-          description: `Тема завдання (ОБОВ'ЯЗКОВО "${params.anchor.topic}")`
+          description: isEnglish ? `Task topic (MUST be "${params.anchor.topic}")` : `Тема завдання (ОБОВ'ЯЗКОВО "${params.anchor.topic}")`
         },
         difficulty: {
           type: "number",
-          description: "Складність 0-5"
+          description: isEnglish ? "Difficulty 0-5" : "Складність 0-5"
         },
         theoryMarkdown: {
           type: "string",
-          description: "Теорія у форматі Markdown"
+          description: isEnglish ? "Theory in Markdown format" : "Теорія у форматі Markdown"
         },
         practicalTask: {
           type: "string",
-          description: "Практичне завдання"
+          description: isEnglish ? "Practical task" : "Практичне завдання"
         },
         ioType: {
           type: "string",
-          description: "ТИП ВВОДУ/ВИВОДУ (machine-only; НЕ показувати у statement). Один з: STDIN_STDOUT | NO_INPUT_FIXED_OUTPUT | NO_INPUT_FREE_OUTPUT",
+          description: isEnglish ? "IO TYPE (machine-only; DO NOT show in statement). One of: STDIN_STDOUT | NO_INPUT_FIXED_OUTPUT | NO_INPUT_FREE_OUTPUT" : "ТИП ВВОДУ/ВИВОДУ (machine-only; НЕ показувати у statement). Один з: STDIN_STDOUT | NO_INPUT_FIXED_OUTPUT | NO_INPUT_FREE_OUTPUT",
           enum: ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]
         },
         inputFormat: {
           type: "string",
-          description: "Формат вхідних даних"
+          description: isEnglish ? "Input format" : "Формат вхідних даних"
         },
         outputFormat: {
           type: "string",
-          description: "Формат вихідних даних"
+          description: isEnglish ? "Output format" : "Формат вихідних даних"
         },
         constraints: {
           type: "string",
-          description: "Обмеження"
+          description: isEnglish ? "Constraints" : "Обмеження"
         },
         examples: {
           type: "array",
@@ -650,12 +678,16 @@ export class LLMOrchestrator {
         },
         codeTemplate: {
           type: "string",
-          description: "Шаблон коду"
+          description: isEnglish ? "Code template" : "Шаблон коду"
         }
       },
       required: ["title", "topic", "difficulty", "theoryMarkdown", "practicalTask", "ioType", "inputFormat", "outputFormat", "constraints", "examples", "codeTemplate"]
     };
-    const systemPrompt = `Ти досвідчений викладач програмування. Створюй якісні завдання з теорією та практикою. Відповідай українською мовою у форматі JSON згідно з наданою схемою.
+    const systemPrompt = isEnglish
+      ? `You are an experienced programming teacher. Create high-quality tasks with theory and practice. Respond in English in JSON format according to the provided schema.
+
+CRITICAL: The "topic" field in JSON MUST be equal to "${params.anchor.topic}". DO NOT change the anchor.`
+      : `Ти досвідчений викладач програмування. Створюй якісні завдання з теорією та практикою. Відповідай українською мовою у форматі JSON згідно з наданою схемою.
 
 КРИТИЧНО: Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}". НЕ змінюй anchor.`;
     const allowedIoTypes = Array.isArray(params.allowedIoTypes) && params.allowedIoTypes.length
@@ -664,11 +696,25 @@ export class LLMOrchestrator {
     const stdinAllowed = allowedIoTypes.includes("STDIN_STDOUT");
     const compactPreviousTasks = compactPromptText(params.previousTasks ?? '', LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS);
     const compactTheoryContext = compactPromptText(params.theory, LLM_TASK_THEORY_CONTEXT_CHARS);
-    const uniquenessBlock = compactPreviousTasks
-      ? `\n\nВЖЕ ЗГЕНЕРОВАНІ ЗАВДАННЯ У ЦІЙ ТЕМІ (щоб уникнути повторів):\n${compactPreviousTasks}\n\nТвоє нове завдання має бути СУТТЄВО ІНШИМ: інший сюжет/дані/формулювання, інші приклади та інші числа.`
-      : '';
 
-    const userPrompt = `
+    let uniquenessBlock = "";
+    if (compactPreviousTasks) {
+      uniquenessBlock = isEnglish
+        ? `\n\nALREADY GENERATED TASKS IN THIS TOPIC (to avoid repetition):\n${compactPreviousTasks}\n\nYour new task MUST be SUBSTANTIALLY DIFFERENT: different plot/data/wording, different examples, and different numbers.`
+        : `\n\nВЖЕ ЗГЕНЕРОВАНІ ЗАВДАННЯ У ЦІЙ ТЕМІ (щоб уникнути повторів):\n${compactPreviousTasks}\n\nТвоє нове завдання має бути СУТТЄВО ІНШИМ: інший сюжет/дані/формулювання, інші приклади та інші числа.`;
+    }
+
+    const userPromptBaseEn = `
+SEMANTIC ANCHOR (IMMUTABLE - DO NOT CHANGE):
+- Topic: ${params.anchor.topic}
+- Core operation: ${params.anchor.coreOperation}
+- Allowed: ${params.anchor.allowedScope.join(', ')}
+- Forbidden: ${params.anchor.forbiddenScope.join(', ')}
+
+Programming language: ${langName}
+${difficultyPrompt}
+`;
+    const userPromptBaseUa = `
 SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
 - Тема: ${params.anchor.topic}
 - Основна операція: ${params.anchor.coreOperation}
@@ -677,7 +723,9 @@ SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
 
 Мова програмування: ${langName}
 ${difficultyPrompt}
+`;
 
+    const instructionsUa = `
 КРИТИЧНО ВАЖЛИВО:
 1. Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}" (immutable)
 2. Практичне завдання (practicalTask) ОБОВ'ЯЗКОВО має містити "${params.anchor.coreOperation}"
@@ -708,7 +756,7 @@ ${difficultyPrompt}
 
 ПРІОРИТЕТ ТОЧНОСТІ УМОВИ:
 - У practicalTask явно вкажи: (1) що дано, (2) що потрібно обчислити/визначити, (3) що саме і в якому форматі вивести.
-- Для outputFormat не використовуй розмиті слова: "тощо", "і т.д.", "або щось подібне", "будь-який" (окрім NO_INPUT_FREE_OUTPUT).
+- Для outputFormat не використовуй розмиті слова: "тощо", "і т.д.", "і тд", "або щось подібне", "будь-який" (окрім NO_INPUT_FREE_OUTPUT).
 - Якщо можливі кілька фіксованих відповідей (наприклад, день тижня/помилка) — перелічи їх явно.
 
 М'ЯКЕ ПОВТОРЕННЯ МИНУЛИХ ТЕМ:
@@ -762,7 +810,97 @@ ${uniquenessBlock}
 - NO_INPUT_FREE_OUTPUT використовуй ТІЛЬКИ для завдань, де за задумом приймається будь-який непорожній stdout (наприклад: "виведіть будь-яке привітання").
 
 Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
-`.trim();
+`;
+    const instructionsEn = `
+CRITICALLY IMPORTANT:
+1. The "topic" field in JSON MUST be equal to "${params.anchor.topic}" (immutable)
+2. The practical task (practicalTask) MUST contain "${params.anchor.coreOperation}"
+3. Any content outside allowedScope = ERROR
+4. Any content from forbiddenScope = ERROR
+5. FORBIDDEN to create multi-task structures (Task 1, Task 2, Control work with multiple tasks)
+6. One task = one operation "${params.anchor.coreOperation}"
+
+PLATFORM / AUTO-CHECK (mandatory):
+- The task must be checkable by an autotest via stdout (and stdin only if allowed).
+- The student writes the solution in ONE file (Main.java / main.py / main.cpp).
+- FORBIDDEN: asking to create files/folders/projects, configure IDE/compiler, CMake/Makefile, src/include structure, etc.
+- If the topic is about project structure — turn it into a programming task (e.g., output the text/diagram of the structure), but still only via stdout.
+
+QUALITY OF STATEMENT (important for students):
+- practicalTask must be informative, interesting, and clear: at least 4–6 sentences of connected text (1–2 paragraphs), with a natural style as in a classic problem statement.
+- In the first 1–2 sentences, EXPLAIN in simple words what exactly needs to be output, so the student understands this BEFORE the "Output format" section.
+- Add a short realistic context (mini-plot), but without unnecessary "filler".
+- As a separate final sentence in practicalTask, add a marker "Output required: ...", but do not write "Output required:" literally, for example: "It is necessary to output n, etc." (no lists).
+- Forbidden to make the statement "1 line" like "Declare a variable ...". Add context and clear check criteria.
+- CATEGORICALLY FORBIDDEN to format practicalTask as a numbered checklist like "1.", "2.", "3.".
+- If structure is needed, do it through connected sentences; do not turn the statement into a list of steps.
+- If the task is about variables/types/operations — require to OUTPUT (print) the result so the autotest can check it (deterministic stdout).
+
+ALLOWED IO-TYPES (allowedIoTypes): ${allowedIoTypes.join(' | ')}
+- If STDIN_STDOUT is NOT allowed — FORBIDDEN to ask for data input, read stdin, or mention input()/Scanner/System.in/std::cin/cin/getline.
+- If STDIN_STDOUT is allowed — you can create tasks with stdin.
+
+PRIORITY OF STATEMENT PRECISION:
+- In practicalTask, clearly state: (1) what is given, (2) what needs to be calculated/determined, (3) what exactly and in what format to output.
+- For outputFormat, do not use vague words: "etc.", "and so on", "or something similar", "any" (except NO_INPUT_FREE_OUTPUT).
+- If several fixed answers are possible (e.g., day of the week/error) — list them explicitly.
+
+SOFT REPETITION OF PREVIOUS TOPICS:
+- Unobtrusively use 1 familiar technique from previous topics so the student does not forget the material.
+- This should be natural and NOT turn the task into a multi-task.
+${params.prevTopics && params.prevTopics.trim().length > 0 ? `Previous topics:\n${params.prevTopics.trim()}` : ''}
+
+Topic theory (for context):
+${compactTheoryContext}
+${uniquenessBlock}
+
+CODE TEMPLATE (codeTemplate) - FORBIDDEN to write the implementation:
+- For Java: ONLY an empty Main class with a main method and a TODO comment
+- For Python: ONLY an empty main() function with if __name__ == "__main__" and a TODO comment
+- For C++: ONLY an empty int main() with a TODO comment (can include #include <iostream> and fast I/O)
+- FORBIDDEN: writing the implementation, ready-made code
+
+INPUT DATA (inputFormat):
+
+TASK TYPE (ioType) — SEPARATE FROM TEXT:
+- You MUST fill the ioType field, but DO NOT mention it in practicalTask/inputFormat/outputFormat (it is machine-only).
+- STDIN_STDOUT: standard task with stdin and a single correct output for each input.
+- NO_INPUT_FIXED_OUTPUT: no input; output is strictly determined (e.g., output a specific string/number).
+- NO_INPUT_FREE_OUTPUT: no input; allowed to output any NON-EMPTY result (check will only be for "non-empty stdout").
+
+CRITICAL FOR AUTOTESTS:
+- If ioType = STDIN_STDOUT or NO_INPUT_FIXED_OUTPUT: for a given input, there exists a SINGLE correct output.
+- If ioType = NO_INPUT_FREE_OUTPUT: explicitly write in outputFormat that any NON-EMPTY line can be output (without unnecessary words/labels).
+- Any prompts/texts in output like "Enter number" or "Answer:" are forbidden.
+
+REQUIREMENT ABOUT INPUT:
+- If ioType = NO_INPUT_FIXED_OUTPUT or NO_INPUT_FREE_OUTPUT: inputFormat MUST explicitly say that there is no input data.
+- ${stdinAllowed ? 'STDIN_STDOUT is allowed.' : 'STDIN_STDOUT is FORBIDDEN — choose NO_INPUT_*.'}
+
+OUTPUT DATA (outputFormat):
+- outputFormat is a contract for autochecking. Describe EXACTLY what needs to be output, including all spaces/colons/newlines if they are important.
+- If ioType = NO_INPUT_FIXED_OUTPUT: outputFormat MUST be the EXACT text that the program should output to stdout (as a ready-made expected output), not a description.
+- If multiple lines are expected, outputFormat MUST be presented in multi-line format: each line on a new line (real \n), in the correct order, without merging into one line.
+- CATEGORICALLY FORBIDDEN to write in outputFormat or examples.output meta-phrases like:
+  "Program compiled and ran without errors", "Success", etc.
+- Labels/prefixes (e.g., "integer: ") are ALLOWED only if they are part of the expected output. If you use labels — they must be:
+  (a) explicitly written in outputFormat (literally),
+  (b) consistent with examples.output,
+  (c) mentioned in practicalTask as a requirement "output in this format".
+
+CRITICAL FOR DETERMINISM:
+- Forbidden to formulate NO_INPUT_FIXED_OUTPUT tasks so that values or format are "any".
+  If there is no input, you MUST specify specific values in the statement (e.g., integer=10, float=3.14, ...)
+  and require an exact output format (e.g., 4 lines with labels).
+- If you want to check variable declaration/assignment but don't want to fix values — choose STDIN_STDOUT and read values from stdin.
+- Use NO_INPUT_FREE_OUTPUT ONLY for tasks where any non-empty stdout is intended to be accepted (e.g., "output any greeting").
+
+Respond ONLY with JSON, without markdown blocks, without explanations.
+`;
+
+    const userPrompt = isEnglish
+      ? (userPromptBaseEn + instructionsEn).trim()
+      : (userPromptBaseUa + instructionsUa).trim();
     const maxRetries = (() => {
       const v = params.semanticRetries;
       if (typeof v !== 'number' || !Number.isFinite(v)) return 2;
@@ -839,6 +977,7 @@ ${uniquenessBlock}
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     userId?: number;
     topicId?: number;
+    language?: "uk" | "en";
     signal?: AbortSignal;
     semanticRetries?: number;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
@@ -848,6 +987,7 @@ ${uniquenessBlock}
       lang: params.lang,
       userId: params.userId,
       topicId: params.topicId,
+      language: params.language,
       signal: params.signal
     }, provider);
     const result = await this.generateTaskFromAnchor({
@@ -861,6 +1001,7 @@ ${uniquenessBlock}
       difus: params.difus,
       userId: params.userId,
       topicId: params.topicId,
+      language: params.language,
       signal: params.signal,
       semanticRetries: params.semanticRetries
     }, provider);
@@ -1336,10 +1477,12 @@ REQUIREMENTS:
   }> {
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
-    const difficulty = params.difficulty ?? 3;
-    const difficultyPrompt = getDifficultyPrompt(difficulty / 5);
-    const taskTypeText = params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу";
     const isEnglish = params.userLanguage === "en";
+    const difficulty = params.difficulty ?? 3;
+    const difficultyPrompt = getDifficultyPrompt(difficulty / 5, isEnglish);
+    const taskTypeText = isEnglish
+      ? (params.taskType === "CONTROL" ? "CONTROL task to check knowledge on the topic" : "PRACTICE task to work through the material")
+      : (params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу");
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const teacherTaskTitle = (params.taskTitle || "").trim();
     const effectiveTitle = teacherTaskTitle || params.topicTitle;
