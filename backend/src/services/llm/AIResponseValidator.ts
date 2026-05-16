@@ -34,6 +34,31 @@ function looksLikeEmptyOutputTemplate(text: string): boolean {
   return templateLines.length === lines.length;
 }
 
+function looksLikeCodeSnippet(text: string): boolean {
+  const s = String(text ?? "");
+  if (!s.trim()) return false;
+
+  const patterns = [
+    /(^|\n)\s*def\s+[a-z_][a-z0-9_]*\s*\(/i,
+    /(^|\n)\s*class\s+[a-z_][a-z0-9_]*\s*[:{]/i,
+    /(^|\n)\s*public\s+class\s+\w+/i,
+    /#include\s*[<"]/i,
+    /\bint\s+main\s*\(/i,
+    /\bSystem\.out\.print/i,
+    /\bstd::cout\b|\bcout\s*<<|\bcin\s*>>/i,
+    /\bprintf\s*\(/i,
+    /\bif\s+__name__\s*==\s*["']__main__["']/i
+  ];
+
+  if (patterns.some((p) => p.test(s))) return true;
+
+  const hasBraces = /[{}]/.test(s);
+  const hasSemicolons = /;/.test(s);
+  if (hasBraces && hasSemicolons) return true;
+
+  return false;
+}
+
 function mentionsNoInput(text: string): boolean {
   const s = String(text ?? '').toLowerCase();
   return /вхідн(их|і)\s+дан(их|і)\s+нема|вхідні\s+дані\s+відсутн|не\s+потрібно\s+вводити|нічого\s+не\s+ввод(ити|иться)|без\s+введенн(я|я\s+даних)|дані\s+не\s+пода(ю|ю)ться|stdin\s*(?:is\s*)?empty|no\s+input|without\s+input|input\s+is\s+not\s+provided|there\s+is\s+no\s+input/.test(s);
@@ -324,6 +349,12 @@ export class AIResponseValidator {
       }
       if (looksLikeJudgeSuccessMessage(exOutput)) {
         throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: examples[0].output looks like judge meta message (e.g., "program compiled/executed without errors")', data);
+      }
+      if (looksLikeCodeSnippet(outFmt)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat looks like source code instead of an output contract', data);
+      }
+      if (looksLikeCodeSnippet(exOutput)) {
+        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: examples[0].output looks like source code instead of expected stdout', data);
       }
 
       if (looksLikeDefaultPlaceholder(inFmt, 'inputFormat')) {

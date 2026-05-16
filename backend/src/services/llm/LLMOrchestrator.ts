@@ -737,6 +737,7 @@ ${difficultyPrompt}
 ПЛАТФОРМА / АВТОПЕРЕВІРКА (обов'язково):
 - Завдання має бути перевірюваним автотестом через stdout (та stdin лише якщо дозволено).
 - Студент пише рішення в ОДНОМУ файлі (Main.java / main.py / main.cpp).
+- ЗАБОРОНЕНО: вимагати реалізувати окрему функцію/метод/клас замість повної програми; завдання має бути розв'язане через stdin/stdout.
 - ЗАБОРОНЕНО: просити створювати файли/папки/проєкти, налаштовувати IDE/компілятор, CMake/Makefile, структуру src/include тощо.
 - Якщо тема про структуру проєкту — перетвори це на програмне завдання (наприклад: вивести текст/схему структури), але все одно лише через stdout.
 
@@ -823,6 +824,7 @@ CRITICALLY IMPORTANT:
 PLATFORM / AUTO-CHECK (mandatory):
 - The task must be checkable by an autotest via stdout (and stdin only if allowed).
 - The student writes the solution in ONE file (Main.java / main.py / main.cpp).
+- FORBIDDEN: ask to implement a standalone function/method/class instead of a full program; the task must be solved via stdin/stdout.
 - FORBIDDEN: asking to create files/folders/projects, configure IDE/compiler, CMake/Makefile, src/include structure, etc.
 - If the topic is about project structure — turn it into a programming task (e.g., output the text/diagram of the structure), but still only via stdout.
 

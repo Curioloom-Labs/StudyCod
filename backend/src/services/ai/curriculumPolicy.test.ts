@@ -119,3 +119,35 @@ test("curriculumPolicy: CPP variables topic allows variables", () => {
   });
   assert.equal(v, null);
 });
+
+test("curriculumPolicy: rejects function implementation tasks (EN)", () => {
+  const v = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 4,
+    title: "Data types",
+    practicalTask: "Write a Python function identify_data_type(x) that returns the argument type as a string."
+  });
+  assert.ok(v);
+  assert.match(String(v), /NON_JUDGEABLE_TASK/i);
+});
+
+test("curriculumPolicy: rejects function implementation tasks (UA)", () => {
+  const v = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 4,
+    title: "Типи даних",
+    practicalTask: "Напишіть функцію identify_data_type(x), яка повертає тип аргументу у вигляді рядка."
+  });
+  assert.ok(v);
+  assert.match(String(v), /NON_JUDGEABLE_TASK/i);
+});
+
+test("curriculumPolicy: allows mathematical function descriptions", () => {
+  const v = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 4,
+    title: "Functions",
+    practicalTask: "Given a function f(x) = x^2 + 1, compute f(5) and print the result."
+  });
+  assert.equal(v, null);
+});

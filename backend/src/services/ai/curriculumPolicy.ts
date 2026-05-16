@@ -22,6 +22,28 @@ function isNonJudgeableScaffoldingText(practicalText: string): boolean {
   return hasCreateVerb && (hasFileOpsNouns(text) || hasScaffoldingPathHints(text) || hasExplicitCreateNamedFile(text));
 }
 
+function hasFunctionTaskVerb(text: string): boolean {
+  return /(write|implement|define|create|declare|develop|build|design|make|реаліз|напис|створ|визнач|оголос|розроб|імплемент|опиш|склад(и|іть))/i.test(text);
+}
+
+function hasFunctionTaskNoun(text: string): boolean {
+  return /(\bfunction\b|\bmethod\b|\bprocedure\b|функц|метод|процедур)/i.test(text);
+}
+
+function looksLikeFunctionImplementationTask(practicalText: string): boolean {
+  const raw = String(practicalText ?? "");
+  const text = raw.toLowerCase();
+
+  if (hasFunctionTaskNoun(text) && hasFunctionTaskVerb(text)) return true;
+
+  if (/\bdef\s+[a-z_][a-z0-9_]*\s*\(/i.test(raw)) return true;
+  if (/\bpublic\s+static\s+\w+\s+\w+\s*\(/i.test(raw)) return true;
+
+  if (hasFunctionTaskNoun(text) && /(must|should|has to)\s+return|повинн\w*\s+поверт|має\s+поверт/.test(text)) return true;
+
+  return false;
+}
+
 function splitPracticalTaskToClauses(practicalTask: string): string[] {
   return String(practicalTask ?? "")
     .split(/\r?\n+/)
@@ -85,6 +107,12 @@ export function getCurriculumPolicyViolationForGeneratedTask(params: {
   {
     if (isNonJudgeableScaffoldingText(practicalText)) {
       return "NON_JUDGEABLE_TASK: Task requires file/project/IDE actions (create folders/files, setup project). Personal tasks must be solvable by writing code in a single file and checked by stdout.";
+    }
+  }
+
+  {
+    if (looksLikeFunctionImplementationTask(practicalText)) {
+      return "NON_JUDGEABLE_TASK: Task asks to implement a function/method instead of a full program with stdin/stdout. Such tasks require unit tests and cannot be auto-checked by stdout only.";
     }
   }
 
