@@ -30,7 +30,7 @@ import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
 import { buildLearningFirstFailure } from "../services/learning/firstFailure";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
-import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn } from "../services/translation/translateUkToEn";
+import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
 import { env } from "../env";
 import {
   normalizeWebTaskFiles,
@@ -49,6 +49,112 @@ type UiLanguage = "uk" | "en";
 
 function sha256Hex(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+const TOPIC_TITLE_EN_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const topicTitleEnCache = new Map<string, { value: string; at: number }>();
+
+function looksLikeCyrillicText(text: string): boolean {
+  return /[\u0400-\u04FF]/.test(String(text ?? ""));
+}
+
+function topicTitleEnCacheKey(topicId: number, title: string): string {
+  return `${topicId}:${sha256Hex(String(title ?? ""))}`;
+}
+
+function getCachedTopicTitleEn(topicId: number, title: string): string | null {
+  const key = topicTitleEnCacheKey(topicId, title);
+  const hit = topicTitleEnCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > TOPIC_TITLE_EN_CACHE_TTL_MS) {
+    topicTitleEnCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function setCachedTopicTitleEn(topicId: number, title: string, value: string): void {
+  const key = topicTitleEnCacheKey(topicId, title);
+  topicTitleEnCache.set(key, { value, at: Date.now() });
+  if (topicTitleEnCache.size > 600) {
+    const now = Date.now();
+    for (const [k, v] of topicTitleEnCache.entries()) {
+      if (now - v.at > TOPIC_TITLE_EN_CACHE_TTL_MS) topicTitleEnCache.delete(k);
+    }
+  }
+}
+
+async function buildLocalizedTopicTitleEnById(params: {
+  req: AuthRequest;
+  topics: Array<Topic | null | undefined>;
+}): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const unique = new Map<number, string>();
+
+  for (const topic of params.topics) {
+    const topicId = Number((topic as any)?.id);
+    if (!Number.isFinite(topicId) || topicId <= 0) continue;
+    const title = String((topic as any)?.title ?? "").trim();
+    if (!title) continue;
+    if (!unique.has(topicId)) unique.set(topicId, title);
+  }
+
+  for (const [topicId, title] of unique.entries()) {
+    if (!looksLikeCyrillicText(title)) {
+      out.set(topicId, title);
+      continue;
+    }
+
+    const cached = getCachedTopicTitleEn(topicId, title);
+    if (cached) {
+      out.set(topicId, cached);
+      continue;
+    }
+
+    try {
+      const translated = await translateTextUkToEn(title);
+      const normalized = String(translated ?? "").trim();
+      if (normalized && !looksLikeTranslationProviderErrorText(normalized)) {
+        out.set(topicId, normalized);
+        setCachedTopicTitleEn(topicId, title, normalized);
+        continue;
+      }
+    } catch (error: any) {
+      logger.warn("[tasks] translate topic title uk->en failed", {
+        requestId: params.req.requestId,
+        userId: params.req.userId,
+        topicId,
+        error: error?.message ?? String(error)
+      });
+    }
+
+    out.set(topicId, title);
+  }
+
+  return out;
+}
+
+async function translateTheoryUkToEn(params: {
+  req: AuthRequest;
+  topicId?: number | null;
+  text: string;
+}): Promise<string> {
+  const raw = String(params.text ?? "");
+  if (!raw.trim()) return raw;
+  if (!looksLikeCyrillicText(raw)) return raw;
+  try {
+    const translated = await translateMarkdownUkToEn(raw);
+    const normalized = String(translated ?? "").trim();
+    if (normalized && !looksLikeTranslationProviderErrorText(normalized)) return translated;
+  } catch (error: any) {
+    logger.warn("[tasks] translate topic theory uk->en failed", {
+      requestId: params.req.requestId,
+      userId: params.req.userId,
+      topicId: params.topicId ?? null,
+      error: error?.message ?? String(error)
+    });
+  }
+  return raw;
 }
 
 function normalizeClientSubmissionId(value: unknown): string | null {
@@ -117,6 +223,10 @@ function resolveUiLanguage(req: AuthRequest): UiLanguage {
   const bodyLang = String((req.body as any)?.language ?? "").toLowerCase().trim();
   if (bodyLang === "en") return "en";
   if (bodyLang === "uk") return "uk";
+
+  const headerLang = String(req.headers["x-ui-language"] ?? req.headers["x-lang"] ?? req.uiLanguage ?? "").toLowerCase().trim();
+  if (headerLang.startsWith("en")) return "en";
+  if (headerLang.startsWith("uk")) return "uk";
 
   const accept = String(req.headers["accept-language"] ?? "").toLowerCase();
   return accept.includes("en") ? "en" : "uk";
@@ -457,9 +567,15 @@ function buildTopicsRangeLabel(params: { startTopicIndex: number; endTopicIndex:
   return `${params.startTopicIndex + 1}-${params.endTopicIndex + 1}`;
 }
 
-function buildPrevTopicsTextFromRange(params: { topics: Topic[]; startTopicIndex: number; endTopicIndex: number }): string {
+function buildPrevTopicsTextFromRange(params: { topics: Topic[]; startTopicIndex: number; endTopicIndex: number; titleByTopicId?: Map<number, string> }): string {
   const selected = params.topics.filter(t => t.topicIndex >= params.startTopicIndex && t.topicIndex <= params.endTopicIndex);
-  const titles = selected.map(t => String(t.title || "").trim()).filter(Boolean);
+  const titles = selected
+    .map(t => {
+      const topicId = Number((t as any)?.id);
+      const localized = Number.isFinite(topicId) ? params.titleByTopicId?.get(topicId) : undefined;
+      return String(localized ?? t.title ?? "").trim();
+    })
+    .filter(Boolean);
   return titles.join("\n");
 }
 
@@ -1063,6 +1179,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   uiLanguage?: UiLanguage;
   localizedTheoryEnByBlockId?: Map<number, string>;
   localizedLegacyTheoryEnByTopicId?: Map<number, string>;
+  localizedTopicTitleEnByTopicId?: Map<number, string>;
 }) {
   const uiLanguage = opts?.uiLanguage ?? "uk";
   const hasGrade = gradeTaskIds ? gradeTaskIds.has(task.id) : !!task.completed;
@@ -1094,7 +1211,10 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
         : `${practiceHeader}\n\n${practiceText || practicePlaceholder}`.trim());
 
   const topicId = typeof (task.topic as any)?.id === "number" ? (task.topic as any).id : null;
-  const topicTitle = typeof (task.topic as any)?.title === "string" ? (task.topic as any).title : null;
+  const rawTopicTitle = typeof (task.topic as any)?.title === "string" ? (task.topic as any).title : null;
+  const topicTitle = uiLanguage === "en" && typeof topicId === "number" && Number.isFinite(topicId)
+    ? (opts?.localizedTopicTitleEnByTopicId?.get(topicId) ?? rawTopicTitle)
+    : rawTopicTitle;
   const topicIndex = typeof (task as any)?.topicIndex === "number" && Number.isFinite((task as any).topicIndex)
     ? Number((task as any).topicIndex)
     : null;
@@ -1629,13 +1749,17 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
     const localizedLegacyTheoryEnByTopicId = uiLanguage === "en"
       ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: tasks.map(t => (t as any)?.topic) })
       : new Map<number, string>();
+    const localizedTopicTitleEnByTopicId = uiLanguage === "en"
+      ? await buildLocalizedTopicTitleEnById({ req, topics: tasks.map(t => (t as any)?.topic) })
+      : new Map<number, string>();
 
     if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
     return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds, {
       includeTheoryDebug,
       uiLanguage,
       localizedTheoryEnByBlockId,
-      localizedLegacyTheoryEnByTopicId
+      localizedLegacyTheoryEnByTopicId,
+      localizedTopicTitleEnByTopicId
     })));
   } catch (error) {
     logger.error("[tasks] GET /tasks error", { requestId: req.requestId, userId: req.userId, error });
@@ -1696,13 +1820,17 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
     const localizedLegacyTheoryEnByTopicId = uiLanguage === "en"
       ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: [(task as any)?.topic] })
       : new Map<number, string>();
+    const localizedTopicTitleEnByTopicId = uiLanguage === "en"
+      ? await buildLocalizedTopicTitleEnById({ req, topics: [(task as any)?.topic] })
+      : new Map<number, string>();
 
     if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
     return res.json(mapTaskToDto(task, gradeTaskIds, {
       includeTheoryDebug,
       uiLanguage,
       localizedTheoryEnByBlockId,
-      localizedLegacyTheoryEnByTopicId
+      localizedLegacyTheoryEnByTopicId,
+      localizedTopicTitleEnByTopicId
     }));
   } catch {
     return res.status(500).json({
@@ -2096,6 +2224,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }
 
     const userLanguage = resolveUiLanguage(req);
+    const wantsEn = userLanguage === "en";
     const user = await userRepo().findOne({
       where: {
         id: userId
@@ -2198,7 +2327,16 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       const practiceTasks = (batchTasks as Task[]).filter(t => typeof (t as any).subtitle === "string" && String((t as any).subtitle).includes("|PRACTICE|"));
 
       const rangeLabel = buildTopicsRangeLabel({ startTopicIndex, endTopicIndex });
-      const prevTopicsText = buildPrevTopicsTextFromRange({ topics, startTopicIndex, endTopicIndex });
+      const topicsInRange = topics.filter(t => t.topicIndex >= startTopicIndex && t.topicIndex <= endTopicIndex);
+      const localizedControlTopicTitles = wantsEn
+        ? await buildLocalizedTopicTitleEnById({ req, topics: topicsInRange })
+        : new Map<number, string>();
+      const prevTopicsText = buildPrevTopicsTextFromRange({
+        topics,
+        startTopicIndex,
+        endTopicIndex,
+        titleByTopicId: localizedControlTopicTitles
+      });
 
       if (!quizTask) {
         const remainingBeforeQuiz = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
@@ -2375,6 +2513,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       relations: ["theoryBlock"]
     });
     const topicTheory = stripPracticeLikeSectionsFromTheory(String((topicWithTheory as any)?.theoryBlock?.content ?? (topicWithTheory as any)?.theoryMarkdown ?? ""));
+    const topicTheoryForAi = wantsEn
+      ? await translateTheoryUkToEn({ req, topicId: topic.id, text: topicTheory })
+      : topicTheory;
 
     const requiredTasksInThisTopic = topic.topicIndex === 0 ? 1 : 3;
     const stdinAllowed = isStdinAllowedForTopic({
@@ -2388,10 +2529,21 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       topicIndex: topic.topicIndex
     });
 
-    const prevTopicsForReinforcement = topics
+    const prevTopicsForReinforcementCandidates = topics
       .filter(t => t.topicIndex < topic.topicIndex)
-      .slice(-6)
-      .map(t => String(t.title || "").trim())
+      .slice(-6);
+    const localizedTopicTitleEnByTopicId = wantsEn
+      ? await buildLocalizedTopicTitleEnById({ req, topics: [topic, ...prevTopicsForReinforcementCandidates] })
+      : new Map<number, string>();
+    const topicTitleForAi = wantsEn
+      ? (localizedTopicTitleEnByTopicId.get(topic.id) ?? topic.title)
+      : topic.title;
+    const prevTopicsForReinforcement = prevTopicsForReinforcementCandidates
+      .map(t => {
+        const topicId = Number((t as any)?.id);
+        const localized = Number.isFinite(topicId) ? localizedTopicTitleEnByTopicId.get(topicId) : undefined;
+        return String(localized ?? t.title ?? "").trim();
+      })
       .filter(Boolean)
       .join("\n");
 
@@ -2430,8 +2582,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
     const aiTaskResult = await safeAICall('generateTask', {
-      topicTitle: topic.title,
-      theory: topicTheory,
+      topicTitle: topicTitleForAi,
+      theory: topicTheoryForAi,
       lang,
       topicIndex: topic.topicIndex,
       numInTopic,
@@ -2495,7 +2647,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     description = statementMarkdown;
 
     const aiTitleRaw = typeof (aiTask as any)?.title === "string" ? String((aiTask as any).title).trim() : "";
-    const baseTitle = aiTitleRaw || i18nText(userLanguage, `Практика: ${topic.title}`, `Practice: ${topic.title}`);
+    const baseTitle = aiTitleRaw || i18nText(userLanguage, `Практика: ${topic.title}`, `Practice: ${topicTitleForAi}`);
     const titlePrefix = requiredTasksInThisTopic > 1 ? `(${numInTopic}/${requiredTasksInThisTopic}) ` : "";
     const uniqueTitle = `${titlePrefix}${baseTitle}`.trim();
     const task = taskRepo().create({
@@ -2621,7 +2773,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
         const testDataResult = await safeAICall('generateTestData', {
           taskDescription: taskDescriptionForTests || description,
-          taskTitle: topic.title,
+          taskTitle: topicTitleForAi,
           lang,
           count: remainingCount,
           userId
@@ -2774,7 +2926,10 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
     return res.json({
       status: "ok",
-      task: mapTaskToDto(savedHydrated ?? saved, undefined, { uiLanguage: userLanguage })
+      task: mapTaskToDto(savedHydrated ?? saved, undefined, {
+        uiLanguage: userLanguage,
+        localizedTopicTitleEnByTopicId: localizedTopicTitleEnByTopicId
+      })
     });
   } catch (error: any) {
     logger.error("[tasks] POST /generate error", { requestId: req.requestId, userId: req.userId, error });
