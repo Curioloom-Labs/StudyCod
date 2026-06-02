@@ -1,5 +1,5 @@
 import { CodeSubmission, TestRunnerResult } from './interfaces';
-import { compareOutput, filterStderrWithLang } from '../codeExecutionService';
+import { compareOutputWithChecker, filterStderrWithLang } from '../codeExecutionService';
 import { judgeWithSemaphore } from '../judgeWorker';
 import type { JudgeLanguage, JudgeRequest, JudgeResponse } from '../judgeWorker/types';
 
@@ -114,7 +114,8 @@ export class TestRunner implements ITestRunner {
       const verdict = String(r?.verdict ?? "");
       const actualOutput = String(r?.actual ?? "");
       const ranOk = verdict === "WA" || verdict === "AC";
-      const passed = ranOk && compareOutput(actualOutput ?? "", expected);
+      // Uses the task's checker policy when provided; otherwise lenient (legacy).
+      const passed = ranOk && compareOutputWithChecker(actualOutput ?? "", expected, submission.checker);
       if (passed) passedCount++;
       const stderr = String(r?.stderr ?? "");
       const error = passed

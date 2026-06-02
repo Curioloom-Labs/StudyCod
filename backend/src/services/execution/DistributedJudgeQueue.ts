@@ -354,7 +354,16 @@ return {moved, skipped, remaining, queued}
 
 export class DistributedJudgeQueue {
   private readonly enabled: boolean;
+  /** Per-instance cap: how many jobs THIS process runs concurrently. */
   private readonly maxConcurrent: number;
+  /**
+   * Cluster-wide cap enforced in the CLAIM Lua against the shared processing
+   * set. Defaults to maxConcurrent (preserving historical single-instance
+   * behaviour), but operators running N backend replicas must raise this to
+   * N * per-instance to actually scale throughput — otherwise the whole
+   * cluster is pinned to one instance's worth of concurrency.
+   */
+  private readonly maxGlobalConcurrent: number;
   private readonly maxQueueSize: number;
   private readonly maxRetries: number;
   private readonly deadLetterMaxItems: number;
@@ -396,6 +405,7 @@ export class DistributedJudgeQueue {
   constructor(params: {
     enabled: boolean;
     maxConcurrent: number;
+    maxGlobalConcurrent?: number;
     maxQueueSize: number;
     maxRetries: number;
     deadLetterMaxItems: number;
@@ -407,6 +417,12 @@ export class DistributedJudgeQueue {
   }) {
     this.enabled = Boolean(params.enabled);
     this.maxConcurrent = Math.max(1, Math.floor(params.maxConcurrent));
+    // Global cap can never be lower than the local cap (that would be
+    // self-contradictory); default to the local cap for backward compatibility.
+    const requestedGlobal = Number.isFinite(params.maxGlobalConcurrent as number)
+      ? Math.floor(params.maxGlobalConcurrent as number)
+      : this.maxConcurrent;
+    this.maxGlobalConcurrent = Math.max(this.maxConcurrent, requestedGlobal);
     this.maxQueueSize = Math.max(0, Math.floor(params.maxQueueSize));
     this.maxRetries = Math.max(0, Math.floor(params.maxRetries));
     this.deadLetterMaxItems = Math.max(10, Math.floor(params.deadLetterMaxItems));
@@ -631,6 +647,17 @@ export class DistributedJudgeQueue {
   private async waitForResult(jobId: string, jobKey: string, waitTimeoutMs: number, signal?: AbortSignal): Promise<JudgeResponse> {
     const deadline = nowMs() + waitTimeoutMs;
 
+    // Adaptive polling backoff. A fixed short interval means every concurrent
+    // submission hammers Redis with O(1/resultPollMs) GET/s purely to wait —
+    // under a contest spike that is thousands of GET/s on the shared Redis. Most
+    // judge runs take far longer than the floor interval, so we start fast (to
+    // keep trivial programs snappy) and grow the interval up to a cap, which
+    // cuts steady-state polling ~5-6x while bounding tail latency to maxPollMs.
+    const minPollMs = this.resultPollMs;
+    const maxPollMs = Math.max(minPollMs, 250);
+    let pollMs = minPollMs;
+    const backoff = () => { pollMs = Math.min(maxPollMs, Math.ceil(pollMs * 1.5)); };
+
     while (nowMs() < deadline) {
       if (signal?.aborted) {
         const reason = getAbortReason(signal);
@@ -640,7 +667,8 @@ export class DistributedJudgeQueue {
 
       const redis = (await getSharedRedisClient()) as SharedRedisClient | null;
       if (!redis) {
-        await sleep(this.resultPollMs);
+        await sleep(pollMs);
+        backoff();
         continue;
       }
 
@@ -665,7 +693,8 @@ export class DistributedJudgeQueue {
         throw new Error(msg);
       }
 
-      await sleep(this.resultPollMs);
+      await sleep(pollMs);
+      backoff();
     }
 
     const timeoutMessage = `JUDGE_TIMEOUT: distributed queue wait timeout ${waitTimeoutMs}ms`;
@@ -747,7 +776,7 @@ export class DistributedJudgeQueue {
       String(now),
       String(now + this.claimTtlMs),
       this.ownerId,
-      String(this.maxConcurrent),
+      String(this.maxGlobalConcurrent),
     ]);
 
     if (claimedRaw == null) return null;

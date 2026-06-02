@@ -79,6 +79,9 @@ const EnvSchema = z.object({
   DB_PASS: z.string().optional(),
   DB_NAME: z.string().optional(),
   DB_POOL_SIZE: z.string().optional(),
+  DB_CONNECT_TIMEOUT_MS: z.string().optional(),
+  DB_ACQUIRE_TIMEOUT_MS: z.string().optional(),
+  DB_POOL_QUEUE_LIMIT: z.string().optional(),
   TRUST_PROXY: z.string().optional(),
   SESSION_STORE: z.string().optional(),
   REDIS_URL: z.string().optional(),
@@ -103,11 +106,19 @@ const EnvSchema = z.object({
 
   // Cloudflare AI worker base URL (used by LLM provider and can be reused for translation)
   CLOUDFLARE_AI_URL: z.string().optional(),
+  // Shared secret sent to the Cloudflare AI worker as `x-internal-secret`.
+  // Must match the worker's WORKER_SHARED_SECRET. Without it the worker is an
+  // open, unauthenticated proxy to paid Workers AI inference.
+  CLOUDFLARE_AI_INTERNAL_SECRET: z.string().optional(),
 
   // Free uk->en translator for theory blocks (optional overrides)
   TRANSLATE_UK_EN_URL: z.string().optional(),
   TRANSLATE_UK_EN_TIMEOUT_MS: z.string().optional(),
   TRANSLATE_UK_EN_MAX_CHUNK_CHARS: z.string().optional(),
+  // Opt-in to routing content through PUBLIC third-party translators
+  // (libretranslate.de / api.mymemory.translated.net). Off by default because
+  // it exfiltrates course/student content to an uncontrolled host.
+  TRANSLATE_ALLOW_PUBLIC_FALLBACK: z.string().optional(),
   JUDGE_WORKER_ENTRY: z.string().optional(),
   NSJAIL_PATH: z.string().optional(),
   NSJAIL_CONFIG: z.string().optional(),
@@ -122,6 +133,9 @@ const EnvSchema = z.object({
 
   // Execution load control (backend -> judge)
   MAX_CONCURRENT_EXECUTIONS: z.string().optional(),
+  // Cluster-wide concurrency cap for the distributed queue. Defaults to the
+  // per-instance MAX_CONCURRENT_EXECUTIONS; raise to N*per-instance for N replicas.
+  MAX_GLOBAL_CONCURRENT_EXECUTIONS: z.string().optional(),
   MAX_EXECUTION_QUEUE_SIZE: z.string().optional(),
   EXECUTION_SCHEDULER_LOG_INTERVAL_MS: z.string().optional(),
   EXECUTION_QUEUE_MODE: z.string().optional(),
@@ -150,6 +164,17 @@ const EnvSchema = z.object({
   WEB_TASK_MAX_FILE_SIZE: z.string().optional(),
   WEB_TASK_MAX_TOTAL_SIZE: z.string().optional(),
   WEB_TASK_PREVIEW_RATE_LIMIT: z.string().optional(),
+
+  // LLM task orchestrator tunables
+  LLM_TASK_TIMEOUT_MS: z.string().optional(),
+  LLM_TASK_MAX_TOKENS: z.string().optional(),
+  LLM_TASK_THEORY_CONTEXT_CHARS: z.string().optional(),
+  LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS: z.string().optional(),
+  LLM_TASK_ANCHOR_CACHE_TTL_MS: z.string().optional(),
+  LLM_TASK_ANCHOR_CACHE_ENABLED: z.string().optional(),
+
+  // Auth user cache (Redis short-TTL for authMiddleware)
+  AUTH_USER_CACHE_TTL_SECONDS: z.string().optional(),
 }).transform(env => {
   const corsOrigins = normalizeOrigins(env.CORS_ORIGIN);
   const cfBase = String(env.CLOUDFLARE_AI_URL ?? "").trim();
@@ -158,7 +183,13 @@ const EnvSchema = z.object({
     ...env,
     __isProduction: isProduction,
     __corsOrigins: corsOrigins,
-    __translateUkEnUrl: ((env.TRANSLATE_UK_EN_URL ?? "") || cfTranslate || "https://libretranslate.de/translate").trim(),
+    __cloudflareAiInternalSecret: (env.CLOUDFLARE_AI_INTERNAL_SECRET ?? "").trim(),
+    // Resolved translation endpoint. EMPTY by default: only an explicit
+    // TRANSLATE_UK_EN_URL or your own Cloudflare worker (derived from
+    // CLOUDFLARE_AI_URL) is used. We deliberately no longer fall back to the
+    // public libretranslate.de host — see __translateAllowPublicFallback.
+    __translateUkEnUrl: ((env.TRANSLATE_UK_EN_URL ?? "") || cfTranslate || "").trim(),
+    __translateAllowPublicFallback: parseBoolEnv(env.TRANSLATE_ALLOW_PUBLIC_FALLBACK),
     __translateUkEnTimeoutMs: (() => {
       const raw = (env.TRANSLATE_UK_EN_TIMEOUT_MS ?? "").trim();
       if (!raw) return 15_000;
@@ -223,6 +254,13 @@ const EnvSchema = z.object({
       if (!raw) return 12;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 12;
+    })(),
+    // 0/unset => fall back to per-instance cap (handled in the queue).
+    __maxGlobalConcurrentExecutions: (() => {
+      const raw = (env.MAX_GLOBAL_CONCURRENT_EXECUTIONS ?? "").trim();
+      if (!raw) return 0;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : 0;
     })(),
     __maxExecutionQueueSize: (() => {
       const raw = (env.MAX_EXECUTION_QUEUE_SIZE ?? "").trim();
@@ -328,9 +366,14 @@ const EnvSchema = z.object({
       if (!raw) return true;
       return parseBoolEnv(raw);
     })(),
+    // Auto-stamping silently inserts rows into typeorm_migrations for failed
+    // migrations that look like legacy schema drift. That is convenient in
+    // dev/test but in production it can hide a real migration regression.
+    // Default: ON outside production, OFF in production. Operators can still
+    // opt back in by setting AUTO_BOOTSTRAP_MIGRATION_HISTORY_ON_STARTUP=1.
     __autoBootstrapMigrationHistoryOnStartup: (() => {
       const raw = (env.AUTO_BOOTSTRAP_MIGRATION_HISTORY_ON_STARTUP ?? "").trim();
-      if (!raw) return true;
+      if (!raw) return !isProduction;
       return parseBoolEnv(raw);
     })(),
 
@@ -352,6 +395,42 @@ const EnvSchema = z.object({
       if (!raw) return 10;
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 10;
+    })(),
+
+    __llmTaskTimeoutMs: (() => {
+      const raw = (env.LLM_TASK_TIMEOUT_MS ?? "").trim();
+      const n = raw ? Number.parseInt(raw, 10) : NaN;
+      const v = Number.isFinite(n) ? n : 45_000;
+      return Math.max(10_000, Math.min(120_000, v));
+    })(),
+    __llmTaskMaxTokens: (() => {
+      const raw = (env.LLM_TASK_MAX_TOKENS ?? "").trim();
+      const n = raw ? Number.parseInt(raw, 10) : NaN;
+      const v = Number.isFinite(n) ? n : 2600;
+      return Math.max(1200, Math.min(4000, v));
+    })(),
+    __llmTaskTheoryContextChars: (() => {
+      const raw = (env.LLM_TASK_THEORY_CONTEXT_CHARS ?? "").trim();
+      const n = raw ? Number.parseInt(raw, 10) : NaN;
+      const v = Number.isFinite(n) ? n : 1200;
+      return Math.max(400, Math.min(3000, v));
+    })(),
+    __llmTaskPreviousTasksContextChars: (() => {
+      const raw = (env.LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS ?? "").trim();
+      const n = raw ? Number.parseInt(raw, 10) : NaN;
+      const v = Number.isFinite(n) ? n : 1200;
+      return Math.max(400, Math.min(3000, v));
+    })(),
+    __llmTaskAnchorCacheTtlMs: (() => {
+      const raw = (env.LLM_TASK_ANCHOR_CACHE_TTL_MS ?? "").trim();
+      const n = raw ? Number.parseInt(raw, 10) : NaN;
+      const v = Number.isFinite(n) ? n : 30 * 60 * 1000;
+      return Math.max(10_000, Math.min(24 * 60 * 60 * 1000, v));
+    })(),
+    __llmTaskAnchorCacheEnabled: (() => {
+      const raw = (env.LLM_TASK_ANCHOR_CACHE_ENABLED ?? "").trim().toLowerCase();
+      if (!raw) return true;
+      return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
     })(),
   };
 }).superRefine((env, ctx) => {

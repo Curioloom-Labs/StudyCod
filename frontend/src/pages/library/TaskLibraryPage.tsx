@@ -22,6 +22,7 @@ import {
   listMyLibraryTasks,
   submitLibraryTask,
   updateLibraryTask,
+  getDifficultySuggestion,
   type JudgeLanguage,
   type LibraryCheckerSpec,
   type LibraryTaskDifficulty,
@@ -447,6 +448,7 @@ export const TaskLibraryPage: React.FC = () => {
   );
 
   const [editor, setEditor] = useState<EditorState>(emptyEditor);
+  const [diffSuggestion, setDiffSuggestion] = useState<{ recommended: string; confidence: number; rationale: string } | null>(null);
   const [webRuleDraft, setWebRuleDraft] = useState<WebRuleDraft>(defaultWebRuleDraft);
   const [draggedWebRuleIndex, setDraggedWebRuleIndex] = useState<number | null>(null);
   const [webRuleDropTargetIndex, setWebRuleDropTargetIndex] = useState<number | null>(null);
@@ -2290,6 +2292,29 @@ export const TaskLibraryPage: React.FC = () => {
                   <option value="MEDIUM">MEDIUM</option>
                   <option value="HARD">HARD</option>
                 </select>
+                {editor.id && Number(editor.id) > 0 ? (
+                  <button
+                    type="button"
+                    className="mt-2 text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+                    title={tr("Порекомендувати складність зі статистики розв'язань", "Recommend difficulty from solve statistics")}
+                    onClick={async () => {
+                      try {
+                        const s = await getDifficultySuggestion(Number(editor.id));
+                        setDiffSuggestion({ recommended: s.recommended, confidence: s.confidence, rationale: s.rationale });
+                        setEditor((st) => ({ ...st, difficulty: s.recommended }));
+                      } catch {
+                        /* ignore — suggestion is best-effort */
+                      }
+                    }}
+                  >
+                    {tr("💡 Підказати з даних", "💡 Suggest from data")}
+                  </button>
+                ) : null}
+                {diffSuggestion ? (
+                  <div className="mt-1 text-[10px] font-mono text-text-secondary">
+                    {tr("Рекомендовано", "Recommended")}: <span className="text-primary">{diffSuggestion.recommended}</span> · {tr("впевненість", "confidence")} {(diffSuggestion.confidence * 100).toFixed(0)}%
+                  </div>
+                ) : null}
               </div>
               <div>
                 <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Розділ", "Section")}</label>

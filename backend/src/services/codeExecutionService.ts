@@ -1,6 +1,6 @@
 import { env } from "../env";
 import { judgeWithSemaphore } from "./judgeWorker";
-import type { JudgeLanguage, JudgeRequest, JudgeResponse } from "./judgeWorker/types";
+import type { JudgeLanguage, JudgeRequest, JudgeResponse, CheckerSpec } from "./judgeWorker/types";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 
@@ -215,7 +215,59 @@ function explainFallbackError(language: "JAVA" | "PYTHON", stderr: string): stri
 export function filterStderrWithLang(stderr: string, language?: "JAVA" | "PYTHON"): string {
   return filterStderrWithLanguage(stderr, language);
 }
-export function compareOutput(actual: string, expected: string): boolean {
+export type OutputCompareMode = "lenient" | "exact" | "whitespace" | "nonempty" | "float";
+
+export interface CompareOutputOptions {
+  /**
+   * How tolerant the comparison is. Defaults to "lenient" — the historical
+   * behaviour — so existing callers are byte-for-byte unaffected.
+   *  - exact:      normalized line equality only (no space/comma fuzzing).
+   *  - whitespace: ignore all whitespace differences.
+   *  - nonempty:   pass if the program produced any non-empty output.
+   *  - float:      token-wise numeric comparison within `epsilon`.
+   *  - lenient:    exact OR whitespace-insensitive OR comma-spacing-insensitive.
+   */
+  mode?: OutputCompareMode;
+  /** Absolute tolerance for "float" mode. */
+  epsilon?: number;
+}
+
+/** Map a judge CheckerSpec to the equivalent local comparison mode. */
+export function compareModeFromChecker(checker?: CheckerSpec | null): CompareOutputOptions {
+  if (!checker || typeof (checker as any).type !== "string") return { mode: "lenient" };
+  switch (checker.type) {
+    case "exact": return { mode: "exact" };
+    case "whitespace": return { mode: "whitespace" };
+    case "nonempty": return { mode: "nonempty" };
+    case "float": return { mode: "float", epsilon: (checker as any).epsilon ?? 1e-6 };
+    default: return { mode: "lenient" };
+  }
+}
+
+/** Convenience: compare using a task's checker spec. */
+export function compareOutputWithChecker(actual: string, expected: string, checker?: CheckerSpec | null): boolean {
+  return compareOutput(actual, expected, compareModeFromChecker(checker));
+}
+
+function compareFloatTokens(actual: string, expected: string, epsilon: number): boolean {
+  const a = actual.split(/\s+/).filter(Boolean);
+  const e = expected.split(/\s+/).filter(Boolean);
+  if (a.length !== e.length) return false;
+  for (let i = 0; i < e.length; i++) {
+    const an = Number(a[i]);
+    const en = Number(e[i]);
+    const bothNumeric = Number.isFinite(an) && Number.isFinite(en);
+    if (bothNumeric) {
+      if (Math.abs(an - en) > epsilon) return false;
+    } else if (a[i] !== e[i]) {
+      // Non-numeric tokens (labels, words) must match exactly.
+      return false;
+    }
+  }
+  return true;
+}
+
+export function compareOutput(actual: string, expected: string, options?: CompareOutputOptions): boolean {
   const hasCyrillic = (s: string) => /[\u0400-\u04FF]/.test(s);
   const safeNfc = (s: string) => {
     try {
@@ -349,12 +401,34 @@ export function compareOutput(actual: string, expected: string): boolean {
     const lines = normalized.split("\n").map(l => l.trim()).filter(l => l.length > 0);
     return lines.join("\n");
   };
+  const mode: OutputCompareMode = options?.mode ?? "lenient";
+
   const normalizedActual = normalize(actual);
   const normalizedExpected = normalize(expected);
+
+  // "nonempty": the only requirement is that the program produced output.
+  if (mode === "nonempty") return normalizedActual.length > 0;
+
+  // "float": token-wise numeric comparison within epsilon.
+  if (mode === "float") {
+    if (normalizedActual === normalizedExpected) return true;
+    return compareFloatTokens(normalizedActual, normalizedExpected, options?.epsilon ?? 1e-6);
+  }
+
+  // Exact (post-normalization) equality is accepted by every mode.
   if (normalizedActual === normalizedExpected) return true;
+
+  // "exact": no further fuzzing — a real exact checker must reject here.
+  if (mode === "exact") return false;
+
   const noSpacesActual = normalizedActual.replace(/\s+/g, "");
   const noSpacesExpected = normalizedExpected.replace(/\s+/g, "");
   if (noSpacesActual === noSpacesExpected) return true;
+
+  // "whitespace": whitespace-insensitive only; stop before comma fuzzing.
+  if (mode === "whitespace") return false;
+
+  // "lenient" (default, historical behaviour): also ignore comma spacing.
   const normalizeCommas = (str: string) => str.replace(/,\s+/g, ",").replace(/\s+,/g, ",");
   if (normalizeCommas(normalizedActual) === normalizeCommas(normalizedExpected)) return true;
   return false;

@@ -33,9 +33,9 @@ export class Task {
     default: "TOPIC"
   })
   type!: TaskType;
-  @Column()
+  @Column({ type: "varchar" })
   title!: string;
-  @Column()
+  @Column({ type: "varchar" })
   subtitle!: string;
   @Column({
     type: "text"

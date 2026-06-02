@@ -621,6 +621,28 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
     const googleLinkUserId = getGoogleLinkUserIdFromSession(req);
     clearGoogleLinkSession(req);
 
+    // Session fixation defence: anonymous session id may have been chosen by
+    // the attacker before login. Rotate it now that we are about to attach
+    // user state. We preserve passport's stored user payload across the
+    // regeneration. Best-effort: callback flow continues even if no session
+    // is attached (e.g. if session middleware is skipped for this path).
+    if (typeof (req.session as any)?.regenerate === "function") {
+      const passportState = (req.session as any)?.passport;
+      await new Promise<void>(resolve => {
+        (req.session as any).regenerate((err: any) => {
+          if (err) {
+            logger.warn("[auth] session regenerate failed (continuing)", {
+              requestId: (req as any).requestId,
+              error: err?.message
+            });
+          } else if (passportState && req.session) {
+            (req.session as any).passport = passportState;
+          }
+          resolve();
+        });
+      });
+    }
+
     const user = req.user as User & {
       isNewUser?: boolean;
       isGoogleLinkFlow?: boolean;

@@ -5,7 +5,7 @@ export type TopicLanguage = "JAVA" | "PYTHON" | "CPP";
 export class Topic {
   @PrimaryGeneratedColumn()
   id!: number;
-  @Column()
+  @Column({ type: "varchar" })
   title!: string;
   @Column({
     type: "enum",

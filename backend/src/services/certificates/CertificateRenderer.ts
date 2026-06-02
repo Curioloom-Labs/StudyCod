@@ -129,14 +129,45 @@ async function getBrowser(): Promise<Browser> {
   return browser!;
 }
 
+/**
+ * Generic HTML -> PDF. Reuses the shared Chromium so callers other than
+ * certificates (e.g. progress reports) don't each launch a browser.
+ */
+export async function renderHtmlToPdf(
+  html: string,
+  options: { landscape?: boolean; format?: "A4" | "Letter" } = {}
+): Promise<Buffer> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setContent(html, { waitUntil: "networkidle" });
+    const data = await page.pdf({
+      printBackground: true,
+      format: options.format ?? "A4",
+      landscape: options.landscape ?? false,
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
+      preferCSSPageSize: false,
+    });
+    return Buffer.from(data);
+  } finally {
+    await page.close();
+  }
+}
+
 export class CertificateRenderer {
   private readonly engine = new CertificateTemplateEngine();
 
   async renderPdf(input: CertificateRenderInput): Promise<Buffer> {
-    const html = input.mode === "custom" && input.template?.htmlTemplate
+    // The canvas editor compiles the layout (field positions, custom text/images,
+    // background) into htmlTemplate+cssTemplate. Whenever a stored HTML template is
+    // present we render it verbatim so the PDF matches the editor exactly (true WYSIWYG)
+    // — regardless of mode. The hardcoded StudyCod layout stays only as a zero-config
+    // fallback for templates that were never customized.
+    const hasHtmlTemplate = Boolean(String(input.template?.htmlTemplate ?? "").trim());
+    const html = hasHtmlTemplate
       ? this.engine.renderCustomTemplate({
-          htmlTemplate: input.template.htmlTemplate,
-          cssTemplate: input.template.cssTemplate,
+          htmlTemplate: input.template!.htmlTemplate as string,
+          cssTemplate: input.template?.cssTemplate,
           payload: input.payload,
         })
       : this.engine.renderStudyCodTemplate({

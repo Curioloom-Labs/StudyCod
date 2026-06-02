@@ -9,6 +9,11 @@ import { StatusChip, type StatusChipTone } from "../../components/ui/StatusChip"
 import { CodeEditor } from "../../components/CodeEditor";
 import { MultiFileEditor } from "../../components/MultiFileEditor";
 import { MarkdownView } from "../../components/MarkdownView";
+import { ErrorExplainButton } from "../../components/ErrorExplainButton";
+import { DebugMentorChat } from "../../components/DebugMentorChat";
+import { useProctoring } from "../../hooks/useProctoring";
+import { scoreProctoring, recordConceptReview } from "../../lib/api/tasks";
+import { saveSolveReplay, type ReplaySnapshot } from "../../lib/api/learning";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -220,6 +225,14 @@ export const LibraryTaskSolvePage: React.FC = () => {
       return false;
     }
   }, []);
+  // Privacy-respecting proctoring capture for the solve session (aggregate
+  // behavioural signals only — see useProctoring).
+  const proctoring = useProctoring(hasToken);
+
+  // Solve-replay capture: throttled code snapshots over the session.
+  const replaySnapshotsRef = useRef<ReplaySnapshot[]>([]);
+  const replayStartRef = useRef<number>(Date.now());
+  const lastSnapAtRef = useRef<number>(0);
   const params = useParams<{ taskKey?: string; taskId?: string; id?: string }>();
   const taskKey = useMemo(() => String(params.taskKey ?? params.taskId ?? params.id ?? "").trim(), [params]);
   const taskId = useMemo(() => {
@@ -282,6 +295,18 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const draftCacheRef = useRef<Partial<Record<JudgeLanguage, DraftState>>>({});
 
   const [code, setCode] = useState<string>("");
+  // Record throttled code snapshots for solve replay.
+  useEffect(() => {
+    if (!hasToken) return;
+    const now = Date.now();
+    if (now - lastSnapAtRef.current < 1500) return;
+    lastSnapAtRef.current = now;
+    const arr = replaySnapshotsRef.current;
+    if (arr.length === 0 || arr[arr.length - 1].code !== code) {
+      arr.push({ tMs: now - replayStartRef.current, code });
+      if (arr.length > 500) arr.shift();
+    }
+  }, [code, hasToken]);
   const [lastSavedCode, setLastSavedCode] = useState<string>("");
   const [useFiles, setUseFiles] = useState<boolean>(false);
   const [files, setFiles] = useState<CodeFile[]>([]);
@@ -295,6 +320,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<LibraryCheckResult | null>(null);
+  const [lastReplayId, setLastReplayId] = useState<number | null>(null);
   const [actionRecovery, setActionRecovery] = useState<{
     tone: "error" | "warning";
     message: string;
@@ -684,6 +710,39 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setCompactFailedOnly(true);
       setResultsTab("check");
       setResultsOpen(true);
+
+      // Fire-and-forget: integrity score + spaced-repetition review. Wrapped so
+      // it can never affect the check UX.
+      try {
+        const codeLen = useFiles ? files.reduce((n, f) => n + (f.content?.length ?? 0), 0) : code.length;
+        void scoreProctoring({ ...proctoring.getSignals(codeLen), taskKind: "LIBRARY", taskId: effectiveTaskId });
+        const tp = Number(r.testsPassed ?? 0);
+        const tt = Number(r.testsTotal ?? 0);
+        const conceptKey = ((task as any)?.section
+          ? `lib-section:${String((task as any).section)}`
+          : `lib-task:${task.id}`).slice(0, 191);
+        void recordConceptReview({
+          conceptKey,
+          outcome: {
+            solved: String(r.verdict ?? "").toUpperCase() === "AC",
+            attempts: 1,
+            testsPassedRatio: tt > 0 ? tp / tt : 0,
+          },
+        });
+        if (replaySnapshotsRef.current.length > 1) {
+          void saveSolveReplay({
+            snapshots: replaySnapshotsRef.current.slice(),
+            taskKind: "LIBRARY",
+            taskId: effectiveTaskId ?? undefined,
+            language: judgeLanguage,
+            durationMs: Date.now() - replayStartRef.current,
+            finalVerdict: r.verdict ?? undefined,
+          }).then((saved) => setLastReplayId(saved.id)).catch(() => { /* best-effort */ });
+        }
+        proctoring.reset();
+      } catch {
+        /* best-effort telemetry */
+      }
     } catch (e: unknown) {
       console.error("Check failed", e);
       const err = (typeof e === "object" && e !== null ? e : {}) as { response?: { status?: number; data?: unknown } };
@@ -1102,6 +1161,60 @@ export const LibraryTaskSolvePage: React.FC = () => {
                   </div>
                 </div>
               ) : null}
+
+              {(() => {
+                if (!hasToken || isWebTask) return null;
+                const verdict = checkResult?.verdict ?? null;
+                const failed = (checkResult?.publicTestResults ?? [])
+                  .filter((r) => !r.passed)
+                  .slice(0, 3)
+                  .map((r) => ({
+                    testId: r.testId,
+                    input: r.input ?? "",
+                    actual: r.actualOutput ?? "",
+                    verdict: r.verdict ?? undefined,
+                    stderr: r.error ?? null,
+                  }));
+                const stderr = (runResult && !runResult.success ? runResult.stderr : "") || checkResult?.compileError || "";
+                const hasError =
+                  (!!verdict && verdict.toUpperCase() !== "AC") ||
+                  failed.length > 0 ||
+                  (!!runResult && !runResult.success && !!stderr);
+                if (!hasError) return null;
+                const lang = String(judgeLanguage).toUpperCase() as "JAVA" | "PYTHON" | "CPP";
+                return (
+                  <div className="mb-3 flex flex-col gap-2">
+                    <ErrorExplainButton
+                      language={lang}
+                      code={code}
+                      verdict={verdict}
+                      stderr={stderr}
+                      taskTitle={task?.title}
+                      taskText={task?.description}
+                      failures={failed}
+                    />
+                    <DebugMentorChat
+                      language={lang}
+                      code={code}
+                      verdict={verdict}
+                      stderr={stderr}
+                      taskTitle={task?.title}
+                      taskText={task?.description}
+                      failures={failed}
+                    />
+                    {lastReplayId ? (
+                      <button
+                        type="button"
+                        className="self-start text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+                        onClick={() => navigate(`/replay/${lastReplayId}`)}
+                        title={tr("Переглянути запис свого розв'язання", "Watch your solve replay")}
+                      >
+                        {tr("⏪ Переглянути запис", "⏪ Watch replay")}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })()}
 
               {!hasToken ? (
                 <div className="text-xs text-text-secondary mb-3">

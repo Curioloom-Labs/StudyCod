@@ -12,6 +12,9 @@ import {
   FoldHorizontal,
   RefreshCw,
   GripVertical,
+  Megaphone,
+  X,
+  Eye,
   type LucideIcon,
 } from "lucide-react";
 import { EditorPanel } from "./EditorPanel";
@@ -93,6 +96,8 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   onFocusModeChange,
   canAskOrganizer,
   onAskOrganizer,
+  announcements,
+  focusLostCount,
 }) => {
   const [tabs, setTabs] = React.useState<WorkspaceTab[]>([tabTemplate("contest-overview"), tabTemplate("problem")]);
   const [activeTabId, setActiveTabId] = React.useState<string>("problem");
@@ -104,6 +109,13 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   const [dockWidth, setDockWidth] = React.useState(370);
   const [dockAttention, setDockAttention] = React.useState(false);
   const [mobileDockOpen, setMobileDockOpen] = React.useState(false);
+  const [dismissedAnnId, setDismissedAnnId] = React.useState<number | null>(null);
+
+  const latestAnnouncement = React.useMemo(() => {
+    const list = announcements ?? [];
+    return list.length ? list[0] : null;
+  }, [announcements]);
+  const showAnnouncement = latestAnnouncement && latestAnnouncement.id !== dismissedAnnId;
 
   const [shakeWrong, setShakeWrong] = React.useState(false);
   const [discussionText, setDiscussionText] = React.useState("");
@@ -442,13 +454,41 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
           </div>
           <div className="flex items-center gap-2 text-[11px]">
             <span className={`px-2 py-1 rounded-md border border-border bg-bg-base ${wsStatus === "connected" ? "text-accent-success" : wsStatus === "connecting" ? "text-accent-warn" : "text-text-secondary"}`}>
-              ws: {wsStatus}
+              live: {wsStatus === "connected" ? "on" : wsStatus === "connecting" ? "…" : "off"}
             </span>
             <span className={`px-2 py-1 rounded-md border border-border bg-bg-base ${latestVerdictTone === "accepted" ? "text-accent-success" : latestVerdictTone === "wrong" ? "text-accent-error" : "text-text-secondary"}`}>
               verdict: {latestVerdict ?? "—"}
             </span>
+            {typeof focusLostCount === "number" && focusLostCount > 0 ? (
+              <span
+                className="px-2 py-1 rounded-md border border-accent-warn/50 bg-accent-warn/10 text-accent-warn inline-flex items-center gap-1"
+                title="Times you left the contest tab. Organizers may monitor focus changes during a contest."
+              >
+                <Eye className="w-3.5 h-3.5" /> {focusLostCount}
+              </span>
+            ) : null}
           </div>
         </header>
+
+        {showAnnouncement && latestAnnouncement ? (
+          <div className="px-3 py-2 border-b border-accent-warn/40 bg-accent-warn/10 flex items-start gap-2">
+            <Megaphone className="w-4 h-4 text-accent-warn mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1 text-xs">
+              <div className="text-accent-warn font-semibold">
+                {announcements && announcements.length > 1 ? `Announcement (latest of ${announcements.length})` : "Announcement"}
+              </div>
+              <div className="text-text-primary whitespace-pre-wrap break-words line-clamp-3">{latestAnnouncement.text}</div>
+            </div>
+            <button
+              onClick={() => setDismissedAnnId(latestAnnouncement.id)}
+              className="text-text-secondary hover:text-text-primary shrink-0"
+              aria-label="Dismiss announcement"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : null}
 
         <div className="px-3 py-2 border-b border-border/60 bg-bg-surface/60">
           <div className="flex flex-wrap items-center gap-2">
@@ -637,7 +677,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
       <div className="hidden lg:block absolute bottom-4 left-3 md:left-[76px] right-3 md:right-4 pointer-events-none">
         <div className="rounded-xl border border-border/70 bg-bg-surface/70 px-3 py-2 text-[11px] text-text-secondary flex items-center justify-between gap-3">
           <span>{contestTitle} · {statement.problem.label} · {statement.task.title}</span>
-          <span className="text-text-secondary">stdin buffer: {runInput.length} chars · ws: {wsStatus}</span>
+          <span className="text-text-secondary">stdin buffer: {runInput.length} chars · live: {wsStatus}</span>
         </div>
       </div>
     </div>

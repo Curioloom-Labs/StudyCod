@@ -8,6 +8,9 @@ import { UserMode, UserRole } from '../entities/User';
 import { logger } from '../utils/logger';
 import { resolveUiLocaleFromHeaders, UiLocale } from '../utils/uiLocale';
 import { isJtiRevoked, wasTokenIssuedBeforeRevocation } from '../services/auth/jwtRevocation';
+import { getCachedUser, setCachedUser, type CachedUser } from '../services/auth/userCache';
+import { getStudentUiLangMarker, setStudentUiLangMarker } from '../services/auth/studentUiLangCache';
+import { setRequestContextFields } from '../utils/requestContextStore';
 
 export interface AuthRequest extends Request<ParamsFlatDictionary, any, any, any, Record<string, any>> {
   userId?: number;
@@ -41,10 +44,16 @@ type JwtPayload = {
 
 async function syncStudentUiLanguage(studentId: number, uiLanguage: UiLocale, requestId?: string): Promise<void> {
   try {
+    // Skip the per-request DB write while a recent Redis marker confirms the row
+    // is already synced. On a marker miss / Redis being unavailable we fall back
+    // to the idempotent UPDATE, so correctness never depends on Redis.
+    const marker = await getStudentUiLangMarker(studentId);
+    if (marker === uiLanguage) return;
     await AppDataSource.query(
       "UPDATE `students` SET `ui_language` = ? WHERE `id` = ? AND (`ui_language` IS NULL OR `ui_language` <> ?)",
       [uiLanguage, studentId, uiLanguage]
     );
+    void setStudentUiLangMarker(studentId, uiLanguage);
   } catch (err: any) {
     logger.warn("[auth] Failed to sync student ui_language", {
       requestId,
@@ -81,12 +90,41 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
   req.userType = "USER";
   req.principalId = userId;
 
-  const user = await AppDataSource.getRepository(User).findOne({
-    where: { id: userId },
-    select: ["id", "lang", "role", "userMode"]
-  });
+  // Try Redis first (short TTL). Falls back to DB transparently on miss /
+  // Redis unavailability. This collapses the per-request MySQL roundtrip for
+  // poll-heavy endpoints.
+  let user: CachedUser | null = null;
+  try {
+    user = await getCachedUser(userId);
+  } catch (err: any) {
+    logger.warn('[auth] user cache lookup failed, falling back to DB', {
+      userId,
+      requestId: req.requestId,
+      error: err?.message
+    });
+  }
 
-  if (!user) return "not-found";
+  if (!user) {
+    const row = await AppDataSource.getRepository(User).findOne({
+      where: { id: userId },
+      select: ["id", "lang", "role", "userMode"]
+    });
+    if (!row) return "not-found";
+    user = {
+      id: row.id,
+      lang: row.lang ?? null,
+      role: row.role ?? null,
+      userMode: row.userMode ?? null
+    };
+    // Fire-and-forget — failures to cache must never block a request.
+    void setCachedUser(user).catch(err => {
+      logger.warn('[auth] user cache write failed', {
+        userId,
+        requestId: req.requestId,
+        error: err?.message
+      });
+    });
+  }
 
   req.lang = user.lang || payload.lang;
   req.userRole = user.role || null;
@@ -135,6 +173,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         message: 'Invalid token'
       });
     }
+    if (req.principalId) setRequestContextFields({ principalId: req.principalId });
     next();
   } catch (error) {
     logger.warn('Token verification failed');

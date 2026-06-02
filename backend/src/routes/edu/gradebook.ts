@@ -11,9 +11,16 @@ import { AssessmentType, validateAssessmentType } from "../../types/AssessmentTy
 import { DEFAULT_GRADING_SYSTEM } from "../../types/GradingSystem";
 import { notifyStudentGradeChange } from "../../services/edu/gradeNotificationService";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
+import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { logger } from "../../utils/logger";
+import { buildLiveSnapshot, type LiveAttempt, type LiveStudent } from "../../services/edu/liveMonitor";
+import { buildSkillTree, type SkillTopicInput } from "../../services/learning/skillTree";
+import { buildProgressReportModel, renderProgressReportHtml } from "../../services/reports/progressReport";
+import { renderHtmlToPdf } from "../../services/certificates/CertificateRenderer";
 
 const router = Router();
+
+const studentRepo = () => AppDataSource.getRepository(Student);
 
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -212,7 +219,12 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
         } else {
           for (const task of lesson.tasks) {
             const grades = allGrades.filter(g => g.topicTask && g.topicTask.id === task.id);
-            const bestGrade = grades.length > 0 ? Math.max(...grades.map(g => g.total || 0)) : null;
+            // Use the LATEST attempt to stay consistent with the student-facing
+            // views (routes/edu/students.ts) and the authoritative control-work
+            // aggregation (services/edu/controlWorkGrading.ts), which all key off
+            // the most recent attempt. Previously this showed the BEST attempt's
+            // total while reporting the latest attempt's id/date — so a teacher
+            // could see a grade a student did not, and vice versa.
             const latestGrade = grades.length > 0 ? [...grades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] : null;
             flatGrades.push({
               taskId: task.id,
@@ -220,7 +232,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
               lessonId: lesson.id,
               lessonTitle: lesson.title,
               lessonType: lesson.type,
-              grade: bestGrade,
+              grade: latestGrade ? latestGrade.total : null,
               createdAt: latestGrade ? latestGrade.createdAt.toISOString() : null,
               gradeId: latestGrade ? latestGrade.id : null
             });
@@ -768,6 +780,218 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
+  }
+});
+
+// Live class monitor for a single topic-task: who is stuck / in-progress /
+// passed / not-started, refreshed by teacher polling. Teacher-of-class (or
+// admin) only. Read-only aggregation over edu_grades.
+router.get("/classes/:classId/topic-tasks/:taskId/live", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_VIEW_LIVE" });
+    }
+    if (!req.userId) {
+      return res.status(401).json({ message: "UNAUTHORIZED" });
+    }
+
+    const classId = parseInt(req.params.classId, 10);
+    const taskId = parseInt(req.params.taskId, 10);
+    if (isNaN(classId) || isNaN(taskId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    const cls = await classRepo().findOne({
+      where: isAdmin ? { id: classId } : { id: classId, teacher: { id: req.userId } },
+      relations: ["students"],
+    });
+    if (!cls) {
+      return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    }
+
+    const roster: LiveStudent[] = (cls.students || []).map((s) => ({
+      studentId: s.id,
+      name: `${s.lastName ?? ""} ${s.firstName ?? ""}`.trim() || `#${s.id}`,
+    }));
+
+    const grades = await gradeRepo().find({
+      where: { topicTask: { id: taskId } },
+      relations: ["student"],
+    });
+
+    const attempts: LiveAttempt[] = grades
+      .filter((g) => g.student)
+      .map((g) => {
+        const tp = Number(g.testsPassed ?? 0);
+        const tt = Number(g.testsTotal ?? 0);
+        const verdict = tt > 0 && tp >= tt ? "AC" : "WA";
+        return {
+          studentId: g.student.id,
+          verdict,
+          testsPassed: tp,
+          testsTotal: tt,
+          updatedAtMs: g.updatedAt ? new Date(g.updatedAt).getTime() : null,
+        };
+      });
+
+    disableCache(res);
+    return res.json(buildLiveSnapshot(roster, attempts, Date.now()));
+  } catch (error: any) {
+    logger.error("[edu/gradebook] live monitor failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Per-topic practice mastery (0..100) for a student, derived from actual
+// EduGrade rows. `TopicProgress.practiceAverage` is never written anywhere in
+// the backend (grades live in `edu_grades`), so reading it always yielded 0% —
+// the skill-tree and progress report must compute mastery from grades instead.
+//
+// Mastery for a topic = average of the latest attempt's grade across the
+// student's assigned PRACTICE tasks, with un-attempted tasks counted as 0 so
+// the value reflects progress through the topic (not just the best task done).
+async function computePracticeMasteryByTopic(
+  studentId: number,
+  classId: number
+): Promise<Map<number, { practiceAverage: number | null; started: boolean }>> {
+  const topics = await topicRepo()
+    .createQueryBuilder("topic")
+    .leftJoinAndSelect("topic.tasks", "task", "task.type = :practiceType", { practiceType: "PRACTICE" })
+    .where("topic.class_id = :classId", { classId })
+    .getMany();
+
+  // Latest practice grade per topicTask for this student. Ordered newest-first
+  // so the first row seen for a task is the latest attempt (mirrors the
+  // student-facing views in routes/edu/students.ts).
+  const grades = await gradeRepo()
+    .createQueryBuilder("grade")
+    .leftJoinAndSelect("grade.topicTask", "topicTask")
+    .where("grade.student_id = :studentId", { studentId })
+    .andWhere("grade.topic_task_id IS NOT NULL")
+    .orderBy("grade.created_at", "DESC")
+    .getMany();
+
+  const latestByTask = new Map<number, number>();
+  for (const g of grades) {
+    if (!g.topicTask) continue;
+    if (latestByTask.has(g.topicTask.id)) continue;
+    latestByTask.set(g.topicTask.id, clampGradeToInt(g.total));
+  }
+
+  const result = new Map<number, { practiceAverage: number | null; started: boolean }>();
+  for (const topic of topics) {
+    const tasks = (topic.tasks || []).filter((t) =>
+      isAssignedToStudent(t.isAssigned, (t as any).assignedStudentIds, studentId)
+    );
+    if (tasks.length === 0) {
+      result.set(topic.id, { practiceAverage: null, started: false });
+      continue;
+    }
+    let sum = 0;
+    let graded = 0;
+    for (const t of tasks) {
+      const val = latestByTask.get(t.id);
+      if (val != null) {
+        sum += val;
+        graded += 1;
+      }
+    }
+    result.set(topic.id, { practiceAverage: sum / tasks.length, started: graded > 0 });
+  }
+  return result;
+}
+
+// Personal skill-tree / concept map for the authenticated STUDENT: their class
+// topics as nodes with mastery (from graded practice tasks), linear
+// prerequisites, and the recommended next node.
+router.get("/my/skill-tree", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType !== "STUDENT" || !req.studentId) {
+      return res.status(403).json({ message: "ONLY_STUDENTS" });
+    }
+
+    const student = await studentRepo().findOne({ where: { id: req.studentId } as any, relations: ["class"] });
+    if (!student?.class) return res.status(404).json({ message: "NO_CLASS" });
+    const classId = student.class.id;
+
+    const topics = await topicRepo()
+      .createQueryBuilder("topic")
+      .where("topic.class_id = :classId", { classId })
+      .orderBy("topic.order", "ASC")
+      .getMany();
+
+    const masteryByTopic = await computePracticeMasteryByTopic(req.studentId, classId);
+
+    const inputs: SkillTopicInput[] = topics.map((t, i) => {
+      const m = masteryByTopic.get(t.id);
+      return {
+        id: t.id,
+        title: t.title,
+        order: t.order ?? i,
+        prerequisites: i > 0 ? [topics[i - 1].id] : [],
+        masteryPct: Math.max(0, Math.min(1, (Number(m?.practiceAverage) || 0) / 100)),
+        started: m?.started ?? false,
+      };
+    });
+
+    disableCache(res);
+    return res.json(buildSkillTree(inputs));
+  } catch (error: any) {
+    logger.error("[edu/gradebook] skill-tree failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Printable progress report (PDF) for the authenticated STUDENT.
+router.get("/my/progress-report.pdf", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType !== "STUDENT" || !req.studentId) {
+      return res.status(403).json({ message: "ONLY_STUDENTS" });
+    }
+    const student = await studentRepo().findOne({ where: { id: req.studentId } as any, relations: ["class"] });
+    if (!student?.class) return res.status(404).json({ message: "NO_CLASS" });
+
+    const topics = await topicRepo()
+      .createQueryBuilder("topic")
+      .where("topic.class_id = :classId", { classId: student.class.id })
+      .orderBy("topic.order", "ASC")
+      .getMany();
+
+    const masteryByTopic = await computePracticeMasteryByTopic(req.studentId, student.class.id);
+
+    const model = buildProgressReportModel({
+      studentName: `${student.lastName ?? ""} ${student.firstName ?? ""}`.trim() || `#${student.id}`,
+      className: (student.class as any).name ?? null,
+      generatedAt: new Date(),
+      topics: topics.map((t) => {
+        const m = masteryByTopic.get(t.id);
+        const practiceAverage = m?.practiceAverage ?? null;
+        const masteryPct = practiceAverage != null ? Math.max(0, Math.min(1, practiceAverage / 100)) : 0;
+        const status = masteryPct >= 0.8 ? "COMPLETED" : m?.started ? "IN_PROGRESS" : "NOT_STARTED";
+        return {
+          title: t.title,
+          masteryPct,
+          status,
+          practiceAverage,
+          controlGrade: null,
+        };
+      }),
+    });
+
+    const html = renderProgressReportHtml(model);
+    try {
+      const pdf = await renderHtmlToPdf(html, { landscape: false, format: "A4" });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'inline; filename="progress-report.pdf"');
+      return res.send(pdf);
+    } catch (renderErr: any) {
+      logger.warn("[edu/gradebook] progress-report PDF render unavailable", { requestId: req.requestId, error: renderErr?.message });
+      return res.status(503).json({ message: "PDF_RENDER_UNAVAILABLE" });
+    }
+  } catch (error: any) {
+    logger.error("[edu/gradebook] progress-report failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

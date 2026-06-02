@@ -23,14 +23,17 @@ function isNonJudgeableScaffoldingText(practicalText: string): boolean {
 }
 
 function hasFunctionTaskVerb(text: string): boolean {
-  return /(write|implement|define|create|declare|develop|build|design|make|реаліз|напис|створ|визнач|оголос|розроб|імплемент|опиш|склад(и|іть))/i.test(text);
+  // `напис` covers "написати/написав"; `напиш` is required for the imperative
+  // "напишіть/напиши" (напиш-, not напис-) — without it UA function-impl tasks
+  // slip through. Likewise `реалізуй` imperative alongside the `реаліз` stem.
+  return /(write|implement|define|create|declare|develop|build|design|make|реаліз|напиш|напис|створ|визнач|оголос|розроб|імплемент|опиш|склад(и|іть))/i.test(text);
 }
 
 function hasFunctionTaskNoun(text: string): boolean {
   return /(\bfunction\b|\bmethod\b|\bprocedure\b|функц|метод|процедур)/i.test(text);
 }
 
-function looksLikeFunctionImplementationTask(practicalText: string): boolean {
+export function looksLikeFunctionImplementationTask(practicalText: string): boolean {
   const raw = String(practicalText ?? "");
   const text = raw.toLowerCase();
 
@@ -85,9 +88,19 @@ export function rewriteNonJudgeablePracticalTaskToJudgeable(practicalTask: strin
   return rewritten;
 }
 
+// Topic titles where implementing a standalone function/method IS the lesson —
+// in those topics the "looks like function implementation" rejection would
+// destroy the curriculum. We still rely on the surrounding prompt to insist on
+// a `main()` driver, but the policy gate is relaxed.
+function isFunctionsTopic(title: string): boolean {
+  const t = String(title ?? "").toLowerCase();
+  return /(функц|метод|процедур|підпрограм|\bfunctions?\b|\bmethods?\b|\bprocedures?\b)/i.test(t);
+}
+
 export function getCurriculumPolicyViolationForGeneratedTask(params: {
   lang: SupportedLanguage;
   topicIndex?: number | null;
+  topicTitle?: string | null;
   title?: string | null;
   practicalTask?: string | null;
 }): string | null {
@@ -110,7 +123,11 @@ export function getCurriculumPolicyViolationForGeneratedTask(params: {
     }
   }
 
-  {
+  // Skip the "looks like function implementation" rejection when the topic IS
+  // about functions. Without this, every task on the "Functions" / "Methods"
+  // chapter would fail validation indefinitely.
+  const topicAboutFunctions = isFunctionsTopic(params.topicTitle ?? "");
+  if (!topicAboutFunctions) {
     if (looksLikeFunctionImplementationTask(practicalText)) {
       return "NON_JUDGEABLE_TASK: Task asks to implement a function/method instead of a full program with stdin/stdout. Such tasks require unit tests and cannot be auto-checked by stdout only.";
     }

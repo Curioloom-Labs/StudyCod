@@ -6,6 +6,8 @@ import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../../
 import { AIResponseValidator, AIValidationError } from './AIResponseValidator';
 import { logger } from '../../utils/logger';
 import { redisKey, runWithRedis } from '../redis/sharedRedis';
+import { BoundedCache } from '../../utils/boundedCache';
+import { env } from '../../env';
 
 export type LLMTaskLanguage = "JAVA" | "PYTHON" | "CPP";
 
@@ -49,33 +51,15 @@ type TaskAnchor = {
   forbiddenScope: string[];
 };
 
-function parseEnvInt(envVar: string, fallbackValue: number, minValue: number, maxValue: number): number {
-  const raw = String(process.env[envVar] ?? '').trim();
-  const n = raw ? Number(raw) : NaN;
-  const v = Number.isFinite(n) ? Math.floor(n) : fallbackValue;
-  return Math.max(minValue, Math.min(maxValue, v));
-}
-
-function parseEnvTimeoutMs(envVar: string, fallbackMs: number, minMs: number, maxMs: number): number {
-  return parseEnvInt(envVar, fallbackMs, minMs, maxMs);
-}
-
-function parseEnvBoolean(envVar: string, fallbackValue: boolean): boolean {
-  const raw = String(process.env[envVar] ?? '').trim().toLowerCase();
-  if (!raw) return fallbackValue;
-  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true;
-  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false;
-  return fallbackValue;
-}
-
-// Default is intentionally above 30s to reduce 504s from upstream on slower generations.
-// NOTE: ensure your reverse proxy (e.g., nginx proxy_read_timeout) is >= this value.
-const LLM_TASK_TIMEOUT_MS = parseEnvTimeoutMs('LLM_TASK_TIMEOUT_MS', 45_000, 10_000, 120_000);
-const LLM_TASK_MAX_TOKENS = parseEnvInt('LLM_TASK_MAX_TOKENS', 2600, 1200, 4000);
-const LLM_TASK_THEORY_CONTEXT_CHARS = parseEnvInt('LLM_TASK_THEORY_CONTEXT_CHARS', 1200, 400, 3000);
-const LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS = parseEnvInt('LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS', 1200, 400, 3000);
-const LLM_TASK_ANCHOR_CACHE_TTL_MS = parseEnvTimeoutMs('LLM_TASK_ANCHOR_CACHE_TTL_MS', 30 * 60 * 1000, 10_000, 24 * 60 * 60 * 1000);
-const LLM_TASK_ANCHOR_CACHE_ENABLED = parseEnvBoolean('LLM_TASK_ANCHOR_CACHE_ENABLED', true);
+// Tunables sourced from env.ts so values are parsed, validated and bounded
+// in one place. Reverse proxies (e.g., nginx proxy_read_timeout) must be
+// >= LLM_TASK_TIMEOUT_MS to avoid 504s on slower generations.
+const LLM_TASK_TIMEOUT_MS = env.__llmTaskTimeoutMs;
+const LLM_TASK_MAX_TOKENS = env.__llmTaskMaxTokens;
+const LLM_TASK_THEORY_CONTEXT_CHARS = env.__llmTaskTheoryContextChars;
+const LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS = env.__llmTaskPreviousTasksContextChars;
+const LLM_TASK_ANCHOR_CACHE_TTL_MS = env.__llmTaskAnchorCacheTtlMs;
+const LLM_TASK_ANCHOR_CACHE_ENABLED = env.__llmTaskAnchorCacheEnabled;
 
 function cloneTaskAnchor(anchor: TaskAnchor): TaskAnchor {
   return {
@@ -207,10 +191,13 @@ export class LLMOrchestrator {
   private cloudflareProvider: CloudflareAIProvider;
   private openRouterProvider: OpenRouterProvider;
   private localProvider: LocalLLMProvider;
-  private static readonly taskAnchorCache = new Map<string, {
-    anchor: TaskAnchor;
-    expiresAt: number;
-  }>();
+  // Bounded LRU+TTL: previously a Map with size-256-trigger that only evicted
+  // expired entries — under hot traffic with fresh entries it could grow
+  // unboundedly across long-lived processes.
+  private static readonly taskAnchorCache = new BoundedCache<string, TaskAnchor>({
+    maxEntries: 512,
+    ttlMs: LLM_TASK_ANCHOR_CACHE_TTL_MS
+  });
   constructor() {
     this.cloudflareProvider = new CloudflareAIProvider();
     this.openRouterProvider = new OpenRouterProvider();
@@ -219,13 +206,9 @@ export class LLMOrchestrator {
 
   private async getCachedTaskAnchor(cacheKey: string): Promise<TaskAnchor | null> {
     if (!LLM_TASK_ANCHOR_CACHE_ENABLED) return null;
-    const record = LLMOrchestrator.taskAnchorCache.get(cacheKey);
-    if (!record) return null;
-    if (record.expiresAt <= Date.now()) {
-      LLMOrchestrator.taskAnchorCache.delete(cacheKey);
-      return null;
-    }
-    return cloneTaskAnchor(record.anchor);
+    const anchor = LLMOrchestrator.taskAnchorCache.get(cacheKey);
+    if (!anchor) return null;
+    return cloneTaskAnchor(anchor);
   }
 
   private async getCachedTaskAnchorFromRedis(cacheKey: string): Promise<TaskAnchor | null> {
@@ -239,10 +222,7 @@ export class LLMOrchestrator {
       const parsed = JSON.parse(raw);
       if (!isTaskAnchor(parsed)) return null;
       const anchor = cloneTaskAnchor(parsed);
-      LLMOrchestrator.taskAnchorCache.set(cacheKey, {
-        anchor,
-        expiresAt: Date.now() + LLM_TASK_ANCHOR_CACHE_TTL_MS,
-      });
+      LLMOrchestrator.taskAnchorCache.set(cacheKey, anchor);
       return anchor;
     } catch {
       return null;
@@ -252,10 +232,7 @@ export class LLMOrchestrator {
   private setCachedTaskAnchor(cacheKey: string, anchor: TaskAnchor): void {
     if (!LLM_TASK_ANCHOR_CACHE_ENABLED) return;
     const normalizedAnchor = cloneTaskAnchor(anchor);
-    LLMOrchestrator.taskAnchorCache.set(cacheKey, {
-      anchor: normalizedAnchor,
-      expiresAt: Date.now() + LLM_TASK_ANCHOR_CACHE_TTL_MS
-    });
+    LLMOrchestrator.taskAnchorCache.set(cacheKey, normalizedAnchor);
 
     void runWithRedis('llm anchor cache set', async redis => {
       await redis.set(taskAnchorRedisKey(cacheKey), JSON.stringify(normalizedAnchor), {
@@ -263,16 +240,6 @@ export class LLMOrchestrator {
       });
       return true;
     });
-
-    // Prevent unbounded growth if service stays hot for a long time.
-    if (LLMOrchestrator.taskAnchorCache.size > 256) {
-      const now = Date.now();
-      for (const [key, value] of LLMOrchestrator.taskAnchorCache.entries()) {
-        if (value.expiresAt <= now) {
-          LLMOrchestrator.taskAnchorCache.delete(key);
-        }
-      }
-    }
   }
 
   private normalizeTemplateTodoComments(params: {
@@ -337,6 +304,8 @@ export class LLMOrchestrator {
     signal?: AbortSignal;
     /** Semantic-gate retries inside generateTaskFromAnchor (0..2). */
     semanticRetries?: number;
+    /** Inbound request id for trace correlation across HTTP -> orchestrator. */
+    requestId?: string;
   }): Promise<AiTaskGenerationResult> {
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
@@ -420,6 +389,7 @@ export class LLMOrchestrator {
     topicId?: number;
     language?: "uk" | "en";
     signal?: AbortSignal;
+    requestId?: string;
   }, providerOverride?: LLMProvider): Promise<{
     topic: string;
     coreOperation: string;
@@ -465,18 +435,18 @@ export class LLMOrchestrator {
 
 CRITICALLY IMPORTANT:
 - The "topic" field in JSON MUST exactly match "${params.topicTitle}" (1:1)
-- coreOperation: ONE clear statement of what exactly needs to be done (not a list, not many actions)
-- allowedScope: what is allowed in the task
-- forbiddenScope: what is strictly forbidden (other topics, other operations)
+- coreOperation: ONE clear statement of what exactly needs to be done (always emphasize: "write a complete program that...")
+- allowedScope: what is allowed in the task (must include "complete program with main()")
+- forbiddenScope: ALWAYS include: "standalone function/method/class implementation" and "unit tests" — even if the topic is about functions, the task must be about writing a complete program, not just implementing a function
 
 Return ONLY JSON without explanations.`
       : `Створи semantic anchor для завдання з теми "${params.topicTitle}" (мова: ${langName}).
 
 КРИТИЧНО ВАЖЛИВО:
 - Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.topicTitle}" точно (1:1)
-- coreOperation: ОДНА дія, що саме потрібно зробити (не список, не багато дій)
-- allowedScope: що дозволено робити в завданні
-- forbiddenScope: що категорично заборонено робити (інші теми, інші операції)
+- coreOperation: ОДНА дія, що саме потрібно зробити (завжди наголошуй: "напиши повну програму, яка...")
+- allowedScope: що дозволено робити в завданні (ОБОВ'ЯЗКОВО "повна програма з main()")
+- forbiddenScope: ЗАВЖДИ включай: "реалізація окремих функцій/методів/класів" та "unit-тести" — навіть якщо тема про функції, завдання ПОВИННО бути про написання повної програми, а не просто реалізацію функції
 
 Поверни ТІЛЬКИ JSON без пояснень.`;
     const expectedTopic = params.topicTitle.trim();
@@ -487,18 +457,35 @@ Return ONLY JSON without explanations.`
     const fallbackAnchor = isEnglish ? {
       topic: expectedTopic,
       coreOperation: `Solve a problem on the topic "${expectedTopic}" and output the result to stdout`,
-      allowedScope: [expectedTopic, 'basic language constructs', 'stdout output'],
-      forbiddenScope: ['multi-task structure', 'compiler meta-messages', 'creating files/projects']
+      allowedScope: [expectedTopic, 'basic language constructs', 'stdout output', 'complete program with main()'],
+      forbiddenScope: [
+        'multi-task structure',
+        'compiler meta-messages',
+        'creating files/projects',
+        'implementing standalone functions/methods/classes',
+        'writing unit tests instead of a complete program',
+        'asking for just a function body without main()',
+        'IDE/build tool configuration'
+      ]
     } : {
       topic: expectedTopic,
       coreOperation: `Розв'язати задачу з теми "${expectedTopic}" та вивести результат у stdout`,
-      allowedScope: [expectedTopic, 'базові конструкції мови', 'вивід у stdout'],
-      forbiddenScope: ['multi-task структура', 'мета-повідомлення компілятора', 'створення файлів/проєктів']
+      allowedScope: [expectedTopic, 'базові конструкції мови', 'вивід у stdout', 'повна програма з main()'],
+      forbiddenScope: [
+        'multi-task структура',
+        'мета-повідомлення компілятора',
+        'створення файлів/проєктів',
+        'реалізація окремих функцій/методів/класів',
+        'написання unit-тестів замість повної програми',
+        'просити писати лише тіло функції без main()',
+        'налаштування IDE/інструментів збірки'
+      ]
     };
 
     const cachedAnchor = await this.getCachedTaskAnchor(cacheKey);
     if (cachedAnchor) {
       logger.debug('[llm] using cached task anchor', {
+        requestId: params.requestId,
         userId: params.userId,
         topicId: params.topicId,
         topic: expectedTopic,
@@ -510,6 +497,7 @@ Return ONLY JSON without explanations.`
     const redisCachedAnchor = await this.getCachedTaskAnchorFromRedis(cacheKey);
     if (redisCachedAnchor) {
       logger.debug('[llm] using redis-cached task anchor', {
+        requestId: params.requestId,
         userId: params.userId,
         topicId: params.topicId,
         topic: expectedTopic,
@@ -557,6 +545,7 @@ Return ONLY JSON without explanations.`
         const topic = parsedTopic === expectedTopic ? parsedTopic : expectedTopic;
         if (parsedTopic !== expectedTopic) {
           logger.warn('[llm] anchor topic mismatch, forced expected topic', {
+            requestId: params.requestId,
             expectedTopic,
             receivedTopic: parsedTopic,
             userId: params.userId,
@@ -576,6 +565,7 @@ Return ONLY JSON without explanations.`
       } catch (err) {
         lastErr = err;
         logger.warn('[llm] anchor generation attempt failed', {
+          requestId: params.requestId,
           attempt,
           maxAnchorAttempts,
           userId: params.userId,
@@ -586,6 +576,7 @@ Return ONLY JSON without explanations.`
     }
 
     logger.warn('[llm] using fallback anchor after failed anchor attempts', {
+      requestId: params.requestId,
       userId: params.userId,
       topicId: params.topicId,
       expectedTopic,
@@ -613,6 +604,7 @@ Return ONLY JSON without explanations.`
     language?: "uk" | "en";
     signal?: AbortSignal;
     semanticRetries?: number;
+    requestId?: string;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
@@ -725,7 +717,15 @@ SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
 ${difficultyPrompt}
 `;
 
-    const instructionsUa = `
+    const instructionsUa = `${stdinAllowed ? '' : `
+🚫 IO-ПОЛІТИКА ЦІЄЇ ТЕМИ (НАЙВИЩИЙ ПРІОРИТЕТ) 🚫
+ВВІД ЗАБОРОНЕНО. Постав ioType = NO_INPUT_FIXED_OUTPUT (або NO_INPUT_FREE_OUTPUT). Програма НЕ читає stdin: жодних input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". Якщо нижче щось підказує читати ввід — ІГНОРУЙ, ця політика головніша.
+`}
+⚠️ ПЕРШ ЛІЖ УСЬОГО — ОСНОВНЕ ПРАВИЛО ⚠️
+ЗАВДАННЯ ОБОВ'ЯЗКОВО ПОВИННО ВИМАГАТИ ПОВНОЇ ПРОГРАМИ (Програма = код зі STDIN/STDOUT або без вводу).
+ЯКЩО ТИ НАПИШЕШ, ЩО СТУДЕНТ ПОВИНЕН РЕАЛІЗУВАТИ ФУНКЦІЮ/МЕТОД/КЛАС (ЗАМІСТЬ ПОВНОЇ ПРОГРАМИ) — ЗАВДАННЯ БУДЕ АВТОМАТИЧНО ВІДХИЛЕНО.
+ЖОДНОЇ ЧАСТИНИ ФУНКЦІЙ, ЖОДНИХ UNIT-ТЕСТІВ, ЖОДНИХ КЛАССІВ — ТІЛЬКИ ПОВНА ПРОГРАМА З main().
+
 КРИТИЧНО ВАЖЛИВО:
 1. Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}" (immutable)
 2. Практичне завдання (practicalTask) ОБОВ'ЯЗКОВО має містити "${params.anchor.coreOperation}"
@@ -740,6 +740,16 @@ ${difficultyPrompt}
 - ЗАБОРОНЕНО: вимагати реалізувати окрему функцію/метод/клас замість повної програми; завдання має бути розв'язане через stdin/stdout.
 - ЗАБОРОНЕНО: просити створювати файли/папки/проєкти, налаштовувати IDE/компілятор, CMake/Makefile, структуру src/include тощо.
 - Якщо тема про структуру проєкту — перетвори це на програмне завдання (наприклад: вивести текст/схему структури), але все одно лише через stdout.
+
+КОНКРЕТНІ ПРИКЛАДИ:
+✓ ДОБРЕ (повна програма зі stdin/stdout):
+  "Напиши програму, яка читає два цілих числа зі stdin та виводить їх суму у stdout."
+✗ ПОГАНО (тільки функція — ЗАБОРОНЕНО):
+  "Реалізуй функцію sum(a, b), яка повертає суму двох чисел."
+✓ ДОБРЕ (без вводу, фіксований вивід):
+  "Напиши програму, яка виводить у stdout текст: Привіт, світ!"
+✗ ПОГАНО (вимагає unit-тестів — ЗАБОРОНЕНО):
+  "Напиши функцію, яка перевіряє, чи число просте."
 
 ЯКІСТЬ УМОВИ (важливо для студентів):
 - practicalTask має бути пізнавальним, цікавим і зрозумілим: мінімум 4–6 речень зв'язного тексту (1–2 абзаци), з природним стилем як у класичній умові задачі.
@@ -807,12 +817,33 @@ ${uniquenessBlock}
 - Заборонено формулювати NO_INPUT_FIXED_OUTPUT задачі так, щоб значення або формат були "як завгодно".
   Якщо немає вводу, ти МАЄШ задати конкретні значення в умові (наприклад: integer=10, float=3.14, ...)
   і вимагати точний формат виводу (наприклад 4 рядки з мітками).
-- Якщо ти хочеш перевіряти оголошення/присвоєння змінних, але не хочеш фіксувати значення — обирай STDIN_STDOUT і читай значення зі stdin.
+${stdinAllowed
+  ? '- Якщо ти хочеш перевіряти оголошення/присвоєння змінних, але не хочеш фіксувати значення — обирай STDIN_STDOUT і читай значення зі stdin.'
+  : '- STDIN_STDOUT ЗАБОРОНЕНО на цьому етапі: НЕ читай stdin (жодних input()/Scanner/cin). Навіть для завдань про оголошення/присвоєння змінних — задай конкретні значення прямо в умові (наприклад x=10, y=3.14) і вимагай точний детермінований вивід (NO_INPUT_FIXED_OUTPUT).'}
 - NO_INPUT_FREE_OUTPUT використовуй ТІЛЬКИ для завдань, де за задумом приймається будь-який непорожній stdout (наприклад: "виведіть будь-яке привітання").
+
+ЕТАЛОН ЯКОСТІ УМОВИ (це приклад лише СТИЛЮ — НЕ копіюй тему, сюжет чи числа):
+"Магазин щодня записує температуру у холодильній вітрині. Сьогодні зранку термометр показував 8 градусів, а до обіду температура піднялася ще на 5. Порахуй, скільки градусів показує термометр зараз. Необхідно вивести одне ціле число — підсумкову температуру."
+Чому добре: короткий живий контекст, чітко сказано ЩО рахувати і ЩО САМЕ вивести, рівно один детермінований результат.
+
+САМОПЕРЕВІРКА ПЕРЕД ВІДПОВІДДЮ (обов'язково, інакше завдання погане):
+1) Подумки виконай свою програму на КОЖНОМУ прикладі й переконайся, що examples[i].output збігається з реальним виводом СИМВОЛ-У-СИМВОЛ (включно з пробілами/переносами).
+2) Умова має спиратися ЛИШЕ на поняття з наданої теорії — нічого, чого студент на цьому етапі ще не вчив.
+3) Складність відповідає вказаному рівню: не легше і не важче.
+4) Сюжет, числа й формулювання НЕ банальні (заборонені кліше типу "сума двох чисел", "hello world", "знайдіть більше з двох") і відрізняються від типових прикладів.
+5) practicalTask читається як жива умова (4–6 зв'язних речень), а не сухий технічний рядок.
 
 Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
 `;
-    const instructionsEn = `
+    const instructionsEn = `${stdinAllowed ? '' : `
+🚫 IO POLICY FOR THIS STAGE (HIGHEST PRIORITY) 🚫
+INPUT IS FORBIDDEN. Set ioType = NO_INPUT_FIXED_OUTPUT (or NO_INPUT_FREE_OUTPUT). The program does NOT read stdin: no input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". If anything below hints at reading input — IGNORE it, this policy wins.
+`}
+⚠️ MOST CRITICAL RULE — READ THIS FIRST ⚠️
+THE TASK MUST REQUIRE WRITING A COMPLETE FULL PROGRAM (Program = code with STDIN/STDOUT or no input with fixed output).
+IF YOU WRITE THAT A STUDENT MUST IMPLEMENT A FUNCTION/METHOD/CLASS (INSTEAD OF A FULL PROGRAM) — THE TASK WILL BE AUTOMATICALLY REJECTED.
+NO FUNCTION STUBS, NO UNIT TESTS, NO CLASSES — ONLY A COMPLETE RUNNABLE PROGRAM WITH main().
+
 CRITICALLY IMPORTANT:
 1. The "topic" field in JSON MUST be equal to "${params.anchor.topic}" (immutable)
 2. The practical task (practicalTask) MUST contain "${params.anchor.coreOperation}"
@@ -827,6 +858,16 @@ PLATFORM / AUTO-CHECK (mandatory):
 - FORBIDDEN: ask to implement a standalone function/method/class instead of a full program; the task must be solved via stdin/stdout.
 - FORBIDDEN: asking to create files/folders/projects, configure IDE/compiler, CMake/Makefile, src/include structure, etc.
 - If the topic is about project structure — turn it into a programming task (e.g., output the text/diagram of the structure), but still only via stdout.
+
+CONCRETE EXAMPLES:
+✓ GOOD (full program with stdin/stdout):
+  "Write a program that reads two integers from stdin and outputs their sum to stdout."
+✗ BAD (function-only - FORBIDDEN):
+  "Implement a function sum(a, b) that returns the sum of two numbers."
+✓ GOOD (no input, fixed output):
+  "Write a program that outputs to stdout: Hello, world!"
+✗ BAD (requires unit tests - FORBIDDEN):
+  "Write a function that checks if a number is prime."
 
 QUALITY OF STATEMENT (important for students):
 - practicalTask must be informative, interesting, and clear: at least 4–6 sentences of connected text (1–2 paragraphs), with a natural style as in a classic problem statement.
@@ -894,8 +935,21 @@ CRITICAL FOR DETERMINISM:
 - Forbidden to formulate NO_INPUT_FIXED_OUTPUT tasks so that values or format are "any".
   If there is no input, you MUST specify specific values in the statement (e.g., integer=10, float=3.14, ...)
   and require an exact output format (e.g., 4 lines with labels).
-- If you want to check variable declaration/assignment but don't want to fix values — choose STDIN_STDOUT and read values from stdin.
+${stdinAllowed
+  ? '- If you want to check variable declaration/assignment but don\'t want to fix values — choose STDIN_STDOUT and read values from stdin.'
+  : '- STDIN_STDOUT is FORBIDDEN at this stage: do NOT read stdin (no input()/Scanner/cin). Even for variable declaration/assignment tasks — specify concrete values directly in the statement (e.g. x=10, y=3.14) and require an exact deterministic output (NO_INPUT_FIXED_OUTPUT).'}
 - Use NO_INPUT_FREE_OUTPUT ONLY for tasks where any non-empty stdout is intended to be accepted (e.g., "output any greeting").
+
+QUALITY EXEMPLAR (style only — do NOT copy this topic, plot or numbers):
+"A shop logs the temperature inside its fridge display every day. This morning the thermometer read 8 degrees, and by noon it rose by another 5. Work out what the thermometer shows now. You must output a single integer — the resulting temperature."
+Why it's good: short living context, clearly states WHAT to compute and WHAT exactly to output, exactly one deterministic result.
+
+SELF-CHECK BEFORE ANSWERING (mandatory, otherwise the task is bad):
+1) Mentally run your program on EVERY example and confirm examples[i].output matches the real output CHARACTER-BY-CHARACTER (including spaces/newlines).
+2) The statement must rely ONLY on concepts from the provided theory — nothing the student hasn't learned yet at this stage.
+3) Difficulty matches the stated level: not easier, not harder.
+4) The plot, numbers and wording are NOT trivial (clichés like "sum of two numbers", "hello world", "max of two" are forbidden) and differ from typical examples.
+5) practicalTask reads like a living statement (4–6 connected sentences), not a dry technical line.
 
 Respond ONLY with JSON, without markdown blocks, without explanations.
 `;
@@ -917,7 +971,7 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
           userId: params.userId,
           topicId: params.topicId,
           signal: params.signal,
-          temperature: 0.2,
+          temperature: 0.15,
           maxTokens: LLM_TASK_MAX_TOKENS
         });
         const validated = AIResponseValidator.validateGenerateTask(parsed, params.anchor.topic);
@@ -982,6 +1036,7 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
     language?: "uk" | "en";
     signal?: AbortSignal;
     semanticRetries?: number;
+    requestId?: string;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
     const anchor = await this.generateTaskAnchor({
@@ -990,7 +1045,8 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
       userId: params.userId,
       topicId: params.topicId,
       language: params.language,
-      signal: params.signal
+      signal: params.signal,
+      requestId: params.requestId
     }, provider);
     const result = await this.generateTaskFromAnchor({
       topicTitle: params.topicTitle,
@@ -1005,7 +1061,8 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
       topicId: params.topicId,
       language: params.language,
       signal: params.signal,
-      semanticRetries: params.semanticRetries
+      semanticRetries: params.semanticRetries,
+      requestId: params.requestId
     }, provider);
     return result;
   }

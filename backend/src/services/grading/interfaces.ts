@@ -1,9 +1,17 @@
+import type { CheckerSpec } from "../judgeWorker/types";
+
 export interface CodeSubmission {
   code: string;
   language: "JAVA" | "PYTHON";
   taskId: number;
   userId: number;
   testData: TestDataItem[];
+  /**
+   * Optional output-comparison policy for this task. When omitted, grading
+   * falls back to the historical lenient comparison (no behaviour change).
+   * Populate it (e.g. from the task's persisted checkerSpec) to grade strictly.
+   */
+  checker?: CheckerSpec | null;
 }
 export interface TestDataItem {
   input: string;

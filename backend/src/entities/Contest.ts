@@ -14,6 +14,7 @@ import { ContestProblem } from "./ContestProblem";
 import { ContestParticipant } from "./ContestParticipant";
 
 export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS";
+export type ContestScoringMode = "IOI" | "ICPC";
 
 @Entity("contests")
 export class Contest {
@@ -58,6 +59,18 @@ export class Contest {
   // These submissions must NOT affect the official contest scoreboard.
   @Column({ type: "boolean", default: true, name: "allow_upsolve" })
   allowUpsolve!: boolean;
+
+  // Ranking model for the live scoreboard:
+  //  - IOI: rank by sum of best partial score per problem (default, matches the
+  //    submit pipeline which records partial/subtask scores).
+  //  - ICPC: rank by problems solved, then penalty (time to first AC + wrong tries).
+  @Column({
+    type: "enum",
+    enum: ["IOI", "ICPC"],
+    default: "IOI",
+    name: "scoring_mode",
+  })
+  scoringMode!: ContestScoringMode;
 
   @OneToMany(() => ContestProblem, (p) => p.contest)
   problems!: ContestProblem[];

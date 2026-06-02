@@ -25,6 +25,7 @@ export class User {
   @PrimaryGeneratedColumn()
   id!: number;
   @Column({
+    type: "varchar",
     unique: true
   })
   username!: string;
@@ -78,7 +79,7 @@ export class User {
     name: "password_reset_expires"
   })
   passwordResetExpires?: Date | null;
-  @Column()
+  @Column({ type: "varchar" })
   password!: string;
   @Column({
     type: "enum",

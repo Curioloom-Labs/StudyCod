@@ -21,6 +21,8 @@ if (distributedRequested && !redisReady) {
 export const distributedJudgeQueue = new DistributedJudgeQueue({
   enabled: distributedEnabled,
   maxConcurrent: readInt((env as any).__maxConcurrentExecutions, 12, 1),
+  // 0 => queue clamps to the per-instance cap (preserves single-instance behaviour).
+  maxGlobalConcurrent: readInt((env as any).__maxGlobalConcurrentExecutions, 0, 0),
   maxQueueSize: readInt((env as any).__maxExecutionQueueSize, 50, 0),
   maxRetries: readInt((env as any).__executionQueueMaxRetries, 2, 0),
   deadLetterMaxItems: readInt((env as any).__executionQueueDeadLetterMaxItems, 1000, 10),

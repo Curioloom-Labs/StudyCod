@@ -1,4 +1,5 @@
 export * from "./AdminDashboardPage";
+export * from "./CookiePolicyPage";
 export * from "./DevEditorPage";
 export * from "./DocsPage";
 export * from "./MaintenancePage";

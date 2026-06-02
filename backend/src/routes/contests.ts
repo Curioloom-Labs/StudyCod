@@ -24,6 +24,8 @@ import { env } from "../env";
 import { FRONTEND_URL } from "../config";
 import { emailService } from "../services/emailService";
 import { certificateService } from "../services/certificates/CertificateService";
+import { computeScoreboard, type ScoreboardSubmission } from "../services/contest/scoreboard";
+import { publishContestEvent, subscribeContestEvents, type ContestEvent } from "../services/contest/contestEvents";
 
 const contestsRouter = Router();
 
@@ -371,6 +373,23 @@ async function ensureContestAdminTables(): Promise<void> {
       `
     );
 
+    await AppDataSource.query(
+      `
+      CREATE TABLE IF NOT EXISTS contest_integrity_events (
+        id BIGINT NOT NULL AUTO_INCREMENT,
+        contest_id INT NOT NULL,
+        participant_id INT NOT NULL,
+        event_type VARCHAR(32) NOT NULL,
+        detail VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        INDEX idx_contest_integrity_contest (contest_id),
+        INDEX idx_contest_integrity_participant (participant_id),
+        INDEX idx_contest_integrity_contest_participant (contest_id, participant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `
+    );
+
     await ensureContestParticipantNotificationColumns();
   })();
   return ensureContestAdminTablesPromise;
@@ -613,6 +632,63 @@ async function ensureContestCommunityTables(): Promise<void> {
 }
 
 // Contest community feed (questions + announcements)
+// Live ICPC-style scoreboard. Read-only aggregation over contest submissions.
+contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = parseInt(req.params.id, 10);
+    if (isNaN(contestId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId } as any });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const subs = await submissionRepo().find({
+      where: { contest: { id: contestId } } as any,
+      relations: ["participant", "problem"] as any,
+    });
+
+    const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
+    const submissionTimes = subs.map((s) => new Date(s.createdAt).getTime());
+    const startMs = contest.startsAt
+      ? new Date(contest.startsAt).getTime()
+      : submissionTimes.length
+        ? Math.min(...submissionTimes)
+        : Date.now();
+
+    const scoreSubs: ScoreboardSubmission[] = subs
+      .filter((s) => s.participant && s.problem)
+      .map((s) => ({
+        participantId: s.participant.id,
+        problemId: s.problem.id,
+        verdict: s.verdict ?? null,
+        createdAtMs: new Date(s.createdAt).getTime(),
+      }))
+      // Only count submissions made during the contest window (exclude upsolve).
+      .filter((s) => endsAtMs == null || s.createdAtMs <= endsAtMs);
+
+    const board = computeScoreboard(scoreSubs, { startMs, penaltyPerWrong: 20 });
+
+    const participants: Record<number, string> = {};
+    const problems: Record<number, string> = {};
+    for (const s of subs) {
+      if (s.participant) participants[s.participant.id] = String((s.participant as any).displayName ?? `#${s.participant.id}`);
+      if (s.problem) problems[s.problem.id] = String((s.problem as any).label ?? `#${s.problem.id}`);
+    }
+
+    res.set("Cache-Control", "no-store");
+    return res.json({
+      rows: board.rows,
+      generatedAtMs: board.generatedAtMs,
+      startMs,
+      endsAtMs,
+      participants,
+      problems,
+    });
+  } catch (error: any) {
+    logger.warn("[contests] scoreboard failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 contestsRouter.get("/:id/community", authOptional, async (req: AuthRequest, res: Response) => {
   try {
     const contestId = Number(req.params.id);
@@ -901,6 +977,15 @@ contestsRouter.post("/:id/community/announcements", authRequired, async (req: Au
     const a = rows[0];
     if (!a) return res.status(500).json({ message: "CREATE_FAILED" });
 
+    // Push the new announcement to live SSE subscribers.
+    publishContestEvent(contestId, {
+      kind: "announcement",
+      id: Number(a.id),
+      text: String(a.text ?? ""),
+      author: String(a.author ?? "organizer"),
+      at: Date.now(),
+    });
+
     return res.json({
       announcement: {
         id: Number(a.id),
@@ -1027,6 +1112,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       endsAt: z.string().datetime().optional(),
       isPublished: z.boolean().optional(),
       allowUpsolve: z.boolean().optional(),
+      scoringMode: z.enum(["IOI", "ICPC"]).optional(),
     });
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) {
@@ -1058,6 +1144,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       endsAt: data.endsAt ? new Date(data.endsAt) : null,
       isPublished: typeof data.isPublished === "boolean" ? data.isPublished : false,
       allowUpsolve: typeof data.allowUpsolve === "boolean" ? data.allowUpsolve : true,
+      scoringMode: data.scoringMode ?? "IOI",
     });
     const saved: Contest = await contestRepo().save(contest as any);
     return res.json({ id: saved.id });
@@ -1091,6 +1178,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
         endsAt: z.string().datetime().nullable().optional(),
         isPublished: z.boolean().optional(),
         allowUpsolve: z.boolean().optional(),
+        scoringMode: z.enum(["IOI", "ICPC"]).optional(),
       })
       .refine((v) => Object.keys(v).length > 0, { message: "EMPTY_PATCH" });
 
@@ -1112,6 +1200,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     if (data.endsAt !== undefined) contest.endsAt = nextEndsAt;
     if (data.isPublished !== undefined) contest.isPublished = data.isPublished;
     if (data.allowUpsolve !== undefined) (contest as any).allowUpsolve = data.allowUpsolve;
+    if (data.scoringMode !== undefined) (contest as any).scoringMode = data.scoringMode;
 
     const saved = await contestRepo().save(contest as any);
     return res.json({
@@ -1121,6 +1210,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       startsAt: saved.startsAt ? new Date(saved.startsAt).toISOString() : null,
       endsAt: saved.endsAt ? new Date(saved.endsAt).toISOString() : null,
       allowUpsolve: (saved as any).allowUpsolve ?? true,
+      scoringMode: (saved as any).scoringMode ?? "IOI",
     });
   } catch (error: any) {
     logger.error("[contests] PATCH /:id error", { requestId: req.requestId, userId: req.userId, err: error });
@@ -1183,6 +1273,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         endsAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null,
         isPublished: contest.isPublished,
         allowUpsolve: (contest as any).allowUpsolve ?? true,
+        scoringMode: (contest as any).scoringMode ?? "IOI",
         createdBy: contest.createdBy ? { id: contest.createdBy.id, username: contest.createdBy.username } : null,
         classId: (contest as any)?.class?.id ?? null,
       },
@@ -1849,6 +1940,28 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
       order: { joinedAt: "ASC" } as any,
     });
 
+    // Aggregate integrity events per participant (focus loss / paste / fullscreen exit).
+    await ensureContestAdminTables();
+    const integrityRows = (await AppDataSource.query(
+      `
+      SELECT participant_id as participantId, event_type as eventType, COUNT(*) as cnt
+      FROM contest_integrity_events
+      WHERE contest_id = ?
+      GROUP BY participant_id, event_type
+      `,
+      [contestId]
+    )) as Array<any>;
+    const integrityByParticipant = new Map<number, { total: number; byType: Record<string, number> }>();
+    for (const r of integrityRows) {
+      const pid = Number(r.participantId);
+      if (!Number.isFinite(pid) || pid <= 0) continue;
+      const cnt = Number(r.cnt ?? 0) || 0;
+      const entry = integrityByParticipant.get(pid) ?? { total: 0, byType: {} };
+      entry.total += cnt;
+      entry.byType[String(r.eventType ?? "OTHER")] = cnt;
+      integrityByParticipant.set(pid, entry);
+    }
+
     return res.json({
       contestId,
       participants: participants.map((p) => ({
@@ -1861,10 +1974,121 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
         isDisqualified: !!(p as any).isDisqualified,
         disqualificationReason: (p as any).disqualificationReason ?? null,
         disqualifiedAt: (p as any).disqualifiedAt ? new Date((p as any).disqualifiedAt).toISOString() : null,
+        integrity: integrityByParticipant.get(p.id) ?? { total: 0, byType: {} },
       })),
     });
   } catch (error: any) {
     logger.error("[contests] GET /:id/admin/participants error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// --- Code similarity (plagiarism heuristic) ---
+function similarityTokenShingles(src: string, k = 5): Set<string> {
+  let s = String(src ?? "").slice(0, 20_000);
+  // Strip comments so cosmetic changes don't hide copies.
+  s = s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ").replace(/#[^\n]*/g, " ");
+  const tokens = s.toLowerCase().split(/[^a-z0-9_]+/).filter(Boolean);
+  const set = new Set<string>();
+  if (tokens.length < k) {
+    if (tokens.length) set.add(tokens.join(" "));
+    return set;
+  }
+  for (let i = 0; i + k <= tokens.length; i++) set.add(tokens.slice(i, i + k).join(" "));
+  return set;
+}
+function similarityJaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  const [small, large] = a.size < b.size ? [a, b] : [b, a];
+  let inter = 0;
+  for (const x of small) if (large.has(x)) inter++;
+  const union = a.size + b.size - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+// Organizer/admin: pairwise code-similarity for a problem's latest submissions.
+contestsRouter.get("/:id/admin/similarity", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    const problemId = Number((req.query as any)?.problemId);
+    if (!Number.isFinite(contestId) || contestId <= 0 || !Number.isFinite(problemId) || problemId <= 0) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+
+    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    const canManage = await canManageContest({ contest, req });
+    if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const threshold = (() => {
+      const n = Number((req.query as any)?.threshold);
+      return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.6;
+    })();
+
+    // Latest CONTEST submission per participant for this problem.
+    const rows = (await AppDataSource.query(
+      `
+      SELECT s.participant_id as participantId, s.submitted_code as code, s.language as language
+      FROM contest_submissions s
+      JOIN (
+        SELECT participant_id, MAX(id) as maxId
+        FROM contest_submissions
+        WHERE contest_id = ? AND problem_id = ? AND phase = 'CONTEST'
+        GROUP BY participant_id
+      ) m ON s.id = m.maxId
+      LIMIT 600
+      `,
+      [contestId, problemId]
+    )) as Array<any>;
+
+    const participants = await participantRepo().find({ where: { contest: { id: contestId } } as any });
+    const nameById = new Map<number, string>();
+    for (const p of participants) nameById.set(p.id, String((p as any).displayName ?? `#${p.id}`));
+
+    type Entry = { participantId: number; displayName: string; language: string; shingles: Set<string> };
+    const entries: Entry[] = [];
+    for (const r of rows) {
+      const pid = Number(r.participantId);
+      if (!Number.isFinite(pid) || pid <= 0) continue;
+      const raw = String(r.code ?? "");
+      const decoded = decodeMultiFileSubmissionV1(raw);
+      const text = decoded?.files?.length ? decoded.files.map((f) => f.content).join("\n") : raw;
+      const shingles = similarityTokenShingles(text);
+      if (shingles.size === 0) continue;
+      entries.push({ participantId: pid, displayName: nameById.get(pid) ?? `#${pid}`, language: String(r.language ?? ""), shingles });
+    }
+
+    const pairs: Array<{
+      a: { participantId: number; displayName: string };
+      b: { participantId: number; displayName: string };
+      similarity: number;
+      language: string;
+    }> = [];
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        const sim = similarityJaccard(entries[i].shingles, entries[j].shingles);
+        if (sim >= threshold) {
+          pairs.push({
+            a: { participantId: entries[i].participantId, displayName: entries[i].displayName },
+            b: { participantId: entries[j].participantId, displayName: entries[j].displayName },
+            similarity: Math.round(sim * 1000) / 1000,
+            language: entries[i].language === entries[j].language ? entries[i].language : `${entries[i].language}/${entries[j].language}`,
+          });
+        }
+      }
+    }
+    pairs.sort((x, y) => y.similarity - x.similarity);
+
+    return res.json({
+      contestId,
+      problemId,
+      threshold,
+      comparedSubmissions: entries.length,
+      pairs: pairs.slice(0, 100),
+    });
+  } catch (error: any) {
+    logger.error("[contests] GET /:id/admin/similarity error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -2505,14 +2729,32 @@ contestsRouter.post(
       if (workerRes.verdict === "CE" && workerRes.compile) {
         const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
         const fallbackHint = "Compilation error. If the message is empty, the compiler/toolchain is likely missing in the sandbox rootfs.";
-        return res.json({ stdout: "", stderr: (combined || fallbackHint).slice(0, 40_000), exitCode: 1, success: false });
+        return res.json({
+          stdout: "",
+          stderr: (combined || fallbackHint).slice(0, 40_000),
+          exitCode: 1,
+          success: false,
+          verdict: "CE",
+          timeMs: null,
+          memoryKb: null,
+        });
       }
 
       const t0 = workerRes.tests?.[0];
       const stdout = (t0 as any)?.actual ?? "";
       const stderr = (t0 as any)?.stderr ?? "";
       const success = workerRes.verdict === "AC" || workerRes.verdict === "WA";
-      return res.json({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode: success ? 0 : 1, success });
+      const timeMs = Number.isFinite(Number((t0 as any)?.time_ms)) ? Number((t0 as any)?.time_ms) : null;
+      const memoryKb = Number.isFinite(Number((t0 as any)?.memory_kb)) ? Number((t0 as any)?.memory_kb) : null;
+      return res.json({
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        exitCode: success ? 0 : 1,
+        success,
+        verdict: workerRes.verdict ?? null,
+        timeMs,
+        memoryKb,
+      });
     } catch (error: any) {
       if (error instanceof HttpError) {
         return res.status(error.statusCode).json({ message: error.message, ...(error.details ? { details: error.details } : {}) });
@@ -2673,7 +2915,10 @@ contestsRouter.post(
         }),
         limits: effectiveLimits,
         checker: effectiveChecker,
-        debug: false,
+        // Debug captures per-test actual/expected so we can return failing-test
+        // detail to the solver. Hidden-test payloads are filtered out below and
+        // never leave the server.
+        debug: true,
         rerun_failed_once: true,
         run_all: true,
       };
@@ -2698,6 +2943,35 @@ contestsRouter.post(
           }))
         : null;
 
+      const truncateForClient = (value: unknown, max = 4_000): string => {
+        const s = String(value ?? "");
+        return s.length > max ? `${s.slice(0, max)}\n… (truncated)` : s;
+      };
+
+      type PerTestResult = {
+        index: number;
+        group: string;
+        hidden: boolean;
+        verdict: string | null;
+        timeMs: number | null;
+        memoryKb: number | null;
+      };
+      const perTest: PerTestResult[] = [];
+      let firstFailure:
+        | {
+            index: number;
+            verdict: string | null;
+            hidden: boolean;
+            group: string;
+            input?: string;
+            expected?: string;
+            actual?: string;
+            stderr?: string;
+          }
+        | null = null;
+      let maxTimeMs = 0;
+      let maxMemoryKb = 0;
+
       if (workerRes.verdict === "CE" && workerRes.compile) {
         compileErrorKind = workerRes.compile.error_kind ?? null;
         const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
@@ -2705,12 +2979,38 @@ contestsRouter.post(
       } else {
         const byId = new Map<string, (typeof workerRes.tests)[number]>();
         for (const r of workerRes.tests) byId.set(String(r.test_id), r);
-        for (const t of tests) {
+        for (let i = 0; i < tests.length; i++) {
+          const t = tests[i];
           const r = byId.get(String(t.id));
-          const passed = r?.verdict === "AC";
+          const verdict = r?.verdict ?? null;
+          const passed = verdict === "AC";
+          const hidden = t.isHidden === true;
+          const subtask = String((t as any).subtask ?? "").trim();
+          const group = subtask || (hidden ? "hidden" : "public");
+          const timeMs = Number.isFinite(Number(r?.time_ms)) ? Number(r?.time_ms) : null;
+          const memoryKb = Number.isFinite(Number(r?.memory_kb)) ? Number(r?.memory_kb) : null;
+          if (timeMs != null && timeMs > maxTimeMs) maxTimeMs = timeMs;
+          if (memoryKb != null && memoryKb > maxMemoryKb) maxMemoryKb = memoryKb;
+
+          perTest.push({ index: i + 1, group, hidden, verdict, timeMs, memoryKb });
+
           if (passed) {
             totalPassed++;
             totalScore += t.points || 1;
+          } else if (!firstFailure) {
+            // Only expose input/expected/actual for NON-hidden (sample/public) tests.
+            firstFailure = hidden
+              ? { index: i + 1, verdict, hidden: true, group }
+              : {
+                  index: i + 1,
+                  verdict,
+                  hidden: false,
+                  group,
+                  input: truncateForClient(t.input ?? ""),
+                  expected: truncateForClient(t.expectedOutput ?? ""),
+                  actual: truncateForClient((r as any)?.actual ?? ""),
+                  stderr: truncateForClient((r as any)?.stderr ?? "", 2_000),
+                };
           }
         }
       }
@@ -2739,6 +3039,10 @@ contestsRouter.post(
       });
       const saved: ContestSubmission = await submissionRepo().save(newSubmission as any);
 
+      // Notify live SSE subscribers that the board may have changed. No scores
+      // are included, so this is freeze-safe — clients refetch /standings.
+      publishContestEvent(contestId, { kind: "scoreboard", at: Date.now() });
+
       return res.json({
         submissionId: saved.id,
         phase: submissionPhase,
@@ -2750,6 +3054,10 @@ contestsRouter.post(
         compileError,
         compileErrorKind,
         annulled,
+        maxTimeMs: maxTimeMs > 0 ? maxTimeMs : null,
+        maxMemoryKb: maxMemoryKb > 0 ? maxMemoryKb : null,
+        tests: perTest,
+        firstFailure,
       });
     } catch (error: any) {
       if (error instanceof HttpError) {
@@ -2847,6 +3155,54 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
 
 // Per-problem progress summary for the current participant (used for e-olymp-like table).
 // Includes best contest-phase score and last submission (any phase).
+// Participant integrity signal (tab/focus loss, large paste, fullscreen exit).
+// Best-effort, recorded only during the active window for non-managers.
+const INTEGRITY_EVENT_TYPES = new Set(["FOCUS_LOST", "BLUR", "PASTE", "FULLSCREEN_EXIT"]);
+contestsRouter.post("/:id/integrity", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    const allowed = await canAccessContest({ contest, req });
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const timeState = getContestTimeState(contest);
+    if (!timeState.active) return res.json({ recorded: false });
+
+    const schema = z.object({ type: z.string().min(1).max(32), detail: z.string().max(255).optional() });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const type = parsed.data.type.trim().toUpperCase();
+    if (!INTEGRITY_EVENT_TYPES.has(type)) return res.status(400).json({ message: "UNKNOWN_EVENT_TYPE" });
+
+    // Don't track organizers/admins.
+    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+    if (isManager) return res.json({ recorded: false });
+
+    const participant = await getOrCreateParticipant({ contestId, req });
+    if ((participant as any).isDisqualified) return res.json({ recorded: false });
+
+    await ensureContestAdminTables();
+    // Coarse anti-spam cap.
+    const countRows = (await AppDataSource.query(
+      `SELECT COUNT(*) as c FROM contest_integrity_events WHERE contest_id = ? AND participant_id = ?`,
+      [contestId, participant.id]
+    )) as Array<any>;
+    if (Number(countRows?.[0]?.c ?? 0) >= 2000) return res.json({ recorded: false });
+
+    await AppDataSource.query(
+      `INSERT INTO contest_integrity_events (contest_id, participant_id, event_type, detail, created_at) VALUES (?, ?, ?, ?, NOW())`,
+      [contestId, participant.id, type, parsed.data.detail ?? null]
+    );
+    return res.json({ recorded: true });
+  } catch (error: any) {
+    logger.error("[contests] POST /:id/integrity error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const contestId = Number(req.params.id);
@@ -3030,8 +3386,13 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
   }
 });
 
-// Scoreboard (IOI): sum of best score per problem.
-contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res: Response) => {
+// Unified live standings. Returns IOI totals AND ICPC (solved + penalty) stats,
+// first-to-solve markers, per-problem max points, and freeze metadata. The
+// `scoringMode` field tells the UI which ranking is authoritative; `rows` are
+// pre-sorted accordingly. (The legacy ICPC-only GET /:id/scoreboard route still
+// exists for older clients.)
+const ICPC_PENALTY_PER_WRONG = 20;
+contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res: Response) => {
   try {
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
@@ -3041,7 +3402,23 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const problems = await problemRepo().find({ where: { contest: { id: contestId } } as any, order: { order: "ASC" } as any });
+    const scoringMode: "IOI" | "ICPC" = (contest as any).scoringMode === "ICPC" ? "ICPC" : "IOI";
+
+    const problems = await problemRepo().find({
+      where: { contest: { id: contestId } } as any,
+      relations: ["libraryTask"] as any,
+      order: { order: "ASC" } as any,
+    });
+
+    // Per-problem max points (problem.points override, else sum of test points).
+    const taskIds = problems.map((p) => Number((p.libraryTask as any)?.id)).filter((x) => Number.isFinite(x) && x > 0);
+    const maxByTask = await getMaxScoreByLibraryTaskId(taskIds);
+    const problemMaxPoints = (p: ContestProblem): number => {
+      const pts = (p as any).points;
+      if (pts != null && Number(pts) > 0) return Math.floor(Number(pts));
+      const tid = Number((p.libraryTask as any)?.id);
+      return Number.isFinite(tid) && tid > 0 ? (maxByTask.get(tid) ?? 0) : 0;
+    };
 
     const participants = await participantRepo().find({ where: { contest: { id: contestId } } as any, order: { joinedAt: "ASC" } as any });
     const activeParticipants = participants.filter((p) => !(p as any).isDisqualified);
@@ -3070,55 +3447,130 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
         participantProblemAnnulled.add(`${participantId}:${problemId}`);
       }
     }
+    const isAnnulledFor = (participantId: number, problemId: number): boolean =>
+      globalAnnulledProblems.has(problemId) || participantProblemAnnulled.has(`${participantId}:${problemId}`);
+
+    const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
+    const startsAtMs = contest.startsAt ? new Date(contest.startsAt).getTime() : null;
+    const nowMs = Date.now();
+    // Freeze the final hour by default (UI decides how to render frozen rows).
+    const freezeAtMs = endsAtMs != null ? endsAtMs - 60 * 60 * 1000 : null;
+    const finished = endsAtMs != null && nowMs > endsAtMs;
+    const frozen = freezeAtMs != null && nowMs >= freezeAtMs && !finished;
+    // Managers/admins always see the live board; participants see a frozen board
+    // (submissions after the freeze cutoff are withheld) during the freeze window.
+    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+    const viewerFrozen = frozen && !isManager;
+    const cutoffMs = viewerFrozen && freezeAtMs != null ? freezeAtMs : null;
+
+    const baseProblems = problems.map((p) => ({
+      id: p.id,
+      order: p.order,
+      label: p.label ?? labelFromOrder(p.order),
+      maxScore: problemMaxPoints(p),
+    }));
 
     if (activeParticipants.length === 0) {
       return res.json({
         contestId,
-        problems: problems.map((p) => ({ id: p.id, order: p.order, label: p.label ?? labelFromOrder(p.order) })),
+        scoringMode,
+        problems: baseProblems,
         rows: [],
+        firstBlood: {},
+        freeze: { enabled: freezeAtMs != null, freezeAtMs, frozen: viewerFrozen, isManagerView: isManager },
         disqualifiedCount: participants.length,
+        generatedAtMs: nowMs,
       });
     }
 
-    // Fetch best score per (participant, problem). Tie-breaker: earliest time that achieved best.
-    const bestRows = (await AppDataSource.query(
+    // Fetch all contest-phase submissions once; derive both IOI best scores and
+    // ICPC stats in JS so the freeze cutoff can be applied uniformly.
+    const allSubs = (await AppDataSource.query(
       `
-      SELECT s.participant_id as participantId,
-             s.problem_id as problemId,
-             MAX(COALESCE(s.score, 0)) as bestScore,
-             MIN(CASE WHEN COALESCE(s.score, 0) = (
-                SELECT MAX(COALESCE(s2.score,0)) FROM contest_submissions s2
-                WHERE s2.participant_id = s.participant_id AND s2.problem_id = s.problem_id AND s2.phase = 'CONTEST'
-             ) THEN s.created_at ELSE NULL END) as bestAt
-      FROM contest_submissions s
-      WHERE s.contest_id = ? AND s.phase = 'CONTEST'
-      GROUP BY s.participant_id, s.problem_id
+      SELECT id,
+             participant_id as participantId,
+             problem_id as problemId,
+             verdict as verdict,
+             COALESCE(score, 0) as score,
+             created_at as createdAt
+      FROM contest_submissions
+      WHERE contest_id = ? AND phase = 'CONTEST'
+      ORDER BY created_at ASC, id ASC
       `,
       [contestId]
     )) as Array<any>;
 
+    // IOI best score per (participant, problem) as of the freeze cutoff, and a
+    // "pending" flag for cells whose latest activity is hidden behind the freeze.
     const byKey = new Map<string, { bestScore: number; bestAt: string | null }>();
-    for (const r of bestRows) {
-      const pid = Number(r.participantId);
-      const pr = Number(r.problemId);
+    const pendingByKey = new Set<string>();
+    const submissionTimes: number[] = [];
+    for (const s of allSubs) {
+      const pid = Number(s.participantId);
+      const pr = Number(s.problemId);
       if (!Number.isFinite(pid) || !Number.isFinite(pr)) continue;
+      const tMs = new Date(s.createdAt).getTime();
+      if (Number.isFinite(tMs)) submissionTimes.push(tMs);
       const key = `${pid}:${pr}`;
-      byKey.set(key, {
-        bestScore: Number(r.bestScore ?? 0) || 0,
-        bestAt: r.bestAt ? new Date(r.bestAt).toISOString() : null,
-      });
+      if (cutoffMs != null && tMs > cutoffMs) {
+        pendingByKey.add(key);
+        continue;
+      }
+      const sc = Number(s.score ?? 0) || 0;
+      const prev = byKey.get(key);
+      if (!prev || sc > prev.bestScore) {
+        byKey.set(key, { bestScore: sc, bestAt: new Date(s.createdAt).toISOString() });
+      }
+    }
+
+    const icpcStartMs = startsAtMs ?? (submissionTimes.length ? Math.min(...submissionTimes) : nowMs);
+
+    const scoreSubs: ScoreboardSubmission[] = allSubs
+      .filter((s) => !isAnnulledFor(Number(s.participantId), Number(s.problemId)))
+      .filter((s) => endsAtMs == null || new Date(s.createdAt).getTime() <= endsAtMs)
+      .filter((s) => cutoffMs == null || new Date(s.createdAt).getTime() <= cutoffMs)
+      .map((s) => ({
+        participantId: Number(s.participantId),
+        problemId: Number(s.problemId),
+        verdict: s.verdict != null ? String(s.verdict) : null,
+        createdAtMs: new Date(s.createdAt).getTime(),
+      }));
+    const icpcBoard = computeScoreboard(scoreSubs, { startMs: icpcStartMs, penaltyPerWrong: ICPC_PENALTY_PER_WRONG, nowMs });
+    const icpcByParticipant = new Map<number, (typeof icpcBoard.rows)[number]>();
+    for (const r of icpcBoard.rows) icpcByParticipant.set(r.participantId, r);
+
+    // First-to-solve per problem: earliest AC across all participants.
+    const firstBlood: Record<number, { participantId: number; atMs: number }> = {};
+    for (const r of icpcBoard.rows) {
+      for (const [pidStr, cell] of Object.entries(r.problems)) {
+        if (!cell.solved || cell.firstAcMs == null) continue;
+        const problemId = Number(pidStr);
+        const current = firstBlood[problemId];
+        if (!current || cell.firstAcMs < current.atMs) {
+          firstBlood[problemId] = { participantId: r.participantId, atMs: cell.firstAcMs };
+        }
+      }
     }
 
     const rows = activeParticipants
       .map((p) => {
+        const icpc = icpcByParticipant.get(p.id);
         const perProblem = problems.map((pr) => {
           const key = `${p.id}:${pr.id}`;
           const hit = byKey.get(key);
-          const isAnnulled = globalAnnulledProblems.has(pr.id) || participantProblemAnnulled.has(key);
+          const annulled = isAnnulledFor(p.id, pr.id);
+          const cell = icpc?.problems[pr.id];
           return {
             problemId: pr.id,
-            score: isAnnulled ? 0 : (hit?.bestScore ?? 0),
+            score: annulled ? 0 : (hit?.bestScore ?? 0),
             bestAt: hit?.bestAt ?? null,
+            // ICPC enrichments
+            solved: annulled ? false : Boolean(cell?.solved),
+            attempts: annulled ? 0 : Number(cell?.tries ?? 0),
+            penaltyMinutes: annulled ? 0 : Number(cell?.penaltyMinutes ?? 0),
+            firstAcMs: annulled ? null : (cell?.firstAcMs ?? null),
+            isFirstBlood: !annulled && cell?.solved === true && cell?.firstAcMs != null && firstBlood[pr.id]?.participantId === p.id,
+            pending: !annulled && pendingByKey.has(key),
           };
         });
         const total = perProblem.reduce((sum, x) => sum + (Number(x.score) || 0), 0);
@@ -3130,13 +3582,23 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
           participantId: p.id,
           displayName: p.displayName,
           totalScore: total,
+          solved: Number(icpc?.solved ?? 0),
+          penalty: Number(icpc?.penalty ?? 0),
+          lastAcMs: icpc?.lastAcMs ?? null,
           lastImprovementAt,
           problems: perProblem,
         };
       })
       .sort((a, b) => {
+        if (scoringMode === "ICPC") {
+          if (b.solved !== a.solved) return b.solved - a.solved;
+          if (a.penalty !== b.penalty) return a.penalty - b.penalty;
+          const la = a.lastAcMs ?? Number.POSITIVE_INFINITY;
+          const lb = b.lastAcMs ?? Number.POSITIVE_INFINITY;
+          if (la !== lb) return la - lb;
+          return a.participantId - b.participantId;
+        }
         if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-        // Tie-breaker: earlier last improvement wins.
         const ta = a.lastImprovementAt ? new Date(a.lastImprovementAt).getTime() : Number.POSITIVE_INFINITY;
         const tb = b.lastImprovementAt ? new Date(b.lastImprovementAt).getTime() : Number.POSITIVE_INFINITY;
         if (ta !== tb) return ta - tb;
@@ -3146,13 +3608,79 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
 
     return res.json({
       contestId,
-      problems: problems.map((p) => ({ id: p.id, order: p.order, label: p.label ?? labelFromOrder(p.order) })),
+      scoringMode,
+      problems: baseProblems,
       rows,
+      firstBlood,
+      freeze: { enabled: freezeAtMs != null, freezeAtMs, frozen: viewerFrozen, isManagerView: isManager },
       disqualifiedCount: participants.length - activeParticipants.length,
+      generatedAtMs: nowMs,
     });
   } catch (error: any) {
-    logger.error("[contests] GET /:id/scoreboard error", { requestId: req.requestId, err: error });
+    logger.error("[contests] GET /:id/standings error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Live updates over Server-Sent Events. EventSource cannot set headers, so a
+// token may be supplied via ?token= and is promoted to a Bearer header here.
+function sseAuthShim(req: AuthRequest, _res: Response, next: () => void): void {
+  const qToken = typeof (req.query as any)?.token === "string" ? String((req.query as any).token) : "";
+  if (!req.headers.authorization && qToken) {
+    req.headers.authorization = `Bearer ${qToken}`;
+  }
+  next();
+}
+
+contestsRouter.get("/:id/events", sseAuthShim, authOptional, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    const allowed = await canAccessContest({ contest, req });
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      // Disable proxy buffering (nginx) so events flush immediately.
+      "X-Accel-Buffering": "no",
+    });
+    (res as any).flushHeaders?.();
+    res.write("retry: 5000\n\n");
+    res.write(`event: ready\ndata: ${JSON.stringify({ at: Date.now() })}\n\n`);
+
+    const send = (event: ContestEvent) => {
+      try {
+        res.write(`event: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        // connection likely closed; cleanup happens on "close"
+      }
+    };
+    const unsubscribe = subscribeContestEvents(contestId, send);
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        // ignore
+      }
+    }, 25000);
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      try {
+        res.end();
+      } catch {
+        // ignore
+      }
+    });
+  } catch (error: any) {
+    logger.error("[contests] GET /:id/events error", { requestId: req.requestId, err: error });
+    if (!res.headersSent) res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

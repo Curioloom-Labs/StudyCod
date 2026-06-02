@@ -3,11 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import {
   checkContestProblem,
+  getContestCommunity,
   getContestDetails,
   getContestProblemStatement,
   getContestProblemSubmissions,
   getContestScoreboard,
+  recordContestIntegrityEvent,
   runContestProblem,
+  type ContestCommunityAnnouncement,
   type ContestCheckResult,
   type ContestProblemStatement,
   type ContestRunResult,
@@ -60,11 +63,11 @@ type JwtPayload = {
   sub?: string;
 };
 
-type ContestEventPayload = {
-  verdict?: string | null;
-  data?: {
-    verdict?: string | null;
-  };
+type ContestAnnouncementEvent = {
+  id: number;
+  text: string;
+  author: string;
+  at?: number;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -117,11 +120,10 @@ function userLabelFromToken(token: string | null): string | null {
   return null;
 }
 
-function wsOriginFromApiOrigin(apiUrl: string): string {
-  const normalized = String(apiUrl || "").replace(/\/+$/, "").replace(/\/api$/, "");
-  if (normalized.startsWith("https://")) return normalized.replace("https://", "wss://");
-  if (normalized.startsWith("http://")) return normalized.replace("http://", "ws://");
-  return normalized;
+function apiHttpBase(): string {
+  const raw = String(import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? window.location.origin : "")).trim();
+  const base = raw.replace(/\/+$/, "").replace(/\/api\/?$/i, "");
+  return `${base}/api`;
 }
 
 function normalizeVerdict(v: string | null | undefined): string | null {
@@ -161,9 +163,10 @@ export const ContestProblemSolvePage: React.FC = () => {
     }
   }, []);
   const turnstileSiteKey = React.useMemo(() => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(), []);
-  const contestWsEnabled = React.useMemo(() => {
+  // Live updates (SSE) are on by default; can be disabled explicitly.
+  const liveUpdatesEnabled = React.useMemo(() => {
     const raw = String(import.meta.env.VITE_ENABLE_CONTEST_WS ?? "").trim().toLowerCase();
-    return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    return !(raw === "0" || raw === "false" || raw === "no" || raw === "off");
   }, []);
   const turnstileEnabled = React.useMemo(() => {
     const raw = String(import.meta.env.VITE_ENABLE_CONTEST_SUBMIT_TURNSTILE ?? "").trim().toLowerCase();
@@ -204,6 +207,8 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [latestVerdictAt, setLatestVerdictAt] = React.useState(0);
 
   const [focusMode, setFocusMode] = React.useState(false);
+  const [announcements, setAnnouncements] = React.useState<ContestCommunityAnnouncement[]>([]);
+  const [focusLostCount, setFocusLostCount] = React.useState(0);
   const liveSyncInFlightRef = React.useRef(false);
   const liveSyncLastAtRef = React.useRef(0);
 
@@ -421,69 +426,59 @@ export const ContestProblemSolvePage: React.FC = () => {
   }, [judgeLanguage, statement, storageBase]);
 
   React.useEffect(() => {
-    if (!contestWsEnabled) {
-      setWsStatus("offline");
-      return;
-    }
-    if (!contestId || !problemId || !hasToken) {
+    if (!liveUpdatesEnabled || !contestId || !hasToken || typeof window === "undefined" || typeof EventSource === "undefined") {
       setWsStatus("offline");
       return;
     }
 
-    let ws: WebSocket | null = null;
     let closed = false;
+    setWsStatus("connecting");
 
-    const openSocket = () => {
-      try {
-        const httpOrigin = import.meta.env.VITE_API_URL || window.location.origin;
-        const base = wsOriginFromApiOrigin(httpOrigin);
-        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
-        const url = `${base}/ws/contests/${contestId}/problems/${problemId}/submissions${tokenParam}`;
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
+    const url = `${apiHttpBase()}/contests/${contestId}/events${tokenParam}`;
+    const es = new EventSource(url);
 
-        setWsStatus("connecting");
-        ws = new WebSocket(url);
-
-        ws.onopen = () => {
-          if (closed) return;
-          setWsStatus("connected");
-        };
-
-        ws.onmessage = (event) => {
-          if (closed) return;
-          const payload = safeJsonParse<ContestEventPayload>(String(event.data ?? ""));
-          const verdict = normalizeVerdict(payload?.verdict ?? payload?.data?.verdict);
-          if (verdict) {
-            setLatestVerdict(verdict);
-            setLatestVerdictAt(Date.now());
-          }
-          syncLiveData(false);
-        };
-
-        ws.onerror = () => {
-          if (closed) return;
-          setWsStatus("offline");
-        };
-
-        ws.onclose = () => {
-          if (closed) return;
-          setWsStatus("offline");
-        };
-      } catch {
-        setWsStatus("offline");
-      }
+    es.addEventListener("ready", () => {
+      if (!closed) setWsStatus("connected");
+    });
+    es.onopen = () => {
+      if (!closed) setWsStatus("connected");
     };
-
-    openSocket();
+    es.addEventListener("scoreboard", () => {
+      if (!closed) syncLiveData(false);
+    });
+    es.addEventListener("announcement", (event) => {
+      if (closed) return;
+      const payload = safeJsonParse<ContestAnnouncementEvent>(String((event as MessageEvent).data ?? ""));
+      if (payload && Number.isFinite(Number(payload.id))) {
+        setAnnouncements((prev) => {
+          if (prev.some((a) => a.id === payload.id)) return prev;
+          return [
+            {
+              id: Number(payload.id),
+              text: String(payload.text ?? ""),
+              author: String(payload.author ?? "organizer"),
+              createdAt: new Date(payload.at ?? Date.now()).toISOString(),
+            },
+            ...prev,
+          ];
+        });
+      }
+    });
+    es.onerror = () => {
+      // EventSource auto-reconnects; reflect the transient state.
+      if (!closed) setWsStatus(es.readyState === EventSource.CLOSED ? "offline" : "connecting");
+    };
 
     return () => {
       closed = true;
       try {
-        ws?.close();
+        es.close();
       } catch {
         // ignore
       }
     };
-  }, [contestWsEnabled, contestId, problemId, hasToken, token, syncLiveData]);
+  }, [liveUpdatesEnabled, contestId, hasToken, token, syncLiveData]);
 
   React.useEffect(() => {
     const id = window.setInterval(() => {
@@ -491,6 +486,51 @@ export const ContestProblemSolvePage: React.FC = () => {
     }, wsStatus === "connected" ? 20000 : 9000);
     return () => window.clearInterval(id);
   }, [wsStatus, syncLiveData]);
+
+  // Poll organizer announcements so participants see them without leaving the workspace.
+  React.useEffect(() => {
+    if (!contestId || !hasToken) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const data = await getContestCommunity(contestId);
+        if (!cancelled) setAnnouncements(Array.isArray(data.announcements) ? data.announcements : []);
+      } catch {
+        // ignore (access/network)
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, 25000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [contestId, hasToken]);
+
+  // Integrity signals: report tab/focus loss and large pastes to the organizer.
+  React.useEffect(() => {
+    if (!contestId || !hasToken) return;
+    const report = (type: "FOCUS_LOST" | "PASTE", detail?: string) => {
+      void recordContestIntegrityEvent(contestId, type, detail).catch(() => {});
+    };
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") {
+        setFocusLostCount((n) => n + 1);
+        report("FOCUS_LOST");
+      }
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text") ?? "";
+      // Ignore trivial pastes; flag substantial code pastes.
+      if (text.trim().length >= 40) report("PASTE", `${text.length} chars`);
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      document.removeEventListener("paste", onPaste);
+    };
+  }, [contestId, hasToken]);
 
   const doRun = async () => {
     if (!contestId || !problemId || !statement) return;
@@ -663,6 +703,8 @@ export const ContestProblemSolvePage: React.FC = () => {
         onFocusModeChange={setFocusMode}
         canAskOrganizer={hasToken}
         onAskOrganizer={askOrganizer}
+        announcements={announcements}
+        focusLostCount={focusLostCount}
       />
     </div>
   );

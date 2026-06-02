@@ -1,6 +1,7 @@
 import type { NextFunction, Response } from "express";
 import crypto from "crypto";
 import type { AuthRequest } from "./authMiddleware";
+import { runWithRequestContext } from "../utils/requestContextStore";
 
 export function requestContextMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const incoming = (req.headers["x-request-id"] || req.headers["x-correlation-id"]) as string | string[] | undefined;
@@ -12,5 +13,7 @@ export function requestContextMiddleware(req: AuthRequest, res: Response, next: 
   res.locals.requestId = requestId;
   res.setHeader("X-Request-Id", requestId);
 
-  next();
+  // Establish the async context so every downstream log (including deep
+  // judge/LLM calls that never see `req`) is automatically correlated.
+  runWithRequestContext({ requestId }, () => next());
 }

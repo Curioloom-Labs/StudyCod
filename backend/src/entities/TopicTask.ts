@@ -37,7 +37,7 @@ export class TopicTask {
     default: 0
   })
   order!: number;
-  @Column()
+  @Column({ type: "varchar" })
   title!: string;
   @Column({
     type: "text"

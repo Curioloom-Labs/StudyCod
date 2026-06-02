@@ -19,7 +19,7 @@ export class EduLesson {
     default: "LESSON"
   })
   type!: LessonType;
-  @Column()
+  @Column({ type: "varchar" })
   title!: string;
   @Column({
     type: "text",

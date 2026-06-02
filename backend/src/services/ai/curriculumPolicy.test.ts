@@ -151,3 +151,37 @@ test("curriculumPolicy: allows mathematical function descriptions", () => {
   });
   assert.equal(v, null);
 });
+
+test("curriculumPolicy: function-impl tasks ALLOWED on Functions topic (UA)", () => {
+  const v = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 5,
+    topicTitle: "Функції",
+    title: "Функція суми",
+    practicalTask: "Напишіть функцію sum_two(a, b), яка повертає суму двох цілих чисел."
+  });
+  assert.equal(v, null);
+});
+
+test("curriculumPolicy: function-impl tasks ALLOWED on Functions topic (EN)", () => {
+  const v = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 5,
+    topicTitle: "Functions and methods",
+    title: "Sum function",
+    practicalTask: "Implement function sum_two(a, b) that returns the sum of two integers."
+  });
+  assert.equal(v, null);
+});
+
+test("curriculumPolicy: function-impl tasks REJECTED on non-functions topic", () => {
+  const v = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 3,
+    topicTitle: "Loops",
+    title: "Sum function",
+    practicalTask: "Implement function sum_two(a, b) that returns the sum of two integers."
+  });
+  assert.ok(v);
+  assert.match(String(v), /NON_JUDGEABLE_TASK/i);
+});

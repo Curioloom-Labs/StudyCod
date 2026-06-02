@@ -16,7 +16,7 @@ export class EduTask {
     name: "lesson_id"
   })
   lesson!: EduLesson;
-  @Column()
+  @Column({ type: "varchar" })
   title!: string;
   @Column({
     type: "text"

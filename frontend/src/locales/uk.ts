@@ -16,6 +16,9 @@ export default {
   tasks: 'Завдання',
   grades: 'Оцінки',
   library: 'Бібліотека',
+  contests: 'Контести',
+  myLearning: 'Моє навчання',
+  playground: 'Пісочниця',
   profile: 'Профіль',
   logout: 'Вийти',
   menu: 'Меню',
@@ -331,6 +334,7 @@ export default {
   footerCopyright: '© {{year}} StudyCod. Усі права захищено.',
   footerPrivacyPolicy: 'Політика конфіденційності',
   footerTermsOfUse: 'Умови використання',
+  footerCookiePolicy: 'Політика cookies',
   maintenanceTitle: 'Технічне обслуговування',
   maintenanceModeEnabled: 'УВІМКНЕНО РЕЖИМ ОБСЛУГОВУВАННЯ'
 };

@@ -355,6 +355,8 @@ interface Props {
   onChange?: (code: string) => void;
   readOnly?: boolean;
   height?: string | number;
+  fontSize?: number;
+  wordWrap?: boolean;
 }
 
 const toMonacoLanguage = (language: Props["language"]) => {
@@ -385,8 +387,8 @@ const toMonacoLanguage = (language: Props["language"]) => {
       return "plaintext";
   }
 };
-const createEditorOptions = (readOnly: boolean) => ({
-  fontSize: 14,
+const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false) => ({
+  fontSize,
   fontFamily: "JetBrains Mono, Fira Code, Consolas, Monaco, 'Courier New', monospace",
   fontLigatures: true,
   minimap: {
@@ -404,7 +406,7 @@ const createEditorOptions = (readOnly: boolean) => ({
     top: 16,
     bottom: 16
   },
-  wordWrap: "off" as const,
+  wordWrap: (wordWrap ? "on" : "off") as "on" | "off",
   tabSize: 2,
   insertSpaces: true,
   bracketPairColorization: {
@@ -443,14 +445,16 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   value,
   onChange,
   readOnly = false,
-  height
+  height,
+  fontSize,
+  wordWrap
 }) => {
   const {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const monacoLang = useMemo(() => toMonacoLanguage(language), [language]);
-  const editorOptions = useMemo(() => createEditorOptions(readOnly), [readOnly]);
+  const editorOptions = useMemo(() => createEditorOptions(readOnly, fontSize, wordWrap), [readOnly, fontSize, wordWrap]);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [didMount, setDidMount] = useState(false);

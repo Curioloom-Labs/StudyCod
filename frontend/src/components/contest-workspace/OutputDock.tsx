@@ -171,17 +171,27 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
         {view === "run" ? (
           <div className="space-y-3">
             {!runResult ? <div className="rounded-lg border border-border bg-bg-base/70 p-2.5 text-xs text-text-secondary">Run your code to inspect stdout, stderr, and exit code before submitting.</div> : null}
+            {runResult ? (
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className={`px-2 py-1 rounded-md border border-border bg-bg-base/70 ${runResult.success ? "text-accent-success" : "text-accent-error"}`}>
+                  {runResult.verdict ? runResult.verdict : runResult.success ? "OK" : "ERROR"}
+                </span>
+                <span className="px-2 py-1 rounded-md border border-border bg-bg-base/70 text-text-secondary inline-flex items-center gap-1">
+                  <Clock3 className="w-3 h-3" />{runResult.timeMs != null ? `${runResult.timeMs} ms` : "—"}
+                </span>
+                <span className="px-2 py-1 rounded-md border border-border bg-bg-base/70 text-text-secondary">
+                  {runResult.memoryKb != null ? `${Math.round(runResult.memoryKb / 1024)} MB` : "—"}
+                </span>
+                <span className="px-2 py-1 rounded-md border border-border bg-bg-base/70 text-text-secondary">exit {runResult.exitCode ?? "—"}</span>
+              </div>
+            ) : null}
             <div className="rounded-xl border border-border bg-bg-base/70 p-2.5">
               <div className="text-[11px] text-text-secondary mb-1">stdout</div>
-              <pre className="text-xs text-text-primary overflow-auto max-h-36">{runResult?.stdout || ""}</pre>
+              <pre className="text-xs text-text-primary overflow-auto max-h-36 whitespace-pre-wrap break-words">{runResult?.stdout || ""}</pre>
             </div>
             <div className="rounded-xl border border-border bg-bg-base/70 p-2.5">
               <div className="text-[11px] text-text-secondary mb-1">stderr</div>
-              <pre className="text-xs text-text-primary overflow-auto max-h-36">{runResult?.stderr || ""}</pre>
-            </div>
-            <div className="text-xs text-text-secondary flex items-center gap-2">
-              <Clock3 className="w-3.5 h-3.5" />
-              exit={runResult?.exitCode ?? "—"} · success={String(!!runResult?.success)}
+              <pre className="text-xs text-accent-error/90 overflow-auto max-h-36 whitespace-pre-wrap break-words">{runResult?.stderr || ""}</pre>
             </div>
           </div>
         ) : null}
@@ -196,7 +206,72 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
               <div className="rounded-xl border border-border bg-bg-base/70 p-2.5 text-xs text-text-secondary">
                 <div className="text-[11px] uppercase tracking-[0.06em] mb-1">Latest check snapshot</div>
                 <div className="text-text-primary">Tests: {checkResult.testsPassed}/{checkResult.testsTotal} · Score: {checkResult.score}/{checkResult.maxScore}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                  {checkResult.maxTimeMs != null ? <span>max time: <span className="text-text-primary">{checkResult.maxTimeMs} ms</span></span> : null}
+                  {checkResult.maxMemoryKb != null ? <span>max mem: <span className="text-text-primary">{Math.round(checkResult.maxMemoryKb / 1024)} MB</span></span> : null}
+                </div>
                 {checkResult.compileError ? <div className="mt-1 text-accent-error">Compile error: {checkResult.compileErrorKind || "UNKNOWN"}</div> : null}
+              </div>
+            ) : null}
+
+            {Array.isArray(checkResult?.tests) && checkResult!.tests!.length > 0 ? (
+              <div className="rounded-xl border border-border bg-bg-base/70 p-2.5">
+                <div className="text-[11px] text-text-secondary mb-2">Per-test results ({checkResult!.tests!.length})</div>
+                <div className="flex flex-wrap gap-1">
+                  {checkResult!.tests!.map((t) => {
+                    const ok = String(t.verdict ?? "").toUpperCase() === "AC";
+                    const tone = ok
+                      ? "bg-accent-success/15 text-accent-success border-accent-success/40"
+                      : t.verdict
+                        ? "bg-accent-error/15 text-accent-error border-accent-error/40"
+                        : "bg-bg-base text-text-secondary border-border";
+                    const title = `#${t.index} · ${t.group}${t.hidden ? " · hidden" : ""} · ${t.verdict ?? "—"}${t.timeMs != null ? ` · ${t.timeMs}ms` : ""}`;
+                    return (
+                      <span
+                        key={t.index}
+                        title={title}
+                        className={`w-6 h-6 rounded border text-[10px] font-mono flex items-center justify-center ${tone}`}
+                      >
+                        {t.index}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {checkResult?.firstFailure ? (
+              <div className="rounded-xl border border-accent-error/40 bg-accent-error/5 p-2.5">
+                <div className="text-[11px] text-accent-error mb-1.5">
+                  First failing test: #{checkResult.firstFailure.index} · {checkResult.firstFailure.verdict ?? "—"}
+                  {checkResult.firstFailure.hidden ? " · hidden" : ""}
+                </div>
+                {checkResult.firstFailure.hidden ? (
+                  <div className="text-[11px] text-text-secondary">This is a hidden test, so its data is not shown. Reproduce the failure with your own edge cases.</div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.06em] text-text-secondary mb-0.5">Input</div>
+                      <pre className="text-[11px] text-text-primary overflow-auto max-h-24 whitespace-pre-wrap break-words rounded bg-bg-base/70 border border-border p-1.5">{checkResult.firstFailure.input || "—"}</pre>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.06em] text-accent-success mb-0.5">Expected</div>
+                        <pre className="text-[11px] text-text-primary overflow-auto max-h-24 whitespace-pre-wrap break-words rounded bg-bg-base/70 border border-border p-1.5">{checkResult.firstFailure.expected || "—"}</pre>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.06em] text-accent-error mb-0.5">Your output</div>
+                        <pre className="text-[11px] text-text-primary overflow-auto max-h-24 whitespace-pre-wrap break-words rounded bg-bg-base/70 border border-border p-1.5">{checkResult.firstFailure.actual || "—"}</pre>
+                      </div>
+                    </div>
+                    {checkResult.firstFailure.stderr ? (
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.06em] text-text-secondary mb-0.5">stderr</div>
+                        <pre className="text-[11px] text-accent-error/90 overflow-auto max-h-20 whitespace-pre-wrap break-words rounded bg-bg-base/70 border border-border p-1.5">{checkResult.firstFailure.stderr}</pre>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             ) : null}
 

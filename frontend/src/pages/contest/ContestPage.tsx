@@ -25,6 +25,7 @@ import {
   listContestAnnulments,
   listContestAdminParticipants,
   listContestParticipantSubmissionsForAdmin,
+  getContestSimilarity,
   postContestCommunityAnnouncement,
   postContestCommunityQuestion,
   removeContestOrganizer,
@@ -44,6 +45,7 @@ import {
   type ContestMyProgressProblem,
   type ScoreboardProblem,
   type ScoreboardRow,
+  type ContestSimilarityPair,
 } from "../../lib/api/contests";
 import {
   importLibraryTaskArchive,
@@ -62,8 +64,11 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import {
   CERTIFICATE_CANVAS_HEIGHT,
   CERTIFICATE_CANVAS_WIDTH,
+  buildCustomAutoLayoutCss,
+  buildCustomAutoLayoutHtml,
   isSupportedCertificateBackgroundFile,
   isSvgCertificateBackgroundFile,
+  mergeAutoLayoutCss,
   normalizeCertificateBackgroundSource,
   toCssUrlValue,
 } from "../../lib/certificates/editorShared";
@@ -424,19 +429,6 @@ type CertificateExtraObject = {
   rotation: number;
 };
 
-function cssClassSafeId(input: string): string {
-  return String(input ?? "").replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-function escapeHtmlText(input: string): string {
-  return String(input ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function createDefaultCertificateExtraObject(type: CertificateExtraObjectType, x = 50, y = 50): CertificateExtraObject {
   const id = `extra-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   if (type === "image") {
@@ -765,139 +757,9 @@ function extractTemplatePlaceholders(template: string): string[] {
   return Array.from(keys.values());
 }
 
-function buildCustomAutoLayoutHtml(
-  fields: Record<CertificateFieldKey, { isEnabled: boolean; isRequired: boolean }>,
-  extraObjects: CertificateExtraObject[]
-): string {
-  const lines = CERTIFICATE_FIELD_KEYS
-    .filter((key) => Boolean(fields[key]?.isEnabled))
-    .map((key) => key === "qr_code"
-      ? `<img class="cf-field cf-${key} cf-qr-image" src="{{${key}}}" alt="qr" />`
-      : `<div class="cf-field cf-${key}">{{${key}}}</div>`);
-
-  const extraLines = extraObjects.map((obj) => {
-    const cls = `cf-extra-${cssClassSafeId(obj.id)}`;
-    if (obj.type === "image") {
-      const src = String(obj.imageUrl ?? "").trim();
-      const safeAlt = escapeHtmlText("certificate-image");
-      return `<img class="cf-extra ${cls}" src="${escapeHtmlText(src)}" alt="${safeAlt}" />`;
-    }
-    if (obj.type === "shape") {
-      return `<div class="cf-extra ${cls}" aria-hidden="true"></div>`;
-    }
-    return `<div class="cf-extra ${cls}">${escapeHtmlText(obj.text || "Additional text")}</div>`;
-  });
-
-  return `<div class="cert-wrap">\n${lines.join("\n")}\n${extraLines.join("\n")}\n</div>`;
-}
-
-function buildCustomAutoLayoutCss(params: { layouts: CertificateLayoutState; backgroundImageUrl: string; extraObjects: CertificateExtraObject[] }): string {
-  const safeBgUrl = String(params.backgroundImageUrl ?? "").trim();
-  const backgroundImageValue = safeBgUrl
-    ? `${toCssUrlValue(safeBgUrl)}, linear-gradient(135deg, #ffffff, #f1f5f9)`
-    : "linear-gradient(135deg, #ffffff, #f1f5f9)";
-
-  const fieldRules = CERTIFICATE_FIELD_KEYS.map((key) => {
-    const l = params.layouts[key];
-    const x = Math.max(0, Math.min(100, Number(l?.x ?? 50)));
-    const y = Math.max(0, Math.min(100, Number(l?.y ?? 50)));
-    const size = Math.max(10, Math.min(72, Number(l?.fontSize ?? 18)));
-    const weight = Math.max(300, Math.min(900, Number(l?.fontWeight ?? 500)));
-    const width = Math.max(8, Math.min(96, Number(l?.width ?? 40)));
-    const align = l?.align === "right" || l?.align === "center" ? l.align : "left";
-    const translate = align === "center" ? "translate(-50%, -50%)" : align === "right" ? "translate(-100%, -50%)" : "translate(0, -50%)";
-    return `.cf-${key} { left: ${x}%; top: ${y}%; width: ${width}%; font-size: ${size}px; font-weight: ${weight}; text-align: ${align}; transform: ${translate}; }`;
-  });
-
-  const extraRules = params.extraObjects.map((obj) => {
-    const cls = `.cf-extra-${cssClassSafeId(obj.id)}`;
-    const x = clampNumber(Number(obj.x ?? 50), 0, 100);
-    const y = clampNumber(Number(obj.y ?? 50), 0, 100);
-    const width = clampNumber(Number(obj.width ?? 20), 2, 96);
-    const height = clampNumber(Number(obj.height ?? 10), 2, 96);
-    const fontSize = clampNumber(Number(obj.fontSize ?? 16), 8, 96);
-    const fontWeight = clampNumber(Number(obj.fontWeight ?? 500), 300, 900);
-    const align = obj.align === "left" || obj.align === "right" ? obj.align : "center";
-    const opacity = clampNumber(Number(obj.opacity ?? 1), 0.05, 1);
-    const radius = clampNumber(Number(obj.borderRadius ?? 0), 0, 48);
-    const rotation = clampNumber(Number(obj.rotation ?? 0), -180, 180);
-    const zIndex = clampNumber(Number(obj.zIndex ?? 20), 1, 999);
-    const transform = align === "left"
-      ? `translate(0, -50%) rotate(${rotation}deg)`
-      : align === "right"
-        ? `translate(-100%, -50%) rotate(${rotation}deg)`
-        : `translate(-50%, -50%) rotate(${rotation}deg)`;
-
-    const base = `${cls} { left: ${x}%; top: ${y}%; width: ${width}%; height: ${height}%; text-align: ${align}; transform: ${transform}; opacity: ${opacity}; border-radius: ${radius}px; z-index: ${Math.round(zIndex)}; }`;
-
-    if (obj.type === "image") {
-      return [
-        base,
-        `${cls} { object-fit: contain; background: transparent; }`,
-      ].join("\n");
-    }
-    if (obj.type === "shape") {
-      return [
-        base,
-        `${cls} { background: ${String(obj.backgroundColor || "rgba(59,130,246,0.25)")}; border: 1px solid rgba(15,23,42,0.2); }`,
-      ].join("\n");
-    }
-    return [
-      base,
-      `${cls} { color: ${String(obj.color || "#0f172a")}; font-size: ${fontSize}px; font-weight: ${fontWeight}; line-height: 1.2; white-space: pre-wrap; background: ${String(obj.backgroundColor || "transparent")}; padding: 2px 6px; }`,
-    ].join("\n");
-  });
-
-  return [
-    "/* AUTOLAYOUT_START */",
-    ".cert-wrap {",
-    "  position: relative;",
-    "  width: 1123px;",
-    "  height: 794px;",
-    "  box-sizing: border-box;",
-    `  background-image: ${backgroundImageValue};`,
-    "  background-repeat: no-repeat;",
-    "  background-position: center;",
-    "  background-size: 100% 100%;",
-    "  image-rendering: auto;",
-    "  -webkit-print-color-adjust: exact;",
-    "  print-color-adjust: exact;",
-    "  border: 2px solid #334155;",
-    "  border-radius: 12px;",
-    "  overflow: hidden;",
-    "}",
-    ".cf-field {",
-    "  position: absolute;",
-    "  max-width: 96%;",
-    "  color: #0f172a;",
-    "  white-space: normal;",
-    "  line-height: 1.2;",
-    "}",
-    ".cf-qr-image {",
-    "  object-fit: contain;",
-    "  height: auto;",
-    "}",
-    ".cf-extra {",
-    "  position: absolute;",
-    "  max-width: 96%;",
-    "  box-sizing: border-box;",
-    "}",
-    ...fieldRules,
-    ...extraRules,
-    "/* AUTOLAYOUT_END */",
-  ].join("\n");
-}
-
-function mergeAutoLayoutCss(existingCss: string, autoCss: string): string {
-  const text = String(existingCss ?? "");
-  const start = text.indexOf("/* AUTOLAYOUT_START */");
-  const end = text.indexOf("/* AUTOLAYOUT_END */");
-  if (start >= 0 && end > start) {
-    const afterEnd = end + "/* AUTOLAYOUT_END */".length;
-    return `${text.slice(0, start).trimEnd()}\n\n${autoCss}\n\n${text.slice(afterEnd).trimStart()}`.trim();
-  }
-  return [text.trim(), autoCss.trim()].filter(Boolean).join("\n\n");
-}
+// buildCustomAutoLayoutHtml / buildCustomAutoLayoutCss / mergeAutoLayoutCss now live in
+// ../../lib/certificates/editorShared so the contest editor and the admin global-template
+// editor share one canonical layout→HTML/CSS engine (imported at the top of this file).
 
 function contestPhaseChip(params: { started: boolean; finished: boolean; paused?: boolean; tr: TrFn }) {
   if (params.paused) {
@@ -1025,6 +887,8 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
   const [problems, setProblems] = React.useState<ScoreboardProblem[]>([]);
   const [rows, setRows] = React.useState<ScoreboardRow[]>([]);
   const [disqualifiedCount, setDisqualifiedCount] = React.useState(0);
+  const [scoringMode, setScoringMode] = React.useState<"IOI" | "ICPC">("IOI");
+  const [frozen, setFrozen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(() => {
@@ -1035,6 +899,8 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
         setProblems(Array.isArray(r.problems) ? r.problems : []);
         setRows(Array.isArray(r.rows) ? r.rows : []);
         setDisqualifiedCount(Number(r.disqualifiedCount ?? 0) || 0);
+        setScoringMode(r.scoringMode === "ICPC" ? "ICPC" : "IOI");
+        setFrozen(Boolean(r.freeze?.frozen));
       })
       .catch((e: unknown) => {
         const msg = getErrorMessage(e);
@@ -1050,12 +916,33 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
     load();
   }, [load]);
 
+  // Auto-refresh standings every 15s so the board feels live.
+  React.useEffect(() => {
+    const id = window.setInterval(load, 15000);
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  const medalTone = (rank: number): string => {
+    if (rank === 1) return "border-yellow-400/60 bg-yellow-400/10 text-yellow-300";
+    if (rank === 2) return "border-slate-300/60 bg-slate-300/10 text-slate-200";
+    if (rank === 3) return "border-amber-600/60 bg-amber-600/10 text-amber-400";
+    return "border-primary/50 bg-primary/10 text-primary";
+  };
+
   return (
     <Card className="p-4 border border-border/70 bg-bg-surface/80">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="font-mono text-text-primary flex items-center gap-2">
           <Flame className="w-4 h-4 text-primary" />
           {tr("Таблиця", "Standings")}
+          <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-bg-base text-text-secondary uppercase tracking-wider">
+            {scoringMode === "ICPC" ? tr("ICPC · бали/штраф", "ICPC · solved/penalty") : tr("IOI · сума балів", "IOI · points")}
+          </span>
+          {frozen ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-accent-warn/50 bg-accent-warn/10 text-accent-warn uppercase tracking-wider">
+              ❄ {tr("Заморожено", "Frozen")}
+            </span>
+          ) : null}
         </div>
         <Button variant="secondary" onClick={load} disabled={loading}>
           <RefreshCw className="w-4 h-4 mr-2" />
@@ -1076,28 +963,56 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
-            <div key={r.participantId} className="rounded-xl border border-border bg-bg-base/80 p-3">
+            <div key={r.participantId} className={`rounded-xl border bg-bg-base/80 p-3 ${r.rank <= 3 ? medalTone(r.rank).replace(/text-[^\s]+/, "") : "border-border"}`}>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-lg border border-primary/50 bg-primary/10 text-primary text-xs font-bold">
-                    #{r.rank}
+                  <span className={`inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-lg border text-xs font-bold ${medalTone(r.rank)}`}>
+                    {r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : `#${r.rank}`}
                   </span>
                   <span className="text-sm font-mono text-text-primary truncate">{r.displayName}</span>
                 </div>
-                <div className="inline-flex items-center gap-1 rounded-lg border border-accent-success/40 bg-accent-success/10 px-2 py-1 text-xs font-mono text-accent-success">
-                  <Trophy className="w-3.5 h-3.5" /> {tr("Сума", "Total")}: {r.totalScore}
-                </div>
+                {scoringMode === "ICPC" ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-accent-success/40 bg-accent-success/10 px-2 py-1 text-xs font-mono text-accent-success">
+                      <Trophy className="w-3.5 h-3.5" /> {Number(r.solved ?? 0)}
+                    </span>
+                    <span className="inline-flex items-center rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs font-mono text-text-secondary">
+                      {tr("штраф", "pen")} {Number(r.penalty ?? 0)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1 rounded-lg border border-accent-success/40 bg-accent-success/10 px-2 py-1 text-xs font-mono text-accent-success">
+                    <Trophy className="w-3.5 h-3.5" /> {tr("Сума", "Total")}: {r.totalScore}
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {problems.map((p) => {
                   const hit = r.problems.find((x) => x.problemId === p.id);
                   const score = Number(hit?.score ?? 0);
-                  const hasSubmission = Boolean(hit?.bestAt);
-                  const scoreTone = problemScoreTone(score, hasSubmission);
+                  const hasSubmission = Boolean(hit?.bestAt) || Number(hit?.attempts ?? 0) > 0;
+                  const solved = Boolean(hit?.solved);
+                  const attempts = Number(hit?.attempts ?? 0);
+                  const firstBlood = Boolean(hit?.isFirstBlood);
+                  const pending = Boolean(hit?.pending);
+                  const cellTone = pending
+                    ? "border-accent-warn/40 bg-accent-warn/10 text-accent-warn"
+                    : scoringMode === "ICPC"
+                    ? (solved ? "border-accent-success/50 bg-accent-success/15 text-accent-success" : hasSubmission ? "border-accent-error/40 bg-accent-error/10 text-accent-error" : "border-border bg-bg-surface text-text-muted")
+                    : problemScoreTone(score, hasSubmission);
                   return (
-                    <span key={p.id} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-mono ${scoreTone}`}>
+                    <span
+                      key={p.id}
+                      title={pending ? tr("Очікує (заморожено)", "Pending (frozen)") : firstBlood ? tr("Перше розв'язання!", "First to solve!") : undefined}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-mono ${cellTone} ${firstBlood ? "ring-1 ring-yellow-400/60" : ""}`}
+                    >
+                      {firstBlood ? <span title={tr("Перше розв'язання", "First to solve")}>⚡</span> : null}
                       <span className="opacity-80">{p.label}</span>
-                      <span>{hasSubmission ? score : "—"}</span>
+                      {scoringMode === "ICPC" ? (
+                        <span>{solved ? `+${attempts > 1 ? attempts : ""}` : pending ? "?" : hasSubmission ? `−${attempts}` : "·"}</span>
+                      ) : (
+                        <span>{hasSubmission ? score : "—"}{pending ? "?" : ""}</span>
+                      )}
                     </span>
                   );
                 })}
@@ -1170,6 +1085,7 @@ export const ContestPage: React.FC = () => {
   const [settingsStartsAt, setSettingsStartsAt] = React.useState("");
   const [settingsEndsAt, setSettingsEndsAt] = React.useState("");
   const [settingsAllowUpsolve, setSettingsAllowUpsolve] = React.useState(true);
+  const [settingsScoringMode, setSettingsScoringMode] = React.useState<"IOI" | "ICPC">("IOI");
 
   const [addOpen, setAddOpen] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
@@ -1201,6 +1117,11 @@ export const ContestPage: React.FC = () => {
   const [adminParticipants, setAdminParticipants] = React.useState<ContestAdminParticipant[]>([]);
   const [adminParticipantsActionMessage, setAdminParticipantsActionMessage] = React.useState<string | null>(null);
   const [adminParticipantsActionTone, setAdminParticipantsActionTone] = React.useState<"success" | "warn" | "error">("success");
+  const [simProblemId, setSimProblemId] = React.useState<number | null>(null);
+  const [simPairs, setSimPairs] = React.useState<ContestSimilarityPair[]>([]);
+  const [simLoading, setSimLoading] = React.useState(false);
+  const [simError, setSimError] = React.useState<string | null>(null);
+  const [simCompared, setSimCompared] = React.useState<number | null>(null);
   const [accountRosterText, setAccountRosterText] = React.useState("");
   const [accountRosterImportKey, setAccountRosterImportKey] = React.useState(0);
   const [accountRosterImportPreviewOpen, setAccountRosterImportPreviewOpen] = React.useState(false);
@@ -1226,6 +1147,13 @@ export const ContestPage: React.FC = () => {
   const [certificateSendEmailEnabled, setCertificateSendEmailEnabled] = React.useState(true);
   const [certificateForceRegenerate, setCertificateForceRegenerate] = React.useState(false);
   const [certificateTemplateId, setCertificateTemplateId] = React.useState("");
+  // True when the current Template ID was auto-created from the canvas (not manually linked).
+  // Lets us re-create a fresh template on every save so canvas edits always reach the PDF
+  // (templates are immutable — there is no update endpoint).
+  const [certificateTemplateAutoCreated, setCertificateTemplateAutoCreated] = React.useState(false);
+  // When true the saved template is global (contest_id = NULL) — reusable across every contest,
+  // so organizers can build a house style here instead of the separate Admin Panel editor.
+  const [certificateTemplateGlobal, setCertificateTemplateGlobal] = React.useState(false);
   const [certificateTemplateName, setCertificateTemplateName] = React.useState("Custom template");
   const [certificateTemplateHtml, setCertificateTemplateHtml] = React.useState("");
   const [certificateTemplateCss, setCertificateTemplateCss] = React.useState("");
@@ -1615,9 +1543,9 @@ export const ContestPage: React.FC = () => {
     setCertificateError(null);
     try {
       const created = await createCertificateTemplate({
-        contestId,
-        name: certificateTemplateName.trim() || "Custom template",
-        type: "custom",
+        contestId: certificateTemplateGlobal ? undefined : contestId,
+        name: certificateTemplateName.trim() || (certificateMode === "studycod" ? "StudyCod layout" : "Custom template"),
+        type: certificateMode === "studycod" ? "studycod" : "custom",
         htmlTemplate,
         cssTemplate: cssTemplate || undefined,
         fields: CERTIFICATE_FIELD_KEYS.map((fieldKey) => ({
@@ -1627,6 +1555,7 @@ export const ContestPage: React.FC = () => {
         })),
       });
       setCertificateTemplateId(String(created.templateId));
+      setCertificateTemplateAutoCreated(true);
       setCertificateMessage(
         tr(
           `Шаблон створено. ID: ${created.templateId}`,
@@ -1645,12 +1574,16 @@ export const ContestPage: React.FC = () => {
 
   const saveCertificateSettings = async () => {
     if (!contestId) return;
-    if (certificateMode === "custom" && certificateAutoSyncLayout) {
+    // The canvas is the single source of truth for BOTH StudyCod and Custom modes:
+    // whatever is on the canvas is compiled to HTML/CSS and rendered verbatim in the PDF.
+    if (certificateMode !== "none" && certificateAutoSyncLayout) {
       const draft = buildCurrentCustomTemplateDraft();
       setCertificateTemplateHtml(draft.htmlTemplate);
       setCertificateTemplateCss(draft.cssTemplate);
     }
-    if (certificateMode === "custom" && certificateUnknownPlaceholders.length > 0) {
+    // Placeholder validation only matters when the organizer edits raw HTML by hand.
+    // Auto-layout always emits valid placeholders for enabled fields.
+    if (!certificateAutoSyncLayout && certificateMode === "custom" && certificateUnknownPlaceholders.length > 0) {
       setCertificateError(
         tr(
           `Невідомі placeholders: ${certificateUnknownPlaceholders.join(", ")}`,
@@ -1659,7 +1592,7 @@ export const ContestPage: React.FC = () => {
       );
       return;
     }
-    if (certificateMode === "custom" && certificateMissingRequiredPlaceholders.length > 0) {
+    if (!certificateAutoSyncLayout && certificateMode === "custom" && certificateMissingRequiredPlaceholders.length > 0) {
       setCertificateError(
         tr(
           `У шаблоні відсутні обов'язкові placeholders: ${certificateMissingRequiredPlaceholders.join(", ")}`,
@@ -1678,11 +1611,22 @@ export const ContestPage: React.FC = () => {
         defaultTemplateId = typedTemplateId;
       }
 
-      if (certificateMode === "custom" && !defaultTemplateId && certificateTemplateHtml.trim()) {
-        defaultTemplateId = await createCustomCertificateTemplate();
-        if (!defaultTemplateId) {
-          setCertificateSaving(false);
-          return;
+      // Persist the current canvas as a fresh template whenever there is no manually-linked
+      // template id — i.e. either nothing is linked yet, or the linked id was itself
+      // auto-created from a previous save (templates are immutable, so re-saving must create
+      // a new one to capture canvas edits). A manually entered / catalog-linked id is reused.
+      const shouldPersistCanvas =
+        certificateMode !== "none" &&
+        (!defaultTemplateId || (certificateAutoSyncLayout && certificateTemplateAutoCreated));
+      if (shouldPersistCanvas) {
+        const draftHtml = buildCurrentCustomTemplateDraft().htmlTemplate.trim();
+        if (draftHtml) {
+          const createdId = await createCustomCertificateTemplate();
+          if (!createdId) {
+            setCertificateSaving(false);
+            return;
+          }
+          defaultTemplateId = createdId;
         }
       }
 
@@ -1697,16 +1641,8 @@ export const ContestPage: React.FC = () => {
         return;
       }
 
-      if (certificateMode === "studycod" && !defaultTemplateId) {
-        setCertificateError(
-          tr(
-            "Вкажіть Template ID, створений у Admin Panel → Certificates",
-            "Please provide a Template ID created in Admin Panel → Certificates"
-          )
-        );
-        setCertificateSaving(false);
-        return;
-      }
+      // StudyCod with no template id and an empty canvas falls back to the built-in
+      // default design (backend auto-resolves it) — no error needed.
 
       await updateContestCertificateSettings(contestId, {
         mode: certificateMode,
@@ -1891,9 +1827,15 @@ export const ContestPage: React.FC = () => {
   }, [certificateFields, certificateLayout, certificateLayoutBackgroundUrl, certificateLayoutExtraObjects]);
 
   React.useEffect(() => {
-    if (certificateMode !== "custom") return;
+    if (certificateMode === "none") return;
     if (!certificateAutoSyncLayout) return;
-    autoSyncLayoutToTemplate();
+    // Debounced: while dragging, layout state changes on every pointer tick. Rebuilding
+    // the HTML/CSS strings + setState each tick is the main editor lag source. We only
+    // need the synced template for the preview and save flow, so coalesce rapid updates.
+    const handle = window.setTimeout(() => {
+      autoSyncLayoutToTemplate();
+    }, 140);
+    return () => window.clearTimeout(handle);
   }, [autoSyncLayoutToTemplate, certificateAutoSyncLayout, certificateMode]);
 
   const loadCertificateTemplatesCatalog = React.useCallback(async () => {
@@ -1917,6 +1859,7 @@ export const ContestPage: React.FC = () => {
       const nextMode: "studycod" | "custom" = tpl.type === "studycod" ? "studycod" : "custom";
       setCertificateMode(nextMode);
       setCertificateTemplateId(String(tpl.id));
+      setCertificateTemplateAutoCreated(false);
       setCertificateTemplateCheckResult({
         ok: true,
         message: tr(`Вибрано шаблон: ${tpl.name}`, `Selected template: ${tpl.name}`),
@@ -3172,6 +3115,24 @@ export const ContestPage: React.FC = () => {
     </>
   );
 
+  const runSimilarityCheck = async (problemId: number | null) => {
+    if (!contestId || !problemId) return;
+    setSimLoading(true);
+    setSimError(null);
+    try {
+      const res = await getContestSimilarity(contestId, problemId);
+      setSimPairs(Array.isArray(res.pairs) ? res.pairs : []);
+      setSimCompared(Number(res.comparedSubmissions ?? 0) || 0);
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setSimError(msg || tr("Не вдалося обчислити схожість", "Failed to compute similarity"));
+      setSimPairs([]);
+      setSimCompared(null);
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
   const toggleParticipantDisqualification = async (p: ContestAdminParticipant) => {
     if (!contestId) return;
     try {
@@ -3287,6 +3248,7 @@ export const ContestPage: React.FC = () => {
     setSettingsStartsAt(toDateTimeLocalInput(data.contest.startsAt));
     setSettingsEndsAt(toDateTimeLocalInput(data.contest.endsAt));
     setSettingsAllowUpsolve(Boolean(data.contest.allowUpsolve));
+    setSettingsScoringMode(data.contest.scoringMode === "ICPC" ? "ICPC" : "IOI");
   }, [settingsOpen, data?.contest]);
 
   const saveContestSettings = async () => {
@@ -3313,6 +3275,7 @@ export const ContestPage: React.FC = () => {
         startsAt: startsAtIso,
         endsAt: endsAtIso,
         allowUpsolve: settingsAllowUpsolve,
+        scoringMode: settingsScoringMode,
       });
       setSettingsOpen(false);
       await load();
@@ -3512,6 +3475,11 @@ export const ContestPage: React.FC = () => {
           >
             <ListOrdered className="w-4 h-4 mr-2" />
             {tr("Задачі", "Problems")}
+          </Button>
+          <Button variant="ghost" onClick={() => navigate(`/contests/${params.id}/scoreboard`)}
+            title={tr("Жива таблиця результатів", "Live scoreboard")}
+          >
+            🏆 {tr("Скорборд", "Scoreboard")}
           </Button>
           <Button variant={tab === "standings" ? "secondary" : "ghost"} onClick={() => setTab("standings")}
             title={tr("Таблиця", "Standings")}
@@ -3781,6 +3749,26 @@ export const ContestPage: React.FC = () => {
             <input type="checkbox" checked={settingsAllowUpsolve} onChange={(e) => setSettingsAllowUpsolve(e.target.checked)} />
             {tr("Дозволити дорішування після завершення", "Allow upsolve after finish")}
           </label>
+
+          <div>
+            <div className="text-sm font-mono text-text-primary mb-1.5">{tr("Модель рейтингу", "Ranking model")}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                ["IOI", tr("IOI — сума найкращих балів", "IOI — sum of best scores"), tr("Часткові бали за підзадачі; рейтинг за сумою.", "Partial subtask scores; ranked by total points.")],
+                ["ICPC", tr("ICPC — задачі + штраф", "ICPC — solved + penalty"), tr("Рейтинг за к-стю розв'язаних, потім за штрафним часом.", "Ranked by problems solved, then penalty time.")],
+              ] as Array<["IOI" | "ICPC", string, string]>).map(([mode, title, desc]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSettingsScoringMode(mode)}
+                  className={`text-left rounded-lg border px-3 py-2 transition-fast ${settingsScoringMode === mode ? "border-primary/60 bg-primary/10" : "border-border bg-bg-code hover:bg-bg-hover"}`}
+                >
+                  <div className={`text-sm font-mono ${settingsScoringMode === mode ? "text-primary" : "text-text-primary"}`}>{title}</div>
+                  <div className="text-[11px] text-text-secondary mt-0.5">{desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" onClick={() => setSettingsOpen(false)} disabled={settingsSaving}>
@@ -4279,15 +4267,15 @@ export const ContestPage: React.FC = () => {
                       <div className="space-y-2 mb-3 border border-border bg-bg-base p-3">
                         <div className="rounded border border-border bg-bg-surface/60 px-3 py-2 text-xs text-text-secondary">
                           {tr(
-                            "Базовий StudyCod сертифікат налаштовується централізовано в Admin Panel → Certificates. У контесті задається лише Template ID для прив'язки.",
-                            "Base StudyCod certificate is configured centrally in Admin Panel → Certificates. Contest page only links Template ID."
+                            "Налаштуйте сертифікат візуально в редакторі нижче — що бачите на Canvas, те й буде у PDF. Поле Template ID нижче необовʼязкове: лишіть порожнім, щоб зберегти власний дизайн, або вкажіть ID готового шаблону з Admin Panel, щоб прив'язати його.",
+                            "Design the certificate visually in the editor below — what you see on the Canvas is exactly what the PDF will contain. The Template ID field below is optional: leave it empty to save your own design, or enter the ID of a ready-made Admin Panel template to link it."
                           )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
                           <Input
                             label={tr("Template ID (з Admin Panel)", "Template ID (from Admin Panel)")}
                             value={certificateTemplateId}
-                            onChange={(e) => setCertificateTemplateId(e.target.value)}
+                            onChange={(e) => { setCertificateTemplateId(e.target.value); setCertificateTemplateAutoCreated(false); }}
                             onBlur={autoValidateCertificateTemplateId}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
@@ -4325,7 +4313,7 @@ export const ContestPage: React.FC = () => {
                       </div>
                     ) : null}
 
-                    {certificateMode === "custom" ? (
+                    {certificateMode !== "none" ? (
                       <div className="space-y-2 mb-3 border border-border bg-bg-base p-3">
                         {certificateUiSimpleMode ? (
                           <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-bg-surface/60 px-2 py-1.5 text-xs text-text-secondary">
@@ -4343,7 +4331,7 @@ export const ContestPage: React.FC = () => {
                         {certificateUiSimpleMode ? (
                           <div className="rounded border border-border bg-bg-surface/60 px-2 py-2 space-y-2">
                             <div className="text-xs text-text-secondary">
-                              {tr("Як працювати: 1) Додай об'єкти кнопками нижче або ПКМ по Canvas, 2) Перетягуй їх на Canvas, 3) Змінюй розмір за правий-нижній маркер.", "How it works: 1) Add objects with toggles below or right-click on Canvas, 2) Drag them on Canvas, 3) Resize with bottom-right handle.")}
+                              {tr("Як працювати: 1) Вмикай поля кнопками нижче, додавай власні об'єкти кнопками над Canvas (або ПКМ по Canvas), 2) Перетягуй їх на Canvas, 3) Змінюй розмір за маркери. Що бачиш на Canvas — те й буде у PDF.", "How it works: 1) Toggle fields with the buttons below, add your own objects with the buttons above the Canvas (or right-click the Canvas), 2) Drag them on the Canvas, 3) Resize with the handles. What you see on the Canvas is exactly what the PDF will contain.")}
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {CERTIFICATE_FIELD_KEYS.map((key) => {
@@ -4370,29 +4358,6 @@ export const ContestPage: React.FC = () => {
                                 );
                               })}
                             </div>
-                            <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border/60">
-                              <button
-                                type="button"
-                                onClick={() => addCertificateExtraObjectAtPosition("text", 50, 50)}
-                                className="px-2 py-1 rounded border border-border bg-bg-base text-text-primary text-[11px] font-mono"
-                              >
-                                + {tr("Текст", "Text")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => addCertificateExtraObjectAtPosition("image", 50, 50)}
-                                className="px-2 py-1 rounded border border-border bg-bg-base text-text-primary text-[11px] font-mono"
-                              >
-                                + {tr("Картинка", "Image")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => addCertificateExtraObjectAtPosition("shape", 50, 50)}
-                                className="px-2 py-1 rounded border border-border bg-bg-base text-text-primary text-[11px] font-mono"
-                              >
-                                + {tr("Фігура", "Shape")}
-                              </button>
-                            </div>
                           </div>
                         ) : null}
                         {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (
@@ -4407,7 +4372,7 @@ export const ContestPage: React.FC = () => {
                             <Input
                               label={tr("Template ID (опційно)", "Template ID (optional)")}
                               value={certificateTemplateId}
-                              onChange={(e) => setCertificateTemplateId(e.target.value)}
+                              onChange={(e) => { setCertificateTemplateId(e.target.value); setCertificateTemplateAutoCreated(false); }}
                               inputMode="numeric"
                             />
                             <div className="border border-border rounded-lg p-3 bg-bg-surface/60">
@@ -4717,8 +4682,34 @@ export const ContestPage: React.FC = () => {
                           ) : null}
 
                           <div className="border border-border rounded-lg bg-bg-base p-2">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <div className="text-[11px] text-text-secondary">{tr("Canvas превʼю", "Canvas preview")}</div>
+                            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] text-text-secondary mr-1">{tr("Додати:", "Add:")}</span>
+                                <button
+                                  type="button"
+                                  className="px-2 py-0.5 rounded border border-border bg-bg-surface hover:bg-bg-hover text-[11px] font-mono text-text-primary"
+                                  onClick={() => addCertificateExtraObjectAtPosition("text", 50, 50)}
+                                  title={tr("Вставити власний текст", "Insert your own text")}
+                                >
+                                  + {tr("Текст", "Text")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-2 py-0.5 rounded border border-border bg-bg-surface hover:bg-bg-hover text-[11px] font-mono text-text-primary"
+                                  onClick={() => addCertificateExtraObjectAtPosition("image", 50, 50)}
+                                  title={tr("Вставити картинку за URL", "Insert image by URL")}
+                                >
+                                  + {tr("Картинка", "Image")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-2 py-0.5 rounded border border-border bg-bg-surface hover:bg-bg-hover text-[11px] font-mono text-text-primary"
+                                  onClick={() => addCertificateExtraObjectAtPosition("shape", 50, 50)}
+                                  title={tr("Вставити фігуру", "Insert shape")}
+                                >
+                                  + {tr("Фігура", "Shape")}
+                                </button>
+                              </div>
                               <div className="text-[11px] text-text-secondary font-mono">
                                 {tr("Розмір", "Size")}: 1123×794 px · A4 L (297×210 mm)
                               </div>
@@ -4873,7 +4864,7 @@ export const ContestPage: React.FC = () => {
                                 return (
                                   <div
                                     key={`canvas-${key}`}
-                                    className={`absolute text-[#0f172a] cursor-move select-none border rounded px-1 py-0.5 ${selected ? "border-primary bg-primary/15" : "border-transparent bg-transparent"}`}
+                                    className={`absolute text-[#0f172a] cursor-move select-none rounded-sm ${selected ? "outline outline-2 outline-primary outline-offset-1 bg-primary/10" : ""}`}
                                     style={{
                                       left: `${l.x}%`,
                                       top: `${l.y}%`,
@@ -4884,6 +4875,10 @@ export const ContestPage: React.FC = () => {
                                       width: `${clampFieldWidth(l.width)}%`,
                                       maxWidth: "96%",
                                       whiteSpace: "normal",
+                                      // Match the backend `.cf-field` box exactly (no padding/border,
+                                      // same font + line-height) so the canvas is pixel-truthful vs PDF.
+                                      fontFamily: "Arial, Helvetica, sans-serif",
+                                      lineHeight: 1.2,
                                     }}
                                     onMouseDown={(e) => {
                                       e.preventDefault();
@@ -4947,7 +4942,7 @@ export const ContestPage: React.FC = () => {
                                 return (
                                   <div
                                     key={`canvas-extra-${obj.id}`}
-                                    className={`absolute select-none border rounded px-1 py-0.5 ${selected ? "border-accent-success bg-accent-success/10" : "border-transparent bg-transparent"} ${obj.type === "shape" ? "cursor-move" : "cursor-move"}`}
+                                    className={`absolute select-none cursor-move ${selected ? "outline outline-2 outline-accent-success outline-offset-1" : ""}`}
                                     style={{
                                       left: `${obj.x}%`,
                                       top: `${obj.y}%`,
@@ -4958,8 +4953,13 @@ export const ContestPage: React.FC = () => {
                                       textAlign: obj.align,
                                       fontSize: `${Math.max(8, obj.fontSize)}px`,
                                       fontWeight: obj.fontWeight,
+                                      fontFamily: "Arial, Helvetica, sans-serif",
+                                      lineHeight: 1.2,
                                       color: obj.color,
                                       background: obj.type === "shape" ? obj.backgroundColor : obj.type === "text" ? obj.backgroundColor : "transparent",
+                                      // Mirror the backend `.cf-extra` text box (padding 2px 6px, flex-centered).
+                                      padding: obj.type === "text" ? "2px 6px" : 0,
+                                      boxSizing: "border-box",
                                       borderRadius: `${clampNumber(obj.borderRadius, 0, 48)}px`,
                                       zIndex: clampNumber(Number(obj.zIndex ?? 20), 1, 999),
                                       overflow: "hidden",
@@ -5493,6 +5493,19 @@ export const ContestPage: React.FC = () => {
                         />
                         {tr("Перегенерувати вже існуючі", "Regenerate existing")}
                       </label>
+                      {certificateMode !== "none" ? (
+                        <label
+                          className="inline-flex items-center gap-2 text-sm text-text-primary"
+                          title={tr("Зберегти цей дизайн як багаторазовий шаблон, доступний у всіх контестах", "Save this design as a reusable template available in every contest")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={certificateTemplateGlobal}
+                            onChange={(e) => { setCertificateTemplateGlobal(e.target.checked); setCertificateTemplateAutoCreated(false); }}
+                          />
+                          {tr("Глобальний шаблон (для всіх контестів)", "Global template (all contests)")}
+                        </label>
+                      ) : null}
                       <Button onClick={enqueueCertificateGeneration} disabled={certificateGenerating}>
                         {certificateGenerating ? tr("Запуск...", "Starting...") : tr("Згенерувати сертифікати", "Generate certificates")}
                       </Button>
@@ -5818,6 +5831,53 @@ export const ContestPage: React.FC = () => {
                       </div>
                     ) : null}
 
+                    <div className="mb-4 rounded-lg border border-border bg-bg-base/60 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-mono text-text-primary">{tr("Перевірка на схожість коду", "Code similarity check")}</span>
+                        <select
+                          value={simProblemId ?? ""}
+                          onChange={(e) => setSimProblemId(e.target.value ? Number(e.target.value) : null)}
+                          aria-label={tr("Оберіть задачу", "Select problem")}
+                          className="h-9 px-2 rounded-md bg-bg-code border border-border text-sm font-mono text-text-primary focus:outline-none"
+                        >
+                          <option value="">{tr("Оберіть задачу…", "Select problem…")}</option>
+                          {(data?.problems ?? []).map((pr) => (
+                            <option key={pr.id} value={pr.id}>{pr.label} · {pr.title}</option>
+                          ))}
+                        </select>
+                        <Button variant="secondary" onClick={() => runSimilarityCheck(simProblemId)} disabled={!simProblemId || simLoading}>
+                          {simLoading ? tr("Аналіз…", "Analyzing…") : tr("Перевірити", "Check")}
+                        </Button>
+                        {simCompared != null ? (
+                          <span className="text-[11px] text-text-secondary">{tr(`Порівняно подач: ${simCompared}`, `Compared: ${simCompared}`)}</span>
+                        ) : null}
+                      </div>
+                      {simError ? <div className="mt-2 text-xs text-accent-error">{simError}</div> : null}
+                      {!simError && simCompared != null && simPairs.length === 0 && !simLoading ? (
+                        <div className="mt-2 text-xs text-text-secondary">{tr("Підозрілих пар не знайдено (поріг 60%).", "No suspicious pairs found (60% threshold).")}</div>
+                      ) : null}
+                      {simPairs.length > 0 ? (
+                        <div className="mt-3 space-y-1.5">
+                          {simPairs.map((pair, idx) => {
+                            const pct = Math.round(pair.similarity * 100);
+                            const tone = pct >= 85 ? "text-accent-error border-accent-error/50 bg-accent-error/10" : pct >= 70 ? "text-accent-warn border-accent-warn/50 bg-accent-warn/10" : "text-text-secondary border-border bg-bg-surface";
+                            return (
+                              <div key={`${pair.a.participantId}-${pair.b.participantId}-${idx}`} className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs font-mono ${tone}`}>
+                                <span className="text-text-primary truncate">{pair.a.displayName} ↔ {pair.b.displayName}</span>
+                                <span>{pct}%</span>
+                              </div>
+                            );
+                          })}
+                          <div className="text-[10px] text-text-muted mt-1">
+                            {tr(
+                              "Евристика (токен-шинглінг). Високий відсоток — привід для перевірки, не доказ.",
+                              "Heuristic (token shingling). A high percentage is a reason to review, not proof."
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
                     {adminParticipantsLoading ? (
                       <div className="space-y-2">
                         {Array.from({ length: 6 }).map((_, i) => (
@@ -5848,11 +5908,23 @@ export const ContestPage: React.FC = () => {
                                 <td className="hidden md:table-cell p-2 border-b border-border">{p.principalType}</td>
                                 <td className="hidden lg:table-cell p-2 border-b border-border">{p.contestAccountHandle ? p.contestAccountHandle : "—"}</td>
                                 <td className="p-2 border-b border-border">
-                                  {p.isDisqualified ? (
-                                    <Badge color="warn">{tr("Дискваліфіковано", "Disqualified")}</Badge>
-                                  ) : (
-                                    <Badge color="success">{tr("У заліку", "Active")}</Badge>
-                                  )}
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {p.isDisqualified ? (
+                                      <Badge color="warn">{tr("Дискваліфіковано", "Disqualified")}</Badge>
+                                    ) : (
+                                      <Badge color="success">{tr("У заліку", "Active")}</Badge>
+                                    )}
+                                    {p.integrity && p.integrity.total > 0 ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 rounded border border-accent-warn/50 bg-accent-warn/10 px-1.5 py-0.5 text-[10px] font-mono text-accent-warn"
+                                        title={Object.entries(p.integrity.byType)
+                                          .map(([k, v]) => `${k}: ${v}`)
+                                          .join(" · ")}
+                                      >
+                                        ⚠ {p.integrity.total}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 </td>
                                 <td className="p-2 border-b border-border text-right">
                                   <div className="flex flex-wrap items-center justify-end gap-2">

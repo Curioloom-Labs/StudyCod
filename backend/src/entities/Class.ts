@@ -15,7 +15,7 @@ export class Class {
     name: "teacher_id"
   })
   teacher!: User;
-  @Column()
+  @Column({ type: "varchar" })
   name!: string;
   @Column({
     type: "enum",

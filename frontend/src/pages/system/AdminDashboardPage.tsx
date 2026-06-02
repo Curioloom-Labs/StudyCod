@@ -12,8 +12,12 @@ import { downloadSupportChatAttachment } from "../../lib/api/support";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
 import {
+  buildCustomAutoLayoutCss,
+  buildCustomAutoLayoutHtml,
+  defaultCertificateLayoutState,
   isSupportedCertificateBackgroundFile,
   isSvgCertificateBackgroundFile,
+  mergeAutoLayoutCss,
   normalizeCertificateBackgroundSource,
   toCssUrlValue,
 } from "../../lib/certificates/editorShared";
@@ -328,68 +332,24 @@ function extractTemplatePlaceholders(template: string): string[] {
   return Array.from(keys.values());
 }
 
+// Thin wrappers over the shared canonical engine (../../lib/certificates/editorShared)
+// so the admin global-template editor and the contest editor produce identical output.
 function buildGlobalContestStyleAutoLayoutHtml(
   fields: Record<GlobalCertTemplateFieldKey, { isEnabled: boolean; isRequired: boolean }>
 ): string {
-  const lines = GLOBAL_CERT_TEMPLATE_FIELD_KEYS
-    .filter((key) => Boolean(fields[key]?.isEnabled))
-    .map((key) => key === "qr_code"
-      ? `<img class="cf-field cf-${key} cf-qr-image" src="{{${key}}}" alt="qr" />`
-      : `<div class="cf-field cf-${key}">{{${key}}}</div>`);
-
-  return `<div class="cert-wrap">\n${lines.join("\n")}\n</div>`;
+  return buildCustomAutoLayoutHtml(fields, []);
 }
 
 function buildGlobalContestStyleAutoLayoutCss(backgroundImageUrl: string): string {
-  const safeBgUrl = String(backgroundImageUrl ?? "").trim();
-  const backgroundImageValue = safeBgUrl
-    ? `${toCssUrlValue(safeBgUrl)}, linear-gradient(135deg, #ffffff, #f1f5f9)`
-    : "linear-gradient(135deg, #ffffff, #f1f5f9)";
-
-  return [
-    "/* AUTOLAYOUT_START */",
-    ".cert-wrap {",
-    "  position: relative;",
-    "  width: 1123px;",
-    "  height: 794px;",
-    "  box-sizing: border-box;",
-    `  background-image: ${backgroundImageValue};`,
-    "  background-repeat: no-repeat;",
-    "  background-position: center;",
-    "  background-size: 100% 100%;",
-    "  image-rendering: auto;",
-    "  -webkit-print-color-adjust: exact;",
-    "  print-color-adjust: exact;",
-    "  border: 2px solid #334155;",
-    "  border-radius: 12px;",
-    "  overflow: hidden;",
-    "}",
-    ".cf-field { position: absolute; max-width: 96%; color: #0f172a; white-space: normal; line-height: 1.2; }",
-    ".cf-contest_name { left: 50%; top: 18%; width: 76%; transform: translate(-50%, -50%); text-align: center; font-size: 28px; font-weight: 700; }",
-    ".cf-name { left: 50%; top: 34%; width: 80%; transform: translate(-50%, -50%); text-align: center; font-size: 34px; font-weight: 700; }",
-    ".cf-full_name { left: 50%; top: 40%; width: 84%; transform: translate(-50%, -50%); text-align: center; font-size: 42px; font-weight: 700; }",
-    ".cf-place { left: 50%; top: 45%; width: 52%; transform: translate(-50%, -50%); text-align: center; font-size: 26px; font-weight: 600; }",
-    ".cf-score { left: 50%; top: 53%; width: 44%; transform: translate(-50%, -50%); text-align: center; font-size: 22px; font-weight: 600; }",
-    ".cf-max_score { left: 62%; top: 53%; width: 20%; transform: translate(0, -50%); text-align: left; font-size: 18px; font-weight: 500; }",
-    ".cf-date { left: 12%; top: 87%; width: 24%; transform: translate(0, -50%); text-align: left; font-size: 16px; font-weight: 500; }",
-    ".cf-organizer { left: 50%; top: 87%; width: 40%; transform: translate(-50%, -50%); text-align: center; font-size: 16px; font-weight: 500; }",
-    ".cf-signature { left: 84%; top: 87%; width: 24%; transform: translate(-100%, -50%); text-align: right; font-size: 16px; font-weight: 500; }",
-    ".cf-certificate_id { left: 12%; top: 93%; width: 30%; transform: translate(0, -50%); text-align: left; font-size: 12px; font-weight: 500; }",
-    ".cf-qr_code { left: 86%; top: 93%; width: 12%; transform: translate(-100%, -50%); text-align: right; }",
-    ".cf-qr-image { object-fit: contain; height: auto; }",
-    "/* AUTOLAYOUT_END */",
-  ].join("\n");
+  return buildCustomAutoLayoutCss({
+    layouts: defaultCertificateLayoutState(),
+    backgroundImageUrl,
+    extraObjects: [],
+  });
 }
 
 function mergeGlobalAutoLayoutCss(existingCss: string, autoCss: string): string {
-  const text = String(existingCss ?? "");
-  const start = text.indexOf("/* AUTOLAYOUT_START */");
-  const end = text.indexOf("/* AUTOLAYOUT_END */");
-  if (start >= 0 && end > start) {
-    const afterEnd = end + "/* AUTOLAYOUT_END */".length;
-    return `${text.slice(0, start).trimEnd()}\n\n${autoCss}\n\n${text.slice(afterEnd).trimStart()}`.trim();
-  }
-  return [text.trim(), autoCss.trim()].filter(Boolean).join("\n\n");
+  return mergeAutoLayoutCss(existingCss, autoCss);
 }
 
 function renderGlobalCertificatePreviewHtml(params: {

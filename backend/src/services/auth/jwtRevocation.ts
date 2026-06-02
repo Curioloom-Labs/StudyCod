@@ -81,6 +81,14 @@ export async function revokeUserTokensBeforeTime(userId: number, timestamp: numb
     const key = `${getRedisKeyPrefix()}user:${userId}:token-invalidate-before`;
     await redis.set(key, String(timestamp));
     logger.info("[jwt] User tokens revoked before timestamp", { userId, timestamp });
+    // The cached User row may now reflect stale role/userMode. Invalidate so
+    // the next request re-reads from DB.
+    try {
+      const { invalidateCachedUser } = await import("./userCache.js");
+      await invalidateCachedUser(userId);
+    } catch {
+      // Best-effort.
+    }
   } catch (err: unknown) {
     logger.error("[jwt] Failed to revoke user tokens", { userId, error: getErrorMessage(err) });
   }

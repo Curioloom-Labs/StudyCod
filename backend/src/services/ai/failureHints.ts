@@ -1,4 +1,5 @@
 import { getLLMProvider } from "../llm/provider";
+import { logger } from "../../utils/logger";
 export type HintLanguage = "JAVA" | "PYTHON" | "CPP";
 export interface FailureCase {
   testId?: number | string;
@@ -192,4 +193,116 @@ ${failures.map((f, idx) => {
   } catch {
     return buildFallbackHints();
   }
+}
+
+// --- On-demand "Explain my error" --------------------------------------------
+
+export type ExplainErrorSource = "ai" | "deterministic";
+
+/**
+ * Detect the broad failure category from a verdict + stderr so we can give a
+ * useful deterministic baseline even when AI is unavailable AND cover compile
+ * errors (which carry no failing-test input/expected/actual).
+ */
+export function classifyErrorKind(verdict: string, stderr: string): "compile" | "timeout" | "runtime" | "wrong_answer" {
+  const v = String(verdict ?? "").toUpperCase();
+  const s = String(stderr ?? "");
+  if (v === "CE" || /\b(compilation|compile error|cannot find symbol|syntax\s*error|error:|javac|g\+\+|clang|expected ['`;])/i.test(s)) return "compile";
+  if (v === "TLE" || /\b(time\s*limit|timeout|killed)\b/i.test(s)) return "timeout";
+  if (v === "RE" || /\b(traceback|exception|segmentation fault|runtimeerror|nullpointer|indexerror|keyerror|zerodivision)\b/i.test(s)) return "runtime";
+  return "wrong_answer";
+}
+
+export function deterministicExplanation(kind: ReturnType<typeof classifyErrorKind>, language: HintLanguage): string {
+  switch (kind) {
+    case "compile":
+      return language === "PYTHON"
+        ? "Програма не запустилася через синтаксичну помилку. Знайди рядок із повідомлення про помилку та перевір дужки, двокрапки після if/for/def і відступи."
+        : "Програма не скомпілювалася. Перевір синтаксис, типи, крапки з комою/дужки та підключені бібліотеки (import / #include), орієнтуючись на рядок із повідомлення компілятора.";
+    case "timeout":
+      return "Програма не вклалася в ліміт часу. Оціни складність: чи немає зайвих вкладених циклів? Подумай, чи можна порахувати потрібне за один прохід.";
+    case "runtime":
+      return "Програма впала під час виконання. Подивись на тип помилки в повідомленні (вихід за межі, ділення на нуль, None/null) і перевір відповідне місце в коді.";
+    default:
+      return "Відповідь не збіглася з очікуваною. Звір свій вивід з очікуваним посимвольно: можлива різниця у пробілах, переносах рядків, регістрі або в самих обчисленнях.";
+  }
+}
+
+/**
+ * Produce a single, plain-language explanation of WHY a submission failed —
+ * for an on-demand "Explain my error" button. Works for compile/runtime/TLE
+ * (stderr only) as well as wrong-answer (failing tests). Same pedagogical
+ * guardrails as the hint ladder: explain what went wrong + ONE directional
+ * next step, never a full solution.
+ */
+export async function explainSubmissionError(params: {
+  taskTitle: string;
+  taskText: string;
+  language: HintLanguage;
+  code: string;
+  verdict?: string;
+  stderr?: string | null;
+  failures?: FailureCase[];
+}): Promise<{ explanation: string; source: ExplainErrorSource }> {
+  const verdict = String(params.verdict ?? "").trim();
+  const failures = (params.failures ?? []).slice(0, 3);
+  const stderr = String(params.stderr ?? failures.map(f => f.stderr || "").filter(Boolean).join("\n") ?? "").slice(0, 4000);
+  const kind = classifyErrorKind(verdict, stderr);
+  const fallback = deterministicExplanation(kind, params.language);
+
+  const systemPrompt = `Ти — доброзичливий наставник з програмування. Поясни студенту ПРОСТОЮ українською, ЧОМУ його розв'язок не пройшов, у 2–4 реченнях.
+
+КРИТИЧНО:
+- Спочатку коротко скажи, що саме пішло не так (помилка/невідповідність).
+- Потім дай ОДИН конкретний напрямок, що перевірити чи виправити.
+- ЗАБОРОНЕНО: давати готовий код або повний алгоритм розв'язку.
+- ЗАБОРОНЕНО: поради про стиль/іменування/коментарі.
+- Якщо даних замало — дай найкорисніше загальне спостереження.
+
+Відповідай ТІЛЬКИ валідним JSON.`;
+
+  const schema = {
+    type: "object",
+    properties: { explanation: { type: "string" } },
+    required: ["explanation"],
+  };
+
+  const failuresBlock = failures.length
+    ? failures.map((f, i) => {
+        const id = f.testId !== undefined ? `#${f.testId}` : `#${i + 1}`;
+        return [
+          `Тест ${id}${f.verdict ? ` (${f.verdict})` : ""}`,
+          `Вхід: ${JSON.stringify(String(f.input ?? "").slice(0, 400))}`,
+          `Очікувалося: ${JSON.stringify(String(f.expected ?? "").slice(0, 400))}`,
+          `Отримано: ${JSON.stringify(String(f.actual ?? "").slice(0, 400))}`,
+        ].join("\n");
+      }).join("\n\n")
+    : "(немає невдалих тестів — ймовірно помилка компіляції/виконання)";
+
+  const userPrompt = `Завдання: ${params.taskTitle}
+
+Умова (скорочено):
+${String(params.taskText || "").slice(0, 1500)}
+
+Мова: ${params.language}
+Вердикт: ${verdict || "(невідомо)"}
+
+Код студента:
+${String(params.code || "").slice(0, 6000)}
+
+${stderr ? `Повідомлення про помилку (stderr):\n${JSON.stringify(stderr.slice(0, 1500))}\n` : ""}
+Невдалі тести:
+${failuresBlock}
+
+Поясни простою українською, що пішло не так і що перевірити. Відповідай JSON {"explanation": "..."}.`;
+
+  try {
+    const provider = getLLMProvider();
+    const parsed = await provider.generateJSON<{ explanation: string }>(userPrompt, schema, systemPrompt, { temperature: 0.2 });
+    const explanation = String(parsed?.explanation ?? "").trim();
+    if (explanation) return { explanation, source: "ai" };
+  } catch (err: any) {
+    logger.debug("[explainSubmissionError] AI explanation failed, using deterministic fallback", { error: err?.message });
+  }
+  return { explanation: fallback, source: "deterministic" };
 }

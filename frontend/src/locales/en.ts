@@ -15,6 +15,9 @@ export default {
   tasks: 'Tasks',
   grades: 'Grades',
   library: 'Library',
+  contests: 'Contests',
+  myLearning: 'My Learning',
+  playground: 'Playground',
   profile: 'Profile',
   logout: 'Logout',
   menu: 'Menu',
@@ -331,6 +334,7 @@ export default {
   footerCopyright: '© {{year}} StudyCod. All rights reserved.',
   footerPrivacyPolicy: 'Privacy Policy',
   footerTermsOfUse: 'Terms of Use',
+  footerCookiePolicy: 'Cookie Policy',
   maintenanceTitle: 'Technical maintenance',
   maintenanceModeEnabled: 'MAINTENANCE MODE ENABLED'
 };

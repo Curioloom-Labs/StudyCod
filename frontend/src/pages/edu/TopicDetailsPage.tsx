@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
+import { LiveClassMonitor } from "../../components/LiveClassMonitor";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
@@ -102,6 +103,7 @@ export const TopicDetailsPage: React.FC = () => {
   const [taskDifficulty, setTaskDifficulty] = useState<"1" | "2" | "3" | "4" | "5">("3");
   const [aiResponseLanguage, setAiResponseLanguage] = useState(i18n.language?.toLowerCase().startsWith("en") ? "English" : "Українська");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [liveTaskId, setLiveTaskId] = useState<number | null>(null);
   const [showTaskTheory, setShowTaskTheory] = useState(false);
   const [taskTheory, setTaskTheory] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -869,6 +871,13 @@ export const TopicDetailsPage: React.FC = () => {
                             <Download className="w-3 h-3 mr-1" />
                             {tr("Експорт", "Export")}
                           </Button>
+                          <Button variant="ghost" onClick={e => {
+                    e.stopPropagation();
+                    setLiveTaskId(prev => (prev === task.id ? null : task.id));
+                  }} className="text-xs" title={tr("Жива панель класу для цього завдання", "Live class monitor for this task")}
+                  >
+                            {liveTaskId === task.id ? tr("🔴 Сховати", "🔴 Hide") : tr("🔴 Live", "🔴 Live")}
+                          </Button>
                         </div>
                         <Button variant="ghost" onClick={e => {
                   e.stopPropagation();
@@ -883,6 +892,10 @@ export const TopicDetailsPage: React.FC = () => {
                   </div>
                 </div>)}
           </div>
+
+          {liveTaskId && (topic as any)?.class?.id ? (
+            <LiveClassMonitor classId={(topic as any).class.id} taskId={liveTaskId} className="mt-3" />
+          ) : null}
         </Card>
 
         {}

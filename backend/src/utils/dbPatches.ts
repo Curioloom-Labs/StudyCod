@@ -1,6 +1,21 @@
 import { AppDataSource } from "../data-source";
 import { logger } from "./logger";
 
+// =============================================================================
+// LEGACY SHADOW MIGRATIONS — DO NOT RE-WIRE WITHOUT EXPLICIT OPT-IN.
+// -----------------------------------------------------------------------------
+// This module historically ran ad-hoc `ALTER TABLE` / `SHOW COLUMNS` statements
+// at boot to repair schema drift. That bypasses TypeORM migration history,
+// races across multi-instance startup, and makes rollbacks impossible.
+//
+// As of the hardening pass, `applyDbPatches()` is NOT called from anywhere in
+// the codebase. The functions remain here as a temporary safety net while the
+// equivalent fixes are ported into proper migrations. New code MUST use
+// TypeORM migrations. To intentionally run these legacy patches in an
+// emergency, set `DB_PATCHES_ENABLED=1` AND call `applyDbPatches()` from a
+// one-shot script — never from server startup.
+// =============================================================================
+
 // Keep legacy db patch code readable while ensuring logs go through the centralized logger.
 // (This shadows the global `console` only within this module.)
 const console = {
@@ -9,7 +24,37 @@ const console = {
   error: (...args: any[]) => logger.error(args[0], args[1])
 } as const;
 
+/**
+ * Public guarded entry point. Throws unless DB_PATCHES_ENABLED=1 — kept this
+ * way so future code cannot accidentally re-introduce shadow migrations at
+ * server startup. The legitimate caller is a one-shot recovery script.
+ *
+ * The MIGRATION caller must NOT go through here — it uses the unguarded
+ * `_legacyDbPatchesForMigration` below.
+ */
 export async function applyDbPatches(): Promise<void> {
+  const enabled = String(process.env.DB_PATCHES_ENABLED ?? "").trim() === "1";
+  if (!enabled) {
+    throw new Error(
+      "DB_PATCHES_DISABLED: applyDbPatches() is a legacy shadow-migration entry point. " +
+      "Port the needed fix to a TypeORM migration. To intentionally run it from a one-shot script, " +
+      "set DB_PATCHES_ENABLED=1."
+    );
+  }
+  logger.warn("[dbPatches] running legacy shadow migrations (DB_PATCHES_ENABLED=1)");
+  await _legacyDbPatchesForMigration();
+}
+
+/**
+ * UNGUARDED body — exported ONLY for the consolidating migration at
+ * `migrations/1748000000000-RunLegacyDbPatches.ts`. Do not call from server
+ * runtime code. The leading underscore is a soft signal — `applyDbPatches`
+ * above is the public surface.
+ *
+ * Every step here is internally idempotent (SHOW COLUMNS / SHOW TABLES checks
+ * before any ALTER), so re-running on an already-patched schema is a no-op.
+ */
+export async function _legacyDbPatchesForMigration(): Promise<void> {
   await ensureUserModeEnums();
   await ensureCppLanguageEnums();
   await ensureClassesGradingSystemColumn();
@@ -345,6 +390,13 @@ async function ensureContestsTable(): Promise<void> {
         await AppDataSource.query("ALTER TABLE `contests` ADD COLUMN allow_upsolve TINYINT(1) NOT NULL DEFAULT 1");
         logger.info("[DB Patch] Added column contests.allow_upsolve");
       }
+
+      const scoringCol = (await AppDataSource.query("SHOW COLUMNS FROM `contests` LIKE 'scoring_mode'")) as Array<any>;
+      if (!Array.isArray(scoringCol) || scoringCol.length === 0) {
+        logger.warn("[DB Patch] Column contests.scoring_mode is missing. Adding...");
+        await AppDataSource.query("ALTER TABLE `contests` ADD COLUMN scoring_mode ENUM('IOI','ICPC') NOT NULL DEFAULT 'IOI'");
+        logger.info("[DB Patch] Added column contests.scoring_mode");
+      }
       return;
     }
 
@@ -362,6 +414,7 @@ async function ensureContestsTable(): Promise<void> {
         ends_at DATETIME NULL,
         is_published TINYINT(1) NOT NULL DEFAULT 1,
         allow_upsolve TINYINT(1) NOT NULL DEFAULT 1,
+        scoring_mode ENUM('IOI','ICPC') NOT NULL DEFAULT 'IOI',
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (id),

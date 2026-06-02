@@ -119,7 +119,7 @@ export class CertificateTemplateEngine {
     <style>
       @page { size: A4 landscape; margin: 0; }
       html, body { margin: 0; width: 297mm; height: 210mm; overflow: hidden; }
-      body { background: #ffffff; }
+      body { background: #ffffff; font-family: Arial, Helvetica, sans-serif; }
       ${css}
     </style>
   </head>

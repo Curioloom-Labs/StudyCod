@@ -1,5 +1,6 @@
 import type {
   ContestCheckResult,
+  ContestCommunityAnnouncement,
   ContestProblemStatement,
   ContestRunResult,
   ContestSubmissionListItem,
@@ -54,4 +55,6 @@ export type ContestWorkspaceProps = {
   onFocusModeChange: (next: boolean) => void;
   canAskOrganizer?: boolean;
   onAskOrganizer?: (question: string) => Promise<void> | void;
+  announcements?: ContestCommunityAnnouncement[];
+  focusLostCount?: number;
 };

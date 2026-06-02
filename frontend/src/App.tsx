@@ -57,6 +57,7 @@ const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => 
 const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(mod => ({ default: mod.SupportPage })));
 const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
 const TermsOfUsePage = React.lazy(() => import("./pages/system/TermsOfUsePage").then(mod => ({ default: mod.TermsOfUsePage })));
+const CookiePolicyPage = React.lazy(() => import("./pages/system/CookiePolicyPage").then(mod => ({ default: mod.CookiePolicyPage })));
 const MaintenancePage = React.lazy(() => import("./pages/system/MaintenancePage").then(mod => ({ default: mod.MaintenancePage })));
 const ProfileCertificatesPage = React.lazy(() => import("./pages/profile/ProfileCertificatesPage").then(mod => ({ default: mod.ProfileCertificatesPage })));
 const CertificateVerifyPage = React.lazy(() => import("./pages/public/CertificateVerifyPage").then(mod => ({ default: mod.CertificateVerifyPage })));
@@ -69,6 +70,10 @@ const ContestProblemSolvePage = React.lazy(() => import("./pages/contest/Contest
 const DevEditorPage = React.lazy(() => import("./pages/system/DevEditorPage").then(mod => ({ default: mod.DevEditorPage })));
 const OnboardingEntry = React.lazy(() => import("./components/onboarding/OnboardingEntry").then(mod => ({ default: mod.OnboardingEntry })));
 const PlacementEntry = React.lazy(() => import("./components/placement/PlacementEntry").then(mod => ({ default: mod.PlacementEntry })));
+const PlaygroundPage = React.lazy(() => import("./pages/system/PlaygroundPage").then(mod => ({ default: mod.PlaygroundPage })));
+const ScoreboardPage = React.lazy(() => import("./pages/contest/ScoreboardPage").then(mod => ({ default: mod.ScoreboardPage })));
+const MyLearningPage = React.lazy(() => import("./pages/edu/MyLearningPage").then(mod => ({ default: mod.MyLearningPage })));
+const SolveReplayPage = React.lazy(() => import("./pages/core/SolveReplayPage").then(mod => ({ default: mod.SolveReplayPage })));
 const PageLoader: React.FC = () => {
   const {
     t
@@ -895,6 +900,14 @@ const AppContent: React.FC = React.memo(() => {
         navigate("/contests");
         return;
       }
+      if (target === "playground") {
+        navigate("/playground");
+        return;
+      }
+      if (target === "learn") {
+        navigate("/learn");
+        return;
+      }
       if (target === "continue") {
         handleGoHome();
         return;
@@ -980,6 +993,11 @@ export const App: React.FC = () => {
                   <TermsOfUsePage />
                 </AnimatedPage>
               </Suspense>} />
+          <Route path="/cookies" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <CookiePolicyPage />
+                </AnimatedPage>
+              </Suspense>} />
           <Route path="/support" element={<RequireToken>
                 <Suspense fallback={<PageLoader />}>
                   <AnimatedPage>
@@ -1013,6 +1031,37 @@ export const App: React.FC = () => {
                   </AnimatedPage>
                 </Suspense>
               </RequireToken>} />
+          <Route path="/playground" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <PlaygroundPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
+          <Route path="/playground/:shareId" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <PlaygroundPage />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/learn" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <MyLearningPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
+          <Route path="/replay/:id" element={<RequireToken>
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <SolveReplayPage />
+                  </AnimatedPage>
+                </Suspense>
+              </RequireToken>} />
+          <Route path="/contests/:id/scoreboard" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <ScoreboardPage />
+                </AnimatedPage>
+              </Suspense>} />
           <Route path="/profile" element={<RequireToken>
                 <Navigate to="/?app=profile" replace />
               </RequireToken>} />

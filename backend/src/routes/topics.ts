@@ -17,11 +17,13 @@ import { TestData } from "../entities/TestData";
 import { generateTaskCondition, generateTaskTemplate, generateTheoryWithAI } from "../services/openRouterService";
 import { emailService } from "../services/emailService";
 import { safeAICall, sendAIError } from "../services/ai/safeAICall";
+import { translateSingleTopicTitleUkToEn as translateSingleTopicTitleUkToEnService } from "../services/translation/topicTitleTranslator";
 import multer from "multer";
 import AdmZip from "adm-zip";
 import { logger } from "../utils/logger";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { normalizeAssignedStudentIds, normalizeTargetedAssignmentForStorage } from "../utils/assignmentVisibility";
+import { validateUploadedZip, ZipValidationError, ZipExtractionBudget } from "../utils/zipUploadValidator";
 import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../services/edu/assignmentTargetsService";
 const topicsRouter = Router();
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
@@ -71,6 +73,14 @@ function normalizeResponseLanguage(raw: unknown): string | undefined {
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
   return trimmed.slice(0, 64);
+}
+
+async function translateTopicTitleToEn(params: { req: AuthRequest; topicId: number; title: string }): Promise<string> {
+  return translateSingleTopicTitleUkToEnService({
+    topicId: params.topicId,
+    title: params.title,
+    logContext: { requestId: params.req.requestId, userId: params.req.userId },
+  });
 }
 
 function resolveSelectedStudentsForAssignment(allClassStudents: Student[], requestedStudentIdsRaw: unknown): {
@@ -157,18 +167,24 @@ function encodeRFC5987ValueChars(str: string): string {
     .replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
-function readZipJson<T>(zip: AdmZip, name: string): T {
+function readZipJson<T>(zip: AdmZip, name: string, budget?: ZipExtractionBudget): T {
   const entry = zip.getEntry(name);
   if (!entry) {
     throw new Error(`MISSING_${name.toUpperCase().replace(/\W+/g, "_")}`);
   }
-  const raw = entry.getData().toString("utf-8");
+  // Decompress through the budget so a lying-header zip-bomb is caught by ACTUAL
+  // byte count, not the (attacker-controlled) central-directory header.
+  const raw = budget ? budget.readEntryText(entry) : entry.getData().toString("utf-8");
   try {
     return JSON.parse(raw) as T;
   } catch {
     throw new Error(`INVALID_JSON_${name}`);
   }
 }
+
+// Zip-slip / zip-bomb defences live in a dedicated module so they can be
+// unit-tested without spinning up a router.
+// See utils/zipUploadValidator.ts.
 
 topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
   try {
@@ -541,7 +557,21 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
     if (!file?.buffer) return res.status(400).json({ message: "ARCHIVE_REQUIRED" });
 
-    const zip = new AdmZip(file.buffer);
+    let zip: AdmZip;
+    const zipBudget = new ZipExtractionBudget();
+    try {
+      zip = new AdmZip(file.buffer);
+      validateUploadedZip(zip);
+    } catch (err: any) {
+      if (err instanceof ZipValidationError) {
+        return res.status(400).json({ message: err.code });
+      }
+      logger.warn("[topics] archive parse failed", {
+        requestId: req.requestId,
+        error: err?.message ?? String(err)
+      });
+      return res.status(400).json({ message: "ARCHIVE_INVALID" });
+    }
 
     type TaskJson = {
       title: string;
@@ -569,7 +599,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       maxAttempts?: number;
     };
 
-    const taskJson = readZipJson<TaskJson>(zip, "task.json");
+    const taskJson = readZipJson<TaskJson>(zip, "task.json", zipBudget);
     const title = String(taskJson.title ?? "").trim();
     const description = String(taskJson.description ?? "").trim();
     const normalizedTaskInput = normalizeWebTaskInput(taskJson);
@@ -600,7 +630,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     // Optional theory
     const theoryEntry = zip.getEntry("theory.md");
     if (theoryEntry) {
-      const content = theoryEntry.getData().toString("utf-8").trim();
+      const content = zipBudget.readEntryText(theoryEntry).trim();
       if (content) {
         const theory = theoryRepo().create({
           topicTask: { id: task.id } as any,
@@ -613,7 +643,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     // Optional tests
     const testsEntry = zip.getEntry("tests.json");
     if (testsEntry) {
-      const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json");
+      const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json", zipBudget);
       if (Array.isArray(tests) && tests.length > 0) {
         const rows = tests.map(t => testDataRepo().create({
           topicTask: { id: task.id } as any,
@@ -636,6 +666,10 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       }
     });
   } catch (error: any) {
+    // A budgeted decompression that blows the actual-byte cap surfaces here.
+    if (error instanceof ZipValidationError) {
+      return res.status(400).json({ message: error.code });
+    }
     logger.error("[topics] import archive failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
   }
@@ -841,9 +875,12 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       });
     }
     const userLanguage: "uk" | "en" = language === 'en' ? "en" : "uk";
+    const topicTitleForAi = userLanguage === "en"
+      ? await translateTopicTitleToEn({ req, topicId: topic.id, title: topic.title })
+      : topic.title;
     const aiStartedAt = Date.now();
     const result = await safeAICall('generateTaskCondition', {
-      topicTitle: topic.title,
+      topicTitle: topicTitleForAi,
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficulty || 3,
@@ -919,9 +956,12 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
       responseLanguage
     } = req.body || {};
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
+    const topicTitleForAi = userLanguage === "en"
+      ? await translateTopicTitleToEn({ req, topicId: topic.id, title: topic.title })
+      : topic.title;
     const aiStartedAt = Date.now();
     const result = await safeAICall('generateTaskTemplate', {
-      topicTitle: topic.title,
+      topicTitle: topicTitleForAi,
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       language: topic.language,
       description,

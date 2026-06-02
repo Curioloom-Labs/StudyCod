@@ -14,8 +14,15 @@ import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
 import { In } from "typeorm";
 import { generateTaskWithAI, generateTheoryWithAI, generateQuizWithAI } from "../services/openRouterService";
-import { safeAICall, sendAIError } from "../services/ai/safeAICall";
-import { generateAlgorithmicHints } from "../services/ai/failureHints";
+import { safeAICall, sendAIError, neutralizePromptInjection } from "../services/ai/safeAICall";
+import { generateAlgorithmicHints, explainSubmissionError, type HintLanguage } from "../services/ai/failureHints";
+import { debugMentorReply, type DebugChatMessage, DEBUG_CHAT_MAX_HISTORY, DEBUG_CHAT_MAX_MESSAGE_CHARS } from "../services/ai/debugMentor";
+import { computeIntegrityScore } from "../services/integrity/proctoringScore";
+import { initialConceptState, reviewConcept, gradeFromOutcome, dueConcepts, DEFAULT_EASE_FACTOR, type ConceptReviewState as ConceptReviewStateShape } from "../services/learning/spacedRepetition";
+import { ConceptReviewState } from "../entities/ConceptReviewState";
+import { SubmissionIntegrity } from "../entities/SubmissionIntegrity";
+import { SolveSession } from "../entities/SolveSession";
+import { boundSnapshots, type ReplaySnapshot } from "../services/replay/replaySession";
 import { checkMilestone } from "../utils/milestoneDetector";
 import { getStableDifus } from "../utils/adaptiveDifficulty";
 import { executeCodeWithInput } from "../services/codeExecutionService";
@@ -42,6 +49,10 @@ import {
 } from "../services/webTaskValidationService";
 import { decodeWebTaskPayload, encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { getSharedRedisClient, redisKey } from "../services/redis/sharedRedis";
+import {
+  buildLocalizedTopicTitleEnById as buildLocalizedTopicTitleEnByIdService,
+  translateTopicTheoryUkToEn as translateTopicTheoryUkToEnService,
+} from "../services/translation/topicTitleTranslator";
 const tasksRouter = Router();
 
 type ApiCodeFile = { path: string; content: string };
@@ -51,87 +62,18 @@ function sha256Hex(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
-const TOPIC_TITLE_EN_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const topicTitleEnCache = new Map<string, { value: string; at: number }>();
-
-function looksLikeCyrillicText(text: string): boolean {
-  return /[\u0400-\u04FF]/.test(String(text ?? ""));
-}
-
-function topicTitleEnCacheKey(topicId: number, title: string): string {
-  return `${topicId}:${sha256Hex(String(title ?? ""))}`;
-}
-
-function getCachedTopicTitleEn(topicId: number, title: string): string | null {
-  const key = topicTitleEnCacheKey(topicId, title);
-  const hit = topicTitleEnCache.get(key);
-  if (!hit) return null;
-  if (Date.now() - hit.at > TOPIC_TITLE_EN_CACHE_TTL_MS) {
-    topicTitleEnCache.delete(key);
-    return null;
-  }
-  return hit.value;
-}
-
-function setCachedTopicTitleEn(topicId: number, title: string, value: string): void {
-  const key = topicTitleEnCacheKey(topicId, title);
-  topicTitleEnCache.set(key, { value, at: Date.now() });
-  if (topicTitleEnCache.size > 600) {
-    const now = Date.now();
-    for (const [k, v] of topicTitleEnCache.entries()) {
-      if (now - v.at > TOPIC_TITLE_EN_CACHE_TTL_MS) topicTitleEnCache.delete(k);
-    }
-  }
-}
-
+// Topic-title localization helpers were extracted to
+// services/translation/topicTitleTranslator.ts (audit M1 starter). Adapter
+// wrappers below preserve the existing handler call sites until the broader
+// route refactor lands.
 async function buildLocalizedTopicTitleEnById(params: {
   req: AuthRequest;
   topics: Array<Topic | null | undefined>;
 }): Promise<Map<number, string>> {
-  const out = new Map<number, string>();
-  const unique = new Map<number, string>();
-
-  for (const topic of params.topics) {
-    const topicId = Number((topic as any)?.id);
-    if (!Number.isFinite(topicId) || topicId <= 0) continue;
-    const title = String((topic as any)?.title ?? "").trim();
-    if (!title) continue;
-    if (!unique.has(topicId)) unique.set(topicId, title);
-  }
-
-  for (const [topicId, title] of unique.entries()) {
-    if (!looksLikeCyrillicText(title)) {
-      out.set(topicId, title);
-      continue;
-    }
-
-    const cached = getCachedTopicTitleEn(topicId, title);
-    if (cached) {
-      out.set(topicId, cached);
-      continue;
-    }
-
-    try {
-      const translated = await translateTextUkToEn(title);
-      const normalized = String(translated ?? "").trim();
-      if (normalized && !looksLikeTranslationProviderErrorText(normalized)) {
-        out.set(topicId, normalized);
-        setCachedTopicTitleEn(topicId, title, normalized);
-        continue;
-      }
-    } catch (error: any) {
-      logger.warn("[tasks] translate topic title uk->en failed", {
-        requestId: params.req.requestId,
-        userId: params.req.userId,
-        topicId,
-        error: error?.message ?? String(error)
-      });
-    }
-
-    out.set(topicId, title);
-  }
-
-  return out;
+  return buildLocalizedTopicTitleEnByIdService({
+    topics: params.topics,
+    logContext: { requestId: params.req.requestId, userId: params.req.userId },
+  });
 }
 
 async function translateTheoryUkToEn(params: {
@@ -139,22 +81,11 @@ async function translateTheoryUkToEn(params: {
   topicId?: number | null;
   text: string;
 }): Promise<string> {
-  const raw = String(params.text ?? "");
-  if (!raw.trim()) return raw;
-  if (!looksLikeCyrillicText(raw)) return raw;
-  try {
-    const translated = await translateMarkdownUkToEn(raw);
-    const normalized = String(translated ?? "").trim();
-    if (normalized && !looksLikeTranslationProviderErrorText(normalized)) return translated;
-  } catch (error: any) {
-    logger.warn("[tasks] translate topic theory uk->en failed", {
-      requestId: params.req.requestId,
-      userId: params.req.userId,
-      topicId: params.topicId ?? null,
-      error: error?.message ?? String(error)
-    });
-  }
-  return raw;
+  return translateTopicTheoryUkToEnService({
+    text: params.text,
+    topicId: params.topicId,
+    logContext: { requestId: params.req.requestId, userId: params.req.userId },
+  });
 }
 
 function normalizeClientSubmissionId(value: unknown): string | null {
@@ -320,6 +251,16 @@ const topicRepo = () => AppDataSource.getRepository(Topic);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
+const conceptReviewRepo = () => AppDataSource.getRepository(ConceptReviewState);
+const submissionIntegrityRepo = () => AppDataSource.getRepository(SubmissionIntegrity);
+const solveSessionRepo = () => AppDataSource.getRepository(SolveSession);
+
+function resolvePrincipal(req: AuthRequest): { type: "USER" | "STUDENT"; id: number } | null {
+  const type: "USER" | "STUDENT" = req.userType === "STUDENT" ? "STUDENT" : "USER";
+  const id = req.principalId ?? (type === "STUDENT" ? req.studentId : req.userId);
+  if (!Number.isFinite(Number(id)) || Number(id) <= 0) return null;
+  return { type, id: Number(id) };
+}
 const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
 
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -2160,6 +2101,331 @@ tasksRouter.get("/:id/control-summary", authMiddleware, async (req: AuthRequest,
   } catch (error: any) {
     logger.error("[tasks] GET /:id/control-summary error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// On-demand "Explain my error" — a plain-language explanation of why a run
+// failed (compile / runtime / TLE / wrong answer), distinct from the terse
+// hint ladder produced automatically on submit. Rate-limited to bound AI spend.
+tasksRouter.post("/explain-error", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const langRaw = String(body.language ?? "").trim().toUpperCase();
+    const language = (["JAVA", "PYTHON", "CPP"].includes(langRaw) ? langRaw : "PYTHON") as HintLanguage;
+
+    const code = String(body.code ?? "").slice(0, 20_000);
+    if (!code.trim()) {
+      return res.status(400).json({ message: "CODE_REQUIRED" });
+    }
+
+    const verdict = String(body.verdict ?? "").slice(0, 32);
+    const stderr = body.stderr == null ? "" : String(body.stderr).slice(0, 8000);
+    const taskTitle = String(body.taskTitle ?? "").slice(0, 300);
+    const taskText = String(body.taskText ?? "").slice(0, 4000);
+
+    const rawFailures = Array.isArray(body.failures) ? body.failures.slice(0, 3) : [];
+    const failures = rawFailures
+      .filter((f): f is Record<string, unknown> => !!f && typeof f === "object")
+      .map((f) => ({
+        testId: typeof f.testId === "number" ? f.testId : undefined,
+        input: String(f.input ?? "").slice(0, 1000),
+        expected: String(f.expected ?? "").slice(0, 1000),
+        actual: String(f.actual ?? "").slice(0, 1000),
+        verdict: f.verdict == null ? undefined : String(f.verdict).slice(0, 32),
+        stderr: f.stderr == null ? null : String(f.stderr).slice(0, 2000),
+      }));
+
+    // Nothing to explain if the run succeeded and carried no error signal.
+    const hasError = verdict && verdict.toUpperCase() !== "AC" || stderr.trim() || failures.length > 0;
+    if (!hasError) {
+      return res.status(400).json({ message: "NO_ERROR_TO_EXPLAIN" });
+    }
+
+    const result = await explainSubmissionError({
+      taskTitle,
+      taskText,
+      language,
+      code,
+      verdict,
+      stderr,
+      failures,
+    });
+
+    return res.json({ explanation: result.explanation, source: result.source });
+  } catch (error: any) {
+    logger.warn("[tasks] explain-error failed", { requestId: req.requestId, error: error?.message });
+    return res.status(503).json({ message: "EXPLAIN_UNAVAILABLE" });
+  }
+});
+
+// Save a recorded solve session (bounded snapshots) for later replay.
+tasksRouter.post("/solve-replay", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const principal = resolvePrincipal(req);
+    if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const rawSnaps = Array.isArray(b.snapshots) ? b.snapshots : [];
+    const snapshots: ReplaySnapshot[] = rawSnaps
+      .filter((s): s is Record<string, unknown> => !!s && typeof s === "object")
+      .map((s) => ({ tMs: Number(s.tMs) || 0, code: String(s.code ?? "") }));
+    const bounded = boundSnapshots(snapshots);
+    if (bounded.length === 0) return res.status(400).json({ message: "NO_SNAPSHOTS" });
+
+    const taskKindRaw = String(b.taskKind ?? "").toUpperCase();
+    const taskKind = (["LIBRARY", "TOPIC", "CONTEST", "PLAYGROUND"].includes(taskKindRaw) ? taskKindRaw : "UNKNOWN") as
+      "LIBRARY" | "TOPIC" | "CONTEST" | "PLAYGROUND" | "UNKNOWN";
+    const taskId = Number.isFinite(Number(b.taskId)) && Number(b.taskId) > 0 ? Number(b.taskId) : null;
+    const language = (String(b.language ?? "").slice(0, 16) || null);
+    const durationMs = Math.max(0, Math.floor(Number(b.durationMs) || (bounded[bounded.length - 1]?.tMs ?? 0)));
+    const finalVerdict = b.finalVerdict == null ? null : String(b.finalVerdict).slice(0, 16);
+
+    const row = solveSessionRepo().create({
+      principalType: principal.type,
+      principalId: principal.id,
+      taskKind,
+      taskId,
+      language,
+      snapshots: JSON.stringify(bounded),
+      durationMs,
+      finalVerdict,
+    });
+    await solveSessionRepo().save(row);
+    return res.status(201).json({ id: row.id, snapshotCount: bounded.length });
+  } catch (error: any) {
+    logger.warn("[tasks] solve-replay save failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "SAVE_FAILED" });
+  }
+});
+
+// Fetch a saved solve session for playback (own sessions only).
+tasksRouter.get("/solve-replay/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const principal = resolvePrincipal(req);
+    if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const row = await solveSessionRepo().findOne({ where: { id } as any });
+    if (!row) return res.status(404).json({ message: "NOT_FOUND" });
+    if (row.principalType !== principal.type || row.principalId !== principal.id) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    let snapshots: ReplaySnapshot[] = [];
+    try { snapshots = JSON.parse(row.snapshots) as ReplaySnapshot[]; } catch { /* corrupt → empty */ }
+
+    return res.json({
+      id: row.id,
+      taskKind: row.taskKind,
+      taskId: row.taskId,
+      language: row.language,
+      durationMs: row.durationMs,
+      finalVerdict: row.finalVerdict,
+      createdAt: row.createdAt,
+      snapshots,
+    });
+  } catch (error: any) {
+    logger.warn("[tasks] solve-replay fetch failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "FETCH_FAILED" });
+  }
+});
+
+// Integrity score from client-side proctoring signals (stateless: computed and
+// returned; persistence for teacher review is a follow-up). Privacy-respecting:
+// only aggregate behavioural counts, never keystrokes/screen.
+tasksRouter.post("/proctoring-score", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const result = computeIntegrityScore({
+      finalCodeLength: num(b.finalCodeLength),
+      totalPastedChars: num(b.totalPastedChars),
+      largestPasteChars: num(b.largestPasteChars),
+      pasteCount: num(b.pasteCount),
+      blurCount: num(b.blurCount),
+      solveDurationMs: num(b.solveDurationMs),
+      typedChars: b.typedChars == null ? undefined : num(b.typedChars),
+    });
+
+    // Persist the event for teacher review (best-effort — never fail the
+    // response on a write error). Only logged when a task is referenced.
+    const principal = resolvePrincipal(req);
+    const taskKindRaw = String(b.taskKind ?? "").toUpperCase();
+    const taskKind = (["LIBRARY", "TOPIC", "CONTEST"].includes(taskKindRaw) ? taskKindRaw : "UNKNOWN") as
+      "LIBRARY" | "TOPIC" | "CONTEST" | "UNKNOWN";
+    const taskId = Number.isFinite(Number(b.taskId)) && Number(b.taskId) > 0 ? Number(b.taskId) : null;
+    if (principal && (taskId || taskKind !== "UNKNOWN")) {
+      void submissionIntegrityRepo()
+        .save(
+          submissionIntegrityRepo().create({
+            principalType: principal.type,
+            principalId: principal.id,
+            taskKind,
+            taskId,
+            score: result.score,
+            level: result.level,
+            flags: JSON.stringify(result.flags),
+          })
+        )
+        .catch((err) => logger.warn("[tasks] proctoring persist failed", { requestId: req.requestId, error: err?.message }));
+    }
+
+    return res.json(result);
+  } catch (error: any) {
+    logger.warn("[tasks] proctoring-score failed", { requestId: req.requestId, error: error?.message });
+    return res.status(400).json({ message: "INVALID_SIGNALS" });
+  }
+});
+
+// Spaced-repetition: record a practice outcome for a concept and advance its
+// SM-2 schedule. Stateful — the (principal, concept) row is loaded, updated and
+// persisted, so review schedules survive across sessions.
+tasksRouter.post("/concept-review", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const principal = resolvePrincipal(req);
+    if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const conceptKey = String(b.conceptKey ?? "").trim().slice(0, 191);
+    if (!conceptKey) return res.status(400).json({ message: "CONCEPT_KEY_REQUIRED" });
+
+    const now = Date.now();
+    const existing = await conceptReviewRepo().findOne({
+      where: { principalType: principal.type, principalId: principal.id, conceptKey } as any,
+    });
+
+    const state: ConceptReviewStateShape = existing
+      ? {
+          repetitions: existing.repetitions,
+          easeFactor: Number(existing.easeFactor) || DEFAULT_EASE_FACTOR,
+          intervalDays: existing.intervalDays,
+          dueAtMs: existing.dueAt ? new Date(existing.dueAt).getTime() : now,
+          mastered: existing.mastered,
+        }
+      : initialConceptState(now);
+
+    const outcome = (b.outcome && typeof b.outcome === "object" ? b.outcome : {}) as Record<string, unknown>;
+    const grade = typeof b.grade === "number"
+      ? b.grade
+      : gradeFromOutcome({
+          solved: Boolean(outcome.solved),
+          attempts: Math.max(1, Math.floor(Number(outcome.attempts) || 1)),
+          hintsUsed: Math.max(0, Math.floor(Number(outcome.hintsUsed) || 0)),
+          testsPassedRatio: Number.isFinite(Number(outcome.testsPassedRatio)) ? Number(outcome.testsPassedRatio) : undefined,
+        });
+
+    const next = reviewConcept(state, grade, now);
+
+    const row: ConceptReviewState = existing ?? conceptReviewRepo().create({
+      principalType: principal.type,
+      principalId: principal.id,
+      conceptKey,
+    });
+    row.repetitions = next.repetitions;
+    row.easeFactor = next.easeFactor;
+    row.intervalDays = next.intervalDays;
+    row.dueAt = new Date(next.dueAtMs);
+    row.mastered = next.mastered;
+    await conceptReviewRepo().save(row);
+
+    return res.json({ conceptKey, state: next, grade });
+  } catch (error: any) {
+    logger.warn("[tasks] concept-review failed", { requestId: req.requestId, error: error?.message });
+    return res.status(400).json({ message: "INVALID_REVIEW" });
+  }
+});
+
+// Concepts that are due for review now, soonest-overdue first.
+tasksRouter.get("/concepts/due", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const principal = resolvePrincipal(req);
+    if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const rows = await conceptReviewRepo().find({
+      where: { principalType: principal.type, principalId: principal.id } as any,
+    });
+    const now = Date.now();
+    const items = rows.map((r) => ({
+      conceptKey: r.conceptKey,
+      state: {
+        repetitions: r.repetitions,
+        easeFactor: Number(r.easeFactor) || DEFAULT_EASE_FACTOR,
+        intervalDays: r.intervalDays,
+        dueAtMs: r.dueAt ? new Date(r.dueAt).getTime() : now,
+        mastered: r.mastered,
+      },
+    }));
+    const due = dueConcepts(items, now);
+    return res.json({ now, total: items.length, due });
+  } catch (error: any) {
+    logger.warn("[tasks] concepts/due failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Multi-turn Socratic debug mentor. Stateless: the client replays the bounded
+// transcript each turn. Student messages are prompt-injection sanitized before
+// reaching the LLM; replies are post-filtered to never contain code blocks.
+tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const langRaw = String(body.language ?? "").trim().toUpperCase();
+    const language = (["JAVA", "PYTHON", "CPP"].includes(langRaw) ? langRaw : "PYTHON") as HintLanguage;
+
+    const code = String(body.code ?? "").slice(0, 20_000);
+    if (!code.trim()) {
+      return res.status(400).json({ message: "CODE_REQUIRED" });
+    }
+
+    const rawMessages = Array.isArray(body.messages) ? body.messages : [];
+    const messages: DebugChatMessage[] = rawMessages
+      .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
+      .map((m) => {
+        const role: DebugChatMessage["role"] = String(m.role) === "mentor" ? "mentor" : "student";
+        let content = String(m.content ?? "").slice(0, DEBUG_CHAT_MAX_MESSAGE_CHARS);
+        // Sanitize ONLY student turns (mentor turns are our own output).
+        if (role === "student") content = neutralizePromptInjection(content);
+        return { role, content };
+      })
+      .filter((m) => m.content.trim().length > 0)
+      .slice(-DEBUG_CHAT_MAX_HISTORY);
+
+    if (messages.length === 0) {
+      return res.status(400).json({ message: "MESSAGE_REQUIRED" });
+    }
+
+    const rawFailures = Array.isArray(body.failures) ? body.failures.slice(0, 3) : [];
+    const failures = rawFailures
+      .filter((f): f is Record<string, unknown> => !!f && typeof f === "object")
+      .map((f) => ({
+        testId: typeof f.testId === "number" ? f.testId : undefined,
+        input: String(f.input ?? "").slice(0, 1000),
+        expected: String(f.expected ?? "").slice(0, 1000),
+        actual: String(f.actual ?? "").slice(0, 1000),
+        verdict: f.verdict == null ? undefined : String(f.verdict).slice(0, 32),
+        stderr: f.stderr == null ? null : String(f.stderr).slice(0, 2000),
+      }));
+
+    const result = await debugMentorReply({
+      context: {
+        taskTitle: String(body.taskTitle ?? "").slice(0, 300),
+        taskText: String(body.taskText ?? "").slice(0, 4000),
+        language,
+        code,
+        verdict: String(body.verdict ?? "").slice(0, 32),
+        stderr: body.stderr == null ? "" : String(body.stderr).slice(0, 8000),
+        failures,
+      },
+      history: messages,
+    });
+
+    return res.json({ reply: result.reply, source: result.source });
+  } catch (error: any) {
+    logger.warn("[tasks] debug-chat failed", { requestId: req.requestId, error: error?.message });
+    return res.status(503).json({ message: "DEBUG_CHAT_UNAVAILABLE" });
   }
 });
 

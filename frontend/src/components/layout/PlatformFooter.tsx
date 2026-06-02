@@ -42,6 +42,13 @@ export const PlatformFooter: React.FC<PlatformFooterProps> = ({ className = "", 
           </button>
           <button
             type="button"
+            onClick={() => navigate("/cookies")}
+            className="inline-flex items-center px-2.5 py-1 text-[11px] font-mono border border-border bg-bg-base/50 text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
+          >
+            {t("footerCookiePolicy")}
+          </button>
+          <button
+            type="button"
             onClick={() => navigate("/docs")}
             className="inline-flex items-center px-2.5 py-1 text-[11px] font-mono border border-border bg-bg-base/50 text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
           >

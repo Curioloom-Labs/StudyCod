@@ -5,6 +5,12 @@ compatibility_date = "2025-12-24"
 # Workers AI binding
 ai = { binding = "AI" }
 
+# REQUIRED in production: shared secret matching the backend's
+# CLOUDFLARE_AI_INTERNAL_SECRET. Set it as an encrypted secret, NOT a [vars]:
+#   wrangler secret put WORKER_SHARED_SECRET
+#   wrangler secret put WORKER_SHARED_SECRET --env production
+# Optionally restrict browser CORS:  wrangler secret put CORS_ALLOW_ORIGIN
+
 [vars]
 ENVIRONMENT = "development"
 

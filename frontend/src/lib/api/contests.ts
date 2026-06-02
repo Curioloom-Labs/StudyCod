@@ -37,6 +37,7 @@ export type ContestDetails = {
     endsAt: string | null;
     isPublished: boolean;
     allowUpsolve: boolean;
+    scoringMode?: ContestScoringMode;
     createdBy: { id: number; username: string } | null;
     classId: number | null;
   };
@@ -62,6 +63,7 @@ export type CreateContestRequest = {
   endsAt?: string;
   isPublished?: boolean;
   allowUpsolve?: boolean;
+  scoringMode?: ContestScoringMode;
 };
 
 export type UpdateContestRequest = {
@@ -71,6 +73,7 @@ export type UpdateContestRequest = {
   endsAt?: string | null;
   isPublished?: boolean;
   allowUpsolve?: boolean;
+  scoringMode?: ContestScoringMode;
 };
 
 export type JudgeLanguage = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
@@ -93,6 +96,26 @@ export type ContestProblemStatement = {
 
 export type CodeFile = { path: string; content: string };
 
+export type ContestTestResult = {
+  index: number;
+  group: string;
+  hidden: boolean;
+  verdict: string | null;
+  timeMs: number | null;
+  memoryKb: number | null;
+};
+
+export type ContestFirstFailure = {
+  index: number;
+  verdict: string | null;
+  hidden: boolean;
+  group: string;
+  input?: string;
+  expected?: string;
+  actual?: string;
+  stderr?: string;
+};
+
 export type ContestCheckResult = {
   submissionId: number;
   phase: "CONTEST" | "UPSOLVE";
@@ -104,6 +127,10 @@ export type ContestCheckResult = {
   compileError: string | null;
   compileErrorKind: string | null;
   groupScores?: Array<{ group: string; score: number; maxScore: number }> | null;
+  maxTimeMs?: number | null;
+  maxMemoryKb?: number | null;
+  tests?: ContestTestResult[];
+  firstFailure?: ContestFirstFailure | null;
 };
 
 export type ContestRunResult = {
@@ -111,16 +138,51 @@ export type ContestRunResult = {
   stderr: string;
   exitCode: number;
   success: boolean;
+  verdict?: string | null;
+  timeMs?: number | null;
+  memoryKb?: number | null;
 };
 
-export type ScoreboardProblem = { id: number; order: number; label: string };
+export type ContestScoringMode = "IOI" | "ICPC";
+
+export type ScoreboardProblem = { id: number; order: number; label: string; maxScore?: number };
+
+export type ScoreboardProblemCell = {
+  problemId: number;
+  score: number;
+  bestAt: string | null;
+  // ICPC enrichments (present on the unified /standings endpoint).
+  solved?: boolean;
+  attempts?: number;
+  penaltyMinutes?: number;
+  firstAcMs?: number | null;
+  isFirstBlood?: boolean;
+  // True when this cell has activity hidden behind the scoreboard freeze.
+  pending?: boolean;
+};
+
 export type ScoreboardRow = {
   rank: number;
   participantId: number;
   displayName: string;
   totalScore: number;
   lastImprovementAt: string | null;
-  problems: Array<{ problemId: number; score: number; bestAt: string | null }>;
+  // ICPC aggregates (present on the unified /standings endpoint).
+  solved?: number;
+  penalty?: number;
+  lastAcMs?: number | null;
+  problems: ScoreboardProblemCell[];
+};
+
+export type ContestStandings = {
+  contestId: number;
+  scoringMode: ContestScoringMode;
+  problems: ScoreboardProblem[];
+  rows: ScoreboardRow[];
+  firstBlood?: Record<number, { participantId: number; atMs: number }>;
+  freeze?: { enabled: boolean; freezeAtMs: number | null; frozen: boolean; isManagerView?: boolean };
+  disqualifiedCount?: number;
+  generatedAtMs?: number;
 };
 
 export type ContestSubmissionListItem = {
@@ -147,7 +209,10 @@ export type ContestAdminParticipant = {
   isDisqualified: boolean;
   disqualificationReason: string | null;
   disqualifiedAt: string | null;
+  integrity?: { total: number; byType: Record<string, number> };
 };
+
+export type ContestIntegrityEventType = "FOCUS_LOST" | "BLUR" | "PASTE" | "FULLSCREEN_EXIT";
 
 export type ContestGeneratedAccount = {
   fullName: string | null;
@@ -309,8 +374,17 @@ export async function runContestProblem(params: {
   return res.data;
 }
 
-export async function getContestScoreboard(contestId: number): Promise<{ contestId: number; problems: ScoreboardProblem[]; rows: ScoreboardRow[]; disqualifiedCount?: number }> {
-  const res = await api.get(`/contests/${contestId}/scoreboard`);
+export async function getContestScoreboard(contestId: number): Promise<ContestStandings> {
+  const res = await api.get(`/contests/${contestId}/standings`);
+  return res.data;
+}
+
+export async function recordContestIntegrityEvent(
+  contestId: number,
+  type: ContestIntegrityEventType,
+  detail?: string
+): Promise<{ recorded: boolean }> {
+  const res = await api.post(`/contests/${contestId}/integrity`, { type, detail });
   return res.data;
 }
 
@@ -503,6 +577,22 @@ export async function sendContestAccountsEmails(
   }
 ): Promise<{ contestId: number; total: number; sentCount: number; failedCount: number; failed: Array<{ email: string; reason: string }> }> {
   const res = await api.post(`/contests/${contestId}/admin/accounts/send-emails`, payload);
+  return res.data;
+}
+
+export type ContestSimilarityPair = {
+  a: { participantId: number; displayName: string };
+  b: { participantId: number; displayName: string };
+  similarity: number;
+  language: string;
+};
+
+export async function getContestSimilarity(
+  contestId: number,
+  problemId: number,
+  threshold?: number
+): Promise<{ contestId: number; problemId: number; threshold: number; comparedSubmissions: number; pairs: ContestSimilarityPair[] }> {
+  const res = await api.get(`/contests/${contestId}/admin/similarity`, { params: { problemId, ...(threshold != null ? { threshold } : {}) } });
   return res.data;
 }
 

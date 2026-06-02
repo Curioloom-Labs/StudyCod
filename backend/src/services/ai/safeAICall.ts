@@ -4,6 +4,7 @@ import { AIResponseValidator, AIValidationError, makeAIValidationError } from '.
 import type { AiTaskGenerationResult, AiTheoryResult, AiQuizResult, TestDataExample } from '../llm/LLMOrchestrator';
 import { logger } from '../../utils/logger';
 import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from './curriculumPolicy';
+import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from './aiCircuitBreaker';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -17,65 +18,51 @@ function computeDefaultRetryAfterMs(statusCode: number): number {
   return 0;
 }
 
-type CircuitState = {
-  openUntil: number;
-  failures: number;
-  firstFailureAt: number;
-};
-
-const circuitByMode = new Map<AIMode, CircuitState>();
-const CIRCUIT_WINDOW_MS = 60_000;
-const CIRCUIT_OPEN_MS = 30_000;
-const CIRCUIT_FAILURES_TO_OPEN = 5;
-
+// Circuit breaker state is shared across instances via Redis (with a local
+// in-memory fallback). See ./aiCircuitBreaker. The breaker is keyed by AI mode.
 function getNowMs(): number {
   return Date.now();
-}
-
-function isCircuitOpen(mode: AIMode): boolean {
-  const st = circuitByMode.get(mode);
-  if (!st) return false;
-  return st.openUntil > getNowMs();
-}
-
-function recordCircuitSuccess(mode: AIMode): void {
-  circuitByMode.delete(mode);
-}
-
-function recordCircuitFailure(mode: AIMode): void {
-  const now = getNowMs();
-  const st = circuitByMode.get(mode);
-  if (!st) {
-    circuitByMode.set(mode, {
-      openUntil: 0,
-      failures: 1,
-      firstFailureAt: now
-    });
-    return;
-  }
-  const windowExpired = now - st.firstFailureAt > CIRCUIT_WINDOW_MS;
-  if (windowExpired) {
-    st.failures = 1;
-    st.firstFailureAt = now;
-    st.openUntil = 0;
-    circuitByMode.set(mode, st);
-    return;
-  }
-  st.failures += 1;
-  if (st.failures >= CIRCUIT_FAILURES_TO_OPEN) {
-    st.openUntil = now + CIRCUIT_OPEN_MS;
-  }
-  circuitByMode.set(mode, st);
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Patterns that try to break out of the surrounding prompt context. Matches at
+// any position; replaced with a visible marker so reviewers can spot abuse
+// rather than silently dropping content. Covers UA / EN / RU phrasings of
+// "ignore previous instructions" and common role-impersonation markers.
+const PROMPT_INJECTION_PATTERNS: RegExp[] = [
+  /^[ \t]*(?:system|assistant|user|developer)\s*:/gim,
+  /<\|(?:im_start|im_end|start|end|system|user|assistant)\|>/gi,
+  /\[\/?(?:INST|SYS)\]/gi,
+  /\b(?:ignore|disregard|forget|override)\b[^.\n]{0,40}\b(?:previous|prior|earlier|above|all)\b[^.\n]{0,40}\b(?:instructions?|prompts?|rules?|system\s*prompt)\b/gi,
+  // NB: JS `\b`/`\w` are ASCII-only — they do NOT recognise Cyrillic word
+  // boundaries, so the previous `\b…\b` anchors never matched Ukrainian/Russian
+  // input (a real prompt-injection bypass for the primary audience). We use the
+  // `u` flag with Unicode letter/number classes for boundaries and word stems.
+  /(?<![\p{L}\p{N}_])(?:проігнор[\p{L}\p{N}_]*|ігнор[\p{L}\p{N}_]*|забуд[\p{L}\p{N}_]*|відкин[\p{L}\p{N}_]*|скасуй?[\p{L}\p{N}_]*)[^.\n]{0,40}(?:попередн[\p{L}\p{N}_]*|вище|усі|всі)[^.\n]{0,40}(?:інструкц[\p{L}\p{N}_]*|правил[\p{L}\p{N}_]*|вказівк[\p{L}\p{N}_]*|промпт[\p{L}\p{N}_]*)/giu,
+  /(?<![\p{L}\p{N}_])(?:игнорир[\p{L}\p{N}_]*|забудь[\p{L}\p{N}_]*|отмени[\p{L}\p{N}_]*|сбрось[\p{L}\p{N}_]*)[^.\n]{0,40}(?:предыдущ[\p{L}\p{N}_]*|выше|все)[^.\n]{0,40}(?:инструкц[\p{L}\p{N}_]*|правил[\p{L}\p{N}_]*|промпт[\p{L}\p{N}_]*)/giu,
+  /\byou\s+are\s+now\b[^.\n]{0,80}/gi,
+  /\b(?:act|behave|pretend)\s+as\s+(?:an?\s+)?(?:system|admin|developer|root|jailbroken)\b/gi,
+];
+
+export function neutralizePromptInjection(text: string): string {
+  let out = text;
+  for (const re of PROMPT_INJECTION_PATTERNS) {
+    out = out.replace(re, "[redacted]");
+  }
+  // Triple-backtick fences inside user input could close a fenced block we
+  // wrap it in. Collapse them to a single backtick — harmless and visible.
+  out = out.replace(/```+/g, "`");
+  return out;
+}
+
 function sanitizeText(input: unknown, maxLen: number): string {
   const s = String(input ?? '');
   const cleaned = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
-  const trimmed = cleaned.trim();
+  const safe = neutralizePromptInjection(cleaned);
+  const trimmed = safe.trim();
   if (trimmed.length <= maxLen) return trimmed;
   return trimmed.slice(0, maxLen);
 }
@@ -374,7 +361,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
     const sanitizedParams = sanitizeParams(mode, params);
     validateInputParams(mode, sanitizedParams);
 
-    if (isCircuitOpen(mode)) {
+    if (await isAiCircuitOpen(mode)) {
       return {
         success: false,
         error: {
@@ -419,7 +406,8 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             result = await orchestrator.generateTaskWithAI({
               ...sanitizedParams,
               language,
-              signal: controller?.signal
+              signal: controller?.signal,
+              requestId: options?.requestId
             });
             result = AIResponseValidator.validateGenerateTask(result);
 
@@ -428,6 +416,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               let violation = getCurriculumPolicyViolationForGeneratedTask({
                 lang: (sanitizedParams as any).lang,
                 topicIndex: (sanitizedParams as any).topicIndex,
+                topicTitle: (sanitizedParams as any).topicTitle,
                 title: (result as any)?.title,
                 practicalTask: (result as any)?.practicalTask
               });
@@ -442,6 +431,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
                   const rewrittenViolation = getCurriculumPolicyViolationForGeneratedTask({
                     lang: (sanitizedParams as any).lang,
                     topicIndex: (sanitizedParams as any).topicIndex,
+                    topicTitle: (sanitizedParams as any).topicTitle,
                     title: (result as any)?.title,
                     practicalTask: rewrittenPracticalTask
                   });
@@ -588,7 +578,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           default:
             throw new Error(`Unknown AI mode: ${mode}`);
         }
-        recordCircuitSuccess(mode);
+        await recordAiCircuitSuccess(mode);
         break;
         } catch (error: any) {
         const errorMsg = String(error?.message ?? error ?? '');
@@ -688,7 +678,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           error: errorMessage
         });
         if (retryable) {
-          recordCircuitFailure(mode);
+          await recordAiCircuitFailure(mode);
         }
 
         if (canRetry) {

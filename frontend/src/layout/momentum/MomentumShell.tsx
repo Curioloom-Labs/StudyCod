@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, FileText, GraduationCap, HelpCircle, Home, Library, Shield, Trophy, User as UserIcon, LogOut, Languages, Menu } from "lucide-react";
+import { BookOpen, FileText, GraduationCap, HelpCircle, Home, Library, Shield, Trophy, User as UserIcon, LogOut, Languages, Menu, FlaskConical, Compass } from "lucide-react";
 import type { User } from "../../types";
 import { Logo } from "../../components/Logo";
 import { PlatformFooter } from "../../components/layout/PlatformFooter";
@@ -17,6 +17,8 @@ export type MomentumNavTarget =
   | "support"
   | "library"
   | "contests"
+  | "playground"
+  | "learn"
   | "student"
   | "teacher"
   | "admin"
@@ -114,6 +116,18 @@ export const MomentumShell: React.FC<Props> = ({
       id: "contests",
       label: t("contests", { defaultValue: "Contests" }),
       icon: Trophy,
+      show: true
+    },
+    {
+      id: "learn",
+      label: t("myLearning", { defaultValue: "My Learning" }),
+      icon: Compass,
+      show: true
+    },
+    {
+      id: "playground",
+      label: t("playground", { defaultValue: "Playground" }),
+      icon: FlaskConical,
       show: true
     },
     {

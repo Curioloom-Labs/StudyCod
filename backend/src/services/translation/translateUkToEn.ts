@@ -157,14 +157,21 @@ function splitLeadingTrailingWhitespace(input: string): { prefix: string; core: 
 
 async function translateViaLibreTranslate(text: string, timeoutMs: number): Promise<string> {
   const url = env.__translateUkEnUrl;
+  if (!url) throw new Error("TRANSLATE_URL_NOT_CONFIGURED");
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
+    // If the configured endpoint is our own Cloudflare worker, authenticate the
+    // call so the worker can reject anonymous traffic.
+    const secret = env.__cloudflareAiInternalSecret;
+    const cfBase = String(env.CLOUDFLARE_AI_URL ?? "").trim().replace(/\/$/, "");
+    const targetsOwnWorker = Boolean(cfBase) && url.startsWith(cfBase);
     const resp = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        ...(secret && targetsOwnWorker ? { "x-internal-secret": secret } : {})
       },
       body: JSON.stringify({
         q: text,
@@ -280,21 +287,40 @@ export async function translateTextUkToEn(text: string): Promise<string> {
   if (!raw.trim()) return raw;
 
   const timeoutMs = env.__translateUkEnTimeoutMs;
+  const hasConfiguredUrl = Boolean(env.__translateUkEnUrl);
+  const allowPublicFallback = env.__translateAllowPublicFallback;
 
-  // Try LibreTranslate first (better for longer text).
-  try {
-    const { prefix, core, suffix } = splitLeadingTrailingWhitespace(raw);
-    if (!core.trim()) return raw;
-    // Always go through chunked path for stability against per-instance limits.
-    const translatedCore = await translateViaLibreTranslateChunked(core, timeoutMs);
-    return `${prefix}${translatedCore}${suffix}`;
-  } catch (err) {
-    logger.warn("[translate] LibreTranslate failed, falling back to MyMemory", {
-      err: (err as any)?.message ?? String(err)
+  // Fail SAFE: if no translation endpoint is configured (e.g. no own Cloudflare
+  // worker) and public third-party fallback is not explicitly enabled, do NOT
+  // ship content to an uncontrolled host. Return the original text unchanged.
+  if (!hasConfiguredUrl && !allowPublicFallback) {
+    logger.debug("[translate] external translation disabled; returning original text", {
+      reason: "no TRANSLATE_UK_EN_URL/CLOUDFLARE_AI_URL and TRANSLATE_ALLOW_PUBLIC_FALLBACK!=1"
     });
+    return raw;
   }
 
-  return await translateViaMyMemoryChunked(raw, timeoutMs);
+  // Prefer the configured endpoint (own worker / explicit URL) first.
+  if (hasConfiguredUrl) {
+    try {
+      const { prefix, core, suffix } = splitLeadingTrailingWhitespace(raw);
+      if (!core.trim()) return raw;
+      // Always go through chunked path for stability against per-instance limits.
+      const translatedCore = await translateViaLibreTranslateChunked(core, timeoutMs);
+      return `${prefix}${translatedCore}${suffix}`;
+    } catch (err) {
+      logger.warn("[translate] configured translator failed", {
+        err: (err as any)?.message ?? String(err),
+        willTryPublicFallback: allowPublicFallback
+      });
+    }
+  }
+
+  // Public MyMemory fallback is gated behind an explicit opt-in.
+  if (allowPublicFallback) {
+    return await translateViaMyMemoryChunked(raw, timeoutMs);
+  }
+  return raw;
 }
 
 export async function translateMarkdownUkToEn(markdown: string): Promise<string> {

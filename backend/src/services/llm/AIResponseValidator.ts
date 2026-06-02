@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AiQuizResult, AiTaskGenerationResult, AiTheoryResult, TestDataExample } from './LLMOrchestrator';
+import { looksLikeFunctionImplementationTask } from '../ai/curriculumPolicy';
 
 const TaskGenerationSchema = z.object({
   title: z.string().min(1, 'title must be a non-empty string'),
@@ -302,6 +303,142 @@ export class AIValidationError extends Error {
 export function makeAIValidationError(mode: string, message: string, rawResponse?: unknown): AIValidationError {
   return new AIValidationError(mode, emptyZod(), message, rawResponse);
 }
+
+// Declarative rule registry for generateTask responses.
+// Each rule owns its own predicate + canonical error message. `applies`
+// optionally gates the rule on IO type so we don't run e.g. STDIN_STDOUT
+// rules against no-input tasks. Messages are kept BYTE-IDENTICAL to the
+// previous linear if/throw chain so client-side error strings stay stable.
+type TaskValidationContext = {
+  ioType: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
+  practical: string;
+  outFmt: string;
+  inFmt: string;
+  constraints: string;
+  exInput: string;
+  exOutput: string;
+};
+
+type TaskValidationRule = {
+  id: string;
+  message: string;
+  applies?: (ctx: TaskValidationContext) => boolean;
+  fails: (ctx: TaskValidationContext) => boolean;
+};
+
+const TASK_VALIDATION_RULES: TaskValidationRule[] = [
+  {
+    id: "practical.too_short",
+    message: "Task generation validation failed: practicalTask is too short/vague; must be a detailed multi-sentence narrative",
+    fails: c => looksTooShortOrVaguePracticalTask(c.practical),
+  },
+  {
+    id: "practical.checklist",
+    message: "Task generation validation failed: practicalTask must be a natural narrative statement, not a numbered checklist",
+    fails: c => looksLikeNumberedChecklistPracticalTask(c.practical),
+  },
+  {
+    id: "practical.function_impl",
+    message: "Task generation validation failed: practicalTask appears to require implementing a function/method/class instead of a full program",
+    fails: c => looksLikeFunctionImplementationTask(c.practical),
+  },
+  {
+    id: "outFmt.meta_success",
+    message: 'Task generation validation failed: outputFormat looks like judge meta message (e.g., "program compiled/executed without errors")',
+    fails: c => looksLikeJudgeSuccessMessage(c.outFmt),
+  },
+  {
+    id: "exOutput.meta_success",
+    message: 'Task generation validation failed: examples[0].output looks like judge meta message (e.g., "program compiled/executed without errors")',
+    fails: c => looksLikeJudgeSuccessMessage(c.exOutput),
+  },
+  {
+    id: "outFmt.code_snippet",
+    message: "Task generation validation failed: outputFormat looks like source code instead of an output contract",
+    fails: c => looksLikeCodeSnippet(c.outFmt),
+  },
+  {
+    id: "exOutput.code_snippet",
+    message: "Task generation validation failed: examples[0].output looks like source code instead of expected stdout",
+    fails: c => looksLikeCodeSnippet(c.exOutput),
+  },
+  {
+    id: "inFmt.placeholder",
+    message: "Task generation validation failed: inputFormat is placeholder/default text",
+    fails: c => looksLikeDefaultPlaceholder(c.inFmt, "inputFormat"),
+  },
+  {
+    id: "outFmt.placeholder",
+    message: "Task generation validation failed: outputFormat is placeholder/default text",
+    fails: c => looksLikeDefaultPlaceholder(c.outFmt, "outputFormat"),
+  },
+  {
+    id: "constraints.placeholder",
+    message: "Task generation validation failed: constraints is placeholder/default text",
+    fails: c => looksLikeDefaultPlaceholder(c.constraints, "constraints"),
+  },
+  {
+    id: "practical.multi_task",
+    message: "Task generation validation failed: practicalTask appears to contain multiple tasks/programs",
+    fails: c => looksLikeMultiTaskInstruction(c.practical),
+  },
+  // IO-type gated rules.
+  {
+    id: "stdin.requires_example_input",
+    applies: c => c.ioType === "STDIN_STDOUT",
+    message: "Task generation validation failed: STDIN_STDOUT requires non-empty examples[0].input",
+    fails: c => !c.exInput,
+  },
+  {
+    id: "no_input.empty_example_input",
+    applies: c => c.ioType !== "STDIN_STDOUT",
+    message: "Task generation validation failed: NO_INPUT_* requires empty examples[0].input",
+    fails: c => Boolean(c.exInput),
+  },
+  {
+    id: "no_input.no_stdin_in_practical",
+    applies: c => c.ioType !== "STDIN_STDOUT",
+    message: "Task generation validation failed: NO_INPUT_* task statement must not require reading input",
+    fails: c => /\b(input\s*\(|stdin|system\.in|scanner\b|bufferedreader\b|зчитай|прочитай|введіть|введи)\b/i.test(c.practical.toLowerCase()),
+  },
+  {
+    id: "fixed_output.outFmt_must_be_concrete",
+    applies: c => c.ioType === "NO_INPUT_FIXED_OUTPUT",
+    message: "Task generation validation failed: NO_INPUT_FIXED_OUTPUT requires outputFormat to contain the exact expected stdout (not just labels/templates)",
+    fails: c => !c.outFmt || looksLikeEmptyOutputTemplate(c.outFmt),
+  },
+  {
+    id: "fixed_output.outFmt_not_meta",
+    applies: c => c.ioType === "NO_INPUT_FIXED_OUTPUT",
+    message: "Task generation validation failed: NO_INPUT_FIXED_OUTPUT outputFormat must be exact expected output, not a meta success message",
+    fails: c => looksLikeJudgeSuccessMessage(c.outFmt),
+  },
+  {
+    id: "fixed_output.exOutput_must_be_concrete",
+    applies: c => c.ioType === "NO_INPUT_FIXED_OUTPUT",
+    message: "Task generation validation failed: NO_INPUT_FIXED_OUTPUT requires examples[0].output with concrete values",
+    fails: c => !c.exOutput || looksLikeEmptyOutputTemplate(c.exOutput),
+  },
+  {
+    id: "fixed_output.exOutput_not_meta",
+    applies: c => c.ioType === "NO_INPUT_FIXED_OUTPUT",
+    message: "Task generation validation failed: NO_INPUT_FIXED_OUTPUT examples[0].output must be exact expected output, not a meta success message",
+    fails: c => looksLikeJudgeSuccessMessage(c.exOutput),
+  },
+  {
+    id: "deterministic.no_vague_outFmt",
+    applies: c => c.ioType !== "NO_INPUT_FREE_OUTPUT",
+    message: "Task generation validation failed: outputFormat is vague for deterministic task type; specify exact output contract",
+    fails: c => hasVagueOutputContract(c.outFmt),
+  },
+  {
+    id: "non_fixed.outFmt_min_length",
+    applies: c => c.ioType !== "NO_INPUT_FIXED_OUTPUT",
+    message: "Task generation validation failed: outputFormat is too short; must describe the output contract clearly",
+    fails: c => !c.outFmt || c.outFmt.length < 12,
+  },
+];
+
 export class AIResponseValidator {
   private static assertTheoryIsPure(theory: string): void {
     const t = String(theory ?? "").trim();
@@ -337,87 +474,24 @@ export class AIResponseValidator {
       const inFmt = String(validated.inputFormat ?? '').trim();
       const constraints = String(validated.constraints ?? '').trim();
 
-      // Quality gates: expand the condition and prevent meta “success” messages.
-      if (looksTooShortOrVaguePracticalTask(practical)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask is too short/vague; must be a detailed multi-sentence narrative', data);
-      }
-      if (looksLikeNumberedChecklistPracticalTask(practical)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask must be a natural narrative statement, not a numbered checklist', data);
-      }
-      if (looksLikeJudgeSuccessMessage(outFmt)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat looks like judge meta message (e.g., "program compiled/executed without errors")', data);
-      }
-      if (looksLikeJudgeSuccessMessage(exOutput)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: examples[0].output looks like judge meta message (e.g., "program compiled/executed without errors")', data);
-      }
-      if (looksLikeCodeSnippet(outFmt)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat looks like source code instead of an output contract', data);
-      }
-      if (looksLikeCodeSnippet(exOutput)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: examples[0].output looks like source code instead of expected stdout', data);
+      // Normalise inputFormat for no-input IO types before rule evaluation:
+      // many models forget the canonical phrasing — we fill it in rather than
+      // fail the whole generation.
+      if (ioType !== 'STDIN_STDOUT' && !mentionsNoInput(validated.inputFormat)) {
+        const practicalHasCyrillic = /[а-яіїєґ]/i.test(practical);
+        (validated as any).inputFormat = defaultNoInputFormat(practicalHasCyrillic);
       }
 
-      if (looksLikeDefaultPlaceholder(inFmt, 'inputFormat')) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: inputFormat is placeholder/default text', data);
-      }
-      if (looksLikeDefaultPlaceholder(outFmt, 'outputFormat')) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat is placeholder/default text', data);
-      }
-      if (looksLikeDefaultPlaceholder(constraints, 'constraints')) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: constraints is placeholder/default text', data);
-      }
+      const ctx: TaskValidationContext = { ioType, practical, outFmt, inFmt, constraints, exInput, exOutput };
 
-      if (looksLikeMultiTaskInstruction(practical)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: practicalTask appears to contain multiple tasks/programs', data);
-      }
-
-      if (ioType === 'STDIN_STDOUT') {
-        if (!exInput) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: STDIN_STDOUT requires non-empty examples[0].input', data);
-        }
-      } else {
-        // No-input tasks should show empty input in examples.
-        if (exInput) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_* requires empty examples[0].input', data);
-        }
-        // Models often forget to state “no input” explicitly. Instead of failing generation,
-        // we normalize inputFormat to a canonical phrase.
-        if (!mentionsNoInput(validated.inputFormat)) {
-          const practicalHasCyrillic = /[а-яіїєґ]/i.test(practical);
-          (validated as any).inputFormat = defaultNoInputFormat(practicalHasCyrillic);
-        }
-
-        // Avoid contradictions: no-input IO type must not ask to read from stdin.
-        const practicalLower = practical.toLowerCase();
-        const mentionsInput = /\b(input\s*\(|stdin|system\.in|scanner\b|bufferedreader\b|зчитай|прочитай|введіть|введи)\b/i.test(practicalLower);
-        if (mentionsInput) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_* task statement must not require reading input', data);
-        }
-      }
-
-      if (ioType === 'NO_INPUT_FIXED_OUTPUT') {
-        if (!outFmt || looksLikeEmptyOutputTemplate(outFmt)) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT requires outputFormat to contain the exact expected stdout (not just labels/templates)', data);
-        }
-        if (looksLikeJudgeSuccessMessage(outFmt)) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT outputFormat must be exact expected output, not a meta success message', data);
-        }
-        if (!exOutput || looksLikeEmptyOutputTemplate(exOutput)) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT requires examples[0].output with concrete values', data);
-        }
-        if (looksLikeJudgeSuccessMessage(exOutput)) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: NO_INPUT_FIXED_OUTPUT examples[0].output must be exact expected output, not a meta success message', data);
-        }
-      }
-
-      if (ioType !== 'NO_INPUT_FREE_OUTPUT' && hasVagueOutputContract(outFmt)) {
-        throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat is vague for deterministic task type; specify exact output contract', data);
-      }
-
-      // For non-fixed-output tasks, outputFormat must be an actual contract description.
-      if (ioType !== 'NO_INPUT_FIXED_OUTPUT') {
-        if (!outFmt || outFmt.length < 12) {
-          throw new AIValidationError('generateTask', emptyZod(), 'Task generation validation failed: outputFormat is too short; must describe the output contract clearly', data);
+      // Iterate the declarative rule registry. The previous implementation
+      // was 100+ lines of linear `if/throw` blocks; this version keeps the
+      // exact same predicates and error messages but routes them through a
+      // single typed registry so new rules can be added or audited cleanly.
+      for (const rule of TASK_VALIDATION_RULES) {
+        if (rule.applies && !rule.applies(ctx)) continue;
+        if (rule.fails(ctx)) {
+          throw new AIValidationError('generateTask', emptyZod(), rule.message, data);
         }
       }
 

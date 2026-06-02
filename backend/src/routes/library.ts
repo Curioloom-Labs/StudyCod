@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from "express";
 import { z } from "zod";
 import AdmZip from "adm-zip";
+import { validateUploadedZip, ZipValidationError, ZipExtractionBudget, ZIP_MAX_TOTAL_UNCOMPRESSED_BYTES } from "../utils/zipUploadValidator";
 import multer from "multer";
 import { createHash } from "crypto";
 import { AppDataSource } from "../data-source";
@@ -10,6 +11,9 @@ import { teacherOrAdminGuard } from "../middleware/rolesGuard";
 import { User } from "../entities/User";
 import { LibraryTask, type LibraryTaskLang, type LibraryTaskStatus } from "../entities/LibraryTask";
 import { LibraryTaskAttempt } from "../entities/LibraryTaskAttempt";
+import { recommendDifficulty, shouldRecalibrate } from "../services/calibration/difficultyCalibration";
+import { SubmissionIntegrity } from "../entities/SubmissionIntegrity";
+import { pickDailyChallenge } from "../services/learning/dailyChallenge";
 import { TaskTheory } from "../entities/TaskTheory";
 import { TestData } from "../entities/TestData";
 import { TopicNew } from "../entities/TopicNew";
@@ -2067,10 +2071,12 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
   }
 });
 
-function readZipJson<T>(zip: AdmZip, path: string): T {
+function readZipJson<T>(zip: AdmZip, path: string, budget?: ZipExtractionBudget): T {
   const entry = zip.getEntry(path);
   if (!entry) throw new Error(`Missing ${path}`);
-  const raw = entry.getData().toString("utf-8");
+  // Decompress through the budget so a lying-header zip-bomb is bounded by the
+  // ACTUAL decompressed byte count, not the attacker-controlled header.
+  const raw = budget ? budget.readEntryText(entry) : entry.getData().toString("utf-8");
   return JSON.parse(raw) as T;
 }
 
@@ -2117,6 +2123,10 @@ function normalizeImportArchiveFiles(req: AuthRequest): UploadArchiveFile[] {
 function extractTaskArchiveCandidates(file: UploadArchiveFile): Array<{ sourceName: string; buffer: Buffer }> {
   const sourceName = String(file.originalname || "archive.zip");
   const primaryZip = new AdmZip(file.buffer);
+  // Reject zip-slip / oversized / suspicious-ratio archives up front, on header
+  // metadata. Per-task content is additionally bounded by actual decompressed
+  // bytes inside importSingleLibraryArchive.
+  validateUploadedZip(primaryZip);
 
   // Standard single-task archive.
   if (primaryZip.getEntry("task.json")) {
@@ -2133,17 +2143,23 @@ function extractTaskArchiveCandidates(file: UploadArchiveFile): Array<{ sourceNa
     return [{ sourceName, buffer: file.buffer }];
   }
 
+  // Bound the TOTAL actual bytes inflated across all nested archives so a
+  // bundle of lying-header bombs cannot exhaust memory before per-task checks.
+  const bundleBudget = new ZipExtractionBudget(ZIP_MAX_TOTAL_UNCOMPRESSED_BYTES, ZIP_MAX_TOTAL_UNCOMPRESSED_BYTES);
   const out: Array<{ sourceName: string; buffer: Buffer }> = [];
   for (const entry of nestedZipEntries) {
     try {
-      const nestedBuffer = entry.getData();
+      const nestedBuffer = bundleBudget.readEntry(entry);
       if (!nestedBuffer || nestedBuffer.length === 0) continue;
       out.push({
         sourceName: `${sourceName}::${entry.entryName}`,
         buffer: nestedBuffer,
       });
-    } catch {
-      // Skip unreadable nested entry; detailed error appears when trying to import candidates.
+    } catch (err) {
+      // A blown budget is fatal for the whole bundle — stop inflating.
+      if (err instanceof ZipValidationError) throw err;
+      // Skip otherwise-unreadable nested entry; a detailed error surfaces when
+      // the candidate is imported.
     }
   }
 
@@ -2157,6 +2173,10 @@ async function importSingleLibraryArchive(params: {
 }): Promise<LibraryTask> {
   const { user, hideFromLibrary, buffer } = params;
   const zip = new AdmZip(buffer);
+  // Defence in depth: validate header metadata (zip-slip / caps / ratio) and
+  // charge every decompressed entry against a per-task actual-byte budget.
+  validateUploadedZip(zip);
+  const zipBudget = new ZipExtractionBudget();
 
   const archiveTaskSchema = z.object({
     title: z.string().min(1).max(255),
@@ -2279,7 +2299,7 @@ async function importSingleLibraryArchive(params: {
     templatesByLanguage: z.record(z.string(), z.string()).optional(),
   });
 
-  const taskJsonRaw = readZipJson<any>(zip, "task.json");
+  const taskJsonRaw = readZipJson<any>(zip, "task.json", zipBudget);
   const parsedTaskJson = archiveTaskSchema.safeParse(taskJsonRaw);
   if (!parsedTaskJson.success) {
     const err = new Error("INVALID_TASK_JSON") as Error & { issues?: unknown[] };
@@ -2361,7 +2381,7 @@ async function importSingleLibraryArchive(params: {
 
   const theoryEntry = zip.getEntry("theory.md");
   if (theoryEntry) {
-    const content = theoryEntry.getData().toString("utf-8").trim();
+    const content = zipBudget.readEntryText(theoryEntry).trim();
     if (content) {
       await theoryRepo().save(theoryRepo().create({ libraryTask: { id: task.id } as any, content }));
     }
@@ -2369,7 +2389,7 @@ async function importSingleLibraryArchive(params: {
 
   const testsEntry = zip.getEntry("tests.json");
   if (testsEntry) {
-    const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json");
+    const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json", zipBudget);
     if (Array.isArray(tests) && tests.length > 0) {
       const rows = tests.map(t =>
         testDataRepo().create({
@@ -2465,8 +2485,118 @@ libraryRouter.post("/tasks/import-archive", authRequired, archiveUploadMiddlewar
       failures,
     });
   } catch (error: any) {
+    // Archive-level rejection (zip-slip / oversized / lying-header bomb).
+    if (error instanceof ZipValidationError) {
+      return res.status(400).json({ message: error.code });
+    }
     logger.error("[library] import archive failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Challenge of the day — deterministic per (date, lang) over approved tasks.
+libraryRouter.get("/daily-challenge", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const lang = String(req.query.lang ?? "").trim().toUpperCase();
+    const qb = libraryRepo()
+      .createQueryBuilder("t")
+      .select(["t.id"])
+      .where("t.status = :st", { st: "APPROVED" as LibraryTaskStatus });
+    const rows = await qb.getMany();
+    const ids = rows.map((r) => r.id).filter((n) => Number.isFinite(n));
+    const pick = pickDailyChallenge(ids, new Date(), lang);
+    if (!pick) return res.json({ available: false });
+
+    const task = await libraryRepo().findOne({ where: { id: pick.item } as any });
+    if (!task) return res.json({ available: false });
+
+    return res.json({
+      available: true,
+      date: pick.date,
+      task: {
+        id: task.id,
+        title: task.title,
+        difficulty: (task as any).difficulty ?? null,
+        problemCode: (task as any).problemCode ?? null,
+        slug: (task as any).slug ?? null,
+        section: (task as any).section ?? null,
+      },
+    });
+  } catch (error: any) {
+    logger.warn("[library] daily-challenge failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Empirical difficulty suggestion from real attempt stats (author/admin only).
+libraryRouter.get("/tasks/:id/difficulty-suggestion", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+
+    const isAuthor = task.author?.id === req.userId;
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    if (!isAuthor && !isAdmin) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const attempts = await attemptRepo().find({ where: { libraryTask: { id } } as any });
+    const distinctUsers = attempts.length;
+    const solved = attempts.filter((a) => String(a.lastVerdict ?? "").toUpperCase() === "AC");
+    const solvedUsers = solved.length;
+    const avgAttemptsToSolve = solvedUsers > 0
+      ? solved.reduce((sum, a) => sum + Math.max(1, a.submissionsCount || 1), 0) / solvedUsers
+      : undefined;
+
+    const rec = recommendDifficulty({ distinctUsers, solvedUsers, avgAttemptsToSolve });
+    const current = ((task as any).difficulty ?? null) as "EASY" | "MEDIUM" | "HARD" | null;
+
+    return res.json({
+      current,
+      ...rec,
+      shouldRecalibrate: shouldRecalibrate(current, rec),
+      sample: { distinctUsers, solvedUsers, avgAttemptsToSolve: avgAttemptsToSolve ?? null },
+    });
+  } catch (error: any) {
+    logger.warn("[library] difficulty-suggestion failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Integrity events recorded for this task (author/admin only), newest first.
+libraryRouter.get("/tasks/:id/integrity-events", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    if (!task) return res.status(404).json({ message: "NOT_FOUND" });
+    const isAuthor = task.author?.id === req.userId;
+    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    if (!isAuthor && !isAdmin) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const events = await AppDataSource.getRepository(SubmissionIntegrity).find({
+      where: { taskKind: "LIBRARY", taskId: id } as any,
+      order: { createdAt: "DESC" } as any,
+      take: limit,
+    });
+
+    return res.json({
+      total: events.length,
+      events: events.map((e) => ({
+        principalType: e.principalType,
+        principalId: e.principalId,
+        score: e.score,
+        level: e.level,
+        flags: (() => { try { return JSON.parse(e.flags ?? "[]"); } catch { return []; } })(),
+        createdAt: e.createdAt,
+      })),
+    });
+  } catch (error: any) {
+    logger.warn("[library] integrity-events failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

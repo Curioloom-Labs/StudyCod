@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Code2, LayoutDashboard, CheckCircle2, GraduationCap, BookOpen, User, LogOut } from 'lucide-react';
+import { Code2, LayoutDashboard, CheckCircle2, GraduationCap, BookOpen, User, LogOut, Beaker, Compass } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { User as AuthUser } from '../types';
 interface SidebarProps {
@@ -30,6 +30,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     to: '/theory',
     label: t('theory'),
     icon: BookOpen
+  }, {
+    to: '/learn',
+    label: t('myLearning', { defaultValue: 'My Learning' }),
+    icon: Compass
+  }, {
+    to: '/playground',
+    label: 'Playground',
+    icon: Beaker
   }, {
     to: '/profile',
     label: t('profile'),

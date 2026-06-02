@@ -76,6 +76,7 @@ export class Student {
   })
   generatedUsername!: string;
   @Column({
+    type: "varchar",
     name: "generated_password"
   })
   generatedPassword!: string;

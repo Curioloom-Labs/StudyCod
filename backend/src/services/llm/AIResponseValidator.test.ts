@@ -33,3 +33,33 @@ test('AIResponseValidator.validateGenerateTask: NO_INPUT_* auto-fixes missing in
   assert.ok(typeof res.inputFormat === 'string' && res.inputFormat.length > 0);
   assert.match(res.inputFormat.toLowerCase(), /вхідні\s+дані\s+відсутн/);
 });
+
+test('AIResponseValidator.validateGenerateTask: rejects function-only tasks', () => {
+  const data = {
+    title: 'Sum Function',
+    topic: 'Functions',
+    difficulty: 3,
+    theoryMarkdown: 'Some theory about functions and return values.',
+    practicalTask:
+      'Write a function named calculateSum(a, b) that returns the sum of two integers. ' +
+      'The function should accept two integers and return their sum without printing anything. ' +
+      'Do not write a complete program; only implement the function body.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'Read two integers from stdin.',
+    outputFormat: 'Print the sum of the two integers to stdout.',
+    constraints: 'Time limit 1 second. Memory limit 256 MB.',
+    examples: [
+      {
+        input: '3 5',
+        output: '8',
+        explanation: 'The sum of 3 and 5 is 8.'
+      }
+    ],
+    codeTemplate: 'def main():\n    pass\n\nif __name__ == "__main__":\n    main()'
+  };
+
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTask(data),
+    /implementing a function\/method\/class/i
+  );
+});

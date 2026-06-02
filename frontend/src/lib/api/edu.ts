@@ -1389,6 +1389,27 @@ export async function getTopicTaskAIDetection(taskId: number, studentId: number)
   const res = await api.get(`/edu/topic-tasks/${taskId}/students/${studentId}/ai-detect`);
   return res.data;
 }
+
+export type LiveStatus = "not_started" | "in_progress" | "stuck" | "passed";
+export interface LiveStudentStatus {
+  studentId: number;
+  name: string;
+  status: LiveStatus;
+  lastVerdict: string | null;
+  testsPassed: number | null;
+  testsTotal: number | null;
+  lastActivityMs: number | null;
+}
+export interface LiveSnapshot {
+  totals: Record<LiveStatus, number>;
+  students: LiveStudentStatus[];
+  generatedAtMs: number;
+}
+
+export async function getLiveMonitor(classId: number, taskId: number): Promise<LiveSnapshot> {
+  const res = await api.get(`/edu/classes/${classId}/topic-tasks/${taskId}/live`);
+  return res.data as LiveSnapshot;
+}
 export interface ControlWorkStudentWork {
   controlWork: {
     id: number;

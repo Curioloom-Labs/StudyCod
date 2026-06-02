@@ -207,6 +207,67 @@ export async function runTask(id: number, codeOrFiles: CodeOrFiles, input?: stri
   };
 }
 
+export type ExplainErrorFailure = {
+  testId?: number;
+  input?: string;
+  expected?: string;
+  actual?: string;
+  verdict?: string | null;
+  stderr?: string | null;
+};
+
+export type ExplainErrorPayload = {
+  language: "JAVA" | "PYTHON" | "CPP";
+  code: string;
+  verdict?: string | null;
+  stderr?: string | null;
+  taskTitle?: string;
+  taskText?: string;
+  failures?: ExplainErrorFailure[];
+};
+
+export async function explainTaskError(payload: ExplainErrorPayload): Promise<{ explanation: string; source: "ai" | "deterministic" }> {
+  const res = await api.post("/tasks/explain-error", payload);
+  return res.data as { explanation: string; source: "ai" | "deterministic" };
+}
+
+export type DebugChatMessage = { role: "student" | "mentor"; content: string };
+export type DebugChatPayload = ExplainErrorPayload & { messages: DebugChatMessage[] };
+
+export async function debugChat(payload: DebugChatPayload): Promise<{ reply: string; source: "ai" | "deterministic" }> {
+  const res = await api.post("/tasks/debug-chat", payload);
+  return res.data as { reply: string; source: "ai" | "deterministic" };
+}
+
+export type ProctoringSignals = {
+  finalCodeLength: number;
+  totalPastedChars?: number;
+  largestPasteChars?: number;
+  pasteCount?: number;
+  blurCount?: number;
+  typedChars?: number;
+  solveDurationMs?: number;
+  /** Optional task context so the score is persisted for teacher review. */
+  taskKind?: "LIBRARY" | "TOPIC" | "CONTEST";
+  taskId?: number;
+};
+
+export async function scoreProctoring(signals: ProctoringSignals): Promise<{ score: number; level: "clean" | "review" | "suspicious"; flags: string[] }> {
+  const res = await api.post("/tasks/proctoring-score", signals);
+  return res.data as { score: number; level: "clean" | "review" | "suspicious"; flags: string[] };
+}
+
+export type ConceptReviewOutcome = { solved: boolean; attempts?: number; hintsUsed?: number; testsPassedRatio?: number };
+
+export async function recordConceptReview(payload: { conceptKey: string; outcome?: ConceptReviewOutcome; grade?: number }): Promise<{
+  conceptKey: string;
+  grade: number;
+  state: { repetitions: number; easeFactor: number; intervalDays: number; dueAtMs: number; mastered: boolean };
+}> {
+  const res = await api.post("/tasks/concept-review", payload);
+  return res.data;
+}
+
 export async function getWebTaskTemplate(id: number): Promise<{ taskId: number; taskMode: "WEB"; files: WebTaskFile[]; rules: WebTaskRule[] }> {
   const res = await api.get(`/tasks/${id}/web-template`);
   return res.data;

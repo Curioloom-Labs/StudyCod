@@ -169,10 +169,13 @@ ${JSON.stringify(schema, null, 2)}
           else signal.addEventListener('abort', onAbort, { once: true });
         }
         logger.debug('[cf-ai] request', { ...logContext, attempt: attempt + 1 });
+        const internalSecret = String(process.env.CLOUDFLARE_AI_INTERNAL_SECRET ?? '').trim();
         const response = await fetch(url, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            // Authenticate to the worker so it can reject anonymous traffic.
+            ...(internalSecret ? { 'x-internal-secret': internalSecret } : {})
           },
           body: JSON.stringify(requestPayload),
           signal: controller.signal

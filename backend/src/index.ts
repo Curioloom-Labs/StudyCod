@@ -7,7 +7,6 @@ import { RedisStore } from "connect-redis";
 import passport from "passport";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import jwt from "jsonwebtoken";
 import { AppDataSource } from "./data-source";
 import { setupGoogleStrategy } from "./middleware/googleAuth";
 import { authRouter } from "./routes/auth";
@@ -25,12 +24,14 @@ import libraryRouter from "./routes/library";
 import contestsRouter from "./routes/contests";
 import emailsRouter from "./routes/emails";
 import certificateRouter from "./routes/certificate";
+import playgroundRouter from "./routes/playground";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { requestContextMiddleware } from "./middleware/requestContext";
 import { placementGate } from "./middleware/placementGate";
 import { authMiddleware } from "./middleware/authMiddleware";
 import { forbidContestModeUsers } from "./middleware/contestModeGuard";
 import { PORT, CORS_ORIGIN, CORS_ORIGINS, SESSION_SECRET, IS_PRODUCTION, TRUST_PROXY, JWT_SECRET } from "./config";
+import jwt from "jsonwebtoken";
 import { logger } from "./utils/logger";
 import { HttpError } from "./utils/httpError";
 import { spawn } from "child_process";
@@ -53,28 +54,67 @@ import { createRedisRateLimitStore } from "./middleware/routeRateLimit";
 import { getRedisClientForStore, getRedisKeyPrefix, getSharedRedisClient, isRedisEnabled } from "./services/redis/sharedRedis";
 import { shutdownRedis } from "./services/redis/sharedRedis";
 import { seedTopicsIfNeeded } from "./utils/seedTopics";
+import { checkReadiness, renderPrometheusMetrics } from "./observability/health";
 const app = express();
 
-// Graceful shutdown handlers for SIGTERM (Kubernetes, systemd, etc.) and SIGINT (Ctrl+C)
-process.on("SIGTERM", async () => {
-  logger.info("[shutdown] SIGTERM received, gracefully shutting down...");
-  try {
-    await shutdownRedis();
-  } catch (err: any) {
-    logger.warn("[shutdown] Redis shutdown error", { error: err?.message });
-  }
-  process.exit(0);
-});
+// Graceful shutdown plumbing.
+//
+// The HTTP server handle is set in bootstrap() once app.listen() resolves.
+// shutdown() is idempotent and bounded: it stops accepting new connections,
+// drains in-flight ones with a deadline, releases Redis, then exits. Without
+// this, SIGTERM during a slow request would cut the client off and orphan
+// child processes (e.g. nsjail health probes spawned in /health/judge).
+let httpServer: import("http").Server | null = null;
+let shutdownInProgress = false;
 
-process.on("SIGINT", async () => {
-  logger.info("[shutdown] SIGINT received, gracefully shutting down...");
+const SHUTDOWN_DRAIN_TIMEOUT_MS = (() => {
+  const raw = (process.env.SHUTDOWN_DRAIN_TIMEOUT_MS ?? "").trim();
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 1000 ? n : 15_000;
+})();
+
+async function gracefulShutdown(reason: string, exitCode: number): Promise<void> {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+  logger.info("[shutdown] starting graceful shutdown", { reason, exitCode, drainTimeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS });
+
+  // 1) Stop accepting new HTTP connections and drain existing ones.
+  if (httpServer) {
+    const drained = await new Promise<boolean>(resolve => {
+      let settled = false;
+      const onDone = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(ok);
+      };
+      const timer = setTimeout(() => {
+        logger.warn("[shutdown] HTTP drain timeout exceeded, forcing close", { timeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS });
+        onDone(false);
+      }, SHUTDOWN_DRAIN_TIMEOUT_MS);
+      timer.unref?.();
+      httpServer!.close(err => {
+        clearTimeout(timer);
+        if (err) {
+          logger.warn("[shutdown] HTTP server close error", { error: err?.message });
+        }
+        onDone(true);
+      });
+    });
+    logger.info("[shutdown] HTTP server drained", { cleanly: drained });
+  }
+
+  // 2) Release Redis after HTTP so in-flight handlers could still use it.
   try {
     await shutdownRedis();
   } catch (err: any) {
     logger.warn("[shutdown] Redis shutdown error", { error: err?.message });
   }
-  process.exit(0);
-});
+
+  process.exit(exitCode);
+}
+
+process.on("SIGTERM", () => { void gracefulShutdown("SIGTERM", 0); });
+process.on("SIGINT", () => { void gracefulShutdown("SIGINT", 0); });
 if (isRedisEnabled()) {
   void getSharedRedisClient();
 }
@@ -140,44 +180,54 @@ if (IS_PRODUCTION) {
   }
 }
 
+// Only treat as a disconnect a real syscall/stream error originating in
+// node:net or node:http. Previously any object with code:'EPIPE' triggered
+// the silent-ignore path, which would also hide bugs that happen to throw
+// such an object from business logic.
 function isDisconnectError(err: any): boolean {
-  const code = err?.code;
-  return code === "EPIPE" || code === "ECONNRESET" || code === "ERR_STREAM_DESTROYED";
+  if (!(err instanceof Error)) return false;
+  const code = (err as any).code;
+  if (code !== "EPIPE" && code !== "ECONNRESET" && code !== "ERR_STREAM_DESTROYED") {
+    return false;
+  }
+  const syscall = (err as any).syscall;
+  // EPIPE/ECONNRESET from sockets always have a syscall (write/read/shutdown).
+  // ERR_STREAM_DESTROYED is a Node stream error and has no syscall but does
+  // come from node-internal stack frames — accept it without a syscall.
+  if (code === "ERR_STREAM_DESTROYED") return true;
+  return typeof syscall === "string" && syscall.length > 0;
 }
 
-type GlobalRateLimitJwtPayload = {
-  userId?: number;
-  studentId?: number;
-  type?: "USER" | "STUDENT";
-};
-
+// Global limiter key.
+//
+// Anonymous requests are keyed by client IP. Authenticated requests are keyed
+// by IP + signed principal id, which fixes two problems at once:
+//   1. A shared NAT (an entire classroom behind one school IP) no longer
+//      shares a single 300/min bucket — each student gets their own.
+//   2. A leaked/revoked token replayed from a DIFFERENT network keys to
+//      `attackerIP:principal`, which can never exhaust the victim's real
+//      `victimIP:principal` bucket — so it cannot be used to DoS the victim.
+//
+// We verify the JWT signature here (cheap HMAC) so the principal id cannot be
+// spoofed; we intentionally do NOT run the async revocation check — this only
+// selects a rate-limit bucket, and authz/revocation is still enforced later in
+// authMiddleware. An invalid signature simply falls back to IP-only keying.
 function resolveGlobalRateLimitKey(req: express.Request): string {
-  const authHeader = typeof req.headers.authorization === "string"
-    ? req.headers.authorization
-    : "";
-
-  if (authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice("Bearer ".length).trim();
-    if (token) {
-      try {
-        const payload = jwt.verify(token, JWT_SECRET) as GlobalRateLimitJwtPayload;
-        if (payload?.type === "STUDENT") {
-          const studentId = Number(payload.studentId);
-          if (Number.isFinite(studentId) && studentId > 0) {
-            return `student:${studentId}`;
-          }
-        }
-        const userId = Number(payload?.userId);
-        if (Number.isFinite(userId) && userId > 0) {
-          return `user:${userId}`;
-        }
-      } catch {
-        // Ignore invalid/expired tokens and fallback to IP-based limiting.
-      }
+  const ip = req.ip ?? "unknown";
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    try {
+      const payload = jwt.verify(authHeader.slice("Bearer ".length), JWT_SECRET) as {
+        userId?: number;
+        studentId?: number;
+      };
+      const principalId = payload?.studentId ?? payload?.userId;
+      if (principalId) return `${ip}:p${principalId}`;
+    } catch {
+      // Invalid/expired token → treat as anonymous for bucketing.
     }
   }
-
-  return req.ip ?? "unknown";
+  return ip;
 }
 
 // In production behind a reverse proxy, clients can disconnect while we are still computing.
@@ -190,26 +240,70 @@ process.on("uncaughtException", (err: any) => {
     });
     return;
   }
-  logger.error("Uncaught exception", {
-    err
-  });
-  // Fail-fast for unknown errors.
-  process.exit(1);
+  logger.error("Uncaught exception", { err });
+  // Fail-fast for unknown errors, but drain HTTP/Redis first so in-flight
+  // clients get a clean close instead of a TCP reset.
+  void gracefulShutdown("uncaughtException", 1);
 });
 
+// Unhandled promise rejections are usually LOCAL bugs (a missed `.catch` on a
+// fire-and-forget call), not process-wide corruption like an uncaughtException.
+// Killing the whole server on the first one means a single stray rejection
+// anywhere — including inside a third-party lib or a background timer — takes
+// down auth, admin, and every in-flight request. We therefore log every
+// rejection and only fail fast when they arrive faster than a threshold within
+// a rolling window, which signals a genuine systemic problem (e.g. a hot loop
+// of rejections) rather than a one-off.
+//
+// Set UNHANDLED_REJECTION_FATAL_THRESHOLD=0 to never auto-restart on rejections.
+const UNHANDLED_REJECTION_WINDOW_MS = (() => {
+  const n = Number.parseInt(String(process.env.UNHANDLED_REJECTION_WINDOW_MS ?? "").trim(), 10);
+  return Number.isFinite(n) && n >= 1000 ? n : 60_000;
+})();
+const UNHANDLED_REJECTION_FATAL_THRESHOLD = (() => {
+  const raw = String(process.env.UNHANDLED_REJECTION_FATAL_THRESHOLD ?? "").trim();
+  if (raw === "") return 25;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 25;
+})();
+let unhandledRejectionTimestamps: number[] = [];
 process.on("unhandledRejection", (reason: any) => {
-  logger.error("Unhandled rejection", {
-    reason
-  });
+  logger.error("Unhandled rejection", { reason });
+  if (UNHANDLED_REJECTION_FATAL_THRESHOLD <= 0) return;
 
-  // Unknown rejected promises can leave the process in a bad state.
-  // Let the orchestrator restart the service after we log the failure.
-  setTimeout(() => process.exit(1), 100);
+  const now = Date.now();
+  unhandledRejectionTimestamps.push(now);
+  unhandledRejectionTimestamps = unhandledRejectionTimestamps.filter(t => now - t <= UNHANDLED_REJECTION_WINDOW_MS);
+
+  if (unhandledRejectionTimestamps.length >= UNHANDLED_REJECTION_FATAL_THRESHOLD) {
+    logger.error("Unhandled rejection rate exceeded threshold; draining and restarting", {
+      count: unhandledRejectionTimestamps.length,
+      windowMs: UNHANDLED_REJECTION_WINDOW_MS,
+      threshold: UNHANDLED_REJECTION_FATAL_THRESHOLD
+    });
+    void gracefulShutdown("unhandledRejection-threshold", 1);
+  }
 });
 
 app.set("trust proxy", TRUST_PROXY);
+// API-only CSP. Backend almost exclusively returns JSON, but some flows
+// (Google OAuth callback redirect, the few HTML probe responses) need a
+// tight default. `default-src 'none'` blocks any script/style/image fetch
+// initiated by a response that somehow ends up rendered in a browser.
+// `frame-ancestors 'none'` prevents clickjacking against any future iframe-
+// serving endpoint. Frontend has its own CSP; this is strictly for the API.
 app.use(helmet({
-  contentSecurityPolicy: false
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      "default-src": ["'none'"],
+      "frame-ancestors": ["'none'"],
+      "base-uri": ["'none'"],
+      "form-action": ["'self'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "same-site" }
 }));
 // NOTE: In express-rate-limit, limit=0 means "allow 0 requests" (i.e. always 429).
 // We only enable global rate limiting in production.
@@ -246,10 +340,35 @@ if (IS_PRODUCTION) {
     }
   }));
 }
+// Build the allowlist once at startup. `__corsOrigins` is already a normalized
+// comma-split array; `CORS_ORIGIN` may itself be a comma-list (legacy callers).
+// Treating `[CORS_ORIGIN]` as a single string in fallback breaks comma-list
+// configs and can silently lock everything out — splitting + filtering avoids
+// that. If nothing resolves and we are NOT in production, we default to the
+// vite dev origin so local boots don't break.
+const corsAllowlist: string[] = (() => {
+  const fromArray = Array.isArray(CORS_ORIGINS) ? CORS_ORIGINS : [];
+  const fromScalar = String(CORS_ORIGIN ?? "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+  const merged = Array.from(new Set([...fromArray, ...fromScalar]));
+  if (merged.length === 0 && !IS_PRODUCTION) {
+    return ["http://localhost:5173"];
+  }
+  return merged;
+})();
+
+if (corsAllowlist.length === 0) {
+  logger.error("[cors] No allowed origins resolved — all cross-origin browser requests will be rejected");
+} else {
+  logger.info("[cors] allowlist resolved", { origins: corsAllowlist });
+}
+
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
-    const allowed = (CORS_ORIGINS.length ? CORS_ORIGINS : [CORS_ORIGIN]).includes(origin);
+    const allowed = corsAllowlist.includes(origin);
     return cb(allowed ? null : new Error("CORS_NOT_ALLOWED"), allowed);
   },
   credentials: true
@@ -279,24 +398,61 @@ app.use((req, res, next) => {
   next();
 });
 
-// Some endpoints (e.g. library task create/update) may send large JSON payloads
-// containing many tests with large input/output.
-const bodyLimit = String(process.env.API_BODY_LIMIT || process.env.BODY_LIMIT || "50mb");
-app.use(express.json({
-  limit: bodyLimit
-}));
-app.use(express.urlencoded({
-  extended: false,
-  limit: bodyLimit
-}));
+// Per-route body limits.
+//
+// Previously a single 50MB limit was applied globally — that is DoS-friendly
+// because every endpoint (including /auth/login and /health) had to accept and
+// parse multi-MB payloads. We now keep a tight default for all routes and only
+// raise the limit for routes that legitimately need it (library task
+// create/update with many test cases, admin imports, topics archive upload).
+//
+// Configuration:
+//   BODY_LIMIT_DEFAULT (default "256kb")
+//   BODY_LIMIT_LARGE   (default "50mb")
+// Legacy API_BODY_LIMIT / BODY_LIMIT are still respected but now configure the
+// LARGE limit (they used to configure everything).
+const LARGE_BODY_PATH_PREFIXES = [
+  "/library", "/api/library",
+  "/admin", "/api/admin",
+  "/topics", "/api/topics",
+  "/contests", "/api/contests"
+];
+const defaultBodyLimit = String(process.env.BODY_LIMIT_DEFAULT || "256kb");
+const largeBodyLimit = String(
+  process.env.BODY_LIMIT_LARGE
+    || process.env.API_BODY_LIMIT
+    || process.env.BODY_LIMIT
+    || "50mb"
+);
+
+function isLargeBodyPath(path: string): boolean {
+  for (const prefix of LARGE_BODY_PATH_PREFIXES) {
+    if (path === prefix || path.startsWith(`${prefix}/`)) return true;
+  }
+  return false;
+}
+
+const jsonParserDefault = express.json({ limit: defaultBodyLimit });
+const jsonParserLarge = express.json({ limit: largeBodyLimit });
+const urlencodedParserDefault = express.urlencoded({ extended: false, limit: defaultBodyLimit });
+const urlencodedParserLarge = express.urlencoded({ extended: false, limit: largeBodyLimit });
+
+app.use((req, res, next) => {
+  (isLargeBodyPath(req.path) ? jsonParserLarge : jsonParserDefault)(req, res, next);
+});
+app.use((req, res, next) => {
+  (isLargeBodyPath(req.path) ? urlencodedParserLarge : urlencodedParserDefault)(req, res, next);
+});
 app.use(requestContextMiddleware);
 app.use(maintenanceMiddleware);
 const sessionStore = createSessionStore();
-app.use(session({
+const sessionMiddleware = session({
   store: sessionStore,
   secret: SESSION_SECRET,
+  // Do NOT persist empty sessions: prevents Redis/session bloat and accidental
+  // session creation for anonymous probes (/health, bots, preflights).
+  saveUninitialized: false,
   resave: false,
-  saveUninitialized: true,
   name: "__sid",
   cookie: {
     secure: IS_PRODUCTION,
@@ -304,9 +460,28 @@ app.use(session({
     sameSite: "lax",
     maxAge: 24 * 60 * 60 * 1000
   }
-}));
+});
+
+// Paths that never need a session (health probes and internal diagnostics).
+// We early-return to avoid even touching the session store.
+const SESSIONLESS_PATH_PREFIXES = ["/health", "/api/health", "/ready", "/api/ready", "/metrics", "/api/metrics", "/internal/", "/api/internal/"];
+function isSessionlessPath(path: string): boolean {
+  if (path === "/" || path === "/api" || path === "/api/") return true;
+  for (const prefix of SESSIONLESS_PATH_PREFIXES) {
+    if (path === prefix.replace(/\/$/, "") || path.startsWith(prefix)) return true;
+  }
+  return false;
+}
+app.use((req, res, next) => {
+  if (isSessionlessPath(req.path)) return next();
+  return sessionMiddleware(req, res, next);
+});
 app.use(passport.initialize());
-app.use(passport.session());
+const passportSessionMiddleware = passport.session();
+app.use((req, res, next) => {
+  if (isSessionlessPath(req.path)) return next();
+  return passportSessionMiddleware(req, res, next);
+});
 setupGoogleStrategy();
 if (!IS_PRODUCTION) {
   app.use(morgan("dev"));
@@ -336,6 +511,33 @@ app.get(["/health", "/api/health"], (_req, res) => {
     nodeEnv: process.env.NODE_ENV || null,
     isProduction: IS_PRODUCTION
   });
+});
+
+// Readiness probe: unlike /health (liveness), this reports whether the instance
+// can serve traffic right now (DB reachable). Orchestrators should gate traffic
+// on a 200 here so rolling deploys don't route at instances still booting or
+// running startup migrations. Returns 503 with per-dependency detail otherwise.
+app.get(["/ready", "/api/ready"], async (_req, res) => {
+  try {
+    const result = await checkReadiness();
+    res.status(result.ready ? 200 : 503).json({
+      status: result.ready ? "ready" : "not-ready",
+      checks: result.checks
+    });
+  } catch (err: any) {
+    res.status(503).json({ status: "not-ready", error: String(err?.message || "READINESS_CHECK_FAILED") });
+  }
+});
+
+// Prometheus metrics. Gated in production (operational info) behind
+// METRICS_ENABLED=1, mirroring the other internal diagnostics endpoints.
+const METRICS_EXPOSED = !IS_PRODUCTION || String(process.env.METRICS_ENABLED || "").trim() === "1";
+app.get(["/metrics", "/api/metrics"], (_req, res) => {
+  if (!METRICS_EXPOSED) {
+    return res.status(404).json({ error: "NOT_FOUND", status: 404 });
+  }
+  res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+  res.status(200).send(renderPrometheusMetrics());
 });
 
 // Internal diagnostics endpoint. Exposed only in non-production by default.
@@ -377,7 +579,31 @@ app.get(["/internal/ai/openrouter", "/api/internal/ai/openrouter"], (_req, res) 
   });
 });
 
+// Cache the judge health probe result. A per-second monitor would otherwise
+// spawn one nsjail child per request — expensive and noisy. TTL kept short
+// enough that a real outage surfaces within a few polls.
+const JUDGE_HEALTH_CACHE_TTL_MS = (() => {
+  const raw = (process.env.JUDGE_HEALTH_CACHE_TTL_MS ?? "").trim();
+  const n = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(n) && n >= 0 ? n : 5_000;
+})();
+let judgeHealthCache: { at: number; status: number; body: any } | null = null;
+let judgeHealthInFlight: Promise<void> | null = null;
+
 app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
+  const now = Date.now();
+  if (judgeHealthCache && now - judgeHealthCache.at < JUDGE_HEALTH_CACHE_TTL_MS) {
+    return res.status(judgeHealthCache.status).json(judgeHealthCache.body);
+  }
+  // Coalesce concurrent probes: only one underlying spawn runs at a time.
+  if (judgeHealthInFlight) {
+    await judgeHealthInFlight;
+    if (judgeHealthCache) {
+      return res.status(judgeHealthCache.status).json(judgeHealthCache.body);
+    }
+  }
+  let resolveInFlight: () => void = () => {};
+  judgeHealthInFlight = new Promise<void>(r => { resolveInFlight = r; });
   try {
     const nsjailPath = env.__nsjailPath || "/usr/bin/nsjail";
     const nsjailExists = (() => {
@@ -435,10 +661,9 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
 
     const ok = Boolean(workerEntry) && Boolean(configPath) && nsjailExists && nsjailExecutable;
     if (!ok) {
-      res.status(503).json({
-        error: "Judge unavailable",
-        status: 503
-      });
+      const body = { error: "Judge unavailable", status: 503 };
+      judgeHealthCache = { at: Date.now(), status: 503, body };
+      res.status(503).json(body);
       return;
     }
 
@@ -528,22 +753,22 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
       });
     });
 
-    res.json({
+    const body = {
       ...health,
       version: judgeVersion,
-      backend: {
-        sandboxMode,
-        workerEntry,
-        configPath,
-        limits
-      }
-    });
+      backend: { sandboxMode, workerEntry, configPath, limits }
+    };
+    judgeHealthCache = { at: Date.now(), status: 200, body };
+    res.json(body);
   } catch (err: any) {
     logger.error("Judge health probe failed", { err });
-    res.status(503).json({
-      error: "Judge unavailable",
-      status: 503
-    });
+    const body = { error: "Judge unavailable", status: 503 };
+    // Cache failures briefly too, so a real outage doesn't fork-bomb us.
+    judgeHealthCache = { at: Date.now(), status: 503, body };
+    res.status(503).json(body);
+  } finally {
+    resolveInFlight();
+    judgeHealthInFlight = null;
   }
 });
 app.use("/auth", authRouter);
@@ -560,6 +785,7 @@ app.use("/support", supportRouter);
 app.use("/library", authMiddleware, forbidContestModeUsers, libraryRouter);
 app.use("/contests", contestsRouter);
 app.use("/certificate", certificateRouter);
+app.use("/playground", playgroundRouter);
 app.use("/emails", emailsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/profile", profileRouter);
@@ -575,9 +801,18 @@ app.use("/api/support", supportRouter);
 app.use("/api/library", authMiddleware, forbidContestModeUsers, libraryRouter);
 app.use("/api/contests", contestsRouter);
 app.use("/api/certificate", certificateRouter);
+app.use("/api/playground", playgroundRouter);
 app.use("/api/emails", emailsRouter);
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error("Unhandled error", { err });
+
+  // If response headers/body have already been streamed, we cannot write a
+  // JSON error body — doing so throws ERR_HTTP_HEADERS_SENT and masks the
+  // real failure. Hand off to Express's default finalhandler, which closes
+  // the connection cleanly.
+  if (res.headersSent) {
+    return next(err);
+  }
 
   const status = Number(err?.statusCode ?? err?.status ?? 500);
   const isHttpError = err instanceof HttpError || err?.name === "HttpError";
@@ -607,10 +842,21 @@ type StartupMigrationOutcome = {
   remediationHint?: string;
 };
 
+// Match MySQL "table already exists" by stable error code/errno, NOT by
+// the localized message text. mysql2 surfaces both `code`
+// (ER_TABLE_EXISTS_ERROR) and `errno` (1050). The message-based check was
+// kept as a last-resort fallback for non-mysql2 drivers; on locale-translated
+// MySQL servers the previous regex on /already exists/ silently broke.
 function isLegacyTableExistsMigrationError(error: any): boolean {
-  const code = String(error?.code || "").trim().toUpperCase();
-  const message = String(error?.message || "");
-  return code === "ER_TABLE_EXISTS_ERROR" || /already exists/i.test(message);
+  const code = String(error?.code || error?.driverError?.code || "").trim().toUpperCase();
+  if (code === "ER_TABLE_EXISTS_ERROR") return true;
+  const errno = Number(error?.errno ?? error?.driverError?.errno);
+  if (Number.isFinite(errno) && errno === 1050) return true;
+  const sqlState = String(error?.sqlState || error?.driverError?.sqlState || "").trim();
+  if (sqlState === "42S01") return true;
+  // Last resort for drivers that only expose a message — kept English only;
+  // the structured signals above are authoritative.
+  return /\bER_TABLE_EXISTS_ERROR\b|\balready exists\b/i.test(String(error?.message || ""));
 }
 
 function extractFailedMigrationName(error: any): string | undefined {
@@ -626,6 +872,15 @@ function extractFailedMigrationName(error: any): string | undefined {
 }
 
 function extractAlreadyExistingTableName(error: any): string | undefined {
+  // Prefer the FAILED SQL string — that is locale-independent and unambiguous.
+  // The localized message ("Table 'x' already exists") is only consulted as a
+  // fallback because the SQL is always emitted by us.
+  const sqlRaw = String(error?.sql || error?.query || error?.driverError?.sql || "");
+  const createMatch = sqlRaw.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?`?([a-zA-Z0-9_]+)`?/i);
+  if (createMatch?.[1]) {
+    return String(createMatch[1]).trim().toLowerCase();
+  }
+
   const rawMessage = String(
     error?.message ||
     error?.sqlMessage ||
@@ -633,16 +888,13 @@ function extractAlreadyExistingTableName(error: any): string | undefined {
     error?.driverError?.sqlMessage ||
     ""
   );
-
-  const quotedMatch = rawMessage.match(/Table\s+'([^']+)'\s+already exists/i);
+  // Generic table-name extraction: any quoted identifier in the message.
+  // Locale-independent because we only look for backtick / single-quote
+  // wrappers around an identifier, not specific English phrases.
+  const quotedMatch = rawMessage.match(/[`']([a-zA-Z0-9_.]+)[`']/);
   if (quotedMatch?.[1]) {
-    return String(quotedMatch[1]).trim().toLowerCase();
-  }
-
-  const sqlRaw = String(error?.sql || error?.query || error?.driverError?.sql || "");
-  const createMatch = sqlRaw.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?`?([a-zA-Z0-9_]+)`?/i);
-  if (createMatch?.[1]) {
-    return String(createMatch[1]).trim().toLowerCase();
+    const parts = String(quotedMatch[1]).split(".");
+    return String(parts[parts.length - 1]).trim().toLowerCase();
   }
 
   return undefined;
@@ -821,18 +1073,24 @@ async function bootstrap(): Promise<void> {
 
     startCertificateQueueWorker();
 
-    const shouldSeed = String(process.env.SEED_TOPICS_ON_STARTUP ?? "true").toLowerCase() !== "false";
+    // Seed defaults: ON in dev/test, OFF in production. Production seeding
+    // on every boot can re-insert rows that were intentionally removed and
+    // hides real curriculum-data regressions. Operators can re-enable
+    // explicitly with SEED_TOPICS_ON_STARTUP=true.
+    const seedDefault = IS_PRODUCTION ? "false" : "true";
+    const shouldSeed = String(process.env.SEED_TOPICS_ON_STARTUP ?? seedDefault).toLowerCase() !== "false";
     if (shouldSeed) {
       await seedTopicsIfNeeded();
     } else {
-      logger.info("[seed-topics] skipped (SEED_TOPICS_ON_STARTUP=false)");
+      logger.info("[seed-topics] skipped", { reason: process.env.SEED_TOPICS_ON_STARTUP ? "env:false" : "prod-default" });
     }
 
-    app.listen(PORT, () => {
-      logger.info("Server listening", {
-        port: PORT
-      });
+    httpServer = app.listen(PORT, () => {
+      logger.info("Server listening", { port: PORT });
     });
+    // Avoid hanging sockets blocking shutdown forever.
+    httpServer.keepAliveTimeout = 60_000;
+    httpServer.headersTimeout = 65_000;
   } catch (err) {
     logger.error("Database initialization error", {
       err

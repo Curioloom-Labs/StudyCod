@@ -9,8 +9,18 @@ export type TopicLanguage = "JAVA" | "PYTHON" | "CPP";
 export class TopicNew {
   @PrimaryGeneratedColumn()
   id!: number;
-  @Column()
+  @Column({ type: "varchar" })
   title!: string;
+  // Persisted English translation of `title`. Populated lazily by the
+  // translation service (write-through). Removes the synchronous uk->en HTTP
+  // call from GET hot paths once the row has been translated once.
+  @Column({
+    name: "title_en",
+    type: "varchar",
+    length: 512,
+    nullable: true
+  })
+  titleEn?: string | null;
   @Column({
     type: "text",
     nullable: true

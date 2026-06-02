@@ -454,6 +454,22 @@ export async function createLibraryTask(payload: {
   return res.data as { task: LibraryTaskListItem };
 }
 
+export type DifficultySuggestion = {
+  current: "EASY" | "MEDIUM" | "HARD" | null;
+  recommended: "EASY" | "MEDIUM" | "HARD";
+  recommendedScore: number;
+  solveRate: number;
+  confidence: number;
+  rationale: string;
+  shouldRecalibrate: boolean;
+  sample: { distinctUsers: number; solvedUsers: number; avgAttemptsToSolve: number | null };
+};
+
+export async function getDifficultySuggestion(taskId: number): Promise<DifficultySuggestion> {
+  const res = await api.get(`/library/tasks/${taskId}/difficulty-suggestion`);
+  return res.data as DifficultySuggestion;
+}
+
 export async function updateLibraryTask(
   id: number,
   payload: Partial<{
