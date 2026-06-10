@@ -36,6 +36,23 @@ export class TopicNew {
     enum: ["JAVA", "PYTHON", "CPP"]
   })
   language!: TopicLanguage;
+  // Per-topic thematic-grade formula override (vars: practice, control).
+  // Empty/null = inherit the class formula, which itself falls back to the
+  // built-in smart default. See utils/thematicFormula.ts.
+  @Column({
+    type: "varchar",
+    length: 255,
+    name: "thematic_formula",
+    nullable: true
+  })
+  thematicFormula?: string | null;
+  // Which semester (1, 2, …) this topic belongs to. NULL is treated as
+  // semester 1 when aggregating semester grades. See services/edu/semesterGrading.ts.
+  @Column({
+    type: "int",
+    nullable: true
+  })
+  semester?: number | null;
   @ManyToOne(() => Class, {
     nullable: true,
     onDelete: "SET NULL"

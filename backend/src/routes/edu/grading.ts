@@ -16,6 +16,7 @@ import { AssessmentType } from "../../types/AssessmentType";
 import { logger } from "../../utils/logger";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
+import { normalizeScaleMode } from "../../utils/gradingScale";
 
 const router = Router();
 
@@ -182,6 +183,7 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
       feedback: feedback || null,
       className: task.topic.class?.name ?? null,
       gradingSystem: task.topic.class?.gradingSystem ?? null,
+      gradeScaleMode: normalizeScaleMode(task.topic.class?.gradeScaleMode),
       fallbackLocale: resolveRequestLocale(req),
       requestId: req.requestId
     });
@@ -433,6 +435,7 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       grade: normalizedGrade,
       className: controlWork.topic.class?.name ?? null,
       gradingSystem: controlWork.topic.class?.gradingSystem ?? null,
+      gradeScaleMode: normalizeScaleMode(controlWork.topic.class?.gradeScaleMode),
       fallbackLocale: resolveRequestLocale(req),
       requestId: req.requestId
     });
@@ -855,6 +858,7 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
       feedback: updated.feedback || null,
       className: updated.student.class?.name ?? null,
       gradingSystem: updated.student.class?.gradingSystem ?? null,
+      gradeScaleMode: normalizeScaleMode(updated.student.class?.gradeScaleMode),
       fallbackLocale: resolveRequestLocale(req),
       requestId: req.requestId
     });
