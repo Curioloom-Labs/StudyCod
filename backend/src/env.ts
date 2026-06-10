@@ -175,6 +175,14 @@ const EnvSchema = z.object({
 
   // Auth user cache (Redis short-TTL for authMiddleware)
   AUTH_USER_CACHE_TTL_SECONDS: z.string().optional(),
+
+  // LiveKit (self-hosted SFU) — powers the EDU live, code-aware classroom.
+  // When all three are set the live-classroom routes mint join tokens; when
+  // unset the feature is treated as disabled and the routes return 503.
+  LIVEKIT_URL: z.string().optional(),
+  LIVEKIT_API_KEY: z.string().optional(),
+  LIVEKIT_API_SECRET: z.string().optional(),
+  LIVEKIT_TOKEN_TTL_MINUTES: z.string().optional(),
 }).transform(env => {
   const corsOrigins = normalizeOrigins(env.CORS_ORIGIN);
   const cfBase = String(env.CLOUDFLARE_AI_URL ?? "").trim();
@@ -431,6 +439,21 @@ const EnvSchema = z.object({
       const raw = (env.LLM_TASK_ANCHOR_CACHE_ENABLED ?? "").trim().toLowerCase();
       if (!raw) return true;
       return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    })(),
+
+    __liveKitUrl: (env.LIVEKIT_URL ?? "").trim(),
+    __liveKitApiKey: (env.LIVEKIT_API_KEY ?? "").trim(),
+    __liveKitApiSecret: (env.LIVEKIT_API_SECRET ?? "").trim(),
+    __liveKitEnabled: Boolean(
+      (env.LIVEKIT_URL ?? "").trim() &&
+      (env.LIVEKIT_API_KEY ?? "").trim() &&
+      (env.LIVEKIT_API_SECRET ?? "").trim()
+    ),
+    __liveKitTokenTtlMinutes: (() => {
+      const raw = (env.LIVEKIT_TOKEN_TTL_MINUTES ?? "").trim();
+      if (!raw) return 240;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 5 ? Math.min(n, 720) : 240;
     })(),
   };
 }).superRefine((env, ctx) => {

@@ -1,0 +1,22 @@
+# Local LiveKit SFU for the EDU live, code-aware classroom.
+#
+#   cd docker/livekit && docker compose up
+#
+# Then set in backend/.env:
+#   LIVEKIT_URL=ws://localhost:7880
+#   LIVEKIT_API_KEY=devkey
+#   LIVEKIT_API_SECRET=devsecret_change_me_at_least_32_characters_long
+#
+# Restart the backend so the new env is picked up; the live-classroom routes
+# stop returning 503 once all three vars are present.
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    ports:
+      - "7880:7880"       # signaling / WebSocket (LIVEKIT_URL)
+      - "7881:7881"       # RTC over TCP fallback
+      - "50000-50100:50000-50100/udp" # RTC media (matches port_range in livekit.yaml)
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro

@@ -53,6 +53,7 @@ import gradingRouter from "./edu/grading";
 import appealsRouter from "./edu/appeals";
 import insightsRouter from "./edu/insights";
 import gradebookRouter from "./edu/gradebook";
+import liveClassroomRouter from "./edu/liveClassroom";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -164,6 +165,7 @@ eduRouter.use(gradingRouter);
 eduRouter.use(appealsRouter);
 eduRouter.use(insightsRouter);
 eduRouter.use(gradebookRouter);
+eduRouter.use(liveClassroomRouter);
 const registerTeacherSchema = z.object({
   username: z.string().min(3).max(50),
   email: z.string().email(),

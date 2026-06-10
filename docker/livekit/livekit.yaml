@@ -1,0 +1,15 @@
+# Minimal LiveKit SFU config for local development of the EDU live classroom.
+# Do NOT use these keys in production — generate strong ones and keep them
+# only in the backend .env (LIVEKIT_API_KEY / LIVEKIT_API_SECRET).
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Local dev only: clients connect over localhost, no NAT traversal needed.
+  use_external_ip: false
+keys:
+  # key: secret  (the secret must be reasonably long)
+  devkey: devsecret_change_me_at_least_32_characters_long
+logging:
+  level: info

@@ -35,7 +35,8 @@ import {
   type TeacherDigestResponse,
   type RiskInterventionPlanResponse,
 } from "../../lib/api/edu";
-import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge } from "lucide-react";
+import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge, Video } from "lucide-react";
+import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -344,6 +345,10 @@ export const ClassDetailsPage: React.FC = () => {
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/teacher-os`)}>
               <Gauge className="w-4 h-4 mr-2" />
               Teacher OS
+            </Button>
+            <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/live`)}>
+              <Video className="w-4 h-4 mr-2" />
+              {tr("Живий урок", "Live lesson")}
             </Button>
           </div>
           <h1 className="text-2xl font-mono text-text-primary">{classInfo?.name ? `${t('classDetails')}: ${classInfo.name}` : t('classDetails')}</h1>

@@ -6,7 +6,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
 import { getMyStudentInfo, getStudentLessons, getMyAnnouncements, type Lesson, type ClassAnnouncementDto } from "../../lib/api/edu";
-import { BookOpen, Clock, FileText, MessageSquare } from "lucide-react";
+import { BookOpen, Clock, FileText, MessageSquare, Video } from "lucide-react";
 type StudentClassInfo = {
   id: number;
   name: string;
@@ -61,6 +61,12 @@ export const StudentLessonsPage: React.FC = () => {
             {t("lessons")} {classInfo?.name && `• ${classInfo.name}`}
           </h1>
           <div className="flex flex-wrap gap-2">
+            {classInfo?.id && (
+              <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classInfo.id}/live`)}>
+                <Video className="w-4 h-4 mr-2" />
+                {tr("Живий урок", "Live lesson")}
+              </Button>
+            )}
             <Button variant="ghost" onClick={() => navigate("/edu/journal")}>
               <BookOpen className="w-4 h-4 mr-2" />
               {t("myJournal")}
