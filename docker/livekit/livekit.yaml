@@ -9,7 +9,9 @@ rtc:
   # Local dev only: clients connect over localhost, no NAT traversal needed.
   use_external_ip: false
 keys:
-  # key: secret  (the secret must be reasonably long)
-  devkey: devsecret_change_me_at_least_32_characters_long
+  # key: secret — MUST match backend/.env (LIVEKIT_API_KEY / LIVEKIT_API_SECRET),
+  # otherwise the SFU rejects every token the backend mints. Local-dev values
+  # only; production must use distinct, strong secrets supplied via env.
+  studycod_key: devsecret_change_me_at_least_32_characters_long
 logging:
   level: info
