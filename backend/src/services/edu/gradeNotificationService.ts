@@ -2,6 +2,7 @@ import { emailService } from "../emailService";
 import { logger } from "../../utils/logger";
 import { UiLocale, normalizeUiLocale } from "../../utils/uiLocale";
 import type { GradingSystem } from "../../types/GradingSystem";
+import type { GradeScaleMode } from "../../utils/gradingScale";
 
 export type GradeNotificationKind = "task" | "summary" | "control";
 export type GradeNotificationEvent = "created" | "updated";
@@ -45,6 +46,7 @@ export async function notifyStudentGradeChange(params: {
   grade: number;
   maxGrade?: number;
   gradingSystem?: GradingSystem | null;
+  gradeScaleMode?: GradeScaleMode | null;
   className?: string | null;
   feedback?: string | null;
   fallbackLocale?: UiLocale;
@@ -67,6 +69,7 @@ export async function notifyStudentGradeChange(params: {
       grade: params.grade,
       maxGrade: params.maxGrade,
       gradingSystem: params.gradingSystem ?? undefined,
+      gradeScaleMode: params.gradeScaleMode ?? undefined,
       className: params.className ?? null,
       feedback: params.feedback ?? null,
       studentName: formatStudentName(params.student) || null,

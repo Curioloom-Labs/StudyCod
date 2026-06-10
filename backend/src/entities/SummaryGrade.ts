@@ -39,14 +39,23 @@ export class SummaryGrade {
     name: "control_work_id"
   })
   controlWork?: ControlWork | null;
+  // Nullable: SEMESTER aggregates span multiple topics and store topic_id NULL.
+  // All other assessment types still set a topic.
   @ManyToOne(() => TopicNew, {
     onDelete: "CASCADE",
-    nullable: false
+    nullable: true
   })
   @JoinColumn({
     name: "topic_id"
   })
-  topic!: TopicNew;
+  topic!: TopicNew | null;
+  // Semester number (1, 2, …) for SEMESTER aggregate rows. NULL for all other
+  // assessment types.
+  @Column({
+    type: "int",
+    nullable: true
+  })
+  semester!: number | null;
   @Column({
     type: "varchar",
     length: 255

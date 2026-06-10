@@ -229,6 +229,15 @@ class Parser {
     }
   }
 }
+// Evaluate a pure-arithmetic expression (all variables already substituted to
+// numbers). Reuses the same safe tokenizer/parser. Throws on any leftover
+// variable/function token or malformed input. Used by the thematic-grade
+// formula evaluator (utils/thematicFormula.ts).
+export function evaluateArithmeticExpression(expression: string): number {
+  const parser = new Parser(expression);
+  return parser.parse({ test: null, avgPractice: 0 });
+}
+
 export function evaluateFormula(formula: string | null | undefined, variables: FormulaVariables): number {
   if (!formula || formula.trim() === "") {
     return calculateDefaultGrade(variables);

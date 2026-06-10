@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ClassGradingSystem } from "../gradingSystems";
+import type { ClassGradingSystem, GradeScaleMode } from "../gradingSystems";
 
 type EduUserPayload = {
   id: number;
@@ -72,6 +72,7 @@ export interface Class {
   name: string;
   language: "JAVA" | "PYTHON" | "CPP";
   gradingSystem: ClassGradingSystem;
+  gradeScaleMode?: GradeScaleMode;
   studentsCount: number;
   createdAt: string;
 }
@@ -348,11 +349,12 @@ export async function registerTeacher(username: string, email: string, password:
   }
   return res.data;
 }
-export async function createClass(name: string, language: "JAVA" | "PYTHON" | "CPP", gradingSystem?: ClassGradingSystem): Promise<Class> {
+export async function createClass(name: string, language: "JAVA" | "PYTHON" | "CPP", gradingSystem?: ClassGradingSystem, gradeScaleMode?: GradeScaleMode): Promise<Class> {
   const res = await api.post("/edu/classes", {
     name,
     language,
-    gradingSystem
+    gradingSystem,
+    gradeScaleMode
   });
   return res.data.class;
 }
@@ -365,6 +367,7 @@ export interface ClassDetails {
   name: string;
   language: "JAVA" | "PYTHON" | "CPP";
   gradingSystem: ClassGradingSystem;
+  gradeScaleMode?: GradeScaleMode;
   createdAt: string;
   updatedAt: string;
 }
@@ -372,9 +375,10 @@ export async function getClass(classId: number): Promise<ClassDetails> {
   const res = await api.get(`/edu/classes/${classId}`);
   return res.data.class;
 }
-export async function updateClassGradingSystem(classId: number, gradingSystem: ClassGradingSystem): Promise<ClassDetails> {
+export async function updateClassGradingSystem(classId: number, gradingSystem: ClassGradingSystem, gradeScaleMode?: GradeScaleMode): Promise<ClassDetails> {
   const res = await api.put(`/edu/classes/${classId}/grading-system`, {
-    gradingSystem
+    gradingSystem,
+    gradeScaleMode
   });
   return res.data.class;
 }
@@ -859,6 +863,7 @@ export async function getMyStudentInfo(): Promise<{
       name: string;
       language: "JAVA" | "PYTHON" | "CPP";
       gradingSystem?: ClassGradingSystem;
+      gradeScaleMode?: GradeScaleMode;
     };
   };
 }> {
@@ -870,17 +875,19 @@ export type SummaryGrade = {
   name: string;
   subject: string;
   grade: number;
-  assessmentType?: "PRACTICE" | "INTERMEDIATE" | "CONTROL";
+  assessmentType?: "PRACTICE" | "INTERMEDIATE" | "CONTROL" | "SEMESTER";
   controlWorkId?: number | null;
   controlWorkTitle?: string | null;
   topicId?: number | null;
   topicTitle?: string | null;
+  semester?: number | null;
   createdAt: string;
 };
 export interface StudentGradesResponse {
   grades: Grade[];
   summaryGrades: SummaryGrade[];
   gradingSystem?: ClassGradingSystem;
+  gradeScaleMode?: GradeScaleMode;
 }
 export async function getStudentGrades(studentId: number): Promise<StudentGradesResponse> {
   const res = await api.get(`/edu/students/${studentId}/grades`);
@@ -1241,6 +1248,52 @@ export async function deleteThematicForTopic(classId: number, topicId: number): 
   const res = await api.delete(`/edu/classes/${classId}/topics/${topicId}/thematic`);
   return res.data;
 }
+
+// --- Thematic formula & semester configuration ---
+export interface ThematicConfigTopic {
+  topicId: number;
+  title: string;
+  thematicFormula: string | null;
+  semester: number | null;
+}
+export interface ThematicConfig {
+  classFormula: string | null;
+  topics: ThematicConfigTopic[];
+}
+export async function getThematicConfig(classId: number): Promise<ThematicConfig> {
+  const res = await api.get(`/edu/classes/${classId}/thematic-config`);
+  return res.data;
+}
+export async function updateClassThematicFormula(classId: number, formula: string | null): Promise<{ classFormula: string | null }> {
+  const res = await api.put(`/edu/classes/${classId}/thematic-formula`, { formula });
+  return res.data;
+}
+export async function updateTopicThematicFormula(classId: number, topicId: number, formula: string | null): Promise<{ topicId: number; thematicFormula: string | null }> {
+  const res = await api.put(`/edu/classes/${classId}/topics/${topicId}/thematic-formula`, { formula });
+  return res.data;
+}
+export async function updateTopicSemester(classId: number, topicId: number, semester: number | null): Promise<{ topicId: number; semester: number | null }> {
+  const res = await api.put(`/edu/classes/${classId}/topics/${topicId}/semester`, { semester });
+  return res.data;
+}
+export interface SemesterGradeRow {
+  gradeId: number;
+  studentId: number | null;
+  semester: number | null;
+  grade: number;
+}
+export async function getSemesterGrades(classId: number): Promise<SemesterGradeRow[]> {
+  const res = await api.get(`/edu/classes/${classId}/semester-grades`);
+  return res.data.semesterGrades;
+}
+export async function recomputeSemesterGrades(classId: number): Promise<{ count: number; semesters: number[] }> {
+  const res = await api.post(`/edu/classes/${classId}/semester-grades/recompute`, {});
+  return res.data;
+}
+export async function updateSemesterGrade(classId: number, gradeId: number, grade: number): Promise<{ gradeId: number; grade: number }> {
+  const res = await api.put(`/edu/classes/${classId}/semester-grades/${gradeId}`, { grade });
+  return res.data;
+}
 export interface GradebookStudent {
   studentId: number;
   studentName: string;
@@ -1255,6 +1308,7 @@ export interface GradebookStudent {
     createdAt: string | null;
     isControlWork?: boolean;
     isSummaryGrade?: boolean;
+    isSemesterGrade?: boolean;
   }>;
 }
 export interface GradebookLesson {
@@ -1273,6 +1327,7 @@ export interface GradebookResponse {
   students: GradebookStudent[];
   lessons: GradebookLesson[];
   gradingSystem: ClassGradingSystem;
+  gradeScaleMode?: GradeScaleMode;
 }
 export async function getClassGradebook(classId: number): Promise<GradebookResponse> {
   const res = await api.get(`/edu/classes/${classId}/gradebook`);

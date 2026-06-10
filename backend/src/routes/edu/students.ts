@@ -12,6 +12,7 @@ import { logger } from "../../utils/logger";
 import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
 import { DEFAULT_GRADING_SYSTEM } from "../../types/GradingSystem";
+import { normalizeScaleMode } from "../../utils/gradingScale";
 
 const router = Router();
 
@@ -48,6 +49,9 @@ function isThematicSummaryName(raw: unknown): boolean {
 function localizeSummaryName(raw: unknown, locale: "uk" | "en"): string {
   if (isThematicSummaryName(raw) || String(raw ?? "").trim().toUpperCase() === THEMATIC_CANONICAL_NAME) {
     return locale === "en" ? "Thematic" : "Тематична";
+  }
+  if (String(raw ?? "").trim().toUpperCase() === "SEMESTER") {
+    return locale === "en" ? "Semester" : "Семестрова";
   }
   return String(raw ?? "").trim();
 }
@@ -523,6 +527,7 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
     res.json({
       grades,
       gradingSystem: targetStudent.class?.gradingSystem || DEFAULT_GRADING_SYSTEM,
+      gradeScaleMode: normalizeScaleMode(targetStudent.class?.gradeScaleMode),
       summaryGrades: summaryGrades.map(sg => ({
         id: sg.id,
         name: localizeSummaryName(sg.name, locale),
@@ -533,6 +538,7 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
         controlWorkTitle: sg.controlWork?.title,
         topicId: sg.topic?.id ?? null,
         topicTitle: sg.topic?.title ?? null,
+        semester: sg.semester ?? null,
         formulaSnapshot: sg.formulaSnapshot,
         calculatedAt: sg.calculatedAt,
         createdAt: sg.createdAt
