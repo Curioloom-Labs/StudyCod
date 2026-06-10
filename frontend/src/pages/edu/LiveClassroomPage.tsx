@@ -60,10 +60,33 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
   const [leftPanel, setLeftPanel] = useState<LeftPanel>("none");
   const [breakoutBarOpen, setBreakoutBarOpen] = useState(false);
   const [myBreakoutIndex, setMyBreakoutIndex] = useState<number | null>(null);
+  const [roomConn, setRoomConn] = useState<"connecting" | "connected" | "failed">("connecting");
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const switchingRef = useRef(false);
+  const connTimerRef = useRef<number | null>(null);
   const activeRoomRef = useRef<ActiveRoom | null>(null);
   activeRoomRef.current = activeRoom;
+
+  // Guard the room connection: if the SFU is unreachable, LiveKit retries the
+  // WebSocket forever and the user just sees an endless "connecting" spinner.
+  // We arm a timeout on every (re)connect attempt and surface a clear failure.
+  useEffect(() => {
+    if (phase !== "in_room" || !activeRoom) return;
+    setRoomConn("connecting");
+    if (connTimerRef.current) window.clearTimeout(connTimerRef.current);
+    connTimerRef.current = window.setTimeout(() => {
+      setRoomConn((c) => (c === "connected" ? c : "failed"));
+    }, 15000);
+    return () => {
+      if (connTimerRef.current) window.clearTimeout(connTimerRef.current);
+    };
+  }, [phase, activeRoom?.token, retryNonce]);
+
+  const retryConnect = useCallback(() => {
+    setRoomConn("connecting");
+    setRetryNonce((n) => n + 1);
+  }, []);
 
   const refreshActive = useCallback(async () => {
     if (!Number.isFinite(classId)) {
@@ -332,9 +355,9 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
         )}
 
         <div className="flex min-h-0 flex-1">
-          <div className="min-h-0 flex-1" data-lk-theme="default">
+          <div className="relative min-h-0 flex-1" data-lk-theme="default">
             <LiveKitRoom
-              key={activeRoom.token}
+              key={`${activeRoom.token}:${retryNonce}`}
               token={activeRoom.token}
               serverUrl={activeRoom.url}
               connect
@@ -347,6 +370,12 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
               style={{ height: "100%" }}
               onConnected={() => {
                 switchingRef.current = false;
+                setRoomConn("connected");
+                if (connTimerRef.current) window.clearTimeout(connTimerRef.current);
+              }}
+              onError={(e) => {
+                console.error("LiveKit room error", e);
+                setRoomConn("failed");
               }}
               onDisconnected={() => {
                 if (switchingRef.current) return; // room switch, not a leave
@@ -379,6 +408,46 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
                 </div>
               </div>
             </LiveKitRoom>
+
+            {roomConn === "connecting" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-bg-base/70 backdrop-blur-sm">
+                <span className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <p className="text-sm font-mono text-text-secondary">
+                  {tr("Підключення до відеосервера…", "Connecting to the video server…")}
+                </p>
+                <p className="max-w-xs text-center text-[11px] font-mono text-text-muted">{activeRoom.url}</p>
+              </div>
+            )}
+
+            {roomConn === "failed" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-bg-base/85 px-6 backdrop-blur-sm">
+                <p className="text-base font-mono text-secondary">
+                  {tr("Не вдалося підключитися до відеосервера", "Couldn't connect to the video server")}
+                </p>
+                <p className="max-w-md text-center text-xs font-mono text-text-secondary">
+                  {tr(
+                    `Сервер ${activeRoom.url} не відповідає. Переконайтеся, що LiveKit запущено і доступний за цією адресою.`,
+                    `The server ${activeRoom.url} is not responding. Make sure LiveKit is running and reachable at this address.`
+                  )}
+                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={retryConnect}
+                    className="rounded-md bg-primary/20 px-4 py-2 text-sm font-mono text-primary hover:bg-primary/30"
+                  >
+                    {tr("Повторити", "Retry")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleLeave()}
+                    className="rounded-md bg-bg-hover/60 px-4 py-2 text-sm font-mono text-text-secondary hover:text-text-primary"
+                  >
+                    {tr("Вийти", "Leave")}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           {isTeacher && Number.isFinite(classId) && (
             <aside className="hidden w-80 shrink-0 border-l border-border p-2 lg:block">
