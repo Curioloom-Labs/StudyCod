@@ -2,10 +2,13 @@
 #
 #   cd docker/livekit && docker compose up
 #
-# Then set in backend/.env:
+# No Docker? On Windows run the SFU directly instead:
+#   cd docker\livekit && .\run-windows.ps1
+#
+# Either way, backend/.env must match the key in livekit.yaml:
 #   LIVEKIT_URL=ws://localhost:7880
-#   LIVEKIT_API_KEY=devkey
-#   LIVEKIT_API_SECRET=devsecret_change_me_at_least_32_characters_long
+#   LIVEKIT_API_KEY=studycod_key
+#   LIVEKIT_API_SECRET=70993dc42b398d701352b227e1b4ded4403bedfc4cf2b6b0eb8e6de94da9adb4
 #
 # Restart the backend so the new env is picked up; the live-classroom routes
 # stop returning 503 once all three vars are present.
