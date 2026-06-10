@@ -122,7 +122,10 @@ export const MomentumShell: React.FC<Props> = ({
       id: "learn",
       label: t("myLearning", { defaultValue: "My Learning" }),
       icon: Compass,
-      show: true
+      // My Learning centers on the EDU skill tree (/edu/my/skill-tree), which is
+      // empty/non-functional for non-students — so it must not show to personal
+      // users or teachers, only to EDU students.
+      show: isEducational && isStudent
     },
     {
       id: "playground",

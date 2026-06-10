@@ -1435,7 +1435,7 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="control-works/:controlWorkId" element={<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>} />
             <Route path="classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
             <Route path="classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
-            <Route path="classes/:classId/live" element={<AnimatedPage><LiveClassroomPage /></AnimatedPage>} />
+            <Route path="classes/:classId/live" element={<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>} />
             <Route path="classes/:classId/appeals" element={<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>} />
             <Route path="journal" element={<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>} />
             <Route path="student" element={<Navigate to="/edu/journal" replace />} />

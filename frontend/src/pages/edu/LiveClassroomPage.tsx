@@ -24,12 +24,18 @@ type Phase = "loading" | "lobby" | "in_room" | "disabled" | "error";
  * page is the lobby + room shell. Code-aware overlays (live heatmap, per-student
  * editor stream) are layered on top in follow-up increments.
  */
-export const LiveClassroomPage: React.FC = () => {
+type LiveClassroomUser = { studentId?: number; userMode?: string } | null | undefined;
+
+export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => {
   const { classId: classIdParam } = useParams<{ classId: string }>();
   const classId = Number(classIdParam);
   const navigate = useNavigate();
 
-  const isTeacher = typeof window !== "undefined" && localStorage.getItem("userType") !== "STUDENT";
+  // Role comes from the authenticated user, never from localStorage: in EDU
+  // mode a teacher has no studentId, a student does. (localStorage "userType"
+  // is stale if both roles were used in the same browser, which mislabels a
+  // teacher as a student and hides the "Start lesson" control.)
+  const isTeacher = !user?.studentId;
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [session, setSession] = useState<LiveSession | null>(null);
