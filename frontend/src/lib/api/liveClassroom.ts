@@ -161,3 +161,79 @@ export async function getLiveCopilot(classId: number): Promise<LiveCopilotRespon
   const res = await api.post(`/edu/classes/${classId}/live-copilot`);
   return res.data;
 }
+
+// ---- Lesson materials -----------------------------------------------------
+
+export interface LessonBrief {
+  id: number;
+  title: string;
+  type: string;
+}
+
+export interface SessionMaterials {
+  lessonId: number | null;
+  title: string | null;
+  theory: string | null;
+  hasTheory: boolean;
+  tasks: Array<{ id: number; title: string }>;
+}
+
+export async function getClassLessonsList(classId: number): Promise<LessonBrief[]> {
+  const res = await api.get(`/edu/classes/${classId}/lessons-list`);
+  return res.data?.lessons ?? [];
+}
+
+export async function setSessionLesson(sessionId: number, lessonId: number | null): Promise<LiveSession> {
+  const res = await api.put(`/edu/live-sessions/${sessionId}/lesson`, { lessonId });
+  return res.data.session;
+}
+
+export async function getSessionMaterials(sessionId: number): Promise<SessionMaterials> {
+  const res = await api.get(`/edu/live-sessions/${sessionId}/materials`);
+  return res.data;
+}
+
+// ---- Breakout rooms -------------------------------------------------------
+
+export interface BreakoutGroupDto {
+  index: number;
+  students: Array<{ id: number; name: string }>;
+}
+
+export interface BreakoutStateDto {
+  active: boolean;
+  groups: BreakoutGroupDto[];
+  myGroupIndex: number | null;
+}
+
+export interface BreakoutTokenDto {
+  active?: boolean;
+  groupIndex?: number;
+  token?: string;
+  url?: string;
+  room?: string;
+}
+
+export async function openBreakouts(classId: number, count: number): Promise<{ groups: BreakoutGroupDto[] }> {
+  const res = await api.post(`/edu/classes/${classId}/breakouts`, { count });
+  return res.data;
+}
+
+export async function getBreakouts(classId: number): Promise<BreakoutStateDto> {
+  const res = await api.get(`/edu/classes/${classId}/breakouts`);
+  return res.data;
+}
+
+export async function getMyBreakoutToken(classId: number): Promise<BreakoutTokenDto> {
+  const res = await api.get(`/edu/classes/${classId}/breakouts/my-token`);
+  return res.data;
+}
+
+export async function getTeacherBreakoutToken(classId: number, index: number): Promise<BreakoutTokenDto> {
+  const res = await api.post(`/edu/classes/${classId}/breakouts/token/${index}`);
+  return res.data;
+}
+
+export async function closeBreakouts(classId: number): Promise<void> {
+  await api.post(`/edu/classes/${classId}/breakouts/close`);
+}

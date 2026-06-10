@@ -20,6 +20,7 @@ import {
 import { buildLiveSnapshot, type LiveAttempt, type LiveStudent } from "../../services/edu/liveMonitor";
 import { setLiveCode, getLiveCode } from "../../services/edu/liveCode";
 import { startChallenge, getChallenge, endChallenge, type LiveChallenge } from "../../services/edu/liveChallenge";
+import { openBreakouts, getBreakouts, findStudentGroup, getGroup, closeBreakouts, type BreakoutState } from "../../services/edu/liveBreakout";
 import { buildLiveSignals, generateLiveBriefing } from "../../services/edu/liveCopilot";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 
@@ -171,6 +172,8 @@ router.post("/classes/:classId/live-sessions", authRequired, async (req: AuthReq
     });
 
     if (!session) {
+      // Fresh lesson — clear any stale breakout state from a previous one.
+      closeBreakouts(classId);
       session = liveRepo().create({
         class: cls,
         lesson: lesson ?? null,
@@ -304,6 +307,8 @@ router.post("/live-sessions/:id/end", authRequired, async (req: AuthRequest, res
       session.status = "ENDED";
       session.endedAt = new Date();
       await liveRepo().save(session);
+      // Tear down any breakout rooms so they don't linger into the next lesson.
+      closeBreakouts(session.class.id);
     }
 
     disableCache(res);
@@ -624,6 +629,107 @@ router.get("/classes/:classId/live-challenges/leaderboard", authRequired, async 
 });
 
 /**
+ * Lessons of the class for the in-room materials picker (teacher attaches a
+ * lesson to the live session so its theory/tasks show beside the video).
+ */
+router.get("/classes/:classId/lessons-list", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const cls = await loadTeacherClass(req, classId);
+    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+
+    const lessons = await lessonRepo().find({
+      where: { class: { id: classId } },
+      order: { id: "DESC" },
+      take: 200
+    });
+    disableCache(res);
+    return res.json({ lessons: lessons.map((l) => ({ id: l.id, title: l.title, type: l.type })) });
+  } catch (error: any) {
+    logger.error("[edu/live] lessons-list failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+/** Teacher attaches (or detaches) a lesson to the live session. */
+router.put("/live-sessions/:id/lesson", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+    const sessionId = parseInt(req.params.id, 10);
+    if (isNaN(sessionId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const session = await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] });
+    if (!session || !session.class) return res.status(404).json({ message: "SESSION_NOT_FOUND" });
+
+    const cls = await loadTeacherClass(req, session.class.id);
+    if (!cls) return res.status(403).json({ message: "NOT_CLASS_TEACHER" });
+
+    const rawLessonId = req.body?.lessonId;
+    if (rawLessonId == null) {
+      session.lesson = null;
+    } else {
+      const lessonId = parseInt(String(rawLessonId), 10);
+      if (isNaN(lessonId)) return res.status(400).json({ message: "INVALID_LESSON_ID" });
+      const lesson = await lessonRepo().findOne({ where: { id: lessonId, class: { id: session.class.id } } });
+      if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+      session.lesson = lesson;
+      session.title = lesson.title;
+    }
+    await liveRepo().save(session);
+
+    const fresh = (await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] }))!;
+    disableCache(res);
+    return res.json({ session: sessionDto(fresh) });
+  } catch (error: any) {
+    logger.error("[edu/live] attach lesson failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+/**
+ * Lesson materials for the session's attached lesson — theory + task list —
+ * readable by the teacher or any student of the class. The in-room panel that
+ * makes a live session feel like an actual lesson, not just a video call.
+ */
+router.get("/live-sessions/:id/materials", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = parseInt(req.params.id, 10);
+    if (isNaN(sessionId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const session = await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] });
+    if (!session || !session.class) return res.status(404).json({ message: "SESSION_NOT_FOUND" });
+
+    const access = await resolveClassAccess(req, res, session.class.id);
+    if (!access) return;
+
+    if (!session.lesson) {
+      disableCache(res);
+      return res.json({ lessonId: null, title: null, theory: null, hasTheory: false, tasks: [] });
+    }
+
+    const lesson = await lessonRepo().findOne({ where: { id: session.lesson.id }, relations: ["tasks"] });
+    disableCache(res);
+    return res.json({
+      lessonId: lesson?.id ?? null,
+      title: lesson?.title ?? null,
+      theory: lesson?.hasTheory ? lesson?.theory ?? null : null,
+      hasTheory: Boolean(lesson?.hasTheory && lesson?.theory),
+      tasks: (lesson?.tasks ?? []).map((t) => ({ id: t.id, title: t.title }))
+    });
+  } catch (error: any) {
+    logger.error("[edu/live] materials failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+/**
  * AI suffler: on-demand teacher briefing for the live lesson. Builds the same
  * live overview, derives deterministic signals (stuck clusters, idle students,
  * readiness), then asks the LLM for a short diagnosis + concrete actions — with
@@ -678,6 +784,159 @@ router.post("/classes/:classId/live-challenges/end", authRequired, async (req: A
     return res.json({ ok: true });
   } catch (error: any) {
     logger.error("[edu/live] end challenge failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// ---- Breakout rooms -------------------------------------------------------
+
+async function buildBreakoutDto(state: BreakoutState) {
+  const students = await studentRepo().find({ where: { class: { id: state.classId } } });
+  const nameById = new Map<number, string>();
+  for (const s of students) {
+    nameById.set(s.id, `${s.lastName ?? ""} ${s.firstName ?? ""}`.trim() || `#${s.id}`);
+  }
+  return {
+    groups: state.groups.map((g) => ({
+      index: g.index,
+      students: g.studentIds.map((id) => ({ id, name: nameById.get(id) ?? `#${id}` }))
+    }))
+  };
+}
+
+/**
+ * Teacher opens breakout rooms: splits the class roster round-robin into N
+ * groups, each its own LiveKit room. Requires a live session.
+ */
+router.post("/classes/:classId/breakouts", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireEnabled(res)) return;
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_OPEN_BREAKOUTS" });
+    }
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const cls = await loadTeacherClass(req, classId);
+    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+
+    const liveSession = await liveRepo().findOne({ where: { class: { id: classId }, status: "LIVE" } });
+    if (!liveSession) return res.status(409).json({ message: "NO_LIVE_SESSION" });
+
+    const count = parseInt(String(req.body?.count ?? ""), 10);
+    const students = await studentRepo().find({ where: { class: { id: classId } } });
+    const state = openBreakouts(classId, Number.isFinite(count) ? count : 2, students.map((s) => s.id));
+
+    disableCache(res);
+    return res.json(await buildBreakoutDto(state));
+  } catch (error: any) {
+    logger.error("[edu/live] open breakouts failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+/** Current breakout state (teacher or enrolled student); student also gets their group index. */
+router.get("/classes/:classId/breakouts", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const access = await resolveClassAccess(req, res, classId);
+    if (!access) return;
+
+    const state = getBreakouts(classId);
+    disableCache(res);
+    if (!state) return res.json({ active: false, groups: [], myGroupIndex: null });
+
+    const dto = await buildBreakoutDto(state);
+    const myGroupIndex =
+      req.userType === "STUDENT" && req.studentId ? findStudentGroup(classId, req.studentId)?.index ?? null : null;
+    return res.json({ active: true, ...dto, myGroupIndex });
+  } catch (error: any) {
+    logger.error("[edu/live] get breakouts failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+/** Student fetches a join token for their assigned breakout room (if any). */
+router.get("/classes/:classId/breakouts/my-token", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireEnabled(res)) return;
+    if (req.userType !== "STUDENT" || !req.studentId) {
+      return res.status(403).json({ message: "ONLY_STUDENTS" });
+    }
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
+    if (!student || student.class?.id !== classId) return res.status(403).json({ message: "NOT_A_CLASS_MEMBER" });
+
+    const group = findStudentGroup(classId, req.studentId);
+    disableCache(res);
+    if (!group) return res.json({ active: false });
+
+    const minted = await mintRoomToken({
+      room: group.roomName,
+      identity: studentIdentity(req.studentId),
+      name: `${student.lastName ?? ""} ${student.firstName ?? ""}`.trim() || `#${student.id}`,
+      role: "participant"
+    });
+    return res.json({ active: true, groupIndex: group.index, ...minted });
+  } catch (error: any) {
+    logger.error("[edu/live] breakout my-token failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+/** Teacher fetches a host token to hop into a specific breakout group. */
+router.post("/classes/:classId/breakouts/token/:index", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireEnabled(res)) return;
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+    const classId = parseInt(req.params.classId, 10);
+    const index = parseInt(req.params.index, 10);
+    if (isNaN(classId) || isNaN(index)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const cls = await loadTeacherClass(req, classId);
+    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+
+    const group = getGroup(classId, index);
+    if (!group) return res.status(404).json({ message: "GROUP_NOT_FOUND" });
+
+    const teacher = await userRepo().findOne({ where: { id: req.userId }, select: ["id", "username"] });
+    const minted = await mintRoomToken({
+      room: group.roomName,
+      identity: teacherIdentity(req.userId),
+      name: teacher?.username || "Teacher",
+      role: "host"
+    });
+    disableCache(res);
+    return res.json({ groupIndex: group.index, ...minted });
+  } catch (error: any) {
+    logger.error("[edu/live] breakout teacher token failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+/** Teacher closes all breakout rooms; everyone returns to the main room. */
+router.post("/classes/:classId/breakouts/close", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) return res.status(400).json({ message: "INVALID_ID" });
+
+    const cls = await loadTeacherClass(req, classId);
+    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+
+    closeBreakouts(classId);
+    disableCache(res);
+    return res.json({ ok: true });
+  } catch (error: any) {
+    logger.error("[edu/live] close breakouts failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
