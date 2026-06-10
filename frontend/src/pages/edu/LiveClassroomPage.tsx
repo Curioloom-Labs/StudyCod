@@ -1,49 +1,69 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { LiveKitRoom, VideoConference } from "@livekit/components-react";
+import { LiveKitRoom, VideoConference, PreJoin, ConnectionStateToast } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { tr } from "../../i18n";
 import { ClassLiveOverview } from "../../components/ClassLiveOverview";
 import { StudentCodeStream } from "../../components/StudentCodeStream";
 import { LiveChallengePanel } from "../../components/LiveChallengePanel";
 import { LiveCodeBoard } from "../../components/LiveCodeBoard";
+import { RaiseHandButton, RaisedHandsBar } from "../../components/LiveRaiseHand";
+import { LessonMaterialsPanel } from "../../components/LessonMaterialsPanel";
+import { BreakoutPanel } from "../../components/BreakoutPanel";
 import {
   getActiveLiveSession,
   startLiveSession,
   joinLiveSession,
   endLiveSession,
+  getBreakouts,
+  getMyBreakoutToken,
+  getTeacherBreakoutToken,
   type LiveJoinInfo,
   type LiveSession,
 } from "../../lib/api/liveClassroom";
 
-type Phase = "loading" | "lobby" | "in_room" | "disabled" | "error";
+type Phase = "loading" | "lobby" | "prejoin" | "in_room" | "disabled" | "error";
+type LeftPanel = "none" | "board" | "materials";
+type ActiveRoom = { token: string; url: string; kind: string }; // kind: "main" | "breakout:N"
 
-/**
- * Live, code-aware classroom for a class. Teachers can open a session; students
- * join an active one. Video/audio is handled by a self-hosted LiveKit SFU; this
- * page is the lobby + room shell. Code-aware overlays (live heatmap, per-student
- * editor stream) are layered on top in follow-up increments.
- */
+type DeviceChoices = {
+  username: string;
+  videoEnabled: boolean;
+  audioEnabled: boolean;
+  videoDeviceId: string;
+  audioDeviceId: string;
+};
+
 type LiveClassroomUser = { studentId?: number; userMode?: string } | null | undefined;
 
+/**
+ * Live, code-aware classroom. Flow: lobby → pre-join device check → in-room.
+ * The room layers code-aware panels (heatmap, student code stream, AI brief,
+ * challenge, shared code board, raised hands), lesson materials, and breakout
+ * rooms on top of the LiveKit video conference.
+ */
 export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => {
   const { classId: classIdParam } = useParams<{ classId: string }>();
   const classId = Number(classIdParam);
   const navigate = useNavigate();
 
-  // Role comes from the authenticated user, never from localStorage: in EDU
-  // mode a teacher has no studentId, a student does. (localStorage "userType"
-  // is stale if both roles were used in the same browser, which mislabels a
-  // teacher as a student and hides the "Start lesson" control.)
   const isTeacher = !user?.studentId;
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [session, setSession] = useState<LiveSession | null>(null);
   const [join, setJoin] = useState<LiveJoinInfo | null>(null);
+  const [choices, setChoices] = useState<DeviceChoices | null>(null);
+  const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [watched, setWatched] = useState<{ studentId: number; name: string } | null>(null);
-  const [boardOpen, setBoardOpen] = useState(false);
+  const [leftPanel, setLeftPanel] = useState<LeftPanel>("none");
+  const [breakoutBarOpen, setBreakoutBarOpen] = useState(false);
+  const [myBreakoutIndex, setMyBreakoutIndex] = useState<number | null>(null);
+
+  const switchingRef = useRef(false);
+  const activeRoomRef = useRef<ActiveRoom | null>(null);
+  activeRoomRef.current = activeRoom;
 
   const refreshActive = useCallback(async () => {
     if (!Number.isFinite(classId)) {
@@ -69,40 +89,112 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
     void refreshActive();
   }, [refreshActive]);
 
-  const enterRoom = useCallback((info: LiveJoinInfo) => {
-    setJoin(info);
-    setSession(info.session);
-    setPhase("in_room");
-    setError(null);
+  // Auto-detect a live session while waiting in the lobby.
+  useEffect(() => {
+    if (phase !== "lobby" || !Number.isFinite(classId)) return;
+    const id = window.setInterval(async () => {
+      try {
+        const { session: active } = await getActiveLiveSession(classId);
+        setSession(active);
+      } catch {
+        /* transient */
+      }
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [phase, classId]);
+
+  const switchRoom = useCallback((next: ActiveRoom) => {
+    // Mark the imminent disconnect as a room switch, not a "leave the lesson".
+    switchingRef.current = true;
+    setActiveRoom(next);
+    window.setTimeout(() => {
+      switchingRef.current = false;
+    }, 2500);
   }, []);
+
+  // Student: follow breakout assignment — move into the assigned group room when
+  // breakouts open, and back to the main room when they close.
+  useEffect(() => {
+    if (phase !== "in_room" || isTeacher || !join || !Number.isFinite(classId)) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const s = await getBreakouts(classId);
+        if (cancelled) return;
+        const curKind = activeRoomRef.current?.kind ?? "main";
+        if (s.active && s.myGroupIndex != null) {
+          setMyBreakoutIndex(s.myGroupIndex);
+          const wantKind = `breakout:${s.myGroupIndex}`;
+          if (curKind !== wantKind) {
+            const t = await getMyBreakoutToken(classId);
+            if (!cancelled && t.active && t.token && t.url) {
+              switchRoom({ token: t.token, url: t.url, kind: wantKind });
+            }
+          }
+        } else {
+          setMyBreakoutIndex(null);
+          if (curKind !== "main") {
+            switchRoom({ token: join.token, url: join.url, kind: "main" });
+          }
+        }
+      } catch {
+        /* transient */
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [phase, isTeacher, classId, join, switchRoom]);
 
   const handleStart = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      enterRoom(await startLiveSession(classId));
+      const info = await startLiveSession(classId);
+      setJoin(info);
+      setSession(info.session);
+      setPhase("prejoin");
     } catch {
       setError(tr("Не вдалося розпочати урок.", "Failed to start the session."));
     } finally {
       setBusy(false);
     }
-  }, [classId, enterRoom]);
+  }, [classId]);
 
   const handleJoin = useCallback(async () => {
     if (!session) return;
     setBusy(true);
     setError(null);
     try {
-      enterRoom(await joinLiveSession(session.id));
+      const info = await joinLiveSession(session.id);
+      setJoin(info);
+      setSession(info.session);
+      setPhase("prejoin");
     } catch {
       setError(tr("Не вдалося приєднатися.", "Failed to join."));
     } finally {
       setBusy(false);
     }
-  }, [session, enterRoom]);
+  }, [session]);
+
+  const enterRoom = useCallback(
+    (values: DeviceChoices) => {
+      if (!join) return;
+      setChoices(values);
+      setActiveRoom({ token: join.token, url: join.url, kind: "main" });
+      setPhase("in_room");
+    },
+    [join]
+  );
 
   const handleLeave = useCallback(async () => {
     setJoin(null);
+    setChoices(null);
+    setActiveRoom(null);
+    setMyBreakoutIndex(null);
     setPhase("loading");
     await refreshActive();
   }, [refreshActive]);
@@ -113,7 +205,7 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
     try {
       await endLiveSession(session.id);
     } catch {
-      /* ignore — we leave regardless */
+      /* ignore */
     } finally {
       setBusy(false);
       setJoin(null);
@@ -121,7 +213,57 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
     }
   }, [session, classId, navigate]);
 
-  if (phase === "in_room" && join) {
+  // Teacher hops between the main room and breakout groups.
+  const teacherJoinGroup = useCallback(
+    async (index: number) => {
+      try {
+        const t = await getTeacherBreakoutToken(classId, index);
+        if (t.token && t.url) switchRoom({ token: t.token, url: t.url, kind: `breakout:${index}` });
+      } catch {
+        /* ignore */
+      }
+    },
+    [classId, switchRoom]
+  );
+
+  const teacherReturnMain = useCallback(() => {
+    if (join) switchRoom({ token: join.token, url: join.url, kind: "main" });
+  }, [join, switchRoom]);
+
+  const togglePanel = (p: LeftPanel) => setLeftPanel((cur) => (cur === p ? "none" : p));
+
+  // --- Pre-join device check -------------------------------------------------
+  if (phase === "prejoin" && join) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] flex-col" data-lk-theme="default">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <div className="text-sm font-mono text-primary">
+            🎥 {join.session.title || tr("Живий урок", "Live lesson")} — {tr("перевірка пристроїв", "device check")}
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleLeave()}
+            className="rounded-md bg-bg-hover/60 px-3 py-1 text-xs font-mono text-text-secondary hover:text-text-primary"
+          >
+            {tr("Назад", "Back")}
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+          <PreJoin
+            defaults={{ username: tr("Учасник", "Participant"), videoEnabled: true, audioEnabled: true }}
+            onSubmit={(values) => enterRoom(values)}
+            onError={() => setError(tr("Помилка доступу до камери/мікрофона.", "Camera/microphone access error."))}
+            joinLabel={tr("Увійти в урок", "Enter lesson")}
+            micLabel={tr("Мікрофон", "Microphone")}
+            camLabel={tr("Камера", "Camera")}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // --- In room ---------------------------------------------------------------
+  if (phase === "in_room" && join && choices && activeRoom) {
     return (
       <div className="flex h-[calc(100vh-4rem)] flex-col">
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
@@ -134,13 +276,33 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setBoardOpen((v) => !v)}
+              onClick={() => togglePanel("board")}
               className={`rounded-md px-3 py-1 text-xs font-mono ${
-                boardOpen ? "bg-primary/25 text-primary" : "bg-bg-hover/60 text-text-secondary hover:text-text-primary"
+                leftPanel === "board" ? "bg-primary/25 text-primary" : "bg-bg-hover/60 text-text-secondary hover:text-text-primary"
               }`}
             >
-              📝 {tr("Дошка коду", "Code board")}
+              📝 {tr("Дошка", "Board")}
             </button>
+            <button
+              type="button"
+              onClick={() => togglePanel("materials")}
+              className={`rounded-md px-3 py-1 text-xs font-mono ${
+                leftPanel === "materials" ? "bg-primary/25 text-primary" : "bg-bg-hover/60 text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              📚 {tr("Матеріали", "Materials")}
+            </button>
+            {isTeacher && (
+              <button
+                type="button"
+                onClick={() => setBreakoutBarOpen((v) => !v)}
+                className={`rounded-md px-3 py-1 text-xs font-mono ${
+                  breakoutBarOpen ? "bg-primary/25 text-primary" : "bg-bg-hover/60 text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                👥 {tr("Групи", "Groups")}
+              </button>
+            )}
             {isTeacher && (
               <button
                 type="button"
@@ -153,27 +315,67 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
             )}
           </div>
         </div>
+
         {Number.isFinite(classId) && <LiveChallengePanel classId={classId} isTeacher={isTeacher} />}
+        {isTeacher && breakoutBarOpen && (
+          <BreakoutPanel
+            classId={classId}
+            currentKind={activeRoom.kind}
+            onJoinGroup={(i) => void teacherJoinGroup(i)}
+            onReturnMain={teacherReturnMain}
+          />
+        )}
+        {!isTeacher && myBreakoutIndex != null && (
+          <div className="border-b border-border bg-primary/10 px-4 py-1.5 text-xs font-mono text-primary">
+            👥 {tr(`Ви в групі ${myBreakoutIndex + 1}`, `You're in group ${myBreakoutIndex + 1}`)}
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1">
           <div className="min-h-0 flex-1" data-lk-theme="default">
             <LiveKitRoom
-              token={join.token}
-              serverUrl={join.url}
+              key={activeRoom.token}
+              token={activeRoom.token}
+              serverUrl={activeRoom.url}
               connect
-              video
-              audio
+              video={choices.videoEnabled}
+              audio={choices.audioEnabled}
+              options={{
+                videoCaptureDefaults: { deviceId: choices.videoDeviceId || undefined },
+                audioCaptureDefaults: { deviceId: choices.audioDeviceId || undefined },
+              }}
               style={{ height: "100%" }}
-              onDisconnected={() => void handleLeave()}
+              onConnected={() => {
+                switchingRef.current = false;
+              }}
+              onDisconnected={() => {
+                if (switchingRef.current) return; // room switch, not a leave
+                void handleLeave();
+              }}
             >
-              <div className="flex h-full">
-                {boardOpen && (
-                  <div className="min-w-0 flex-1 border-r border-border">
-                    <LiveCodeBoard isTeacher={isTeacher} />
+              <ConnectionStateToast />
+              <div className="flex h-full flex-col">
+                {isTeacher ? (
+                  <RaisedHandsBar />
+                ) : (
+                  <div className="flex items-center justify-end border-b border-border px-4 py-1.5">
+                    <RaiseHandButton />
                   </div>
                 )}
-                <div className={boardOpen ? "w-72 shrink-0" : "h-full w-full"}>
-                  <VideoConference />
+                <div className="flex min-h-0 flex-1">
+                  {leftPanel === "board" && (
+                    <div className="min-w-0 flex-1 border-r border-border">
+                      <LiveCodeBoard isTeacher={isTeacher} />
+                    </div>
+                  )}
+                  {leftPanel === "materials" && (
+                    <div className="min-w-0 flex-1 border-r border-border">
+                      <LessonMaterialsPanel classId={classId} sessionId={join.session.id} isTeacher={isTeacher} />
+                    </div>
+                  )}
+                  <div className={leftPanel === "none" ? "h-full w-full" : "w-72 shrink-0"}>
+                    <VideoConference />
+                  </div>
                 </div>
               </div>
             </LiveKitRoom>
@@ -201,6 +403,7 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
     );
   }
 
+  // --- Lobby / loading / disabled / error ------------------------------------
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="text-lg font-mono text-text-primary">{tr("Живий урок", "Live classroom")}</h1>
@@ -239,7 +442,8 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
 
           {session ? (
             <>
-              <p className="text-sm font-mono text-text-primary">
+              <p className="flex items-center gap-2 text-sm font-mono text-text-primary">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent-success" />
                 {tr("Зараз триває урок:", "A lesson is live:")}{" "}
                 <span className="text-primary">{session.title || tr("Без назви", "Untitled")}</span>
               </p>
@@ -267,8 +471,9 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
               </button>
             </>
           ) : (
-            <p className="text-sm font-mono text-text-secondary">
-              {tr("Зараз немає активного уроку. Зачекайте, поки вчитель розпочне.", "No active lesson right now. Wait for the teacher to start.")}
+            <p className="flex items-center gap-2 text-sm font-mono text-text-secondary">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-text-muted" />
+              {tr("Очікуємо, поки вчитель розпочне урок…", "Waiting for the teacher to start the lesson…")}
             </p>
           )}
         </div>
