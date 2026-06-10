@@ -142,11 +142,11 @@ class EmailService {
 
   async sendAnnouncementEmail(email: string, username: string, className: string, title: string | null, preview: string) {
     const html = this.buildBaseEmail({
-      title: title ? `Оголошення: ${title}` : "Оголошення",
+      title: title ? `📢 ${title}` : "📢 Оголошення",
       preheader: preview ? `${preview}` : `Нове оголошення у класі ${className}`,
       greeting: `Привіт, ${username}!`,
-      contentHtml: `<p>Ви отримали нове оголошення у класі <b>${this.escapeHtml(className)}</b>:</p>
-<div style="margin:12px 0 0 0;padding:14px 14px;border:1px solid #1f3552;border-radius:12px;background:#0a1422;color:#dbe9ff;">${this.escapeHtml(
+      contentHtml: `<p style="margin:0 0 6px 0;">Нове оголошення у класі <b>${this.escapeHtml(className)}</b>:</p>
+<div style="margin:12px 0 0 0;padding:16px 16px;border:1px solid #1f3552;border-left:4px solid #7bc9ff;border-radius:12px;background:#0a1422;color:#dbe9ff;line-height:1.7;">${this.escapeHtml(
         preview
       )}</div>`,
       cta: { label: "Відкрити StudyCod", url: this.getFrontendUrl() },
@@ -162,12 +162,20 @@ class EmailService {
 
   async sendStreakBreakNotification(email: string, username: string, streak: number) {
     const html = this.buildBaseEmail({
-      title: "Ви можете втратити серію!",
+      title: "🔥 Ви можете втратити серію!",
       preheader: `Ваша серія (${streak} днів) під загрозою — зробіть завдання сьогодні.`,
       greeting: `Привіт, ${username}!`,
-      contentHtml: `<p>Ваша серія успіхів <b>${streak} днів</b> під загрозою.</p>
-<p>Зайдіть у StudyCod та виконайте будь-яке завдання сьогодні, щоб не втратити прогрес.</p>`,
-      cta: { label: "Перейти до StudyCod", url: this.getFrontendUrl() },
+      contentHtml: `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 14px 0;">
+  <tr>
+    <td align="center" style="padding:18px 16px;border:1px solid #ff8f8f33;border-radius:16px;background:rgba(255,143,143,0.10);">
+      <div style="font-size:40px;line-height:1;font-weight:900;color:#ffcc66;">🔥 ${streak}</div>
+      <div style="margin:8px 0 0 0;font-size:13px;color:#9fb3c8;">днів поспіль</div>
+    </td>
+  </tr>
+</table>
+<p style="margin:0 0 8px 0;">Ваша серія успіхів під загрозою!</p>
+<p style="margin:0;">Зайдіть у StudyCod та виконайте будь-яке завдання сьогодні, щоб не втратити прогрес.</p>`,
+      cta: { label: "Зберегти серію", url: this.getFrontendUrl() },
     });
     const text = `Ваша серія успіхів (${streak} днів) під загрозою! Не забудьте виконати завдання сьогодні.`;
     await this.sendEmail({
@@ -179,16 +187,21 @@ class EmailService {
   }
 
   async sendTaskAssignmentEmail(email: string, username: string, taskTitle: string, deadline: Date, type: string) {
+    const isControl = type === "CONTROL_WORK";
+    const titleText = isControl ? "Контрольна робота" : "Нове завдання";
+    const emoji = isControl ? "📝" : "🚀";
+    const deadlineStr = deadline.toLocaleString("uk-UA");
     const html = this.buildBaseEmail({
-      title: type === "CONTROL_WORK" ? "Контрольна робота" : "Нове завдання",
-      preheader: `Призначено: ${taskTitle}. Дедлайн: ${deadline.toLocaleString("uk-UA")}`,
+      title: `${emoji} ${titleText}`,
+      preheader: `Призначено: ${taskTitle}. Дедлайн: ${deadlineStr}`,
       greeting: `Привіт, ${username}!`,
-      contentHtml: `<p>Вам призначено ${type === "CONTROL_WORK" ? "контрольну роботу" : "нове завдання"}: <b>${this.escapeHtml(
-        taskTitle
-      )}</b></p>
-<p style="margin:10px 0 0 0;">Дедлайн: <b>${deadline.toLocaleString(
-        "uk-UA"
-      )}</b></p>`,
+      contentHtml: `<p style="margin:0 0 12px 0;">Вам призначено ${isControl ? "контрольну роботу" : "нове завдання"}:</p>
+<div style="margin:0;padding:14px 16px;border:1px solid #1f3552;border-radius:12px;background:#0a1422;color:#f2f7ff;font-size:16px;font-weight:700;">${this.escapeHtml(taskTitle)}</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:14px 0 0 0;">
+  <tr>
+    <td style="padding:10px 14px;border:1px solid #ffcc6633;border-radius:12px;background:rgba(255,204,102,0.10);color:#ffcc66;font-size:14px;font-weight:700;">⏰ Дедлайн: ${this.escapeHtml(deadlineStr)}</td>
+  </tr>
+</table>`,
       cta: { label: "Відкрити StudyCod", url: this.getFrontendUrl() },
     });
     const text = `${type === "CONTROL_WORK" ? "Контрольна робота" : "Нове завдання"}: ${taskTitle}\nДедлайн: ${deadline.toLocaleString("uk-UA")}`;
@@ -367,16 +380,46 @@ StudyCod: ${this.getFrontendUrl()}`;
     const statusUk = opts.event === "updated" ? "оновлену" : "нову";
     const statusEn = opts.event === "updated" ? "updated" : "new";
 
+    // Color + emoji depend on how good the grade is (grade is a 0..100 percent).
+    const tone =
+      grade >= 90 ? { accent: "#00ff88", soft: "rgba(0,255,136,0.12)", emoji: "🌟" }
+        : grade >= 75 ? { accent: "#7bc9ff", soft: "rgba(123,201,255,0.12)", emoji: "👍" }
+          : grade >= 50 ? { accent: "#ffcc66", soft: "rgba(255,204,102,0.12)", emoji: "📘" }
+            : { accent: "#ff8f8f", soft: "rgba(255,143,143,0.12)", emoji: "💪" };
+
+    const praiseUk =
+      grade >= 90 ? "Чудовий результат — так тримати!"
+        : grade >= 75 ? "Гарна робота, продовжуй у тому ж дусі!"
+          : grade >= 50 ? "Непогано — є над чим попрацювати."
+            : "Не засмучуйся: наступного разу вийде краще!";
+    const praiseEn =
+      grade >= 90 ? "Excellent result — keep it up!"
+        : grade >= 75 ? "Nice work, keep going!"
+          : grade >= 50 ? "Not bad — there's room to grow."
+            : "Don't worry: you'll do better next time!";
+
+    // Big hero badge with the grade.
+    const gradeBadgeHtml = `
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:6px 0 4px 0;">
+  <tr>
+    <td align="center" style="padding:20px 16px;border:1px solid ${tone.accent}33;border-radius:16px;background:${tone.soft};">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:#9fb3c8;margin:0 0 8px 0;">${tone.emoji}&nbsp;${this.t(lng, "Оцінка", "Grade")}</div>
+      <div style="font-size:44px;line-height:1;font-weight:900;color:${tone.accent};">${this.escapeHtml(gradeDisplay)}</div>
+      <div style="margin:10px 0 0 0;font-size:13px;color:#9fb3c8;">${this.t(lng, praiseUk, praiseEn)}</div>
+    </td>
+  </tr>
+</table>`.trim();
+
     const contentHtml = lng === "en"
-      ? `<p>You have a ${statusEn} ${kindEn}.</p>
-<p style="margin:8px 0 0 0;"><b>Item:</b> ${itemTitle}</p>
-    <p style="margin:8px 0 0 0;"><b>Grade:</b> ${this.escapeHtml(gradeDisplay)}</p>
+      ? `<p style="margin:0 0 4px 0;">You have a ${statusEn} grade for the ${kindEn} below.</p>
+${gradeBadgeHtml}
+<p style="margin:14px 0 0 0;"><b>Item:</b> ${itemTitle}</p>
     ${scaleHtml}
 ${classHtml}
 ${feedbackHtml}`
-      : `<p>Вам виставлено ${statusUk} оцінку для ${kindUk}.</p>
-<p style="margin:8px 0 0 0;"><b>Елемент:</b> ${itemTitle}</p>
-    <p style="margin:8px 0 0 0;"><b>Оцінка:</b> ${this.escapeHtml(gradeDisplay)}</p>
+      : `<p style="margin:0 0 4px 0;">Вам виставлено ${statusUk} оцінку для ${kindUk}.</p>
+${gradeBadgeHtml}
+<p style="margin:14px 0 0 0;"><b>Елемент:</b> ${itemTitle}</p>
     ${scaleHtml}
 ${classHtml}
 ${feedbackHtml}`;
