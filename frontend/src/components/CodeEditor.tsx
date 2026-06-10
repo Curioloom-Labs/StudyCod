@@ -357,6 +357,12 @@ interface Props {
   height?: string | number;
   fontSize?: number;
   wordWrap?: boolean;
+  /**
+   * Exposes the underlying Monaco editor + api once mounted, so callers can
+   * attach cursor listeners or decorations (e.g. the live code board's shared
+   * teacher pointer). Optional; most usages don't need it.
+   */
+  onEditorMount?: (editor: Monaco.editor.IStandaloneCodeEditor, monaco: MonacoApi) => void;
 }
 
 const toMonacoLanguage = (language: Props["language"]) => {
@@ -447,7 +453,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   readOnly = false,
   height,
   fontSize,
-  wordWrap
+  wordWrap,
+  onEditorMount
 }) => {
   const {
     i18n
@@ -626,6 +633,11 @@ export const CodeEditor: React.FC<Props> = React.memo(({
       }} onMount={(editor: Monaco.editor.IStandaloneCodeEditor, monaco: MonacoApi) => {
         editorRef.current = editor;
         setDidMount(true);
+        try {
+          onEditorMount?.(editor, monaco);
+        } catch {
+          // a consumer error must never break editor mount
+        }
 
         if (import.meta.env.DEV) {
           try {

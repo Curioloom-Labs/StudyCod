@@ -10,6 +10,7 @@ import { Topic } from "./entities/Topic";
 import { Class } from "./entities/Class";
 import { Student } from "./entities/Student";
 import { EduLesson } from "./entities/EduLesson";
+import { EduLiveSession } from "./entities/EduLiveSession";
 import { EduTask } from "./entities/EduTask";
 import { TestData } from "./entities/TestData";
 import { EduGrade } from "./entities/EduGrade";
@@ -79,7 +80,7 @@ export const AppDataSource = new DataSource({
     password: env.DB_PASS || "",
     database: env.DB_NAME || "studycod"
   }),
-  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet],
+  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet],
   synchronize: false,
   logging: false,
   migrations: migrationGlobs,

@@ -51,6 +51,7 @@ const StudentAppealsPage = React.lazy(() => import("./pages/edu/StudentAppealsPa
 const TeacherClassAppealsPage = React.lazy(() => import("./pages/edu/TeacherClassAppealsPage").then(mod => ({ default: mod.TeacherClassAppealsPage })));
 const SummaryGradesPage = React.lazy(() => import("./pages/edu/SummaryGradesPage").then(mod => ({ default: mod.SummaryGradesPage })));
 const ClassGradebookPage = React.lazy(() => import("./pages/edu/ClassGradebookPage").then(mod => ({ default: mod.ClassGradebookPage })));
+const LiveClassroomPage = React.lazy(() => import("./pages/edu/LiveClassroomPage").then(mod => ({ default: mod.LiveClassroomPage })));
 const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
 const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminDashboardPage").then(mod => ({ default: mod.AdminDashboardPage })));
 const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => ({ default: mod.DocsPage })));
@@ -1434,6 +1435,7 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="control-works/:controlWorkId" element={<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>} />
             <Route path="classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
             <Route path="classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
+            <Route path="classes/:classId/live" element={<AnimatedPage><LiveClassroomPage /></AnimatedPage>} />
             <Route path="classes/:classId/appeals" element={<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>} />
             <Route path="journal" element={<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>} />
             <Route path="student" element={<Navigate to="/edu/journal" replace />} />

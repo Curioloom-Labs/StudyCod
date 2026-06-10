@@ -32,6 +32,7 @@ import {
   type TestResult
 } from "../../lib/api/edu";
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
+import { publishLiveCode } from "../../lib/api/liveClassroom";
 import { ArrowLeft, Play, Send, Save, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload } from "lucide-react";
 import { isDeadlineExpired } from "../../utils/timezone";
 import { getMe } from "../../lib/api/profile";
@@ -1260,6 +1261,20 @@ export const StudentTaskPage: React.FC = () => {
     if (task.maxAttempts && task.attemptsUsed !== undefined && task.attemptsUsed >= task.maxAttempts) return false;
     return true;
   }, [task?.grade, task?.isClosed, task?.deadline, task?.maxAttempts, task?.attemptsUsed, task]);
+
+  // Live editor stream: while the student is actively editing, push a debounced
+  // snapshot of their code so the teacher's live lesson panel can watch it. The
+  // backend only stores it when a live session is running for the class, so this
+  // is a cheap fire-and-forget when no lesson is live.
+  useEffect(() => {
+    if (!canEdit || !taskId || !code) return;
+    const id = parseInt(taskId, 10);
+    if (isNaN(id)) return;
+    const handle = window.setTimeout(() => {
+      void publishLiveCode(id, code, task?.title).catch(() => {});
+    }, 4000);
+    return () => window.clearTimeout(handle);
+  }, [code, canEdit, taskId, task?.title]);
 
   const canComplete = useMemo(() => {
     if (!task) return false;

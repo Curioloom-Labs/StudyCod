@@ -39,6 +39,7 @@
     "iconv-lite": "^0.7.2",
     "imapflow": "^1.0.190",
     "jsonwebtoken": "^9.0.3",
+    "livekit-server-sdk": "^2.15.4",
     "mailparser": "^3.9.0",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
