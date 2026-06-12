@@ -2,6 +2,9 @@ export enum AssessmentType {
   PRACTICE = "PRACTICE",
   INTERMEDIATE = "INTERMEDIATE",
   CONTROL = "CONTROL",
+  // Semester aggregate: average of a semester's thematic (INTERMEDIATE) grades.
+  // Not tied to a single topic (topic_id is NULL); keyed by the `semester` column.
+  SEMESTER = "SEMESTER",
 }
 export function validateAssessmentType(type: AssessmentType, controlWorkId: number | null | undefined, targetField?: string): void {
   if (type === AssessmentType.CONTROL) {
@@ -12,9 +15,9 @@ export function validateAssessmentType(type: AssessmentType, controlWorkId: numb
       throw new Error(`CONTROL assessment cannot be stored in field '${targetField}'. ` + `Must use 'control_grade' or 'grade' in SummaryGrade.`);
     }
   }
-  if (type === AssessmentType.INTERMEDIATE || type === AssessmentType.PRACTICE) {
+  if (type === AssessmentType.INTERMEDIATE || type === AssessmentType.PRACTICE || type === AssessmentType.SEMESTER) {
     if (controlWorkId) {
-      throw new Error(`INTERMEDIATE/PRACTICE assessment cannot have controlWorkId. ` + `Got: controlWorkId=${controlWorkId}, type=${type}`);
+      throw new Error(`${type} assessment cannot have controlWorkId. ` + `Got: controlWorkId=${controlWorkId}, type=${type}`);
     }
   }
 }

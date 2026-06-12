@@ -9,6 +9,9 @@ import { EduGrade } from "../../entities/EduGrade";
 import { SummaryGrade } from "../../entities/SummaryGrade";
 import { AssessmentType, validateAssessmentType } from "../../types/AssessmentType";
 import { DEFAULT_GRADING_SYSTEM } from "../../types/GradingSystem";
+import { normalizeScaleMode } from "../../utils/gradingScale";
+import { computeThematicGrade, resolveThematicFormula, validateThematicFormula } from "../../utils/thematicFormula";
+import { recomputeSemesterGrades } from "../../services/edu/semesterGrading";
 import { notifyStudentGradeChange } from "../../services/edu/gradeNotificationService";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 import { isAssignedToStudent } from "../../utils/assignmentVisibility";
@@ -61,6 +64,10 @@ function thematicLabelForLocale(locale: "uk" | "en"): string {
   return locale === "en" ? "Thematic" : "Тематична";
 }
 
+function semesterLabelForLocale(locale: "uk" | "en", semester: number): string {
+  return locale === "en" ? `Semester ${semester}` : `Семестр ${semester}`;
+}
+
 router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (req.userType === "STUDENT" || req.studentId) {
@@ -109,7 +116,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
     const lessons: Array<{
       id: number;
       title: string;
-      type: "TOPIC" | "CONTROL" | "SUMMARY";
+      type: "TOPIC" | "CONTROL" | "SUMMARY" | "SEMESTER";
       parentId?: number;
       parentTitle?: string;
       tasks: Array<{
@@ -165,6 +172,33 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
       }
     }
 
+    // Append a column per semester that actually has aggregate grades, so the
+    // semester columns only appear once the teacher has recomputed them.
+    const semesterRows = await summaryGradeRepo()
+      .createQueryBuilder("sg")
+      .select("DISTINCT sg.semester", "semester")
+      .where("sg.class_id = :classId", { classId })
+      .andWhere("sg.assessment_type = :type", { type: AssessmentType.SEMESTER })
+      .andWhere("sg.semester IS NOT NULL")
+      .getRawMany();
+    const semesters = semesterRows
+      .map(r => Number(r.semester))
+      .filter(n => Number.isFinite(n))
+      .sort((a, b) => a - b);
+    for (const semester of semesters) {
+      const semesterLabel = semesterLabelForLocale(locale, semester);
+      lessons.push({
+        id: semester,
+        title: semesterLabel,
+        type: "SEMESTER",
+        tasks: [{
+          id: semester,
+          title: semesterLabel,
+          type: "SEMESTER"
+        }]
+      });
+    }
+
     const gradebookStudents = [];
 
     for (const student of students) {
@@ -216,6 +250,19 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
             gradeId: thematic ? thematic.id : null,
             isSummaryGrade: true
           });
+        } else if (lesson.type === "SEMESTER") {
+          const semesterGrade = summaryGrades.find((sg: any) => sg.assessmentType === AssessmentType.SEMESTER && Number(sg.semester) === lesson.id);
+          flatGrades.push({
+            taskId: lesson.id,
+            taskTitle: lesson.title,
+            lessonId: lesson.id,
+            lessonTitle: lesson.title,
+            lessonType: "SEMESTER",
+            grade: semesterGrade ? clampGradeToInt(semesterGrade.grade) : null,
+            createdAt: semesterGrade ? semesterGrade.createdAt.toISOString() : null,
+            gradeId: semesterGrade ? semesterGrade.id : null,
+            isSemesterGrade: true
+          });
         } else {
           for (const task of lesson.tasks) {
             const grades = allGrades.filter(g => g.topicTask && g.topicTask.id === task.id);
@@ -251,7 +298,8 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
     return res.json({
       students: gradebookStudents,
       lessons,
-      gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM
+      gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
+      gradeScaleMode: normalizeScaleMode(cls.gradeScaleMode)
     });
   } catch (error) {
     logger.error("[edu/gradebook] Error fetching gradebook", { requestId: req.requestId, err: error });
@@ -452,6 +500,9 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
         });
       }
     } else {
+      // Effective formula: per-topic override > class default > built-in smart default.
+      const thematicFormula = resolveThematicFormula(topic.thematicFormula, cls.thematicFormula);
+
       for (const student of cls.students) {
         const classGrades = await gradeRepo()
           .createQueryBuilder("grade")
@@ -465,105 +516,68 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
           })
           .getMany();
 
-        if (classGrades.length > 0) {
-          const practiceGrades = classGrades.filter(g => {
-            if (g.topicTask && g.topicTask.type === "CONTROL") {
-              return false;
-            }
-            return true;
-          });
-
-          const practiceBestGrades: Record<number, number> = {};
-          practiceGrades.forEach(g => {
-            let taskId: number | null = null;
-            if (g.task) {
-              taskId = g.task.id;
-            } else if (g.topicTask) {
-              taskId = g.topicTask.id + 1000000;
-            }
-            if (taskId !== null && (!practiceBestGrades[taskId] || (g.total || 0) > practiceBestGrades[taskId])) {
-              practiceBestGrades[taskId] = g.total || 0;
-            }
-          });
-
-          const practiceScores = Object.values(practiceBestGrades);
-          const controlSummaryGrades = await summaryGradeRepo()
-            .createQueryBuilder("sg")
-            .leftJoinAndSelect("sg.controlWork", "cw")
-            .where("sg.student_id = :studentId", {
-              studentId: student.id
-            })
-            .andWhere("sg.assessment_type = :type", {
-              type: AssessmentType.CONTROL
-            })
-            .andWhere("sg.topic_id = :topicId", {
-              topicId: topic.id
-            })
-            .getMany();
-
-          const controlScores = controlSummaryGrades.map(sg => Number(sg.grade) || 0).filter(v => Number.isFinite(v));
-          const allScores = [...practiceScores, ...controlScores];
-
-          if (allScores.length === 0) {
-            const sg = summaryGradeRepo().create({
-              class: cls,
-              student,
-              name: normalizedName,
-              grade: 0,
-              topic,
-              assessmentType: AssessmentType.INTERMEDIATE,
-              controlWork: null
-            });
-            validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
-            await summaryGradeRepo().save(sg);
-            results.push(sg);
-            pendingNotifications.push({
-              student,
-              grade: sg.grade,
-              event: hadGradesByStudentId.has(student.id) ? "updated" : "created"
-            });
-            continue;
+        const practiceGrades = classGrades.filter(g => !(g.topicTask && g.topicTask.type === "CONTROL"));
+        const practiceBestGrades: Record<number, number> = {};
+        practiceGrades.forEach(g => {
+          let taskId: number | null = null;
+          if (g.task) {
+            taskId = g.task.id;
+          } else if (g.topicTask) {
+            taskId = g.topicTask.id + 1000000;
           }
+          if (taskId !== null && (!practiceBestGrades[taskId] || (g.total || 0) > practiceBestGrades[taskId])) {
+            practiceBestGrades[taskId] = g.total || 0;
+          }
+        });
+        const practiceScores = Object.values(practiceBestGrades);
 
-          const avg = allScores.length > 0 ? clampGradeToInt(allScores.reduce((s, val) => s + val, 0) / allScores.length) : 0;
-          const sg = summaryGradeRepo().create({
-            class: cls,
-            student,
-            name: normalizedName,
-            grade: avg,
-            topic,
-            assessmentType: AssessmentType.INTERMEDIATE,
-            controlWork: null
-          });
+        // Control-work grades live in SummaryGrade, independent of practice
+        // grades — gather them unconditionally so a topic with only a control
+        // work still produces a real thematic grade.
+        const controlSummaryGrades = await summaryGradeRepo()
+          .createQueryBuilder("sg")
+          .leftJoinAndSelect("sg.controlWork", "cw")
+          .where("sg.student_id = :studentId", {
+            studentId: student.id
+          })
+          .andWhere("sg.assessment_type = :type", {
+            type: AssessmentType.CONTROL
+          })
+          .andWhere("sg.topic_id = :topicId", {
+            topicId: topic.id
+          })
+          .getMany();
+        const controlScores = controlSummaryGrades
+          .map(sg => Number(sg.grade))
+          .filter(v => Number.isFinite(v));
 
-          validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
-          await summaryGradeRepo().save(sg);
-          results.push(sg);
-          pendingNotifications.push({
-            student,
-            grade: sg.grade,
-            event: hadGradesByStudentId.has(student.id) ? "updated" : "created"
-          });
-        } else {
-          const sg = summaryGradeRepo().create({
-            class: cls,
-            student,
-            name: normalizedName,
-            grade: 0,
-            topic,
-            assessmentType: AssessmentType.INTERMEDIATE,
-            controlWork: null
-          });
+        const hasPractice = practiceScores.length > 0;
+        const hasControl = controlScores.length > 0;
+        const practiceAvg = hasPractice ? practiceScores.reduce((s, v) => s + v, 0) / practiceScores.length : 0;
+        const controlAvg = hasControl ? controlScores.reduce((s, v) => s + v, 0) / controlScores.length : 0;
 
-          validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
-          await summaryGradeRepo().save(sg);
-          results.push(sg);
-          pendingNotifications.push({
-            student,
-            grade: sg.grade,
-            event: hadGradesByStudentId.has(student.id) ? "updated" : "created"
-          });
-        }
+        const grade = computeThematicGrade(
+          { practice: practiceAvg, control: controlAvg, hasPractice, hasControl },
+          thematicFormula
+        );
+
+        const sg = summaryGradeRepo().create({
+          class: cls,
+          student,
+          name: normalizedName,
+          grade,
+          topic,
+          assessmentType: AssessmentType.INTERMEDIATE,
+          controlWork: null
+        });
+        validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
+        await summaryGradeRepo().save(sg);
+        results.push(sg);
+        pendingNotifications.push({
+          student,
+          grade: sg.grade,
+          event: hadGradesByStudentId.has(student.id) ? "updated" : "created"
+        });
       }
     }
 
@@ -589,6 +603,7 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
         grade: item.grade,
         className: cls.name,
         gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
+        gradeScaleMode: normalizeScaleMode(cls.gradeScaleMode),
         fallbackLocale,
         requestId: req.requestId
       });
@@ -651,6 +666,7 @@ router.put("/classes/:classId/summary-grades/:id", authRequired, async (req: Aut
       grade: sg.grade,
       className: sg.class?.name ?? null,
       gradingSystem: sg.class?.gradingSystem || DEFAULT_GRADING_SYSTEM,
+      gradeScaleMode: normalizeScaleMode(sg.class?.gradeScaleMode),
       fallbackLocale: resolveRequestLocale(req),
       requestId: req.requestId
     });
@@ -780,6 +796,237 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
+  }
+});
+
+// Normalize a teacher-entered formula: trim, empty -> null (= use default).
+function normalizeFormulaInput(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+// Resolve the class for a thematic-config request, enforcing teacher-of-class
+// (or SYSTEM_ADMIN) access. Returns the class or null (response already sent).
+async function loadTeacherClassForConfig(req: AuthRequest, res: Response, classId: number): Promise<Class | null> {
+  if (req.userType === "STUDENT" || req.studentId) {
+    res.status(403).json({ message: "ONLY_TEACHERS_CAN_EDIT_FORMULA" });
+    return null;
+  }
+  const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
+  if (!cls) {
+    res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    return null;
+  }
+  if (cls.teacher.id !== req.userId) {
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user || user.role !== "SYSTEM_ADMIN") {
+      res.status(403).json({ message: "ACCESS_DENIED" });
+      return null;
+    }
+  }
+  return cls;
+}
+
+// Thematic-grade formula config: the class-level default plus every topic's
+// per-topic override. Used by the gradebook settings UI.
+router.get("/classes/:classId/thematic-config", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const cls = await loadTeacherClassForConfig(req, res, classId);
+    if (!cls) return;
+
+    const topics = await topicRepo()
+      .createQueryBuilder("topic")
+      .where("topic.class_id = :classId", { classId })
+      .orderBy("topic.order", "ASC")
+      .addOrderBy("topic.id", "ASC")
+      .getMany();
+
+    return res.json({
+      classFormula: cls.thematicFormula ?? null,
+      topics: topics.map(t => ({
+        topicId: t.id,
+        title: t.title,
+        thematicFormula: t.thematicFormula ?? null,
+        semester: t.semester ?? null
+      }))
+    });
+  } catch (error) {
+    logger.error("[edu/gradebook] Error loading thematic config", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Set the class-level default thematic formula. Empty -> built-in default.
+router.put("/classes/:classId/thematic-formula", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const formula = normalizeFormulaInput(req.body?.formula);
+    if (!validateThematicFormula(formula)) {
+      return res.status(400).json({ message: "INVALID_FORMULA" });
+    }
+    const cls = await loadTeacherClassForConfig(req, res, classId);
+    if (!cls) return;
+
+    cls.thematicFormula = formula;
+    await classRepo().save(cls);
+    return res.json({ message: "FORMULA_UPDATED", classFormula: cls.thematicFormula ?? null });
+  } catch (error) {
+    logger.error("[edu/gradebook] Error updating class thematic formula", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Set a per-topic thematic formula override. Empty -> inherit the class formula.
+router.put("/classes/:classId/topics/:topicId/thematic-formula", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    const topicId = parseInt(req.params.topicId, 10);
+    if (isNaN(classId) || isNaN(topicId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const formula = normalizeFormulaInput(req.body?.formula);
+    if (!validateThematicFormula(formula)) {
+      return res.status(400).json({ message: "INVALID_FORMULA" });
+    }
+    const cls = await loadTeacherClassForConfig(req, res, classId);
+    if (!cls) return;
+
+    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } as any } as any });
+    if (!topic) {
+      return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
+    }
+
+    topic.thematicFormula = formula;
+    await topicRepo().save(topic);
+    return res.json({ message: "FORMULA_UPDATED", topicId, thematicFormula: topic.thematicFormula ?? null });
+  } catch (error) {
+    logger.error("[edu/gradebook] Error updating topic thematic formula", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Assign a topic to a semester (1, 2, …). null/empty clears the assignment
+// (topic falls back to semester 1 when aggregating).
+router.put("/classes/:classId/topics/:topicId/semester", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    const topicId = parseInt(req.params.topicId, 10);
+    if (isNaN(classId) || isNaN(topicId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const cls = await loadTeacherClassForConfig(req, res, classId);
+    if (!cls) return;
+
+    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } as any } as any });
+    if (!topic) {
+      return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
+    }
+
+    const raw = req.body?.semester;
+    if (raw === null || raw === undefined || raw === "") {
+      topic.semester = null;
+    } else {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 1 || n > 12) {
+        return res.status(400).json({ message: "INVALID_SEMESTER" });
+      }
+      topic.semester = Math.floor(n);
+    }
+    await topicRepo().save(topic);
+    return res.json({ message: "SEMESTER_UPDATED", topicId, semester: topic.semester ?? null });
+  } catch (error) {
+    logger.error("[edu/gradebook] Error updating topic semester", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Recompute all semester aggregate grades for a class (avg of thematic grades
+// per semester per student).
+router.post("/classes/:classId/semester-grades/recompute", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const cls = await loadTeacherClassForConfig(req, res, classId);
+    if (!cls) return;
+
+    const result = await recomputeSemesterGrades(classId);
+    return res.json({ message: "SEMESTER_GRADES_RECOMPUTED", ...result });
+  } catch (error) {
+    logger.error("[edu/gradebook] Error recomputing semester grades", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// List semester aggregate grades for a class (teacher view).
+router.get("/classes/:classId/semester-grades", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    if (isNaN(classId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const cls = await loadTeacherClassForConfig(req, res, classId);
+    if (!cls) return;
+
+    const rows = await summaryGradeRepo()
+      .createQueryBuilder("sg")
+      .leftJoinAndSelect("sg.student", "student")
+      .where("sg.class_id = :classId", { classId })
+      .andWhere("sg.assessment_type = :type", { type: AssessmentType.SEMESTER })
+      .orderBy("sg.semester", "ASC")
+      .getMany();
+
+    return res.json({
+      semesterGrades: rows.map(sg => ({
+        gradeId: sg.id,
+        studentId: sg.student?.id ?? null,
+        semester: sg.semester ?? null,
+        grade: clampGradeToInt(sg.grade)
+      }))
+    });
+  } catch (error) {
+    logger.error("[edu/gradebook] Error listing semester grades", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Manually override a single semester aggregate grade.
+router.put("/classes/:classId/semester-grades/:gradeId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    const gradeId = parseInt(req.params.gradeId, 10);
+    if (isNaN(classId) || isNaN(gradeId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const cls = await loadTeacherClassForConfig(req, res, classId);
+    if (!cls) return;
+
+    const row = await summaryGradeRepo()
+      .createQueryBuilder("sg")
+      .where("sg.id = :gradeId", { gradeId })
+      .andWhere("sg.class_id = :classId", { classId })
+      .andWhere("sg.assessment_type = :type", { type: AssessmentType.SEMESTER })
+      .getOne();
+    if (!row) {
+      return res.status(404).json({ message: "SEMESTER_GRADE_NOT_FOUND" });
+    }
+
+    const grade = clampGradeToInt(req.body?.grade);
+    row.grade = grade;
+    await summaryGradeRepo().save(row);
+    return res.json({ message: "SEMESTER_GRADE_UPDATED", gradeId, grade: clampGradeToInt(row.grade) });
+  } catch (error) {
+    logger.error("[edu/gradebook] Error updating semester grade", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

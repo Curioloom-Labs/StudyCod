@@ -16,7 +16,7 @@ import {
   type StudentNextTaskResponse,
   type MasteryStatus,
 } from "../../lib/api/edu";
-import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
+import { DEFAULT_GRADE_SCALE_MODE, DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemLabel, normalizeGradingSystem, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
 import { FileText, BookOpen, MessageSquare } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Modal } from "../../components/ui/Modal";
@@ -25,8 +25,8 @@ import type { User } from "../../types";
 interface Props {
   user: User;
 }
-const getGradeColor = (grade: number | null | undefined, gradingSystem: ClassGradingSystem): string => {
-  const tone = getGradeToneForSystem(grade, gradingSystem);
+const getGradeColor = (grade: number | null | undefined, gradingSystem: ClassGradingSystem, scaleMode: GradeScaleMode): string => {
+  const tone = getGradeToneForSystem(grade, gradingSystem, scaleMode);
   if (tone === "success") return "text-accent-success";
   if (tone === "warn") return "text-accent-warn";
   if (tone === "warning") return "text-accent-warning";
@@ -49,6 +49,7 @@ export const StudentDashboardPage: React.FC<Props> = ({
   const [skillGraph, setSkillGraph] = useState<StudentSkillGraphResponse | null>(null);
   const [nextTaskRecommendation, setNextTaskRecommendation] = useState<StudentNextTaskResponse | null>(null);
   const [gradingSystem, setGradingSystem] = useState<ClassGradingSystem>(DEFAULT_GRADING_SYSTEM);
+  const [gradeScaleMode, setGradeScaleMode] = useState<GradeScaleMode>(DEFAULT_GRADE_SCALE_MODE);
   const [loading, setLoading] = useState(true);
   const [showTheory, setShowTheory] = useState(false);
   const [theoryContent, setTheoryContent] = useState<{
@@ -90,9 +91,11 @@ export const StudentDashboardPage: React.FC<Props> = ({
       ]);
 
       const nextGradingSystem = normalizeGradingSystem(data.gradingSystem || studentInfo.student.class?.gradingSystem || DEFAULT_GRADING_SYSTEM);
+      const nextScaleMode = normalizeScaleMode(data.gradeScaleMode ?? studentInfo.student.class?.gradeScaleMode);
       setGrades(data.grades || []);
       setSummaryGrades(data.summaryGrades || []);
       setGradingSystem(nextGradingSystem);
+      setGradeScaleMode(nextScaleMode);
 
       setMasteryPath(masteryResult.status === "fulfilled" ? masteryResult.value : null);
       setSkillGraph(graphResult.status === "fulfilled" ? graphResult.value : null);
@@ -239,8 +242,8 @@ export const StudentDashboardPage: React.FC<Props> = ({
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                          <div className={`text-2xl font-mono font-bold ${getGradeColor(summaryGrade.grade, gradingSystem)}`}>
-                            {formatGradeForSystem(summaryGrade.grade, gradingSystem)}
+                          <div className={`text-2xl font-mono font-bold ${getGradeColor(summaryGrade.grade, gradingSystem, gradeScaleMode)}`}>
+                            {formatGradeForSystem(summaryGrade.grade, gradingSystem, gradeScaleMode)}
                           </div>
                           <div className="text-xs text-text-muted">{gradingSystemLabel(gradingSystem, !!isEn)}</div>
                         </div>
@@ -280,8 +283,8 @@ export const StudentDashboardPage: React.FC<Props> = ({
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                          <div className={`text-2xl font-mono font-bold ${getGradeColor(summaryGrade.grade, gradingSystem)}`}>
-                            {formatGradeForSystem(summaryGrade.grade, gradingSystem)}
+                          <div className={`text-2xl font-mono font-bold ${getGradeColor(summaryGrade.grade, gradingSystem, gradeScaleMode)}`}>
+                            {formatGradeForSystem(summaryGrade.grade, gradingSystem, gradeScaleMode)}
                           </div>
                           <div className="text-xs text-text-muted">{gradingSystemLabel(gradingSystem, !!isEn)}</div>
                         </div>
@@ -363,8 +366,8 @@ export const StudentDashboardPage: React.FC<Props> = ({
                             </div>}
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                          <div className={`text-2xl font-mono font-bold ${getGradeColor(grade.total, gradingSystem)}`}>
-                            {formatGradeForSystem(grade.total, gradingSystem)}
+                          <div className={`text-2xl font-mono font-bold ${getGradeColor(grade.total, gradingSystem, gradeScaleMode)}`}>
+                            {formatGradeForSystem(grade.total, gradingSystem, gradeScaleMode)}
                           </div>
                           <div className="text-xs text-text-muted">{gradingSystemLabel(gradingSystem, !!isEn)}</div>
                           <div className="text-xs text-text-secondary">
