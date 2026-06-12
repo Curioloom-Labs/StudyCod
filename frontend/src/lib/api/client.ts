@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "axios";
+import axios, { AxiosError, AxiosHeaders, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import { getRetryDelayMs, sleep, getRetryCount, setRetryCount } from "./retry";
 type MaintenancePayload = {
   maintenance: true;
@@ -95,12 +95,12 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
       config.headers.set("X-UI-Language", uiLanguage);
       config.headers.set("Accept-Language", uiLanguage);
     } else {
-      config.headers = {
+      config.headers = AxiosHeaders.from({
         ...(config.headers || {}),
         Authorization: `Bearer ${token}`,
         "X-UI-Language": uiLanguage,
         "Accept-Language": uiLanguage
-      };
+      });
     }
     return config;
   }
@@ -109,11 +109,11 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers.set("X-UI-Language", uiLanguage);
     config.headers.set("Accept-Language", uiLanguage);
   } else {
-    config.headers = {
+    config.headers = AxiosHeaders.from({
       ...(config.headers || {}),
       "X-UI-Language": uiLanguage,
       "Accept-Language": uiLanguage
-    };
+    });
   }
   return config;
 }, (error: AxiosError) => {

@@ -35,7 +35,8 @@ import {
   type TeacherDigestResponse,
   type RiskInterventionPlanResponse,
 } from "../../lib/api/edu";
-import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge, Video } from "lucide-react";
+import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
@@ -330,9 +331,7 @@ export const ClassDetailsPage: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t('loading')}
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -386,7 +385,8 @@ export const ClassDetailsPage: React.FC = () => {
           <Card className="p-4">
             <div className="flex items-center justify-between gap-3 mb-4">
               <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                📊 {tr("Аналітика класу", "Class analytics")}
+                <BarChart3 className="w-5 h-5 text-primary" />
+                {tr("Аналітика класу", "Class analytics")}
               </h2>
               <Button variant="ghost" className="text-xs" onClick={loadData}>
                 {tr("Оновити", "Refresh")}
@@ -461,7 +461,8 @@ export const ClassDetailsPage: React.FC = () => {
           <Card className="p-4">
             <div className="flex items-center justify-between gap-3 mb-4">
               <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                🧠 {tr("Teacher Copilot", "Teacher Copilot")}
+                <Sparkles className="w-5 h-5 text-primary" />
+                {tr("Teacher Copilot", "Teacher Copilot")}
               </h2>
             </div>
 
@@ -618,7 +619,8 @@ export const ClassDetailsPage: React.FC = () => {
           <Card className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                🗒️ {tr("Оголошення", "Announcements")}
+                <MessageSquare className="w-5 h-5 text-primary" />
+                {tr("Оголошення", "Announcements")}
               </h2>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={openCreateAnnouncement} className="text-xs">
@@ -633,7 +635,7 @@ export const ClassDetailsPage: React.FC = () => {
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                       <div className="flex-1">
                         <div className="text-sm font-mono text-text-primary">
-                          {a.pinned ? "📌 " : ""}{a.title || tr("Оголошення", "Announcement")}
+                          {a.pinned && <span className="text-text-muted mr-1" aria-label="pinned">·</span>}{a.title || tr("Оголошення", "Announcement")}
                         </div>
                         <div className="text-[10px] text-text-muted mt-1">
                           {a.author?.name || tr("Вчитель", "Teacher")} • {new Date(a.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
@@ -691,7 +693,7 @@ export const ClassDetailsPage: React.FC = () => {
                         {topic.description}
                       </div>}
                     {(() => {
-                const practiceCount = (topic.tasks || []).filter((taskItem) => taskItem?.type === "PRACTICE").length;
+                const practiceCount = (topic.tasks || []).filter((taskItem) => (taskItem as { type?: unknown } | null | undefined)?.type === "PRACTICE").length;
                 const controlWorksCount = (topic.controlWorks || []).length;
                 const totalCount = practiceCount + controlWorksCount;
                 if (totalCount <= 0) return null;

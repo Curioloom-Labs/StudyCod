@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, RotateCcw, Save, CheckCircle2, LayoutDashboard, FolderCode, TerminalSquare, Sparkles } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { Modal } from "../../components/ui/Modal";
 import { StatusChip, type StatusChipTone } from "../../components/ui/StatusChip";
 import { CodeEditor } from "../../components/CodeEditor";
@@ -898,8 +899,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
   }
 
   return (
-    <div className="relative min-h-[calc(100dvh-3rem)] w-full px-2 sm:px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-      <div className="min-h-[calc(100dvh-3.75rem)] rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex">
+    <div className="relative min-h-full w-full px-2 sm:px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+      <div className="min-h-[calc(100%-1.5rem)] rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex">
         <aside className="hidden xl:flex w-[58px] border-r border-border/60 bg-bg-surface/70 flex-col items-center py-3 gap-2">
           <div className="group relative">
             <button
@@ -980,8 +981,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
         </div>
 
         {loading ? (
-          <Card className="p-4">
-            <div className="text-sm text-text-secondary">{tr("Завантаження...", "Loading...")}</div>
+          <Card className="p-4 space-y-3">
+            <Skeleton className="h-6 w-1/3" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
           </Card>
         ) : !task ? (
           <Card className="p-4">

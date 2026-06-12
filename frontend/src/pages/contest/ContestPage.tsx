@@ -924,7 +924,7 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
 
   const medalTone = (rank: number): string => {
     if (rank === 1) return "border-yellow-400/60 bg-yellow-400/10 text-yellow-300";
-    if (rank === 2) return "border-slate-300/60 bg-slate-300/10 text-slate-200";
+    if (rank === 2) return "border-border bg-bg-hover text-text-secondary";
     if (rank === 3) return "border-amber-600/60 bg-amber-600/10 text-amber-400";
     return "border-primary/50 bg-primary/10 text-primary";
   };

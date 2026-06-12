@@ -491,7 +491,7 @@ export const PlacementOverlay: React.FC<{
                         {lang === "uk" ? "Тести" : "Tests"}: {report?.passedTests ?? 0}/{report?.totalTests ?? 0}
                       </div>
 
-                      {!report?.passed ? (
+                      {report && !report.passed ? (
                         report.stderr ? (
                           <pre className="text-xs font-mono bg-bg-code border border-border p-2 overflow-auto">{report.stderr}</pre>
                         ) : (

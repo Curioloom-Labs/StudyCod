@@ -1,13 +1,15 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, FileText, GraduationCap, HelpCircle, Home, Library, Shield, Trophy, User as UserIcon, LogOut, Languages, Menu, FlaskConical, Compass } from "lucide-react";
+import { BookOpen, FileText, GraduationCap, HelpCircle, Home, Library, Search, Shield, SwatchBook, Trophy, User as UserIcon, LogOut, Languages, Menu, FlaskConical, Compass } from "lucide-react";
 import type { User } from "../../types";
 import { Logo } from "../../components/Logo";
 import { PlatformFooter } from "../../components/layout/PlatformFooter";
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import { WorkspaceViewportProvider } from "../../components/interface/WorkspaceViewport";
+import { CommandPalette, type PaletteAction, type PaletteItem } from "../../components/interface/CommandPalette";
 import { useMediaQuery } from "../../utils/useMediaQuery";
+import { prefetchNavTarget } from "../../lib/prefetchRoutes";
 
 export type MomentumNavTarget =
   | "continue"
@@ -41,6 +43,12 @@ type NavItem = {
   show: boolean;
 };
 
+// Warm the target route chunk on hover/focus so the click feels instant.
+const prefetchProps = (id: MomentumNavTarget) => ({
+  onPointerEnter: () => prefetchNavTarget(id),
+  onFocus: () => prefetchNavTarget(id)
+});
+
 export const MomentumShell: React.FC<Props> = ({
   user,
   current,
@@ -53,9 +61,20 @@ export const MomentumShell: React.FC<Props> = ({
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const ui = useUIMode();
+  const cycleUIMode = () => {
+    ui.setMode(ui.mode === "focus" ? "nova" : ui.mode === "nova" ? "classic" : "focus");
+  };
+  const currentUIModeName =
+    ui.mode === "focus"
+      ? t("momentumUiName")
+      : ui.mode === "nova"
+        ? t("novaUiName", { defaultValue: "Nova" })
+        : t("classicUiName");
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
   const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
+  const isUk = (i18n.language || "").startsWith("uk");
 
   const isEducational = user.userMode === "EDUCATIONAL";
   const isStudent = Boolean(user.studentId);
@@ -168,6 +187,59 @@ export const MomentumShell: React.FC<Props> = ({
     return hit?.label ?? "";
   }, [items, current]);
 
+  const searchLabel = t("searchOrJump", {
+    defaultValue: isUk ? "Пошук або перехід…" : "Search or jump to…"
+  });
+
+  const paletteItems = React.useMemo<PaletteItem[]>(() => {
+    const navGroup = t("navigation", { defaultValue: "Navigation" });
+    return items
+      .filter((it) => it.show)
+      .map((it) => ({
+        id: it.id,
+        label: it.label,
+        icon: it.icon,
+        group: it.id === "profile" ? t("account") : navGroup
+      }));
+  }, [items, t]);
+
+  const paletteActions = React.useMemo<PaletteAction[]>(() => [
+    {
+      id: "help",
+      label: t("help"),
+      icon: HelpCircle,
+      run: () => navigate("/docs")
+    },
+    {
+      id: "interface",
+      label: `${t("interfaceLabel")}: ${currentUIModeName}`,
+      icon: SwatchBook,
+      run: () => {
+        ui.setMode(ui.mode === "focus" ? "nova" : ui.mode === "nova" ? "classic" : "focus");
+      }
+    },
+    {
+      id: "logout",
+      label: t("logout"),
+      icon: LogOut,
+      danger: true,
+      run: onLogout
+    }
+  ], [t, navigate, onLogout, ui, currentUIModeName]);
+
+  // Global Ctrl+K / Cmd+K toggles the command palette while the shell shows nav.
+  React.useEffect(() => {
+    if (navigationHidden) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && (event.key === "k" || event.key === "K")) {
+        event.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigationHidden]);
+
   React.useEffect(() => {
     if (!menuOpen) return;
 
@@ -233,6 +305,7 @@ export const MomentumShell: React.FC<Props> = ({
                 <button
                   key={it.id}
                   onClick={() => onNavigate(it.id)}
+                  {...prefetchProps(it.id)}
                   aria-label={it.label}
                   aria-pressed={active}
                   className={
@@ -297,11 +370,11 @@ export const MomentumShell: React.FC<Props> = ({
                   <button
                     onClick={() => {
                       setMenuOpen(false);
-                      ui.setMode(ui.mode === "focus" ? "classic" : "focus");
+                      cycleUIMode();
                     }}
                     className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-text-secondary"
                   >
-                    {t("interfaceLabel")}: {ui.mode === "focus" ? t("momentumUiName") : t("classicUiName")}
+                    {t("interfaceLabel")}: {currentUIModeName}
                   </button>
                   <button
                     onClick={() => {
@@ -336,9 +409,32 @@ export const MomentumShell: React.FC<Props> = ({
             <div className="inline-flex items-center px-3 py-1 rounded-full border border-border bg-bg-surface text-xs font-mono font-medium tracking-[0.02em] text-text-secondary max-w-full">
               <span className="truncate">{currentLabel}</span>
             </div>
+            {!isCompactViewport ? (
+              <button
+                onClick={() => setPaletteOpen(true)}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-bg-surface text-xs font-mono text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
+                aria-label={searchLabel}
+                title={searchLabel}
+                aria-haspopup="dialog"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <kbd className="text-[10px] font-mono text-text-muted">Ctrl K</kbd>
+              </button>
+            ) : null}
           </div>
           <div className="flex items-center gap-2 sm:gap-3 pl-2">
             {topRight}
+            {isCompactViewport ? (
+              <button
+                onClick={() => setPaletteOpen(true)}
+                className="h-11 w-11 rounded-xl border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center justify-center"
+                aria-label={searchLabel}
+                title={searchLabel}
+                aria-haspopup="dialog"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+            ) : null}
             <button
               onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium tracking-[0.03em] border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
@@ -378,6 +474,7 @@ export const MomentumShell: React.FC<Props> = ({
                                 setMenuOpen(false);
                                 onNavigate(it.id);
                               }}
+                              {...prefetchProps(it.id)}
                               className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast flex items-center gap-2"
                             >
                               <Icon className="w-4 h-4" />
@@ -412,11 +509,11 @@ export const MomentumShell: React.FC<Props> = ({
                     <button
                       onClick={() => {
                         setMenuOpen(false);
-                        ui.setMode(ui.mode === "focus" ? "classic" : "focus");
+                        cycleUIMode();
                       }}
                       className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-text-secondary"
                     >
-                      {t("interfaceLabel")}: {ui.mode === "focus" ? t("momentumUiName") : t("classicUiName")}
+                      {t("interfaceLabel")}: {currentUIModeName}
                     </button>
                     <button
                       onClick={() => {
@@ -456,6 +553,7 @@ export const MomentumShell: React.FC<Props> = ({
                 <button
                   key={`bottom-${it.id}`}
                   onClick={() => onNavigate(it.id)}
+                  {...prefetchProps(it.id)}
                   className={`min-h-11 rounded-xl border px-1 py-1.5 flex flex-col items-center justify-center gap-1 transition-fast ${active ? "border-primary bg-primary/12 text-primary" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
                   aria-label={it.label}
                   aria-pressed={active}
@@ -468,6 +566,14 @@ export const MomentumShell: React.FC<Props> = ({
           </div>
         </nav>
       ) : null}
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        items={paletteItems}
+        onSelect={(id) => onNavigate(id as MomentumNavTarget)}
+        extraActions={paletteActions}
+      />
     </div>
   );
 };

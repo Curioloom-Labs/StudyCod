@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
+import type { Pluggable, PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import { decodeEscapedInputText, normalizeMarkdownEscapes } from "../utils/inputTextNormalization";
 const MATH_MARKUP_RE = /(\$\$[^$]+?\$\$)|(\$[^$\n]+?\$)|\\\(|\\\[|\\begin\{/;
@@ -400,8 +401,8 @@ type PrismStylesModule = {
   vscDarkPlus?: unknown;
 };
 type MathPluginBundle = {
-  remarkMath: unknown | null;
-  rehypeKatex: unknown | null;
+  remarkMath: Pluggable | null;
+  rehypeKatex: Pluggable | null;
 };
 
 const PlainCodeBlock: React.FC<{ code: string }> = ({ code }) => {
@@ -504,13 +505,13 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
   }, [hasMathMarkup]);
 
   const remarkPlugins = useMemo(() => {
-    const plugins: unknown[] = [remarkGfm];
+    const plugins: PluggableList = [remarkGfm];
     if (mathPlugins.remarkMath) plugins.push(mathPlugins.remarkMath);
     return plugins;
   }, [mathPlugins.remarkMath]);
 
   const rehypePlugins = useMemo(() => {
-    if (!mathPlugins.rehypeKatex) return [] as unknown[];
+    if (!mathPlugins.rehypeKatex) return [] as PluggableList;
     return [mathPlugins.rehypeKatex];
   }, [mathPlugins.rehypeKatex]);
 

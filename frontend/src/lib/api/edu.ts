@@ -185,6 +185,8 @@ export interface Lesson {
         expected?: string;
         actual?: string;
         stderr?: string;
+        error?: string;
+        error_kind?: string | null;
       }> | null;
     };
   }>;
@@ -257,6 +259,8 @@ export interface TaskWithGrade {
       expected?: string;
       actual?: string;
       stderr?: string;
+      error?: string;
+      error_kind?: string | null;
     }> | null;
     submissionMeta?: SubmissionMeta;
   };
@@ -592,7 +596,7 @@ export async function submitWebTask(taskId: number, files: WebTaskFile[]): Promi
   const res = await api.post(`/edu/tasks/${taskId}/web-submit`, { files });
   return res.data;
 }
-export async function submitCode(taskId: number, code: string, binding?: SubmissionBinding): Promise<{
+export interface SubmitCodeResponse {
   message?: string;
   grade: {
     id: number;
@@ -615,7 +619,8 @@ export async function submitCode(taskId: number, code: string, binding?: Submiss
   };
   learningFeedback?: LearningFeedback;
   submissionMeta?: SubmissionMeta;
-}> {
+}
+export async function submitCode(taskId: number, code: string, binding?: SubmissionBinding): Promise<SubmitCodeResponse> {
   const res = await api.post(`/edu/tasks/${taskId}/submit`, {
     code,
     ...(binding ?? {})
@@ -623,11 +628,11 @@ export async function submitCode(taskId: number, code: string, binding?: Submiss
   return res.data;
 }
 
-export async function submitCodeFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<unknown> {
+export async function submitCodeFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<SubmitCodeResponse> {
   const res = await api.post(`/edu/tasks/${taskId}/submit`, { files, ...(binding ?? {}) });
   return res.data;
 }
-export async function completeTask(taskId: number, code: string, binding?: SubmissionBinding): Promise<{
+export interface CompleteTaskResponse {
   message?: string;
   grade: {
     id: number;
@@ -651,7 +656,8 @@ export async function completeTask(taskId: number, code: string, binding?: Submi
   };
   learningFeedback?: LearningFeedback;
   submissionMeta?: SubmissionMeta;
-}> {
+}
+export async function completeTask(taskId: number, code: string, binding?: SubmissionBinding): Promise<CompleteTaskResponse> {
   const res = await api.post(`/edu/tasks/${taskId}/complete`, {
     code,
     ...(binding ?? {})
@@ -659,7 +665,7 @@ export async function completeTask(taskId: number, code: string, binding?: Submi
   return res.data;
 }
 
-export async function completeTaskFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<unknown> {
+export async function completeTaskFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<CompleteTaskResponse> {
   const res = await api.post(`/edu/tasks/${taskId}/complete`, { files, ...(binding ?? {}) });
   return res.data;
 }

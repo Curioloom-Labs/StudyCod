@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, BarChart3, Clock3, RefreshCcw } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { listGrades } from "../../lib/api/grades";
 import { resetTopic } from "../../lib/api/tasks";
 import { Button } from "../../components/ui/Button";
@@ -211,11 +212,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   };
 
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {tr("Завантаження журналу...", "Loading journal...")}
-      </div>
-    );
+    return <PageSkeleton variant="table" />;
   }
 
   return (
@@ -256,7 +253,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
 
             {topicsWithLowAverage.length === 0 ? (
               <div className="rounded-xl border border-border bg-bg-base/70 px-4 py-6 text-center">
-                <div className="text-sm text-text-primary">{tr("Критичних тем не знайдено 🎉", "No critical topics found 🎉")}</div>
+                <div className="text-sm text-text-primary">{tr("Критичних тем не знайдено", "No critical topics found")}</div>
                 <div className="text-xs text-text-secondary mt-1">
                   {tr("Нижче доступний повний журнал оцінок.", "Full grade journal is available below.")}
                 </div>
@@ -318,7 +315,7 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
             </div>
 
             {focusQuest.length === 0 ? (
-              <div className="text-center text-text-muted font-mono py-6">{tr("Квест поки не потрібен 🙂", "No quest needed right now 🙂")}</div>
+              <div className="text-center text-text-muted font-mono py-6">{tr("Квест поки не потрібен", "No quest needed right now")}</div>
             ) : (
               <div className="space-y-2">
                 {focusQuest.map((topic) => (

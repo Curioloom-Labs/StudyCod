@@ -150,7 +150,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             aria-label="Select solution language"
             className="h-11 w-full sm:w-auto px-3 rounded-xl bg-bg-base border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-secondary/50"
           >
-            {(allowedLangs.length ? allowedLangs : ["java"]).map((lang) => (
+            {(allowedLangs.length ? allowedLangs : (["java"] satisfies JudgeLanguage[])).map((lang) => (
               <option key={lang} value={lang}>
                 {FRIENDLY_LANG[lang] ?? lang}
               </option>

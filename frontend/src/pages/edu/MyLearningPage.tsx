@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Compass, Target, ArrowRight, Repeat, FileDown, Trophy, Layers3, Gauge, CheckCircle2 } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { showToast } from "../../lib/toast";
 import {
   getMySkillTree,
@@ -158,7 +159,11 @@ export const MyLearningPage: React.FC = () => {
             <span className="text-xs font-mono font-medium uppercase tracking-[0.04em] text-text-secondary">{tr("Мапа тем", "Skill map")}</span>
           </div>
           {!tree ? (
-            <div className="p-5 text-sm text-text-secondary">{tr("Завантаження…", "Loading…")}</div>
+            <div className="p-5 space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
           ) : tree.nodes.length === 0 ? (
             <div className="p-5 text-sm text-text-secondary">{tr("Тем поки немає.", "No topics yet.")}</div>
           ) : (

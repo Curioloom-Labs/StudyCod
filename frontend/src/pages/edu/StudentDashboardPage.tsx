@@ -18,6 +18,7 @@ import {
 } from "../../lib/api/edu";
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
 import { FileText, BookOpen, MessageSquare } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
 import type { User } from "../../types";
@@ -103,9 +104,7 @@ export const StudentDashboardPage: React.FC<Props> = ({
     }
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t('loading')}
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   const intermediateGrades = summaryGrades.filter(g => (g.assessmentType || "INTERMEDIATE") === "INTERMEDIATE");
   const controlGrades = summaryGrades.filter(g => g.assessmentType === "CONTROL");

@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText } from "lucide-react";
+import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { api } from "../../lib/api/client";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
@@ -12,7 +13,7 @@ import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import { generateTestData, getTestData, getTestDataItem, addTestData, updateTestData, deleteTestData, deleteGeneratedTestData, type TestData, updateControlWorkFormula } from "../../lib/api/edu";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
-import { showToast } from "../../lib/toast";
+import { toast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 interface ControlWork {
   id: number;
@@ -236,24 +237,24 @@ export const ControlWorkDetailsPage: React.FC = () => {
       const errorMessage = getErrorMessage(error, tr("Не вдалося завантажити контрольну роботу", "Failed to load control work"));
       const status = getErrorStatus(error);
       console.error("Error details:", errorMessage, status);
-      showToast.error(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
   const handleCreateTask = async () => {
     if (!controlWorkId || !newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
-      showToast.error(tr("Заповніть всі обов'язкові поля", "Fill all required fields"));
+      toast.error(tr("Заповніть всі обов'язкові поля", "Fill all required fields"));
       return;
     }
     if (!controlWork) {
-      showToast.error(tr("Контрольна робота не завантажена", "Control work not loaded"));
+      toast.error(tr("Контрольна робота не завантажена", "Control work not loaded"));
       return;
     }
     try {
       const topicId = controlWork.topic?.id;
       if (!topicId) {
-        showToast.error(tr("Не вдалося визначити тему", "Failed to determine topic"));
+        toast.error(tr("Не вдалося визначити тему", "Failed to determine topic"));
         return;
       }
       await api.post(`/topics/${topicId}/tasks`, {
@@ -277,16 +278,16 @@ export const ControlWorkDetailsPage: React.FC = () => {
       console.error("Failed to create task:", error);
       const msg = getErrorMessage(error, tr("Не вдалося створити завдання", "Failed to create task"));
       if (msg === "CONTROL_WORK_MAX_TASKS_REACHED") {
-        showToast.error(tr("У контрольній може бути максимум 3 практичні задачі.", "A control work can contain at most 3 practice tasks."));
+        toast.error(tr("У контрольній може бути максимум 3 практичні задачі.", "A control work can contain at most 3 practice tasks."));
       } else {
-        showToast.error(msg);
+        toast.error(msg);
       }
     }
   };
   const handleUpdateTask = async () => {
     if (!controlWork || !controlWork.topic?.id || !editingTask) return;
     if (!newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
-      showToast.error(tr("Заповніть всі обов'язкові поля", "Fill all required fields"));
+      toast.error(tr("Заповніть всі обов'язкові поля", "Fill all required fields"));
       return;
     }
     try {
@@ -307,20 +308,20 @@ export const ControlWorkDetailsPage: React.FC = () => {
       });
     } catch (error: unknown) {
       console.error("Failed to update task:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося оновити завдання", "Failed to update task")));
+      toast.error(getErrorMessage(error, tr("Не вдалося оновити завдання", "Failed to update task")));
     }
   };
   const handleGenerateCondition = async () => {
     if (!controlWork) return;
     if (!newTask.title.trim()) {
-      showToast.error(tr("Спочатку введіть назву завдання", "Enter task title first"));
+      toast.error(tr("Спочатку введіть назву завдання", "Enter task title first"));
       return;
     }
     setGeneratingCondition(true);
     try {
       const topicId = controlWork.topic?.id;
       if (!topicId) {
-        showToast.error(tr("Не вдалося визначити тему", "Failed to determine topic"));
+        toast.error(tr("Не вдалося визначити тему", "Failed to determine topic"));
         return;
       }
       const userLanguage = i18n.language === 'en' ? 'en' : 'uk';
@@ -337,7 +338,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       });
     } catch (error: unknown) {
       console.error("Failed to generate condition:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося згенерувати умову", "Failed to generate condition")));
+      toast.error(getErrorMessage(error, tr("Не вдалося згенерувати умову", "Failed to generate condition")));
     } finally {
       setGeneratingCondition(false);
     }
@@ -345,14 +346,14 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const handleGenerateTemplate = async () => {
     if (!controlWork) return;
     if (!newTask.title.trim()) {
-      showToast.error(tr("Спочатку введіть назву завдання", "Enter task title first"));
+      toast.error(tr("Спочатку введіть назву завдання", "Enter task title first"));
       return;
     }
     setGeneratingTemplate(true);
     try {
       const topicId = controlWork.topicId || controlWork.topic?.id;
       if (!topicId) {
-        showToast.error(tr("Не вдалося визначити тему", "Failed to determine topic"));
+        toast.error(tr("Не вдалося визначити тему", "Failed to determine topic"));
         return;
       }
       const res = await api.post(`/topics/${topicId}/tasks/generate-template`, {
@@ -367,7 +368,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       });
     } catch (error: unknown) {
       console.error("Failed to generate template:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося згенерувати шаблон", "Failed to generate template")));
+      toast.error(getErrorMessage(error, tr("Не вдалося згенерувати шаблон", "Failed to generate template")));
     } finally {
       setGeneratingTemplate(false);
     }
@@ -382,7 +383,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       setEditingTitle(false);
     } catch (error: unknown) {
       console.error("Failed to save title:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося зберегти назву", "Failed to save title")));
+      toast.error(getErrorMessage(error, tr("Не вдалося зберегти назву", "Failed to save title")));
     }
   };
   const handleSaveSettings = async () => {
@@ -398,7 +399,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       setShowQuizSettings(false);
     } catch (error: unknown) {
       console.error("Failed to save settings:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося зберегти налаштування", "Failed to save settings")));
+      toast.error(getErrorMessage(error, tr("Не вдалося зберегти налаштування", "Failed to save settings")));
     }
   };
   const handleSaveQuiz = async (questionsToSave?: QuizQuestion[]) => {
@@ -423,7 +424,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       }
     } catch (error: unknown) {
       console.error("Failed to save quiz:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося зберегти тест", "Failed to save quiz")));
+      toast.error(getErrorMessage(error, tr("Не вдалося зберегти тест", "Failed to save quiz")));
       await loadControlWork();
     }
   };
@@ -443,11 +444,11 @@ export const ControlWorkDetailsPage: React.FC = () => {
   };
   const handleSaveNewQuestion = async () => {
     if (!newQuestion.question.trim()) {
-      showToast.error(tr("Введіть питання", "Enter a question"));
+      toast.error(tr("Введіть питання", "Enter a question"));
       return;
     }
     if (!newQuestion.options.А.trim() || !newQuestion.options.Б.trim() || !newQuestion.options.В.trim() || !newQuestion.options.Г.trim() || !newQuestion.options.Д.trim()) {
-      showToast.error(tr("Заповніть всі варіанти відповіді", "Fill all answer options"));
+      toast.error(tr("Заповніть всі варіанти відповіді", "Fill all answer options"));
       return;
     }
     const questionForSave = {
@@ -512,11 +513,11 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const handleSaveEditedQuestion = async () => {
     if (editingQuestionIndex === null) return;
     if (!newQuestion.question.trim()) {
-      showToast.error(tr("Введіть питання", "Enter a question"));
+      toast.error(tr("Введіть питання", "Enter a question"));
       return;
     }
     if (!newQuestion.options.А.trim() || !newQuestion.options.Б.trim() || !newQuestion.options.В.trim() || !newQuestion.options.Г.trim() || !newQuestion.options.Д.trim()) {
-      showToast.error(tr("Заповніть всі варіанти відповіді", "Fill all answer options"));
+      toast.error(tr("Заповніть всі варіанти відповіді", "Fill all answer options"));
       return;
     }
     const questionForSave = {
@@ -540,11 +541,11 @@ export const ControlWorkDetailsPage: React.FC = () => {
     setSavingFormula(true);
     try {
       await updateControlWorkFormula(parseInt(controlWorkId, 10), formula.trim() || null);
-      showToast.success(tr("Формулу оновлено. Всі оцінки перераховано.", "Formula updated. All grades recalculated."));
+      toast.success(tr("Формулу оновлено. Всі оцінки перераховано.", "Formula updated. All grades recalculated."));
       await loadControlWork();
     } catch (error: unknown) {
       console.error("Failed to save formula:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося зберегти формулу", "Failed to save formula")));
+      toast.error(getErrorMessage(error, tr("Не вдалося зберегти формулу", "Failed to save formula")));
     } finally {
       setSavingFormula(false);
     }
@@ -552,7 +553,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const handleGenerateQuiz = async () => {
     if (!controlWork || !controlWorkId) return;
     if (!quizTopicTitle.trim()) {
-      showToast.error(tr("Введіть тему для тесту", "Enter quiz topic"));
+      toast.error(tr("Введіть тему для тесту", "Enter quiz topic"));
       return;
     }
     if (generatingQuiz) return;
@@ -567,7 +568,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       let questions = res.data?.questions;
       if (!questions) {
         console.error("No questions field in response:", res.data);
-        showToast.error(tr("Не вдалося згенерувати питання. Спробуйте ще раз.", "Failed to generate questions. Please try again."));
+        toast.error(tr("Не вдалося згенерувати питання. Спробуйте ще раз.", "Failed to generate questions. Please try again."));
         setGeneratingQuiz(false);
         return;
       }
@@ -577,14 +578,14 @@ export const ControlWorkDetailsPage: React.FC = () => {
           questions = JSON.parse(questions);
         } catch (e) {
           console.error("Failed to parse questions as JSON:", e);
-          showToast.error(tr("Не вдалося згенерувати питання. Спробуйте ще раз.", "Failed to generate questions. Please try again."));
+          toast.error(tr("Не вдалося згенерувати питання. Спробуйте ще раз.", "Failed to generate questions. Please try again."));
           setGeneratingQuiz(false);
           return;
         }
       }
       if (questions.length === 0) {
         console.error("Empty questions array");
-        showToast.error(tr("Не вдалося згенерувати питання. Спробуйте ще раз.", "Failed to generate questions. Please try again."));
+        toast.error(tr("Не вдалося згенерувати питання. Спробуйте ще раз.", "Failed to generate questions. Please try again."));
         setGeneratingQuiz(false);
         return;
       }
@@ -594,7 +595,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       await loadControlWork();
     } catch (error: unknown) {
       console.error("Failed to generate quiz:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося згенерувати тест", "Failed to generate quiz")));
+      toast.error(getErrorMessage(error, tr("Не вдалося згенерувати тест", "Failed to generate quiz")));
     } finally {
       setGeneratingQuiz(false);
     }
@@ -678,14 +679,14 @@ export const ControlWorkDetailsPage: React.FC = () => {
       if ((result.skippedDuplicates || 0) > 0) {
         extras.push(tr(`дублі пропущено: ${result.skippedDuplicates}`, `duplicates skipped: ${result.skippedDuplicates}`));
       }
-      showToast.success(
+      toast.success(
         extras.length > 0
           ? `${tr(`Згенеровано ${result.count} тестів`, `Generated ${result.count} tests`)} (${extras.join(", ")})`
           : tr(`Згенеровано ${result.count} тестів`, `Generated ${result.count} tests`)
       );
     } catch (error: unknown) {
       console.error("Failed to generate test data:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося згенерувати тести", "Failed to generate tests")));
+      toast.error(getErrorMessage(error, tr("Не вдалося згенерувати тести", "Failed to generate tests")));
     } finally {
       setGeneratingTestData(false);
     }
@@ -703,7 +704,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       });
     } catch (error: unknown) {
       console.error("Failed to add test data:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося додати тест", "Failed to add test")));
+      toast.error(getErrorMessage(error, tr("Не вдалося додати тест", "Failed to add test")));
     }
   };
 
@@ -711,14 +712,14 @@ export const ControlWorkDetailsPage: React.FC = () => {
     if (!testDataTaskId) return;
     if (importingFiles) return;
     if (importFiles.length === 0) {
-      showToast.error(tr("Оберіть файли .in та .out", "Choose .in and .out files"));
+      toast.error(tr("Оберіть файли .in та .out", "Choose .in and .out files"));
       return;
     }
     setImportingFiles(true);
     try {
       const { tests, errors } = await importTestsFromInOutFiles(importFiles);
       if (errors.length > 0) {
-        showToast.info(`${tr("Знайдено проблеми з файлами:", "Found issues with selected files:")}\n\n${errors.slice(0, 12).join("\n")}${errors.length > 12 ? `\n... (+${errors.length - 12})` : ""}`, { durationMs: 7000 });
+        toast.info(`${tr("Знайдено проблеми з файлами:", "Found issues with selected files:")}\n\n${errors.slice(0, 12).join("\n")}${errors.length > 12 ? `\n... (+${errors.length - 12})` : ""}`, 7000);
       }
       if (tests.length === 0) return;
 
@@ -736,7 +737,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       setImportInputKey(k => k + 1);
     } catch (error: unknown) {
       console.error("Failed to import tests:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося імпортувати тести", "Failed to import tests")));
+      toast.error(getErrorMessage(error, tr("Не вдалося імпортувати тести", "Failed to import tests")));
     } finally {
       setImportingFiles(false);
     }
@@ -755,7 +756,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       setEditingTest(null);
     } catch (error: unknown) {
       console.error("Failed to update test data:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося оновити тест", "Failed to update test")));
+      toast.error(getErrorMessage(error, tr("Не вдалося оновити тест", "Failed to update test")));
     }
   };
   const handleStartEditTestData = async (index: number, testDataId: number) => {
@@ -773,7 +774,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       });
     } catch (error: unknown) {
       console.error("Failed to load full test data:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося завантажити повний тест", "Failed to load full test")));
+      toast.error(getErrorMessage(error, tr("Не вдалося завантажити повний тест", "Failed to load full test")));
     }
   };
   const handleDeleteTestData = async (testDataId: number) => {
@@ -789,7 +790,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
       });
     } catch (error: unknown) {
       console.error("Failed to delete test data:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося видалити тест", "Failed to delete test")));
+      toast.error(getErrorMessage(error, tr("Не вдалося видалити тест", "Failed to delete test")));
     }
   };
   const handleClearGeneratedTestData = async () => {
@@ -803,18 +804,16 @@ export const ControlWorkDetailsPage: React.FC = () => {
       await loadTestDataPage(testDataTaskId, {
         offset: 0
       });
-      showToast.success(tr(`Видалено AI-тестів: ${result.deleted}`, `Deleted AI tests: ${result.deleted}`));
+      toast.success(tr(`Видалено AI-тестів: ${result.deleted}`, `Deleted AI tests: ${result.deleted}`));
     } catch (error: unknown) {
       console.error("Failed to clear generated tests:", error);
-      showToast.error(getErrorMessage(error, tr("Не вдалося очистити AI-тести", "Failed to clear AI tests")));
+      toast.error(getErrorMessage(error, tr("Не вдалося очистити AI-тести", "Failed to clear AI tests")));
     } finally {
       setClearingGeneratedTests(false);
     }
   };
   if (loading) {
-    return <div className="flex-1 min-h-0 flex items-center justify-center">
-        <div className="text-text-primary font-mono">{tr("Завантаження...", "Loading...")}</div>
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   if (!controlWork) {
     return <div className="flex-1 min-h-0 flex items-center justify-center">
@@ -1508,7 +1507,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                {loadingTestDataPage ? <p className="text-text-secondary text-sm text-center py-4">{t("loading")}</p> : testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
+                {loadingTestDataPage ? <Skeleton className="h-10 w-full" /> : testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
                     {tr("Немає тестових даних. Згенеруйте або додайте вручну.", "No test data. Generate or add manually.")}
                   </p> : testDataList.map((test, index) => {
                     const displayIndex = testDataOffset + index + 1;

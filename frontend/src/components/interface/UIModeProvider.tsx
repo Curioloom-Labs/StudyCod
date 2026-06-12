@@ -87,6 +87,12 @@ export const UIModeProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     refresh();
   }, [tick, refresh]);
 
+  React.useEffect(() => {
+    // Expose the mode globally so theme tokens apply outside shell wrappers
+    // (standalone routes, portals, toasts).
+    document.documentElement.setAttribute("data-ui-mode", state.mode);
+  }, [state.mode]);
+
   const value = React.useMemo<UIModeContextValue>(() => {
     return {
       mode: state.mode,

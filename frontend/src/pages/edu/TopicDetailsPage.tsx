@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle, Upload, Download } from "lucide-react";
+import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { api } from "../../lib/api/client";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
@@ -745,9 +746,7 @@ export const TopicDetailsPage: React.FC = () => {
     }
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center">
-        <div className="text-text-primary font-mono">{t("loading")}</div>
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   if (!topic) {
     return <div className="h-full flex items-center justify-center">
@@ -876,7 +875,7 @@ export const TopicDetailsPage: React.FC = () => {
                     setLiveTaskId(prev => (prev === task.id ? null : task.id));
                   }} className="text-xs" title={tr("Жива панель класу для цього завдання", "Live class monitor for this task")}
                   >
-                            {liveTaskId === task.id ? tr("🔴 Сховати", "🔴 Hide") : tr("🔴 Live", "🔴 Live")}
+                            {liveTaskId === task.id ? tr("Сховати", "Hide") : "Live"}
                           </Button>
                         </div>
                         <Button variant="ghost" onClick={e => {
@@ -1545,7 +1544,7 @@ export const TopicDetailsPage: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                {loadingTestDataPage ? <p className="text-text-secondary text-sm text-center py-4">{t("loading")}</p> : testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
+                {loadingTestDataPage ? <Skeleton className="h-10 w-full" /> : testDataList.length === 0 ? <p className="text-text-secondary text-sm text-center py-4">
                     {tr("Немає тестових даних. Згенеруйте або додайте вручну.", "No test data. Generate or add manually.")}
                   </p> : testDataList.map((test, index) => {
                     const displayIndex = testDataOffset + index + 1;

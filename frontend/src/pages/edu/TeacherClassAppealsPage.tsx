@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, MessageSquare, RefreshCw } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import {
@@ -342,7 +343,7 @@ export const TeacherClassAppealsPage: React.FC = () => {
   }
 
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">{tr("Завантаження...", "Loading...")}</div>;
+    return <PageSkeleton variant="default" />;
   }
 
   return (
