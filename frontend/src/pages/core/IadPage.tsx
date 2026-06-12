@@ -1,11 +1,34 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, TrendingDown, TrendingUp, Minus } from "lucide-react";
-import { Card } from "../../components/ui/Card";
+import { animate, motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, TrendingDown, TrendingUp, Minus, Gauge, ArrowUpRight } from "lucide-react";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { getIadDetails } from "../../lib/api/profile";
 import type { IadDetails, IadEvent } from "../../types";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+
+const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (reduce) {
+      node.textContent = value.toFixed(decimals);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: (v) => {
+        node.textContent = v.toFixed(decimals);
+      },
+    });
+    return () => controls.stop();
+  }, [value, decimals, reduce]);
+  return <span ref={ref} className={className}>{value.toFixed(decimals)}</span>;
+};
 
 function fmtSigned(value: number): string {
   const rounded = Math.round(value * 1000) / 1000;
@@ -265,13 +288,15 @@ export const IadPage: React.FC = () => {
     }
   };
 
+  const currentIadValue = details ? Number(details.currentIad ?? details.currentDifus ?? 0) : 0;
+
   return (
     <div className="min-h-full bg-bg-base text-text-primary">
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-3 py-2 border border-border text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
           >
             <ArrowLeft className="w-4 h-4" />
             {tr("Назад", "Back")}
@@ -285,29 +310,64 @@ export const IadPage: React.FC = () => {
                 // ignore
               }
             }}
-            className="inline-flex items-center gap-2 px-3 py-2 border border-border text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
           >
             {tr("До профілю", "To profile")}
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>
+
+        <motion.div variants={staggerContainer} initial="initial" animate="animate">
+          <motion.div variants={fadeUpItem} className="flex items-center gap-2 font-mono text-xs text-primary/70">
+            <Gauge className="w-3.5 h-3.5" />
+            <span>// iad</span>
+          </motion.div>
+          <motion.h1 variants={fadeUpItem} className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+            {tr("Адаптивна складність", "Adaptive difficulty")}
+          </motion.h1>
+          <motion.p variants={fadeUpItem} className="mt-1.5 text-sm text-text-secondary">
+            {tr("Як система підлаштовує рівень завдань під твій прогрес.", "How the system tunes task difficulty to your progress.")}
+          </motion.p>
+
+          {details ? (
+            <motion.div variants={fadeUpItem} className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Поточний IAD", "Current IAD")}</div>
+                <div className="mt-1 text-3xl font-mono font-semibold text-primary">
+                  <CountUp value={currentIadValue} decimals={3} />
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Рівень", "Level")}</div>
+                <div className="mt-1 text-3xl font-mono font-semibold text-text-primary">{levelLabel}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Мова", "Language")}</div>
+                <div className="mt-1 text-3xl font-mono font-semibold text-text-primary">{details.lang}</div>
+              </div>
+            </motion.div>
+          ) : null}
+        </motion.div>
+
+        <div className="mt-1 mb-2 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
         {loading ? (
           <div className="space-y-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i} className="p-5 border border-border/70 bg-bg-surface/80 space-y-3">
+              <div key={i} className="rounded-xl border border-border bg-bg-surface p-5 space-y-3">
                 <Skeleton className="h-5 w-1/3" />
                 <Skeleton className="h-9 w-1/4" />
                 <Skeleton className="h-3 w-full" />
-              </Card>
+              </div>
             ))}
           </div>
         ) : error ? (
-          <Card className="p-4 sm:p-6 text-sm text-accent-error">{error}</Card>
+          <div className="rounded-xl border border-accent-error/40 bg-bg-surface p-4 sm:p-6 text-sm text-accent-error">{error}</div>
         ) : !details ? (
-          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Дані недоступні", "Data unavailable")}</Card>
+          <div className="rounded-xl border border-border bg-bg-surface p-4 sm:p-6 text-sm text-text-secondary">{tr("Дані недоступні", "Data unavailable")}</div>
         ) : (
           <>
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
+            <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
               <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
                 <div>
                   <div className="text-xs text-text-secondary">{tr("Поточний IAD", "Current IAD")}</div>
@@ -333,10 +393,10 @@ export const IadPage: React.FC = () => {
                   <span>{details.limits.max.toFixed(1)}</span>
                 </div>
               </div>
-            </Card>
+            </div>
 
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-2">{tr("Симуляція наступної оцінки", "Next-grade simulation")}</div>
+            <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-2">{tr("Симуляція наступної оцінки", "Next-grade simulation")}</div>
               <div className="text-xs text-text-secondary mb-3">
                 {tr(
                   "Подивись, як умовно зміниться IAD, якщо наступна оцінка буде X. Це превʼю: реальне значення оновиться лише після фактичного сабміту.",
@@ -393,10 +453,10 @@ export const IadPage: React.FC = () => {
                   {tr("Зверни увагу: значення впирається в межу шкали (0..1).", "Note: value is capped by scale limits (0..1).")}
                 </div> : null}
               </div> : null}
-            </Card>
+            </div>
 
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-2">{tr("What-if trajectory", "What-if trajectory")}</div>
+            <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-2">{tr("What-if trajectory", "What-if trajectory")}</div>
               <div className="text-xs text-text-secondary mb-3">
                 {tr(
                   "Міні-графік показує можливу траєкторію IAD на 4 кроки + X. Увімкни compare mode для порівняння сценаріїв.",
@@ -533,10 +593,10 @@ export const IadPage: React.FC = () => {
                   ))}
                 </div>
               </div> : null}
-            </Card>
+            </div>
 
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-2">{tr("IAD velocity", "IAD velocity")}</div>
+            <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-2">{tr("IAD velocity", "IAD velocity")}</div>
               <div className="text-xs text-text-secondary mb-3">
                 {tr(
                   "Тренд за 7/14 днів показує, як швидко та стабільно змінюється IAD: рівно, хвилями чи ривками.",
@@ -576,10 +636,10 @@ export const IadPage: React.FC = () => {
                   </div>
                 ))}
               </div> : null}
-            </Card>
+            </div>
 
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-2">{tr("Як працює IAD", "How IAD works")}</div>
+            <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-2">{tr("Як працює IAD", "How IAD works")}</div>
               <div className="text-xs text-text-secondary space-y-2 leading-relaxed">
                 <p>
                   {tr(
@@ -606,10 +666,10 @@ export const IadPage: React.FC = () => {
                   )}
                 </p>
               </div>
-            </Card>
+            </div>
 
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-3">{tr("Правила зміни", "Change rules")}</div>
+            <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-3">{tr("Правила зміни", "Change rules")}</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
                 {details.rules.map((r) => (
                   <div key={`${r.minGrade}-${r.maxGrade}`} className="border border-border rounded-lg px-3 py-2 bg-bg-code text-text-secondary">
@@ -617,10 +677,10 @@ export const IadPage: React.FC = () => {
                   </div>
                 ))}
               </div>
-            </Card>
+            </div>
 
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-2">{tr("Чому IAD змінюється", "Why IAD changes")}</div>
+            <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-2">{tr("Чому IAD змінюється", "Why IAD changes")}</div>
               <div className="text-xs text-text-secondary mb-3">
                 {tr(
                   "Події нижче показують останні оцінки для активної мови. Δ в рядку — це фактичний застосований внесок; для незастосованих подій показується окрема підказка з дельтою за правилом.",
@@ -665,7 +725,7 @@ export const IadPage: React.FC = () => {
                   })
                 )}
               </div>
-            </Card>
+            </div>
           </>
         )}
       </div>

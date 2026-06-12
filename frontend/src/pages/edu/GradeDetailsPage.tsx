@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { motion, useReducedMotion, animate } from "framer-motion";
+import { easeOutQuint } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
@@ -10,6 +12,40 @@ import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+
+const CountUp: React.FC<{ value: number }> = ({ value }) => {
+  const reduce = useReducedMotion();
+  const [display, setDisplay] = useState(reduce ? value : 0);
+  useEffect(() => {
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: latest => setDisplay(Math.round(latest))
+    });
+    return () => controls.stop();
+  }, [value, reduce]);
+  return <>{display}</>;
+};
+
+const ScoreBar: React.FC<{ percent: number; tone?: string }> = ({ percent, tone = "bg-primary" }) => {
+  const reduce = useReducedMotion();
+  const clamped = Math.max(0, Math.min(100, percent));
+  return (
+    <div className="h-1.5 rounded-full bg-bg-hover overflow-hidden">
+      <motion.div
+        className={`h-full ${tone} rounded-full origin-left`}
+        style={{ width: "100%" }}
+        initial={reduce ? { scaleX: clamped / 100 } : { scaleX: 0 }}
+        animate={{ scaleX: clamped / 100 }}
+        transition={reduce ? { duration: 0 } : { duration: 0.6, ease: easeOutQuint }}
+      />
+    </div>
+  );
+};
 type GradeStudent = {
   firstName: string;
   lastName: string;
@@ -90,21 +126,24 @@ export const GradeDetailsPage: React.FC = () => {
   if (loading) {
     return <PageSkeleton variant="default" />;
   }
+  const scoreTone = total >= 85 ? "text-accent-success" : total >= 65 ? "text-accent-warn" : total >= 40 ? "text-accent-warning" : "text-accent-error";
+  const barTone = total >= 85 ? "bg-accent-success" : total >= 65 ? "bg-accent-warn" : total >= 40 ? "bg-accent-warning" : "bg-accent-error";
   return <div className="h-full flex flex-col bg-bg-base">
-      <div className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
+      <div className="border-b border-border bg-bg-surface flex items-center justify-between px-6 py-3 flex-shrink-0">
+        <div className="flex items-center gap-4 min-w-0">
+          <Button variant="ghost" onClick={() => navigate(-1)} className="-ml-1">
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-          <div>
-            <h1 className="text-lg font-mono text-text-primary">{task?.title}</h1>
-            <div className="text-xs text-text-secondary">
+          <div className="min-w-0">
+            <span className="font-mono text-xs text-primary/70">// grade</span>
+            <h1 className="text-lg md:text-xl font-semibold tracking-tight text-text-primary truncate">{task?.title}</h1>
+            <div className="text-xs text-text-secondary font-mono truncate">
               {student?.lastName} {student?.firstName} {student?.middleName || ""}
             </div>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={handleSave} disabled={saving} className="shrink-0">
           <Save className="w-4 h-4 mr-2" />
           {saving ? tr("Збереження...", "Saving...") : tr("Зберегти", "Save")}
         </Button>
@@ -114,6 +153,10 @@ export const GradeDetailsPage: React.FC = () => {
         {}
         <div className="flex-1 border-r border-border overflow-hidden">
           <div className="h-full p-4 bg-bg-code overflow-y-auto">
+            <div className="mb-2 text-xs font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-1.5">
+              <Code2 className="w-3.5 h-3.5" />
+              {tr("Код учня", "Student code")}
+            </div>
             <pre className="text-sm font-mono text-text-primary whitespace-pre-wrap">
               {code}
             </pre>
@@ -121,9 +164,19 @@ export const GradeDetailsPage: React.FC = () => {
         </div>
 
         {}
-        <div className="w-80 bg-bg-surface p-4 overflow-y-auto">
-          <h2 className="text-lg font-mono text-text-primary mb-4">{tr("Оцінка", "Grade")}</h2>
-          
+        <div className="w-80 bg-bg-surface p-5 overflow-y-auto">
+          <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4">{tr("Оцінка", "Grade")}</h2>
+
+          <div className="rounded-xl border border-border bg-bg-base p-4 mb-5">
+            <div className="flex items-baseline gap-2">
+              <span className={`font-mono text-3xl md:text-4xl font-bold tabular-nums ${scoreTone}`}><CountUp value={total} /></span>
+              <span className="text-xs text-text-muted font-mono uppercase tracking-[0.08em]">/ 100</span>
+            </div>
+            <div className="mt-3">
+              <ScoreBar percent={total} tone={barTone} />
+            </div>
+          </div>
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-mono text-text-secondary mb-2">

@@ -1,11 +1,35 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles } from "lucide-react";
+import { animate, motion, useReducedMotion } from "framer-motion";
+import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles, LayoutGrid, Zap, Compass } from "lucide-react";
 import { Skeleton } from "../../components/ui/Skeleton";
 import type { User, CourseLanguage, Grade, PublicProfilePrivacy } from "../../types";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
+
+const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (reduce) {
+      node.textContent = value.toFixed(decimals);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: (v) => {
+        node.textContent = v.toFixed(decimals);
+      },
+    });
+    return () => controls.stop();
+  }, [value, decimals, reduce]);
+  return <span ref={ref} className={className}>{value.toFixed(decimals)}</span>;
+};
 import { getEmailSubscription, updateEmailSubscription, updateProfile } from "../../lib/api/profile";
 import { prepareGoogleLinkSession } from "../../lib/api/auth";
 import { listGrades } from "../../lib/api/grades";
@@ -126,64 +150,58 @@ const ProgressBadge: React.FC<{ milestone: BadgeMilestone; solvedCount: number; 
     ? tr("Бейдж відкрито. Продовжуй серію!", "Badge unlocked. Keep the streak alive!")
     : tr(`Ще ${remaining} задач до розблокування`, `${remaining} tasks left to unlock`);
 
+  const reduce = useReducedMotion();
+
   return (
-    <div
+    <motion.div
+      variants={fadeUpItem}
       title={badgeHint}
       tabIndex={0}
       aria-label={badgeHint}
       className={
-        "group rounded-2xl border p-3 transition-fast relative overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary/60 " +
+        "group rounded-xl border p-4 transition-fast relative overflow-hidden focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] " +
         (unlocked
-          ? "border-primary/60 bg-bg-surface/80"
-          : "border-border bg-bg-base/70 opacity-70")
+          ? "border-primary/40 bg-bg-surface hover:border-primary/60"
+          : "border-border bg-bg-surface opacity-70 hover:opacity-100 hover:border-primary/30")
       }
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <div className="inline-flex items-center gap-1 text-xs font-mono text-text-secondary">
-          <Icon className={`w-3.5 h-3.5 ${unlocked ? "text-primary" : "text-text-muted"}`} />
-          {unlocked ? tr("Активний", "Active") : tr("Locked", "Locked")}
-        </div>
-        <div className="text-[11px] font-mono text-text-secondary">#{milestone}</div>
-      </div>
-
-      <div className="mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-mono tracking-wide ${rarity.chipTone}`}>
           {tr(rarity.uk, rarity.en)}
         </span>
+        <div className="text-[11px] font-mono text-text-muted">#{milestone}</div>
       </div>
 
       <div
         className={
-          "mx-auto relative w-14 h-14 rounded-full border flex items-center justify-center text-lg font-mono " +
+          "mx-auto relative w-14 h-14 rounded-full border flex items-center justify-center transition-fast group-hover:scale-105 " +
           (unlocked
             ? "border-primary/60 text-primary bg-primary/10"
-            : "border-border text-text-muted bg-bg-surface")
+            : "border-border text-text-muted bg-bg-base")
         }
       >
         <Icon className="w-6 h-6 relative z-[1]" />
       </div>
 
-      <div className="text-center mt-2 text-xs font-mono text-text-primary">{tr(meta.nameUk, meta.nameEn)}</div>
+      <div className="text-center mt-2.5 text-xs font-mono text-text-primary">{tr(meta.nameUk, meta.nameEn)}</div>
       <div className="text-center mt-1 text-[11px] font-mono text-text-secondary truncate">{tr(meta.flavorUk, meta.flavorEn)}</div>
 
-      <div className="mt-2.5 space-y-1">
-        <div className="h-1.5 w-full rounded-full bg-bg-surface border border-border overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${unlocked ? "bg-primary" : "bg-text-muted/40"}`}
-            style={{ width: `${progress}%` }}
+      <div className="mt-3 space-y-1.5">
+        <div className="h-1.5 w-full rounded-full bg-bg-hover overflow-hidden">
+          <motion.div
+            className={`h-full rounded-full origin-left ${unlocked ? "bg-primary" : "bg-text-muted/40"}`}
+            initial={reduce ? false : { scaleX: 0 }}
+            whileInView={{ scaleX: progress / 100 }}
+            viewport={{ once: true, amount: 0.5 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            style={{ width: "100%", transformOrigin: "left" }}
           />
         </div>
         <div className="text-center text-[11px] font-mono text-text-secondary">
           {solvedCount}/{milestone} {tr("задач", "tasks")}
         </div>
       </div>
-
-      <div className="mt-1.5 max-h-0 overflow-hidden opacity-0 transition-all duration-300 group-hover:max-h-10 group-hover:opacity-100 group-focus:max-h-10 group-focus:opacity-100">
-        <div className="text-center text-[10px] font-mono text-text-secondary bg-bg-surface/80 border border-border rounded px-2 py-1">
-          {badgeHint}
-        </div>
-      </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -403,141 +421,163 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   };
 
   return (
-    <div className="min-h-0 flex flex-col bg-bg-base">
-      <div className="border-b border-border bg-bg-surface p-4 flex items-center justify-between flex-shrink-0">
-        <h1 className="text-lg font-mono text-text-primary">{t("profile")}</h1>
-      </div>
-
-      <div className="p-4 md:p-6 pb-8 md:pb-12 overflow-y-auto">
-        <div className="max-w-5xl mx-auto space-y-4">
-          <Card className="p-5 border border-border/70">
-            <div className="flex flex-col md:flex-row md:items-center gap-5">
-              <div className="w-20 h-20 rounded-xl border border-border overflow-hidden flex items-center justify-center text-2xl font-mono text-text-primary bg-bg-base/80">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={`${tr("Аватар", "Avatar")}: ${user.username}`} className="w-full h-full object-cover" />
-                ) : (
-                  user.username.slice(0, 1).toUpperCase()
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-mono text-text-primary truncate">
-                  {isStudent ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username : user.username}
-                </h2>
-                <div className="text-[11px] text-text-secondary mt-1.5">
-                  {tr("ID користувача", "User ID")}: <span className="text-text-primary font-mono">#{user.id}</span>
-                </div>
-                <div className="text-xs text-text-secondary mt-1.5">
-                  {isStudent ? (
-                    <>
-                      {t("classLabel")}: <span className="text-text-primary">{user.className || t("unknown")}</span>
-                      {user.email ? <> · {t("email")}: <span className="text-text-primary">{user.email}</span></> : null}
-                    </>
-                  ) : (
-                    <>
-                      {t("language")}: <span className="text-text-primary">{course}</span>
-                      {!isEducational ? (
-                        <>
-                          {" "}· {tr("IAD", "IAD")}: <span className="text-text-primary">{currentIad >= 0.65 ? t("advanced") : currentIad <= 0.35 ? t("basic") : tr("Середній", "Intermediate")}</span>
-                        </>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-                {!isStudent && !isEducational ? (
-                  <div className="mt-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        to={`/u/${encodeURIComponent(user.username)}`}
-                        className="inline-flex items-center gap-1 px-2 py-1 border border-border text-[11px] font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
-                      >
-                        {tr("Публічний профіль", "Public profile")} · @{user.username}
-                      </Link>
-                      <Link
-                        to="/iad"
-                        className="inline-flex items-center gap-1 px-2 py-1 border border-border text-[11px] font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
-                      >
-                        {tr("Деталі IAD", "IAD details")}
-                      </Link>
-                      <Link
-                        to="/profile/certificates"
-                        className="inline-flex items-center gap-1 px-2 py-1 border border-border text-[11px] font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
-                      >
-                        {tr("Сертифікати", "Certificates")}
-                      </Link>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </Card>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Card className="p-4 border border-border/70 bg-bg-surface/80">
-              <div className="text-xs text-text-secondary">{tr("Бібліотека (бейджі/заохочення)", "Library (badges/encouragement)")}</div>
-              <div className="mt-1 text-2xl font-mono text-primary flex items-center gap-2">
-                <Trophy className="w-5 h-5" /> {profileStats.librarySolved}
-              </div>
-              <div className="mt-2 text-xs text-text-secondary">
-                {tr("Відкрито бейджів", "Badges unlocked")}: <span className="text-text-primary font-mono">{profileStats.badgesUnlocked}/{BADGES.length}</span>
-              </div>
-            </Card>
-
-            <Card className="p-4 border border-border/70 bg-bg-surface/80">
-              <div className="text-xs text-text-secondary">{tr("Навчальний прогрес (власні задачі)", "Learning progress (own tasks)")}</div>
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                <div>
-                  <div className="text-[11px] text-text-secondary">{tr("Оцінок", "Grades")}</div>
-                  <div className="text-lg font-mono text-text-primary">{profileStats.totalGrades}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-text-secondary">{tr("Середній", "Average")}</div>
-                  <div className={`text-lg font-mono ${profileStats.avgGrade != null ? gradeTone(profileStats.avgGrade) : "text-text-muted"}`}>
-                    {profileStats.avgGrade != null ? profileStats.avgGrade : "—"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-text-secondary">{tr("Відмінно", "Excellent")}</div>
-                  <div className="text-lg font-mono text-accent-success flex items-center gap-1">
-                    <Flame className="w-4 h-4" /> {profileStats.excellent}
-                  </div>
-                </div>
-              </div>
-              {isEducational && isStudent ? (
-                <div className="mt-2 text-[11px] text-text-secondary">
-                  {tr("Оцінки в EDU дивись у розділі «Мій журнал».", "In EDU, check your grades in “My Journal”.")}
-                </div>
-              ) : profileStats.totalGrades === 0 ? (
-                <div className="mt-2 text-[11px] text-text-secondary">
-                  {tr("Середній бал показується після появи навчальних оцінок.", "Average is shown once learning grades are available.")}
-                </div>
-              ) : null}
-            </Card>
-          </div>
-
-          <Card className="p-5 border border-border/70 bg-bg-surface/80">
-            <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
-              <Award className="w-4 h-4 text-primary" />
-              {tr("Бейджі прогресу", "Progress badges")}
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {BADGES.map((milestone) => (
-                <ProgressBadge
-                  key={milestone}
-                  milestone={milestone}
-                  solvedCount={profileStats.librarySolved}
-                  unlocked={profileStats.librarySolved >= milestone}
-                  tr={tr}
-                />
-              ))}
-            </div>
-            <div className="text-[11px] text-text-secondary mt-3">
-              {tr(
-                "Бейдж відкривається, коли кількість зарахованих задач Бібліотеки досягає порогу.",
-                "A badge unlocks when your completed Library tasks reach the milestone."
+    <div className="min-h-0 flex flex-col bg-bg-base overflow-y-auto">
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-5xl mx-auto w-full">
+        <span className="font-mono text-xs text-primary/70">// {t("profile")}</span>
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="mt-4 flex flex-col sm:flex-row sm:items-center gap-5"
+        >
+          <motion.div variants={fadeUpItem} className="relative shrink-0">
+            <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center text-3xl font-mono text-primary bg-bg-surface ring-2 ring-primary/40 ring-offset-2 ring-offset-bg-base">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={`${tr("Аватар", "Avatar")}: ${user.username}`} className="w-full h-full object-cover" />
+              ) : (
+                user.username.slice(0, 1).toUpperCase()
               )}
             </div>
-          </Card>
+          </motion.div>
+
+          <motion.div variants={fadeUpItem} className="flex-1 min-w-0">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary truncate">
+              {isStudent ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username : user.username}
+            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full border border-border bg-bg-surface px-2.5 py-0.5 text-[11px] font-mono text-text-secondary">
+                #{user.id}
+              </span>
+              {isStudent ? (
+                <>
+                  <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-[11px] font-mono text-primary">
+                    {user.className || t("unknown")}
+                  </span>
+                  {user.email ? (
+                    <span className="inline-flex items-center rounded-full border border-border bg-bg-surface px-2.5 py-0.5 text-[11px] font-mono text-text-secondary">
+                      {user.email}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-[11px] font-mono text-primary">
+                    {course}
+                  </span>
+                  {!isEducational ? (
+                    <span className="inline-flex items-center rounded-full border border-border bg-bg-surface px-2.5 py-0.5 text-[11px] font-mono text-text-secondary">
+                      {tr("IAD", "IAD")}: {currentIad >= 0.65 ? t("advanced") : currentIad <= 0.35 ? t("basic") : tr("Середній", "Intermediate")}
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </div>
+            {!isStudent && !isEducational ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link
+                  to={`/u/${encodeURIComponent(user.username)}`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-mono text-text-secondary hover:text-text-primary hover:border-primary/40 hover:bg-bg-hover transition-fast"
+                >
+                  {tr("Публічний профіль", "Public profile")} · @{user.username}
+                </Link>
+                <Link
+                  to="/iad"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-mono text-text-secondary hover:text-text-primary hover:border-primary/40 hover:bg-bg-hover transition-fast"
+                >
+                  {tr("Деталі IAD", "IAD details")}
+                </Link>
+                <Link
+                  to="/profile/certificates"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-mono text-text-secondary hover:text-text-primary hover:border-primary/40 hover:bg-bg-hover transition-fast"
+                >
+                  {tr("Сертифікати", "Certificates")}
+                </Link>
+              </div>
+            ) : null}
+          </motion.div>
+        </motion.div>
+
+        <div className="mt-6 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+      </div>
+
+      <div className="px-4 md:px-8 pb-12 max-w-5xl mx-auto w-full space-y-8">
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
+          <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+            <div className="text-xs font-mono text-text-secondary">{tr("Бібліотека (бейджі/заохочення)", "Library (badges/encouragement)")}</div>
+            <div className="mt-2 flex items-center gap-2 text-3xl font-mono font-semibold text-primary">
+              <Trophy className="w-6 h-6" /> <CountUp value={profileStats.librarySolved} />
+            </div>
+            <div className="mt-2 text-xs text-text-secondary">
+              {tr("Відкрито бейджів", "Badges unlocked")}: <span className="text-text-primary font-mono">{profileStats.badgesUnlocked}/{BADGES.length}</span>
+            </div>
+          </motion.div>
+
+          <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+            <div className="text-xs font-mono text-text-secondary">{tr("Навчальний прогрес (власні задачі)", "Learning progress (own tasks)")}</div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <div>
+                <div className="text-[11px] font-mono text-text-secondary">{tr("Оцінок", "Grades")}</div>
+                <div className="text-xl font-mono font-semibold text-text-primary"><CountUp value={profileStats.totalGrades} /></div>
+              </div>
+              <div>
+                <div className="text-[11px] font-mono text-text-secondary">{tr("Середній", "Average")}</div>
+                <div className={`text-xl font-mono font-semibold ${profileStats.avgGrade != null ? gradeTone(profileStats.avgGrade) : "text-text-muted"}`}>
+                  {profileStats.avgGrade != null ? <CountUp value={profileStats.avgGrade} decimals={1} /> : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-mono text-text-secondary">{tr("Відмінно", "Excellent")}</div>
+                <div className="text-xl font-mono font-semibold text-accent-success flex items-center gap-1">
+                  <Flame className="w-4 h-4" /> <CountUp value={profileStats.excellent} />
+                </div>
+              </div>
+            </div>
+            {isEducational && isStudent ? (
+              <div className="mt-3 text-[11px] text-text-secondary">
+                {tr("Оцінки в EDU дивись у розділі «Мій журнал».", "In EDU, check your grades in “My Journal”.")}
+              </div>
+            ) : profileStats.totalGrades === 0 ? (
+              <div className="mt-3 text-[11px] text-text-secondary">
+                {tr("Середній бал показується після появи навчальних оцінок.", "Average is shown once learning grades are available.")}
+              </div>
+            ) : null}
+          </motion.div>
+        </motion.div>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted">
+            <Award className="w-4 h-4 text-primary" />
+            {tr("Бейджі прогресу", "Progress badges")}
+          </div>
+          <motion.div
+            variants={staggerContainer}
+            initial="initial"
+            whileInView="animate"
+            viewport={{ once: true, amount: 0.1 }}
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"
+          >
+            {BADGES.map((milestone) => (
+              <ProgressBadge
+                key={milestone}
+                milestone={milestone}
+                solvedCount={profileStats.librarySolved}
+                unlocked={profileStats.librarySolved >= milestone}
+                tr={tr}
+              />
+            ))}
+          </motion.div>
+          <div className="text-[11px] text-text-secondary">
+            {tr(
+              "Бейдж відкривається, коли кількість зарахованих задач Бібліотеки досягає порогу.",
+              "A badge unlocks when your completed Library tasks reach the milestone."
+            )}
+          </div>
+        </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-6 md:p-7 border border-border/70 bg-bg-surface/80 space-y-7">
@@ -682,41 +722,47 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <button
                       onClick={() => ui.setMode("classic")}
                       className={
-                        "px-3 py-2 border font-mono text-xs transition-fast " +
-                        (ui.mode === "classic" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50")
+                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
+                        (ui.mode === "classic" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
                       }
                     >
-                      Classic
+                      <LayoutGrid className={`w-4 h-4 ${ui.mode === "classic" ? "text-primary" : "text-text-muted"}`} />
+                      <div className={`mt-2 text-xs font-mono ${ui.mode === "classic" ? "text-primary" : "text-text-primary"}`}>Classic</div>
+                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Класична навігація", "Classic navigation")}</div>
                     </button>
                     <button
                       onClick={() => ui.setMode("focus")}
                       className={
-                        "px-3 py-2 border font-mono text-xs transition-fast " +
-                        (ui.mode === "focus" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50")
+                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
+                        (ui.mode === "focus" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
                       }
                     >
-                      Momentum UI
+                      <Zap className={`w-4 h-4 ${ui.mode === "focus" ? "text-primary" : "text-text-muted"}`} />
+                      <div className={`mt-2 text-xs font-mono ${ui.mode === "focus" ? "text-primary" : "text-text-primary"}`}>Momentum UI</div>
+                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Компактний простір", "Compact workspace")}</div>
                     </button>
                     <button
                       onClick={() => ui.setMode("nova")}
                       className={
-                        "px-3 py-2 border font-mono text-xs transition-fast " +
-                        (ui.mode === "nova" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50")
+                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
+                        (ui.mode === "nova" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
                       }
                     >
-                      Nova
-                    </button>
-                    <button
-                      onClick={() => ui.setClassicForToday()}
-                      className="px-3 py-2 border border-border font-mono text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
-                    >
-                      {tr("Classic до кінця дня", "Classic for today")}
+                      <Compass className={`w-4 h-4 ${ui.mode === "nova" ? "text-primary" : "text-text-muted"}`} />
+                      <div className={`mt-2 text-xs font-mono ${ui.mode === "nova" ? "text-primary" : "text-text-primary"}`}>Nova</div>
+                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Швидка навігація (Ctrl+K)", "Fast nav (Ctrl+K)")}</div>
                     </button>
                   </div>
+                  <button
+                    onClick={() => ui.setClassicForToday()}
+                    className="mt-2.5 inline-flex px-3 py-2 rounded-lg border border-border font-mono text-xs text-text-secondary hover:text-text-primary hover:border-primary/40 hover:bg-bg-hover transition-fast"
+                  >
+                    {tr("Classic до кінця дня", "Classic for today")}
+                  </button>
 
                   {ui.override ? (
                     <div className="text-[11px] font-mono text-text-secondary border border-border bg-bg-surface px-3 py-2 flex items-center justify-between gap-3">
@@ -801,7 +847,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 <div className="space-y-2 max-h-[620px] overflow-auto pr-1">
                   {recentHistory.map((t) => {
                     return (
-                      <div key={t.id} className="rounded-xl border border-border bg-bg-base/80 p-3">
+                      <div key={t.id} className="rounded-xl border border-border bg-bg-base/80 p-3 transition-fast hover:-translate-y-0.5 hover:border-primary/40">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="text-sm font-mono text-text-primary truncate">{t.title}</div>
@@ -826,7 +872,6 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
               )}
             </Card>
           </div>
-        </div>
       </div>
     </div>
   );

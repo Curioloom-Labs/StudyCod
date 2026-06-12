@@ -1,12 +1,13 @@
 import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Award, Trophy, Code2, CheckCircle2, CalendarClock, Star, Shield, Medal, Crown, Rocket, Gem } from "lucide-react";
-import { Card } from "../../components/ui/Card";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { getPublicProfile } from "../../lib/api/profile";
 import type { PublicProfile } from "../../types";
 import { buildContestProfileUrl, contestPlatformLabel } from "../../utils/contestAccounts";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 
 const BADGES = [25, 50, 100, 250, 500, 1000] as const;
 type BadgeMilestone = (typeof BADGES)[number];
@@ -99,7 +100,7 @@ const PublicProgressBadge: React.FC<{
   const remaining = Math.max(0, milestone - solvedCount);
   const Icon = meta.Icon;
   const badgeHint = unlocked
-    ? tr("Бейдж відкрито. Продовжуй серію 🔥", "Badge unlocked. Keep the streak alive 🔥")
+    ? tr("Бейдж відкрито", "Badge unlocked")
     : tr(`Ще ${remaining} задач до розблокування`, `${remaining} tasks left to unlock`);
 
   return (
@@ -108,10 +109,10 @@ const PublicProgressBadge: React.FC<{
       tabIndex={0}
       aria-label={badgeHint}
       className={
-        "group rounded-2xl border p-3 transition-fast relative overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary/60 " +
+        "group rounded-xl border p-3 transition-fast relative overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary/60 " +
         (unlocked
-          ? "border-primary/60 bg-bg-surface/80"
-          : "border-border bg-bg-base/70 opacity-70")
+          ? "border-primary/40 bg-bg-surface hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]"
+          : "border-border bg-bg-base/70 opacity-60")
       }
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -130,7 +131,7 @@ const PublicProgressBadge: React.FC<{
 
       <div
         className={
-          "mx-auto relative w-14 h-14 rounded-full border flex items-center justify-center text-lg font-mono " +
+          "mx-auto relative w-14 h-14 rounded-full border flex items-center justify-center " +
           (unlocked
             ? "border-primary/60 text-primary bg-primary/10"
             : "border-border text-text-muted bg-bg-surface")
@@ -143,7 +144,7 @@ const PublicProgressBadge: React.FC<{
       <div className="text-center mt-1 text-[11px] font-mono text-text-secondary truncate">{tr(meta.flavorUk, meta.flavorEn)}</div>
 
       <div className="mt-2.5 space-y-1">
-        <div className="h-1.5 w-full rounded-full bg-bg-surface border border-border overflow-hidden">
+        <div className="h-1.5 w-full rounded-full bg-bg-base border border-border overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${unlocked ? "bg-primary" : "bg-text-muted/40"}`}
             style={{ width: `${progress}%` }}
@@ -169,6 +170,7 @@ export const PublicProfilePage: React.FC = () => {
     (uk: string, en: string) => ((i18n.language ?? "").toLowerCase().startsWith("en") ? en : uk),
     [i18n.language]
   );
+  const prefersReducedMotion = useReducedMotion();
 
   const locale = (i18n.language ?? "").toLowerCase().startsWith("en") ? "en-US" : "uk-UA";
   const { username } = useParams();
@@ -213,28 +215,53 @@ export const PublicProfilePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bg-base text-text-primary">
-      <div className="max-w-5xl mx-auto px-4 py-6 md:py-8 space-y-4">
-        <div className="flex items-center justify-between gap-3">
+      <div className="max-w-5xl mx-auto px-4 py-6 md:py-8 space-y-6">
+        {/* Top bar */}
+        <motion.div
+          initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
+          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: easeOutQuint }}
+          className="flex items-center justify-between gap-3"
+        >
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-3 py-2 border border-border text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover hover:border-primary/40 transition-fast"
           >
             <ArrowLeft className="w-4 h-4" />
             {tr("На головну", "Back to home")}
           </Link>
-          {profile ? <div className="text-xs font-mono text-text-secondary">@{profile.username}</div> : null}
-        </div>
+          {profile ? (
+            <div className="text-xs font-mono text-text-muted">
+              <span className="font-mono text-xs text-primary/70">// profile /</span>
+              <span className="text-text-secondary"> @{profile.username}</span>
+            </div>
+          ) : null}
+        </motion.div>
 
         {loading ? (
-          <Card className="p-4 sm:p-6 space-y-3">
-            <Skeleton className="h-7 w-48" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </Card>
+          <div className="space-y-4">
+            <Skeleton className="h-28 w-full rounded-xl" />
+            <Skeleton className="h-16 w-full rounded-xl" />
+            <div className="grid grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-xl" />
+              ))}
+            </div>
+          </div>
         ) : error ? (
-          <Card className="p-4 sm:p-6 text-sm text-accent-error">{error}</Card>
+          <div className="rounded-xl border border-dashed border-border py-14 px-6 flex flex-col items-center text-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-accent-error/10 flex items-center justify-center">
+              <Trophy className="w-5 h-5 text-accent-error" />
+            </div>
+            <div className="text-sm text-accent-error">{error}</div>
+          </div>
         ) : !profile ? (
-          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Профіль недоступний", "Profile is unavailable")}</Card>
+          <div className="rounded-xl border border-dashed border-border py-14 px-6 flex flex-col items-center text-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Trophy className="w-5 h-5 text-primary" />
+            </div>
+            <div className="text-sm text-text-secondary">{tr("Профіль недоступний", "Profile is unavailable")}</div>
+          </div>
         ) : (
           <>
             {(() => {
@@ -244,155 +271,241 @@ export const PublicProfilePage: React.FC = () => {
                 showLanguageBreakdown: true,
               };
               return (
-                <>
-            <Card className="p-5 border border-border/70">
-              <div className="flex flex-col md:flex-row md:items-center gap-4">
-                <div className="w-20 h-20 rounded-xl border border-border overflow-hidden flex items-center justify-center text-2xl font-mono text-text-primary bg-bg-base/80">
-                  {profile.avatarUrl ? (
-                    <img src={profile.avatarUrl} alt={`${tr("Аватар", "Avatar")}: ${profile.username}`} className="w-full h-full object-cover" />
-                  ) : (
-                    profile.username.slice(0, 1).toUpperCase()
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl font-mono text-text-primary truncate">{profile.username}</h1>
-                  <div className="text-xs text-text-secondary mt-1 flex flex-wrap items-center gap-2">
-                    <span>{tr("Мова", "Language")}: <span className="text-text-primary">{profile.lang}</span></span>
-                    <span>·</span>
-                    <span>{tr("IAD", "IAD")}: <span className="text-text-primary">{profile.difus}</span></span>
-                    <span>·</span>
-                    <span className="inline-flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> {tr("З нами з", "Joined")}: <span className="text-text-primary">{fmtDateTime(profile.joinedAt, locale)}</span></span>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4 border border-border/70 bg-bg-surface/80">
-              <div className="text-xs text-text-secondary mb-2">{tr("Контест-акаунти", "Contest accounts")}</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                {(["codeforces", "atcoder", "leetcode", "codechef"] as const).map((platform) => {
-                  const handle = profile.contestHandles?.[platform] ?? null;
-                  const url = buildContestProfileUrl(platform, handle ?? "");
-                  if (!handle || !url) {
-                    return (
-                      <div key={platform} className="text-text-muted font-mono text-xs">
-                        {contestPlatformLabel(platform)}: {tr("не вказано", "not set")}
+                <motion.div
+                  variants={prefersReducedMotion ? undefined : staggerContainer}
+                  initial={prefersReducedMotion ? undefined : "initial"}
+                  animate={prefersReducedMotion ? undefined : "animate"}
+                  className="space-y-4"
+                >
+                  {/* Identity card */}
+                  <motion.div
+                    variants={prefersReducedMotion ? undefined : fadeUpItem}
+                    className="rounded-xl border border-border bg-bg-surface p-5 hover:border-primary/30 transition-fast"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center gap-4">
+                      {/* Avatar with ring */}
+                      <div className="relative w-20 h-20 shrink-0">
+                        <div className="w-20 h-20 rounded-full border-2 border-primary/40 overflow-hidden flex items-center justify-center text-2xl font-mono text-text-primary bg-bg-base/80 shadow-[0_0_0_4px_rgba(var(--color-primary-rgb,0,0,0),0.08)]">
+                          {profile.avatarUrl ? (
+                            <img
+                              src={profile.avatarUrl}
+                              alt={`${tr("Аватар", "Avatar")}: ${profile.username}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            profile.username.slice(0, 1).toUpperCase()
+                          )}
+                        </div>
                       </div>
-                    );
-                  }
-                  return (
-                    <a
-                      key={platform}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-secondary hover:underline font-mono text-xs"
-                    >
-                      {contestPlatformLabel(platform)}: @{handle}
-                    </a>
-                  );
-                })}
-              </div>
-            </Card>
-
-            <div className={`grid grid-cols-1 ${privacy.showContestStats ? "md:grid-cols-4" : "md:grid-cols-1"} gap-3`}>
-              <Card className="p-4 border border-border/70 bg-bg-surface/80">
-                <div className="text-xs text-text-secondary">{tr("Розвʼязано задач", "Solved tasks")}</div>
-                <div className="mt-1 text-2xl font-mono text-primary flex items-center gap-2">
-                  <Trophy className="w-5 h-5" /> {profile.stats.solvedTotal}
-                </div>
-              </Card>
-              {privacy.showContestStats ? (
-                <>
-                  <Card className="p-4 border border-border/70 bg-bg-surface/80">
-                    <div className="text-xs text-text-secondary">{tr("Контести", "Contests")}</div>
-                    <div className="mt-1 text-2xl font-mono text-text-primary">{profile.stats.contestsJoined ?? 0}</div>
-                  </Card>
-                  <Card className="p-4 border border-border/70 bg-bg-surface/80">
-                    <div className="text-xs text-text-secondary">{tr("Подач у контестах", "Contest submissions")}</div>
-                    <div className="mt-1 text-2xl font-mono text-text-primary">{profile.stats.contestSubmissionsTotal ?? 0}</div>
-                  </Card>
-                  <Card className="p-4 border border-border/70 bg-bg-surface/80">
-                    <div className="text-xs text-text-secondary">{tr("AC-подібні результати", "Accepted-like results")}</div>
-                    <div className="mt-1 text-2xl font-mono text-accent-success flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5" /> {profile.stats.contestAcceptedLike ?? 0}
+                      <div className="flex-1 min-w-0">
+                        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary truncate">
+                          {profile.username}
+                        </h1>
+                        <div className="text-xs text-text-secondary mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono">
+                          <span>
+                            {tr("Мова", "Language")}:{" "}
+                            <span className="text-text-primary">{profile.lang}</span>
+                          </span>
+                          <span className="text-text-muted">·</span>
+                          <span>
+                            {tr("IAD", "IAD")}:{" "}
+                            <span className="text-text-primary">{profile.difus}</span>
+                          </span>
+                          <span className="text-text-muted">·</span>
+                          <span className="inline-flex items-center gap-1">
+                            <CalendarClock className="w-3.5 h-3.5" />
+                            {tr("З нами з", "Joined")}:{" "}
+                            <span className="text-text-primary">{fmtDateTime(profile.joinedAt, locale)}</span>
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </Card>
-                </>
-              ) : (
-                <Card className="p-4 border border-border/70 bg-bg-surface/80">
-                  <div className="text-xs text-text-secondary">{tr("Контести", "Contests")}</div>
-                  <div className="mt-1 text-sm text-text-secondary">{tr("Власник профілю приховав статистику контестів.", "Profile owner has hidden contest statistics.")}</div>
-                </Card>
-              )}
-            </div>
+                  </motion.div>
 
-            {privacy.showLanguageBreakdown ? (
-              <Card className="p-5 border border-border/70 bg-bg-surface/80">
-                <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
-                  <Code2 className="w-4 h-4 text-primary" />
-                  {tr("Розвʼязані задачі за мовами", "Solved tasks by language")}
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {(["JAVA", "PYTHON", "CPP"] as const).map((lang) => (
-                    <div key={lang} className="rounded-xl border border-border bg-bg-base/70 p-3">
-                      <div className="text-[11px] text-text-secondary font-mono">{lang}</div>
-                      <div className="text-lg text-text-primary font-mono mt-1">{profile.stats.solvedByLang[lang] ?? 0}</div>
+                  {/* Contest accounts */}
+                  <motion.div
+                    variants={prefersReducedMotion ? undefined : fadeUpItem}
+                    className="rounded-xl border border-border bg-bg-surface p-4 hover:border-primary/30 transition-fast"
+                  >
+                    <div className="text-xs font-mono uppercase tracking-[0.08em] text-text-muted mb-3">
+                      {tr("// контест-акаунти", "// contest accounts")}
                     </div>
-                  ))}
-                </div>
-              </Card>
-            ) : null}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      {(["codeforces", "atcoder", "leetcode", "codechef"] as const).map((platform) => {
+                        const handle = profile.contestHandles?.[platform] ?? null;
+                        const url = buildContestProfileUrl(platform, handle ?? "");
+                        if (!handle || !url) {
+                          return (
+                            <div key={platform} className="text-text-muted font-mono text-xs px-2 py-1">
+                              {contestPlatformLabel(platform)}: {tr("не вказано", "not set")}
+                            </div>
+                          );
+                        }
+                        return (
+                          <a
+                            key={platform}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 text-secondary hover:underline font-mono text-xs px-2 py-1"
+                          >
+                            {contestPlatformLabel(platform)}: @{handle}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
 
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
-                <Award className="w-4 h-4 text-primary" />
-                {tr("Бейджі прогресу", "Progress badges")}
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                {BADGES.map((milestone) => {
-                  const unlocked = profile.stats.badgesUnlocked.includes(milestone);
-                  return (
-                    <PublicProgressBadge
-                      key={milestone}
-                      milestone={milestone}
-                      solvedCount={profile.stats.solvedTotal}
-                      unlocked={unlocked}
-                      tr={tr}
-                    />
-                  );
-                })}
-              </div>
-            </Card>
-
-            <Card className="p-5 border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-3">{tr("Останні зараховані задачі", "Recent solved tasks")}</div>
-              {!privacy.showSolvedHistory ? (
-                <div className="text-sm text-text-secondary">{tr("Власник профілю приховав історію розвʼязань.", "Profile owner has hidden solved history.")}</div>
-              ) : profile.recentSolved.length === 0 ? (
-                <div className="text-sm text-text-secondary">{tr("Поки що немає публічної історії розвʼязань.", "No public solved history yet.")}</div>
-              ) : (
-                <div className="space-y-2">
-                  {profile.recentSolved.map((item) => (
-                    <div key={`${item.id}:${item.lastCheckedAt ?? ""}`} className="rounded-xl border border-border bg-bg-base/80 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-mono text-text-primary truncate">{item.title}</div>
-                          <div className="text-xs text-text-secondary mt-1">
-                            {item.problemCode ?? item.slug ?? "#"} · {item.lang} · {fmtDateTime(item.lastCheckedAt, locale)}
+                  {/* Stats grid */}
+                  <motion.div
+                    variants={prefersReducedMotion ? undefined : fadeUpItem}
+                    className={`grid grid-cols-2 ${privacy.showContestStats ? "md:grid-cols-4" : "md:grid-cols-2"} gap-3`}
+                  >
+                    <div className="rounded-xl border border-border bg-bg-surface p-4 hover:border-primary/40 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] transition-fast">
+                      <div className="text-xs font-mono uppercase tracking-[0.06em] text-text-muted mb-1">
+                        {tr("Розвʼязано", "Solved")}
+                      </div>
+                      <div className="text-3xl font-mono text-primary flex items-baseline gap-1.5">
+                        <Trophy className="w-5 h-5 mb-0.5" />
+                        {profile.stats.solvedTotal}
+                      </div>
+                    </div>
+                    {privacy.showContestStats ? (
+                      <>
+                        <div className="rounded-xl border border-border bg-bg-surface p-4 hover:border-primary/40 hover:-translate-y-0.5 transition-fast">
+                          <div className="text-xs font-mono uppercase tracking-[0.06em] text-text-muted mb-1">
+                            {tr("Контести", "Contests")}
+                          </div>
+                          <div className="text-3xl font-mono text-text-primary">{profile.stats.contestsJoined ?? 0}</div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-bg-surface p-4 hover:border-primary/40 hover:-translate-y-0.5 transition-fast">
+                          <div className="text-xs font-mono uppercase tracking-[0.06em] text-text-muted mb-1">
+                            {tr("Подачі", "Submissions")}
+                          </div>
+                          <div className="text-3xl font-mono text-text-primary">{profile.stats.contestSubmissionsTotal ?? 0}</div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-bg-surface p-4 hover:border-primary/40 hover:-translate-y-0.5 transition-fast">
+                          <div className="text-xs font-mono uppercase tracking-[0.06em] text-text-muted mb-1">
+                            {tr("AC-результати", "AC results")}
+                          </div>
+                          <div className="text-3xl font-mono text-accent-success flex items-baseline gap-1.5">
+                            <CheckCircle2 className="w-5 h-5 mb-0.5" />
+                            {profile.stats.contestAcceptedLike ?? 0}
                           </div>
                         </div>
-                        <div className="text-right text-xs font-mono text-text-secondary">
-                          <div className="text-text-primary">{item.lastScore ?? "—"}</div>
-                          <div>{item.lastTestsPassed ?? 0}/{item.lastTestsTotal ?? 0}</div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-border bg-bg-surface p-4 col-span-1">
+                        <div className="text-xs font-mono uppercase tracking-[0.06em] text-text-muted mb-1">
+                          {tr("Контести", "Contests")}
+                        </div>
+                        <div className="text-xs text-text-secondary mt-1">
+                          {tr("Власник профілю приховав статистику контестів.", "Profile owner has hidden contest statistics.")}
                         </div>
                       </div>
+                    )}
+                  </motion.div>
+
+                  {/* Language breakdown */}
+                  {privacy.showLanguageBreakdown ? (
+                    <motion.div
+                      variants={prefersReducedMotion ? undefined : fadeUpItem}
+                      className="rounded-xl border border-border bg-bg-surface p-5 hover:border-primary/30 transition-fast"
+                    >
+                      <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4 flex items-center gap-2">
+                        <Code2 className="w-4 h-4 text-primary" />
+                        {tr("// мови програмування", "// languages")}
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        {(["JAVA", "PYTHON", "CPP"] as const).map((lang) => (
+                          <div
+                            key={lang}
+                            className="rounded-xl border border-border bg-bg-base/70 p-3 hover:border-primary/40 transition-fast"
+                          >
+                            <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{lang}</div>
+                            <div className="text-2xl text-text-primary font-mono mt-1">
+                              {profile.stats.solvedByLang[lang] ?? 0}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : null}
+
+                  {/* Progress badges */}
+                  <motion.div
+                    variants={prefersReducedMotion ? undefined : fadeUpItem}
+                    className="rounded-xl border border-border bg-bg-surface p-5"
+                  >
+                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4 flex items-center gap-2">
+                      <Award className="w-4 h-4 text-primary" />
+                      {tr("// бейджі прогресу", "// progress badges")}
                     </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-                </>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                      {BADGES.map((milestone) => {
+                        const unlocked = profile.stats.badgesUnlocked.includes(milestone);
+                        return (
+                          <PublicProgressBadge
+                            key={milestone}
+                            milestone={milestone}
+                            solvedCount={profile.stats.solvedTotal}
+                            unlocked={unlocked}
+                            tr={tr}
+                          />
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+
+                  {/* Recent solved */}
+                  <motion.div
+                    variants={prefersReducedMotion ? undefined : fadeUpItem}
+                    className="rounded-xl border border-border bg-bg-surface p-5"
+                  >
+                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4">
+                      {tr("// останні задачі", "// recent solved")}
+                    </div>
+                    {!privacy.showSolvedHistory ? (
+                      <div className="text-sm text-text-secondary">
+                        {tr("Власник профілю приховав історію розвʼязань.", "Profile owner has hidden solved history.")}
+                      </div>
+                    ) : profile.recentSolved.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border py-8 px-6 flex flex-col items-center text-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Code2 className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="text-sm text-text-secondary">
+                          {tr("Поки що немає публічної історії розвʼязань.", "No public solved history yet.")}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {profile.recentSolved.map((item) => (
+                          <div
+                            key={`${item.id}:${item.lastCheckedAt ?? ""}`}
+                            className="rounded-xl border border-border bg-bg-base/80 p-3 hover:border-primary/40 hover:-translate-y-0.5 transition-fast"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-mono text-text-primary truncate">{item.title}</div>
+                                <div className="text-xs text-text-secondary mt-1 font-mono">
+                                  {item.problemCode ?? item.slug ?? "#"} · {item.lang} ·{" "}
+                                  {fmtDateTime(item.lastCheckedAt, locale)}
+                                </div>
+                              </div>
+                              <div className="text-right text-xs font-mono text-text-secondary shrink-0">
+                                <div className="text-text-primary font-semibold">{item.lastScore ?? "—"}</div>
+                                <div>
+                                  {item.lastTestsPassed ?? 0}/{item.lastTestsTotal ?? 0}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                </motion.div>
               );
             })()}
           </>
