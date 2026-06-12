@@ -6,6 +6,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getClasses, createClass, type Class, getPendingReviews, updateGrade, type PendingReview } from "../../lib/api/edu";
 import { Plus, Users, BookOpen, FileText, CheckCircle, Clock, MessageSquare, Gauge } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { CodeEditor } from "../../components/CodeEditor";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -96,9 +97,7 @@ export const TeacherDashboardPage: React.FC = () => {
     }
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t('loading')}
-      </div>;
+    return <PageSkeleton variant="cards" />;
   }
   return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -112,7 +111,7 @@ export const TeacherDashboardPage: React.FC = () => {
             {pendingReviews.length > 0 && <Button variant="ghost" onClick={() => setShowPendingReviews(true)} className="relative">
                 <Clock className="w-4 h-4 mr-2" />
                 {t('reviewTasks')}
-                <span className="ml-2 px-2 py-0.5 bg-primary text-text-primary text-xs rounded-full">
+                <span className="ml-2 px-2 py-0.5 bg-primary text-bg-base text-xs rounded-full">
                   {pendingReviews.length}
                 </span>
               </Button>}

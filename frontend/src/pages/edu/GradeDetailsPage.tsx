@@ -6,6 +6,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getStudentCode, updateGrade, type UpdateGradeRequest } from "../../lib/api/edu";
 import { ArrowLeft, Save, Code2 } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -87,9 +88,7 @@ export const GradeDetailsPage: React.FC = () => {
     }
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {tr("Завантаження...", "Loading...")}
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   return <div className="h-full flex flex-col bg-bg-base">
       <div className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">

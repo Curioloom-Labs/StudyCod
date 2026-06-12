@@ -5,6 +5,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, updateSemesterGrade, deleteThematicForTopic, getControlWorkDetails, getControlWorkStudentWork, getTopicTaskStudentWork, getTopicTaskAIDetection, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork, type TopicTaskAIDetectionResponse } from "../../lib/api/edu";
 import { ArrowLeft, Calculator, Download, Edit2, Trash2 } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { useTranslation } from "react-i18next";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -379,9 +380,7 @@ export const ClassGradebookPage: React.FC = () => {
     link.click();
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t('loading')}
-      </div>;
+    return <PageSkeleton variant="table" />;
   }
   if (!gradebook) {
     return <div className="h-full flex items-center justify-center text-text-primary font-mono">

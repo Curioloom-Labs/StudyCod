@@ -4,6 +4,7 @@ import { tr } from "../../i18n";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
+import { Skeleton } from "../../components/ui/Skeleton";
 import {
   closeSupportChatConversation,
   createSupportChatConversation,
@@ -243,7 +244,7 @@ export const SupportPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg-base text-text-primary p-3 sm:p-4 md:p-6">
+    <div className="min-h-full bg-bg-base text-text-primary p-3 sm:p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -278,7 +279,13 @@ export const SupportPage: React.FC = () => {
             </div>
 
             <div className="mt-3 space-y-2">
-              {loading && <div className="text-xs font-mono text-text-secondary">{tr("Завантаження…", "Loading…")}</div>}
+              {loading && (
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-14 w-full" />
+                  ))}
+                </div>
+              )}
               {!loading && conversations.length === 0 && (
                 <div className="text-xs font-mono text-text-secondary">{tr("Поки що немає звернень.", "No requests yet.")}</div>
               )}
@@ -289,7 +296,7 @@ export const SupportPage: React.FC = () => {
                   className={`w-full text-left rounded-md border px-3 py-2 transition-fast ${
                     selectedConversationId === c.id
                       ? "border-primary bg-bg-code"
-                      : "border-border hover:bg-bg-secondary"
+                      : "border-border hover:bg-bg-hover"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -297,7 +304,7 @@ export const SupportPage: React.FC = () => {
                     <div className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                       c.status === "OPEN"
                         ? "border-accent-success/60 text-accent-success bg-accent-success/10"
-                        : "border-border text-text-secondary bg-bg-secondary"
+                        : "border-border text-text-secondary bg-bg-hover"
                     }`}
                     >
                       {statusLabel(c.status)}
@@ -329,7 +336,7 @@ export const SupportPage: React.FC = () => {
                       value={newMessage}
                       onChange={e => setNewMessage(e.target.value)}
                       placeholder={tr("Опишіть детально проблему та кроки відтворення", "Describe the issue and reproduction steps in detail")}
-                      className="w-full min-h-[140px] resize-y bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors placeholder:text-text-muted"
+                      className="w-full min-h-[140px] resize-y bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-fast placeholder:text-text-muted"
                       required
                     />
                   </div>
@@ -362,13 +369,19 @@ export const SupportPage: React.FC = () => {
                 </div>
 
                 {selectedConversation?.status === "CLOSED" ? (
-                  <div className="mt-2 text-xs font-mono text-text-secondary border border-border bg-bg-secondary/40 px-3 py-2 rounded">
+                  <div className="mt-2 text-xs font-mono text-text-secondary border border-border bg-bg-hover/40 px-3 py-2 rounded">
                     {tr("Це звернення закрито. Для нових питань створіть нове звернення.", "This request is closed. Create a new one for new questions.")}
                   </div>
                 ) : null}
 
                 <div className="mt-3 flex-1 overflow-auto rounded-md border border-border bg-bg-code p-3">
-                  {threadLoading && <div className="text-xs font-mono text-text-secondary">{tr("Завантаження…", "Loading…")}</div>}
+                  {threadLoading && (
+                    <div className="space-y-3">
+                      <Skeleton className="h-16 w-2/3" />
+                      <Skeleton className="h-16 w-3/4 ml-auto" />
+                      <Skeleton className="h-16 w-1/2" />
+                    </div>
+                  )}
                   {!threadLoading && messages.length === 0 && (
                     <div className="text-xs font-mono text-text-secondary">{tr("Повідомлень ще немає.", "No messages yet.")}</div>
                   )}
@@ -381,7 +394,7 @@ export const SupportPage: React.FC = () => {
                             className={`max-w-[85%] rounded-lg border px-3 py-2 ${
                               isUser
                                 ? "border-primary/50 bg-primary/10"
-                                : "border-border bg-bg-secondary"
+                                : "border-border bg-bg-hover"
                             }`}
                           >
                             <div className="text-[11px] font-mono text-text-secondary flex items-center justify-between gap-3">
@@ -449,7 +462,7 @@ export const SupportPage: React.FC = () => {
                       value={composerText}
                       onChange={e => setComposerText(e.target.value)}
                       placeholder={tr("Напишіть повідомлення…", "Write a message…")}
-                      className="w-full min-h-[90px] resize-y bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors placeholder:text-text-muted"
+                      className="w-full min-h-[90px] resize-y bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-fast placeholder:text-text-muted"
                     />
                   </div>
 

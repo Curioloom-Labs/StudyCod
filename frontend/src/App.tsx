@@ -3,18 +3,22 @@ import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } fr
 import { AnimatePresence } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon } from "lucide-react";
+import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon, Search, SwatchBook, LogOut } from "lucide-react";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
 import { PlatformFooter } from "./components/layout/PlatformFooter";
-import { TerminalLoader } from "./components/ui/TerminalLoader";
+import { StandaloneShell } from "./components/layout/StandaloneShell";
+import { PageSkeleton } from "./components/ui/Skeleton";
 import type { MaintenancePayload } from "./pages/system/MaintenancePage";
 import { UIModeProvider, useUIMode } from "./components/interface/UIModeProvider";
 import { SwitchToMomentumNudge } from "./components/interface/SwitchToMomentumNudge";
 import { WorkspaceViewportProvider } from "./components/interface/WorkspaceViewport";
 import { MomentumShell, type MomentumNavTarget } from "./layout/momentum/MomentumShell";
+import { NovaShellLazy } from "./layout/nova/NovaShellLazy";
+import { CommandPalette, type PaletteItem, type PaletteAction } from "./components/interface/CommandPalette";
+import { prefetchNavTarget, prefetchPath } from "./lib/prefetchRoutes";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "./lib/resumeState";
 import { applyTheme, getCurrentTheme, type AppTheme } from "./theme";
 import { getMaintenanceStatus } from "./lib/api/maintenance";
@@ -76,11 +80,8 @@ const ScoreboardPage = React.lazy(() => import("./pages/contest/ScoreboardPage")
 const MyLearningPage = React.lazy(() => import("./pages/edu/MyLearningPage").then(mod => ({ default: mod.MyLearningPage })));
 const SolveReplayPage = React.lazy(() => import("./pages/core/SolveReplayPage").then(mod => ({ default: mod.SolveReplayPage })));
 const PageLoader: React.FC = () => {
-  const {
-    t
-  } = useTranslation();
-  return <div className="h-screen flex items-center justify-center text-text-primary font-mono bg-bg-base">
-      <TerminalLoader label={t("loading")} sublabel="StudyCod EDU" />
+  return <div className="min-h-[100dvh] bg-bg-base text-text-primary">
+      <PageSkeleton />
     </div>;
 };
 type Page = "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin";
@@ -668,6 +669,73 @@ const AppContent: React.FC = React.memo(() => {
     setWorkspaceViewportEl(el);
   }, []);
 
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    if (ui.mode !== "classic" || !user) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setPaletteOpen(v => !v);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [ui.mode, user?.id]);
+
+  const classicPaletteItems = useMemo<PaletteItem[]>(() => {
+    if (!user) return [];
+    const navLabel = t("navigation", { defaultValue: "Navigation" });
+    const list: PaletteItem[] = [{ id: "home", label: t("home"), icon: Home, group: navLabel }];
+    if (!user.userMode || user.userMode === "PERSONAL") {
+      list.push({ id: "tasks", label: t("tasks"), icon: FileText, group: navLabel });
+      list.push({ id: "grades", label: t("grades"), icon: FileText, group: navLabel });
+      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
+    }
+    if (user.userMode === "EDUCATIONAL" && user.studentId) {
+      list.push({ id: "student", label: t("myJournal"), icon: BookOpen, group: navLabel });
+      list.push({ id: "lessons", label: t("lessons"), icon: FileText, group: navLabel });
+      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
+      list.push({ id: "appeals", label: i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції", icon: HelpCircle, group: navLabel });
+    }
+    if (user.userMode === "EDUCATIONAL" && !user.studentId) {
+      list.push({ id: "teacher", label: t("myClasses"), icon: GraduationCap, group: navLabel });
+    }
+    if (user.role === "SYSTEM_ADMIN") {
+      list.push({ id: "admin", label: "Admin", icon: Shield, group: navLabel });
+    }
+    list.push({ id: "profile", label: t("profile"), icon: UserIcon, group: t("account") });
+    return list;
+  }, [user?.id, user?.userMode, user?.studentId, user?.role, t, i18n.language]);
+
+  const classicPaletteActions = useMemo<PaletteAction[]>(() => [
+    { id: "help", label: t("help"), icon: HelpCircle, run: () => navigate("/docs") },
+    { id: "support", label: t("support"), icon: HelpCircle, run: () => navigate("/support") },
+    { id: "theme", label: theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme"), icon: SunMoon, run: toggleTheme },
+    { id: "interface", label: `${t("interfaceLabel")}: ${t("classicUiName")}`, icon: SwatchBook, run: () => ui.setMode("focus") },
+    { id: "logout", label: t("logout"), icon: LogOut, danger: true, run: handleLogout }
+  ], [t, navigate, theme, toggleTheme, ui, handleLogout]);
+
+  const handleClassicPaletteSelect = useCallback((id: string) => {
+    if (id === "library") {
+      if (user?.userMode === "EDUCATIONAL" && user.studentId) {
+        navigate("/edu/library");
+      } else {
+        navigate("/library");
+      }
+      return;
+    }
+    if (id === "lessons") {
+      navigate("/edu/lessons");
+      return;
+    }
+    if (id === "appeals") {
+      navigate("/edu/appeals");
+      return;
+    }
+    const pageTarget = asPage(id);
+    if (pageTarget) handleSetPage(pageTarget);
+  }, [user?.userMode, user?.studentId, navigate, handleSetPage]);
+
   if (!maintenanceChecked) {
     return <div className="h-screen flex items-center justify-center text-text-primary font-mono">
         {t('loading')}
@@ -729,7 +797,7 @@ const AppContent: React.FC = React.memo(() => {
       {(() => {
       if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
       if (resolvedPage === "home") {
-        return <HomePage user={user} onNavigate={handleSetPage} suppressFocusAutoResume={ui.mode === "focus"} />;
+        return <HomePage user={user} onNavigate={handleSetPage} suppressFocusAutoResume={ui.mode !== "classic"} />;
       }
       if (resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       if (resolvedPage === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
@@ -767,52 +835,42 @@ const AppContent: React.FC = React.memo(() => {
               </div>}
             {}
             {(!user.userMode || user.userMode === "PERSONAL") && <>
-                <button onClick={handleGoHome} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={handleGoHome} onPointerEnter={() => prefetchNavTarget("continue")} onFocus={() => prefetchNavTarget("continue")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <Home className="w-4 h-4" />
                   {t('home')}
                 </button>
-                <button onClick={() => handleSetPage("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("tasks")} onPointerEnter={() => prefetchNavTarget("tasks")} onFocus={() => prefetchNavTarget("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('tasks')}
                 </button>
-                <button onClick={() => handleSetPage("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("grades")} onPointerEnter={() => prefetchNavTarget("grades")} onFocus={() => prefetchNavTarget("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('grades')}
                 </button>
-                <button onClick={() => navigate("/library")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+                <button onClick={() => navigate("/library")} onPointerEnter={() => prefetchNavTarget("library")} onFocus={() => prefetchNavTarget("library")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
                   <Library className="w-4 h-4" />
                   {t("library")}
                 </button>
               </>}
 
-            <button onClick={() => navigate("/docs")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-              <HelpCircle className="w-4 h-4" />
-              {t("help")}
-            </button>
-
-            <button onClick={() => navigate("/support")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-              <HelpCircle className="w-4 h-4" />
-              {t("support")}
-            </button>
-
             {}
-            {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} onPointerEnter={() => prefetchNavTarget("admin")} onFocus={() => prefetchNavTarget("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <Shield className="w-4 h-4" />
                 Admin
               </button>}
 
             {}
-            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => handleSetPage("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => handleSetPage("teacher")} onPointerEnter={() => prefetchNavTarget("teacher")} onFocus={() => prefetchNavTarget("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <GraduationCap className="w-4 h-4" />
                 {t('myClasses')}
               </button>}
 
             {user.userMode === "EDUCATIONAL" && user.studentId && <>
-                <button onClick={() => handleSetPage("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button onClick={() => handleSetPage("student")} onPointerEnter={() => prefetchNavTarget("student")} onFocus={() => prefetchNavTarget("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <BookOpen className="w-4 h-4" />
                   {t('myJournal')}
                 </button>
-                <button onClick={() => navigate("/edu/library")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+                <button onClick={() => navigate("/edu/library")} onPointerEnter={() => prefetchPath("/edu/library")} onFocus={() => prefetchPath("/edu/library")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <Library className="w-4 h-4" />
                   {t("library")}
                 </button>
@@ -824,7 +882,7 @@ const AppContent: React.FC = React.memo(() => {
                 </button>
                 <button onClick={() => {
               navigate("/edu/lessons");
-            }} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+            }} onPointerEnter={() => prefetchNavTarget("lessons")} onFocus={() => prefetchNavTarget("lessons")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   {t('lessons')}
                 </button>
@@ -835,6 +893,10 @@ const AppContent: React.FC = React.memo(() => {
             {}
             <div className="flex items-center gap-2">
               {}
+              <button onClick={() => setPaletteOpen(true)} className="shrink-0 px-3 py-2 text-xs font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2" title={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-label={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-haspopup="dialog">
+                <Search className="w-4 h-4" />
+                <kbd className="hidden md:inline px-1.5 py-0.5 border border-border text-[10px] font-mono text-text-muted">Ctrl K</kbd>
+              </button>
               <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
                 {i18n.language === 'uk' ? 'EN' : 'UA'}
               </button>
@@ -844,17 +906,37 @@ const AppContent: React.FC = React.memo(() => {
                 {theme === "dark" ? "Light" : "Dark"}
               </button>
               
-              <button onClick={() => handleSetPage("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${resolvedPage === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
+              <button onClick={() => handleSetPage("profile")} onPointerEnter={() => prefetchNavTarget("profile")} onFocus={() => prefetchNavTarget("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${resolvedPage === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
                 <UserIcon className="w-4 h-4 text-text-secondary" />
               </button>
               <div className="relative" ref={navMenuRef}>
-                <button onClick={handleToggleNav} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" title={t('menu')} aria-label={t('menu')}>
+                <button onClick={handleToggleNav} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" title={t('menu')} aria-label={t('menu')} aria-haspopup="menu" aria-expanded={navOpen}>
                   {navOpen ? <X className="w-4 h-4 text-text-secondary" /> : <Menu className="w-4 h-4 text-text-secondary" />}
                 </button>
                 {navOpen && <>
-                    <div className="absolute right-0 top-10 z-40 bg-bg-surface border border-border min-w-[180px]">
+                    <div className="absolute right-0 top-12 z-40 bg-bg-surface border border-border min-w-[200px]" role="menu" aria-label={t('menu')}>
                       <nav className="flex flex-col">
-                        <button onClick={handleLogout} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-accent-error">
+                        <button role="menuitem" onClick={() => {
+                      setNavOpen(false);
+                      navigate("/docs");
+                    }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary flex items-center gap-2">
+                          <HelpCircle className="w-4 h-4" />
+                          {t('help')}
+                        </button>
+                        <button role="menuitem" onClick={() => {
+                      setNavOpen(false);
+                      navigate("/support");
+                    }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary flex items-center gap-2">
+                          <HelpCircle className="w-4 h-4" />
+                          {t('support')}
+                        </button>
+                        <button role="menuitem" onClick={() => {
+                      setNavOpen(false);
+                      ui.setMode(ui.mode === "classic" ? "focus" : ui.mode === "focus" ? "nova" : "classic");
+                    }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary border-t border-border">
+                          {t("interfaceLabel")}: {ui.mode === "classic" ? t("classicUiName") : ui.mode === "focus" ? t("momentumUiName") : t("novaUiName", { defaultValue: "Nova" })}
+                        </button>
+                        <button role="menuitem" onClick={handleLogout} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-accent-error border-t border-border">
                           {t('logout')}
                         </button>
                       </nav>
@@ -879,12 +961,15 @@ const AppContent: React.FC = React.memo(() => {
         <Suspense fallback={null}>
           <OnboardingEntry />
         </Suspense>
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={classicPaletteItems} onSelect={handleClassicPaletteSelect} extraActions={classicPaletteActions} />
       </div>;
   }
 
         const momentumCurrent: MomentumNavTarget = resolvedPage === "home" ? "continue" : resolvedPage;
+  const Shell = ui.mode === "nova" ? NovaShellLazy : MomentumShell;
   return <>
-      <MomentumShell user={user} current={momentumCurrent} onNavigate={target => {
+      <Suspense fallback={<PageLoader />}>
+      <Shell user={user} current={momentumCurrent} onNavigate={target => {
       if (target === "library") {
         if (user.userMode === "EDUCATIONAL" && user.studentId) {
           navigate("/edu/library");
@@ -926,7 +1011,8 @@ const AppContent: React.FC = React.memo(() => {
           <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
           </button>}>
         {content}
-      </MomentumShell>
+      </Shell>
+      </Suspense>
       {user ? <Suspense fallback={null}>
           <PlacementEntry user={user} onUserChange={setUser} />
         </Suspense> : null}
@@ -979,11 +1065,13 @@ export const App: React.FC = () => {
                   <GoogleAuthErrorPage />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/docs" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <DocsPage />
-                </AnimatedPage>
-              </Suspense>} />
+          <Route path="/docs" element={<StandaloneShell current="support">
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <DocsPage />
+                  </AnimatedPage>
+                </Suspense>
+              </StandaloneShell>} />
           <Route path="/privacy" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <PrivacyPolicyPage />
@@ -1000,18 +1088,22 @@ export const App: React.FC = () => {
                 </AnimatedPage>
               </Suspense>} />
           <Route path="/support" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <SupportPage />
-                  </AnimatedPage>
-                </Suspense>
+                <StandaloneShell current="support">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <SupportPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
               </RequireToken>} />
           <Route path="/profile/certificates" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <ProfileCertificatesPage />
-                  </AnimatedPage>
-                </Suspense>
+                <StandaloneShell current="profile">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <ProfileCertificatesPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
               </RequireToken>} />
           <Route path="/certificate/:certificateId" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
@@ -1019,50 +1111,64 @@ export const App: React.FC = () => {
                 </AnimatedPage>
               </Suspense>} />
           <Route path="/library" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <TaskLibraryPage />
-                  </AnimatedPage>
-                </Suspense>
+                <StandaloneShell current="library">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <TaskLibraryPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
               </RequireToken>} />
           <Route path="/library/solve/:taskKey" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <LibraryTaskSolvePage />
-                  </AnimatedPage>
-                </Suspense>
+                <StandaloneShell current="library">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <LibraryTaskSolvePage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
               </RequireToken>} />
           <Route path="/playground" element={<RequireToken>
+                <StandaloneShell current="playground">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <PlaygroundPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
+          <Route path="/playground/:shareId" element={<StandaloneShell current="playground">
                 <Suspense fallback={<PageLoader />}>
                   <AnimatedPage>
                     <PlaygroundPage />
                   </AnimatedPage>
                 </Suspense>
-              </RequireToken>} />
-          <Route path="/playground/:shareId" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <PlaygroundPage />
-                </AnimatedPage>
-              </Suspense>} />
+              </StandaloneShell>} />
           <Route path="/learn" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <MyLearningPage />
-                  </AnimatedPage>
-                </Suspense>
+                <StandaloneShell current="learn">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <MyLearningPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
               </RequireToken>} />
           <Route path="/replay/:id" element={<RequireToken>
+                <StandaloneShell current="grades">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <SolveReplayPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
+          <Route path="/contests/:id/scoreboard" element={<StandaloneShell current="contests">
                 <Suspense fallback={<PageLoader />}>
                   <AnimatedPage>
-                    <SolveReplayPage />
+                    <ScoreboardPage />
                   </AnimatedPage>
                 </Suspense>
-              </RequireToken>} />
-          <Route path="/contests/:id/scoreboard" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <ScoreboardPage />
-                </AnimatedPage>
-              </Suspense>} />
+              </StandaloneShell>} />
           <Route path="/profile" element={<RequireToken>
                 <Navigate to="/?app=profile" replace />
               </RequireToken>} />
@@ -1078,39 +1184,49 @@ export const App: React.FC = () => {
           <Route path="/dashboard" element={<RequireToken>
                 <Navigate to="/" replace />
               </RequireToken>} />
-          <Route path="/contests" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <ContestsPage />
-                </AnimatedPage>
-              </Suspense>} />
-          <Route path="/contests/:id" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <ContestPage />
-                </AnimatedPage>
-              </Suspense>} />
-          <Route path="/contests/:id/problems/:problemId" element={<Suspense fallback={<PageLoader />}>
-                <AnimatedPage>
-                  <ContestProblemSolvePage />
-                </AnimatedPage>
-              </Suspense>} />
+          <Route path="/contests" element={<StandaloneShell current="contests">
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <ContestsPage />
+                  </AnimatedPage>
+                </Suspense>
+              </StandaloneShell>} />
+          <Route path="/contests/:id" element={<StandaloneShell current="contests">
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <ContestPage />
+                  </AnimatedPage>
+                </Suspense>
+              </StandaloneShell>} />
+          <Route path="/contests/:id/problems/:problemId" element={<StandaloneShell current="contests">
+                <Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <ContestProblemSolvePage />
+                  </AnimatedPage>
+                </Suspense>
+              </StandaloneShell>} />
           <Route path="/u/:username" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <PublicProfilePage />
                 </AnimatedPage>
               </Suspense>} />
           <Route path="/iad" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <IadPage />
-                  </AnimatedPage>
-                </Suspense>
+                <StandaloneShell current="profile">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <IadPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
               </RequireToken>} />
           <Route path="/difus" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <IadPage />
-                  </AnimatedPage>
-                </Suspense>
+                <StandaloneShell current="profile">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <IadPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
               </RequireToken>} />
           <Route path="/email-preferences" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
@@ -1409,6 +1525,53 @@ const EduRoutes: React.FC = React.memo(() => {
 
   const isControlExamActive = !!controlExamSession;
 
+  const [eduPaletteOpen, setEduPaletteOpen] = useState(false);
+  useEffect(() => {
+    if (ui.mode !== "classic" || !user || isControlExamActive) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setEduPaletteOpen(v => !v);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [ui.mode, user?.id, isControlExamActive]);
+
+  const eduPaletteItems = useMemo<PaletteItem[]>(() => {
+    if (!user) return [];
+    const navLabel = t("navigation", { defaultValue: "Navigation" });
+    const list: PaletteItem[] = [];
+    if (user.studentId) {
+      list.push({ id: "lessons", label: t("lessons"), icon: FileText, group: navLabel });
+      list.push({ id: "student", label: t("myJournal"), icon: BookOpen, group: navLabel });
+      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
+      list.push({ id: "appeals", label: i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції", icon: HelpCircle, group: navLabel });
+    } else {
+      list.push({ id: "teacher", label: t("myClasses"), icon: GraduationCap, group: navLabel });
+    }
+    return list;
+  }, [user?.id, user?.studentId, t, i18n.language]);
+
+  const eduPaletteActions = useMemo<PaletteAction[]>(() => [
+    { id: "help", label: t("help"), icon: HelpCircle, run: () => navigate("/docs") },
+    { id: "home", label: t("toHome"), icon: Home, run: () => navigate("/") },
+    { id: "theme", label: theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme"), icon: SunMoon, run: toggleTheme },
+    { id: "interface", label: `${t("interfaceLabel")}: ${t("classicUiName")}`, icon: SwatchBook, run: () => ui.setMode("focus") },
+    { id: "logout", label: t("logout"), icon: LogOut, danger: true, run: () => {
+      localStorage.removeItem("token");
+      navigate("/");
+    } }
+  ], [t, navigate, theme, toggleTheme, ui]);
+
+  const handleEduPaletteSelect = useCallback((id: string) => {
+    if (id === "lessons") navigate("/edu/lessons");
+    else if (id === "student") navigate("/edu/journal");
+    else if (id === "library") navigate("/edu/library");
+    else if (id === "appeals") navigate("/edu/appeals");
+    else if (id === "teacher") navigate("/edu");
+  }, [navigate]);
+
   if (loading) {
     return <PageLoader />;
   }
@@ -1466,6 +1629,10 @@ const EduRoutes: React.FC = React.memo(() => {
               </div>
             </div>
             <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap">
+              <button onClick={() => setEduPaletteOpen(true)} className="shrink-0 px-3 py-2 text-xs font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2" title={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-label={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-haspopup="dialog">
+                <Search className="w-4 h-4" />
+                <kbd className="hidden md:inline px-1.5 py-0.5 border border-border text-[10px] font-mono text-text-muted">Ctrl K</kbd>
+              </button>
               <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
                 {i18n.language === 'uk' ? 'EN' : 'UA'}
               </button>
@@ -1490,6 +1657,7 @@ const EduRoutes: React.FC = React.memo(() => {
         </WorkspaceViewportProvider>
         {!isControlExamActive && <PlatformFooter className="flex-shrink-0" />}
         <OnboardingEntry />
+        {!isControlExamActive && <CommandPalette open={eduPaletteOpen} onClose={() => setEduPaletteOpen(false)} items={eduPaletteItems} onSelect={handleEduPaletteSelect} extraActions={eduPaletteActions} />}
       </div>;
   }
 
@@ -1500,8 +1668,10 @@ const EduRoutes: React.FC = React.memo(() => {
       : /^\/edu\/(lessons|tasks|grades)\b/.test(location.pathname)
         ? "lessons"
         : "continue";
+  const Shell = ui.mode === "nova" ? NovaShellLazy : MomentumShell;
   return <>
-      <MomentumShell user={user} current={momentumCurrent} navigationHidden={isControlExamActive} onNavigate={target => {
+      <Suspense fallback={<PageLoader />}>
+      <Shell user={user} current={momentumCurrent} navigationHidden={isControlExamActive} onNavigate={target => {
       if (isControlExamActive && controlExamSession) {
         navigate(`/edu/lessons/${controlExamSession.controlWorkId}?type=CONTROL`, {
           replace: true
@@ -1551,7 +1721,8 @@ const EduRoutes: React.FC = React.memo(() => {
           <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
           </button>}>
         {eduMain}
-      </MomentumShell>
+      </Shell>
+      </Suspense>
       <Suspense fallback={null}>
         <OnboardingEntry />
       </Suspense>

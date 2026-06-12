@@ -5,6 +5,8 @@ __pycache__/
 # Build outputs
 **/dist/
 **/build/
+tmp-index.js
+tmp-index.map
 
 # Environment variables (do not commit secrets)
 **/.env
@@ -80,8 +82,12 @@ coverage/
 # Uploads (user files)
 **/uploads/
 
+frontend/.design-sync
 .gitignore
 .agents/
+.github/
+.claude/
+studycod-video/
 .impeccable.md
 skills-lock.json
 tmp-harden-findings-full.json

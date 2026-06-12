@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { Card } from "../../components/ui/Card";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { getIadDetails } from "../../lib/api/profile";
 import type { IadDetails, IadEvent } from "../../types";
 
@@ -265,7 +266,7 @@ export const IadPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-bg-base text-text-primary">
+    <div className="min-h-full bg-bg-base text-text-primary">
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <Link
@@ -291,7 +292,15 @@ export const IadPage: React.FC = () => {
         </div>
 
         {loading ? (
-          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Завантаження...", "Loading...")}</Card>
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="p-5 border border-border/70 bg-bg-surface/80 space-y-3">
+                <Skeleton className="h-5 w-1/3" />
+                <Skeleton className="h-9 w-1/4" />
+                <Skeleton className="h-3 w-full" />
+              </Card>
+            ))}
+          </div>
         ) : error ? (
           <Card className="p-4 sm:p-6 text-sm text-accent-error">{error}</Card>
         ) : !details ? (

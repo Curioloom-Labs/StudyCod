@@ -119,6 +119,7 @@ export default {
   interfaceLabel: 'Interface',
   momentumUiName: 'Momentum UI',
   classicUiName: 'Classic',
+  novaUiName: 'Nova',
   switchToMomentumPermanent: 'Switch permanently to Momentum UI?',
   switchToMomentumNow: 'Switch to Momentum UI',
   notNow: 'Not now',

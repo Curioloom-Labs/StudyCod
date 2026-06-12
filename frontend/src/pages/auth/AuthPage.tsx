@@ -234,7 +234,7 @@ export const AuthPage: React.FC<Props> = ({
                   id: studentResult.student.id,
                   username: studentResult.student.username,
                   course: studentResult.student.language,
-                  iad: 0,
+                  difus: 0,
                   avatarUrl: null,
                   userMode: "EDUCATIONAL" as const,
                   studentId: studentResult.student.id,
@@ -296,9 +296,10 @@ export const AuthPage: React.FC<Props> = ({
             setEmailSent(true);
             setSuccess(tr("Реєстрація вчителя успішна! Перевірте вашу пошту для підтвердження email. Після підтвердження ви зможете увійти.", "Teacher registration successful! Check your email to verify it. After verification you can log in."));
           } else if (result.user && result.token) {
+            const registeredUser = result.user;
             setSuccess(tr("Реєстрація вчителя успішна!", "Teacher registration successful!"));
             setTimeout(() => {
-              onAuth(result.user);
+              onAuth(registeredUser);
             }, 1500);
           }
         } else {

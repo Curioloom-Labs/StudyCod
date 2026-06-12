@@ -1408,7 +1408,7 @@ export const TasksPage: React.FC<Props> = ({
       const status = String(payload?.status ?? "");
       if (status === "ok" && payload?.task && typeof payload.task === "object") {
         const generatedTask = payload.task as Task;
-        const generatedTaskId = Number((generatedTask as Record<string, unknown>).id ?? 0);
+        const generatedTaskId = Number((generatedTask as { id?: unknown }).id ?? 0);
         setGenerationPhase("syncing");
         const newTasks = await listTasks(uiLanguage);
         setTasks(newTasks);
@@ -3397,7 +3397,7 @@ export const TasksPage: React.FC<Props> = ({
       </Modal>
 
       {}
-      <Modal open={!!milestone} title={tr("🎯 Ти покращився!", "🎯 You improved!")} description={milestone?.message} onClose={async () => {
+      <Modal open={!!milestone} title={tr("Ти покращився!", "You improved!")} description={milestone?.message} onClose={async () => {
       if (milestone) {
         try {
           const base = import.meta.env.VITE_API_URL || window.location.origin;

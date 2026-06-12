@@ -6,6 +6,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getStudents, getSummaryGrades, createSummaryGrade, updateSummaryGrade, deleteSummaryGrade, getTaskGrades, getTopics, type Student, type SummaryGradeGroup, type Topic } from "../../lib/api/edu";
 import { ArrowLeft, Plus, FileText, Trash2 } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -102,9 +103,7 @@ export const SummaryGradesPage: React.FC = () => {
     }
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {tr("Завантаження...", "Loading...")}
-      </div>;
+    return <PageSkeleton variant="table" />;
   }
   return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-6xl mx-auto">

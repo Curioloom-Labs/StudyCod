@@ -85,7 +85,7 @@ export const DocsPage: React.FC = () => {
   const selected = useMemo(() => {
     return sections.find(s => s.id === selectedId) || sections[0];
   }, [selectedId, sections]);
-  return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
+  return <div className="min-h-full bg-bg-base text-text-primary flex flex-col">
       <header className="min-h-16 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 md:px-6 py-2 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <Button variant="ghost" onClick={() => {

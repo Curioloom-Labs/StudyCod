@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { getMyStudentInfo, getStudentLessons, getMyAnnouncements, type Lesson, type ClassAnnouncementDto } from "../../lib/api/edu";
 import { BookOpen, Clock, FileText, MessageSquare, Video } from "lucide-react";
 type StudentClassInfo = {
@@ -50,9 +51,7 @@ export const StudentLessonsPage: React.FC = () => {
     }
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t("loading")}
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-4xl mx-auto">

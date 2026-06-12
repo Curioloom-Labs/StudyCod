@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Award, Trophy, Code2, CheckCircle2, CalendarClock, Star, Shield, Medal, Crown, Rocket, Gem } from "lucide-react";
 import { Card } from "../../components/ui/Card";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { getPublicProfile } from "../../lib/api/profile";
 import type { PublicProfile } from "../../types";
 import { buildContestProfileUrl, contestPlatformLabel } from "../../utils/contestAccounts";
@@ -225,7 +226,11 @@ export const PublicProfilePage: React.FC = () => {
         </div>
 
         {loading ? (
-          <Card className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Завантаження профілю...", "Loading profile...")}</Card>
+          <Card className="p-4 sm:p-6 space-y-3">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+          </Card>
         ) : error ? (
           <Card className="p-4 sm:p-6 text-sm text-accent-error">{error}</Card>
         ) : !profile ? (

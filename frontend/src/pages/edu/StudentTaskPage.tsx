@@ -34,6 +34,7 @@ import {
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
 import { publishLiveCode } from "../../lib/api/liveClassroom";
 import { ArrowLeft, Play, Send, Save, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload } from "lucide-react";
+import { PageSkeleton } from "../../components/ui/Skeleton";
 import { isDeadlineExpired } from "../../utils/timezone";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
@@ -1380,9 +1381,7 @@ export const StudentTaskPage: React.FC = () => {
   }, [taskId, hintFeedbackContext, hintFeedbackSentKey, hintFeedbackReasonCode, hintFeedbackReasonText, toastError, toastSuccess, tr]);
 
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t("loading")}
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   if (!task) {
     return <div className="h-full flex items-center justify-center text-text-primary font-mono">
@@ -1593,7 +1592,7 @@ export const StudentTaskPage: React.FC = () => {
                   </Button>
                 </div>
               </div>
-            </div> : <Group direction={isCompactViewport ? "vertical" : "horizontal"} className="flex-1 overflow-hidden">
+            </div> : <Group orientation={isCompactViewport ? "vertical" : "horizontal"} className="flex-1 overflow-hidden">
             {}
             <Panel defaultSize={isCompactViewport ? 34 : 25} minSize={isCompactViewport ? 20 : 15} maxSize={isCompactViewport ? 65 : 60} className={`flex flex-col overflow-hidden bg-bg-base ${isCompactViewport ? "border-b border-border" : "border-r border-border"}`}>
               <div className="p-3 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
@@ -1870,7 +1869,7 @@ export const StudentTaskPage: React.FC = () => {
                                 void handleSendHintFeedback("up");
                               }}
                             >
-                              👍 {tr("Так, корисно", "Yes, helpful")}
+                              {tr("Так, корисно", "Yes, helpful")}
                             </Button>
                             <Button
                               variant="ghost"
@@ -1878,7 +1877,7 @@ export const StudentTaskPage: React.FC = () => {
                               disabled={hintFeedbackSending}
                               onClick={() => setHintFeedbackSignal("down")}
                             >
-                              👎 {tr("Не дуже", "Not really")}
+                              {tr("Не дуже", "Not really")}
                             </Button>
                           </div>
 
