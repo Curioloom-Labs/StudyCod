@@ -1,14 +1,54 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, BarChart3, Clock3, RefreshCcw } from "lucide-react";
+import { animate, motion, useReducedMotion } from "framer-motion";
+import { AlertTriangle, BarChart3, Clock3, RefreshCcw, TrendingUp, TrendingDown, Minus, Target, Flame } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { listGrades } from "../../lib/api/grades";
 import { resetTopic } from "../../lib/api/tasks";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import type { Grade } from "../../types";
 import { tr } from "../../i18n";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+
+const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (reduce) {
+      node.textContent = value.toFixed(decimals);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: (v) => {
+        node.textContent = v.toFixed(decimals);
+      },
+    });
+    return () => controls.stop();
+  }, [value, decimals, reduce]);
+  return <span ref={ref} className={className}>{value.toFixed(decimals)}</span>;
+};
+
+const ScoreBar: React.FC<{ value: number; tone: string }> = ({ value, tone }) => {
+  const reduce = useReducedMotion();
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div className="h-1.5 rounded-full bg-bg-hover overflow-hidden">
+      <motion.div
+        className={`h-full rounded-full origin-left ${tone}`}
+        initial={reduce ? false : { scaleX: 0 }}
+        whileInView={{ scaleX: pct / 100 }}
+        viewport={{ once: true, amount: 0.4 }}
+        transition={{ duration: 0.6, ease: easeOutQuint }}
+        style={{ width: "100%", transformOrigin: "left" }}
+      />
+    </div>
+  );
+};
 
 interface TopicWithAverage {
   topicId: number | null;
@@ -46,6 +86,13 @@ function gradeHeatTone(value: number): string {
   return "bg-accent-error/20 border-accent-error/40";
 }
 
+function gradeFillTone(value: number): string {
+  if (value >= 85) return "bg-accent-success";
+  if (value >= 65) return "bg-accent-warn";
+  if (value >= 40) return "bg-accent-warning";
+  return "bg-accent-error";
+}
+
 export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
@@ -69,7 +116,14 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
     const avg = count > 0 ? Number((validGrades.reduce((s, g) => s + Number(g.total), 0) / count).toFixed(2)) : 0;
     const passed = validGrades.filter((g) => Number(g.total) >= 50).length;
     const excellent = validGrades.filter((g) => Number(g.total) >= 85).length;
-    return { count, avg, passed, excellent };
+    const chrono = [...validGrades].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const half = Math.max(1, Math.floor(chrono.length / 2));
+    const firstHalf = chrono.slice(0, half).map((g) => Number(g.total));
+    const lastHalf = chrono.slice(-half).map((g) => Number(g.total));
+    const firstAvg = firstHalf.length ? firstHalf.reduce((s, v) => s + v, 0) / firstHalf.length : avg;
+    const lastAvg = lastHalf.length ? lastHalf.reduce((s, v) => s + v, 0) / lastHalf.length : avg;
+    const trend = count > 1 ? Number((lastAvg - firstAvg).toFixed(1)) : 0;
+    return { count, avg, passed, excellent, trend };
   }, [validGrades]);
 
   const topicsWithLowAverage = useMemo(() => {
@@ -215,189 +269,263 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
     return <PageSkeleton variant="table" />;
   }
 
+  const TrendIcon = stats.trend > 0 ? TrendingUp : stats.trend < 0 ? TrendingDown : Minus;
+  const trendTone = stats.trend > 0 ? "text-accent-success" : stats.trend < 0 ? "text-accent-error" : "text-text-muted";
+
   return (
-    <div className="h-full flex flex-col bg-bg-base">
-      <div className="border-b border-border bg-bg-surface p-3 sm:p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
-        <div className="flex items-center gap-2 text-lg font-mono text-text-primary">
-          <BarChart3 className="w-4 h-4 text-primary" />
-          {tr("Журнал успішності", "Progress journal")}
-        </div>
+    <div className="h-full flex flex-col bg-bg-base overflow-y-auto">
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto w-full">
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+        >
+          <motion.div variants={fadeUpItem} className="flex items-center gap-2 font-mono text-xs text-primary/70">
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>// grades</span>
+          </motion.div>
+          <motion.h1 variants={fadeUpItem} className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+            {tr("Журнал успішності", "Progress journal")}
+          </motion.h1>
+          <motion.p variants={fadeUpItem} className="mt-1.5 text-sm text-text-secondary">
+            {tr("Твій прогрес, слабкі теми та квест на покращення — в одному місці.", "Your progress, weak topics and an improvement quest — all in one place.")}
+          </motion.p>
+
+          <motion.div variants={fadeUpItem} className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Середній бал", "Average")}</div>
+              <div className={`mt-1 text-3xl font-mono font-semibold ${gradeTone(stats.avg)}`}>
+                <CountUp value={stats.avg} decimals={1} />
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Оцінок", "Grades")}</div>
+              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary">
+                <CountUp value={stats.count} />
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Тренд", "Trend")}</div>
+              <div className={`mt-1 flex items-center gap-1.5 text-3xl font-mono font-semibold ${trendTone}`}>
+                <TrendIcon className="w-5 h-5" />
+                {stats.trend > 0 ? `+${stats.trend}` : stats.trend}
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        <div className="mt-6 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        <div className="max-w-6xl mx-auto space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <Card className="p-4 border border-border/70 bg-bg-surface/80">
-              <div className="text-xs text-text-secondary">{tr("Оцінок", "Grades")}</div>
-              <div className="mt-1 text-2xl font-mono text-text-primary">{stats.count}</div>
-            </Card>
-            <Card className="p-4 border border-border/70 bg-bg-surface/80">
-              <div className="text-xs text-text-secondary">{tr("Середній бал", "Average")}</div>
-              <div className={`mt-1 text-2xl font-mono ${gradeTone(stats.avg)}`}>{stats.avg}</div>
-            </Card>
-            <Card className="p-4 border border-border/70 bg-bg-surface/80">
-              <div className="text-xs text-text-secondary">{tr("Успішно (≥50)", "Passed (≥50)")}</div>
-              <div className="mt-1 text-2xl font-mono text-accent-success">{stats.passed}</div>
-            </Card>
-            <Card className="p-4 border border-border/70 bg-bg-surface/80">
-              <div className="text-xs text-text-secondary">{tr("Відмінно (≥85)", "Excellent (≥85)")}</div>
-              <div className="mt-1 text-2xl font-mono text-primary">{stats.excellent}</div>
-            </Card>
+      <div className="px-4 md:px-8 pb-12 max-w-6xl mx-auto w-full space-y-8">
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        >
+          <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+            <div className="text-xs font-mono text-text-secondary">{tr("Оцінок", "Grades")}</div>
+            <div className="mt-2 text-2xl font-mono font-semibold text-text-primary"><CountUp value={stats.count} /></div>
+          </motion.div>
+          <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+            <div className="text-xs font-mono text-text-secondary">{tr("Середній бал", "Average")}</div>
+            <div className={`mt-2 text-2xl font-mono font-semibold ${gradeTone(stats.avg)}`}><CountUp value={stats.avg} decimals={1} /></div>
+            <div className="mt-2.5"><ScoreBar value={stats.avg} tone={gradeFillTone(stats.avg)} /></div>
+          </motion.div>
+          <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+            <div className="flex items-center gap-1.5 text-xs font-mono text-text-secondary">
+              <Target className="w-3.5 h-3.5 text-accent-success" />
+              {tr("Успішно (≥50)", "Passed (≥50)")}
+            </div>
+            <div className="mt-2 text-2xl font-mono font-semibold text-accent-success"><CountUp value={stats.passed} /></div>
+          </motion.div>
+          <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+            <div className="flex items-center gap-1.5 text-xs font-mono text-text-secondary">
+              <Flame className="w-3.5 h-3.5 text-primary" />
+              {tr("Відмінно (≥85)", "Excellent (≥85)")}
+            </div>
+            <div className="mt-2 text-2xl font-mono font-semibold text-primary"><CountUp value={stats.excellent} /></div>
+          </motion.div>
+        </motion.div>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted">
+            <AlertTriangle className="w-4 h-4 text-accent-warn" />
+            {tr("Теми, які варто повторити", "Topics worth retrying")}
           </div>
 
-          <Card className="p-4 border border-border/70 bg-bg-surface/80">
-            <div className="flex items-center gap-2 text-sm font-mono text-text-primary mb-3">
-              <AlertTriangle className="w-4 h-4 text-accent-warn" />
-              {tr("Теми, які варто повторити", "Topics worth retrying")}
+          {topicsWithLowAverage.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-bg-surface px-4 py-10 text-center">
+              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                <Target className="w-5 h-5 text-primary" />
+              </div>
+              <div className="text-sm font-medium text-text-primary">{tr("Критичних тем не знайдено", "No critical topics found")}</div>
+              <div className="text-xs text-text-secondary mt-1">
+                {tr("Нижче доступний повний журнал оцінок.", "Full grade journal is available below.")}
+              </div>
             </div>
-
-            {topicsWithLowAverage.length === 0 ? (
-              <div className="rounded-xl border border-border bg-bg-base/70 px-4 py-6 text-center">
-                <div className="text-sm text-text-primary">{tr("Критичних тем не знайдено", "No critical topics found")}</div>
-                <div className="text-xs text-text-secondary mt-1">
-                  {tr("Нижче доступний повний журнал оцінок.", "Full grade journal is available below.")}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {topicsWithLowAverage.map((topic) => (
-                  <div key={`${topic.topicId ?? "single"}-${topic.topicTitle}`} className="rounded-xl border border-border bg-bg-base/70 p-3 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-                    <div>
-                      <div className="text-sm font-mono text-text-primary">{topic.topicTitle}</div>
-                      <div className="text-xs text-text-secondary mt-1 flex items-center gap-2">
-                        <Clock3 className="w-3.5 h-3.5" />
-                        {tr("Спроб", "Attempts")}: {topic.gradeCount} · {tr("Середній", "Average")}: <span className={gradeTone(topic.average)}>{topic.average}</span>
-                      </div>
+          ) : (
+            <motion.div variants={staggerContainer} initial="initial" whileInView="animate" viewport={{ once: true, amount: 0.15 }} className="space-y-3">
+              {topicsWithLowAverage.map((topic) => (
+                <motion.div
+                  key={`${topic.topicId ?? "single"}-${topic.topicTitle}`}
+                  variants={fadeUpItem}
+                  className="rounded-xl border border-border bg-bg-surface p-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-mono text-text-primary">{topic.topicTitle}</div>
+                    <div className="text-xs text-text-secondary mt-1.5 flex items-center gap-2">
+                      <Clock3 className="w-3.5 h-3.5" />
+                      {tr("Спроб", "Attempts")}: {topic.gradeCount} · {tr("Середній", "Average")}: <span className={gradeTone(topic.average)}>{topic.average}</span>
                     </div>
-                    <Button
-                      variant="primary"
-                      onClick={() => handleRetryTopic(topic.topicId)}
-                      disabled={topic.topicId === null || retryingTopicId === topic.topicId}
-                    >
-                      <RefreshCcw className="w-4 h-4 mr-2" />
-                      {retryingTopicId === topic.topicId ? tr("Запуск...", "Starting...") : tr("Перепройти тему", "Retry topic")}
-                    </Button>
+                    <div className="mt-2.5 max-w-md"><ScoreBar value={topic.average} tone={gradeFillTone(topic.average)} /></div>
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
+                  <Button
+                    variant="primary"
+                    onClick={() => handleRetryTopic(topic.topicId)}
+                    disabled={topic.topicId === null || retryingTopicId === topic.topicId}
+                  >
+                    <RefreshCcw className="w-4 h-4 mr-2" />
+                    {retryingTopicId === topic.topicId ? tr("Запуск...", "Starting...") : tr("Перепройти тему", "Retry topic")}
+                  </Button>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </section>
 
-          <Card className="p-4 border border-border/70 bg-bg-surface/80">
-            <div className="text-sm font-mono text-text-primary mb-3">{tr("Topic heatmap", "Topic heatmap")}</div>
+        <section className="space-y-4">
+          <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Topic heatmap", "Topic heatmap")}</div>
 
-            {topicHeatmap.length === 0 ? (
-              <div className="text-center text-text-muted font-mono py-6">{tr("Ще немає даних для heatmap", "No data yet for heatmap")}</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {topicHeatmap.map((topic) => (
-                  <div key={topic.key} className={`rounded-xl border p-3 ${gradeHeatTone(topic.average)}`}>
+          {topicHeatmap.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-bg-surface text-center text-text-muted font-mono py-10">{tr("Ще немає даних для heatmap", "No data yet for heatmap")}</div>
+          ) : (
+            <motion.div variants={staggerContainer} initial="initial" whileInView="animate" viewport={{ once: true, amount: 0.1 }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {topicHeatmap.map((topic) => {
+                const Trend = topic.trend > 0 ? TrendingUp : topic.trend < 0 ? TrendingDown : Minus;
+                return (
+                  <motion.div
+                    key={topic.key}
+                    variants={fadeUpItem}
+                    className={`rounded-xl border p-4 transition-fast hover:-translate-y-0.5 ${gradeHeatTone(topic.average)}`}
+                  >
                     <div className="text-xs font-mono text-text-primary truncate">{topic.topicTitle}</div>
-                    <div className="mt-1 text-[11px] text-text-secondary">
-                      {tr("Середній", "Average")}: <span className={gradeTone(topic.average)}>{topic.average}</span> · {tr("Спроб", "Attempts")}: {topic.attempts}
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className={`text-xl font-mono font-semibold ${gradeTone(topic.average)}`}>{topic.average}</span>
+                      <span className="text-[11px] text-text-secondary">{tr("Спроб", "Attempts")}: {topic.attempts}</span>
                     </div>
-                    <div className="mt-1 text-[11px] text-text-secondary">
-                      {tr("Тренд", "Trend")}: <span className={topic.trend > 0 ? "text-accent-success" : topic.trend < 0 ? "text-accent-error" : "text-text-secondary"}>{topic.trend >= 0 ? `+${topic.trend}` : topic.trend}</span>
+                    <div className="mt-2 flex items-center gap-1 text-[11px] font-mono">
+                      <Trend className={`w-3.5 h-3.5 ${topic.trend > 0 ? "text-accent-success" : topic.trend < 0 ? "text-accent-error" : "text-text-muted"}`} />
+                      <span className={topic.trend > 0 ? "text-accent-success" : topic.trend < 0 ? "text-accent-error" : "text-text-secondary"}>{topic.trend >= 0 ? `+${topic.trend}` : topic.trend}</span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Focus Quest (3 теми)", "Focus Quest (3 topics)")}</div>
+          <p className="text-xs text-text-secondary -mt-1">
+            {tr(
+              "Замість адаптивного retry-плану: короткий квест на 3 найслабші теми з ціллю вийти до ≥65.",
+              "Instead of an adaptive retry plan: a short quest for your 3 weakest topics with a target to reach ≥65."
+            )}
+          </p>
+
+          {focusQuest.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-bg-surface text-center text-text-muted font-mono py-10">{tr("Квест поки не потрібен", "No quest needed right now")}</div>
+          ) : (
+            <motion.div variants={staggerContainer} initial="initial" whileInView="animate" viewport={{ once: true, amount: 0.15 }} className="space-y-3">
+              {focusQuest.map((topic) => (
+                <motion.div
+                  key={`quest-${topic.key}`}
+                  variants={fadeUpItem}
+                  className="rounded-xl border border-primary/30 bg-bg-surface p-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <Target className="w-4 h-4 text-primary shrink-0" />
+                      <div className="text-sm font-mono text-text-primary truncate">{topic.topicTitle}</div>
+                    </div>
+                    <div className="text-xs text-text-secondary mt-1.5">
+                      {tr("Поточний", "Current")}: <span className={gradeTone(topic.average)}>{topic.average}</span> → {tr("ціль", "target")}: {topic.target} · {tr("сесій", "sessions")}: ~{topic.sessions}
+                    </div>
+                    <div className="mt-2.5 max-w-md"><ScoreBar value={(topic.average / topic.target) * 100} tone="bg-primary" /></div>
+                  </div>
+                  <Button
+                    variant="primary"
+                    onClick={() => handleRetryTopic(topic.topicId)}
+                    disabled={topic.topicId === null || retryingTopicId === topic.topicId}
+                  >
+                    <RefreshCcw className="w-4 h-4 mr-2" />
+                    {retryingTopicId === topic.topicId ? tr("Запуск...", "Starting...") : tr("Старт теми", "Start topic")}
+                  </Button>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Останні оцінки (згруповано за темами)", "Recent grades (grouped by topic)")}</div>
+
+          {recentGrades.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-bg-surface text-center text-text-muted font-mono py-12">{tr("Немає оцінок", "No grades yet")}</div>
+          ) : (
+            <div className="space-y-4">
+              {recentGradesByTopic.map((section) => (
+                <div key={section.key} className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+                  <div className="px-4 py-3 bg-bg-hover/60 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-xs font-mono text-text-primary">{section.topicTitle}</div>
+                    <div className="text-[11px] text-text-secondary">
+                      {tr("Спроб", "Attempts")}: {section.rows.length} · {tr("Середній", "Average")}: <span className={gradeTone(section.avg)}>{section.avg}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-4 border border-border/70 bg-bg-surface/80">
-            <div className="text-sm font-mono text-text-primary mb-2">{tr("Focus Quest (3 теми)", "Focus Quest (3 topics)")}</div>
-            <div className="text-xs text-text-secondary mb-3">
-              {tr(
-                "Замість адаптивного retry-плану: короткий квест на 3 найслабші теми з ціллю вийти до ≥65.",
-                "Instead of an adaptive retry plan: a short quest for your 3 weakest topics with a target to reach ≥65."
-              )}
-            </div>
-
-            {focusQuest.length === 0 ? (
-              <div className="text-center text-text-muted font-mono py-6">{tr("Квест поки не потрібен", "No quest needed right now")}</div>
-            ) : (
-              <div className="space-y-2">
-                {focusQuest.map((topic) => (
-                  <div key={`quest-${topic.key}`} className="rounded-xl border border-border bg-bg-base/70 p-3 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-                    <div>
-                      <div className="text-sm font-mono text-text-primary">{topic.topicTitle}</div>
-                      <div className="text-xs text-text-secondary mt-1">
-                        {tr("Поточний", "Current")}: <span className={gradeTone(topic.average)}>{topic.average}</span> → {tr("ціль", "target")}: {topic.target} · {tr("сесій", "sessions")}: ~{topic.sessions}
-                      </div>
-                    </div>
-                    <Button
-                      variant="primary"
-                      onClick={() => handleRetryTopic(topic.topicId)}
-                      disabled={topic.topicId === null || retryingTopicId === topic.topicId}
-                    >
-                      <RefreshCcw className="w-4 h-4 mr-2" />
-                      {retryingTopicId === topic.topicId ? tr("Запуск...", "Starting...") : tr("Старт теми", "Start topic")}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-4 border border-border/70 bg-bg-surface/80 overflow-hidden">
-            <div className="text-sm font-mono text-text-primary mb-3">{tr("Останні оцінки (згруповано за темами)", "Recent grades (grouped by topic)")}</div>
-
-            {recentGrades.length === 0 ? (
-              <div className="text-center text-text-muted font-mono py-8">{tr("Немає оцінок", "No grades yet")}</div>
-            ) : (
-              <div className="space-y-3">
-                {recentGradesByTopic.map((section) => (
-                  <div key={section.key} className="border border-border/70 rounded-xl overflow-hidden">
-                    <div className="px-3 py-2 bg-bg-hover/70 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-xs font-mono text-text-primary">{section.topicTitle}</div>
-                      <div className="text-[11px] text-text-secondary">
-                        {tr("Спроб", "Attempts")}: {section.rows.length} · {tr("Середній", "Average")}: <span className={gradeTone(section.avg)}>{section.avg}</span>
-                      </div>
-                    </div>
-                    <div className="overflow-auto">
-                      <table className="min-w-[620px] md:min-w-[760px] w-full text-xs sm:text-sm font-mono">
-                        <caption className="sr-only">
-                          {tr("Спроби по темі та їхні оцінки", "Attempts by topic and their grades")}
-                        </caption>
-                        <thead className="bg-bg-surface/80">
-                          <tr>
-                            <th className="p-2 border-b border-border text-left">{tr("Дата", "Date")}</th>
-                            <th className="p-2 border-b border-border text-left">{tr("Завдання", "Task")}</th>
-                            <th className="p-2 border-b border-border text-center">{tr("Підсумок", "Total")}</th>
-                            <th className="hidden md:table-cell p-2 border-b border-border text-center">W/O/I</th>
+                  <div className="overflow-auto">
+                    <table className="min-w-[620px] md:min-w-[760px] w-full text-xs sm:text-sm font-mono">
+                      <caption className="sr-only">
+                        {tr("Спроби по темі та їхні оцінки", "Attempts by topic and their grades")}
+                      </caption>
+                      <thead className="bg-bg-surface/80">
+                        <tr>
+                          <th className="p-2.5 border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-text-muted">{tr("Дата", "Date")}</th>
+                          <th className="p-2.5 border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-text-muted">{tr("Завдання", "Task")}</th>
+                          <th className="p-2.5 border-b border-border text-center text-[11px] uppercase tracking-[0.06em] text-text-muted">{tr("Підсумок", "Total")}</th>
+                          <th className="hidden md:table-cell p-2.5 border-b border-border text-center text-[11px] uppercase tracking-[0.06em] text-text-muted">W/O/I</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.rows.map((grade) => (
+                          <tr key={grade.id} className="odd:bg-bg-base even:bg-bg-surface/70 hover:bg-bg-hover transition-fast">
+                            <td className="p-2.5 border-b border-border text-text-secondary">
+                              {new Date(grade.createdAt).toLocaleString(locale, {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </td>
+                            <td className="p-2.5 border-b border-border text-text-primary">{grade.task.title}</td>
+                            <td className={`p-2.5 border-b border-border text-center font-semibold ${gradeTone(Number(grade.total))}`}>
+                              {grade.total}
+                            </td>
+                            <td className="hidden md:table-cell p-2.5 border-b border-border text-center text-text-secondary">
+                              {grade.workScore}/{grade.optimizationScore}/{grade.integrityScore}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {section.rows.map((grade) => (
-                            <tr key={grade.id} className="odd:bg-bg-base even:bg-bg-surface/70">
-                              <td className="p-2 border-b border-border text-text-secondary">
-                                {new Date(grade.createdAt).toLocaleString(locale, {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </td>
-                              <td className="p-2 border-b border-border text-text-primary">{grade.task.title}</td>
-                              <td className={`p-2 border-b border-border text-center font-semibold ${gradeTone(Number(grade.total))}`}>
-                                {grade.total}
-                              </td>
-                              <td className="hidden md:table-cell p-2 border-b border-border text-center text-text-secondary">
-                                {grade.workScore}/{grade.optimizationScore}/{grade.integrityScore}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

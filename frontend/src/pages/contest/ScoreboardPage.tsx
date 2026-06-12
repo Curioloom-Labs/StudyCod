@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate } from "lucide-react";
+import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate, Medal } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import { Skeleton } from "../../components/ui/Skeleton";
@@ -10,6 +11,7 @@ import {
   type ContestStandings,
   type ScoreboardRow,
 } from "../../lib/api/contests";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 
 type JwtPayload = { username?: string; name?: string; email?: string; sub?: string };
 
@@ -50,6 +52,7 @@ export const ScoreboardPage: React.FC = () => {
   const navigate = useNavigate();
   const params = useParams<{ id?: string }>();
   const contestId = Number(params.id);
+  const prefersReducedMotion = useReducedMotion();
 
   const [board, setBoard] = useState<ContestStandings | null>(null);
   const [title, setTitle] = useState<string>("");
@@ -159,35 +162,59 @@ export const ScoreboardPage: React.FC = () => {
     <div className="w-full bg-bg-base px-4 py-6 md:px-8 md:py-8">
       <div className="max-w-6xl w-full mx-auto space-y-6">
         {/* Hero */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <motion.div
+          initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
+          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: easeOutQuint }}
+          className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        >
           <div>
             <Button variant="ghost" onClick={() => navigate(`/contests/${Number.isFinite(contestId) ? contestId : ""}`)} className="mb-3">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>
-            <div className="inline-flex items-center gap-2 border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-mono font-medium uppercase tracking-[0.04em] text-primary">
-              <Trophy className="w-3.5 h-3.5" />
-              {mode === "ICPC" ? tr("ICPC · бали + штраф", "ICPC · solved + penalty") : tr("IOI · сума балів", "IOI · points")}
-            </div>
-            <h1 className="mt-3 text-2xl md:text-3xl font-mono font-semibold text-text-primary">
+            <span className="font-mono text-xs text-primary/70">// scoreboard</span>
+            <h1 className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
               {title || tr("Скорборд", "Scoreboard")}
             </h1>
-            <p className="mt-1 text-sm font-mono text-text-secondary">
-              {tr("Оновлюється наживо кожні 7 секунд.", "Updates live every 7 seconds.")}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-primary/40 bg-primary/10 text-[11px] font-mono font-medium uppercase tracking-[0.06em] text-primary">
+                <Trophy className="w-3 h-3" />
+                {mode === "ICPC" ? tr("ICPC · бали + штраф", "ICPC · solved + penalty") : tr("IOI · сума балів", "IOI · points")}
+              </span>
+              <p className="text-sm font-mono text-text-secondary">
+                {tr("Оновлюється наживо кожні 7 секунд.", "Updates live every 7 seconds.")}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {board?.freeze?.frozen ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-accent-warn border border-accent-warn/50 bg-accent-warn/10 px-2 py-1 rounded">
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-accent-warn border border-accent-warn/50 bg-accent-warn/10 px-2 py-1 rounded-lg">
                 <Snowflake className="w-3.5 h-3.5" /> {tr("Заморожено", "Frozen")}
               </span>
             ) : null}
-            {live && <span className="text-[11px] font-mono text-accent-error animate-pulse">● LIVE</span>}
+            {live && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-accent-error">
+                <span className="relative inline-flex h-2 w-2">
+                  {!prefersReducedMotion ? (
+                    <motion.span
+                      className="absolute inset-0 rounded-full bg-accent-error"
+                      animate={{ scale: [1, 2.4], opacity: [0.6, 0] }}
+                      transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+                    />
+                  ) : null}
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-error" />
+                </span>
+                LIVE
+              </span>
+            )}
             <Button variant="secondary" onClick={() => setLive((v) => !v)}>
               {live ? tr("Пауза", "Pause") : tr("Наживо", "Go live")}
             </Button>
           </div>
-        </div>
+        </motion.div>
+
+        <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
         {!Number.isFinite(contestId) ? (
           <div className="text-sm text-text-secondary">{tr("Невірний контест.", "Invalid contest.")}</div>
@@ -208,24 +235,39 @@ export const ScoreboardPage: React.FC = () => {
 
             {/* Podium */}
             {board && podium.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {podium.map((r, i) => (
-                  <div
-                    key={r.participantId}
-                    className={`rounded-xl border p-3 ${rankBadgeTone(i + 1)} ${isMe(r) ? "ring-1 ring-secondary" : ""}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{["🥇", "🥈", "🥉"][i]}</span>
-                      <span className="font-mono text-sm text-text-primary truncate">{r.displayName}</span>
-                    </div>
-                    <div className="mt-1 text-xs font-mono text-text-secondary">
-                      {mode === "ICPC"
-                        ? `${r.solved ?? 0} ${tr("розв.", "solved")} · ${tr("штраф", "pen")} ${r.penalty ?? 0}`
-                        : `${r.totalScore} ${tr("балів", "pts")}`}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <motion.div
+                variants={prefersReducedMotion ? undefined : staggerContainer}
+                initial={prefersReducedMotion ? undefined : "initial"}
+                animate={prefersReducedMotion ? undefined : "animate"}
+                className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+              >
+                {podium.map((r, i) => {
+                  const PodiumIcon = i === 0 ? Crown : i === 1 ? Trophy : Medal;
+                  const iconCls = i === 0 ? "text-yellow-400" : i === 1 ? "text-slate-400" : "text-amber-500";
+                  return (
+                    <motion.div
+                      key={r.participantId}
+                      variants={prefersReducedMotion ? undefined : fadeUpItem}
+                      className={`rounded-xl border p-4 transition-fast hover:-translate-y-0.5 ${rankBadgeTone(i + 1)} ${isMe(r) ? "ring-1 ring-secondary" : ""}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${i === 0 ? "bg-yellow-400/15" : i === 1 ? "bg-slate-400/15" : "bg-amber-500/15"}`}>
+                          <PodiumIcon className={`w-4 h-4 ${iconCls}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-mono text-sm text-text-primary truncate">{r.displayName}</div>
+                          <div className="text-[11px] font-mono text-text-muted">{tr("місце", "place")} #{i + 1}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs font-mono text-text-secondary">
+                        {mode === "ICPC"
+                          ? `${r.solved ?? 0} ${tr("розв.", "solved")} · ${tr("штраф", "pen")} ${r.penalty ?? 0}`
+                          : `${r.totalScore} ${tr("балів", "pts")}`}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
             ) : null}
 
             {/* Controls */}
@@ -298,10 +340,10 @@ export const ScoreboardPage: React.FC = () => {
                           className={`${me ? "bg-secondary/10" : "odd:bg-bg-base/40 even:bg-bg-surface"} hover:bg-bg-hover transition-fast`}
                         >
                           <td className={`px-4 py-2.5 border-b border-border ${me ? "bg-secondary/10" : "bg-inherit"} sticky left-0`}>
-                            <span className={`inline-flex items-center justify-center min-w-7 h-7 px-1.5 rounded border text-xs font-bold ${rankBadgeTone(r.rank)}`}>
-                              {r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}
+                            <span className={`inline-flex items-center justify-center min-w-7 h-7 px-1.5 rounded border text-xs font-bold font-mono ${rankBadgeTone(r.rank)}`}>
+                              {r.rank}
                             </span>
-                            <span className={`ml-1 ${moved === "↑" ? "text-accent-success" : "text-accent-error"}`}>{moved}</span>
+                            <span className={`ml-1 text-xs font-mono ${moved === "↑" ? "text-accent-success" : "text-accent-error"}`}>{moved}</span>
                           </td>
                           <td className="px-4 py-2.5 border-b border-border text-text-primary">
                             {me ? <Crown className="inline w-3.5 h-3.5 text-secondary mr-1 -mt-0.5" /> : null}

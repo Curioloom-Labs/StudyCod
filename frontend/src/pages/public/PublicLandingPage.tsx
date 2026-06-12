@@ -1,26 +1,58 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import { Logo } from "../../components/Logo";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
-import { GraduationCap, User, Library, BookOpen, ShieldCheck, Sparkles, Rocket, CheckCircle2, Timer, MessageCircleQuestion } from "lucide-react";
+import { IntroSplash } from "../../components/IntroSplash";
+import { GraduationCap, User, Library, BookOpen, ShieldCheck, Timer, CheckCircle2, MessageCircleQuestion, ArrowRight, Terminal, Code2, Trophy } from "lucide-react";
 import { applyTheme, getCurrentTheme } from "../../theme";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 
 export const PublicLandingPage: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
 
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
-  const topMenuButtonClass = "inline-flex h-8 items-center justify-center rounded-md border border-border/80 bg-bg-code/70 px-3 text-[11px] font-mono uppercase tracking-[0.08em] text-text-secondary transition-fast hover:-translate-y-[1px] hover:border-primary/50 hover:bg-bg-hover/80 hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/60";
+  const topMenuButtonClass =
+    "inline-flex h-8 items-center justify-center rounded-md border border-border/80 bg-bg-code/70 px-3 text-[11px] font-mono uppercase tracking-[0.08em] text-text-secondary transition-fast hover:-translate-y-[1px] hover:border-primary/50 hover:bg-bg-hover/80 hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/60";
   const [theme, setTheme] = React.useState<"dark" | "light">(() => getCurrentTheme());
+
+  const features = [
+    {
+      Icon: Timer,
+      title: t("landingMiniFastTitle"),
+      body: t("landingMiniFastBody"),
+    },
+    {
+      Icon: CheckCircle2,
+      title: t("landingMiniClearTitle"),
+      body: t("landingMiniClearBody"),
+    },
+    {
+      Icon: MessageCircleQuestion,
+      title: t("landingMiniHelpTitle"),
+      body: t("landingMiniHelpBody"),
+    },
+  ];
+
+  const cards = [
+    { Icon: User, title: t("landingCardPersonalTitle"), body: t("landingCardPersonalBody") },
+    { Icon: GraduationCap, title: t("landingCardEduTitle"), body: t("landingCardEduBody") },
+    { Icon: Library, title: t("landingCardLibraryTitle"), body: t("landingCardLibraryBody") },
+  ];
 
   return (
     <div className="min-h-[100dvh] bg-bg-base text-text-primary">
-      <header className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6">
+      {/* One-time cinematic brand intro (first visit only). */}
+      <IntroSplash />
+
+      {/* Header */}
+      <header className="h-16 border-b border-border bg-bg-surface/80 backdrop-blur-sm flex items-center justify-between px-6 sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <Logo size={28} className="text-primary" />
-          <span className="text-lg font-mono text-text-primary">StudyCod</span>
+          <span className="text-lg font-mono text-text-primary tracking-tight">StudyCod</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-bg-code/35 p-1.5">
@@ -46,130 +78,153 @@ export const PublicLandingPage: React.FC = () => {
             {theme === "dark" ? "Light" : "Dark"}
           </button>
 
-          <button type="button" className={topMenuButtonClass} onClick={() => navigate("/docs")}>{t("help")}</button>
+          <button type="button" className={topMenuButtonClass} onClick={() => navigate("/docs")}>
+            {t("help")}
+          </button>
         </div>
       </header>
 
-      <main className="px-6 py-10">
-        <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr,0.8fr] gap-8 items-start">
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 px-3 py-1 border border-border bg-bg-code text-xs font-mono text-text-secondary">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  {t("landingBadge")}
-                </div>
+      <main className="px-6 py-12">
+        <div className="max-w-5xl mx-auto space-y-16">
+          {/* Hero */}
+          <motion.div
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 12 }}
+            animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: easeOutQuint }}
+            className="grid grid-cols-1 lg:grid-cols-[1.2fr,0.8fr] gap-10 items-start"
+          >
+            {/* Left column: value prop */}
+            <div className="space-y-7">
+              <div className="space-y-4">
+                <span className="font-mono text-xs text-primary/70">// studycod</span>
 
-                <h1 className="text-3xl md:text-4xl font-mono text-text-primary leading-tight">
+                <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-text-primary leading-tight">
                   {t("landingTitle")}
                 </h1>
 
-                <p className="text-sm md:text-base font-mono text-text-secondary max-w-2xl">
+                <p className="text-sm md:text-base text-text-secondary max-w-xl leading-relaxed">
                   {t("landingSubtitle")}
                 </p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button onClick={() => navigate("/?auth=register")}>{t("landingCtaRegister")}</Button>
-                <Button variant="secondary" onClick={() => navigate("/?auth=login")}>{t("landingCtaLogin")}</Button>
-                <Button variant="ghost" onClick={() => navigate("/?auth=login&next=%2Flibrary")}>{t("landingCtaLibrary")}</Button>
+                <Button variant="secondary" onClick={() => navigate("/?auth=login")}>
+                  {t("landingCtaLogin")}
+                </Button>
+                <Button variant="ghost" onClick={() => navigate("/?auth=login&next=%2Flibrary")}>
+                  {t("landingCtaLibrary")}
+                </Button>
               </div>
 
-              <div className="text-xs font-mono text-text-muted">
-                {t("landingNote")}
-              </div>
+              <div className="text-xs font-mono text-text-muted">{t("landingNote")}</div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="flex items-start gap-3 p-3 border border-border bg-bg-surface/40">
-                  <Timer className="w-4 h-4 text-primary mt-0.5" />
-                  <div>
-                    <div className="text-xs font-mono text-text-primary">{t("landingMiniFastTitle")}</div>
-                    <div className="text-[11px] font-mono text-text-muted mt-1">{t("landingMiniFastBody")}</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 border border-border bg-bg-surface/40">
-                  <CheckCircle2 className="w-4 h-4 text-primary mt-0.5" />
-                  <div>
-                    <div className="text-xs font-mono text-text-primary">{t("landingMiniClearTitle")}</div>
-                    <div className="text-[11px] font-mono text-text-muted mt-1">{t("landingMiniClearBody")}</div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 border border-border bg-bg-surface/40">
-                  <MessageCircleQuestion className="w-4 h-4 text-primary mt-0.5" />
-                  <div>
-                    <div className="text-xs font-mono text-text-primary">{t("landingMiniHelpTitle")}</div>
-                    <div className="text-[11px] font-mono text-text-muted mt-1">{t("landingMiniHelpBody")}</div>
-                  </div>
-                </div>
-              </div>
+              {/* Mini feature pills */}
+              <motion.div
+                variants={prefersReducedMotion ? undefined : staggerContainer}
+                initial={prefersReducedMotion ? undefined : "initial"}
+                animate={prefersReducedMotion ? undefined : "animate"}
+                className="grid grid-cols-1 md:grid-cols-3 gap-3"
+              >
+                {features.map(({ Icon, title, body }) => (
+                  <motion.div
+                    key={title}
+                    variants={prefersReducedMotion ? undefined : fadeUpItem}
+                    className="group flex items-start gap-3 p-4 rounded-xl border border-border bg-bg-surface hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] transition-fast"
+                  >
+                    <Icon className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-text-primary">{title}</div>
+                      <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{body}</div>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
             </div>
 
-            <Card className="p-6">
-              <div className="space-y-4">
+            {/* Right column: terminal-style quick-start card */}
+            <div className="rounded-xl border border-border bg-bg-surface shadow-[0_12px_32px_-16px_rgba(0,0,0,0.4)] overflow-hidden">
+              {/* Terminal dots bar */}
+              <div className="flex items-center gap-1.5 px-4 py-3 border-b border-border bg-bg-code/60">
+                <span className="w-3 h-3 rounded-full bg-accent-error/60" />
+                <span className="w-3 h-3 rounded-full bg-accent-warn/60" />
+                <span className="w-3 h-3 rounded-full bg-accent-success/60" />
+                <span className="ml-3 text-xs font-mono text-text-muted">studycod — quick-start</span>
+              </div>
+
+              <div className="p-5 space-y-4">
                 <div className="text-sm font-mono text-text-secondary">{t("landingQuickStart")}</div>
 
-                <div className="space-y-3">
-                  <div className="p-3 border border-border bg-bg-code">
-                    <div className="flex items-center gap-2 text-xs font-mono text-text-secondary">
-                      <Rocket className="w-4 h-4 text-primary" />
+                <div className="space-y-2">
+                  {/* Steps block */}
+                  <div className="rounded-lg border border-border bg-bg-code p-3">
+                    <div className="flex items-center gap-2 text-xs font-mono text-text-secondary mb-2">
+                      <Terminal className="w-3.5 h-3.5 text-primary" />
                       {t("landingStepsTitle")}
                     </div>
-                    <ol className="mt-2 space-y-2 text-xs font-mono text-text-primary">
+                    <ol className="space-y-1.5 text-xs font-mono text-text-primary">
                       <li className="flex gap-2">
-                        <span className="text-text-muted">1)</span>
+                        <span className="text-primary/60">01</span>
                         <span>{t("landingStep1")}</span>
                       </li>
                       <li className="flex gap-2">
-                        <span className="text-text-muted">2)</span>
+                        <span className="text-primary/60">02</span>
                         <span>{t("landingStep2")}</span>
                       </li>
                       <li className="flex gap-2">
-                        <span className="text-text-muted">3)</span>
+                        <span className="text-primary/60">03</span>
                         <span>{t("landingStep3")}</span>
                       </li>
                     </ol>
                   </div>
 
-                  <button className="w-full text-left p-3 border border-border hover:bg-bg-hover transition-fast" onClick={() => navigate("/?auth=register")}
-                >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-mono text-text-primary">{t("landingQuickPersonal")}</span>
+                  {[
+                    {
+                      Icon: User,
+                      label: t("landingQuickPersonal"),
+                      hint: t("landingQuickPersonalHint"),
+                      tag: tr("для новачків", "beginner-friendly"),
+                      onClick: () => navigate("/?auth=register"),
+                    },
+                    {
+                      Icon: GraduationCap,
+                      label: t("landingQuickEdu"),
+                      hint: t("landingQuickEduHint"),
+                      tag: tr("для класів", "for classes"),
+                      onClick: () => navigate("/?auth=login"),
+                    },
+                    {
+                      Icon: Library,
+                      label: t("landingQuickLibrary"),
+                      hint: t("landingQuickLibraryHint"),
+                      tag: t("landingRequiresAccount"),
+                      onClick: () => navigate("/?auth=login&next=%2Flibrary"),
+                    },
+                  ].map(({ Icon, label, hint, tag, onClick }) => (
+                    <button
+                      key={label}
+                      className="w-full text-left rounded-xl border border-border bg-bg-base/50 hover:border-primary/40 hover:bg-bg-hover p-3 transition-fast group"
+                      onClick={onClick}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Icon className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-mono text-text-primary">{label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono text-text-secondary">{tag}</span>
+                          <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-primary group-hover:translate-x-0.5 transition-fast" />
+                        </div>
                       </div>
-                      <span className="text-xs font-mono text-text-secondary">{tr("для новачків", "beginner-friendly")}</span>
-                    </div>
-                    <div className="mt-1 text-xs font-mono text-text-muted">{t("landingQuickPersonalHint")}</div>
-                  </button>
-
-                  <button className="w-full text-left p-3 border border-border hover:bg-bg-hover transition-fast" onClick={() => navigate("/?auth=login")}
-                >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <GraduationCap className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-mono text-text-primary">{t("landingQuickEdu")}</span>
-                      </div>
-                      <span className="text-xs font-mono text-text-secondary">{tr("для класів", "for classes")}</span>
-                    </div>
-                    <div className="mt-1 text-xs font-mono text-text-muted">{t("landingQuickEduHint")}</div>
-                  </button>
-
-                  <button className="w-full text-left p-3 border border-border hover:bg-bg-hover transition-fast" onClick={() => navigate("/?auth=login&next=%2Flibrary")}
-                >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Library className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-mono text-text-primary">{t("landingQuickLibrary")}</span>
-                      </div>
-                      <span className="text-xs font-mono text-text-secondary">{t("landingRequiresAccount")}</span>
-                    </div>
-                    <div className="mt-1 text-xs font-mono text-text-muted">{t("landingQuickLibraryHint")}</div>
-                  </button>
+                      <div className="mt-1 text-xs font-mono text-text-muted">{hint}</div>
+                    </button>
+                  ))}
                 </div>
 
-                <div className="pt-2">
-                  <Button className="w-full" onClick={() => navigate("/docs")}> 
-                    <BookOpen className="w-4 h-4" /> {t("landingCtaDocs")}
+                <div>
+                  <Button className="w-full" onClick={() => navigate("/docs")}>
+                    <BookOpen className="w-4 h-4" />
+                    {t("landingCtaDocs")}
                   </Button>
                 </div>
 
@@ -178,43 +233,79 @@ export const PublicLandingPage: React.FC = () => {
                   {t("landingPrivacy")}
                 </div>
               </div>
-            </Card>
+            </div>
+          </motion.div>
+
+          {/* Hairline */}
+          <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+          {/* Feature cards */}
+          <div>
+            <div className="mb-6">
+              <span className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">
+                {tr("// можливості", "// features")}
+              </span>
+            </div>
+            <motion.div
+              variants={prefersReducedMotion ? undefined : staggerContainer}
+              initial={prefersReducedMotion ? undefined : "initial"}
+              animate={prefersReducedMotion ? undefined : "animate"}
+              className="grid grid-cols-1 md:grid-cols-3 gap-4"
+            >
+              {cards.map(({ Icon, title, body }) => (
+                <motion.div
+                  key={title}
+                  variants={prefersReducedMotion ? undefined : fadeUpItem}
+                  className="rounded-xl border border-border bg-bg-surface p-5 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] transition-fast"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Icon className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="text-sm font-semibold text-text-primary">{title}</div>
+                  </div>
+                  <div className="text-xs text-text-secondary leading-relaxed">{body}</div>
+                </motion.div>
+              ))}
+            </motion.div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-10">
-            <Card className="p-5">
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4 text-primary" />
-                <div className="text-sm font-mono text-text-primary">{t("landingCardPersonalTitle")}</div>
-              </div>
-              <div className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">{t("landingCardPersonalBody")}</div>
-            </Card>
-
-            <Card className="p-5">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-primary" />
-                <div className="text-sm font-mono text-text-primary">{t("landingCardEduTitle")}</div>
-              </div>
-              <div className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">{t("landingCardEduBody")}</div>
-            </Card>
-
-            <Card className="p-5">
-              <div className="flex items-center gap-2">
-                <Library className="w-4 h-4 text-primary" />
-                <div className="text-sm font-mono text-text-primary">{t("landingCardLibraryTitle")}</div>
-              </div>
-              <div className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">{t("landingCardLibraryBody")}</div>
-            </Card>
+          {/* Stats strip */}
+          <div className="rounded-xl border border-border bg-bg-surface p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
+              {[
+                { Icon: Code2, label: tr("Задач у бібліотеці", "Library tasks"), value: "200+" },
+                { Icon: Trophy, label: tr("Контестів проведено", "Contests held"), value: "50+" },
+                { Icon: CheckCircle2, label: tr("Подань оцінено", "Submissions judged"), value: "10k+" },
+              ].map(({ Icon, label, value }) => (
+                <div key={label} className="flex flex-col items-center gap-2">
+                  <Icon className="w-5 h-5 text-primary/70" />
+                  <div className="text-2xl font-mono font-semibold text-text-primary">{value}</div>
+                  <div className="text-xs text-text-muted font-mono">{label}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-10 flex items-center justify-between text-xs font-mono text-text-muted border-t border-border pt-6">
+          {/* Footer */}
+          <div className="flex flex-wrap items-center justify-between text-xs font-mono text-text-muted border-t border-border pt-6 gap-4">
             <div>© {new Date().getFullYear()} StudyCod</div>
-            <div className="flex items-center gap-3">
-              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/privacy")}>{t("footerPrivacyPolicy")}</button>
-              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/terms")}>{t("footerTermsOfUse")}</button>
-              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/cookies")}>{t("footerCookiePolicy")}</button>
-              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/support")}>{t("landingSupport")}</button>
-              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/docs")}>{t("help")}</button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/privacy")}>
+                {t("footerPrivacyPolicy")}
+              </button>
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/terms")}>
+                {t("footerTermsOfUse")}
+              </button>
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/cookies")}>
+                {t("footerCookiePolicy")}
+              </button>
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/support")}>
+                {t("landingSupport")}
+              </button>
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/docs")}>
+                {t("help")}
+              </button>
             </div>
           </div>
         </div>

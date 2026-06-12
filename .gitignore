@@ -84,6 +84,7 @@ coverage/
 .agents/
 .github/
 .claude/
+studycod-video/
 .impeccable.md
 skills-lock.json
 tmp-harden-findings-full.json

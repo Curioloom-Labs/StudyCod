@@ -1,12 +1,35 @@
-import React, { useEffect, useMemo, useState, startTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { animate, motion, useReducedMotion } from "framer-motion";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { Logo } from "../../components/Logo";
 import type { User, Task } from "../../types";
 import { ArrowRight, FileText, GraduationCap, BookOpen, Users, TrendingUp, Clock as ClockIcon, CheckCircle2, TimerReset, Layers3, Gauge, Sparkles } from "lucide-react";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
+
+const CountUp: React.FC<{ value: number; decimals?: number; suffix?: string; className?: string }> = ({ value, decimals = 0, suffix = "", className }) => {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (reduce) {
+      node.textContent = value.toFixed(decimals) + suffix;
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: (v) => {
+        node.textContent = v.toFixed(decimals) + suffix;
+      },
+    });
+    return () => controls.stop();
+  }, [value, decimals, suffix, reduce]);
+  return <span ref={ref} className={className}>{value.toFixed(decimals) + suffix}</span>;
+};
 import { listTasks } from "../../lib/api/tasks";
 import { getClasses, getStudentLessons, getStudentGrades, type Class, type Lesson, type Grade, type SummaryGrade } from "../../lib/api/edu";
 import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezone";
@@ -439,59 +462,157 @@ export const HomePage: React.FC<Props> = ({
     );
   }
 
-  return <div className="w-full bg-bg-base px-4 py-6 md:px-8 md:py-10">
-            <div className="max-w-5xl w-full mx-auto space-y-8">
-                {}
-                <div className="mb-2 md:mb-4">
-                    <div className="flex items-center gap-3 mb-3">
-                        <Logo size={48} />
-                        <h1 className="text-2xl font-mono text-text-primary">
+  const primaryAction = () => {
+    if (isStudent) {
+      startTransition(() => onNavigate("student"));
+    } else if (isTeacher || isEducational) {
+      startTransition(() => onNavigate("teacher"));
+    } else {
+      startTransition(() => onNavigate("tasks"));
+    }
+  };
+
+  const quickActions: Array<{ icon: React.ComponentType<{ className?: string }>; label: string; sub: string; onClick: () => void }> = isEducational
+    ? [
+        ...(isStudent
+          ? [
+              { icon: BookOpen, label: t("myJournal"), sub: tr("Уроки та оцінки", "Lessons & grades"), onClick: () => startTransition(() => onNavigate("student")) },
+              { icon: ClockIcon, label: tr("Уроки", "Lessons"), sub: `${activeLessons} ${tr("активних", "active")}`, onClick: () => navigate("/edu/lessons") },
+            ]
+          : [
+              { icon: GraduationCap, label: t("myClasses"), sub: `${classes.length} ${tr("класів", "classes")}`, onClick: () => startTransition(() => onNavigate("teacher")) },
+              { icon: Users, label: t("studentsCount"), sub: `${totalStudents}`, onClick: () => startTransition(() => onNavigate("teacher")) },
+            ]),
+      ]
+    : [
+        { icon: FileText, label: tr("Завдання", "Tasks"), sub: `${personalStats.open} ${tr("відкрито", "open")}`, onClick: () => startTransition(() => onNavigate("tasks")) },
+        { icon: TrendingUp, label: tr("Оцінки", "Grades"), sub: `${personalStats.done}/${personalStats.total || 0}`, onClick: () => startTransition(() => onNavigate("grades")) },
+        { icon: Layers3, label: tr("Бібліотека", "Library"), sub: tr("Каталог задач", "Task catalog"), onClick: () => navigate("/library") },
+        { icon: Gauge, label: tr("Пісочниця", "Playground"), sub: tr("Вільний код", "Free coding"), onClick: () => navigate("/playground") },
+      ];
+
+  return <div className="w-full bg-bg-base">
+            <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto w-full">
+                <motion.div variants={staggerContainer} initial="initial" animate="animate">
+                    <motion.div variants={fadeUpItem} className="flex items-center gap-2 font-mono text-xs text-primary/70">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>// {isEducational ? "edu" : "home"}</span>
+                    </motion.div>
+                    <motion.div variants={fadeUpItem} className="mt-3 flex items-center gap-3">
+                        <Logo size={44} />
+                        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
                             StudyCod {isEducational ? "EDU" : ""}
                         </h1>
+                    </motion.div>
+                    <motion.p variants={fadeUpItem} className="mt-2 text-sm text-text-secondary">
+                        {t('hello')}, <span className="text-text-primary font-medium">{user.username}</span> · {sessionLabel}
+                    </motion.p>
+
+                    <motion.div variants={fadeUpItem} className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
+                        {isStudent ? (
+                          <>
+                            {averageGrade !== null && hasControlInAverage ? (
+                              <button onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")} className="text-left group">
+                                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Середній бал", "Average")}</div>
+                                <div className="mt-1 text-3xl font-mono font-semibold text-text-primary group-hover:text-primary transition-fast"><CountUp value={averageGrade} decimals={1} /></div>
+                              </button>
+                            ) : null}
+                            <div>
+                              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Активних уроків", "Active lessons")}</div>
+                              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={activeLessons} /></div>
+                            </div>
+                          </>
+                        ) : isTeacher ? (
+                          <>
+                            <div>
+                              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{t("classesCount")}</div>
+                              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={classes.length} /></div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{t("studentsCount")}</div>
+                              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={totalStudents} /></div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Прогрес", "Progress")}</div>
+                              <div className="mt-1 text-3xl font-mono font-semibold text-primary"><CountUp value={personalStats.progress} suffix="%" /></div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Виконано", "Done")}</div>
+                              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={personalStats.done} />/{personalStats.total || 0}</div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Відкрито", "Open")}</div>
+                              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={personalStats.open} /></div>
+                            </div>
+                          </>
+                        )}
+                    </motion.div>
+                </motion.div>
+
+                <div className="mt-6 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+            </div>
+
+            <div className="px-4 md:px-8 pb-12 max-w-6xl mx-auto w-full space-y-8">
+                {}
+                <motion.button
+                  type="button"
+                  onClick={openResume}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                  className="group w-full text-left rounded-xl border border-primary/40 bg-bg-surface p-5 md:p-6 transition-fast hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 flex items-center justify-between gap-4"
+                >
+                    <div className="min-w-0">
+                        <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-primary/80">{tr("Продовжити сесію", "Continue session")}</div>
+                        <div className="mt-1.5 text-lg md:text-xl font-mono font-semibold text-text-primary truncate" title={resumeTitle}>
+                            {loading ? tr("Завантаження…", "Loading…") : resumeTitle}
+                        </div>
+                        <div className="mt-1 text-xs font-mono text-text-secondary">{sessionLabel}</div>
                     </div>
-                    <p className="text-base text-text-secondary leading-[1.65]">
-                        {t('hello')}, {user.username}
-                    </p>
-                </div>
+                    <div className="shrink-0 flex h-11 w-11 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary transition-fast group-hover:translate-x-0.5">
+                        <ArrowRight className="w-5 h-5" />
+                    </div>
+                </motion.button>
 
                 {}
-                {isTeacher && !loading && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Card className="p-4 space-y-1">
-                            <Users className="w-5 h-5 text-primary mb-2" />
-                            <p className="text-xs text-text-secondary">{t("classesCount")}</p>
-                            <p className="text-xl font-mono text-text-primary">{classes.length}</p>
-                        </Card>
-                        <Card className="p-4 space-y-1">
-                            <GraduationCap className="w-5 h-5 text-primary mb-2" />
-                            <p className="text-xs text-text-secondary">{t("studentsCount")}</p>
-                            <p className="text-xl font-mono text-text-primary">{totalStudents}</p>
-                        </Card>
-                    </div>}
+                <section className="space-y-4">
+                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Швидкі дії", "Quick actions")}</div>
+                    <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {quickActions.map((action, idx) => (
+                          <motion.button
+                            key={idx}
+                            variants={fadeUpItem}
+                            type="button"
+                            onClick={action.onClick}
+                            className="group text-left rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
+                          >
+                            <action.icon className="w-5 h-5 text-primary transition-fast group-hover:scale-110" />
+                            <div className="mt-3 text-sm font-mono text-text-primary truncate">{action.label}</div>
+                            <div className="mt-0.5 text-[11px] font-mono text-text-secondary truncate">{action.sub}</div>
+                          </motion.button>
+                        ))}
+                    </motion.div>
+                </section>
 
                 {}
-                {isStudent && !loading && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {averageGrade !== null && hasControlInAverage && <Card className="p-4 space-y-1 cursor-pointer hover:bg-bg-hover transition-fast" onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")}>
-                                <TrendingUp className="w-5 h-5 text-primary mb-2" />
-                                <p className="text-xs text-text-secondary">{tr("Середній бал", "Average grade")}</p>
-                                <p className="text-xl font-mono text-text-primary">{averageGrade.toFixed(1)}</p>
-                            </Card>}
-                        <Card className="p-4 space-y-1">
-                            <ClockIcon className="w-5 h-5 text-primary mb-2" />
-                            <p className="text-xs text-text-secondary">{tr("Активних уроків", "Active lessons")}</p>
-                            <p className="text-xl font-mono text-text-primary">{activeLessons}</p>
-                        </Card>
-                    </div>}
-
-                {}
-                {isStudent && recentGrades.length > 0 && <Card className="p-4 space-y-2">
-                        <h3 className="text-sm font-mono text-text-primary mb-3">{tr("Останні оцінки", "Recent grades")}</h3>
-                        {recentGrades.filter(g => g.task || g.topicTask).map(g => <div key={g.id} className="flex justify-between text-sm py-1 border-b border-border/60 last:border-b-0">
-                                    <span>
-                                        {g.task?.title || g.topicTask?.title || tr("Невідоме завдання", "Unknown task")}
-                                    </span>
-                                    <span>{g.total}/100</span>
-                                </div>)}
-                    </Card>}
+                {isStudent && recentGrades.length > 0 && (
+                  <section className="space-y-4">
+                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Останні оцінки", "Recent grades")}</div>
+                    <motion.div variants={staggerContainer} initial="initial" whileInView="animate" viewport={{ once: true, amount: 0.2 }} className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+                        {recentGrades.filter(g => g.task || g.topicTask).map(g => (
+                          <motion.div key={g.id} variants={fadeUpItem} className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/60 last:border-b-0 hover:bg-bg-hover transition-fast">
+                            <span className="text-sm font-mono text-text-primary truncate">
+                                {g.task?.title || g.topicTask?.title || tr("Невідоме завдання", "Unknown task")}
+                            </span>
+                            <span className="text-sm font-mono text-text-secondary shrink-0">{g.total}<span className="text-text-muted">/100</span></span>
+                          </motion.div>
+                        ))}
+                    </motion.div>
+                  </section>
+                )}
 
                 {}
                 {isStudent && averageGrade !== null && hasControlInAverage && <Modal open={showAverageBreakdown} onClose={() => setShowAverageBreakdown(false)} title={tr("Середній бал — розрахунок", "Average grade — calculation")}>
@@ -525,16 +646,17 @@ export const HomePage: React.FC<Props> = ({
                     </Modal>}
 
                 {}
-                {!isEducational && !isStudent && !isTeacher && allTasks.length > 0 && <Card className="p-4">
-                        <h3 className="text-sm font-mono text-text-primary mb-3">{tr("Мої завдання", "My tasks")}</h3>
-                        <div className="space-y-2 max-h-64 overflow-y-auto">
-                            {allTasks.map(task => <button type="button" key={task.id} onClick={() => {
+                {!isEducational && !isStudent && !isTeacher && allTasks.length > 0 && (
+                  <section className="space-y-4">
+                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Мої завдання", "My tasks")}</div>
+                    <motion.div variants={staggerContainer} initial="initial" whileInView="animate" viewport={{ once: true, amount: 0.1 }} className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        {allTasks.map(task => <motion.button variants={fadeUpItem} type="button" key={task.id} onClick={() => {
             sessionStorage.setItem("openTaskId", task.id.toString());
             startTransition(() => {
               onNavigate("tasks");
             });
-          }} className="w-full p-3 text-left border border-border hover:border-primary/50 hover:bg-bg-hover transition-fast rounded">
-                                    <div className="flex items-center justify-between mb-1">
+          }} className="w-full p-4 text-left rounded-xl border border-border bg-bg-surface hover:border-primary/40 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60">
+                                    <div className="flex items-center justify-between gap-3 mb-1">
                                         <span className="text-sm font-mono text-text-primary truncate flex-1">
                                             {task.title}
                                         </span>
@@ -545,15 +667,16 @@ export const HomePage: React.FC<Props> = ({
                                     <div className="text-xs font-mono text-text-muted">
                                         {new Date(task.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
                                     </div>
-                                </button>)}
-                        </div>
-                    </Card>}
+                                </motion.button>)}
+                    </motion.div>
+                  </section>
+                )}
 
                 {}
-                <div className="flex justify-center">
-                {isStudent ? <Button onClick={() => startTransition(() => onNavigate("student"))}>
+                <div className="flex justify-center pt-2">
+                {isStudent ? <Button onClick={primaryAction}>
                         <BookOpen className="w-5 h-5" /> {t("myJournal")}
-                    </Button> : isTeacher || isEducational ? <Button onClick={() => startTransition(() => onNavigate("teacher"))}>
+                    </Button> : isTeacher || isEducational ? <Button onClick={primaryAction}>
                         <GraduationCap className="w-5 h-5" /> {t("myClasses")}
                     </Button> : <Button onClick={() => startTransition(() => onNavigate("tasks"))}>
                         <FileText className="w-5 h-5" /> {tr("Продовжити навчання", "Continue learning")}

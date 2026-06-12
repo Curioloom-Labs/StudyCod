@@ -1,9 +1,10 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
+import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
 
 type LegalSection = {
   title: string;
@@ -14,17 +15,15 @@ type LegalSection = {
 const SUPPORT_EMAIL = "support@studycod.space";
 
 const LegalSectionBlock: React.FC<{ section: LegalSection }> = ({ section }) => (
-  <section className="space-y-2">
-    <h2 className="text-base font-mono text-text-primary">{section.title}</h2>
+  <section className="space-y-2.5">
+    <h2 className="text-sm font-mono font-semibold text-text-primary">{section.title}</h2>
     {section.paragraphs?.map((paragraph) => (
-      <p key={paragraph} className="text-sm leading-6 text-text-secondary">
-        {paragraph}
-      </p>
+      <p key={paragraph} className="text-sm leading-7 text-text-secondary">{paragraph}</p>
     ))}
     {section.bullets ? (
-      <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-text-secondary">
+      <ul className="space-y-1.5 pl-4 border-l-2 border-primary/20">
         {section.bullets.map((bullet) => (
-          <li key={bullet}>{bullet}</li>
+          <li key={bullet} className="text-sm leading-6 text-text-secondary pl-2">{bullet}</li>
         ))}
       </ul>
     ) : null}
@@ -34,20 +33,15 @@ const LegalSectionBlock: React.FC<{ section: LegalSection }> = ({ section }) => 
 export const PrivacyPolicyPage: React.FC = () => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
 
   const sections: LegalSection[] = [
     {
       title: tr("1. Хто відповідає за обробку даних", "1. Who is responsible for data processing"),
       paragraphs: [
-        tr(
-          "Ця політика пояснює, як StudyCod обробляє персональні дані користувачів платформи: учнів, студентів, вчителів, організаторів змагань, адміністраторів та користувачів персонального режиму.",
-          "This policy explains how StudyCod processes personal data of platform users: learners, students, teachers, contest organizers, administrators, and personal-mode users."
-        ),
-        tr(
-          "Для персонального режиму оператором даних є StudyCod. Для класів, створених навчальним закладом або вчителем, відповідальність за склад учнів, навчальні матеріали й оцінювання може розподілятися між StudyCod та відповідним навчальним організатором.",
-          "For personal mode, StudyCod acts as the data operator. For classes created by an educational institution or teacher, responsibility for student rosters, learning materials, and assessment may be shared between StudyCod and the relevant educational organizer."
-        )
+        tr("Ця політика пояснює, як StudyCod обробляє персональні дані користувачів платформи: учнів, студентів, вчителів, організаторів змагань, адміністраторів та користувачів персонального режиму.", "This policy explains how StudyCod processes personal data of platform users: learners, students, teachers, contest organizers, administrators, and personal-mode users."),
+        tr("Для персонального режиму оператором даних є StudyCod. Для класів, створених навчальним закладом або вчителем, відповідальність за склад учнів, навчальні матеріали й оцінювання може розподілятися між StudyCod та відповідним навчальним організатором.", "For personal mode, StudyCod acts as the data operator. For classes created by an educational institution or teacher, responsibility for student rosters, learning materials, and assessment may be shared between StudyCod and the relevant educational organizer.")
       ]
     },
     {
@@ -76,27 +70,15 @@ export const PrivacyPolicyPage: React.FC = () => {
     {
       title: tr("4. Правові підстави обробки", "4. Legal bases for processing"),
       paragraphs: [
-        tr(
-          "Залежно від ситуації ми обробляємо дані на підставі виконання домовленості з користувачем або навчальним організатором, законного інтересу в безпеці й розвитку сервісу, згоди користувача або вимог законодавства.",
-          "Depending on the situation, we process data to perform an agreement with the user or educational organizer, based on legitimate interests in security and service improvement, with user consent, or to comply with legal requirements."
-        ),
-        tr(
-          "Якщо учень користується платформою в межах класу, вчитель або навчальна організація мають переконатися, що для створення й використання учнівського акаунта є належна підстава або згода батьків/законних представників, коли це потрібно.",
-          "If a student uses the platform as part of a class, the teacher or educational organization must ensure there is a proper basis or parent/legal guardian consent for creating and using the student account when required."
-        )
+        tr("Залежно від ситуації ми обробляємо дані на підставі виконання домовленості з користувачем або навчальним організатором, законного інтересу в безпеці й розвитку сервісу, згоди користувача або вимог законодавства.", "Depending on the situation, we process data to perform an agreement with the user or educational organizer, based on legitimate interests in security and service improvement, with user consent, or to comply with legal requirements."),
+        tr("Якщо учень користується платформою в межах класу, вчитель або навчальна організація мають переконатися, що для створення й використання учнівського акаунта є належна підстава або згода батьків/законних представників, коли це потрібно.", "If a student uses the platform as part of a class, the teacher or educational organization must ensure there is a proper basis or parent/legal guardian consent for creating and using the student account when required.")
       ]
     },
     {
       title: tr("5. AI, автоматична перевірка та доброчесність", "5. AI, automated checking, and integrity"),
       paragraphs: [
-        tr(
-          "StudyCod може використовувати автоматичні тести, аналіз коду, AI-підказки, AI-генерацію навчальних матеріалів та інструменти оцінювання. Для цього можуть оброблятися умови задач, код, відповіді, технічні помилки й навчальний контекст.",
-          "StudyCod may use automated tests, code analysis, AI hints, AI-generated learning materials, and assessment tools. Task statements, code, answers, technical errors, and learning context may be processed for this purpose."
-        ),
-        tr(
-          "Журнали доброчесності можуть фіксувати технічні сигнали під час виконання або здачі роботи, наприклад індикатори підозрілої активності. Такі сигнали призначені для перегляду вчителем або адміністратором і не повинні бути єдиною підставою для важливого рішення без людської перевірки.",
-          "Integrity logs may record technical signals during work or submission, such as indicators of suspicious activity. These signals are intended for teacher or administrator review and should not be the sole basis for an important decision without human review."
-        )
+        tr("StudyCod може використовувати автоматичні тести, аналіз коду, AI-підказки, AI-генерацію навчальних матеріалів та інструменти оцінювання. Для цього можуть оброблятися умови задач, код, відповіді, технічні помилки й навчальний контекст.", "StudyCod may use automated tests, code analysis, AI hints, AI-generated learning materials, and assessment tools. Task statements, code, answers, technical errors, and learning context may be processed for this purpose."),
+        tr("Журнали доброчесності можуть фіксувати технічні сигнали під час виконання або здачі роботи, наприклад індикатори підозрілої активності. Такі сигнали призначені для перегляду вчителем або адміністратором і не повинні бути єдиною підставою для важливого рішення без людської перевірки.", "Integrity logs may record technical signals during work or submission, such as indicators of suspicious activity. These signals are intended for teacher or administrator review and should not be the sole basis for an important decision without human review.")
       ]
     },
     {
@@ -107,45 +89,27 @@ export const PrivacyPolicyPage: React.FC = () => {
         tr("Правоохоронним органам, судам або державним органам, якщо цього вимагає закон або необхідно для захисту прав, безпеки чи цілісності сервісу.", "Law enforcement, courts, or public authorities when required by law or necessary to protect rights, safety, or service integrity.")
       ],
       paragraphs: [
-        tr(
-          "Ми не продаємо персональні дані користувачів. Постачальники отримують лише ті дані, які потрібні для виконання конкретної функції сервісу.",
-          "We do not sell users' personal data. Providers receive only the data needed to perform a specific service function."
-        )
+        tr("Ми не продаємо персональні дані користувачів. Постачальники отримують лише ті дані, які потрібні для виконання конкретної функції сервісу.", "We do not sell users' personal data. Providers receive only the data needed to perform a specific service function.")
       ]
     },
     {
       title: tr("7. Міжнародна передача даних", "7. International data transfers"),
       paragraphs: [
-        tr(
-          "Окремі технічні або AI-сервіси можуть бути розміщені за межами країни користувача. У таких випадках ми застосовуємо доступні договірні, технічні та організаційні заходи для захисту даних відповідно до застосовного законодавства.",
-          "Some technical or AI services may be hosted outside the user's country. In those cases, we use available contractual, technical, and organizational safeguards to protect data in line with applicable law."
-        )
+        tr("Окремі технічні або AI-сервіси можуть бути розміщені за межами країни користувача. У таких випадках ми застосовуємо доступні договірні, технічні та організаційні заходи для захисту даних відповідно до застосовного законодавства.", "Some technical or AI services may be hosted outside the user's country. In those cases, we use available contractual, technical, and organizational safeguards to protect data in line with applicable law.")
       ]
     },
     {
       title: tr("8. Зберігання даних", "8. Data retention"),
       paragraphs: [
-        tr(
-          "Ми зберігаємо дані стільки, скільки це потрібно для роботи акаунта, навчального процесу, підтримки, безпеки, виконання юридичних обов'язків або вирішення спорів. Навчальні результати й журнал оцінок можуть зберігатися довше, якщо вони потрібні вчителю, класу, контесту або самому користувачу.",
-          "We keep data for as long as needed to operate the account, support learning, provide support, maintain security, meet legal obligations, or resolve disputes. Learning results and gradebook records may be kept longer when needed by a teacher, class, contest, or the user."
-        ),
-        tr(
-          "Локальні чернетки, нотатки, токени входу, мова інтерфейсу та налаштування можуть зберігатися у браузері користувача до виходу з акаунта, очищення браузера або видалення відповідних даних користувачем.",
-          "Local drafts, notes, login tokens, interface language, and settings may be stored in the user's browser until logout, browser cleanup, or deletion of the relevant data by the user."
-        )
+        tr("Ми зберігаємо дані стільки, скільки це потрібно для роботи акаунта, навчального процесу, підтримки, безпеки, виконання юридичних обов'язків або вирішення спорів. Навчальні результати й журнал оцінок можуть зберігатися довше, якщо вони потрібні вчителю, класу, контесту або самому користувачу.", "We keep data for as long as needed to operate the account, support learning, provide support, maintain security, meet legal obligations, or resolve disputes. Learning results and gradebook records may be kept longer when needed by a teacher, class, contest, or the user."),
+        tr("Локальні чернетки, нотатки, токени входу, мова інтерфейсу та налаштування можуть зберігатися у браузері користувача до виходу з акаунта, очищення браузера або видалення відповідних даних користувачем.", "Local drafts, notes, login tokens, interface language, and settings may be stored in the user's browser until logout, browser cleanup, or deletion of the relevant data by the user.")
       ]
     },
     {
       title: tr("9. Захист даних", "9. Data security"),
       paragraphs: [
-        tr(
-          "Ми застосовуємо технічні й організаційні заходи захисту: обмеження доступу за ролями, токени автентифікації, хешування паролів, журналювання подій, rate limiting, ізоляцію виконання коду, перевірку файлів підтримки та контроль службових доступів.",
-          "We use technical and organizational safeguards: role-based access, authentication tokens, password hashing, event logging, rate limiting, code execution isolation, support file validation, and administrative access controls."
-        ),
-        tr(
-          "Жоден онлайн-сервіс не може гарантувати абсолютну безпеку. Якщо ви підозрюєте несанкціонований доступ до акаунта або витік даних, повідомте нас якомога швидше.",
-          "No online service can guarantee absolute security. If you suspect unauthorized account access or a data leak, please notify us as soon as possible."
-        )
+        tr("Ми застосовуємо технічні й організаційні заходи захисту: обмеження доступу за ролями, токени автентифікації, хешування паролів, журналювання подій, rate limiting, ізоляцію виконання коду, перевірку файлів підтримки та контроль службових доступів.", "We use technical and organizational safeguards: role-based access, authentication tokens, password hashing, event logging, rate limiting, code execution isolation, support file validation, and administrative access controls."),
+        tr("Жоден онлайн-сервіс не може гарантувати абсолютну безпеку. Якщо ви підозрюєте несанкціонований доступ до акаунта або витік даних, повідомте нас якомога швидше.", "No online service can guarantee absolute security. If you suspect unauthorized account access or a data leak, please notify us as soon as possible.")
       ]
     },
     {
@@ -159,106 +123,100 @@ export const PrivacyPolicyPage: React.FC = () => {
         tr("Попросити експорт даних у розумному технічному форматі, якщо це можливо й передбачено законом.", "Request data export in a reasonable technical format where possible and required by law.")
       ],
       paragraphs: [
-        tr(
-          "Ми можемо попросити підтвердити особу перед виконанням запиту, щоб не розкрити дані сторонній особі.",
-          "We may ask you to verify your identity before fulfilling a request so that we do not disclose data to someone else."
-        )
+        tr("Ми можемо попросити підтвердити особу перед виконанням запиту, щоб не розкрити дані сторонній особі.", "We may ask you to verify your identity before fulfilling a request so that we do not disclose data to someone else.")
       ]
     },
     {
       title: tr("11. Діти та навчальні акаунти", "11. Children and educational accounts"),
       paragraphs: [
-        tr(
-          "StudyCod є навчальною платформою, тому нею можуть користуватися неповнолітні. Учнівські акаунти в EDU-режимі мають створюватися або використовуватися з відома вчителя, навчальної організації або законного представника, якщо це потрібно за законом.",
-          "StudyCod is an educational platform, so minors may use it. Student accounts in EDU mode should be created or used with the knowledge of a teacher, educational organization, or legal guardian where required by law."
-        ),
-        tr(
-          "Ми не просимо учнів додавати зайві персональні дані й рекомендуємо вчителям мінімізувати дані в назвах класів, матеріалах, коментарях і вкладеннях.",
-          "We do not ask students to add unnecessary personal data and recommend that teachers minimize personal data in class names, materials, comments, and attachments."
-        )
+        tr("StudyCod є навчальною платформою, тому нею можуть користуватися неповнолітні. Учнівські акаунти в EDU-режимі мають створюватися або використовуватися з відома вчителя, навчальної організації або законного представника, якщо це потрібно за законом.", "StudyCod is an educational platform, so minors may use it. Student accounts in EDU mode should be created or used with the knowledge of a teacher, educational organization, or legal guardian where required by law."),
+        tr("Ми не просимо учнів додавати зайві персональні дані й рекомендуємо вчителям мінімізувати дані в назвах класів, матеріалах, коментарях і вкладеннях.", "We do not ask students to add unnecessary personal data and recommend that teachers minimize personal data in class names, materials, comments, and attachments.")
       ]
     },
     {
       title: tr("12. Cookies і локальне сховище", "12. Cookies and local storage"),
       paragraphs: [
-        tr(
-          "Ми використовуємо cookies, localStorage і sessionStorage для входу, безпеки, Google OAuth, мови інтерфейсу, чернеток, налаштувань, стану сесій і стабільної роботи платформи. Детальніше це описано в Cookie Policy.",
-          "We use cookies, localStorage, and sessionStorage for login, security, Google OAuth, interface language, drafts, settings, session state, and stable platform operation. This is described in more detail in the Cookie Policy."
-        )
+        tr("Ми використовуємо cookies, localStorage і sessionStorage для входу, безпеки, Google OAuth, мови інтерфейсу, чернеток, налаштувань, стану сесій і стабільної роботи платформи. Детальніше це описано в Cookie Policy.", "We use cookies, localStorage, and sessionStorage for login, security, Google OAuth, interface language, drafts, settings, session state, and stable platform operation. This is described in more detail in the Cookie Policy.")
       ]
     },
     {
       title: tr("13. Оновлення політики", "13. Policy updates"),
       paragraphs: [
-        tr(
-          "Ми можемо оновлювати цю політику, коли змінюється функціональність платформи, постачальники, вимоги безпеки або законодавство. Актуальна версія завжди доступна на цій сторінці.",
-          "We may update this policy when platform functionality, providers, security requirements, or laws change. The current version is always available on this page."
-        )
+        tr("Ми можемо оновлювати цю політику, коли змінюється функціональність платформи, постачальники, вимоги безпеки або законодавство. Актуальна версія завжди доступна на цій сторінці.", "We may update this policy when platform functionality, providers, security requirements, or laws change. The current version is always available on this page.")
       ]
     },
     {
       title: tr("14. Контакти", "14. Contact"),
       paragraphs: [
-        tr(
-          `З питань приватності, доступу, видалення або виправлення даних напишіть на ${SUPPORT_EMAIL} або створіть звернення в розділі підтримки після входу в акаунт.`,
-          `For privacy, access, deletion, or correction requests, email ${SUPPORT_EMAIL} or create a support request after signing in.`
-        )
+        tr(`З питань приватності, доступу, видалення або виправлення даних напишіть на ${SUPPORT_EMAIL} або створіть звернення в розділі підтримки після входу в акаунт.`, `For privacy, access, deletion, or correction requests, email ${SUPPORT_EMAIL} or create a support request after signing in.`)
       ]
     }
   ];
 
   return (
     <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-      <header className="min-h-16 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 md:px-6 py-2 flex-shrink-0">
+      {/* Header */}
+      <motion.header
+        initial={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
+        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: easeOutQuint }}
+        className="min-h-14 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 md:px-6 py-2 shrink-0"
+      >
         <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" onClick={() => {
-            if (window.history.length > 1) navigate(-1); else navigate("/");
-          }}>
+          <Button variant="ghost" onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
+          <div className="h-4 w-px bg-border hidden sm:block" />
           <div className="flex items-center gap-2 min-w-0">
-            <ShieldCheck className="w-5 h-5 text-primary" />
-            <div className="text-lg font-mono text-text-primary">{tr("Політика конфіденційності", "Privacy Policy")}</div>
+            <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm font-mono text-text-primary">{tr("Політика конфіденційності", "Privacy Policy")}</span>
           </div>
         </div>
-      </header>
+      </motion.header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6">
-        <div className="max-w-4xl mx-auto space-y-4">
-          <Card className="p-4 sm:p-6 space-y-5">
-            <div className="space-y-2">
-              <p className="text-xs font-mono text-text-muted">
-                {tr("Оновлено: 31.05.2026", "Updated: 2026-05-31")}
-              </p>
-              <p className="text-sm leading-6 text-text-secondary">
-                {tr(
-                  "Цей документ описує, які дані збирає StudyCod, навіщо вони потрібні, кому можуть бути доступні та як користувач може керувати своїми даними.",
-                  "This document describes what data StudyCod collects, why it is needed, who may access it, and how users can manage their data."
-                )}
-              </p>
-            </div>
+      <main className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-8">
+        <motion.div
+          variants={prefersReducedMotion ? undefined : staggerContainer}
+          initial={prefersReducedMotion ? undefined : "initial"}
+          animate={prefersReducedMotion ? undefined : "animate"}
+          className="max-w-3xl mx-auto"
+        >
+          {/* Hero */}
+          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mb-8">
+            <span className="font-mono text-xs text-primary/70">// privacy</span>
+            <h1 className="mt-1 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+              {tr("Політика конфіденційності", "Privacy Policy")}
+            </h1>
+            <p className="mt-2 text-sm text-text-secondary">
+              {tr("Цей документ описує, які дані збирає StudyCod, навіщо вони потрібні, кому можуть бути доступні та як користувач може керувати своїми даними.", "This document describes what data StudyCod collects, why it is needed, who may access it, and how users can manage their data.")}
+            </p>
+            <p className="mt-1.5 text-xs font-mono text-text-muted">{tr("Оновлено: 31.05.2026", "Updated: 2026-05-31")}</p>
+          </motion.div>
 
+          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+            <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent mb-8" />
+          </motion.div>
+
+          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="space-y-7">
             {sections.map((section) => (
               <LegalSectionBlock key={section.title} section={section} />
             ))}
+          </motion.div>
 
-            <div className="flex flex-wrap gap-2 pt-2">
-              <Button variant="secondary" onClick={() => navigate("/cookies")}>
-                {tr("Політика cookies", "Cookie Policy")}
-              </Button>
-              <Button variant="ghost" onClick={() => navigate("/support")}>
-                {tr("До підтримки", "Go to support")}
-              </Button>
-              <Button variant="ghost" onClick={() => {
-                window.location.href = `mailto:${SUPPORT_EMAIL}`;
-              }}>
-                <Mail className="w-4 h-4 mr-2" />
-                {SUPPORT_EMAIL}
-              </Button>
-            </div>
-          </Card>
-        </div>
+          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mt-10 pt-6 border-t border-border flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => navigate("/cookies")}>
+              {tr("Політика cookies", "Cookie Policy")}
+            </Button>
+            <Button variant="ghost" onClick={() => navigate("/support")}>
+              {tr("До підтримки", "Go to support")}
+            </Button>
+            <Button variant="ghost" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }}>
+              <Mail className="w-4 h-4 mr-2" />
+              {SUPPORT_EMAIL}
+            </Button>
+          </motion.div>
+        </motion.div>
       </main>
     </div>
   );

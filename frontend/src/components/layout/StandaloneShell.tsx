@@ -16,6 +16,20 @@ type Props = {
   children: React.ReactNode;
 };
 
+// The shell remounts on every route change; resolving the user synchronously
+// from this session cache avoids a skeleton flash (and visible "nav reload")
+// on each navigation between standalone pages.
+let sessionUser: { token: string; user: User } | null = null;
+
+const readToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem("token");
+  } catch {
+    return null;
+  }
+};
+
 // Wraps standalone routes (/library, /playground, /learn, /contests, ...) in the
 // user's active shell so navigation stays available outside the main app tree.
 // Guests and CONTEST-mode users get the page bare — their flows have their own chrome.
@@ -23,9 +37,12 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const ui = useUIMode();
-  const hasToken = typeof window !== "undefined" && !!localStorage.getItem("token");
-  const [user, setUser] = React.useState<User | null>(null);
-  const [loading, setLoading] = React.useState(hasToken);
+  const token = readToken();
+  const hasToken = !!token;
+  const [user, setUser] = React.useState<User | null>(() =>
+    token && sessionUser?.token === token ? sessionUser.user : null
+  );
+  const [loading, setLoading] = React.useState(hasToken && !user);
   const [theme, setTheme] = React.useState<AppTheme>(() => getCurrentTheme());
 
   React.useEffect(() => {
@@ -33,6 +50,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     let cancelled = false;
     getMe()
       .then(u => {
+        if (token) sessionUser = { token, user: u };
         if (!cancelled) setUser(u);
       })
       .catch(() => {
@@ -44,7 +62,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     return () => {
       cancelled = true;
     };
-  }, [hasToken]);
+  }, [hasToken, token]);
 
   const toggleTheme = React.useCallback(() => {
     setTheme(prev => {
