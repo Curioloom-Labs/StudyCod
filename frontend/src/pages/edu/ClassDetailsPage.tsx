@@ -17,6 +17,11 @@ import {
   deleteClassAnnouncement,
   getClass,
   updateClassGradingSystem,
+  getThematicConfig,
+  updateClassThematicFormula,
+  updateTopicThematicFormula,
+  updateTopicSemester,
+  recomputeSemesterGrades,
   getClassCohortAnalytics,
   getTeacherCopilotRecommendations,
   getClassHintsQuality,
@@ -34,6 +39,7 @@ import {
   type HintsQualityResponse,
   type TeacherDigestResponse,
   type RiskInterventionPlanResponse,
+  type ThematicConfig,
 } from "../../lib/api/edu";
 import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
@@ -41,7 +47,7 @@ import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
+import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, DEFAULT_GRADE_SCALE_MODE, GRADE_SCALE_MODES, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
 export const ClassDetailsPage: React.FC = () => {
   const {
     t,
@@ -72,7 +78,14 @@ export const ClassDetailsPage: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [classInfo, setClassInfo] = useState<ClassDetails | null>(null);
   const [selectedGradingSystem, setSelectedGradingSystem] = useState<ClassGradingSystem>(DEFAULT_GRADING_SYSTEM);
+  const [selectedScaleMode, setSelectedScaleMode] = useState<GradeScaleMode>(DEFAULT_GRADE_SCALE_MODE);
   const [savingGradingSystem, setSavingGradingSystem] = useState(false);
+  const [thematicConfig, setThematicConfig] = useState<ThematicConfig | null>(null);
+  const [classFormulaDraft, setClassFormulaDraft] = useState("");
+  const [topicFormulaDrafts, setTopicFormulaDrafts] = useState<Record<number, string>>({});
+  const [topicSemesterDrafts, setTopicSemesterDrafts] = useState<Record<number, string>>({});
+  const [savingThematic, setSavingThematic] = useState(false);
+  const [recomputingSemester, setRecomputingSemester] = useState(false);
   const [announcements, setAnnouncements] = useState<ClassAnnouncementDto[]>([]);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<number | null>(null);
@@ -123,6 +136,8 @@ export const ClassDetailsPage: React.FC = () => {
       setAnnouncements(announcementsData.announcements || []);
       setClassInfo(classData);
       setSelectedGradingSystem(normalizeGradingSystem(classData.gradingSystem));
+      setSelectedScaleMode(normalizeScaleMode(classData.gradeScaleMode));
+      void loadThematicConfig();
       setCohortAnalytics(analyticsResult.status === "fulfilled" ? analyticsResult.value : null);
       setTeacherCopilot(copilotResult.status === "fulfilled" ? copilotResult.value : null);
       setHintsQuality(hintsResult.status === "fulfilled" ? hintsResult.value : null);
@@ -176,15 +191,89 @@ export const ClassDetailsPage: React.FC = () => {
     if (!classId) return;
     setSavingGradingSystem(true);
     try {
-      const updated = await updateClassGradingSystem(parseInt(classId, 10), selectedGradingSystem);
+      const updated = await updateClassGradingSystem(parseInt(classId, 10), selectedGradingSystem, selectedScaleMode);
       setClassInfo(updated);
       setSelectedGradingSystem(normalizeGradingSystem(updated.gradingSystem));
+      setSelectedScaleMode(normalizeScaleMode(updated.gradeScaleMode));
       showToast({ type: "success", message: tr("Систему оцінювання оновлено", "Grading system updated") });
     } catch (error: unknown) {
       console.error("Failed to update grading system:", error);
       showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося оновити систему оцінювання", "Failed to update grading system")) });
     } finally {
       setSavingGradingSystem(false);
+    }
+  };
+  const loadThematicConfig = async () => {
+    if (!classId) return;
+    try {
+      const cfg = await getThematicConfig(parseInt(classId, 10));
+      setThematicConfig(cfg);
+      setClassFormulaDraft(cfg.classFormula ?? "");
+      const fDrafts: Record<number, string> = {};
+      const sDrafts: Record<number, string> = {};
+      for (const t of cfg.topics) {
+        fDrafts[t.topicId] = t.thematicFormula ?? "";
+        sDrafts[t.topicId] = t.semester === null || t.semester === undefined ? "" : String(t.semester);
+      }
+      setTopicFormulaDrafts(fDrafts);
+      setTopicSemesterDrafts(sDrafts);
+    } catch (error: unknown) {
+      // Non-fatal: thematic config is teacher-only extra settings.
+      console.error("Failed to load thematic config:", error);
+    }
+  };
+  const scaleModeLabel = (mode: GradeScaleMode): string =>
+    mode === "MON" ? tr("МОН (офіційна 12-бальна)", "MON (official 12-point)") : tr("Лінійна (пропорційна)", "Linear (proportional)");
+  const handleSaveClassFormula = async () => {
+    if (!classId) return;
+    setSavingThematic(true);
+    try {
+      const formula = classFormulaDraft.trim() || null;
+      await updateClassThematicFormula(parseInt(classId, 10), formula);
+      showToast({ type: "success", message: tr("Формулу тематичної збережено", "Thematic formula saved") });
+      await loadThematicConfig();
+    } catch (error: unknown) {
+      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Невірна формула", "Invalid formula")) });
+    } finally {
+      setSavingThematic(false);
+    }
+  };
+  const handleSaveTopicConfig = async (topicId: number) => {
+    if (!classId) return;
+    setSavingThematic(true);
+    try {
+      const cid = parseInt(classId, 10);
+      const formula = (topicFormulaDrafts[topicId] ?? "").trim() || null;
+      const semRaw = (topicSemesterDrafts[topicId] ?? "").trim();
+      const semester = semRaw === "" ? null : parseInt(semRaw, 10);
+      if (semRaw !== "" && (!Number.isFinite(semester) || (semester as number) < 1)) {
+        showToast({ type: "error", message: tr("Невірний семестр", "Invalid semester") });
+        setSavingThematic(false);
+        return;
+      }
+      await updateTopicThematicFormula(cid, topicId, formula);
+      await updateTopicSemester(cid, topicId, semester);
+      showToast({ type: "success", message: tr("Налаштування теми збережено", "Topic settings saved") });
+      await loadThematicConfig();
+    } catch (error: unknown) {
+      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося зберегти", "Failed to save")) });
+    } finally {
+      setSavingThematic(false);
+    }
+  };
+  const handleRecomputeSemester = async () => {
+    if (!classId) return;
+    setRecomputingSemester(true);
+    try {
+      const result = await recomputeSemesterGrades(parseInt(classId, 10));
+      showToast({
+        type: "success",
+        message: tr(`Семестрові оцінки оновлено (${result.count})`, `Semester grades updated (${result.count})`)
+      });
+    } catch (error: unknown) {
+      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося перерахувати", "Failed to recompute")) });
+    } finally {
+      setRecomputingSemester(false);
     }
   };
   const openCreateAnnouncement = () => {
@@ -374,11 +463,91 @@ export const ClassDetailsPage: React.FC = () => {
               <div className="text-[11px] text-text-secondary">
                 {tr("Поточна:", "Current:")} {gradingSystemLabel(normalizeGradingSystem(classInfo?.gradingSystem || selectedGradingSystem), !!isEn)}
               </div>
+              <div className="pt-2 border-t border-border">
+                <div className="text-xs text-text-muted mb-2">
+                  {tr("Спосіб конвертації у 12-бальну шкалу.", "How to convert into the 12-point scale.")}
+                </div>
+                <select value={selectedScaleMode} onChange={e => setSelectedScaleMode(normalizeScaleMode(e.target.value))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
+                  {GRADE_SCALE_MODES.map(mode => <option key={mode} value={mode}>
+                      {scaleModeLabel(mode)}
+                    </option>)}
+                </select>
+              </div>
               <div className="flex justify-end">
                 <Button onClick={handleSaveGradingSystem} disabled={savingGradingSystem}>
                   {savingGradingSystem ? t("saving") : t("save")}
                 </Button>
               </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                {tr("Тематична та семестрова", "Thematic & semester")}
+              </h2>
+              <Button variant="ghost" className="text-xs" onClick={handleRecomputeSemester} disabled={recomputingSemester}>
+                {recomputingSemester ? tr("Рахуємо…", "Computing…") : tr("Перерахувати семестрові", "Recompute semester")}
+              </Button>
+            </div>
+            <div className="space-y-3">
+              <div className="text-xs text-text-muted">
+                {tr(
+                  "Формула тематичної. Змінні: practice (середнє практичних), control (середнє контрольних). Порожньо = 0.7*control + 0.3*practice.",
+                  "Thematic formula. Variables: practice (avg of practice), control (avg of control works). Empty = 0.7*control + 0.3*practice."
+                )}
+              </div>
+              <div>
+                <label className="text-[11px] text-text-secondary block mb-1">
+                  {tr("Формула за замовчуванням для класу", "Class default formula")}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={classFormulaDraft}
+                    onChange={e => setClassFormulaDraft(e.target.value)}
+                    placeholder="0.7*control + 0.3*practice"
+                    className="flex-1 px-3 py-2 bg-bg-code border border-border text-text-primary font-mono text-sm rounded focus:outline-none focus:border-primary"
+                  />
+                  <Button onClick={handleSaveClassFormula} disabled={savingThematic}>
+                    {t("save")}
+                  </Button>
+                </div>
+              </div>
+              {thematicConfig && thematicConfig.topics.length > 0 && (
+                <div className="pt-2 border-t border-border space-y-2">
+                  <div className="text-[11px] text-text-secondary">
+                    {tr("Перевизначення для тем (порожньо = успадкувати клас)", "Per-topic overrides (empty = inherit class)")}
+                  </div>
+                  {thematicConfig.topics.map(topic => (
+                    <div key={topic.topicId} className="flex flex-col gap-1 p-2 border border-border rounded">
+                      <div className="text-xs font-mono text-text-primary truncate" title={topic.title}>{topic.title}</div>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <input
+                          type="text"
+                          value={topicFormulaDrafts[topic.topicId] ?? ""}
+                          onChange={e => setTopicFormulaDrafts(prev => ({ ...prev, [topic.topicId]: e.target.value }))}
+                          placeholder={tr("Формула теми", "Topic formula")}
+                          className="flex-1 min-w-[160px] px-2 py-1 bg-bg-code border border-border text-text-primary font-mono text-xs rounded focus:outline-none focus:border-primary"
+                        />
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          value={topicSemesterDrafts[topic.topicId] ?? ""}
+                          onChange={e => setTopicSemesterDrafts(prev => ({ ...prev, [topic.topicId]: e.target.value }))}
+                          placeholder={tr("Сем.", "Sem.")}
+                          className="w-16 px-2 py-1 bg-bg-code border border-border text-text-primary font-mono text-xs rounded focus:outline-none focus:border-primary"
+                        />
+                        <Button variant="ghost" className="text-xs" onClick={() => handleSaveTopicConfig(topic.topicId)} disabled={savingThematic}>
+                          {t("save")}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </Card>
 

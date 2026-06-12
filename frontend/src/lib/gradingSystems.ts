@@ -5,6 +5,54 @@ export type GradeTone = "muted" | "error" | "warning" | "warn" | "success";
 
 export const DEFAULT_GRADING_SYSTEM: ClassGradingSystem = "PERCENT_100";
 
+export const GRADE_SCALE_MODES = ["LINEAR", "MON"] as const;
+export type GradeScaleMode = (typeof GRADE_SCALE_MODES)[number];
+export const DEFAULT_GRADE_SCALE_MODE: GradeScaleMode = "LINEAR";
+
+export function normalizeScaleMode(value: unknown): GradeScaleMode {
+  return value === "MON" ? "MON" : "LINEAR";
+}
+
+// Official Ukrainian (МОН) 12-point band table. `anchor` is the percent stored
+// when a teacher enters that point value (band upper bound → stable round-trip).
+// Mirror of backend/src/utils/gradingScale.ts — keep both in sync.
+const MON_12_BANDS: Array<{ point: number; min: number; anchor: number }> = [
+  { point: 12, min: 98, anchor: 100 },
+  { point: 11, min: 95, anchor: 97 },
+  { point: 10, min: 90, anchor: 94 },
+  { point: 9, min: 82, anchor: 89 },
+  { point: 8, min: 74, anchor: 81 },
+  { point: 7, min: 64, anchor: 73 },
+  { point: 6, min: 55, anchor: 63 },
+  { point: 5, min: 45, anchor: 54 },
+  { point: 4, min: 35, anchor: 44 },
+  { point: 3, min: 25, anchor: 34 },
+  { point: 2, min: 10, anchor: 24 },
+  { point: 1, min: 1, anchor: 9 }
+];
+
+function percentToPoints12Mon(score: number): number {
+  if (score <= 0) return 0;
+  for (const band of MON_12_BANDS) {
+    if (score >= band.min) return band.point;
+  }
+  return 1;
+}
+
+function points12ToPercentMon(point: number): number {
+  const p = Math.max(0, Math.min(12, Math.round(point)));
+  if (p <= 0) return 0;
+  const band = MON_12_BANDS.find(b => b.point === p);
+  return band ? band.anchor : 0;
+}
+
+// LINEAR point mapping that never collapses a positive score to 0.
+function percentToPointsLinear(score: number, max: number): number {
+  if (score <= 0) return 0;
+  const points = Math.round((score / 100) * max);
+  return points <= 0 ? 1 : points;
+}
+
 export function normalizeGradingSystem(value: unknown): ClassGradingSystem {
   if (typeof value !== "string") return DEFAULT_GRADING_SYSTEM;
   if ((GRADING_SYSTEMS as readonly string[]).includes(value)) {
@@ -105,7 +153,11 @@ const ectsToPercent: Record<string, number> = {
   F: 50
 };
 
-export function formatGradeForSystem(rawScore: number | null | undefined, system: ClassGradingSystem): string {
+export function formatGradeForSystem(
+  rawScore: number | null | undefined,
+  system: ClassGradingSystem,
+  scaleMode: GradeScaleMode = DEFAULT_GRADE_SCALE_MODE
+): string {
   if (rawScore === null || rawScore === undefined || !Number.isFinite(Number(rawScore))) {
     return "-";
   }
@@ -115,9 +167,9 @@ export function formatGradeForSystem(rawScore: number | null | undefined, system
     case "PERCENT_100":
       return String(score);
     case "POINTS_12":
-      return String(Math.round(score / 100 * 12));
+      return String(scaleMode === "MON" ? percentToPoints12Mon(score) : percentToPointsLinear(score, 12));
     case "POINTS_10":
-      return String(Math.round(score / 100 * 10));
+      return String(percentToPointsLinear(score, 10));
     case "LETTER_AF":
       return percentToLetterAF(score);
     case "ECTS_AF":
@@ -132,7 +184,11 @@ export function formatGradeForSystem(rawScore: number | null | undefined, system
   }
 }
 
-export function getGradeToneForSystem(rawScore: number | null | undefined, system: ClassGradingSystem): GradeTone {
+export function getGradeToneForSystem(
+  rawScore: number | null | undefined,
+  system: ClassGradingSystem,
+  scaleMode: GradeScaleMode = DEFAULT_GRADE_SCALE_MODE
+): GradeTone {
   if (rawScore === null || rawScore === undefined || !Number.isFinite(Number(rawScore))) {
     return "muted";
   }
@@ -147,7 +203,7 @@ export function getGradeToneForSystem(rawScore: number | null | undefined, syste
         warning: 40
       });
     case "POINTS_12": {
-      const points = Math.round(score / 100 * 12);
+      const points = scaleMode === "MON" ? percentToPoints12Mon(score) : percentToPointsLinear(score, 12);
       return numericToneFromBands(points, {
         success: 10,
         warn: 7,
@@ -155,7 +211,7 @@ export function getGradeToneForSystem(rawScore: number | null | undefined, syste
       });
     }
     case "POINTS_10": {
-      const points = Math.round(score / 100 * 10);
+      const points = percentToPointsLinear(score, 10);
       return numericToneFromBands(points, {
         success: 8,
         warn: 6,
@@ -193,7 +249,11 @@ export function getGradeToneForSystem(rawScore: number | null | undefined, syste
   }
 }
 
-export function parseGradeInputToRaw100(input: string, system: ClassGradingSystem): number | null {
+export function parseGradeInputToRaw100(
+  input: string,
+  system: ClassGradingSystem,
+  scaleMode: GradeScaleMode = DEFAULT_GRADE_SCALE_MODE
+): number | null {
   const value = input.trim();
   if (!value) return null;
 
@@ -206,6 +266,7 @@ export function parseGradeInputToRaw100(input: string, system: ClassGradingSyste
     case "POINTS_12": {
       const n = toNumber(value);
       if (!Number.isFinite(n) || n < 0 || n > 12) return null;
+      if (scaleMode === "MON") return clamp100(points12ToPercentMon(n));
       return clamp100(n / 12 * 100);
     }
     case "POINTS_10": {

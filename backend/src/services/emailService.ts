@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import { logger } from "../utils/logger";
 import { BACKEND_PUBLIC_URL, JWT_SECRET } from "../config";
 import { DEFAULT_GRADING_SYSTEM, type GradingSystem } from "../types/GradingSystem";
-import { formatGradeForSystem as formatGradeForGradingSystem, gradingSystemDisplayLabel } from "../utils/gradingScale";
+import { formatGradeForSystem as formatGradeForGradingSystem, gradingSystemDisplayLabel, normalizeScaleMode, type GradeScaleMode } from "../utils/gradingScale";
 
 /**
  * Production Email Service
@@ -322,6 +322,7 @@ StudyCod: ${this.getFrontendUrl()}`;
     grade: number;
     maxGrade?: number;
     gradingSystem?: GradingSystem | null;
+    gradeScaleMode?: GradeScaleMode | null;
     className?: string | null;
     feedback?: string | null;
     studentName?: string | null;
@@ -330,7 +331,7 @@ StudyCod: ${this.getFrontendUrl()}`;
     const lng = this.normalizeLocale(opts.locale);
     const grade = Math.max(0, Math.min(100, Math.round(Number(opts.grade) || 0)));
     const gradingSystem = opts.gradingSystem || DEFAULT_GRADING_SYSTEM;
-    const gradeDisplay = formatGradeForGradingSystem(grade, gradingSystem);
+    const gradeDisplay = formatGradeForGradingSystem(grade, gradingSystem, normalizeScaleMode(opts.gradeScaleMode));
     const gradingSystemLabel = gradingSystemDisplayLabel(gradingSystem, lng);
 
     const kindUk = opts.kind === "control"

@@ -41,7 +41,7 @@ import { notifyStudentGradeChange } from "../services/edu/gradeNotificationServi
 import { logger } from "../utils/logger";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { resolveUiLocaleFromHeaders } from "../utils/uiLocale";
-import { convertGradeToRaw100, shouldConvertLegacyGrades } from "../utils/gradingScale";
+import { convertGradeToRaw100, shouldConvertLegacyGrades, normalizeScaleMode, GRADE_SCALE_MODES, DEFAULT_GRADE_SCALE_MODE } from "../utils/gradingScale";
 import studentAuthRouter from "./edu/studentAuth";
 import announcementsRouter from "./edu/announcements";
 import classStudentsRouter from "./edu/classStudents";
@@ -353,7 +353,8 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
     const schema = z.object({
       name: z.string().min(1).max(100),
       language: z.string().optional(),
-      gradingSystem: z.enum(GRADING_SYSTEMS).optional()
+      gradingSystem: z.enum(GRADING_SYSTEMS).optional(),
+      gradeScaleMode: z.enum(GRADE_SCALE_MODES).optional()
     });
     const validated = schema.safeParse(req.body);
     if (!validated.success) return res.status(400).json({
@@ -362,13 +363,15 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
     const {
       name,
       language,
-      gradingSystem
+      gradingSystem,
+      gradeScaleMode
     } = validated.data;
     const cls = classRepo().create({
       teacher: user,
       name,
       language: normalizeLang(language || user.lang),
-      gradingSystem: gradingSystem || DEFAULT_GRADING_SYSTEM
+      gradingSystem: gradingSystem || DEFAULT_GRADING_SYSTEM,
+      gradeScaleMode: gradeScaleMode || DEFAULT_GRADE_SCALE_MODE
     });
     await classRepo().save(cls);
     res.status(201).json({
@@ -410,6 +413,7 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
         name: c.name,
         language: c.language,
         gradingSystem: c.gradingSystem || DEFAULT_GRADING_SYSTEM,
+        gradeScaleMode: normalizeScaleMode(c.gradeScaleMode),
         studentsCount: c.students?.length || 0,
         createdAt: c.createdAt
       }))
@@ -461,6 +465,7 @@ eduRouter.get("/classes/:classId", authRequired, async (req: AuthRequest, res: R
         name: cls.name,
         language: cls.language,
         gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
+        gradeScaleMode: normalizeScaleMode(cls.gradeScaleMode),
         createdAt: cls.createdAt,
         updatedAt: cls.updatedAt
       }
@@ -493,7 +498,8 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: Auth
     }
 
     const parsedBody = z.object({
-      gradingSystem: z.enum(GRADING_SYSTEMS)
+      gradingSystem: z.enum(GRADING_SYSTEMS),
+      gradeScaleMode: z.enum(GRADE_SCALE_MODES).optional()
     }).safeParse(req.body);
     if (!parsedBody.success) {
       return res.status(400).json({
@@ -534,6 +540,7 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: Auth
       }
 
       const fromSystem = (lockedClass.gradingSystem || DEFAULT_GRADING_SYSTEM) as GradingSystem;
+      const fromScaleMode = normalizeScaleMode(lockedClass.gradeScaleMode);
 
       if (fromSystem !== requestedGradingSystem) {
         const eduGrades = await manager
@@ -568,7 +575,7 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: Auth
 
           for (const grade of eduGrades) {
             if (grade.total === null || !Number.isFinite(Number(grade.total))) continue;
-            const next = convertGradeToRaw100(Number(grade.total), fromSystem);
+            const next = convertGradeToRaw100(Number(grade.total), fromSystem, fromScaleMode);
             if (next !== Number(grade.total)) {
               grade.total = next;
               convertedFieldsCount += 1;
@@ -577,7 +584,7 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: Auth
 
           for (const summary of summaryGrades) {
             if (Number.isFinite(Number(summary.grade))) {
-              const nextGrade = convertGradeToRaw100(Number(summary.grade), fromSystem);
+              const nextGrade = convertGradeToRaw100(Number(summary.grade), fromSystem, fromScaleMode);
               if (nextGrade !== Number(summary.grade)) {
                 summary.grade = nextGrade;
                 convertedFieldsCount += 1;
@@ -585,7 +592,7 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: Auth
             }
 
             if (summary.theoryGrade !== null && Number.isFinite(Number(summary.theoryGrade))) {
-              const nextTheoryGrade = convertGradeToRaw100(Number(summary.theoryGrade), fromSystem);
+              const nextTheoryGrade = convertGradeToRaw100(Number(summary.theoryGrade), fromSystem, fromScaleMode);
               if (nextTheoryGrade !== Number(summary.theoryGrade)) {
                 summary.theoryGrade = nextTheoryGrade;
                 convertedFieldsCount += 1;
@@ -603,6 +610,9 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: Auth
       }
 
       lockedClass.gradingSystem = requestedGradingSystem;
+      if (parsedBody.data.gradeScaleMode) {
+        lockedClass.gradeScaleMode = parsedBody.data.gradeScaleMode;
+      }
       await manager.save(Class, lockedClass);
     });
 
@@ -627,6 +637,7 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: Auth
         name: updatedClass.name,
         language: updatedClass.language,
         gradingSystem: updatedClass.gradingSystem,
+        gradeScaleMode: normalizeScaleMode(updatedClass.gradeScaleMode),
         createdAt: updatedClass.createdAt,
         updatedAt: updatedClass.updatedAt
       },

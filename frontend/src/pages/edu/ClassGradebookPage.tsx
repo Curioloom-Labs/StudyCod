@@ -3,13 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
-import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, deleteThematicForTopic, getControlWorkDetails, getControlWorkStudentWork, getTopicTaskStudentWork, getTopicTaskAIDetection, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork, type TopicTaskAIDetectionResponse } from "../../lib/api/edu";
+import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, updateSemesterGrade, deleteThematicForTopic, getControlWorkDetails, getControlWorkStudentWork, getTopicTaskStudentWork, getTopicTaskAIDetection, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork, type TopicTaskAIDetectionResponse } from "../../lib/api/edu";
 import { ArrowLeft, Calculator, Download, Edit2, Trash2 } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { useTranslation } from "react-i18next";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemInputHint, gradingSystemLabel, normalizeGradingSystem, parseGradeInputToRaw100, type ClassGradingSystem } from "../../lib/gradingSystems";
+import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemInputHint, gradingSystemLabel, normalizeGradingSystem, normalizeScaleMode, parseGradeInputToRaw100, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
 
 type GradebookGrade = GradebookStudent["grades"][number];
 
@@ -45,6 +45,7 @@ export const ClassGradebookPage: React.FC = () => {
     taskTitle: string;
     isControlWork?: boolean;
     isSummaryGrade?: boolean;
+    isSemesterGrade?: boolean;
   } | null>(null);
   const [gradeValue, setGradeValue] = useState<string>("");
   const [feedback, setFeedback] = useState<string>("");
@@ -78,8 +79,8 @@ export const ClassGradebookPage: React.FC = () => {
       setLoading(false);
     }
   };
-  const getGradeColor = (grade: number | null, system: ClassGradingSystem) => {
-    const tone = getGradeToneForSystem(grade, system);
+  const getGradeColor = (grade: number | null, system: ClassGradingSystem, scaleMode: GradeScaleMode) => {
+    const tone = getGradeToneForSystem(grade, system, scaleMode);
     if (tone === "success") return "text-accent-success font-bold";
     if (tone === "warn") return "text-accent-warn font-semibold";
     if (tone === "warning") return "text-accent-warning font-semibold";
@@ -88,8 +89,10 @@ export const ClassGradebookPage: React.FC = () => {
   };
   const handleGradeClick = async (student: GradebookStudent, taskId: number, grade: GradebookGrade | undefined, taskTitle: string) => {
     const activeGradingSystem = normalizeGradingSystem(gradebook?.gradingSystem || DEFAULT_GRADING_SYSTEM);
+    const activeScaleMode = normalizeScaleMode(gradebook?.gradeScaleMode);
     const isControlWork = grade?.lessonType === "CONTROL" || grade?.isControlWork;
     const isSummaryGrade = grade?.lessonType === "SUMMARY" || grade?.isSummaryGrade;
+    const isSemesterGrade = grade?.lessonType === "SEMESTER" || grade?.isSemesterGrade;
     setEditingGrade({
       studentId: student.studentId,
       taskId: taskId,
@@ -98,15 +101,17 @@ export const ClassGradebookPage: React.FC = () => {
       studentName: student.studentName,
       taskTitle: taskTitle,
       isControlWork: isControlWork,
-      isSummaryGrade
+      isSummaryGrade,
+      isSemesterGrade
     });
-    setGradeValue(grade?.grade === null || grade?.grade === undefined ? "" : formatGradeForSystem(grade.grade, activeGradingSystem));
+    setGradeValue(grade?.grade === null || grade?.grade === undefined ? "" : formatGradeForSystem(grade.grade, activeGradingSystem, activeScaleMode));
     setFeedback("");
   };
   const handleSaveGrade = async () => {
     if (!editingGrade || !classId) return;
     const activeGradingSystem = normalizeGradingSystem(gradebook?.gradingSystem || DEFAULT_GRADING_SYSTEM);
-    const gradeNum = parseGradeInputToRaw100(gradeValue, activeGradingSystem);
+    const activeScaleMode = normalizeScaleMode(gradebook?.gradeScaleMode);
+    const gradeNum = parseGradeInputToRaw100(gradeValue, activeGradingSystem, activeScaleMode);
     if (gradeNum === null) {
       showToast({ type: "error", message: `${tr("Некоректна оцінка", "Invalid grade")}. ${gradingSystemInputHint(activeGradingSystem, !!isEn)}` });
       return;
@@ -115,6 +120,12 @@ export const ClassGradebookPage: React.FC = () => {
     try {
       if (editingGrade.isControlWork) {
         await updateControlWorkGrade(editingGrade.taskId, editingGrade.studentId, gradeNum);
+      } else if (editingGrade.isSemesterGrade) {
+        if (!editingGrade.gradeId) {
+          showToast({ type: "error", message: tr("Спочатку перерахуйте семестрові оцінки в налаштуваннях класу.", "Recompute semester grades in class settings first.") });
+        } else {
+          await updateSemesterGrade(parseInt(classId, 10), editingGrade.gradeId, gradeNum);
+        }
       } else if (editingGrade.isSummaryGrade) {
         if (!editingGrade.gradeId) {
           showToast({ type: "error", message: tr("Спочатку створіть тематичну в журналі кнопкою «Створити тематичну».", "Create a thematic column first using “Create thematic”.") });
@@ -150,7 +161,7 @@ export const ClassGradebookPage: React.FC = () => {
   const handleDeleteGrade = async () => {
     if (!editingGrade || !classId) return;
     if (!editingGrade.gradeId) return;
-    if (editingGrade.isControlWork || editingGrade.isSummaryGrade) {
+    if (editingGrade.isControlWork || editingGrade.isSummaryGrade || editingGrade.isSemesterGrade) {
       showToast({ type: "error", message: tr("Видалення доступне тільки для оцінок за практичні завдання.", "Deletion is available only for practice task grades.") });
       return;
     }
@@ -196,7 +207,7 @@ export const ClassGradebookPage: React.FC = () => {
         const data = await getControlWorkStudentWork(currentGrade.taskId, currentGrade.studentId);
         if (workLoadTokenRef.current !== loadToken) return;
         setControlWorkWork(data);
-      } else if (!currentGrade.isSummaryGrade) {
+      } else if (!currentGrade.isSummaryGrade && !currentGrade.isSemesterGrade) {
         const data = await getTopicTaskStudentWork(currentGrade.taskId, currentGrade.studentId, {
           limit: PRACTICE_WORK_PAGE_SIZE
         });
@@ -230,7 +241,7 @@ export const ClassGradebookPage: React.FC = () => {
   };
 
   const handleLoadMorePracticeWork = async () => {
-    if (!editingGrade || editingGrade.isControlWork || editingGrade.isSummaryGrade) return;
+    if (!editingGrade || editingGrade.isControlWork || editingGrade.isSummaryGrade || editingGrade.isSemesterGrade) return;
     if (!practiceWork?.hasMore || loadingMorePracticeWork) return;
 
     const beforeId = practiceWork.nextCursor ?? practiceWork.submissions[practiceWork.submissions.length - 1]?.id;
@@ -352,10 +363,11 @@ export const ClassGradebookPage: React.FC = () => {
   const exportToCSV = () => {
     if (!gradebook) return;
     const activeGradingSystem = normalizeGradingSystem(gradebook.gradingSystem || DEFAULT_GRADING_SYSTEM);
+    const activeScaleMode = normalizeScaleMode(gradebook.gradeScaleMode);
     const headers = [tr("Учень", "Student"), ...gradebook.lessons.flatMap(l => l.tasks.map(t => `${l.title} - ${t.title}`))];
     const rows = gradebook.students.map(student => {
       const studentName = student.studentName;
-      const grades = student.grades.map(g => g.grade === null || g.grade === undefined ? "" : formatGradeForSystem(g.grade, activeGradingSystem));
+      const grades = student.grades.map(g => g.grade === null || g.grade === undefined ? "" : formatGradeForSystem(g.grade, activeGradingSystem, activeScaleMode));
       return [studentName, ...grades];
     });
     const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
@@ -376,6 +388,7 @@ export const ClassGradebookPage: React.FC = () => {
       </div>;
   }
   const activeGradingSystem = normalizeGradingSystem(gradebook.gradingSystem || DEFAULT_GRADING_SYSTEM);
+  const activeScaleMode = normalizeScaleMode(gradebook.gradeScaleMode);
   const filteredLessons = selectedLesson === "all" ? gradebook.lessons : gradebook.lessons.filter(l => l.type === "TOPIC" && l.id === selectedLesson || l.type === "CONTROL" && l.parentId === selectedLesson || l.type === "SUMMARY" && l.parentId === selectedLesson);
   const allTasks = filteredLessons.flatMap(l => l.tasks.map(t => ({
     ...t,
@@ -528,8 +541,8 @@ export const ClassGradebookPage: React.FC = () => {
                         </td>
                         {allTasks.map(task => {
                       const grade = student.grades.find(g => g.taskId === task.id && g.lessonType === task.lessonType);
-                      return <td key={`${task.type}-${task.id}`} onClick={() => handleGradeClick(student, task.id, grade, task.title)} className={`px-3 py-2 text-center text-sm font-mono border-r border-border cursor-pointer hover:bg-bg-hover transition-fast ${getGradeColor(grade?.grade ?? null, activeGradingSystem)}`} title={t('gradeFor')}>
-                              {formatGradeForSystem(grade?.grade ?? null, activeGradingSystem)}
+                      return <td key={`${task.type}-${task.id}`} onClick={() => handleGradeClick(student, task.id, grade, task.title)} className={`px-3 py-2 text-center text-sm font-mono border-r border-border cursor-pointer hover:bg-bg-hover transition-fast ${getGradeColor(grade?.grade ?? null, activeGradingSystem, activeScaleMode)}`} title={t('gradeFor')}>
+                              {formatGradeForSystem(grade?.grade ?? null, activeGradingSystem, activeScaleMode)}
                             </td>;
                     })}
                       </tr>)}
@@ -573,7 +586,7 @@ export const ClassGradebookPage: React.FC = () => {
               <textarea value={feedback} onChange={e => setFeedback(e.target.value)} className="w-full px-3 py-2 bg-bg-code border border-border text-text-primary font-mono rounded focus:outline-none focus:border-primary" rows={3} placeholder={t('feedback')} />
             </div>
             <div className="flex flex-wrap gap-2 justify-end">
-              {!editingGrade.isSummaryGrade && <Button variant="ghost" onClick={handleViewWork} disabled={saving}>
+              {!editingGrade.isSummaryGrade && !editingGrade.isSemesterGrade && <Button variant="ghost" onClick={handleViewWork} disabled={saving}>
                   {tr("Переглянути роботу", "View work")}
                 </Button>}
               <Button variant="ghost" onClick={() => {
@@ -583,7 +596,7 @@ export const ClassGradebookPage: React.FC = () => {
           }} disabled={saving}>
                 {t('cancel')}
               </Button>
-              {!editingGrade.isControlWork && !editingGrade.isSummaryGrade && editingGrade.gradeId && <Button variant="ghost" onClick={handleDeleteGrade} disabled={saving} className="text-accent-error border border-accent-error hover:bg-bg-hover">
+              {!editingGrade.isControlWork && !editingGrade.isSummaryGrade && !editingGrade.isSemesterGrade && editingGrade.gradeId && <Button variant="ghost" onClick={handleDeleteGrade} disabled={saving} className="text-accent-error border border-accent-error hover:bg-bg-hover">
                   <Trash2 className="w-4 h-4 mr-2" />
                   {t("delete")}
                 </Button>}
@@ -611,7 +624,7 @@ export const ClassGradebookPage: React.FC = () => {
                   {practiceWork.submissions.length < practiceWork.submissionsTotal ? ` · ${tr("показано", "shown")}: ${practiceWork.submissions.length}` : ""}
                 </div>
 
-                {editingGrade && !editingGrade.isControlWork && !editingGrade.isSummaryGrade && <div className="text-xs text-text-muted space-y-1">
+                {editingGrade && !editingGrade.isControlWork && !editingGrade.isSummaryGrade && !editingGrade.isSemesterGrade && <div className="text-xs text-text-muted space-y-1">
                     {aiDetectLoading ? <span>{tr("AI детектор: аналіз...", "AI detector: analyzing...")}</span> : (() => {
                   const badge = formatAiBadge(aiDetection);
                   if (!badge) {
