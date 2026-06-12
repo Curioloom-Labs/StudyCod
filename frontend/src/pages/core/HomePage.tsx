@@ -456,35 +456,35 @@ export const HomePage: React.FC<Props> = ({
 
                 {}
                 {isTeacher && !loading && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Card className="p-4">
-                            <Users className="w-5 h-5 text-primary" />
-                            <p className="text-xs">{t("classesCount")}</p>
-                            <p className="text-xl">{classes.length}</p>
+                        <Card className="p-4 space-y-1">
+                            <Users className="w-5 h-5 text-primary mb-2" />
+                            <p className="text-xs text-text-secondary">{t("classesCount")}</p>
+                            <p className="text-xl font-mono text-text-primary">{classes.length}</p>
                         </Card>
-                        <Card className="p-4">
-                            <GraduationCap className="w-5 h-5 text-primary" />
-                            <p className="text-xs">{t("studentsCount")}</p>
-                            <p className="text-xl">{totalStudents}</p>
+                        <Card className="p-4 space-y-1">
+                            <GraduationCap className="w-5 h-5 text-primary mb-2" />
+                            <p className="text-xs text-text-secondary">{t("studentsCount")}</p>
+                            <p className="text-xl font-mono text-text-primary">{totalStudents}</p>
                         </Card>
                     </div>}
 
                 {}
                 {isStudent && !loading && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {averageGrade !== null && hasControlInAverage && <Card className="p-4 cursor-pointer hover:bg-bg-hover transition-fast" onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")}>
-                                <TrendingUp className="w-5 h-5 text-primary" />
-                                <p className="text-xs">{tr("Середній бал", "Average grade")}</p>
-                                <p className="text-xl">{averageGrade.toFixed(1)}</p>
+                  {averageGrade !== null && hasControlInAverage && <Card className="p-4 space-y-1 cursor-pointer hover:bg-bg-hover transition-fast" onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")}>
+                                <TrendingUp className="w-5 h-5 text-primary mb-2" />
+                                <p className="text-xs text-text-secondary">{tr("Середній бал", "Average grade")}</p>
+                                <p className="text-xl font-mono text-text-primary">{averageGrade.toFixed(1)}</p>
                             </Card>}
-                        <Card className="p-4">
-                      <ClockIcon className="w-5 h-5 text-primary" />
-                            <p className="text-xs">{tr("Активних уроків", "Active lessons")}</p>
-                            <p className="text-xl">{activeLessons}</p>
+                        <Card className="p-4 space-y-1">
+                            <ClockIcon className="w-5 h-5 text-primary mb-2" />
+                            <p className="text-xs text-text-secondary">{tr("Активних уроків", "Active lessons")}</p>
+                            <p className="text-xl font-mono text-text-primary">{activeLessons}</p>
                         </Card>
                     </div>}
 
                 {}
                 {isStudent && recentGrades.length > 0 && <Card className="p-4 space-y-2">
-                        <h3 className="text-sm mb-3">{tr("Останні оцінки", "Recent grades")}</h3>
+                        <h3 className="text-sm font-mono text-text-primary mb-3">{tr("Останні оцінки", "Recent grades")}</h3>
                         {recentGrades.filter(g => g.task || g.topicTask).map(g => <div key={g.id} className="flex justify-between text-sm py-1 border-b border-border/60 last:border-b-0">
                                     <span>
                                         {g.task?.title || g.topicTask?.title || tr("Невідоме завдання", "Unknown task")}

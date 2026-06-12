@@ -82,6 +82,8 @@ coverage/
 
 .gitignore
 .agents/
+.github/
+.claude/
 .impeccable.md
 skills-lock.json
 tmp-harden-findings-full.json

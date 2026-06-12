@@ -2,6 +2,14 @@
 
 @config "../tailwind.config.js";
 
+/* `transition-fast` is used across the codebase as a first-class utility;
+   define it for real so hover/focus states actually ease. */
+@utility transition-fast {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-out);
+}
+
 /* =========================
    Design Tokens – Terminal
    ========================= */
@@ -431,4 +439,24 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* =========================
+   Nova UI mode overrides
+   ========================= */
+/* Calmer, lower-chroma neutral surfaces; brand green --primary stays as-is. */
+:root[data-ui-mode="nova"],
+[data-ui-mode="nova"] {
+  --bg-base: oklch(15% 0.006 250);
+  --bg-surface: oklch(18.5% 0.007 250);
+  --bg-hover: oklch(23% 0.008 250);
+  --border: oklch(30% 0.008 250);
+}
+
+:root[data-theme="light"][data-ui-mode="nova"],
+:root[data-theme="light"] [data-ui-mode="nova"] {
+  --bg-base: oklch(98% 0.003 250);
+  --bg-surface: oklch(99.6% 0.001 250);
+  --bg-hover: oklch(95% 0.004 250);
+  --border: oklch(89% 0.005 250);
 }

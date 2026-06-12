@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { Skeleton } from "../../components/ui/Skeleton";
 import {
   getContestScoreboard,
   getContestDetails,
@@ -147,7 +148,7 @@ export const ScoreboardPage: React.FC = () => {
 
   const rankBadgeTone = (rank: number): string => {
     if (rank === 1) return "border-yellow-400/60 bg-yellow-400/10 text-yellow-300";
-    if (rank === 2) return "border-slate-300/60 bg-slate-300/10 text-slate-200";
+    if (rank === 2) return "border-border bg-bg-hover text-text-secondary";
     if (rank === 3) return "border-amber-600/60 bg-amber-600/10 text-amber-400";
     return "border-border bg-bg-base text-text-secondary";
   };
@@ -193,7 +194,17 @@ export const ScoreboardPage: React.FC = () => {
         ) : (
           <>
             {error && <div className="text-xs font-mono text-accent-error">{error}</div>}
-            {!board && !error && <div className="text-sm text-text-secondary">{tr("Завантаження…", "Loading…")}</div>}
+            {!board && !error && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                  ))}
+                </div>
+                <Skeleton className="h-10 w-full rounded-lg" />
+                <Skeleton className="h-[320px] w-full rounded-lg" />
+              </div>
+            )}
 
             {/* Podium */}
             {board && podium.length > 0 ? (

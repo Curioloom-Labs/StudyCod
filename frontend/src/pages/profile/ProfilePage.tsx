@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles } from "lucide-react";
+import { Skeleton } from "../../components/ui/Skeleton";
 import type { User, CourseLanguage, Grade, PublicProfilePrivacy } from "../../types";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
@@ -122,7 +123,7 @@ const ProgressBadge: React.FC<{ milestone: BadgeMilestone; solvedCount: number; 
   const remaining = Math.max(0, milestone - solvedCount);
   const Icon = meta.Icon;
   const badgeHint = unlocked
-    ? tr("Бейдж відкрито. Продовжуй серію 🔥", "Badge unlocked. Keep the streak alive 🔥")
+    ? tr("Бейдж відкрито. Продовжуй серію!", "Badge unlocked. Keep the streak alive!")
     : tr(`Ще ${remaining} задач до розблокування`, `${remaining} tasks left to unlock`);
 
   return (
@@ -675,8 +676,8 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                     <div className="text-xs font-mono text-text-primary">{tr("Режим інтерфейсу", "UI mode")}</div>
                     <div className="text-[11px] font-mono text-text-secondary mt-1">
                       {tr(
-                        "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд.",
-                        "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout."
+                        "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K).",
+                        "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K)."
                       )}
                     </div>
                   </div>
@@ -701,6 +702,15 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       Momentum UI
                     </button>
                     <button
+                      onClick={() => ui.setMode("nova")}
+                      className={
+                        "px-3 py-2 border font-mono text-xs transition-fast " +
+                        (ui.mode === "nova" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50")
+                      }
+                    >
+                      Nova
+                    </button>
+                    <button
                       onClick={() => ui.setClassicForToday()}
                       className="px-3 py-2 border border-border font-mono text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
                     >
@@ -711,7 +721,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                   {ui.override ? (
                     <div className="text-[11px] font-mono text-text-secondary border border-border bg-bg-surface px-3 py-2 flex items-center justify-between gap-3">
                       <span>
-                        {tr("Тимчасовий режим", "Temporary mode")}: <span className="text-text-primary">{ui.override.mode === "classic" ? "Classic" : "Momentum UI"}</span>
+                        {tr("Тимчасовий режим", "Temporary mode")}: <span className="text-text-primary">{ui.override.mode === "classic" ? "Classic" : ui.override.mode === "nova" ? "Nova" : "Momentum UI"}</span>
                       </span>
                       <button
                         onClick={() => ui.clearOverride()}
@@ -758,7 +768,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 </div>
               ) : (
                 <div className="text-xs font-mono text-text-secondary border border-border bg-bg-code px-4 py-3 rounded-md">
-                  {tr("✅ Google акаунт підвʼязано.", "✅ Google account is linked.")}
+                  {tr("Google акаунт підвʼязано.", "Google account is linked.")}
                 </div>
               )}
 
@@ -776,7 +786,11 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
               </div>
 
               {libraryLoading ? (
-                <div className="text-sm text-text-secondary">{tr("Завантаження історії...", "Loading history...")}</div>
+                <div className="space-y-2">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
               ) : recentHistory.length === 0 ? (
                 <div className="rounded-xl border border-border bg-bg-base/70 p-4 text-sm text-text-secondary">
                   {libraryLoading

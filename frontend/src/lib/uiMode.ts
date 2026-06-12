@@ -1,4 +1,4 @@
-export type UIMode = "classic" | "focus";
+export type UIMode = "classic" | "focus" | "nova";
 
 const STORAGE_KEYS = {
   preference: "studycod.uiMode.preference",
@@ -43,7 +43,7 @@ const safeLocalStorage = {
 };
 
 export function parseUIMode(value: unknown): UIMode | null {
-  return value === "classic" || value === "focus" ? value : null;
+  return value === "classic" || value === "focus" || value === "nova" ? value : null;
 }
 
 function getWithLegacy(primaryKey: string, ...legacyKeys: string[]): string | null {

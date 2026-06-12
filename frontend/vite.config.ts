@@ -46,6 +46,7 @@ export default defineConfig({
 
           // Animations
           if (norm.includes("/node_modules/framer-motion/")) return "framer-motion";
+          if (norm.includes("/node_modules/gsap/") || norm.includes("/node_modules/@gsap/")) return "gsap";
 
           // Markdown + math rendering
           if (norm.includes("/node_modules/remark-math/") || norm.includes("/node_modules/rehype-katex/") || norm.includes("/node_modules/katex/") || norm.includes("/node_modules/mdast-util-math/") || norm.includes("/node_modules/micromark-extension-math/")) {

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, History, Play, Pause, SkipBack, SkipForward } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { getSolveReplay, type SolveReplaySession } from "../../lib/api/learning";
 
 export const SolveReplayPage: React.FC = () => {
@@ -63,7 +64,12 @@ export const SolveReplayPage: React.FC = () => {
 
   if (!Number.isFinite(id)) return shell(<div className="text-sm text-text-secondary">{tr("Невірний запис.", "Invalid replay.")}</div>);
   if (error) return shell(<div className="text-sm text-accent-error">{error}</div>);
-  if (!session) return shell(<div className="text-sm text-text-secondary">{tr("Завантаження…", "Loading…")}</div>);
+  if (!session) return shell(
+    <div className="space-y-6">
+      <Skeleton className="h-[120px] w-full rounded-lg" />
+      <Skeleton className="h-[280px] w-full rounded-lg" />
+    </div>
+  );
 
   const total = session.snapshots.length;
   const snap = total ? session.snapshots[Math.min(idx, total - 1)] : null;

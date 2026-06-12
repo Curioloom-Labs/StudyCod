@@ -7,6 +7,7 @@ import { Modal } from "../../components/ui/Modal";
 import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, getTestDataItem, updateTestData, deleteTestData, deleteGeneratedTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type Task, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade, type TaskGrade } from "../../lib/api/edu";
 import { GlobalTimer } from "../../components/GlobalTimer";
 import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock } from "lucide-react";
+import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { getMe } from "../../lib/api/profile";
 import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
@@ -724,9 +725,7 @@ export const LessonDetailsPage: React.FC = () => {
     }
   };
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t("loading")}
-      </div>;
+    return <PageSkeleton variant="default" />;
   }
   if (!lesson) {
     return <div className="h-full flex items-center justify-center text-text-primary font-mono">
@@ -1651,9 +1650,7 @@ export const LessonDetailsPage: React.FC = () => {
               </div>
             </div>
 
-            {loadingTestData ? <div className="text-center py-8 text-text-secondary font-mono">
-                {t("loading")}
-              </div> : <div className="space-y-3">
+            {loadingTestData ? <Skeleton className="h-24 w-full" /> : <div className="space-y-3">
                 {}
                 {editingTestIndex === -1 && <Card className="p-4 border-2 border-primary">
                     <div className="space-y-3">
