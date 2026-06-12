@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
+import { motion, useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import {
   getStudents,
   getLessons,
@@ -17,11 +18,6 @@ import {
   deleteClassAnnouncement,
   getClass,
   updateClassGradingSystem,
-  getThematicConfig,
-  updateClassThematicFormula,
-  updateTopicThematicFormula,
-  updateTopicSemester,
-  recomputeSemesterGrades,
   getClassCohortAnalytics,
   getTeacherCopilotRecommendations,
   getClassHintsQuality,
@@ -39,15 +35,33 @@ import {
   type HintsQualityResponse,
   type TeacherDigestResponse,
   type RiskInterventionPlanResponse,
-  type ThematicConfig,
 } from "../../lib/api/edu";
-import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles } from "lucide-react";
+import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, DEFAULT_GRADE_SCALE_MODE, GRADE_SCALE_MODES, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
+import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
+
+const CountUp: React.FC<{ value: number }> = ({ value }) => {
+  const reduce = useReducedMotion();
+  const [display, setDisplay] = useState(reduce ? value : 0);
+  useEffect(() => {
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: latest => setDisplay(Math.round(latest))
+    });
+    return () => controls.stop();
+  }, [value, reduce]);
+  return <>{display}</>;
+};
+
 export const ClassDetailsPage: React.FC = () => {
   const {
     t,
@@ -78,14 +92,7 @@ export const ClassDetailsPage: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [classInfo, setClassInfo] = useState<ClassDetails | null>(null);
   const [selectedGradingSystem, setSelectedGradingSystem] = useState<ClassGradingSystem>(DEFAULT_GRADING_SYSTEM);
-  const [selectedScaleMode, setSelectedScaleMode] = useState<GradeScaleMode>(DEFAULT_GRADE_SCALE_MODE);
   const [savingGradingSystem, setSavingGradingSystem] = useState(false);
-  const [thematicConfig, setThematicConfig] = useState<ThematicConfig | null>(null);
-  const [classFormulaDraft, setClassFormulaDraft] = useState("");
-  const [topicFormulaDrafts, setTopicFormulaDrafts] = useState<Record<number, string>>({});
-  const [topicSemesterDrafts, setTopicSemesterDrafts] = useState<Record<number, string>>({});
-  const [savingThematic, setSavingThematic] = useState(false);
-  const [recomputingSemester, setRecomputingSemester] = useState(false);
   const [announcements, setAnnouncements] = useState<ClassAnnouncementDto[]>([]);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<number | null>(null);
@@ -136,8 +143,6 @@ export const ClassDetailsPage: React.FC = () => {
       setAnnouncements(announcementsData.announcements || []);
       setClassInfo(classData);
       setSelectedGradingSystem(normalizeGradingSystem(classData.gradingSystem));
-      setSelectedScaleMode(normalizeScaleMode(classData.gradeScaleMode));
-      void loadThematicConfig();
       setCohortAnalytics(analyticsResult.status === "fulfilled" ? analyticsResult.value : null);
       setTeacherCopilot(copilotResult.status === "fulfilled" ? copilotResult.value : null);
       setHintsQuality(hintsResult.status === "fulfilled" ? hintsResult.value : null);
@@ -191,89 +196,15 @@ export const ClassDetailsPage: React.FC = () => {
     if (!classId) return;
     setSavingGradingSystem(true);
     try {
-      const updated = await updateClassGradingSystem(parseInt(classId, 10), selectedGradingSystem, selectedScaleMode);
+      const updated = await updateClassGradingSystem(parseInt(classId, 10), selectedGradingSystem);
       setClassInfo(updated);
       setSelectedGradingSystem(normalizeGradingSystem(updated.gradingSystem));
-      setSelectedScaleMode(normalizeScaleMode(updated.gradeScaleMode));
       showToast({ type: "success", message: tr("Систему оцінювання оновлено", "Grading system updated") });
     } catch (error: unknown) {
       console.error("Failed to update grading system:", error);
       showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося оновити систему оцінювання", "Failed to update grading system")) });
     } finally {
       setSavingGradingSystem(false);
-    }
-  };
-  const loadThematicConfig = async () => {
-    if (!classId) return;
-    try {
-      const cfg = await getThematicConfig(parseInt(classId, 10));
-      setThematicConfig(cfg);
-      setClassFormulaDraft(cfg.classFormula ?? "");
-      const fDrafts: Record<number, string> = {};
-      const sDrafts: Record<number, string> = {};
-      for (const t of cfg.topics) {
-        fDrafts[t.topicId] = t.thematicFormula ?? "";
-        sDrafts[t.topicId] = t.semester === null || t.semester === undefined ? "" : String(t.semester);
-      }
-      setTopicFormulaDrafts(fDrafts);
-      setTopicSemesterDrafts(sDrafts);
-    } catch (error: unknown) {
-      // Non-fatal: thematic config is teacher-only extra settings.
-      console.error("Failed to load thematic config:", error);
-    }
-  };
-  const scaleModeLabel = (mode: GradeScaleMode): string =>
-    mode === "MON" ? tr("МОН (офіційна 12-бальна)", "MON (official 12-point)") : tr("Лінійна (пропорційна)", "Linear (proportional)");
-  const handleSaveClassFormula = async () => {
-    if (!classId) return;
-    setSavingThematic(true);
-    try {
-      const formula = classFormulaDraft.trim() || null;
-      await updateClassThematicFormula(parseInt(classId, 10), formula);
-      showToast({ type: "success", message: tr("Формулу тематичної збережено", "Thematic formula saved") });
-      await loadThematicConfig();
-    } catch (error: unknown) {
-      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Невірна формула", "Invalid formula")) });
-    } finally {
-      setSavingThematic(false);
-    }
-  };
-  const handleSaveTopicConfig = async (topicId: number) => {
-    if (!classId) return;
-    setSavingThematic(true);
-    try {
-      const cid = parseInt(classId, 10);
-      const formula = (topicFormulaDrafts[topicId] ?? "").trim() || null;
-      const semRaw = (topicSemesterDrafts[topicId] ?? "").trim();
-      const semester = semRaw === "" ? null : parseInt(semRaw, 10);
-      if (semRaw !== "" && (!Number.isFinite(semester) || (semester as number) < 1)) {
-        showToast({ type: "error", message: tr("Невірний семестр", "Invalid semester") });
-        setSavingThematic(false);
-        return;
-      }
-      await updateTopicThematicFormula(cid, topicId, formula);
-      await updateTopicSemester(cid, topicId, semester);
-      showToast({ type: "success", message: tr("Налаштування теми збережено", "Topic settings saved") });
-      await loadThematicConfig();
-    } catch (error: unknown) {
-      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося зберегти", "Failed to save")) });
-    } finally {
-      setSavingThematic(false);
-    }
-  };
-  const handleRecomputeSemester = async () => {
-    if (!classId) return;
-    setRecomputingSemester(true);
-    try {
-      const result = await recomputeSemesterGrades(parseInt(classId, 10));
-      showToast({
-        type: "success",
-        message: tr(`Семестрові оцінки оновлено (${result.count})`, `Semester grades updated (${result.count})`)
-      });
-    } catch (error: unknown) {
-      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося перерахувати", "Failed to recompute")) });
-    } finally {
-      setRecomputingSemester(false);
     }
   };
   const openCreateAnnouncement = () => {
@@ -422,31 +353,66 @@ export const ClassDetailsPage: React.FC = () => {
   if (loading) {
     return <PageSkeleton variant="default" />;
   }
-  return <div className="p-3 sm:p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
-          <div className="flex flex-wrap items-center gap-2">
+  return <div className="min-h-full bg-bg-base">
+      {/* Hero */}
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-7xl mx-auto">
+        <span className="font-mono text-xs text-primary/70">// class</span>
+        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+              {classInfo?.name || t('classDetails')}
+            </h1>
+            <p className="mt-1.5 text-sm text-text-secondary">
+              {tr("Учні, теми, оголошення та аналітика класу — усе в одному місці.", "Students, topics, announcements and analytics — all in one place.")}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Button variant="ghost" onClick={() => navigate("/edu")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {t('toHome')}
-            </Button>
-            <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/teacher-os`)}>
-              <Gauge className="w-4 h-4 mr-2" />
-              Teacher OS
             </Button>
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/live`)}>
               <Video className="w-4 h-4 mr-2" />
               {tr("Живий урок", "Live lesson")}
             </Button>
+            <Button onClick={() => navigate(`/edu/classes/${classId}/teacher-os`)}>
+              <Gauge className="w-4 h-4 mr-2" />
+              Teacher OS
+            </Button>
           </div>
-          <h1 className="text-2xl font-mono text-text-primary">{classInfo?.name ? `${t('classDetails')}: ${classInfo.name}` : t('classDetails')}</h1>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="p-4">
+        {/* Inline key stats */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={students.length} /></span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t('students')}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={topics.length} /></span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t('topic')}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={lessons.length} /></span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Уроки", "Lessons")}</span>
+          </div>
+          {cohortAnalytics && (
+            <div className="flex items-baseline gap-2">
+              <span className={`font-mono text-2xl md:text-3xl tabular-nums ${cohortAnalytics.overview.riskStudentsCount > 0 ? "text-accent-warning" : "text-text-primary"}`}><CountUp value={cohortAnalytics.overview.riskStudentsCount} /></span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Учні ризику", "At-risk")}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+      <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto space-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                <Settings className="w-5 h-5" />
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <Settings className="w-3.5 h-3.5 text-primary" />
                 {tr("Система оцінювання", "Grading system")}
               </h2>
             </div>
@@ -455,7 +421,7 @@ export const ClassDetailsPage: React.FC = () => {
               <div className="text-xs text-text-muted">
                 {tr("Оберіть шкалу для цього класу. Можна змінювати будь-коли.", "Choose the scale for this class. You can change it anytime.")}
               </div>
-              <select value={selectedGradingSystem} onChange={e => setSelectedGradingSystem(normalizeGradingSystem(e.target.value))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
+              <select value={selectedGradingSystem} onChange={e => setSelectedGradingSystem(normalizeGradingSystem(e.target.value))} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary transition-fast">
                 {GRADING_SYSTEMS.map(system => <option key={system} value={system}>
                     {gradingSystemLabel(system, !!isEn)}
                   </option>)}
@@ -463,98 +429,18 @@ export const ClassDetailsPage: React.FC = () => {
               <div className="text-[11px] text-text-secondary">
                 {tr("Поточна:", "Current:")} {gradingSystemLabel(normalizeGradingSystem(classInfo?.gradingSystem || selectedGradingSystem), !!isEn)}
               </div>
-              <div className="pt-2 border-t border-border">
-                <div className="text-xs text-text-muted mb-2">
-                  {tr("Спосіб конвертації у 12-бальну шкалу.", "How to convert into the 12-point scale.")}
-                </div>
-                <select value={selectedScaleMode} onChange={e => setSelectedScaleMode(normalizeScaleMode(e.target.value))} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary">
-                  {GRADE_SCALE_MODES.map(mode => <option key={mode} value={mode}>
-                      {scaleModeLabel(mode)}
-                    </option>)}
-                </select>
-              </div>
               <div className="flex justify-end">
                 <Button onClick={handleSaveGradingSystem} disabled={savingGradingSystem}>
                   {savingGradingSystem ? t("saving") : t("save")}
                 </Button>
               </div>
             </div>
-          </Card>
+          </div>
 
-          <Card className="p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                <Settings className="w-5 h-5" />
-                {tr("Тематична та семестрова", "Thematic & semester")}
-              </h2>
-              <Button variant="ghost" className="text-xs" onClick={handleRecomputeSemester} disabled={recomputingSemester}>
-                {recomputingSemester ? tr("Рахуємо…", "Computing…") : tr("Перерахувати семестрові", "Recompute semester")}
-              </Button>
-            </div>
-            <div className="space-y-3">
-              <div className="text-xs text-text-muted">
-                {tr(
-                  "Формула тематичної. Змінні: practice (середнє практичних), control (середнє контрольних). Порожньо = 0.7*control + 0.3*practice.",
-                  "Thematic formula. Variables: practice (avg of practice), control (avg of control works). Empty = 0.7*control + 0.3*practice."
-                )}
-              </div>
-              <div>
-                <label className="text-[11px] text-text-secondary block mb-1">
-                  {tr("Формула за замовчуванням для класу", "Class default formula")}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={classFormulaDraft}
-                    onChange={e => setClassFormulaDraft(e.target.value)}
-                    placeholder="0.7*control + 0.3*practice"
-                    className="flex-1 px-3 py-2 bg-bg-code border border-border text-text-primary font-mono text-sm rounded focus:outline-none focus:border-primary"
-                  />
-                  <Button onClick={handleSaveClassFormula} disabled={savingThematic}>
-                    {t("save")}
-                  </Button>
-                </div>
-              </div>
-              {thematicConfig && thematicConfig.topics.length > 0 && (
-                <div className="pt-2 border-t border-border space-y-2">
-                  <div className="text-[11px] text-text-secondary">
-                    {tr("Перевизначення для тем (порожньо = успадкувати клас)", "Per-topic overrides (empty = inherit class)")}
-                  </div>
-                  {thematicConfig.topics.map(topic => (
-                    <div key={topic.topicId} className="flex flex-col gap-1 p-2 border border-border rounded">
-                      <div className="text-xs font-mono text-text-primary truncate" title={topic.title}>{topic.title}</div>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <input
-                          type="text"
-                          value={topicFormulaDrafts[topic.topicId] ?? ""}
-                          onChange={e => setTopicFormulaDrafts(prev => ({ ...prev, [topic.topicId]: e.target.value }))}
-                          placeholder={tr("Формула теми", "Topic formula")}
-                          className="flex-1 min-w-[160px] px-2 py-1 bg-bg-code border border-border text-text-primary font-mono text-xs rounded focus:outline-none focus:border-primary"
-                        />
-                        <input
-                          type="number"
-                          min={1}
-                          max={12}
-                          value={topicSemesterDrafts[topic.topicId] ?? ""}
-                          onChange={e => setTopicSemesterDrafts(prev => ({ ...prev, [topic.topicId]: e.target.value }))}
-                          placeholder={tr("Сем.", "Sem.")}
-                          className="w-16 px-2 py-1 bg-bg-code border border-border text-text-primary font-mono text-xs rounded focus:outline-none focus:border-primary"
-                        />
-                        <Button variant="ghost" className="text-xs" onClick={() => handleSaveTopicConfig(topic.topicId)} disabled={savingThematic}>
-                          {t("save")}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Card>
-
-          <Card className="p-4">
+          <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-primary" />
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5 text-primary" />
                 {tr("Аналітика класу", "Class analytics")}
               </h2>
               <Button variant="ghost" className="text-xs" onClick={loadData}>
@@ -566,28 +452,28 @@ export const ClassDetailsPage: React.FC = () => {
                 {tr("Аналітика поки недоступна", "Analytics are not available yet")}
               </div> : <div className="space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="border border-border bg-bg-surface p-2">
-                    <div className="text-[11px] text-text-muted">{tr("Сер. бал", "Avg score")}</div>
-                    <div className="text-lg font-mono text-text-primary">{Math.round(cohortAnalytics.overview.avgScore)}</div>
+                  <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Сер. бал", "Avg score")}</div>
+                    <div className="text-lg font-mono text-text-primary tabular-nums">{Math.round(cohortAnalytics.overview.avgScore)}</div>
                   </div>
-                  <div className="border border-border bg-bg-surface p-2">
-                    <div className="text-[11px] text-text-muted">{tr("Completion", "Completion")}</div>
-                    <div className="text-lg font-mono text-text-primary">{Math.round(cohortAnalytics.overview.completionRate * 100)}%</div>
+                  <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Completion", "Completion")}</div>
+                    <div className="text-lg font-mono text-text-primary tabular-nums">{Math.round(cohortAnalytics.overview.completionRate * 100)}%</div>
                   </div>
-                  <div className="border border-border bg-bg-surface p-2">
-                    <div className="text-[11px] text-text-muted">{tr("Pass rate", "Pass rate")}</div>
-                    <div className="text-lg font-mono text-text-primary">{Math.round(cohortAnalytics.overview.passRate * 100)}%</div>
+                  <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Pass rate", "Pass rate")}</div>
+                    <div className="text-lg font-mono text-text-primary tabular-nums">{Math.round(cohortAnalytics.overview.passRate * 100)}%</div>
                   </div>
-                  <div className="border border-border bg-bg-surface p-2">
-                    <div className="text-[11px] text-text-muted">{tr("Учні ризику", "At-risk")}</div>
-                    <div className="text-lg font-mono text-accent-warning">{cohortAnalytics.overview.riskStudentsCount}</div>
+                  <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Учні ризику", "At-risk")}</div>
+                    <div className="text-lg font-mono text-accent-warning tabular-nums">{cohortAnalytics.overview.riskStudentsCount}</div>
                   </div>
                 </div>
 
                 {cohortAnalytics.commonErrorKinds.length > 0 && <div>
                     <div className="text-xs text-text-secondary mb-2">{tr("Часті помилки", "Frequent errors")}</div>
                     <div className="flex flex-wrap gap-1">
-                      {cohortAnalytics.commonErrorKinds.slice(0, 6).map(item => <span key={item.kind} className="text-[10px] px-2 py-1 border border-border text-text-muted">
+                      {cohortAnalytics.commonErrorKinds.slice(0, 6).map(item => <span key={item.kind} className="text-[10px] font-mono px-2 py-1 rounded-full border border-border text-text-muted">
                           {item.kind} · {item.count}
                         </span>)}
                     </div>
@@ -596,7 +482,7 @@ export const ClassDetailsPage: React.FC = () => {
                 {cohortAnalytics.riskStudents.length > 0 && <div>
                     <div className="text-xs text-text-secondary mb-2">{tr("Кого підтримати в першу чергу", "Students to support first")}</div>
                     <div className="space-y-2 max-h-36 overflow-y-auto">
-                      {cohortAnalytics.riskStudents.slice(0, 5).map(studentItem => <div key={studentItem.studentId} className="p-2 border border-border bg-bg-surface">
+                      {cohortAnalytics.riskStudents.slice(0, 5).map(studentItem => <div key={studentItem.studentId} className="rounded-lg p-2.5 border border-border bg-bg-base">
                           <div className="text-xs font-mono text-text-primary">{studentItem.studentName}</div>
                           <div className="text-[11px] text-text-muted">
                             {tr("Сер. бал", "Avg score")}: {Math.round(studentItem.avgScore)} · {tr("Completion", "Completion")}: {Math.round(studentItem.completionRate * 100)}%
@@ -611,7 +497,7 @@ export const ClassDetailsPage: React.FC = () => {
                       {cohortAnalytics.topics
                     .filter(topic => topic.avgScore < 65 || topic.passRate < 0.6)
                     .slice(0, 4)
-                    .map(topic => <div key={topic.topicId} className="p-2 border border-border bg-bg-surface flex items-start justify-between gap-2">
+                    .map(topic => <div key={topic.topicId} className="rounded-lg p-2.5 border border-border bg-bg-base flex items-start justify-between gap-2">
                             <div>
                               <div className="text-xs font-mono text-text-primary">{topic.title}</div>
                               <div className="text-[11px] text-text-muted">
@@ -625,12 +511,12 @@ export const ClassDetailsPage: React.FC = () => {
                     </div>
                   </div>}
               </div>}
-          </Card>
+          </div>
 
-          <Card className="p-4">
+          <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
                 {tr("Teacher Copilot", "Teacher Copilot")}
               </h2>
             </div>
@@ -638,10 +524,10 @@ export const ClassDetailsPage: React.FC = () => {
             {!teacherCopilot || teacherCopilot.suggestions.length === 0 ? <div className="text-sm text-text-secondary">
                 {tr("Поради поки недоступні", "Recommendations are not available yet")}
               </div> : <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
-                {teacherCopilot.suggestions.map(item => <div key={item.id} className="p-3 border border-border bg-bg-surface">
+                {teacherCopilot.suggestions.map(item => <div key={item.id} className="rounded-lg p-3 border border-border bg-bg-base">
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="text-sm font-mono text-text-primary">{item.title}</div>
-                      <span className={`text-[10px] px-2 py-1 border ${copilotPriorityBadgeClass(item.priority)}`}>
+                      <span className={`text-[10px] font-mono px-2 py-1 rounded-full border ${copilotPriorityBadgeClass(item.priority)}`}>
                         {copilotPriorityLabel(item.priority)}
                       </span>
                     </div>
@@ -656,70 +542,71 @@ export const ClassDetailsPage: React.FC = () => {
                       </div>}
                   </div>)}
               </div>}
-          </Card>
+          </div>
 
-          <Card className="p-4">
+          <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                ⚡ {tr("Інсайти та втручання", "Insights & interventions")}
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-primary" />
+                {tr("Інсайти та втручання", "Insights & interventions")}
               </h2>
             </div>
 
             <div className="space-y-4">
               {!teacherDigest ? <div className="text-sm text-text-secondary">
                   {tr("Дайджест поки недоступний", "Digest is not available yet")}
-                </div> : <div className="p-3 border border-border bg-bg-surface space-y-3">
+                </div> : <div className="rounded-lg p-3 border border-border bg-bg-base space-y-3">
                   <div className="text-xs text-text-secondary">{tr("Щотижневий дайджест", "Weekly digest")}</div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Активні апеляції", "Active appeals")}</div>
-                      <div className="text-sm font-mono text-text-primary">{teacherDigest.appeals.active}</div>
+                      <div className="text-sm font-mono text-text-primary tabular-nums">{teacherDigest.appeals.active}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Прострочені", "Overdue")}</div>
-                      <div className="text-sm font-mono text-accent-error">{teacherDigest.appeals.overdueActive}</div>
+                      <div className="text-sm font-mono text-accent-error tabular-nums">{teacherDigest.appeals.overdueActive}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Ескаловані", "Escalated")}</div>
-                      <div className="text-sm font-mono text-accent-warning">{teacherDigest.appeals.escalatedActive}</div>
+                      <div className="text-sm font-mono text-accent-warning tabular-nums">{teacherDigest.appeals.escalatedActive}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Сер. час (год)", "Avg resolution (h)")}</div>
-                      <div className="text-sm font-mono text-text-primary">{Math.round(teacherDigest.appeals.avgResolutionHours)}</div>
+                      <div className="text-sm font-mono text-text-primary tabular-nums">{Math.round(teacherDigest.appeals.avgResolutionHours)}</div>
                     </div>
                   </div>
                 </div>}
 
               {!hintsQuality ? <div className="text-sm text-text-secondary">
                   {tr("Якість підказок поки недоступна", "Hint quality is not available yet")}
-                </div> : <div className="p-3 border border-border bg-bg-surface space-y-3">
+                </div> : <div className="rounded-lg p-3 border border-border bg-bg-base space-y-3">
                   <div className="text-xs text-text-secondary">{tr("Якість підказок", "Hints quality")}</div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Відгуків", "Feedback")}</div>
-                      <div className="text-sm font-mono text-text-primary">{hintsQuality.totalFeedback}</div>
+                      <div className="text-sm font-mono text-text-primary tabular-nums">{hintsQuality.totalFeedback}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Позитивні", "Positive")}</div>
-                      <div className="text-sm font-mono text-accent-success">{Math.round(hintsQuality.positiveRate)}%</div>
+                      <div className="text-sm font-mono text-accent-success tabular-nums">{Math.round(hintsQuality.positiveRate)}%</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Скор корисності", "Helpfulness")}</div>
-                      <div className="text-sm font-mono text-text-primary">{Math.round(hintsQuality.helpfulnessScore)}</div>
+                      <div className="text-sm font-mono text-text-primary tabular-nums">{Math.round(hintsQuality.helpfulnessScore)}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-text-muted">{tr("Період", "Window")}</div>
-                      <div className="text-sm font-mono text-text-primary">{hintsQuality.windowDays}d</div>
+                      <div className="text-sm font-mono text-text-primary tabular-nums">{hintsQuality.windowDays}d</div>
                     </div>
                   </div>
                   {hintsQuality.byVariant.length > 0 && <div className="flex flex-wrap gap-2">
-                      {hintsQuality.byVariant.map(item => <span key={item.variant} className="text-[11px] px-2 py-1 border border-border text-text-muted">
+                      {hintsQuality.byVariant.map(item => <span key={item.variant} className="text-[11px] font-mono px-2 py-1 rounded-full border border-border text-text-muted">
                           Variant {item.variant}: {item.count} · {Math.round(item.positiveRate)}%
                         </span>)}
                     </div>}
                 </div>}
 
-              <div className="p-3 border border-border bg-bg-surface space-y-3">
+              <div className="rounded-lg p-3 border border-border bg-bg-base space-y-3">
                 <div className="text-xs text-text-secondary">{tr("План втручання для учнів ризику", "Intervention plan for at-risk students")}</div>
 
                 {!riskInterventionPlan ? <div className="text-sm text-text-secondary">
@@ -748,132 +635,167 @@ export const ClassDetailsPage: React.FC = () => {
                   </>}
               </div>
             </div>
-          </Card>
+          </div>
+        </div>
 
-          {}
-          <Card className="p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                {t('studentsCountLabel')} ({students.length})
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={handleExport} className="text-xs">
-                  <Download className="w-4 h-4 mr-1" />
-                  {t('export')}
-                </Button>
-                <Button variant="ghost" onClick={() => setShowImport(true)} className="text-xs">
-                  <Upload className="w-4 h-4 mr-1" />
-                  {t('import')}
-                </Button>
-                <Button onClick={() => setShowAddStudents(true)} className="text-xs">
-                  <Plus className="w-4 h-4 mr-1" />
-                  {t('add')}
-                </Button>
+        {/* Students */}
+        <section>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <Users className="w-3.5 h-3.5 text-primary" />
+              {t('studentsCountLabel')}
+              <span className="text-text-muted/70">· {students.length}</span>
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={handleExport} className="text-xs">
+                <Download className="w-4 h-4 mr-1" />
+                {t('export')}
+              </Button>
+              <Button variant="ghost" onClick={() => setShowImport(true)} className="text-xs">
+                <Upload className="w-4 h-4 mr-1" />
+                {t('import')}
+              </Button>
+              <Button onClick={() => setShowAddStudents(true)} className="text-xs">
+                <Plus className="w-4 h-4 mr-1" />
+                {t('add')}
+              </Button>
+            </div>
+          </div>
+
+          {students.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <Users className="w-6 h-6 text-primary" />
               </div>
+              <p className="text-text-secondary mb-4">{t('noStudents')}</p>
+              <Button onClick={() => setShowAddStudents(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t('add')}
+              </Button>
             </div>
+          ) : (
+            <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {students.map(student => <motion.div key={student.id} variants={fadeUpItem} className="rounded-xl p-4 border border-border bg-bg-surface transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+                  <div className="text-sm font-mono text-text-primary">
+                    {student.lastName} {student.firstName} {student.middleName || ""}
+                  </div>
+                  <div className="text-xs text-text-secondary mt-1 truncate">{student.email}</div>
+                  <div className="text-xs text-text-muted font-mono">@{student.generatedUsername}</div>
+                </motion.div>)}
+            </motion.div>
+          )}
+        </section>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {students.length === 0 ? <p className="text-text-secondary text-sm">{t('noStudents')}</p> : students.map(student => <div key={student.id} className="p-2 border border-border hover:bg-bg-hover transition-fast">
-                    <div className="text-sm font-mono text-text-primary">
-                      {student.lastName} {student.firstName} {student.middleName || ""}
-                    </div>
-                    <div className="text-xs text-text-secondary">{student.email}</div>
-                    <div className="text-xs text-text-muted">@{student.generatedUsername}</div>
-                  </div>)}
-            </div>
-          </Card>
+        {/* Announcements */}
+        <section>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <MessageSquare className="w-3.5 h-3.5 text-primary" />
+              {tr("Оголошення", "Announcements")}
+              {announcements.length > 0 && <span className="text-text-muted/70">· {announcements.length}</span>}
+            </h2>
+            <Button onClick={openCreateAnnouncement} className="text-xs">
+              <Plus className="w-4 h-4 mr-1" />
+              {t("add")}
+            </Button>
+          </div>
 
-          {}
-          <Card className="p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
+          {announcements.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-6 text-center">
+              <div className="mx-auto w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-2">
                 <MessageSquare className="w-5 h-5 text-primary" />
-                {tr("Оголошення", "Announcements")}
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={openCreateAnnouncement} className="text-xs">
-                  <Plus className="w-4 h-4 mr-1" />
-                  {t("add")}
-                </Button>
               </div>
+              <p className="text-sm text-text-secondary">{tr("Поки немає оголошень", "No announcements yet")}</p>
             </div>
-
-            {announcements.length === 0 ? <p className="text-text-secondary text-sm">{tr("Поки немає оголошень", "No announcements yet")}</p> : <div className="space-y-3 max-h-96 overflow-y-auto">
-                {announcements.map(a => <div key={a.id} className="p-3 border border-border bg-bg-surface">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="text-sm font-mono text-text-primary">
-                          {a.pinned && <span className="text-text-muted mr-1" aria-label="pinned">·</span>}{a.title || tr("Оголошення", "Announcement")}
-                        </div>
-                        <div className="text-[10px] text-text-muted mt-1">
-                          {a.author?.name || tr("Вчитель", "Teacher")} • {new Date(a.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
-                        </div>
+          ) : (
+            <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid gap-4 md:grid-cols-2">
+              {announcements.map(a => <motion.div key={a.id} variants={fadeUpItem} className="rounded-xl p-5 border border-border bg-bg-surface transition-fast hover:border-primary/40">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-mono text-text-primary">
+                        {a.pinned && <span className="text-primary mr-1" aria-label="pinned">·</span>}{a.title || tr("Оголошення", "Announcement")}
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="ghost" className="text-xs" onClick={() => openEditAnnouncement(a)}>
-                          {t("edit")}
-                        </Button>
-                        <Button variant="ghost" className="text-xs" onClick={() => removeAnnouncement(a.id)}>
-                          {t("delete")}
-                        </Button>
+                      <div className="text-[10px] text-text-muted mt-1">
+                        {a.author?.name || tr("Вчитель", "Teacher")} • {new Date(a.createdAt).toLocaleString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
                       </div>
                     </div>
-                    <div className="mt-3 text-xs text-text-secondary">
-                      <MarkdownView content={a.content} />
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      <Button variant="ghost" className="text-xs" onClick={() => openEditAnnouncement(a)}>
+                        {t("edit")}
+                      </Button>
+                      <Button variant="ghost" className="text-xs" onClick={() => removeAnnouncement(a.id)}>
+                        {t("delete")}
+                      </Button>
                     </div>
-                  </div>)}
-              </div>}
-          </Card>
+                  </div>
+                  <div className="mt-3 text-xs text-text-secondary">
+                    <MarkdownView content={a.content} />
+                  </div>
+                </motion.div>)}
+            </motion.div>
+          )}
+        </section>
 
-          {}
-          <Card className="p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary flex items-center gap-2">
-                <BookOpen className="w-5 h-5" />
-                {t('topicsCountLabel')} ({topics.length})
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/gradebook`)} className="text-xs">
-                  <FileText className="w-4 h-4 mr-1" />
-                  {t('gradebook')}
-                </Button>
-                <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/appeals`)} className="text-xs">
-                  <MessageSquare className="w-4 h-4 mr-1" />
-                  {tr("Апеляції", "Appeals")}
-                </Button>
-                {}
-                <Button onClick={() => navigate(`/edu/classes/${classId}/topics/new`)} className="text-xs">
-                  <Plus className="w-4 h-4 mr-1" />
-                  {t('createTopic')}
-                </Button>
-              </div>
+        {/* Topics */}
+        <section>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <BookOpen className="w-3.5 h-3.5 text-primary" />
+              {t('topicsCountLabel')}
+              <span className="text-text-muted/70">· {topics.length}</span>
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/gradebook`)} className="text-xs">
+                <FileText className="w-4 h-4 mr-1" />
+                {t('gradebook')}
+              </Button>
+              <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/appeals`)} className="text-xs">
+                <MessageSquare className="w-4 h-4 mr-1" />
+                {tr("Апеляції", "Appeals")}
+              </Button>
+              <Button onClick={() => navigate(`/edu/classes/${classId}/topics/new`)} className="text-xs">
+                <Plus className="w-4 h-4 mr-1" />
+                {t('createTopic')}
+              </Button>
             </div>
+          </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {topics.length === 0 ? <p className="text-text-secondary text-sm">{t('noTopics')}</p> : topics.map(topic => <button type="button" key={topic.id} className="w-full p-2 text-left border border-border hover:bg-bg-hover transition-fast" onClick={() => navigate(`/edu/topics/${topic.id}`)}>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-mono text-text-primary">{topic.title}</div>
-                      <span className="text-xs text-text-muted px-2 py-1 border border-border">
-                        {topic.language === "JAVA" ? "Java" : topic.language === "PYTHON" ? "Python" : "C++"}
-                      </span>
-                    </div>
-                    {topic.description && <div className="text-xs text-text-secondary mt-1 line-clamp-2">
-                        {topic.description}
-                      </div>}
-                    {(() => {
+          {topics.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <BookOpen className="w-6 h-6 text-primary" />
+              </div>
+              <p className="text-text-secondary mb-4">{t('noTopics')}</p>
+              <Button onClick={() => navigate(`/edu/classes/${classId}/topics/new`)}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t('createTopic')}
+              </Button>
+            </div>
+          ) : (
+            <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {topics.map(topic => <motion.button type="button" key={topic.id} variants={fadeUpItem} className="group w-full p-5 text-left rounded-xl border border-border bg-bg-surface transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]" onClick={() => navigate(`/edu/topics/${topic.id}`)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-mono text-text-primary min-w-0 truncate group-hover:text-primary transition-fast">{topic.title}</div>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted px-2 py-0.5 rounded-full border border-border shrink-0">
+                      {topic.language === "JAVA" ? "Java" : topic.language === "PYTHON" ? "Python" : "C++"}
+                    </span>
+                  </div>
+                  {topic.description && <div className="text-xs text-text-secondary mt-2 line-clamp-2">
+                      {topic.description}
+                    </div>}
+                  {(() => {
                 const practiceCount = (topic.tasks || []).filter((taskItem) => (taskItem as { type?: unknown } | null | undefined)?.type === "PRACTICE").length;
                 const controlWorksCount = (topic.controlWorks || []).length;
                 const totalCount = practiceCount + controlWorksCount;
                 if (totalCount <= 0) return null;
-                return <div className="text-xs text-text-secondary mt-1">
-                          {t('tasksCount')}: {totalCount}
-                        </div>;
+                return <div className="text-xs text-text-muted font-mono mt-3 tabular-nums">
+                        {t('tasksCount')}: {totalCount}
+                      </div>;
               })()}
-                  </button>)}
-            </div>
-          </Card>
-        </div>
+                </motion.button>)}
+            </motion.div>
+          )}
+        </section>
       </div>
 
       {}

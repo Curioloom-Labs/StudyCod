@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import { ArrowLeft } from "lucide-react";
 import { getClasses } from "../../lib/api/edu";
 import { api } from "../../lib/api/client";
@@ -62,35 +61,53 @@ export const CreateTopicPage: React.FC = () => {
       showToast({ type: "error", message: raw || tr("Не вдалося створити тему", "Failed to create topic") });
     }
   };
-  return <div className="p-3 sm:p-4 md:p-6">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
-          <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
+  return <div className="min-h-full bg-bg-base">
+      {/* Hero */}
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-3xl mx-auto">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-xs text-primary/70">// new topic</span>
+          <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/classes/${classId}`)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-          <h1 className="text-2xl font-mono text-text-primary">{tr("Створити тему", "Create topic")}</h1>
         </div>
+        <div className="mt-2">
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Створити тему", "Create topic")}</h1>
+          <p className="mt-1.5 text-sm text-text-secondary">
+            {tr("Тема обʼєднує практичні завдання та контрольні роботи для класу.", "A topic groups practice tasks and control works for the class.")}
+          </p>
+        </div>
+      </div>
 
-        <Card className="p-4 sm:p-6 space-y-6">
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+      <div className="px-4 md:px-8 py-8 max-w-3xl mx-auto">
+        <div className="rounded-xl border border-border bg-bg-surface p-5 sm:p-6 space-y-6">
           <div>
-            <label className="block text-sm font-mono text-text-secondary mb-2">
-              {tr("Назва теми *", "Topic title *")}
-            </label>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" placeholder={tr("Наприклад: Масиви та цикли", "Example: Arrays and loops")} />
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4">
+              {tr("Деталі теми", "Topic details")}
+            </h2>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-mono text-text-secondary mb-2">
+                  {tr("Назва теми *", "Topic title *")}
+                </label>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary transition-fast" placeholder={tr("Наприклад: Масиви та цикли", "Example: Arrays and loops")} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-mono text-text-secondary mb-2">
+                  {tr("Опис теми (необов'язково)", "Topic description (optional)")}
+                </label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px] transition-fast" placeholder={tr("Короткий опис теми...", "Short topic description...")} />
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-mono text-text-secondary mb-2">
-              {tr("Опис теми (необов'язково)", "Topic description (optional)")}
-            </label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px]" placeholder={tr("Короткий опис теми...", "Short topic description...")} />
-          </div>
-
-          <div>
-            <label className="block text-sm font-mono text-text-secondary mb-2">
+          <div className="border-t border-border pt-6">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4">
               {tr("Мова програмування", "Programming language")}
-            </label>
+            </h2>
             <div className="flex flex-col sm:flex-row gap-2">
               <Button variant={language === "JAVA" ? "primary" : "ghost"} onClick={() => setLanguage("JAVA")} className="flex-1">
                 Java
@@ -104,13 +121,13 @@ export const CreateTopicPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 justify-end border-t border-border pt-6">
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
               {tr("Скасувати", "Cancel")}
             </Button>
             <Button onClick={handleSubmit}>{tr("Створити тему", "Create topic")}</Button>
           </div>
-        </Card>
+        </div>
       </div>
     </div>;
 };

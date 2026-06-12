@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { LiveClassMonitor } from "../../components/LiveClassMonitor";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
-import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle, Upload, Download } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle, Upload, Download, BookOpen, ShieldCheck, CheckCircle2, Clock } from "lucide-react";
 import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { api } from "../../lib/api/client";
 import { getMe } from "../../lib/api/profile";
@@ -62,6 +64,7 @@ export const TopicDetailsPage: React.FC = () => {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const reduce = useReducedMotion();
   const getErrorMessage = (error: unknown, fallback: string): string =>
     getErrorMessageFromUnknown(error, fallback);
   const parseTaskDifficulty = (value: string): "1" | "2" | "3" | "4" | "5" => {
@@ -757,21 +760,45 @@ export const TopicDetailsPage: React.FC = () => {
   const controlWorks = topic.controlWorks || [];
   return <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.3 }}
+          className="mb-6"
+        >
+          <Button variant="ghost" onClick={() => navigate(-1)} className="mb-3 -ml-1">
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-          <div>
-            <h1 className="text-2xl font-mono text-text-primary">{topic.title}</h1>
-            {topic.description && <p className="text-text-secondary text-sm mt-1">{topic.description}</p>}
+          <span className="font-mono text-xs text-primary/70">// topic</span>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <BookOpen className="w-5 h-5 text-primary shrink-0" />
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{topic.title}</h1>
+            <span className="text-[10px] font-mono uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border border-border text-text-muted">{t("topic")}</span>
           </div>
-        </div>
+          {topic.description && <p className="mt-1.5 text-sm text-text-secondary">{topic.description}</p>}
+          <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{practiceTasks.length}</span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Практичних", "Practice")}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{controlWorks.length}</span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Контрольних", "Control works")}</span>
+            </div>
+          </div>
+        </motion.div>
+
+        <div className="h-px mb-6 bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
         {}
-        <Card className="p-4 mb-6">
+        <section className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-mono text-text-primary">{t('practicalTasks')} ({practiceTasks.length})</h2>
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <FileText className="w-3.5 h-3.5" />
+              {t('practicalTasks')}
+              <span className="text-text-muted/70">· {practiceTasks.length}</span>
+            </h2>
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex items-center gap-2">
                 <input key={importArchiveKey} id="import-task-archive" type="file" accept=".zip" className="hidden" onChange={e => {
               const f = e.target.files?.[0] || null;
@@ -791,17 +818,26 @@ export const TopicDetailsPage: React.FC = () => {
               </div>}
           </div>
 
-          <div className="space-y-2">
-            {practiceTasks.length === 0 ? <p className="text-text-secondary text-sm">{t('noTasks')}</p> : practiceTasks.map(task => <div key={task.id} className="p-3 border border-border hover:bg-bg-hover transition-fast">
+          <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+            {practiceTasks.length === 0 ? <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                  <FileText className="w-6 h-6 text-primary" />
+                </div>
+                <p className="text-text-secondary">{t('noTasks')}</p>
+              </div> : practiceTasks.map(task => <motion.div key={task.id} variants={fadeUpItem} className="group rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="text-sm font-mono text-text-primary">{task.title}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        {task.theory && <div className="text-xs text-text-secondary">✓ {t('theoryAdded')}</div>}
-                        {task.isAssigned && <div className="text-xs text-accent-success">✓ {t('assigned')}</div>}
-                        {task.deadline && <div className="text-xs text-text-secondary">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-primary shrink-0" />
+                        <div className="text-sm font-mono text-text-primary">{task.title}</div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs font-mono">
+                        {task.theory && <span className="text-text-secondary flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{t('theoryAdded')}</span>}
+                        {task.isAssigned && <span className="text-accent-success flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{t('assigned')}</span>}
+                        {task.deadline && <span className="text-text-muted flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
                             {t('deadlineLabel')}: {formatDeadlineForDisplay(task.deadline, user?.timezone || undefined)}
-                          </div>}
+                          </span>}
                       </div>
                     </div>
                     {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex flex-wrap gap-2 items-center">
@@ -889,18 +925,22 @@ export const TopicDetailsPage: React.FC = () => {
                         </Button>
                       </div>}
                   </div>
-                </div>)}
-          </div>
+                </motion.div>)}
+          </motion.div>
 
           {liveTaskId && (topic as any)?.class?.id ? (
             <LiveClassMonitor classId={(topic as any).class.id} taskId={liveTaskId} className="mt-3" />
           ) : null}
-        </Card>
+        </section>
 
         {}
-        <Card className="p-4 mb-6">
+        <section className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-mono text-text-primary">{t('controlWorks')} ({controlWorks.length})</h2>
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-accent-warn" />
+              {t('controlWorks')}
+              <span className="text-text-muted/70">· {controlWorks.length}</span>
+            </h2>
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => setShowCreateControlWork(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 {t('createControlWork')}
@@ -908,24 +948,33 @@ export const TopicDetailsPage: React.FC = () => {
           </div>
 
 
-          <div className="space-y-2">
-            {controlWorks.length === 0 ? <p className="text-text-secondary text-sm">{t('noControlWorks')}</p> : controlWorks.map(cw => <div key={cw.id} className="p-3 border border-border hover:bg-bg-hover transition-fast">
+          <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+            {controlWorks.length === 0 ? <div className="rounded-xl border border-dashed border-accent-warn/40 bg-accent-warn/5 p-10 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-accent-warn/10 flex items-center justify-center mb-3">
+                  <ShieldCheck className="w-6 h-6 text-accent-warn" />
+                </div>
+                <p className="text-text-secondary">{t('noControlWorks')}</p>
+              </div> : controlWorks.map(cw => <motion.div key={cw.id} variants={fadeUpItem} className="group rounded-xl border border-accent-warn/40 bg-accent-warn/5 p-5 transition-fast hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    <button type="button" className="flex-1 text-left" onClick={() => {
+                    <button type="button" className="flex-1 text-left min-w-0" onClick={() => {
                 navigate(`/edu/control-works/${cw.id}`);
               }}>
-                      <div className="text-sm font-mono text-text-primary">
-                        {cw.title || `${t('controlWork')} #${cw.id}`}
-                        {cw.timeLimitMinutes && ` (${cw.timeLimitMinutes} ${t('min')})`}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <div className="text-xs text-text-secondary">
-                          {cw.hasTheory && `✓ ${t('test')}`} {cw.hasTheory && cw.hasPractice && " + "} {cw.hasPractice && `✓ ${t('practice')}`}
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-accent-warn shrink-0" />
+                        <div className="text-sm font-mono text-text-primary">
+                          {cw.title || `${t('controlWork')} #${cw.id}`}
+                          {cw.timeLimitMinutes && ` (${cw.timeLimitMinutes} ${t('min')})`}
                         </div>
-                        {cw.isAssigned && <div className="text-xs text-accent-success">✓ {t('assigned')}</div>}
-                        {cw.deadline && <div className="text-xs text-text-secondary">
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs font-mono">
+                        <span className="text-text-secondary">
+                          {cw.hasTheory && `✓ ${t('test')}`} {cw.hasTheory && cw.hasPractice && " + "} {cw.hasPractice && `✓ ${t('practice')}`}
+                        </span>
+                        {cw.isAssigned && <span className="text-accent-success flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />{t('assigned')}</span>}
+                        {cw.deadline && <span className="text-text-muted flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
                             {t('deadlineLabel')}: {formatDeadlineForDisplay(cw.deadline, user?.timezone || undefined)}
-                          </div>}
+                          </span>}
                       </div>
                     </button>
                     {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex flex-wrap gap-2 items-center">
@@ -964,9 +1013,9 @@ export const TopicDetailsPage: React.FC = () => {
                         </Button>
                       </div>}
                   </div>
-                </div>)}
-          </div>
-        </Card>
+                </motion.div>)}
+          </motion.div>
+        </section>
 
         {}
         {showCreateTask && <Modal open={showCreateTask} onClose={() => {

@@ -648,15 +648,15 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   return (
     <div className="p-2 sm:p-3 space-y-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 border-b border-border/50 pb-2">
         <Button variant="ghost" onClick={() => navigate(`/contests/${contestId ?? ""}`)} className="w-full sm:w-auto">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to contest
         </Button>
 
-        <div className="text-xs text-text-secondary w-full sm:w-auto">
+        <div className="text-xs font-mono text-text-secondary w-full sm:w-auto flex items-center gap-3">
           {error ? <span className="text-accent-error">{error}</span> : null}
-          {subsLoading ? <span className="ml-3">Syncing submissions...</span> : null}
+          {subsLoading ? <span className="text-text-muted">Syncing submissions...</span> : null}
         </div>
       </div>
 

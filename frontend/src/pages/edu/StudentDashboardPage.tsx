@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { motion, useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import {
   getStudentGrades,
   getMyStudentInfo,
@@ -16,8 +18,8 @@ import {
   type StudentNextTaskResponse,
   type MasteryStatus,
 } from "../../lib/api/edu";
-import { DEFAULT_GRADE_SCALE_MODE, DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemLabel, normalizeGradingSystem, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
-import { FileText, BookOpen, MessageSquare } from "lucide-react";
+import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
+import { FileText, BookOpen, MessageSquare, Sparkles, Target, GraduationCap, ArrowRight } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -25,14 +27,51 @@ import type { User } from "../../types";
 interface Props {
   user: User;
 }
-const getGradeColor = (grade: number | null | undefined, gradingSystem: ClassGradingSystem, scaleMode: GradeScaleMode): string => {
-  const tone = getGradeToneForSystem(grade, gradingSystem, scaleMode);
+const getGradeColor = (grade: number | null | undefined, gradingSystem: ClassGradingSystem): string => {
+  const tone = getGradeToneForSystem(grade, gradingSystem);
   if (tone === "success") return "text-accent-success";
   if (tone === "warn") return "text-accent-warn";
   if (tone === "warning") return "text-accent-warning";
   if (tone === "error") return "text-accent-error";
   return "text-text-muted";
 };
+
+const CountUp: React.FC<{ value: number; decimals?: number }> = ({ value, decimals = 0 }) => {
+  const reduce = useReducedMotion();
+  const [display, setDisplay] = useState(reduce ? value : 0);
+  useEffect(() => {
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: latest => setDisplay(latest)
+    });
+    return () => controls.stop();
+  }, [value, reduce]);
+  return <>{decimals > 0 ? display.toFixed(decimals) : Math.round(display)}</>;
+};
+
+// Animated horizontal score bar (visual only).
+const ScoreBar: React.FC<{ percent: number; tone?: string }> = ({ percent, tone = "bg-primary" }) => {
+  const reduce = useReducedMotion();
+  const clamped = Math.max(0, Math.min(100, percent));
+  return (
+    <div className="h-1.5 rounded-full bg-bg-hover overflow-hidden">
+      <motion.div
+        className={`h-full ${tone} rounded-full origin-left`}
+        style={{ width: "100%" }}
+        initial={reduce ? { scaleX: clamped / 100 } : { scaleX: 0 }}
+        whileInView={{ scaleX: clamped / 100 }}
+        viewport={{ once: true, amount: 0.5 }}
+        transition={reduce ? { duration: 0 } : { duration: 0.6, ease: easeOutQuint }}
+      />
+    </div>
+  );
+};
+
 export const StudentDashboardPage: React.FC<Props> = ({
   user
 }) => {
@@ -49,7 +88,6 @@ export const StudentDashboardPage: React.FC<Props> = ({
   const [skillGraph, setSkillGraph] = useState<StudentSkillGraphResponse | null>(null);
   const [nextTaskRecommendation, setNextTaskRecommendation] = useState<StudentNextTaskResponse | null>(null);
   const [gradingSystem, setGradingSystem] = useState<ClassGradingSystem>(DEFAULT_GRADING_SYSTEM);
-  const [gradeScaleMode, setGradeScaleMode] = useState<GradeScaleMode>(DEFAULT_GRADE_SCALE_MODE);
   const [loading, setLoading] = useState(true);
   const [showTheory, setShowTheory] = useState(false);
   const [theoryContent, setTheoryContent] = useState<{
@@ -91,11 +129,9 @@ export const StudentDashboardPage: React.FC<Props> = ({
       ]);
 
       const nextGradingSystem = normalizeGradingSystem(data.gradingSystem || studentInfo.student.class?.gradingSystem || DEFAULT_GRADING_SYSTEM);
-      const nextScaleMode = normalizeScaleMode(data.gradeScaleMode ?? studentInfo.student.class?.gradeScaleMode);
       setGrades(data.grades || []);
       setSummaryGrades(data.summaryGrades || []);
       setGradingSystem(nextGradingSystem);
-      setGradeScaleMode(nextScaleMode);
 
       setMasteryPath(masteryResult.status === "fulfilled" ? masteryResult.value : null);
       setSkillGraph(graphResult.status === "fulfilled" ? graphResult.value : null);
@@ -111,110 +147,152 @@ export const StudentDashboardPage: React.FC<Props> = ({
   }
   const intermediateGrades = summaryGrades.filter(g => (g.assessmentType || "INTERMEDIATE") === "INTERMEDIATE");
   const controlGrades = summaryGrades.filter(g => g.assessmentType === "CONTROL");
-  return <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-6 overflow-y-auto">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-          <h1 className="text-2xl font-mono text-text-primary">{t('myJournal')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => {
-            navigate("/edu/appeals");
-          }}>
+
+  const taskGrades = grades.filter(grade => {
+    if (!Boolean(grade.task || grade.topicTask)) return false;
+    if (grade.task?.lesson?.type === "CONTROL") return false;
+    if (grade.topicTask?.controlWorkId) return false;
+    return true;
+  });
+  const avgTestPercent = (() => {
+    const withTests = grades.filter(g => g.testsTotal > 0);
+    if (withTests.length === 0) return 0;
+    const sum = withTests.reduce((s, g) => s + (g.testsPassed / g.testsTotal) * 100, 0);
+    return sum / withTests.length;
+  })();
+
+  return <div className="flex-1 min-h-0 overflow-y-auto bg-bg-base">
+      {/* Hero */}
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto">
+        <span className="font-mono text-xs text-primary/70">// journal</span>
+        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{t('myJournal')}</h1>
+            <p className="mt-1.5 text-sm text-text-secondary">
+              {tr("Ваші оцінки, прогрес та персональні рекомендації.", "Your grades, progress and personal recommendations.")}
+              <span className="text-text-muted"> · {tr("Шкала", "Scale")}: {gradingSystemLabel(gradingSystem, !!isEn)}</span>
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button variant="ghost" onClick={() => navigate("/edu/appeals")}>
               <MessageSquare className="w-4 h-4 mr-2" />
               {tr("Апеляції", "Appeals")}
             </Button>
-            <Button variant="ghost" onClick={() => {
-            navigate("/edu/lessons");
-          }}>
+            <Button variant="ghost" onClick={() => navigate("/edu/lessons")}>
               <BookOpen className="w-4 h-4 mr-2" />
               {t('lessons')}
             </Button>
           </div>
         </div>
-        <div className="mb-4 text-xs text-text-muted">
-          {tr("Шкала", "Scale")}: {gradingSystemLabel(gradingSystem, !!isEn)}
-        </div>
 
-        {masteryPath && <div className="mb-6">
-            <h2 className="text-lg font-mono text-text-primary mb-3">
+        {/* Inline aggregate stats */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+          {masteryPath && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={Math.round(masteryPath.summary.averageMasteryPercent)} />%</span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Mastery", "Mastery")}</span>
+            </div>
+          )}
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={taskGrades.length} /></span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Завдань", "Tasks")}</span>
+          </div>
+          {avgTestPercent > 0 && (
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={Math.round(avgTestPercent)} />%</span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Тести", "Tests")}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+      <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto space-y-8">
+        {masteryPath && <section>
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4 flex items-center gap-2">
+              <Target className="w-3.5 h-3.5" />
               {tr("Персональний шлях прогресу", "Personal progress path")}
             </h2>
-            <Card className="p-4 space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-[11px] text-text-muted">{tr("Середній mastery", "Avg mastery")}</div>
-                  <div className="text-lg font-mono text-text-primary">{Math.round(masteryPath.summary.averageMasteryPercent)}%</div>
-                </div>
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-[11px] text-text-muted">{tr("Опрацьовано", "Mastered")}</div>
-                  <div className="text-lg font-mono text-accent-success">{masteryPath.summary.masteredTopics}/{masteryPath.summary.topicsTotal}</div>
-                </div>
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-[11px] text-text-muted">{tr("В процесі", "In progress")}</div>
-                  <div className="text-lg font-mono text-accent-warning">{masteryPath.summary.inProgressTopics}</div>
-                </div>
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-[11px] text-text-muted">{tr("Не розпочато", "Not started")}</div>
-                  <div className="text-lg font-mono text-text-secondary">{masteryPath.summary.notStartedTopics}</div>
-                </div>
-              </div>
+            <Card className="p-5 space-y-5">
+              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-3">
+                  <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{tr("Середній mastery", "Avg mastery")}</div>
+                  <div className="text-xl font-mono text-text-primary mt-1 tabular-nums"><CountUp value={Math.round(masteryPath.summary.averageMasteryPercent)} />%</div>
+                </motion.div>
+                <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-3">
+                  <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{tr("Опрацьовано", "Mastered")}</div>
+                  <div className="text-xl font-mono text-accent-success mt-1 tabular-nums">{masteryPath.summary.masteredTopics}/{masteryPath.summary.topicsTotal}</div>
+                </motion.div>
+                <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-3">
+                  <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{tr("В процесі", "In progress")}</div>
+                  <div className="text-xl font-mono text-accent-warning mt-1 tabular-nums">{masteryPath.summary.inProgressTopics}</div>
+                </motion.div>
+                <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-3">
+                  <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{tr("Не розпочато", "Not started")}</div>
+                  <div className="text-xl font-mono text-text-secondary mt-1 tabular-nums">{masteryPath.summary.notStartedTopics}</div>
+                </motion.div>
+              </motion.div>
 
-              {nextTaskRecommendation?.recommendation && <div className="border border-primary/40 bg-primary/5 p-3">
-                  <div className="text-xs text-text-secondary mb-1">{tr("Рекомендація: next best task", "Recommendation: next best task")}</div>
+              {nextTaskRecommendation?.recommendation && <div className="rounded-xl border border-primary/40 bg-primary/5 p-4">
+                  <div className="text-xs text-primary/80 font-mono uppercase tracking-[0.06em] mb-1.5 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {tr("Рекомендація: next best task", "Recommendation: next best task")}
+                  </div>
                   <div className="text-sm font-mono text-text-primary">
                     {nextTaskRecommendation.recommendation.topicTitle} → {nextTaskRecommendation.recommendation.taskTitle}
                   </div>
                   <div className="text-xs text-text-muted mt-1">{nextTaskRecommendation.recommendation.reason}</div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/tasks/${nextTaskRecommendation.recommendation?.taskId}`)}>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button variant="ghost" className="text-xs group" onClick={() => navigate(`/edu/tasks/${nextTaskRecommendation.recommendation?.taskId}`)}>
                       {tr("Відкрити завдання", "Open task")}
+                      <ArrowRight className="w-3.5 h-3.5 ml-1.5 transition-transform group-hover:translate-x-0.5" />
                     </Button>
-                    <span className="text-[11px] text-text-muted px-2 py-1 border border-border">
+                    <span className="text-[11px] text-text-muted px-2 py-1 rounded-full border border-border">
                       {tr("Оцінка складності", "Difficulty")}: {getDifficultyLabel(masteryPath.topics.find(topic => topic.topicId === nextTaskRecommendation.recommendation?.topicId)?.recommendedDifficulty || "MEDIUM")}
                     </span>
                   </div>
                 </div>}
 
-              <div className="space-y-2">
-                {masteryPath.topics.map(topic => <div key={topic.topicId} className="border border-border p-3 bg-bg-surface">
+              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-2">
+                {masteryPath.topics.map(topic => <motion.div key={topic.topicId} variants={fadeUpItem} className="rounded-xl border border-border p-3.5 bg-bg-surface transition-fast hover:border-primary/40">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="text-sm font-mono text-text-primary">{topic.title}</div>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <span className={`text-[10px] px-2 py-1 border ${getMasteryStatusBadge(topic.status)}`}>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${getMasteryStatusBadge(topic.status)}`}>
                             {getMasteryStatusLabel(topic.status)}
                           </span>
-                          <span className="text-[10px] text-text-muted px-2 py-1 border border-border">
+                          <span className="text-[10px] text-text-muted px-2 py-0.5 rounded-full border border-border">
                             {tr("Задач", "Tasks")}: {topic.completedTasks}/{topic.totalTasks}
                           </span>
-                          <span className="text-[10px] text-text-muted px-2 py-1 border border-border">
+                          <span className="text-[10px] text-text-muted px-2 py-0.5 rounded-full border border-border">
                             {tr("Рівень", "Difficulty")}: {getDifficultyLabel(topic.recommendedDifficulty)}
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 sm:flex-col sm:items-end">
-                        <div className="text-sm font-mono text-text-primary">{topic.masteryPercent}%</div>
+                      <div className="flex items-center gap-2 sm:flex-col sm:items-end shrink-0">
+                        <div className="text-sm font-mono text-text-primary tabular-nums">{topic.masteryPercent}%</div>
                         {topic.nextTaskId && <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/tasks/${topic.nextTaskId}`)}>
                             {tr("Далі", "Next")}
                           </Button>}
                       </div>
                     </div>
-                    <div className="mt-2 h-1.5 w-full bg-bg-base border border-border overflow-hidden">
-                      <div className="h-full bg-primary transition-all" style={{
-                    width: `${Math.max(0, Math.min(100, topic.masteryPercent))}%`
-                  }} />
+                    <div className="mt-3">
+                      <ScoreBar percent={topic.masteryPercent} />
                     </div>
-                  </div>)}
-              </div>
+                  </motion.div>)}
+              </motion.div>
 
-              {skillGraph && skillGraph.nodes.length > 0 && <div className="border border-border p-3 bg-bg-surface">
-                  <div className="text-xs text-text-secondary mb-2">
+              {skillGraph && skillGraph.nodes.length > 0 && <div className="rounded-xl border border-border p-3.5 bg-bg-surface">
+                  <div className="text-xs text-text-muted font-mono uppercase tracking-[0.06em] mb-2">
                     {tr("Skill graph (лінійний маршрут)", "Skill graph (linear path)")}
                   </div>
                   <div className="flex flex-wrap items-center gap-1 text-xs">
                     {skillGraph.nodes
                   .sort((a, b) => a.order - b.order)
                   .map((node, index) => <React.Fragment key={node.id}>
-                        <span className={`px-2 py-1 border ${getMasteryStatusBadge(node.status)}`} title={`${node.label}: ${node.masteryPercent}%`}>
+                        <span className={`px-2 py-1 rounded-full border ${getMasteryStatusBadge(node.status)}`} title={`${node.label}: ${node.masteryPercent}%`}>
                           {node.label}
                         </span>
                         {index < skillGraph.nodes.length - 1 && <span className="text-text-muted">→</span>}
@@ -222,38 +300,40 @@ export const StudentDashboardPage: React.FC<Props> = ({
                   </div>
                 </div>}
             </Card>
-          </div>}
+          </section>}
 
-        {grades.length === 0 && summaryGrades.length === 0 ? <Card className="p-8 text-center">
+        {grades.length === 0 && summaryGrades.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <GraduationCap className="w-6 h-6 text-primary" />
+            </div>
             <p className="text-text-secondary">{t('noGradesYet')}</p>
-          </Card> : <div className="space-y-6">
-            {}
-            {intermediateGrades.length > 0 && <div>
-                <h2 className="text-lg font-mono text-text-primary mb-3">{t('intermediateGrades')}</h2>
-                <div className="space-y-3">
-                  {intermediateGrades.map(summaryGrade => <Card key={summaryGrade.id} className="p-4">
+          </div>
+        ) : <div className="space-y-8">
+            {intermediateGrades.length > 0 && <section>
+                <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4">{t('intermediateGrades')}</h2>
+                <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+                  {intermediateGrades.map(summaryGrade => <motion.div key={summaryGrade.id} variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <FileText className="w-4 h-4 text-text-secondary" />
+                            <FileText className="w-4 h-4 text-text-secondary shrink-0" />
                             <h3 className="text-lg font-mono text-text-primary">
                               {summaryGrade.name}
                             </h3>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className={`text-2xl font-mono font-bold ${getGradeColor(summaryGrade.grade, gradingSystem, gradeScaleMode)}`}>
-                            {formatGradeForSystem(summaryGrade.grade, gradingSystem, gradeScaleMode)}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <div className={`text-2xl font-mono font-bold tabular-nums ${getGradeColor(summaryGrade.grade, gradingSystem)}`}>
+                            {formatGradeForSystem(summaryGrade.grade, gradingSystem)}
                           </div>
                           <div className="text-xs text-text-muted">{gradingSystemLabel(gradingSystem, !!isEn)}</div>
                         </div>
                       </div>
-                      <div className="mt-3 text-xs text-text-muted">
-                        {new Date(summaryGrade.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                        <span>{new Date(summaryGrade.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}</span>
+                        {summaryGrade.topicTitle && <span>· {tr("Тема", "Topic")}: {summaryGrade.topicTitle}</span>}
                       </div>
-                      {summaryGrade.topicTitle && <div className="mt-1 text-xs text-text-muted">
-                          {tr("Тема", "Topic")}: {summaryGrade.topicTitle}
-                        </div>}
                       <div className="mt-2">
                         <Button
                           variant="ghost"
@@ -264,37 +344,34 @@ export const StudentDashboardPage: React.FC<Props> = ({
                           {tr("Подати апеляцію", "Create appeal")}
                         </Button>
                       </div>
-                    </Card>)}
-                </div>
-              </div>}
+                    </motion.div>)}
+                </motion.div>
+              </section>}
 
-            {}
-            {controlGrades.length > 0 && <div>
-                <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Контрольні оцінки", "Control work grades")}</h2>
-                <div className="space-y-3">
-                  {controlGrades.map(summaryGrade => <Card key={summaryGrade.id} className="p-4 border-primary/40">
+            {controlGrades.length > 0 && <section>
+                <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4">{tr("Контрольні оцінки", "Control work grades")}</h2>
+                <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+                  {controlGrades.map(summaryGrade => <motion.div key={summaryGrade.id} variants={fadeUpItem} className="rounded-xl border border-primary/40 bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <FileText className="w-4 h-4 text-primary" />
+                            <FileText className="w-4 h-4 text-primary shrink-0" />
                             <h3 className="text-lg font-mono text-text-primary">
                               {summaryGrade.controlWorkTitle || summaryGrade.name}
                             </h3>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className={`text-2xl font-mono font-bold ${getGradeColor(summaryGrade.grade, gradingSystem, gradeScaleMode)}`}>
-                            {formatGradeForSystem(summaryGrade.grade, gradingSystem, gradeScaleMode)}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <div className={`text-2xl font-mono font-bold tabular-nums ${getGradeColor(summaryGrade.grade, gradingSystem)}`}>
+                            {formatGradeForSystem(summaryGrade.grade, gradingSystem)}
                           </div>
                           <div className="text-xs text-text-muted">{gradingSystemLabel(gradingSystem, !!isEn)}</div>
                         </div>
                       </div>
-                      <div className="mt-3 text-xs text-text-muted">
-                        {new Date(summaryGrade.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                        <span>{new Date(summaryGrade.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}</span>
+                        {summaryGrade.topicTitle && <span>· {tr("Тема", "Topic")}: {summaryGrade.topicTitle}</span>}
                       </div>
-                      {summaryGrade.topicTitle && <div className="mt-1 text-xs text-text-muted">
-                          {tr("Тема", "Topic")}: {summaryGrade.topicTitle}
-                        </div>}
                       <div className="mt-2">
                         <Button
                           variant="ghost"
@@ -305,28 +382,23 @@ export const StudentDashboardPage: React.FC<Props> = ({
                           {tr("Подати апеляцію", "Create appeal")}
                         </Button>
                       </div>
-                    </Card>)}
-                </div>
-              </div>}
+                    </motion.div>)}
+                </motion.div>
+              </section>}
 
-            {}
-            {grades.length > 0 && <div>
-                <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Оцінки за завдання", "Task grades")}</h2>
-                <div className="space-y-3">
-                  {grades.filter(grade => {
-              if (!Boolean(grade.task || grade.topicTask)) return false;
-              if (grade.task?.lesson?.type === "CONTROL") return false;
-              if (grade.topicTask?.controlWorkId) return false;
-              return true;
-            }).map(grade => {
+            {grades.length > 0 && <section>
+                <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4">{tr("Оцінки за завдання", "Task grades")}</h2>
+                <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+                  {taskGrades.map(grade => {
               const taskId = grade.task?.id ?? grade.topicTask?.id;
               const title = grade.task?.title ?? grade.topicTask?.title ?? tr("Без назви", "Untitled");
               const subtitle = grade.task?.lesson ? `${grade.task.lesson.title} • ${grade.task.lesson.type === "LESSON" ? t("lesson") : tr("Контрольна", "Control work")}` : grade.topicTask?.topicTitle ? `${tr("Тема", "Topic")}: ${grade.topicTask.topicTitle}` : null;
-              return <Card key={grade.id} className="p-4">
+              const testPercent = grade.testsTotal > 0 ? (grade.testsPassed / grade.testsTotal) * 100 : 0;
+              return <motion.div key={grade.id} variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <FileText className="w-4 h-4 text-text-secondary" />
+                            <FileText className="w-4 h-4 text-text-secondary shrink-0" />
                             <h3 className="text-lg font-mono text-text-primary">
                               {title}
                             </h3>
@@ -335,10 +407,12 @@ export const StudentDashboardPage: React.FC<Props> = ({
                               {subtitle}
                             </div>}
 
+                          {grade.testsTotal > 0 && <div className="max-w-xs mb-3">
+                              <ScoreBar percent={testPercent} tone={testPercent >= 100 ? "bg-accent-success" : "bg-primary"} />
+                            </div>}
+
                           {taskId && <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                              <Button variant="ghost" className="text-xs" onClick={() => {
-                        navigate(`/edu/tasks/${taskId}`);
-                      }}>
+                              <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/tasks/${taskId}`)}>
                                 {tr("Переглянути завдання", "View task")}
                               </Button>
                               <Button
@@ -361,19 +435,19 @@ export const StudentDashboardPage: React.FC<Props> = ({
                                   <FileText className="w-3 h-3 mr-1" /> {t("theory")}
                                 </Button>}
                             </div>}
-                          {grade.feedback && <div className="text-sm text-text-muted mt-2 p-2 bg-bg-surface border border-border">
+                          {grade.feedback && <div className="text-sm text-text-muted mt-3 p-3 bg-bg-base rounded-lg border border-border">
                               {grade.feedback}
                             </div>}
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className={`text-2xl font-mono font-bold ${getGradeColor(grade.total, gradingSystem, gradeScaleMode)}`}>
-                            {formatGradeForSystem(grade.total, gradingSystem, gradeScaleMode)}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <div className={`text-2xl font-mono font-bold tabular-nums ${getGradeColor(grade.total, gradingSystem)}`}>
+                            {formatGradeForSystem(grade.total, gradingSystem)}
                           </div>
                           <div className="text-xs text-text-muted">{gradingSystemLabel(gradingSystem, !!isEn)}</div>
-                          <div className="text-xs text-text-secondary">
+                          <div className="text-xs text-text-secondary tabular-nums">
                             {grade.testsPassed}/{grade.testsTotal} {t("tests")}
                           </div>
-                          {grade.isManuallyGraded && <span className="text-xs text-text-muted px-2 py-1 border border-border">
+                          {grade.isManuallyGraded && <span className="text-[10px] text-text-muted px-2 py-0.5 rounded-full border border-border">
                               {tr("Ручна оцінка", "Manual grade")}
                             </span>}
                         </div>
@@ -381,14 +455,13 @@ export const StudentDashboardPage: React.FC<Props> = ({
                       <div className="mt-3 text-xs text-text-muted">
                         {new Date(grade.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA")}
                       </div>
-                    </Card>;
+                    </motion.div>;
             })}
-                </div>
-              </div>}
+                </motion.div>
+              </section>}
           </div>}
       </div>
 
-      {}
       {showTheory && theoryContent && <Modal open={showTheory} onClose={() => {
       setShowTheory(false);
       setTheoryContent(null);

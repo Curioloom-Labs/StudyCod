@@ -3479,7 +3479,8 @@ export const ContestPage: React.FC = () => {
           <Button variant="ghost" onClick={() => navigate(`/contests/${params.id}/scoreboard`)}
             title={tr("Жива таблиця результатів", "Live scoreboard")}
           >
-            🏆 {tr("Скорборд", "Scoreboard")}
+            <Trophy className="w-4 h-4 mr-2" />
+            {tr("Скорборд", "Scoreboard")}
           </Button>
           <Button variant={tab === "standings" ? "secondary" : "ghost"} onClick={() => setTab("standings")}
             title={tr("Таблиця", "Standings")}
@@ -3903,37 +3904,45 @@ export const ContestPage: React.FC = () => {
         </Card>
       ) : !data ? null : (
         <div className="space-y-4">
-          <Card className="p-4 border border-border/70">
-            <div className="flex flex-wrap items-center gap-2">
-              <Trophy className="w-5 h-5 text-primary" />
-              <Badge color="info">StudyCod Arena</Badge>
-              <div className="text-lg font-mono text-text-primary">{data.contest.title}</div>
-              {(() => {
-                const chip = contestPhaseChip({
-                  started: data.phase.started,
-                  finished: data.phase.finished,
-                  paused: !!data.access.isPaused,
-                  tr,
-                });
-                return <StatusChip glyph={chip.glyph} label={chip.label} tone={chip.tone} />;
-              })()}
-              {data.contest.visibility === "PUBLIC" ? <Badge color="info">Public</Badge> : data.contest.visibility === "PRIVATE_CODE" ? <Badge color="warn">{tr("За кодом", "Code")}</Badge> : <Badge color="info">Class</Badge>}
-              {data.contest.isPublished ? <Badge color="success">{tr("Опубліковано", "Published")}</Badge> : <Badge color="warn">{tr("Чернетка", "Draft")}</Badge>}
-              {data.contest.allowUpsolve ? <Badge color="info">{tr("Дорішування", "Upsolve")}</Badge> : null}
+          <Card className="p-5 border border-border/70">
+            {/* Hero heading */}
+            <div className="space-y-1.5">
+              <span className="font-mono text-xs text-primary/70">// contest</span>
+              <div className="flex flex-wrap items-start gap-2">
+                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary leading-tight flex-1">
+                  {data.contest.title}
+                </h1>
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {(() => {
+                    const chip = contestPhaseChip({
+                      started: data.phase.started,
+                      finished: data.phase.finished,
+                      paused: !!data.access.isPaused,
+                      tr,
+                    });
+                    return <StatusChip glyph={chip.glyph} label={chip.label} tone={chip.tone} />;
+                  })()}
+                  {data.contest.visibility === "PUBLIC" ? <Badge color="info">Public</Badge> : data.contest.visibility === "PRIVATE_CODE" ? <Badge color="warn">{tr("За кодом", "Code")}</Badge> : <Badge color="info">Class</Badge>}
+                  {data.contest.isPublished ? <Badge color="success">{tr("Опубліковано", "Published")}</Badge> : <Badge color="warn">{tr("Чернетка", "Draft")}</Badge>}
+                  {data.contest.allowUpsolve ? <Badge color="info">{tr("Дорішування", "Upsolve")}</Badge> : null}
+                </div>
+              </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-              <div className="rounded-lg border border-border bg-bg-base/70 px-3 py-2">
-                <div className="text-text-secondary">{tr("Формат", "Format")}</div>
-                <div className="text-text-primary font-mono">{tr("IOI-стиль · partial scoring", "IOI-style · partial scoring")}</div>
+            <div className="h-px bg-gradient-to-r from-primary/30 via-border to-transparent my-3" />
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-2 hover:border-primary/40 transition-fast">
+                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Формат", "Format")}</div>
+                <div className="text-text-primary font-mono mt-0.5">{tr("IOI-стиль · partial scoring", "IOI-style · partial scoring")}</div>
               </div>
-              <div className="rounded-lg border border-border bg-bg-base/70 px-3 py-2">
-                <div className="text-text-secondary">{tr("Режим", "Mode")}</div>
-                <div className="text-text-primary font-mono">{data.access.isPaused ? tr("Пауза", "Paused") : tr("Змагальний", "Competitive")}</div>
+              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-2 hover:border-primary/40 transition-fast">
+                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Режим", "Mode")}</div>
+                <div className="text-text-primary font-mono mt-0.5">{data.access.isPaused ? tr("Пауза", "Paused") : tr("Змагальний", "Competitive")}</div>
               </div>
-              <div className="rounded-lg border border-border bg-bg-base/70 px-3 py-2">
-                <div className="text-text-secondary">{tr("Платформа", "Platform")}</div>
-                <div className="text-text-primary font-mono">StudyCod Contests</div>
+              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-2 hover:border-primary/40 transition-fast">
+                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Платформа", "Platform")}</div>
+                <div className="text-text-primary font-mono mt-0.5">StudyCod Contests</div>
               </div>
             </div>
 
@@ -4011,7 +4020,7 @@ export const ContestPage: React.FC = () => {
             <>
               <Card className="p-4">
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="font-mono text-text-primary">{tr("Задачі", "Problems")}</div>
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("// задачі", "// problems")}</div>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   {hasToken && data.access.canAccessContent ? (
                     <Button variant="secondary" onClick={loadProgress} disabled={progressLoading}>
@@ -4102,9 +4111,11 @@ export const ContestPage: React.FC = () => {
                               ? String(last.score)
                               : "—"
                           : "—";
+                        const isSolved = pr != null && pr.maxScore != null && pr.bestContestScore >= pr.maxScore;
+                        const isAttempted = pr != null && pr.bestContestScore > 0 && !isSolved;
 
                         return (
-                          <tr key={p.id} className="odd:bg-bg-base even:bg-bg-surface">
+                          <tr key={p.id} className={`odd:bg-bg-base even:bg-bg-surface ${isSolved ? "border-l-2 border-l-accent-success" : isAttempted ? "border-l-2 border-l-accent-warn" : ""}`}>
                             <td className="p-2 border-b border-border">
                               <button
                                 className="text-primary hover:underline"

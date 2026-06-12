@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
-import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, ShieldCheck, Clock, Calculator } from "lucide-react";
 import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { api } from "../../lib/api/client";
 import { getMe } from "../../lib/api/profile";
@@ -73,6 +75,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
     controlWorkId: string;
   }>();
   const navigate = useNavigate();
+  const reduce = useReducedMotion();
   const [controlWork, setControlWork] = useState<ControlWork | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -828,12 +831,18 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const formulaInputHasUnsupportedChars = formulaToPersist.length > 0 && !/^[0-9A-Za-z_+\-*/().,\s]+$/.test(formulaToPersist);
   return <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.3 }}
+          className="mb-6"
+        >
+          <Button variant="ghost" onClick={() => navigate(-1)} className="mb-3 -ml-1">
             <ArrowLeft className="w-4 h-4 mr-2" />
             {t("back")}
           </Button>
-          <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-accent-warn/80">// control work</span>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
             {editingTitle ? <div className="flex items-center gap-2 flex-1">
                 <input type="text" value={controlWorkTitle} onChange={e => setControlWorkTitle(e.target.value)} className="px-3 py-1 bg-bg-surface border border-border text-text-primary font-mono text-2xl focus:outline-none focus:border-primary" placeholder={tr("Назва контрольної роботи", "Control work title")} autoFocus onKeyDown={async e => {
               if (e.key === "Enter") {
@@ -852,10 +861,14 @@ export const ControlWorkDetailsPage: React.FC = () => {
             }} aria-label={tr("Скасувати редагування назви", "Cancel title editing")} title={tr("Скасувати редагування назви", "Cancel title editing")}>
                   <X className="w-4 h-4" />
                 </Button>
-              </div> : <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-mono text-text-primary">
+              </div> : <div className="flex items-center gap-2 flex-wrap">
+                <ShieldCheck className="w-5 h-5 text-accent-warn shrink-0" />
+                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
                   {controlWork.title || tr(`Контрольна робота #${controlWork.id}`, `Control work #${controlWork.id}`)}
                 </h1>
+                <span className="text-[10px] font-mono uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border border-accent-warn/40 text-accent-warn">
+                  {tr("Контрольна", "Control work")}
+                </span>
                 {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button
                 variant="ghost"
                 size="sm"
@@ -867,36 +880,44 @@ export const ControlWorkDetailsPage: React.FC = () => {
                   </Button>}
               </div>}
           </div>
-        </div>
+        </motion.div>
+
+        <div className="h-px mb-6 bg-gradient-to-r from-accent-warn/40 via-border to-transparent" />
 
         {}
-        <Card className="p-4 mb-6">
+        <Card className="p-5 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-mono text-text-primary">{tr("Налаштування", "Settings")}</h2>
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <Settings className="w-3.5 h-3.5" />
+              {tr("Налаштування", "Settings")}
+            </h2>
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button variant="ghost" onClick={() => setShowQuizSettings(true)}>
                 <Settings className="w-4 h-4 mr-2" />
                 {tr("Налаштувати", "Configure")}
               </Button>}
           </div>
-          <div className="space-y-2 text-sm text-text-secondary">
-            <div>
-              {tr("Обмеження часу", "Time limit")}:{" "}
-              {timeLimitMinutes ? `${timeLimitMinutes} ${t("min")}` : tr("Не встановлено", "Not set")}
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-border bg-bg-surface p-3">
+                <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em] flex items-center gap-1"><Clock className="w-3 h-3" />{tr("Час", "Time limit")}</div>
+                <div className="text-sm font-mono text-text-primary mt-1 tabular-nums">{timeLimitMinutes ? `${timeLimitMinutes} ${t("min")}` : tr("—", "—")}</div>
+              </div>
+              <div className="rounded-xl border border-border bg-bg-surface p-3">
+                <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{tr("Тест", "Quiz")}</div>
+                <div className={`text-sm font-mono mt-1 ${hasTheory ? "text-accent-success" : "text-text-muted"}`}>{hasTheory ? tr("Увімкнено", "Enabled") : tr("Вимкнено", "Disabled")}</div>
+              </div>
+              <div className="rounded-xl border border-border bg-bg-surface p-3">
+                <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{tr("Практика", "Practice")}</div>
+                <div className={`text-sm font-mono mt-1 ${hasPractice ? "text-accent-success" : "text-text-muted"}`}>{hasPractice ? tr("Увімкнено", "Enabled") : tr("Вимкнено", "Disabled")}</div>
+              </div>
+              <div className="rounded-xl border border-border bg-bg-surface p-3">
+                <div className="text-[11px] text-text-muted font-mono uppercase tracking-[0.06em]">{tr("Питань", "Questions")}</div>
+                <div className="text-sm font-mono text-text-primary mt-1 tabular-nums">{hasTheory ? quizQuestions.length : "—"}</div>
+              </div>
             </div>
             <div>
-              {tr("Теоретична частина", "Theory part")}:{" "}
-              {hasTheory ? tr("✓ Увімкнено", "✓ Enabled") : tr("✗ Вимкнено", "✗ Disabled")}
-            </div>
-            <div>
-              {tr("Практична частина", "Practice part")}:{" "}
-              {hasPractice ? tr("✓ Увімкнено", "✓ Enabled") : tr("✗ Вимкнено", "✗ Disabled")}
-            </div>
-            {hasTheory && quizQuestions.length > 0 && <div>
-                {tr("Питання тесту", "Quiz questions")}: {quizQuestions.length}
-              </div>}
-            <div className="mt-2 pt-2 border-t border-border">
-              <div className="text-xs font-mono text-text-primary mb-1">{tr("Формула оцінки", "Grading formula")}:</div>
-              <div className="text-xs font-mono text-text-secondary bg-bg-hover p-2 rounded">
+              <div className="text-xs font-mono text-text-primary mb-1 flex items-center gap-1.5"><Calculator className="w-3.5 h-3.5 text-accent-warn" />{tr("Формула оцінки", "Grading formula")}:</div>
+              <div className="text-xs font-mono text-text-secondary bg-bg-code p-2 rounded border border-border">
                 {savedFormula || DEFAULT_CONTROL_WORK_FORMULA}
               </div>
               {!savedFormula && <div className="text-[11px] text-text-muted mt-1">
@@ -910,10 +931,12 @@ export const ControlWorkDetailsPage: React.FC = () => {
         </Card>
 
         {}
-        <Card className="p-4 mb-6">
+        <Card className="p-5 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-mono text-text-primary">
-              {tr("Теоретична частина", "Theory part")} ({quizQuestions.length} {tr("питань", "questions")})
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <FileText className="w-3.5 h-3.5" />
+              {tr("Теоретична частина", "Theory part")}
+              <span className="text-text-muted/70">· {quizQuestions.length}</span>
             </h2>
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex gap-2">
                 {!hasTheory && <Button variant="ghost" onClick={() => setShowQuizSettings(true)}>
@@ -942,7 +965,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
                     {tr("Додати питання", "Add question")}
                   </Button>
                 </div>}
-              {quizQuestions.map((q, idx) => <div key={idx} className="p-3 border border-border">
+              {quizQuestions.map((q, idx) => <div key={idx} className="rounded-xl border border-border bg-bg-surface p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="text-sm font-mono text-text-primary mb-2">
@@ -994,10 +1017,12 @@ export const ControlWorkDetailsPage: React.FC = () => {
         </Card>
 
         {}
-        {hasPractice && <Card className="p-4 mb-6">
+        {hasPractice && <Card className="p-5 mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-mono text-text-primary">
-                {tr("Практична частина", "Practice part")} ({controlWork.tasks?.length || 0} {tr("завдань", "tasks")})
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <ShieldCheck className="w-3.5 h-3.5 text-accent-warn" />
+                {tr("Практична частина", "Practice part")}
+                <span className="text-text-muted/70">· {controlWork.tasks?.length || 0}</span>
               </h2>
               {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => {
             setNewTask({
@@ -1013,10 +1038,16 @@ export const ControlWorkDetailsPage: React.FC = () => {
                 </Button>}
             </div>
 
-            <div className="space-y-2">
-              {!controlWork.tasks || controlWork.tasks.length === 0 ? <p className="text-text-secondary text-sm">{tr("Немає завдань", "No tasks")}</p> : controlWork.tasks.map(task => <div key={task.id} className="p-3 border border-border hover:bg-bg-hover transition-fast">
+            <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+              {!controlWork.tasks || controlWork.tasks.length === 0 ? <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-accent-warn/10 flex items-center justify-center mb-3">
+                    <ShieldCheck className="w-6 h-6 text-accent-warn" />
+                  </div>
+                  <p className="text-text-secondary">{tr("Немає завдань", "No tasks")}</p>
+                </div> : controlWork.tasks.map(task => <motion.div key={task.id} variants={fadeUpItem} className="group rounded-xl border border-border bg-bg-surface p-4 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-primary shrink-0" />
                         <div className="text-sm font-mono text-text-primary">{task.title}</div>
                       </div>
                       {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex gap-2">
@@ -1042,8 +1073,8 @@ export const ControlWorkDetailsPage: React.FC = () => {
                           </Button>
                         </div>}
                     </div>
-                  </div>)}
-            </div>
+                  </motion.div>)}
+            </motion.div>
           </Card>}
 
         {}

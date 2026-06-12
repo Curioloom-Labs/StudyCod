@@ -1,15 +1,35 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { motion, useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { getStudents, getSummaryGrades, createSummaryGrade, updateSummaryGrade, deleteSummaryGrade, getTaskGrades, getTopics, type Student, type SummaryGradeGroup, type Topic } from "../../lib/api/edu";
 import { ArrowLeft, Plus, FileText, Trash2 } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+
+const CountUp: React.FC<{ value: number }> = ({ value }) => {
+  const reduce = useReducedMotion();
+  const [display, setDisplay] = useState(reduce ? value : 0);
+  useEffect(() => {
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: latest => setDisplay(Math.round(latest))
+    });
+    return () => controls.stop();
+  }, [value, reduce]);
+  return <>{display}</>;
+};
+
 export const SummaryGradesPage: React.FC = () => {
   useTranslation();
   const {
@@ -105,31 +125,73 @@ export const SummaryGradesPage: React.FC = () => {
   if (loading) {
     return <PageSkeleton variant="table" />;
   }
-  return <div className="p-3 sm:p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-            <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
+  const totalGrades = summaryGrades.reduce((s, g) => s + g.grades.length, 0);
+  return <div className="min-h-full bg-bg-base">
+      {/* Hero */}
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-xs text-primary/70">// summary grades</span>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/classes/${classId}`)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>
-            <h1 className="text-2xl font-mono text-text-primary">{tr("Проміжні оцінки", "Intermediate grades")}</h1>
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              {tr("Створити", "Create")}
+            </Button>
           </div>
-          <Button onClick={() => setShowCreate(true)} className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            {tr("Створити", "Create")}
-          </Button>
+        </div>
+        <div className="mt-2">
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Проміжні оцінки", "Intermediate grades")}</h1>
+          <p className="mt-1.5 text-sm text-text-secondary">
+            {tr("Тематичні та проміжні оцінки за темами класу.", "Thematic and intermediate grades grouped by class topics.")}
+          </p>
         </div>
 
-        {summaryGrades.length === 0 ? <Card className="p-8 text-center">
-            <p className="text-text-secondary">{tr("Поки немає проміжних оцінок", "No intermediate grades yet")}</p>
-          </Card> : <div className="space-y-6">
-            {summaryGrades.map((group, index) => <Card key={index} className="p-4">
-                <h2 className="text-lg font-mono text-text-primary mb-4">{group.name}</h2>
+        {/* Inline key stats */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={summaryGrades.length} /></span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Колонки", "Columns")}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={students.length} /></span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Учні", "Students")}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={totalGrades} /></span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Оцінки", "Grades")}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+      <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto">
+        {summaryGrades.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <FileText className="w-6 h-6 text-primary" />
+            </div>
+            <p className="text-text-secondary mb-4">{tr("Поки немає проміжних оцінок", "No intermediate grades yet")}</p>
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              {tr("Створити", "Create")}
+            </Button>
+          </div>
+        ) : (
+          <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-6">
+            {summaryGrades.map((group, index) => <motion.div key={index} variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+                <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4 flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                  {group.name}
+                  <span className="text-text-muted/70">· {group.grades.length}</span>
+                </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {group.grades.map(g => {
               const isEditing = editingGrade?.studentId === g.studentId && editingGrade?.id === g.id;
-              return <div key={g.studentId} className="p-2 border border-border bg-bg-surface text-sm relative group">
+              return <div key={g.studentId} className="rounded-lg p-3 border border-border bg-bg-base text-sm relative group transition-fast hover:border-primary/40">
                         <div className="flex items-center justify-between mb-1">
                           <div className="text-text-secondary text-xs line-clamp-1 flex-1">
                             {g.studentName}
@@ -155,7 +217,7 @@ export const SummaryGradesPage: React.FC = () => {
                       setEditingGrade(null);
                     }
                   }} autoFocus className="w-16 px-2 py-1 bg-bg-base border border-primary text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
-                          </div> : <button type="button" className="text-lg font-mono text-primary hover:bg-bg-hover px-1 rounded" onClick={() => {
+                          </div> : <button type="button" className="text-lg font-mono text-primary tabular-nums hover:bg-bg-hover px-1 rounded transition-fast" onClick={() => {
                   setEditingGrade({
                     id: g.id,
                     studentId: g.studentId,
@@ -167,8 +229,9 @@ export const SummaryGradesPage: React.FC = () => {
                       </div>;
             })}
                 </div>
-              </Card>)}
-          </div>}
+              </motion.div>)}
+          </motion.div>
+        )}
       </div>
 
       {}

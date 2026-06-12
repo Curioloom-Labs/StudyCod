@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
+import { LifeBuoy, MessageSquarePlus, Paperclip, Send, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import { tr } from "../../i18n";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import {
   closeSupportChatConversation,
   createSupportChatConversation,
@@ -19,6 +22,7 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 export const SupportPage: React.FC = () => {
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<SupportChatConversation[]>([]);
@@ -244,64 +248,91 @@ export const SupportPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full bg-bg-base text-text-primary p-3 sm:p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-xl font-mono font-bold">{tr("Технічна підтримка", "Technical support")}</h1>
-            <p className="text-sm text-text-secondary mt-1">
-              {tr("Чат із підтримкою (можна додавати файли).", "Chat with support (attachments are allowed).")}
-            </p>
+    <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto space-y-8">
+      {/* Hero */}
+      <motion.div
+        initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
+        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: easeOutQuint }}
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+      >
+        <div>
+          <span className="font-mono text-xs text-primary/70">{tr("// підтримка", "// support")}</span>
+          <div className="mt-2 flex items-center gap-2">
+            <LifeBuoy className="w-5 h-5 text-primary" />
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Технічна підтримка", "Technical support")}</h1>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => loadConversations()} disabled={loading}>
-              {tr("Оновити", "Refresh")}
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/")}>
-              {tr("На головну", "Home")}
-            </Button>
-          </div>
+          <p className="mt-1.5 text-sm text-text-secondary max-w-xl">
+            {tr("Чат із підтримкою (можна додавати файли).", "Chat with support (attachments are allowed).")}
+          </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => loadConversations()} disabled={loading}>
+            {tr("Оновити", "Refresh")}
+          </Button>
+          <Button variant="ghost" onClick={() => navigate("/")}>
+            {tr("На головну", "Home")}
+          </Button>
+        </div>
+      </motion.div>
 
-        {error && (
-          <div className="mt-4 border border-accent-error bg-bg-code px-4 py-3 font-mono text-xs text-accent-error">
-            {error}
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+      {error && (
+        <div className="rounded-xl border border-accent-error bg-bg-code px-4 py-3 font-mono text-xs text-accent-error">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="p-4 md:col-span-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Звернення", "Requests")}</div>
+            <Button variant="secondary" size="sm" onClick={() => setSelectedConversationId(null)}>
+              <MessageSquarePlus className="w-3.5 h-3.5 mr-1.5" />
+              {tr("Нове", "New")}
+            </Button>
           </div>
-        )}
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-4 md:col-span-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-mono font-semibold text-text-primary">{tr("Звернення", "Requests")}</div>
-              <Button variant="secondary" size="sm" onClick={() => setSelectedConversationId(null)}>
-                {tr("+ Нове", "+ New")}
-              </Button>
-            </div>
-
-            <div className="mt-3 space-y-2">
-              {loading && (
-                <div className="space-y-2">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-14 w-full" />
-                  ))}
+          <div className="mt-3 space-y-2">
+            {loading && (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                ))}
+              </div>
+            )}
+            {!loading && conversations.length === 0 && (
+              <div className="rounded-xl border border-dashed border-border py-10 px-4 flex flex-col items-center text-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <LifeBuoy className="w-4 h-4 text-primary" />
                 </div>
-              )}
-              {!loading && conversations.length === 0 && (
                 <div className="text-xs font-mono text-text-secondary">{tr("Поки що немає звернень.", "No requests yet.")}</div>
-              )}
+              </div>
+            )}
+            <motion.div
+              variants={prefersReducedMotion ? undefined : staggerContainer}
+              initial={prefersReducedMotion ? undefined : "initial"}
+              animate={prefersReducedMotion ? undefined : "animate"}
+              className="space-y-2"
+            >
               {conversations.map(c => (
-                <button
+                <motion.button
                   key={c.id}
+                  variants={prefersReducedMotion ? undefined : fadeUpItem}
                   onClick={() => setSelectedConversationId(c.id)}
-                  className={`w-full text-left rounded-md border px-3 py-2 transition-fast ${
+                  className={`relative w-full text-left rounded-xl border px-3 py-2.5 transition-fast hover:-translate-y-0.5 ${
                     selectedConversationId === c.id
-                      ? "border-primary bg-bg-code"
-                      : "border-border hover:bg-bg-hover"
+                      ? "border-primary/40 bg-primary/5 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]"
+                      : "border-border bg-bg-surface hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm text-text-primary font-mono truncate">{c.subject}</div>
-                    <div className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                  {c.status === "OPEN" && selectedConversationId !== c.id && (
+                    <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
+                  )}
+                  <div className="flex items-center justify-between gap-2 pr-3">
+                    <div className="text-sm text-text-primary font-medium truncate">{c.subject}</div>
+                    <div className={`text-[10px] font-mono px-2 py-0.5 rounded-md border shrink-0 ${
                       c.status === "OPEN"
                         ? "border-accent-success/60 text-accent-success bg-accent-success/10"
                         : "border-border text-text-secondary bg-bg-hover"
@@ -313,15 +344,16 @@ export const SupportPage: React.FC = () => {
                   <div className="mt-1 text-[11px] text-text-secondary font-mono">
                     {new Date(c.lastMessageAt).toLocaleString()}
                   </div>
-                </button>
+                </motion.button>
               ))}
-            </div>
-          </Card>
+            </motion.div>
+          </div>
+        </Card>
 
-          <Card className="p-4 md:col-span-2">
+        <Card className="p-4 md:col-span-2">
             {!selectedConversationId ? (
               <div>
-                <div className="text-sm font-mono font-semibold text-text-primary">{tr("Нове звернення", "New request")}</div>
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Нове звернення", "New request")}</div>
                 <form onSubmit={onCreateConversation} className="mt-3 space-y-3">
                   <Input
                     label={tr("Тема", "Subject")}
@@ -352,16 +384,19 @@ export const SupportPage: React.FC = () => {
               </div>
             ) : (
               <div className="flex flex-col h-[70vh]">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-mono font-semibold text-text-primary">{tr("Чат", "Chat")}</div>
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-border">
                   <div className="flex items-center gap-2">
-                    <div className="text-xs font-mono text-text-secondary">#{selectedConversationId}</div>
+                    <div className="text-sm font-semibold text-text-primary">{tr("Чат", "Chat")}</div>
+                    <span className="text-xs font-mono text-text-muted">#{selectedConversationId}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     {selectedConversation?.status === "OPEN" ? (
                       <Button variant="secondary" size="sm" onClick={closeConversation}>
                         {tr("Закрити чат", "Close chat")}
                       </Button>
                     ) : (
-                      <div className="text-[11px] font-mono text-text-secondary border border-border px-2 py-1 rounded">
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-text-secondary border border-border rounded-md px-2 py-1">
+                        <CheckCircle2 className="w-3 h-3" />
                         {tr("Закрито", "Closed")}
                       </div>
                     )}
@@ -369,12 +404,12 @@ export const SupportPage: React.FC = () => {
                 </div>
 
                 {selectedConversation?.status === "CLOSED" ? (
-                  <div className="mt-2 text-xs font-mono text-text-secondary border border-border bg-bg-hover/40 px-3 py-2 rounded">
+                  <div className="mt-3 text-xs font-mono text-text-secondary border border-border bg-bg-hover/40 rounded-lg px-3 py-2">
                     {tr("Це звернення закрито. Для нових питань створіть нове звернення.", "This request is closed. Create a new one for new questions.")}
                   </div>
                 ) : null}
 
-                <div className="mt-3 flex-1 overflow-auto rounded-md border border-border bg-bg-code p-3">
+                <div className="mt-3 flex-1 overflow-auto rounded-xl border border-border bg-bg-code p-3">
                   {threadLoading && (
                     <div className="space-y-3">
                       <Skeleton className="h-16 w-2/3" />
@@ -383,18 +418,32 @@ export const SupportPage: React.FC = () => {
                     </div>
                   )}
                   {!threadLoading && messages.length === 0 && (
-                    <div className="text-xs font-mono text-text-secondary">{tr("Повідомлень ще немає.", "No messages yet.")}</div>
+                    <div className="rounded-xl border border-dashed border-border py-10 px-4 flex flex-col items-center text-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <LifeBuoy className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="text-xs font-mono text-text-secondary">{tr("Повідомлень ще немає.", "No messages yet.")}</div>
+                    </div>
                   )}
-                  <div className="space-y-3">
+                  <motion.div
+                    variants={prefersReducedMotion ? undefined : staggerContainer}
+                    initial={prefersReducedMotion ? undefined : "initial"}
+                    animate={prefersReducedMotion ? undefined : "animate"}
+                    className="space-y-3"
+                  >
                     {messages.map(m => {
                       const isUser = m.senderType === "USER";
                       return (
-                        <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                        <motion.div
+                          key={m.id}
+                          variants={prefersReducedMotion ? undefined : fadeUpItem}
+                          className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                        >
                           <div
-                            className={`max-w-[85%] rounded-lg border px-3 py-2 ${
+                            className={`max-w-[85%] rounded-xl border px-3 py-2 ${
                               isUser
-                                ? "border-primary/50 bg-primary/10"
-                                : "border-border bg-bg-hover"
+                                ? "border-primary/30 bg-primary/10"
+                                : "border-border bg-bg-surface"
                             }`}
                           >
                             <div className="text-[11px] font-mono text-text-secondary flex items-center justify-between gap-3">
@@ -406,7 +455,7 @@ export const SupportPage: React.FC = () => {
                             {m.attachments?.length ? (
                               <div className="mt-2 space-y-1">
                                 {m.attachments.map(a => (
-                                  <div key={a.id} className="flex items-center justify-between gap-2 border border-border rounded-md px-2 py-1 bg-bg-base">
+                                  <div key={a.id} className="flex items-center justify-between gap-2 border border-border rounded-lg px-2 py-1 bg-bg-base">
                                     <div className="min-w-0">
                                       <div className="text-xs font-mono text-text-primary truncate">{a.originalName}</div>
                                       <div className="text-[11px] font-mono text-text-secondary">{humanSize(a.sizeBytes)}</div>
@@ -421,8 +470,9 @@ export const SupportPage: React.FC = () => {
                                               setError(String(msg));
                                             }
                                           }}
-                                          className="mt-1 text-[11px] font-mono text-primary hover:underline"
+                                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-mono text-primary hover:underline"
                                         >
+                                          <ImageIcon className="w-3 h-3" />
                                           {tr("Показати прев’ю", "Show preview")}
                                         </button>
                                       ) : null}
@@ -441,21 +491,21 @@ export const SupportPage: React.FC = () => {
                                   const url = attachmentPreviewUrls[a.id];
                                   if (!url) return null;
                                   return (
-                                    <div key={`preview-${a.id}`} className="border border-border rounded-md p-2 bg-bg-base">
-                                      <img src={url} alt={a.originalName} className="max-h-64 rounded border border-border" />
+                                    <div key={`preview-${a.id}`} className="border border-border rounded-lg p-2 bg-bg-base">
+                                      <img src={url} alt={a.originalName} className="max-h-64 rounded-md border border-border" />
                                     </div>
                                   );
                                 })}
                               </div>
                             ) : null}
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })}
-                  </div>
+                  </motion.div>
                 </div>
 
-                <form onSubmit={onSendMessage} className="mt-3 space-y-2">
+                <form onSubmit={onSendMessage} className="mt-3 space-y-2 sticky bottom-0 bg-bg-base pt-1">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Повідомлення", "Message")}</label>
                     <textarea
@@ -468,16 +518,20 @@ export const SupportPage: React.FC = () => {
 
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        multiple
-                        onChange={e => {
-                          const files = Array.from(e.target.files || []);
-                          setComposerFiles(files);
-                        }}
-                        className="block text-xs font-mono text-text-secondary"
-                      />
+                      <label className="inline-flex items-center gap-1.5 text-xs font-mono text-text-secondary border border-border rounded-md px-2 py-1.5 cursor-pointer hover:bg-bg-hover transition-fast">
+                        <Paperclip className="w-3.5 h-3.5" />
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          onChange={e => {
+                            const files = Array.from(e.target.files || []);
+                            setComposerFiles(files);
+                          }}
+                          className="hidden"
+                        />
+                        {tr("Файли", "Files")}
+                      </label>
                       {composerFiles.length > 0 && (
                         <div className="text-xs font-mono text-text-secondary">
                           {tr("{{count}} файл(ів)", "{{count}} file(s)").replace("{{count}}", String(composerFiles.length))}
@@ -497,6 +551,7 @@ export const SupportPage: React.FC = () => {
                         {tr("Очистити файли", "Clear files")}
                       </Button>
                       <Button type="submit" disabled={!canSend}>
+                        <Send className="w-4 h-4 mr-2" />
                         {sending ? tr("Надсилаємо…", "Sending…") : tr("Надіслати", "Send")}
                       </Button>
                     </div>
@@ -504,12 +559,11 @@ export const SupportPage: React.FC = () => {
                 </form>
               </div>
             )}
-          </Card>
-        </div>
+        </Card>
+      </div>
 
-        <div className="mt-6 text-xs text-text-secondary font-mono">
-          {tr("Якщо чат не відкривається — перевірте, що ви увійшли в акаунт.", "If chat does not open, check that you are logged in.")}
-        </div>
+      <div className="text-xs text-text-secondary font-mono">
+        {tr("Якщо чат не відкривається — перевірте, що ви увійшли в акаунт.", "If chat does not open, check that you are logged in.")}
       </div>
     </div>
   );

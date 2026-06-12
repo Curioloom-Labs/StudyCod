@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, getTestDataItem, updateTestData, deleteTestData, deleteGeneratedTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type Task, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade, type TaskGrade } from "../../lib/api/edu";
 import { GlobalTimer } from "../../components/GlobalTimer";
-import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock } from "lucide-react";
+import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock, BookOpen, ShieldCheck, CheckCircle2, ArrowRight, Lock } from "lucide-react";
 import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { getMe } from "../../lib/api/profile";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -61,6 +63,7 @@ export const LessonDetailsPage: React.FC = () => {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const reduce = useReducedMotion();
   const {
     lessonId
   } = useParams<{
@@ -744,43 +747,66 @@ export const LessonDetailsPage: React.FC = () => {
 
   return <>
       <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-6">
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          {!isActiveControlExam && <Button variant="ghost" onClick={handleBackNavigation}>
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.3 }}
+          className="mb-6"
+        >
+          {!isActiveControlExam && <Button variant="ghost" onClick={handleBackNavigation} className="mb-3 -ml-1">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {t("back")}
             </Button>}
-          <h1 className="text-2xl font-mono text-text-primary">{lesson.title}</h1>
-          <span className="text-xs text-text-muted px-2 py-1 border border-border">
-            {lesson.type === "TOPIC" ? t("topic") : lesson.type === "CONTROL" ? tr("Контрольна", "Control work") : t("lesson")}
+          <span className={`font-mono text-xs ${lesson.type === "CONTROL" ? "text-accent-warn/80" : "text-primary/70"}`}>
+            {lesson.type === "CONTROL" ? "// control work" : lesson.type === "TOPIC" ? "// topic" : "// lesson"}
           </span>
+          <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                {lesson.type === "CONTROL"
+                  ? <ShieldCheck className="w-5 h-5 text-accent-warn shrink-0" />
+                  : <BookOpen className="w-5 h-5 text-primary shrink-0" />}
+                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{lesson.title}</h1>
+                <span className={`text-[10px] font-mono uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border ${lesson.type === "CONTROL" ? "border-accent-warn/40 text-accent-warn" : "border-border text-text-muted"}`}>
+                  {lesson.type === "TOPIC" ? t("topic") : lesson.type === "CONTROL" ? tr("Контрольна", "Control work") : t("lesson")}
+                </span>
+              </div>
+            </div>
+            {lesson.type === "CONTROL" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && remainingSeconds !== null && user?.userMode === "EDUCATIONAL" && user?.studentId && <div className="shrink-0 font-mono"><GlobalTimer remainingSeconds={remainingSeconds} onExpired={() => {
+            setTimeExpired(true);
+            showToast({ type: "error", message: tr("Час вийшов! Ви не можете більше відправляти відповіді.", "Time is up! You can no longer submit answers.") });
+          }} /></div>}
           </div>
-          {lesson.type === "CONTROL" && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null && remainingSeconds !== null && user?.userMode === "EDUCATIONAL" && user?.studentId && <GlobalTimer remainingSeconds={remainingSeconds} onExpired={() => {
-          setTimeExpired(true);
-          showToast({ type: "error", message: tr("Час вийшов! Ви не можете більше відправляти відповіді.", "Time is up! You can no longer submit answers.") });
-        }} />}
-        </div>
+        </motion.div>
 
-        {lesson.hasTheory && lesson.theory && <Card className="p-4 mb-6">
-            <h2 className="text-lg font-mono text-text-primary mb-3">{t("theory")}</h2>
+        <div className={`h-px mb-6 bg-gradient-to-r ${lesson.type === "CONTROL" ? "from-accent-warn/40" : "from-primary/40"} via-border to-transparent`} />
+
+        {lesson.hasTheory && lesson.theory && <Card className="p-5 mb-6">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-3 flex items-center gap-2">
+              <FileText className="w-3.5 h-3.5" />
+              {t("theory")}
+            </h2>
             <div className="prose prose-invert max-w-none text-text-secondary font-mono text-sm">
               <MarkdownView content={lesson.theory} />
             </div>
           </Card>}
 
         {}
-          {lesson.type === "TOPIC" && Array.isArray(lesson.controlWorks) && lesson.controlWorks.length > 0 && <Card className="p-4 mb-6">
-            <h2 className="text-lg font-mono text-text-primary mb-3">{tr("Контрольні роботи", "Control works")}</h2>
-            <div className="space-y-3">
-            {lesson.controlWorks!.map((cw: ControlWorkListItem) => <div key={cw.id} className="p-3 border border-border bg-bg-base flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-muted px-2 py-1 border border-border">{tr("Контрольна", "Control work")}</span>
+          {lesson.type === "TOPIC" && Array.isArray(lesson.controlWorks) && lesson.controlWorks.length > 0 && <section className="mb-6">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-3 flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-accent-warn" />
+              {tr("Контрольні роботи", "Control works")}
+            </h2>
+            <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+            {lesson.controlWorks!.map((cw: ControlWorkListItem) => <motion.div key={cw.id} variants={fadeUpItem} className="rounded-xl border border-accent-warn/40 bg-accent-warn/5 p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3 transition-fast hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.08em] text-accent-warn px-2 py-0.5 rounded-full border border-accent-warn/40">{tr("Контрольна", "Control work")}</span>
                       <div className="text-sm font-mono text-text-primary">{cw.title}</div>
                     </div>
-                    <div className="mt-2 text-xs text-text-muted flex flex-wrap gap-3">
+                    <div className="mt-2 text-xs text-text-muted font-mono flex flex-wrap gap-x-4 gap-y-1">
                       <span>{tr("Завдань", "Tasks")}: {cw.tasksCount}</span>
-                      {cw.timeLimitMinutes ? <span>{tr("Обмеження", "Limit")}: {cw.timeLimitMinutes} {t("min")}</span> : null}
+                      {cw.timeLimitMinutes ? <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{tr("Обмеження", "Limit")}: {cw.timeLimitMinutes} {t("min")}</span> : null}
                       {cw.deadline ? <span>
                           {tr("Дедлайн", "Deadline")}:{" "}
                           {formatDeadlineForDisplay(cw.deadline, cw.deadlineTimezone || lesson.deadlineTimezone || undefined, {
@@ -793,16 +819,16 @@ export const LessonDetailsPage: React.FC = () => {
                         </span>}
                     </div>
                   </div>
-                  <Button variant="ghost" onClick={() => navigate(`/edu/lessons/${cw.id}?type=CONTROL`, {
+                  <Button variant="ghost" className="shrink-0" onClick={() => navigate(`/edu/lessons/${cw.id}?type=CONTROL`, {
                   state: {
                     from: currentLessonPath
                   }
                 })}>
                     {cw.studentStatus === "COMPLETED" ? tr("Рапорт", "Report") : t("open")}
                   </Button>
-                </div>)}
-            </div>
-          </Card>}
+                </motion.div>)}
+            </motion.div>
+          </section>}
 
         {}
         {}
@@ -1082,8 +1108,10 @@ export const LessonDetailsPage: React.FC = () => {
           </Card>}
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <h2 className="text-xl font-mono text-text-primary">
-            {lesson.type === "CONTROL" ? tr("Блок 2: Практика", "Block 2: Practice") : t("tasks")} ({lesson.tasks.length})
+          <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+            <FileText className="w-3.5 h-3.5" />
+            {lesson.type === "CONTROL" ? tr("Блок 2: Практика", "Block 2: Practice") : t("tasks")}
+            <span className="text-text-muted/70">· {lesson.tasks.length}</span>
           </h2>
           {user?.userMode === "EDUCATIONAL" && !user?.studentId && <Button onClick={() => {
           if (lesson.type === "LESSON" && lesson.tasks.length > 0) {
@@ -1098,33 +1126,45 @@ export const LessonDetailsPage: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          {lesson.tasks.length === 0 ? <Card className="p-8 text-center">
+          {lesson.tasks.length === 0 ? <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <FileText className="w-6 h-6 text-primary" />
+              </div>
               <p className="text-text-secondary">{t("noTasks")}</p>
-            </Card> : (() => {
+            </div> : (() => {
           const isStudentControlFlow = lesson.type === "CONTROL" && !!user?.studentId;
           const quizGatePassed = !lesson.controlHasTheory || studentQuizSubmitted || controlWorkStatus === "COMPLETED" || isReportOnlyControl;
           const currentTaskId = lesson.studentControlProgress?.currentTaskId ?? null;
           const completedTaskIds = new Set<number>(Array.isArray(lesson.studentControlProgress?.completedTaskIds) ? lesson.studentControlProgress!.completedTaskIds : []);
 
           if (isStudentControlFlow && !controlWorkAttemptStarted) {
-            return <Card className="p-8 text-center">
+            return <div className="rounded-xl border border-dashed border-accent-warn/40 bg-accent-warn/5 p-10 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-accent-warn/10 flex items-center justify-center mb-3">
+                  <ShieldCheck className="w-6 h-6 text-accent-warn" />
+                </div>
                 <p className="text-text-secondary">{tr("Натисніть «Почати контрольну», щоб відкрити тест і задачі.", "Click “Start control work” to unlock the quiz and tasks.")}</p>
-              </Card>;
+              </div>;
           }
 
           if (isStudentControlFlow && (controlWorkStatus === "COMPLETED" || isReportOnlyControl)) {
-            return <Card className="p-6 text-center">
+            return <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                  <Lock className="w-6 h-6 text-primary" />
+                </div>
                 <p className="text-text-secondary">{tr("Практичний блок закрито. Доступний лише рапорт за контрольну.", "Practice block is closed. Only the control-work report is available.")}</p>
-              </Card>;
+              </div>;
           }
 
           if (isStudentControlFlow && !quizGatePassed) {
-            return <Card className="p-8 text-center">
+            return <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                  <Lock className="w-6 h-6 text-primary" />
+                </div>
                 <p className="text-text-secondary">{tr("Спершу відправте тест, щоб відкрити першу задачу.", "Submit the quiz first to unlock the first task.")}</p>
-              </Card>;
+              </div>;
           }
 
-          return lesson.tasks.map(task => {
+          return <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">{lesson.tasks.map(task => {
           const isExpired = task.deadline && isDeadlineExpired(task.deadline);
           const hasGrade = task.hasGrade || false;
           const showOverdue = isExpired && !hasGrade;
@@ -1136,10 +1176,24 @@ export const LessonDetailsPage: React.FC = () => {
           const progressCompleted = (task.progressCompleted === true) || completedTaskIds.has(task.id) || attemptsExhausted || task.grade?.isCompleted === true;
           const isActiveControlTask = isStudentControlFlow ? !progressCompleted && currentTaskId === task.id : false;
           const isLockedControlTask = isStudentControlFlow ? !progressCompleted && !isActiveControlTask : false;
-          return <Card key={task.id} className={`p-4 ${showOverdue ? 'border-accent-error/50 bg-accent-error/5' : ''}`}>
+          const cardAccent = showOverdue
+            ? "border-accent-error/50 bg-accent-error/5"
+            : isActiveControlTask
+              ? "border-primary/40"
+              : progressCompleted
+                ? "border-accent-success/30"
+                : isLockedControlTask
+                  ? "border-border opacity-80"
+                  : "border-border";
+          return <motion.div key={task.id} variants={fadeUpItem} className={`group rounded-xl border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] ${cardAccent} ${isLockedControlTask ? "" : "hover:border-primary/40"}`}>
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {progressCompleted
+                        ? <CheckCircle2 className="w-4 h-4 text-accent-success shrink-0" />
+                        : isLockedControlTask
+                          ? <Lock className="w-4 h-4 text-text-muted shrink-0" />
+                          : <FileText className="w-4 h-4 text-primary shrink-0" />}
                       <h3 className="text-lg font-mono text-text-primary">{task.title}</h3>
                       {showOverdue && <span className="text-xs px-2 py-1 bg-accent-error/20 text-accent-error border border-accent-error/30 rounded flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -1230,8 +1284,8 @@ export const LessonDetailsPage: React.FC = () => {
                       </Button>}
                   </div>
                 </div>
-              </Card>;
-        });
+              </motion.div>;
+        })}</motion.div>;
         })()}
         </div>
       </div>

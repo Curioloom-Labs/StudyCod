@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Panel, Group, Separator } from "react-resizable-panels";
@@ -32,8 +33,9 @@ import {
   type TestResult
 } from "../../lib/api/edu";
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
+import { easeOutQuint } from "../../lib/motion";
 import { publishLiveCode } from "../../lib/api/liveClassroom";
-import { ArrowLeft, Play, Send, Save, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload } from "lucide-react";
+import { ArrowLeft, Play, Send, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload, MoreHorizontal, Terminal, BookOpen, FilePlus2, ListChecks } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { isDeadlineExpired } from "../../utils/timezone";
 import { getMe } from "../../lib/api/profile";
@@ -192,6 +194,9 @@ export const StudentTaskPage: React.FC = () => {
   const [importSolutionKey, setImportSolutionKey] = useState(0);
   const [taskPaneEl, setTaskPaneEl] = useState<HTMLDivElement | null>(null);
   const [theoryPaneEl, setTheoryPaneEl] = useState<HTMLDivElement | null>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const restoredStepRef = useRef(false);
   const restoredViewportScrollRef = useRef(false);
@@ -1380,6 +1385,24 @@ export const StudentTaskPage: React.FC = () => {
     }
   }, [taskId, hintFeedbackContext, hintFeedbackSentKey, hintFeedbackReasonCode, hintFeedbackReasonText, toastError, toastSuccess, tr]);
 
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setActionsMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActionsMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [actionsMenuOpen]);
+
   if (loading) {
     return <PageSkeleton variant="default" />;
   }
@@ -1436,125 +1459,125 @@ export const StudentTaskPage: React.FC = () => {
   const showScoringLegend = Array.isArray(scoringSegments) && scoringSegments.some(s => s.key === "public" || s.key === "hidden");
   return <div className="h-full min-h-0 flex flex-col bg-bg-base">
       {}
-      {!showTheory && <div className="border-b border-border bg-bg-surface p-3 sm:p-4 flex-shrink-0">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-3">
-            <div className="flex items-start gap-3 sm:gap-4 min-w-0">
-              <Button variant="ghost" onClick={() => {
-            const hasTheory = task.lesson.hasTheory && task.lesson.theory && task.lesson.theory.trim().length > 0;
-            if (theoryAcknowledged && hasTheory) {
-              setTheoryAcknowledged(false);
-            } else {
-              handleBack();
-            }
-          }}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                {t("back")}
-              </Button>
-              <div>
-                <h1 className="text-lg font-mono text-text-primary mb-1">{task.title}</h1>
-                <div className="text-xs font-mono text-text-muted flex items-center gap-2">
-                  <span>
-                    {task.lesson.type === "LESSON" ? t("lesson") : task.lesson.type === "TOPIC" ? t("topic") : t("controlWork")}{" "}
-                    · {task.language}
-                  </span>
-                  {task.testDataCount !== undefined && <span className="text-text-secondary">· {t("tests")}: {task.testDataCount}</span>}
-                </div>
+      {!showTheory && <div className={`border-b flex-shrink-0 ${task.lesson.type === "CONTROL" ? "border-accent-warn/30 bg-accent-warn/[0.04]" : "border-border bg-bg-surface"}`}>
+          <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5">
+            {}
+            <button
+              type="button"
+              onClick={() => {
+                const hasTheory = task.lesson.hasTheory && task.lesson.theory && task.lesson.theory.trim().length > 0;
+                if (theoryAcknowledged && hasTheory) {
+                  setTheoryAcknowledged(false);
+                } else {
+                  handleBack();
+                }
+              }}
+              className="flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
+              title={t("back")}
+              aria-label={t("back")}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+
+            {}
+            <div className="min-w-0 flex-1 flex flex-col">
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="text-sm sm:text-base font-semibold tracking-tight text-text-primary truncate">{task.title}</h1>
+                <span className={`flex-shrink-0 px-2 py-0.5 rounded-full border font-mono text-[10px] uppercase tracking-[0.04em] ${task.lesson.type === "CONTROL" ? "border-accent-warn/50 text-accent-warn" : "border-border text-text-muted"}`}>
+                  {task.lesson.type === "LESSON" ? t("lesson") : task.lesson.type === "TOPIC" ? t("topic") : t("controlWork")}
+                </span>
+                <span className="hidden sm:inline-flex flex-shrink-0 px-2 py-0.5 rounded-full border border-border text-text-muted font-mono text-[10px]">{task.language}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] font-mono text-text-muted mt-0.5 min-w-0">
+                {task.testDataCount !== undefined && <span className="truncate">{t("tests")}: {task.testDataCount}</span>}
+                {task.maxAttempts !== undefined && task.attemptsUsed !== undefined && <span className="hidden md:inline truncate">· {t("attempts")}: {task.attemptsUsed}/{task.maxAttempts}{attemptsRemaining !== null ? ` · ${tr("Залишилось", "Remaining")}: ${attemptsRemaining}` : ""}</span>}
+                {task.isClosed && <span className="text-accent-error truncate">· {t("taskClosed")}</span>}
+                {!hideControlResults && task.grade && <span className={`hidden md:inline truncate font-bold ${task.grade.total >= 85 ? "text-accent-success" : task.grade.total >= 65 ? "text-accent-warn" : task.grade.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>· {t("grade")}: {task.grade.total}/100</span>}
               </div>
             </div>
-            <div className="flex w-full md:w-auto flex-wrap gap-2 items-center justify-start md:justify-end">
-              {}
-              {timeRemaining !== null && task.lesson.type === "CONTROL" && <div className={`text-sm font-mono mr-0 md:mr-4 flex items-center ${timeRemaining <= 5 ? "text-accent-error" : timeRemaining <= 10 ? "text-accent-warning" : "text-text-primary"}`}>
-                  <Clock className="w-4 h-4 mr-1" />
-                  {Math.floor(timeRemaining)} хв
-                </div>}
-              {}
-              {deadlineRemaining !== null && !task.isClosed && <div className={`text-sm font-mono mr-0 md:mr-4 flex items-center ${deadlineRemaining <= 300 ? "text-accent-error" : deadlineRemaining <= 600 ? "text-accent-warning" : "text-text-primary"}`}>
-                  <Clock className="w-4 h-4 mr-1" />
-                  {deadlineRemaining > 3600 ? t("timeHhMm", {
-              h: Math.floor(deadlineRemaining / 3600),
-              m: Math.floor(deadlineRemaining % 3600 / 60)
-            }) : deadlineRemaining > 60 ? t("timeMm", {
-              m: Math.floor(deadlineRemaining / 60)
-            }) : t("timeSs", {
-              s: deadlineRemaining
-            })}
-                </div>}
-              {}
-              {task.maxAttempts !== undefined && task.attemptsUsed !== undefined && <div className="text-xs font-mono text-text-secondary mr-0 md:mr-4">
-                  {t("attempts")}: {task.attemptsUsed}/{task.maxAttempts}
-                  {attemptsRemaining !== null && <>
-                      {" "}· {tr("Залишилось", "Remaining")}: {attemptsRemaining}
-                    </>}
-                </div>}
-              {}
-              {task.isClosed && <div className="text-xs font-mono text-accent-error mr-0 md:mr-4">
-                  {t("taskClosed")}
-                </div>}
-                {!hideControlResults && task.grade && <div className={`text-sm font-mono font-bold mr-0 md:mr-4 flex items-center ${task.grade.total >= 85 ? "text-accent-success" : task.grade.total >= 65 ? "text-accent-warn" : task.grade.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>
-                  {t("grade")}: {task.grade.total}/100
-                </div>}
-              {!hideControlResults && lastScoring && typeof scoringPct === "number" && <div className="min-w-[150px] sm:min-w-[180px] mr-0 md:mr-3">
-                  <div className="h-2 w-full bg-border rounded overflow-hidden">
-                    {Array.isArray(scoringSegments) && scoringSegments.length > 0 ? <div className="h-2 w-full flex">
-                        {scoringSegments.map(seg => <div key={seg.key} className={`h-2 ${seg.className}`} title={seg.title} style={{
-                        width: `${seg.pct}%`
-                      }} />)}
-                      </div> : <div className="h-2 bg-primary" style={{
-                        width: `${scoringPct}%`
-                      }} />}
-                  </div>
-                  <div className="mt-1 text-[10px] font-mono text-text-muted flex flex-wrap items-center justify-between gap-2">
-                    <span>{tr("Бал", "Score")}: <span className="text-text-secondary">{lastScoring.score}/{lastScoring.maxScore}</span></span>
-                    <span>{scoringPct}%</span>
-                  </div>
-                  {showScoringLegend && <div className="mt-1 text-[10px] font-mono text-text-muted flex flex-wrap items-center gap-3">
-                      <span className="inline-flex items-center gap-1" title={tr("Публічні тести", "Public tests")}> 
-                        <span className="inline-block w-2 h-2 rounded-sm bg-primary" />
-                        <span>{tr("публічні", "public")}</span>
-                      </span>
-                      <span className="inline-flex items-center gap-1" title={tr("Приховані тести", "Hidden tests")}>
-                        <span className="inline-block w-2 h-2 rounded-sm bg-violet-500" />
-                        <span>{tr("приховані", "hidden")}</span>
-                      </span>
-                    </div>}
-                </div>}
-              {theoryAcknowledged && <>
-                  <Button variant="ghost" onClick={() => {
-              setTheoryAcknowledged(false);
-            }} className="text-xs">
-                  <FileText className="w-3 h-3 mr-1" /> {t("theory")}
-                  </Button>
-                  <Button variant="ghost" onClick={() => importInputRef.current?.click()} disabled={!canEdit} className="text-xs" title={tr("Імпорт коду з файлу", "Import code from file")}>
-                    <Upload className="w-3 h-3 mr-1" /> {tr("Імпорт", "Import")}
-                  </Button>
-                  {!useFiles && canEdit && <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setUseFiles(true);
-                      setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: code }], code));
-                    }}
-                    className="text-xs"
-                    title={tr("Додати файл (multi-file)", "Add file (multi-file)")}
-                  >
-                    {tr("Додати файл", "Add file")}
+
+            {}
+            {(timeRemaining !== null && task.lesson.type === "CONTROL") || (deadlineRemaining !== null && !task.isClosed) ? (
+              <div className={`flex-shrink-0 items-center ${timeRemaining !== null && task.lesson.type === "CONTROL" ? "flex" : "hidden sm:flex"}`}>
+                {timeRemaining !== null && task.lesson.type === "CONTROL" ? (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-sm font-semibold border ${timeRemaining <= 5 ? "text-accent-error border-accent-error/40 bg-accent-error/10" : timeRemaining <= 10 ? "text-accent-warning border-accent-warning/40 bg-accent-warning/10" : "text-accent-warn border-accent-warn/40 bg-accent-warn/10"}`}>
+                    <Clock className="w-3.5 h-3.5" />
+                    {Math.floor(timeRemaining)} {tr("хв", "min")}
+                  </span>
+                ) : deadlineRemaining !== null && !task.isClosed ? (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-sm border ${deadlineRemaining <= 300 ? "text-accent-error border-accent-error/40 bg-accent-error/10" : deadlineRemaining <= 600 ? "text-accent-warning border-accent-warning/40 bg-accent-warning/10" : "text-text-secondary border-border"}`}>
+                    <Clock className="w-3.5 h-3.5" />
+                    {deadlineRemaining > 3600 ? t("timeHhMm", { h: Math.floor(deadlineRemaining / 3600), m: Math.floor(deadlineRemaining % 3600 / 60) }) : deadlineRemaining > 60 ? t("timeMm", { m: Math.floor(deadlineRemaining / 60) }) : t("timeSs", { s: deadlineRemaining })}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {}
+            {!hideControlResults && lastScoring && typeof scoringPct === "number" && <div className="flex-shrink-0 hidden lg:flex items-center gap-2" title={`${tr("Бал", "Score")}: ${lastScoring.score}/${lastScoring.maxScore} (${scoringPct}%)`}>
+                <div className="w-24 h-1.5 bg-border rounded-full overflow-hidden">
+                  {Array.isArray(scoringSegments) && scoringSegments.length > 0 ? <div className="h-1.5 w-full flex">
+                      {scoringSegments.map(seg => <div key={seg.key} className={`h-1.5 ${seg.className}`} title={seg.title} style={{ width: `${seg.pct}%` }} />)}
+                    </div> : <div className="h-1.5 bg-primary" style={{ width: `${scoringPct}%` }} />}
+                </div>
+                <span className="text-[11px] font-mono text-text-secondary tabular-nums">{scoringPct}%</span>
+              </div>}
+
+            {}
+            {theoryAcknowledged && <div className="flex-shrink-0 flex items-center gap-1.5">
+                {!hideControlResults && <Button variant="ghost" size="sm" onClick={handleRun} disabled={!canEdit || running} className="px-2.5" title={tr("Запустити", "Run")} aria-label={tr("Запустити", "Run")}>
+                    <Play className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">{tr("Запустити", "Run")}</span>
                   </Button>}
-                  {!hideControlResults && <Button variant="ghost" onClick={handleRun} disabled={!canEdit || running} className="text-xs">
-                      <Play className="w-3 h-3 mr-1" /> {tr("Запустити", "Run")}
-                    </Button>}
 
-                  {!hideControlResults && testResults.length > 0 && <Button variant="ghost" onClick={() => setShowResults(true)} className="text-xs" title={tr("Переглянути результати тестування", "View test results")}>
-                      <CheckCircle2 className="w-3 h-3 mr-1" /> {tr("Результати", "Results")}
-                    </Button>}
+                <Button variant="primary" size="sm" onClick={handleSubmit} disabled={submitting || !canSubmit} className="px-3">
+                  <Send className="w-4 h-4 sm:mr-1.5" />
+                  <span className="hidden sm:inline">{submitting ? tr("Перевірка...", "Checking...") : tr("Відправити", "Submit")}</span>
+                </Button>
 
-                  <Button variant="primary" onClick={handleSubmit} disabled={submitting || !canSubmit} className="text-xs">
-                    <Send className="w-3 h-3 mr-1" />
-                  {submitting ? tr("Перевірка...", "Checking...") : tr("Відправити", "Submit")}
-                  </Button>
-                  {canComplete && <Button variant="ghost" onClick={handleComplete} disabled={submitting} className="text-xs border border-accent-warn text-accent-warn hover:bg-accent-warn/10" title={tr("Завершити завдання достроково (закриє можливість редагування)", "Complete the task early (will disable editing)")} aria-label={tr("Завершити завдання достроково", "Complete task early")}>
-                    {tr("✓ Завершити", "✓ Complete")}
-                    </Button>}
-                </>}
-            </div>
+                {}
+                <div className="relative" ref={actionsMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setActionsMenuOpen(o => !o)}
+                    className={`inline-flex items-center justify-center w-9 h-9 rounded-lg border transition-fast ${actionsMenuOpen ? "border-primary text-primary bg-primary/10" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
+                    title={tr("Більше дій", "More actions")}
+                    aria-label={tr("Більше дій", "More actions")}
+                    aria-haspopup="menu"
+                    aria-expanded={actionsMenuOpen}
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                  <AnimatePresence>
+                    {actionsMenuOpen && <motion.div
+                      role="menu"
+                      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+                      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.14, ease: easeOutQuint }}
+                      className="absolute right-0 top-full mt-2 z-40 w-60 rounded-xl border border-border bg-bg-surface shadow-xl overflow-hidden py-1"
+                    >
+                      <button type="button" role="menuitem" onClick={() => { setActionsMenuOpen(false); setTheoryAcknowledged(false); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast text-left">
+                        <BookOpen className="w-4 h-4 flex-shrink-0 text-text-muted" /> {t("theory")}
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => { setActionsMenuOpen(false); importInputRef.current?.click(); }} disabled={!canEdit} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                        <Upload className="w-4 h-4 flex-shrink-0 text-text-muted" /> {tr("Імпорт коду з файлу", "Import code from file")}
+                      </button>
+                      {!useFiles && canEdit && <button type="button" role="menuitem" onClick={() => { setActionsMenuOpen(false); setUseFiles(true); setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: code }], code)); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast text-left">
+                        <FilePlus2 className="w-4 h-4 flex-shrink-0 text-text-muted" /> {tr("Додати файл", "Add file")}
+                      </button>}
+                      {!hideControlResults && testResults.length > 0 && <button type="button" role="menuitem" onClick={() => { setActionsMenuOpen(false); setShowResults(true); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast text-left">
+                        <ListChecks className="w-4 h-4 flex-shrink-0 text-text-muted" /> {tr("Результати", "Results")}
+                      </button>}
+                      {canComplete && <>
+                        <div className="my-1 border-t border-border" />
+                        <button type="button" role="menuitem" onClick={() => { setActionsMenuOpen(false); handleComplete(); }} disabled={submitting} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-mono text-accent-warn hover:bg-accent-warn/10 transition-fast text-left disabled:opacity-40 disabled:cursor-not-allowed" title={tr("Завершити завдання достроково (закриє можливість редагування)", "Complete the task early (will disable editing)")}>
+                          <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> {tr("Завершити достроково", "Complete early")}
+                        </button>
+                      </>}
+                    </motion.div>}
+                  </AnimatePresence>
+                </div>
+              </div>}
           </div>
 
           <input key={importSolutionKey} ref={importInputRef} type="file" accept={task.language === "JAVA" ? ".java,.txt,text/plain" : task.language === "CPP" ? ".cpp,.txt,text/plain" : ".py,.txt,text/plain"} onChange={e => handleImportSolutionFile(e.target.files?.[0] || null)} className="hidden" />
@@ -1563,43 +1586,58 @@ export const StudentTaskPage: React.FC = () => {
       {}
       {showTheory ? <div className="flex-1 flex flex-col overflow-hidden bg-bg-base">
           {}
-          <div className="border-b border-border bg-bg-surface p-4 flex-shrink-0">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" onClick={handleBack}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                {t("back")}
-              </Button>
-              <h1 className="text-lg font-mono text-text-primary">{task.title}</h1>
+          <div className="border-b border-border bg-bg-surface px-3 sm:px-4 py-2.5 flex-shrink-0 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
+              title={t("back")}
+              aria-label={t("back")}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1 className="min-w-0 flex-1 text-sm sm:text-base font-semibold tracking-tight text-text-primary truncate">{task.title}</h1>
+            {}
+            <div className="flex-shrink-0 flex items-center gap-1 rounded-lg border border-border p-0.5 bg-bg-base">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.04em] bg-primary/12 text-primary">
+                <BookOpen className="w-3.5 h-3.5" /> {t("theory")}
+              </span>
+              <button type="button" onClick={() => setTheoryAcknowledged(true)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.04em] text-text-muted hover:text-text-primary hover:bg-bg-hover transition-fast">
+                <FileText className="w-3.5 h-3.5" /> {t("task")}
+              </button>
             </div>
           </div>
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 pb-32 sm:pb-24" ref={setTheoryPaneEl}>
-                <div className="max-w-4xl mx-auto">
-                  <h2 className="text-2xl font-mono text-text-primary mb-6">{t("theory")}</h2>
+                <div className="max-w-3xl mx-auto">
+                  <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted mb-4">// {t("theory")}</div>
                   <div className="prose prose-invert max-w-none text-text-secondary font-mono">
                     <MarkdownView content={task.lesson.theory || ""} />
                   </div>
                 </div>
               </div>
-              <div className="bg-bg-surface p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex-shrink-0 fixed bottom-0 left-0 right-0 z-30 shadow-lg">
-                <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-                  <p className="text-xs font-mono text-text-secondary flex-1">
+              <div className="bg-bg-surface/95 backdrop-blur border-t border-border p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex-shrink-0 fixed bottom-0 left-0 right-0 z-30">
+                <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                  <p className="text-xs font-mono text-text-muted flex-1">
                     {tr("Після прочитання теорії ви зможете перейти до практичного завдання", "After reading theory you can proceed to the practice task")}
                   </p>
                   <Button variant="primary" onClick={() => {
             setTheoryAcknowledged(true);
-          }} className="text-sm sm:text-base px-5 sm:px-8 py-3 font-semibold whitespace-nowrap shadow-md hover:shadow-lg transition-all w-full sm:w-auto">
-                    {tr("✓ Я прочитав теорію", "✓ I have read the theory")}
+          }} className="whitespace-nowrap w-full sm:w-auto">
+                    <CheckCircle2 className="w-4 h-4 mr-1.5" /> {tr("Я прочитав теорію", "I have read the theory")}
                   </Button>
                 </div>
               </div>
             </div> : <Group orientation={isCompactViewport ? "vertical" : "horizontal"} className="flex-1 overflow-hidden">
             {}
             <Panel defaultSize={isCompactViewport ? 34 : 25} minSize={isCompactViewport ? 20 : 15} maxSize={isCompactViewport ? 65 : 60} className={`flex flex-col overflow-hidden bg-bg-base ${isCompactViewport ? "border-b border-border" : "border-r border-border"}`}>
-              <div className="p-3 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
-                <div className="text-sm font-mono text-text-primary flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
+              <div className="px-3 py-2.5 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+                <div className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-secondary flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-text-muted" />
                   {task.lesson.type === "CONTROL" && quizQuestions.length > 0 ? tr("Теоретична частина", "Theory part") : t("task")}
                 </div>
+                {hasTheory && task.lesson.type !== "CONTROL" && <button type="button" onClick={() => setTheoryAcknowledged(false)} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.04em] text-text-muted hover:text-primary hover:bg-bg-hover transition-fast" title={t("theory")}>
+                  <BookOpen className="w-3.5 h-3.5" /> {t("theory")}
+                </button>}
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-bg-base" ref={setTaskPaneEl}>
                 {task.lesson.type === "CONTROL" && quizQuestions.length > 0 ? <div className="space-y-4">
@@ -1688,10 +1726,8 @@ export const StudentTaskPage: React.FC = () => {
                           </div>
                         </div>
                       </Card>}
-                  </div> : <div className="bg-bg-surface border border-border rounded-lg p-4">
-                    <div className="prose prose-invert max-w-none text-text-secondary font-mono text-sm">
-                      <MarkdownView content={getPracticeText() || task.description || ""} />
-                    </div>
+                  </div> : <div className="prose prose-invert max-w-none text-text-secondary font-mono text-sm">
+                    <MarkdownView content={getPracticeText() || task.description || ""} />
                   </div>}
               </div>
             </Panel>
@@ -1745,17 +1781,22 @@ export const StudentTaskPage: React.FC = () => {
                 </Separator>
 
                 {}
-                <Panel defaultSize={isCompactViewport ? 26 : 25} minSize={isCompactViewport ? 16 : 10} maxSize={isCompactViewport ? 60 : 50} className={`flex flex-col overflow-hidden bg-bg-surface ${isCompactViewport ? "border-t border-border" : "border-l border-border"}`}>
-                  <div className="p-3 border-b border-border flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
-                    <div className="text-sm font-mono text-text-primary flex items-center gap-2">
-                      <Play className="w-4 h-4" /> {tr("Консоль", "Console")}
+                <Panel defaultSize={isCompactViewport ? 26 : 25} minSize={isCompactViewport ? 16 : 10} maxSize={isCompactViewport ? 60 : 50} className={`flex flex-col overflow-hidden bg-bg-code ${isCompactViewport ? "border-t border-border" : "border-l border-border"}`}>
+                  <div className="px-3 py-2.5 border-b border-border bg-bg-surface flex items-center gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-border" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-border" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-border" />
+                    </div>
+                    <div className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-secondary flex items-center gap-1.5">
+                      <Terminal className="w-3.5 h-3.5 text-text-muted" /> {tr("Консоль", "Console")}
                     </div>
                   </div>
                   <div className="flex-1 flex flex-col overflow-hidden">
                     {}
                     <div className="border-b border-border p-3 flex-shrink-0">
-                      <div className="text-xs font-mono text-text-secondary mb-2">{tr("Вхідні дані:", "Input:")}</div>
-                      <textarea value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані...", "Enter test input...")} className="w-full h-24 bg-bg-code border border-border rounded p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
+                      <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Вхідні дані", "Input")}</div>
+                      <textarea value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані...", "Enter test input...")} className="w-full h-24 bg-bg-base border border-border rounded-lg p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
                     </div>
                     {}
                     <div className="flex-1 overflow-y-auto p-4">
@@ -1796,10 +1837,13 @@ export const StudentTaskPage: React.FC = () => {
       {}
       {showResults && !hideControlResults && <Modal open={showResults} onClose={() => setShowResults(false)} title={tr("Результати тестування", "Test results")} showCloseButton={false}>
           <div className="p-4 sm:p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
-            <h2 className="text-xl font-mono text-text-primary mb-4">{tr("Результати тестування", "Test results")}</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <ListChecks className="w-4 h-4 text-text-muted" />
+              <h2 className="text-sm font-mono uppercase tracking-[0.06em] text-text-secondary">{tr("Результати тестування", "Test results")}</h2>
+            </div>
 
-            {lastScoring && lastScoring.maxScore > 0 && <div className="mb-4 p-3 border border-border bg-bg-code">
-                <div className="text-[10px] font-mono text-text-secondary mb-2">{tr("Прогрес", "Progress")}</div>
+            {lastScoring && lastScoring.maxScore > 0 && <div className="mb-4 p-3 rounded-lg border border-border bg-bg-code">
+                <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Прогрес", "Progress")}</div>
                 <div className="h-2 w-full bg-border rounded overflow-hidden">
                   {Array.isArray(scoringSegments) && scoringSegments.length > 0 ? <div className="h-2 w-full flex">
                       {scoringSegments.map(seg => <div key={seg.key} className={`h-2 ${seg.className}`} title={seg.title} style={{
@@ -1835,8 +1879,8 @@ export const StudentTaskPage: React.FC = () => {
                   </div>}
               </div>}
 
-            {hints.length > 0 && <div className="mb-4 p-3 border border-primary/30 bg-bg-code">
-                <div className="text-xs font-mono text-primary mb-2">{tr("Підказки (крок за кроком)", "Hints (step-by-step)")}</div>
+            {hints.length > 0 && <div className="mb-4 p-3 rounded-lg border border-border bg-bg-surface">
+                <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Підказки (крок за кроком)", "Hints (step-by-step)")}</div>
                 <div className="space-y-2">
                   {hints.slice(0, revealedHints).map((h, i) => <div key={i} className="text-xs font-mono text-text-primary whitespace-pre-wrap">
                         {i + 1}. {h}
@@ -1940,8 +1984,8 @@ export const StudentTaskPage: React.FC = () => {
               const analysis = learningFeedback?.analysis ?? null;
               if (!analysis) return null;
 
-              return <div className="mb-4 p-3 border border-primary/30 bg-bg-code">
-                  <div className="text-xs font-mono text-primary mb-2">{tr("AI-розбір провалу", "AI failure analysis")}</div>
+              return <div className="mb-4 p-3 rounded-lg border border-border bg-bg-surface">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("AI-розбір провалу", "AI failure analysis")}</div>
                   <div className="text-xs font-mono text-text-secondary mb-2">
                     <span className="text-text-primary">{tr("Зведення", "Summary")}:</span> {analysis.summary}
                   </div>
@@ -1992,25 +2036,26 @@ export const StudentTaskPage: React.FC = () => {
                 </div>;
             })()}
 
-            <div className="space-y-3">
-              {testResults.map((result, index) => <Card key={index} className="p-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                    <span className="text-sm font-mono text-text-primary">
+            {testResults.length > 0 && <div className="rounded-lg border border-border bg-bg-code overflow-hidden divide-y divide-border">
+              {testResults.map((result, index) => <div key={index} className="px-3 py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${result.passed ? "bg-accent-success" : "bg-accent-error"}`} />
+                    <span className="text-xs font-mono text-text-primary flex-1">
                       {tr("Тест", "Test")} {index + 1}
                       {typeof result.testId === "number" ? <span className="text-text-muted"> (#{result.testId})</span> : null}
                     </span>
-                    {result.passed ? <span className="text-xs text-accent-success">{tr("✓ Пройдено", "✓ Passed")}</span> : <span className="text-xs text-accent-error">{tr("✗ Не пройдено", "✗ Failed")}</span>}
+                    <span className={`text-[11px] font-mono uppercase tracking-[0.04em] ${result.passed ? "text-accent-success" : "text-accent-error"}`}>
+                      {result.passed ? tr("Пройдено", "Passed") : tr("Не пройдено", "Failed")}
+                    </span>
                   </div>
-                  <div className="text-xs text-text-secondary space-y-1">
-                    {!result.passed && (result.verdict || result.errorKind) && <div className="text-text-muted">
-                        <strong>{tr("Тип", "Type")}:</strong> {[result.verdict, result.errorKind].filter(Boolean).join(" · ")}
+                  {(!result.passed && (result.verdict || result.errorKind || result.stderr)) && <div className="mt-1.5 ml-4.5 pl-0 text-[11px] font-mono space-y-1">
+                    {(result.verdict || result.errorKind) && <div className="text-text-muted">
+                        {[result.verdict, result.errorKind].filter(Boolean).join(" · ")}
                       </div>}
-                    {result.stderr && <div className="text-accent-error">
-                        <strong>{tr("Помилка", "Error")}:</strong> {result.stderr}
-                      </div>}
-                  </div>
-                </Card>)}
-            </div>
+                    {result.stderr && <div className="text-accent-error whitespace-pre-wrap">{result.stderr}</div>}
+                  </div>}
+                </div>)}
+            </div>}
             <div className="flex justify-end mt-4">
               <Button onClick={() => setShowResults(false)}>{tr("Закрити", "Close")}</Button>
             </div>

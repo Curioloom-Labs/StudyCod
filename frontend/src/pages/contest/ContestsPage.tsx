@@ -1,13 +1,14 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Search, Trophy } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Search, Trophy, Clock, CheckCircle2 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import { createContest, joinContestByCode, listContests, type ContestListItem, type ContestVisibility } from "../../lib/api/contests";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 const getErrorMessage = (error: unknown): string => getErrorMessageFromUnknown(error, "");
@@ -43,6 +44,7 @@ export const ContestsPage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
 
   const hasToken = React.useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -224,69 +226,110 @@ export const ContestsPage: React.FC = () => {
     });
   }, [contests, q]);
 
+  const counts = React.useMemo(() => {
+    let live = 0;
+    let upcoming = 0;
+    for (const c of contests) {
+      const s = contestState(c);
+      if (s === "RUNNING") live++;
+      else if (s === "UPCOMING") upcoming++;
+    }
+    return { live, upcoming, total: contests.length };
+  }, [contests]);
+
   return (
-    <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
-        <div>
-          <div className="mb-2">
-            <Button variant="ghost" onClick={() => navigate("/")}
-              title={tr("Назад", "Back")}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              {tr("Назад", "Back")}
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-primary" />
-            <h1 className="text-xl font-mono text-text-primary">{tr("Контести", "Contests")}</h1>
-          </div>
-          <div className="text-sm text-text-secondary mt-1">
-            {tr(
-              "Список доступних контестів.",
-              "List of available contests."
-            )}
-          </div>
+    <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto space-y-8">
+      <motion.div
+        initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
+        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: easeOutQuint }}
+      >
+        <div className="mb-2">
+          <Button variant="ghost" onClick={() => navigate("/")} title={tr("Назад", "Back")}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            {tr("Назад", "Back")}
+          </Button>
         </div>
 
-        <div className="w-full lg:max-w-xl flex flex-col sm:flex-row sm:items-start gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none"
-              placeholder={tr("Пошук...", "Search...")}
-              aria-label={tr("Пошук контестів", "Search contests")}
-            />
-          </div>
+        <span className="font-mono text-xs text-primary/70">{tr("// контести", "// contests")}</span>
 
-          {hasToken ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setJoinOpen(true);
-                  setJoinError(null);
-                  setJoinCode("");
-                }}
-                title={tr("Приєднатись за кодом", "Join by code")}
-              >
-                {tr("Приєднатись", "Join")}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setCreateOpen(true);
-                  setCreateError(null);
-                }}
-                title={tr("Створити контест", "Create contest")}
-              >
-                {tr("Створити", "Create")}
-              </Button>
+        <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-primary" />
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Контести", "Contests")}</h1>
             </div>
-          ) : null}
+            <p className="mt-1.5 text-sm text-text-secondary max-w-xl">
+              {tr("Список доступних контестів.", "List of available contests.")}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-4 font-mono text-sm">
+              <span className="inline-flex items-center gap-1.5 text-text-secondary">
+                <span className="relative inline-flex h-2 w-2">
+                  {counts.live > 0 && !prefersReducedMotion ? (
+                    <motion.span
+                      className="absolute inset-0 rounded-full bg-primary"
+                      animate={{ scale: [1, 2.4], opacity: [0.6, 0] }}
+                      transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+                    />
+                  ) : null}
+                  <span className={`relative inline-flex h-2 w-2 rounded-full ${counts.live > 0 ? "bg-primary" : "bg-text-muted"}`} />
+                </span>
+                <span className="text-text-primary font-semibold">{counts.live}</span>
+                {tr("живих", "live")}
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-text-secondary">
+                <span className="h-2 w-2 rounded-full bg-secondary" />
+                <span className="text-text-primary font-semibold">{counts.upcoming}</span>
+                {tr("скоро", "upcoming")}
+              </span>
+              <span className="text-text-muted">
+                {tr("Всього", "Total")}: <span className="text-text-primary">{counts.total}</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="w-full lg:max-w-xl flex flex-col sm:flex-row sm:items-start gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary/40 transition-fast"
+                placeholder={tr("Пошук...", "Search...")}
+                aria-label={tr("Пошук контестів", "Search contests")}
+              />
+            </div>
+
+            {hasToken ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setJoinOpen(true);
+                    setJoinError(null);
+                    setJoinCode("");
+                  }}
+                  title={tr("Приєднатись за кодом", "Join by code")}
+                >
+                  {tr("Приєднатись", "Join")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setCreateOpen(true);
+                    setCreateError(null);
+                  }}
+                  title={tr("Створити контест", "Create contest")}
+                >
+                  {tr("Створити", "Create")}
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
+      </motion.div>
+
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
       <Modal
         open={joinOpen}
@@ -434,92 +477,106 @@ export const ContestsPage: React.FC = () => {
         </div>
       </Modal>
 
-      <Card className="p-0 overflow-hidden">
-        <div className="grid grid-cols-1">
-          {loading ? (
-            <div className="p-4 space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="p-4 sm:p-6 text-sm text-text-secondary">{tr("Поки що немає контестів.", "No contests yet.")}</div>
-          ) : (
-            <div className="divide-y divide-border">
-              {filtered.map((c) => {
-                const state = contestState(c);
-                const stateBadge =
-                  state === "RUNNING" ? (
-                    <Badge color="success">{tr("Йде", "Running")}</Badge>
-                  ) : state === "UPCOMING" ? (
-                    <Badge color="info">{tr("Скоро", "Upcoming")}</Badge>
-                  ) : (
-                    <Badge color="warn">{tr("Завершено", "Finished")}</Badge>
-                  );
-
-                const visBadge =
-                  c.visibility === "PUBLIC" ? (
-                    <Badge color="info">Public</Badge>
-                  ) : c.visibility === "PRIVATE_CODE" ? (
-                    <Badge color="warn">{tr("За кодом", "Code")}</Badge>
-                  ) : (
-                    <Badge color="info">Class</Badge>
-                  );
-
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => navigate(`/contests/${c.id}`)}
-                    className="w-full text-left p-4 hover:bg-bg-hover transition-fast"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="font-mono text-text-primary truncate">{c.title}</div>
-                          {stateBadge}
-                          {visBadge}
-                          {c.allowUpsolve ? <Badge color="info">{tr("Дорішування", "Upsolve")}</Badge> : null}
-                        </div>
-                        <div className="text-xs text-text-secondary mt-1 flex flex-wrap gap-3">
-                          {c.startsAt ? (
-                            <span>
-                              {tr("Старт", "Start")}: {fmtDate(c.startsAt, i18n.language)}
-                            </span>
-                          ) : (
-                            <span>{tr("Старт", "Start")}: —</span>
-                          )}
-                          {c.endsAt ? (
-                            <span>
-                              {tr("Фініш", "End")}: {fmtDate(c.endsAt, i18n.language)}
-                            </span>
-                          ) : (
-                            <span>{tr("Фініш", "End")}: —</span>
-                          )}
-                        </div>
-                        {c.description ? <div className="text-sm text-text-secondary mt-2 line-clamp-2">{c.description}</div> : null}
-                      </div>
-
-                      <div className="flex-shrink-0 sm:self-start">
-                        <Button
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            navigate(`/contests/${c.id}`);
-                          }}
-                        >
-                          {tr("Відкрити", "Open")}
-                          <ArrowRight className="w-4 h-4 ml-2" />
-                        </Button>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
         </div>
-      </Card>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border py-14 px-6 flex flex-col items-center text-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+            <Trophy className="w-5 h-5 text-primary" />
+          </div>
+          <div className="text-sm text-text-secondary max-w-sm">{tr("Поки що немає контестів.", "No contests yet.")}</div>
+        </div>
+      ) : (
+        <motion.div
+          variants={prefersReducedMotion ? undefined : staggerContainer}
+          initial={prefersReducedMotion ? undefined : "initial"}
+          animate={prefersReducedMotion ? undefined : "animate"}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
+          {filtered.map((c) => {
+            const state = contestState(c);
+
+            const ribbon =
+              state === "RUNNING" ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-[0.06em] text-primary">
+                  <span className="relative inline-flex h-2 w-2">
+                    {!prefersReducedMotion ? (
+                      <motion.span
+                        className="absolute inset-0 rounded-full bg-primary"
+                        animate={{ scale: [1, 2.4], opacity: [0.6, 0] }}
+                        transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+                      />
+                    ) : null}
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                  </span>
+                  {tr("Йде", "Live")}
+                </span>
+              ) : state === "UPCOMING" ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-[0.06em] text-secondary">
+                  <span className="h-2 w-2 rounded-full bg-secondary" />
+                  {tr("Скоро", "Upcoming")}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-[0.06em] text-text-muted">
+                  <span className="h-2 w-2 rounded-full bg-text-muted" />
+                  {tr("Завершено", "Finished")}
+                </span>
+              );
+
+            const visBadge =
+              c.visibility === "PUBLIC" ? (
+                <Badge color="info">Public</Badge>
+              ) : c.visibility === "PRIVATE_CODE" ? (
+                <Badge color="warn">{tr("За кодом", "Code")}</Badge>
+              ) : (
+                <Badge color="info">Class</Badge>
+              );
+
+            return (
+              <motion.button
+                key={c.id}
+                variants={prefersReducedMotion ? undefined : fadeUpItem}
+                onClick={() => navigate(`/contests/${c.id}`)}
+                className="group w-full text-left rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  {ribbon}
+                  <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                    {visBadge}
+                    {c.allowUpsolve ? <Badge color="info">{tr("Дорішування", "Upsolve")}</Badge> : null}
+                  </div>
+                </div>
+
+                <div className="mt-3 font-semibold text-text-primary truncate">{c.title}</div>
+
+                {c.description ? <div className="text-sm text-text-secondary mt-1.5 line-clamp-2">{c.description}</div> : null}
+
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-xs text-text-secondary">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-text-muted" />
+                    {tr("Старт", "Start")}: {c.startsAt ? fmtDate(c.startsAt, i18n.language) : "—"}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-text-muted" />
+                    {tr("Фініш", "End")}: {c.endsAt ? fmtDate(c.endsAt, i18n.language) : "—"}
+                  </span>
+                </div>
+
+                <div className="mt-4 flex items-center justify-end">
+                  <span className="inline-flex items-center gap-1.5 text-sm font-mono text-primary opacity-70 group-hover:opacity-100 transition-fast">
+                    {tr("Відкрити", "Open")}
+                    <ArrowRight className="w-4 h-4 transition-fast group-hover:translate-x-0.5" />
+                  </span>
+                </div>
+              </motion.button>
+            );
+          })}
+        </motion.div>
+      )}
     </div>
   );
 };

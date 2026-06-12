@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "../../components/ui/Button";
 import { Logo } from "../../components/Logo";
 import { register, login, contestLogin, resendVerificationEmail, requestPasswordReset, resetPassword } from "../../lib/api/auth";
@@ -8,6 +9,9 @@ import { registerTeacher, studentLogin } from "../../lib/api/edu";
 import type { User, CourseLanguage } from "../../types";
 import { applyTheme, getCurrentTheme } from "../../theme";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { CheckCircle2, Mail, Lock, AlertCircle, Sun, Moon, Globe } from "lucide-react";
+
 type Mode = "login" | "register";
 type UserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
 interface Props {
@@ -62,13 +66,14 @@ export const AuthPage: React.FC<Props> = ({
   initialUserMode,
   showBackToLanding
 }) => {
-  const {
-    t,
-    i18n
-  } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
-  const topMenuButtonClass = "inline-flex h-8 items-center justify-center rounded-md border border-border/80 bg-bg-code/70 px-3 text-[11px] font-mono uppercase tracking-[0.08em] text-text-secondary transition-fast hover:-translate-y-[1px] hover:border-primary/50 hover:bg-bg-hover/80 hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/60";
+
+  const fieldInputClass = "w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-fast placeholder:text-text-muted";
+  const fieldLabelClass = "text-[0.7rem] font-semibold text-text-muted uppercase tracking-[0.08em] mb-1.5 block";
+
   const authIdPrefix = React.useId();
   const fieldIds = React.useMemo(() => ({
     emailSentEmail: `${authIdPrefix}-email-sent`,
@@ -81,6 +86,7 @@ export const AuthPage: React.FC<Props> = ({
     password: `${authIdPrefix}-password`,
     forgotPasswordEmail: `${authIdPrefix}-forgot-password-email`
   }), [authIdPrefix]);
+
   const [theme, setTheme] = useState<"dark" | "light">(() => getCurrentTheme());
   const [userMode, setUserMode] = useState<UserMode>(() => initialUserMode ?? "PERSONAL");
   const [mode, setMode] = useState<Mode>(() => initialMode ?? "login");
@@ -98,6 +104,7 @@ export const AuthPage: React.FC<Props> = ({
   const [emailSent, setEmailSent] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+
   const turnstileSiteKey = React.useMemo(() => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(), []);
   const authTurnstileEnabled = React.useMemo(() => {
     return parseBoolEnv(import.meta.env.VITE_ENABLE_AUTH_TURNSTILE) && turnstileSiteKey.length > 0;
@@ -113,7 +120,6 @@ export const AuthPage: React.FC<Props> = ({
 
   React.useEffect(() => {
     if (!authTurnstileEnabled) return;
-
     const existing = document.querySelector<HTMLScriptElement>('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]');
     if (window.turnstile) {
       setTurnstileLoadFailed(false);
@@ -121,42 +127,26 @@ export const AuthPage: React.FC<Props> = ({
       return;
     }
     if (existing) {
-      const onLoad = () => {
-        setTurnstileLoadFailed(false);
-        setTurnstileScriptReady(true);
-      };
+      const onLoad = () => { setTurnstileLoadFailed(false); setTurnstileScriptReady(true); };
       const onError = () => setTurnstileLoadFailed(true);
       existing.addEventListener("load", onLoad);
       existing.addEventListener("error", onError);
-      return () => {
-        existing.removeEventListener("load", onLoad);
-        existing.removeEventListener("error", onError);
-      };
+      return () => { existing.removeEventListener("load", onLoad); existing.removeEventListener("error", onError); };
     }
-
     const script = document.createElement("script");
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
     script.async = true;
     script.defer = true;
-    script.onload = () => {
-      setTurnstileLoadFailed(false);
-      setTurnstileScriptReady(true);
-    };
-    script.onerror = () => {
-      setTurnstileLoadFailed(true);
-    };
+    script.onload = () => { setTurnstileLoadFailed(false); setTurnstileScriptReady(true); };
+    script.onerror = () => { setTurnstileLoadFailed(true); };
     document.head.appendChild(script);
-
-    return () => {
-      // keep shared script for other pages
-    };
+    return () => { /* keep shared script for other pages */ };
   }, [authTurnstileEnabled]);
 
   React.useEffect(() => {
     if (!shouldRenderAuthTurnstile || !turnstileScriptReady) return;
     const container = turnstileContainerRef.current;
     if (!container || !window.turnstile) return;
-
     if (turnstileWidgetIdRef.current == null) {
       try {
         const widgetId = window.turnstile.render(container, {
@@ -167,11 +157,8 @@ export const AuthPage: React.FC<Props> = ({
           "error-callback": () => setTurnstileToken(null)
         });
         turnstileWidgetIdRef.current = widgetId;
-      } catch {
-        setTurnstileLoadFailed(true);
-      }
+      } catch { setTurnstileLoadFailed(true); }
     }
-
     return () => {
       if (!window.turnstile) return;
       if (turnstileWidgetIdRef.current != null && typeof window.turnstile.remove === "function") {
@@ -196,6 +183,7 @@ export const AuthPage: React.FC<Props> = ({
     if (msg.trim()) return msg;
     return fallback;
   }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -272,9 +260,7 @@ export const AuthPage: React.FC<Props> = ({
           if (loginErrorMessage === "EMAIL_NOT_VERIFIED" && userMode === "EDUCATIONAL") {
             setError(tr("Email не підтверджено. Перевірте вашу пошту та підтвердіть email перед входом.", "Email is not verified. Check your inbox and verify your email before logging in."));
             setEmailSent(true);
-            if (username.includes("@")) {
-              setEmail(username);
-            }
+            if (username.includes("@")) { setEmail(username); }
           } else {
             setError(loginErrorMessage);
           }
@@ -298,9 +284,7 @@ export const AuthPage: React.FC<Props> = ({
           } else if (result.user && result.token) {
             const registeredUser = result.user;
             setSuccess(tr("Реєстрація вчителя успішна!", "Teacher registration successful!"));
-            setTimeout(() => {
-              onAuth(registeredUser);
-            }, 1500);
+            setTimeout(() => { onAuth(registeredUser); }, 1500);
           }
         } else {
           if (!firstName.trim() || !lastName.trim() || !birthDay || !birthMonth) {
@@ -327,21 +311,16 @@ export const AuthPage: React.FC<Props> = ({
     } catch (err: unknown) {
       const errorMessage = formatApiError(err, tr("Помилка авторизації", "Authorization error"));
       setError(errorMessage);
-      if (errorMessage === "EMAIL_NOT_VERIFIED") {
-        setEmailSent(true);
-      }
+      if (errorMessage === "EMAIL_NOT_VERIFIED") { setEmailSent(true); }
     } finally {
       if (requiresTurnstile && window.turnstile && turnstileWidgetIdRef.current != null) {
-        try {
-          window.turnstile.reset(turnstileWidgetIdRef.current);
-        } catch {
-          // ignore turnstile reset failures
-        }
+        try { window.turnstile.reset(turnstileWidgetIdRef.current); } catch { /* ignore */ }
         setTurnstileToken(null);
       }
       setLoading(false);
     }
   };
+
   const handleResendEmail = async () => {
     if (!email.trim()) {
       setError(tr("Введіть email для повторної відправки", "Enter an email to resend"));
@@ -358,252 +337,427 @@ export const AuthPage: React.FC<Props> = ({
       setLoading(false);
     }
   };
-  return <div className="min-h-screen flex items-center justify-center bg-bg-base">
-      <div className="w-full max-w-md bg-bg-surface border border-border p-8">
-        <div className="mb-3 flex flex-wrap items-center justify-end gap-2 rounded-lg border border-border/60 bg-bg-code/35 p-1.5">
-          {showBackToLanding ? <button type="button" onClick={() => navigate("/", {
-          replace: true
-        })} className={topMenuButtonClass} title={t("toHome")} aria-label={t("toHome")}>
-              {t("toHome")}
-            </button> : null}
-          <button type="button" onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className={topMenuButtonClass} title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")} aria-label={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
-            {i18n.language === "uk" ? "EN" : "UA"}
-          </button>
-          <button type="button" onClick={() => {
-          const next = theme === "dark" ? "light" : "dark";
-          applyTheme(next);
-          setTheme(next);
-        }} className={topMenuButtonClass} title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-            {theme === "dark" ? "Light" : "Dark"}
-          </button>
-        </div>
-        <div className="flex flex-col items-center mb-6">
-          <Logo size={48} />
-          <h1 className="mt-4 text-xl font-mono text-text-primary">
-            {mode === "login"
-              ? userMode === "EDUCATIONAL"
-                ? tr("Вхід EDU", "EDU login")
-                : userMode === "CONTEST"
-                  ? tr("Вхід Contest", "Contest login")
-                  : tr("Вхід Personal", "Personal login")
-              : userMode === "EDUCATIONAL"
-                ? tr("Реєстрація вчителя (EDU)", "Teacher registration (EDU)")
-                : tr("Реєстрація (Personal)", "Registration (Personal)")}
-          </h1>
-        </div>
-        <div className="flex mb-4 border border-border bg-bg-code p-1">
-          <button type="button" onClick={() => {
-          setUserMode("PERSONAL");
-          setMode("login");
-          setError(null);
-          setSuccess(null);
-        }} className={`flex-1 py-2 text-xs font-mono transition-fast ${userMode === "PERSONAL" ? "bg-bg-hover text-text-primary border border-border" : "text-text-secondary hover:text-text-primary"}`}>
-            Personal
-          </button>
-          <button type="button" onClick={() => {
-          setUserMode("EDUCATIONAL");
-          setMode("login");
-          setError(null);
-          setSuccess(null);
-        }} className={`flex-1 py-2 text-xs font-mono transition-fast ${userMode === "EDUCATIONAL" ? "bg-bg-hover text-text-primary border border-border" : "text-text-secondary hover:text-text-primary"}`}>
-            EDU ({t("teacher")})
-          </button>
-          <button type="button" onClick={() => {
-          setUserMode("CONTEST");
-          setMode("login");
-          setError(null);
-          setSuccess(null);
-        }} className={`flex-1 py-2 text-xs font-mono transition-fast ${userMode === "CONTEST" ? "bg-bg-hover text-text-primary border border-border" : "text-text-secondary hover:text-text-primary"}`}>
-            Contest
-          </button>
-        </div>
-        <div className="mb-4 border border-border bg-bg-code px-3 py-2">
-          <div className="text-xs font-mono text-text-primary">
-            {t("authEduForTeachersTitle")}
-          </div>
-          <div className="mt-1 text-[11px] font-mono text-text-muted leading-relaxed">
-            {t("authEduForTeachersBody")}
-          </div>
-        </div>
-        {emailSent ? <div className="space-y-4">
-            <div className="text-xs font-mono text-text-primary border border-primary bg-bg-code px-3 py-2">
-              {success || tr("Перевірте вашу пошту для підтвердження email. Після підтвердження ви зможете увійти.", "Check your inbox to verify your email. After verification you can log in.")}
-            </div>
-            <div>
-              <label htmlFor={fieldIds.emailSentEmail} className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
-              <input id={fieldIds.emailSentEmail} type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" />
-            </div>
-            <Button type="button" onClick={handleResendEmail} className="w-full" disabled={loading}>
-              {loading ? tr("Відправка...", "Sending...") : tr("Відправити лист повторно", "Resend email")}
-            </Button>
-            <button type="button" onClick={() => {
-          setEmailSent(false);
-          setSuccess(null);
-          setError(null);
-        }} className="w-full text-xs font-mono text-text-secondary hover:text-text-primary transition-fast">
-              {tr("Повернутись до реєстрації", "Back to registration")}
-            </button>
-          </div> : <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor={fieldIds.username} className="text-xs font-mono text-text-secondary mb-1 block">{t("username")}</label>
-              <input id={fieldIds.username} className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={username} onChange={e => setUsername(e.target.value)} required />
-            </div>
-            {mode === "register" && <>
-                <div>
-                  <label htmlFor={fieldIds.registerEmail} className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
-                  <input id={fieldIds.registerEmail} type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={email} onChange={e => setEmail(e.target.value)} required />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor={fieldIds.firstName} className="text-xs font-mono text-text-secondary mb-1 block">{t("firstName")}</label>
-                    <input id={fieldIds.firstName} type="text" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={firstName} onChange={e => setFirstName(e.target.value)} required />
-                  </div>
-                  <div>
-                    <label htmlFor={fieldIds.lastName} className="text-xs font-mono text-text-secondary mb-1 block">{t("lastName")}</label>
-                    <input id={fieldIds.lastName} type="text" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={lastName} onChange={e => setLastName(e.target.value)} required />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-mono text-text-secondary mb-1 block">{tr("День народження (без року)", "Birth day (no year)")}</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label htmlFor={fieldIds.birthDay} className="text-xs font-mono text-text-secondary mb-1 block">{tr("День", "Day")}</label>
-                      <input id={fieldIds.birthDay} type="number" min="1" max="31" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={birthDay} onChange={e => setBirthDay(e.target.value ? Number(e.target.value) : "")} placeholder="1-31" required />
-                    </div>
-                    <div>
-                      <label htmlFor={fieldIds.birthMonth} className="text-xs font-mono text-text-secondary mb-1 block">{tr("Місяць", "Month")}</label>
-                      <input id={fieldIds.birthMonth} type="number" min="1" max="12" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={birthMonth} onChange={e => setBirthMonth(e.target.value ? Number(e.target.value) : "")} placeholder="1-12" required />
-                    </div>
-                  </div>
-                </div>
-              </>}
-            <div>
-              <label htmlFor={fieldIds.password} className="text-xs font-mono text-text-secondary mb-1 block">{t("password")}</label>
-              <input id={fieldIds.password} type="password" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={password} onChange={e => setPassword(e.target.value)} required />
-            </div>
-          {mode === "register" && <div>
-              <label className="text-xs font-mono text-text-secondary mb-2 block">{t("programmingLanguage")}</label>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setCourse("JAVA")} className={`flex-1 py-2 px-4 border text-xs font-mono transition-fast ${course === "JAVA" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`}>
-                  Java
-                </button>
-                <button type="button" onClick={() => setCourse("PYTHON")} className={`flex-1 py-2 px-4 border text-xs font-mono transition-fast ${course === "PYTHON" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`}>
-                  Python
-                </button>
-                <button type="button" onClick={() => setCourse("CPP")} className={`flex-1 py-2 px-4 border text-xs font-mono transition-fast ${course === "CPP" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"}`}>
-                  C++
-                </button>
-              </div>
-            </div>}
-          {mode === "login" && userMode !== "CONTEST" && <div className="text-center space-y-2 mt-4">
-              <button type="button" onClick={() => {
-            setMode("register");
-            setError(null);
-            setSuccess(null);
-          }} className="text-xs font-mono text-text-secondary hover:text-primary transition-fast block w-full">
-                {tr("Немає аккаунту?", "No account?")} <span className="text-primary">{t("register")}</span>
-              </button>
-              <button type="button" onClick={() => {
-            setShowForgotPassword(true);
-            setError(null);
-            setSuccess(null);
-          }} className="text-xs font-mono text-text-secondary hover:text-primary transition-fast block w-full">
-                {tr("Забули пароль?", "Forgot password?")} <span className="text-primary">{t("resetPassword")}</span>
-              </button>
-            </div>}
-          {mode === "register" && userMode !== "CONTEST" && <div className="text-center mt-4">
-              <button type="button" onClick={() => {
-            setMode("login");
-            setError(null);
-            setSuccess(null);
-          }} className="text-xs font-mono text-text-secondary hover:text-primary transition-fast">
-                {tr("Вже є аккаунт?", "Already have an account?")} <span className="text-primary">{t("login")}</span>
-              </button>
-            </div>}
-            {error && <div className="text-xs font-mono text-accent-error border border-accent-error bg-bg-code px-3 py-2">
-                {error}
-              </div>}
-            {success && <div className="text-xs font-mono text-primary border border-primary bg-bg-code px-3 py-2">
-                {success}
-              </div>}
-            {shouldRenderAuthTurnstile && <div className="rounded-md border border-border bg-bg-code px-3 py-3">
-                <div ref={turnstileContainerRef} className="min-h-[65px]" />
-                {turnstileLoadFailed && <div className="mt-2 text-[11px] font-mono text-accent-error">
-                    {tr("Не вдалося завантажити Cloudflare перевірку.", "Failed to load Cloudflare verification.")}
-                  </div>}
-              </div>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? tr("Обробка...", "Processing...") : mode === "login" ? t("login") : t("register")}
-            </Button>
-            {mode === "login" && userMode !== "CONTEST" && <div className="mt-4">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-border"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="px-2 bg-bg-surface text-text-secondary font-mono">{tr("або", "or")}</span>
-                  </div>
-                </div>
-                <button type="button" onClick={() => {
-            window.location.href = buildApiUrl("/auth/google");
-          }} className="mt-4 w-full flex items-center justify-center gap-2 border border-border bg-bg-code hover:bg-bg-hover px-4 py-2 text-sm font-mono text-text-primary transition-fast">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                  </svg>
-                  {tr("Увійти через Google", "Continue with Google")}
-                </button>
-              </div>}
-          </form>}
 
-        {}
-        {showForgotPassword && <div className="mt-4 space-y-4">
-            <div>
-              <label htmlFor={fieldIds.forgotPasswordEmail} className="text-xs font-mono text-text-secondary mb-1 block">Email</label>
-              <input id={fieldIds.forgotPasswordEmail} type="email" className="w-full border border-border bg-bg-code px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:border-primary transition-fast" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="your@email.com" />
+  // Derive eyebrow label
+  const eyebrowLabel = mode === "login"
+    ? userMode === "EDUCATIONAL"
+      ? "// edu login"
+      : userMode === "CONTEST"
+        ? "// contest login"
+        : "// sign in"
+    : userMode === "EDUCATIONAL"
+      ? "// teacher register"
+      : "// create account";
+
+  const headingLabel = mode === "login"
+    ? userMode === "EDUCATIONAL"
+      ? tr("Вхід EDU", "EDU Login")
+      : userMode === "CONTEST"
+        ? tr("Вхід Contest", "Contest Login")
+        : tr("Вхід", "Sign In")
+    : userMode === "EDUCATIONAL"
+      ? tr("Реєстрація вчителя", "Teacher Registration")
+      : tr("Реєстрація", "Create Account");
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-bg-base px-4 py-8">
+      <motion.div
+        variants={prefersReducedMotion ? undefined : staggerContainer}
+        initial={prefersReducedMotion ? undefined : "initial"}
+        animate={prefersReducedMotion ? undefined : "animate"}
+        className="w-full max-w-[420px]"
+      >
+        {/* Terminal-style card */}
+        <motion.div
+          variants={prefersReducedMotion ? undefined : fadeUpItem}
+          className="rounded-xl border border-border bg-bg-surface overflow-hidden shadow-[0_24px_48px_-16px_rgba(0,0,0,0.5)]"
+        >
+          {/* Card header bar */}
+          <div className="flex items-center justify-between gap-3 border-b border-border bg-bg-code/60 px-4 py-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-border" />
+              <span className="h-2.5 w-2.5 rounded-full bg-border" />
+              <span className="h-2.5 w-2.5 rounded-full bg-border" />
             </div>
-            {error && <div className="text-xs font-mono text-accent-error border border-accent-error bg-bg-code px-3 py-2">
-                {error}
-              </div>}
-            {success && <div className="text-xs font-mono text-primary border border-primary bg-bg-code px-3 py-2">
-                {success}
-              </div>}
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => {
-            setShowForgotPassword(false);
-            setResetEmail("");
-            setError(null);
-            setSuccess(null);
-          }} className="flex-1">
-                {t("cancel")}
-              </Button>
-              <Button onClick={async () => {
-            if (!resetEmail.trim()) {
-              setError(tr("Введіть email", "Enter an email"));
-              return;
-            }
-            setLoading(true);
-            setError(null);
-            setSuccess(null);
-            try {
-              await requestPasswordReset(resetEmail.trim());
-              setSuccess(tr("Лист з інструкціями відправлено на вашу пошту!", "Instructions were sent to your email!"));
-              setTimeout(() => {
-                setShowForgotPassword(false);
-                setResetEmail("");
-              }, 2000);
-            } catch (err: unknown) {
-              setError(formatApiError(err, tr("Помилка відправки листа", "Failed to send email")));
-            } finally {
-              setLoading(false);
-            }
-          }} disabled={loading} className="flex-1">
-                {loading ? tr("Відправка...", "Sending...") : tr("Відправити", "Send")}
-              </Button>
+            <span className="text-[10px] font-mono text-text-muted tracking-[0.08em]">auth</span>
+            <div className="flex items-center gap-1.5">
+              {showBackToLanding && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/", { replace: true })}
+                  className="inline-flex h-6 items-center justify-center rounded border border-border/80 bg-bg-hover/50 px-2 text-[10px] font-mono text-text-secondary transition-fast hover:border-primary/50 hover:text-text-primary"
+                  title={t("toHome")}
+                >
+                  {t("toHome")}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
+                className="inline-flex h-6 w-6 items-center justify-center rounded border border-border/80 bg-bg-hover/50 text-[10px] font-mono text-text-secondary transition-fast hover:border-primary/50 hover:text-text-primary"
+                title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}
+              >
+                <Globe className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => { const next = theme === "dark" ? "light" : "dark"; applyTheme(next); setTheme(next); }}
+                className="inline-flex h-6 w-6 items-center justify-center rounded border border-border/80 bg-bg-hover/50 text-[10px] font-mono text-text-secondary transition-fast hover:border-primary/50 hover:text-text-primary"
+                title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}
+              >
+                {theme === "dark" ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
+              </button>
             </div>
-          </div>}
-      </div>
-    </div>;
+          </div>
+
+          {/* Card body */}
+          <div className="p-6">
+            {/* Logo + hero */}
+            <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mb-5">
+              <div className="flex items-center gap-3">
+                <Logo size={36} />
+                <div>
+                  <span className="block font-mono text-xs text-primary/70">{eyebrowLabel}</span>
+                  <h1 className="text-2xl font-semibold tracking-tight text-text-primary">{headingLabel}</h1>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Hairline */}
+            <div className="mb-5 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+            {/* Mode tabs (userMode) */}
+            <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mb-4">
+              <div className="flex gap-1 rounded-lg border border-border bg-bg-code p-1">
+                {(["PERSONAL", "EDUCATIONAL", "CONTEST"] as UserMode[]).map((um) => (
+                  <button
+                    key={um}
+                    type="button"
+                    onClick={() => { setUserMode(um); setMode("login"); setError(null); setSuccess(null); }}
+                    className={`flex-1 rounded-md py-1.5 text-[11px] font-mono transition-fast ${
+                      userMode === um
+                        ? "bg-bg-hover text-text-primary border border-primary/40 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.4)]"
+                        : "text-text-secondary hover:text-text-primary border border-transparent"
+                    }`}
+                  >
+                    {um === "PERSONAL" ? "Personal" : um === "EDUCATIONAL" ? "EDU" : "Contest"}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* EDU info note */}
+            {userMode === "EDUCATIONAL" && (
+              <motion.div
+                variants={prefersReducedMotion ? undefined : fadeUpItem}
+                className="mb-4 rounded-lg border border-border bg-bg-code/60 px-3 py-2"
+              >
+                <div className="text-[11px] font-mono text-text-primary">{t("authEduForTeachersTitle")}</div>
+                <div className="mt-0.5 text-[10px] font-mono text-text-muted leading-relaxed">{t("authEduForTeachersBody")}</div>
+              </motion.div>
+            )}
+
+            {/* Email verification sent state */}
+            {emailSent ? (
+              <motion.div
+                variants={prefersReducedMotion ? undefined : fadeUpItem}
+                className="space-y-4"
+              >
+                <div className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+                  <Mail className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <p className="text-xs font-mono text-text-primary leading-relaxed">
+                    {success || tr("Перевірте вашу пошту для підтвердження email. Після підтвердження ви зможете увійти.", "Check your inbox to verify your email. After verification you can log in.")}
+                  </p>
+                </div>
+                <div>
+                  <label htmlFor={fieldIds.emailSentEmail} className={fieldLabelClass}>Email</label>
+                  <input
+                    id={fieldIds.emailSentEmail}
+                    type="email"
+                    className={fieldInputClass}
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                  />
+                </div>
+                <Button type="button" onClick={handleResendEmail} className="w-full" disabled={loading}>
+                  {loading ? tr("Відправка...", "Sending...") : tr("Відправити лист повторно", "Resend email")}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setEmailSent(false); setSuccess(null); setError(null); }}
+                  className="w-full text-xs font-mono text-text-secondary hover:text-text-primary transition-fast"
+                >
+                  {tr("Повернутись до реєстрації", "Back to registration")}
+                </button>
+              </motion.div>
+            ) : (
+              <>
+                {/* Login / Register tab toggle */}
+                {userMode !== "CONTEST" && (
+                  <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mb-4">
+                    <div className="flex gap-1 rounded-lg border border-border bg-bg-code p-1">
+                      {(["login", "register"] as Mode[]).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { setMode(m); setError(null); setSuccess(null); }}
+                          className={`flex-1 rounded-md py-1.5 text-[11px] font-mono transition-fast ${
+                            mode === m
+                              ? "bg-bg-hover text-text-primary border border-primary/40 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.4)]"
+                              : "text-text-secondary hover:text-text-primary border border-transparent"
+                          }`}
+                        >
+                          {m === "login" ? t("login") : t("register")}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-3">
+                  <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+                    <label htmlFor={fieldIds.username} className={fieldLabelClass}>{t("username")}</label>
+                    <input
+                      id={fieldIds.username}
+                      className={fieldInputClass}
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      required
+                    />
+                  </motion.div>
+
+                  {mode === "register" && (
+                    <>
+                      <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+                        <label htmlFor={fieldIds.registerEmail} className={fieldLabelClass}>Email</label>
+                        <input
+                          id={fieldIds.registerEmail}
+                          type="email"
+                          className={fieldInputClass}
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          required
+                        />
+                      </motion.div>
+
+                      {userMode === "PERSONAL" && (
+                        <>
+                          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label htmlFor={fieldIds.firstName} className={fieldLabelClass}>{t("firstName")}</label>
+                              <input id={fieldIds.firstName} type="text" className={fieldInputClass} value={firstName} onChange={e => setFirstName(e.target.value)} required />
+                            </div>
+                            <div>
+                              <label htmlFor={fieldIds.lastName} className={fieldLabelClass}>{t("lastName")}</label>
+                              <input id={fieldIds.lastName} type="text" className={fieldInputClass} value={lastName} onChange={e => setLastName(e.target.value)} required />
+                            </div>
+                          </motion.div>
+
+                          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+                            <label className={fieldLabelClass}>{tr("День народження (без року)", "Birth day (no year)")}</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label htmlFor={fieldIds.birthDay} className="sr-only">{tr("День", "Day")}</label>
+                                <input id={fieldIds.birthDay} type="number" min="1" max="31" className={fieldInputClass} value={birthDay} onChange={e => setBirthDay(e.target.value ? Number(e.target.value) : "")} placeholder={tr("День (1–31)", "Day (1–31)")} required />
+                              </div>
+                              <div>
+                                <label htmlFor={fieldIds.birthMonth} className="sr-only">{tr("Місяць", "Month")}</label>
+                                <input id={fieldIds.birthMonth} type="number" min="1" max="12" className={fieldInputClass} value={birthMonth} onChange={e => setBirthMonth(e.target.value ? Number(e.target.value) : "")} placeholder={tr("Місяць (1–12)", "Month (1–12)")} required />
+                              </div>
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+                    <label htmlFor={fieldIds.password} className={fieldLabelClass}>{t("password")}</label>
+                    <input
+                      id={fieldIds.password}
+                      type="password"
+                      className={fieldInputClass}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      required
+                    />
+                  </motion.div>
+
+                  {mode === "register" && userMode === "PERSONAL" && (
+                    <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+                      <label className={fieldLabelClass}>{t("programmingLanguage")}</label>
+                      <div className="flex gap-2">
+                        {(["JAVA", "PYTHON", "CPP"] as CourseLanguage[]).map((lang) => (
+                          <button
+                            key={lang}
+                            type="button"
+                            onClick={() => setCourse(lang)}
+                            className={`flex-1 py-2 px-3 rounded-lg border text-xs font-mono transition-fast ${
+                              course === lang
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-text-secondary hover:border-primary/40 hover:text-text-primary"
+                            }`}
+                          >
+                            {lang === "CPP" ? "C++" : lang === "JAVA" ? "Java" : "Python"}
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {error && (
+                    <motion.div
+                      variants={prefersReducedMotion ? undefined : fadeUpItem}
+                      className="flex items-start gap-2 rounded-lg border border-accent-error/50 bg-accent-error/10 px-3 py-2.5"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 text-accent-error shrink-0 mt-0.5" />
+                      <span className="text-xs font-mono text-accent-error leading-relaxed">{error}</span>
+                    </motion.div>
+                  )}
+                  {success && (
+                    <motion.div
+                      variants={prefersReducedMotion ? undefined : fadeUpItem}
+                      className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                      <span className="text-xs font-mono text-primary leading-relaxed">{success}</span>
+                    </motion.div>
+                  )}
+
+                  {shouldRenderAuthTurnstile && (
+                    <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="rounded-lg border border-border bg-bg-code px-3 py-3">
+                      <div ref={turnstileContainerRef} className="min-h-[65px]" />
+                      {turnstileLoadFailed && (
+                        <div className="mt-2 text-[11px] font-mono text-accent-error">
+                          {tr("Не вдалося завантажити Cloudflare перевірку.", "Failed to load Cloudflare verification.")}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+
+                  <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading
+                        ? tr("Обробка...", "Processing...")
+                        : mode === "login" ? t("login") : t("register")}
+                    </Button>
+                  </motion.div>
+
+                  {/* Google button */}
+                  {mode === "login" && userMode !== "CONTEST" && (
+                    <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
+                      <div className="relative my-1">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full h-px bg-border" />
+                        </div>
+                        <div className="relative flex justify-center">
+                          <span className="px-2 bg-bg-surface text-[11px] font-mono text-text-muted">{tr("або", "or")}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { window.location.href = buildApiUrl("/auth/google"); }}
+                        className="mt-3 w-full flex items-center justify-center gap-2.5 rounded-lg border border-border bg-bg-code hover:bg-bg-hover hover:border-primary/30 px-4 py-2.5 text-sm font-mono text-text-primary transition-fast"
+                      >
+                        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                          <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                          <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                          <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                          <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                        </svg>
+                        {tr("Продовжити через Google", "Continue with Google")}
+                      </button>
+                    </motion.div>
+                  )}
+
+                  {/* Forgot password link */}
+                  {mode === "login" && userMode !== "CONTEST" && (
+                    <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => { setShowForgotPassword(true); setError(null); setSuccess(null); }}
+                        className="text-[11px] font-mono text-text-muted hover:text-primary transition-fast"
+                      >
+                        {tr("Забули пароль?", "Forgot password?")}
+                      </button>
+                    </motion.div>
+                  )}
+                </form>
+              </>
+            )}
+
+            {/* Forgot password panel (rendered below form when active) */}
+            {showForgotPassword && (
+              <motion.div
+                initial={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
+                animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: easeOutQuint }}
+                className="mt-4 pt-4 border-t border-border space-y-3"
+              >
+                <div>
+                  <span className="block font-mono text-xs text-primary/70 mb-1">// reset password</span>
+                  <label htmlFor={fieldIds.forgotPasswordEmail} className={fieldLabelClass}>Email</label>
+                  <input
+                    id={fieldIds.forgotPasswordEmail}
+                    type="email"
+                    className={fieldInputClass}
+                    value={resetEmail}
+                    onChange={e => setResetEmail(e.target.value)}
+                    placeholder="your@email.com"
+                  />
+                </div>
+                {error && (
+                  <div className="flex items-start gap-2 rounded-lg border border-accent-error/50 bg-accent-error/10 px-3 py-2.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-accent-error shrink-0 mt-0.5" />
+                    <span className="text-xs font-mono text-accent-error">{error}</span>
+                  </div>
+                )}
+                {success && (
+                  <div className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                    <span className="text-xs font-mono text-primary">{success}</span>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => { setShowForgotPassword(false); setResetEmail(""); setError(null); setSuccess(null); }}
+                    className="flex-1"
+                  >
+                    {t("cancel")}
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!resetEmail.trim()) { setError(tr("Введіть email", "Enter an email")); return; }
+                      setLoading(true); setError(null); setSuccess(null);
+                      try {
+                        await requestPasswordReset(resetEmail.trim());
+                        setSuccess(tr("Лист з інструкціями відправлено на вашу пошту!", "Instructions were sent to your email!"));
+                        setTimeout(() => { setShowForgotPassword(false); setResetEmail(""); }, 2000);
+                      } catch (err: unknown) {
+                        setError(formatApiError(err, tr("Помилка відправки листа", "Failed to send email")));
+                      } finally { setLoading(false); }
+                    }}
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    {loading ? tr("Відправка...", "Sending...") : tr("Відправити", "Send")}
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Footer note */}
+        <motion.p
+          variants={prefersReducedMotion ? undefined : fadeUpItem}
+          className="mt-4 text-center text-[11px] font-mono text-text-muted"
+        >
+          StudyCod &mdash; {tr("навчальна платформа", "learning platform")}
+        </motion.p>
+      </motion.div>
+    </div>
+  );
 };

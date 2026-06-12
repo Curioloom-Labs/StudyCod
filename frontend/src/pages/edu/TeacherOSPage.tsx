@@ -278,20 +278,25 @@ export const TeacherOSPage: React.FC = () => {
   }
 
   return (
-    <div className="p-3 sm:p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+    <div className="min-h-full bg-bg-base">
+      {/* Hero */}
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-7xl mx-auto">
+        <span className="font-mono text-xs text-primary/70">// teacher os</span>
+        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+              Teacher OS{snapshot?.className ? <span className="text-text-muted font-normal"> · {snapshot.className}</span> : ""}
+            </h1>
+            <p className="mt-1.5 text-sm text-text-secondary">
+              {tr("Операційна панель класу — сигнали, місії та план підтримки в одному місці.", "Class operations surface — signals, missions and the support plan in one place.")}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classIdNum}`)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("До класу", "Back to class")}
             </Button>
-            <h1 className="text-2xl font-mono text-text-primary">
-              Teacher OS{snapshot?.className ? ` • ${snapshot.className}` : ""}
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
             <Button variant="ghost" onClick={() => void loadSnapshot("refresh")} disabled={refreshing || recalculatingPlan || applyingPlan}>
               <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
               {tr("Оновити", "Refresh")}
@@ -306,36 +311,37 @@ export const TeacherOSPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
-          <Card className="p-3 col-span-2">
-            <div className="text-[11px] text-text-muted">{tr("Індекс здоров'я класу", "Class health index")}</div>
-            <div className={`text-2xl font-mono mt-1 ${healthToneClass}`}>{healthScore ?? "—"}</div>
-          </Card>
-
-          <Card className="p-3">
-            <div className="text-[11px] text-text-muted">{tr("Сер. бал", "Avg score")}</div>
-            <div className="text-xl font-mono text-text-primary">{snapshot?.analytics ? Math.round(snapshot.analytics.overview.avgScore) : "—"}</div>
-          </Card>
-
-          <Card className="p-3">
-            <div className="text-[11px] text-text-muted">Completion</div>
-            <div className="text-xl font-mono text-text-primary">{snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.completionRate * 100)}%` : "—"}</div>
-          </Card>
-
-          <Card className="p-3">
-            <div className="text-[11px] text-text-muted">Pass rate</div>
-            <div className="text-xl font-mono text-text-primary">{snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.passRate * 100)}%` : "—"}</div>
-          </Card>
-
-          <Card className="p-3">
-            <div className="text-[11px] text-text-muted">{tr("Активні апеляції", "Active appeals")}</div>
-            <div className="text-xl font-mono text-accent-warning">{snapshot?.digest?.appeals.active ?? snapshot?.activeAppeals.length ?? "—"}</div>
-          </Card>
+        {/* Inline key stats */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+          <div className="flex items-baseline gap-2">
+            <span className={`font-mono text-2xl md:text-3xl tabular-nums ${healthToneClass}`}>{healthScore ?? "—"}</span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Індекс здоров'я", "Health index")}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{snapshot?.analytics ? Math.round(snapshot.analytics.overview.avgScore) : "—"}</span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Сер. бал", "Avg score")}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.completionRate * 100)}%` : "—"}</span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">Completion</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.passRate * 100)}%` : "—"}</span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">Pass rate</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-accent-warning tabular-nums">{snapshot?.digest?.appeals.active ?? snapshot?.activeAppeals.length ?? "—"}</span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Активні апеляції", "Active appeals")}</span>
+          </div>
         </div>
+      </div>
 
-        <Card className="p-4">
-          <div className="text-sm font-mono text-text-primary mb-3 flex items-center gap-2">
-            <Gauge className="w-4 h-4" />
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+      <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto space-y-4">
+        <Card className="p-5">
+          <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-3 flex items-center gap-2">
+            <Gauge className="w-3.5 h-3.5 text-primary" />
             {tr("Операційні сигнали", "Operational signals")}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
@@ -356,10 +362,10 @@ export const TeacherOSPage: React.FC = () => {
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div className="xl:col-span-2 space-y-4">
-            <Card className="p-4">
+            <Card className="p-5">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono text-text-primary flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-primary" />
                   {tr("Місії Teacher Copilot", "Teacher Copilot missions")}
                 </div>
                 <span className="text-[11px] text-text-muted">{snapshot?.copilot?.generatedBy || "rule-based"}</span>
@@ -370,13 +376,13 @@ export const TeacherOSPage: React.FC = () => {
               ) : (
                 <div className="space-y-2">
                   {snapshot.copilot.suggestions.slice(0, 6).map(suggestion => (
-                    <div key={suggestion.id} className="p-3 border border-border bg-bg-surface">
+                    <div key={suggestion.id} className="rounded-lg p-3 border border-border bg-bg-base transition-fast hover:border-primary/40">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-sm font-mono text-text-primary">{suggestion.title}</div>
                           <div className="text-xs text-text-secondary mt-1">{suggestion.rationale}</div>
                         </div>
-                        <span className={`text-[10px] px-2 py-1 border ${renderCopilotPriorityClass(suggestion.priority)}`}>
+                        <span className={`text-[10px] font-mono px-2 py-1 rounded-full border ${renderCopilotPriorityClass(suggestion.priority)}`}>
                           {suggestion.priority.toUpperCase()}
                         </span>
                       </div>
@@ -401,10 +407,10 @@ export const TeacherOSPage: React.FC = () => {
               )}
             </Card>
 
-            <Card className="p-4">
+            <Card className="p-5">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono text-text-primary flex items-center gap-2">
-                  <Target className="w-4 h-4" />
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-primary" />
                   {tr("Теплова карта тем", "Topic heatmap")}
                 </div>
                 <span className="text-[11px] text-text-muted">
@@ -419,7 +425,7 @@ export const TeacherOSPage: React.FC = () => {
                   {sortedTopics.slice(0, 10).map(topic => {
                     const risk = renderTopicRisk(topic);
                     return (
-                      <div key={topic.topicId} className="border border-border bg-bg-surface p-3">
+                      <div key={topic.topicId} className="rounded-lg border border-border bg-bg-base p-3 transition-fast hover:border-primary/40">
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="text-sm font-mono text-text-primary">{topic.title}</div>
@@ -427,13 +433,13 @@ export const TeacherOSPage: React.FC = () => {
                               {tr("Сер. бал", "Avg score")}: {Math.round(topic.avgScore)} · Pass: {Math.round(topic.passRate * 100)}% · Completion: {Math.round(topic.completionRate * 100)}%
                             </div>
                           </div>
-                          <span className={`text-[11px] px-2 py-1 border ${risk >= 65 ? "text-accent-error border-accent-error/40" : risk >= 40 ? "text-accent-warning border-accent-warning/40" : "text-accent-success border-accent-success/40"}`}>
+                          <span className={`text-[11px] font-mono px-2 py-1 rounded-full border ${risk >= 65 ? "text-accent-error border-accent-error/40" : risk >= 40 ? "text-accent-warning border-accent-warning/40" : "text-accent-success border-accent-success/40"}`}>
                             RISK {risk}
                           </span>
                         </div>
 
-                        <div className="mt-2 h-1.5 w-full bg-bg-base border border-border overflow-hidden">
-                          <div className={`h-full ${risk >= 65 ? "bg-accent-error" : risk >= 40 ? "bg-accent-warning" : "bg-accent-success"}`} style={{ width: `${risk}%` }} />
+                        <div className="mt-2 h-1.5 w-full rounded-full bg-bg-code overflow-hidden">
+                          <div className={`h-full rounded-full ${risk >= 65 ? "bg-accent-error" : risk >= 40 ? "bg-accent-warning" : "bg-accent-success"}`} style={{ width: `${risk}%` }} />
                         </div>
 
                         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -449,10 +455,10 @@ export const TeacherOSPage: React.FC = () => {
               )}
             </Card>
 
-            <Card className="p-4">
+            <Card className="p-5">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono text-text-primary flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" />
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                  <MessageSquare className="w-3.5 h-3.5 text-primary" />
                   {tr("Черга апеляцій", "Appeals queue")}
                 </div>
                 <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/classes/${classIdNum}/appeals`)}>
@@ -467,13 +473,13 @@ export const TeacherOSPage: React.FC = () => {
                   {snapshot.activeAppeals.map(appeal => {
                     const sla = renderAppealSla(appeal);
                     return (
-                      <div key={appeal.id} className="p-3 border border-border bg-bg-surface">
+                      <div key={appeal.id} className="rounded-lg p-3 border border-border bg-bg-base transition-fast hover:border-primary/40">
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="text-sm font-mono text-text-primary">#{appeal.id} • {appeal.studentName}</div>
                             <div className="text-xs text-text-secondary mt-1">{appeal.targetTitle}</div>
                           </div>
-                          <span className={`text-[10px] px-2 py-1 border ${sla.className}`}>{sla.label}</span>
+                          <span className={`text-[10px] font-mono px-2 py-1 rounded-full border ${sla.className}`}>{sla.label}</span>
                         </div>
                         <div className="text-xs text-text-muted mt-2 line-clamp-2">{appeal.reasonText}</div>
                       </div>
@@ -485,9 +491,9 @@ export const TeacherOSPage: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            <Card className="p-4">
-              <div className="text-sm font-mono text-text-primary flex items-center gap-2 mb-3">
-                <CalendarClock className="w-4 h-4" />
+            <Card className="p-5">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 mb-3">
+                <CalendarClock className="w-3.5 h-3.5 text-primary" />
                 {tr("Orchestrator: план підтримки", "Orchestrator: support plan")}
               </div>
 
@@ -500,7 +506,7 @@ export const TeacherOSPage: React.FC = () => {
                     max={30}
                     value={planDraft.limitStudents}
                     onChange={e => setPlanDraft(prev => ({ ...prev, limitStudents: parseIntSafe(e.target.value, prev.limitStudents) }))}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
+                    className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast"
                   />
                 </div>
 
@@ -512,7 +518,7 @@ export const TeacherOSPage: React.FC = () => {
                     max={5}
                     value={planDraft.maxTasksPerStudent}
                     onChange={e => setPlanDraft(prev => ({ ...prev, maxTasksPerStudent: parseIntSafe(e.target.value, prev.maxTasksPerStudent) }))}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
+                    className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast"
                   />
                 </div>
 
@@ -524,7 +530,7 @@ export const TeacherOSPage: React.FC = () => {
                     max={30}
                     value={planDraft.deadlineDays}
                     onChange={e => setPlanDraft(prev => ({ ...prev, deadlineDays: parseIntSafe(e.target.value, prev.deadlineDays) }))}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
+                    className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast"
                   />
                 </div>
 
@@ -533,7 +539,7 @@ export const TeacherOSPage: React.FC = () => {
                   <select
                     value={planDraft.topicId}
                     onChange={e => setPlanDraft(prev => ({ ...prev, topicId: parseIntSafe(e.target.value, 0) }))}
-                    className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
+                    className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast"
                   >
                     <option value={0}>{tr("Усі теми", "All topics")}</option>
                     {(snapshot?.analytics?.topics || []).map(topic => (
@@ -543,8 +549,8 @@ export const TeacherOSPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-3 p-2 border border-border bg-bg-surface text-xs text-text-muted">
-                {tr("Попередній перегляд", "Preview")}: {snapshot?.riskPlan?.studentsTargeted.length || 0} {tr("учнів", "students")}, {snapshot?.riskPlan?.tasksSelected.length || 0} {tr("задач", "tasks")}
+              <div className="mt-3 rounded-lg p-2.5 border border-border bg-bg-base text-xs text-text-muted">
+                {tr("Попередній перегляд", "Preview")}: <span className="text-text-primary tabular-nums">{snapshot?.riskPlan?.studentsTargeted.length || 0}</span> {tr("учнів", "students")}, <span className="text-text-primary tabular-nums">{snapshot?.riskPlan?.tasksSelected.length || 0}</span> {tr("задач", "tasks")}
               </div>
 
               {(snapshot?.riskPlan?.studentsTargeted?.length || 0) > 0 ? (
@@ -564,9 +570,9 @@ export const TeacherOSPage: React.FC = () => {
               ) : null}
             </Card>
 
-            <Card className="p-4">
-              <div className="text-sm font-mono text-text-primary flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4" />
+            <Card className="p-5">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 mb-3">
+                <Users className="w-3.5 h-3.5 text-primary" />
                 {tr("Risk radar", "Risk radar")}
               </div>
 
@@ -581,13 +587,13 @@ export const TeacherOSPage: React.FC = () => {
                       100
                     );
                     return (
-                      <div key={student.studentId} className="p-3 border border-border bg-bg-surface">
+                      <div key={student.studentId} className="rounded-lg p-3 border border-border bg-bg-base transition-fast hover:border-primary/40">
                         <div className="text-xs font-mono text-text-primary">{student.studentName}</div>
                         <div className="text-[11px] text-text-muted mt-1">
                           {tr("Сер. бал", "Avg score")}: {Math.round(student.avgScore)} · Completion: {Math.round(student.completionRate * 100)}%
                         </div>
-                        <div className="mt-2 h-1.5 w-full bg-bg-base border border-border overflow-hidden">
-                          <div className={`h-full ${riskIndex >= 70 ? "bg-accent-error" : riskIndex >= 40 ? "bg-accent-warning" : "bg-accent-success"}`} style={{ width: `${riskIndex}%` }} />
+                        <div className="mt-2 h-1.5 w-full rounded-full bg-bg-code overflow-hidden">
+                          <div className={`h-full rounded-full ${riskIndex >= 70 ? "bg-accent-error" : riskIndex >= 40 ? "bg-accent-warning" : "bg-accent-success"}`} style={{ width: `${riskIndex}%` }} />
                         </div>
                       </div>
                     );
@@ -596,35 +602,35 @@ export const TeacherOSPage: React.FC = () => {
               )}
             </Card>
 
-            <Card className="p-4">
-              <div className="text-sm font-mono text-text-primary flex items-center gap-2 mb-3">
-                <CheckCircle2 className="w-4 h-4" />
+            <Card className="p-5">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 mb-3">
+                <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
                 {tr("Якість підказок та дайджест", "Hints quality and digest")}
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-text-muted">{tr("Відгуків", "Feedback")}</div>
-                  <div className="text-sm font-mono text-text-primary">{snapshot?.hints?.totalFeedback ?? "—"}</div>
+                <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Відгуків", "Feedback")}</div>
+                  <div className="text-sm font-mono text-text-primary tabular-nums">{snapshot?.hints?.totalFeedback ?? "—"}</div>
                 </div>
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-text-muted">{tr("Helpful score", "Helpful score")}</div>
-                  <div className="text-sm font-mono text-text-primary">{snapshot?.hints ? Math.round(snapshot.hints.helpfulnessScore) : "—"}</div>
+                <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Helpful score", "Helpful score")}</div>
+                  <div className="text-sm font-mono text-text-primary tabular-nums">{snapshot?.hints ? Math.round(snapshot.hints.helpfulnessScore) : "—"}</div>
                 </div>
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-text-muted">{tr("Нові апеляції", "New appeals")}</div>
-                  <div className="text-sm font-mono text-text-primary">{snapshot?.digest?.appeals.newInWindow ?? "—"}</div>
+                <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Нові апеляції", "New appeals")}</div>
+                  <div className="text-sm font-mono text-text-primary tabular-nums">{snapshot?.digest?.appeals.newInWindow ?? "—"}</div>
                 </div>
-                <div className="border border-border bg-bg-surface p-2">
-                  <div className="text-text-muted">{tr("Сер. час (год)", "Avg resolution (h)")}</div>
-                  <div className="text-sm font-mono text-text-primary">{snapshot?.digest ? Math.round(snapshot.digest.appeals.avgResolutionHours) : "—"}</div>
+                <div className="rounded-lg border border-border bg-bg-base p-2.5">
+                  <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted">{tr("Сер. час (год)", "Avg resolution (h)")}</div>
+                  <div className="text-sm font-mono text-text-primary tabular-nums">{snapshot?.digest ? Math.round(snapshot.digest.appeals.avgResolutionHours) : "—"}</div>
                 </div>
               </div>
 
               {snapshot?.hints?.byVariant?.length ? (
                 <div className="flex flex-wrap gap-2">
                   {snapshot.hints.byVariant.map(item => (
-                    <span key={item.variant} className="text-[11px] px-2 py-1 border border-border text-text-muted">
+                    <span key={item.variant} className="text-[11px] font-mono px-2 py-1 rounded-full border border-border text-text-muted">
                       Variant {item.variant}: {item.count} · {Math.round(item.positiveRate)}%
                     </span>
                   ))}

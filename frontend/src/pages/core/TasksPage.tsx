@@ -1160,19 +1160,6 @@ export const TasksPage: React.FC<Props> = ({
     };
   }, [lessonStatus]);
 
-  const sidebarFocusItem = useMemo(() => {
-    for (const section of sidebarSections) {
-      const candidate = section.items.find((item) => item.status !== "GRADED") || section.items[0];
-      if (candidate) {
-        return {
-          sectionTitle: section.title,
-          item: candidate
-        };
-      }
-    }
-    return null;
-  }, [sidebarSections]);
-
   useEffect(() => {
     try {
       localStorage.setItem("studycod_tasks_editor_open", editorOpen ? "1" : "0");
@@ -2311,30 +2298,6 @@ export const TasksPage: React.FC<Props> = ({
         </aside>
 
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          <div className="min-h-10 border-b border-border/60 bg-bg-surface/60 px-2 sm:px-3 py-1 flex items-center justify-between gap-2">
-            <div className="hidden sm:flex items-center gap-1.5 text-xs">
-              <span className="px-2 py-1 rounded-lg border border-border bg-bg-base text-text-primary">{tr("Personal Workspace", "Personal Workspace")}</span>
-              <span className="px-2 py-1 rounded-lg border border-border text-text-secondary">{tr("IDE режим", "IDE mode")}</span>
-              <span className="px-2 py-1 rounded-lg border border-border text-text-secondary">{tr("Mission control", "Mission control")}</span>
-            </div>
-            <div className="flex items-center gap-2 whitespace-nowrap">
-              <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-muted">
-                {tr("Стан уроку", "Lesson state")}
-              </span>
-              <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono ${lessonStatusMeta.pillClass}`}>
-                {lessonStatusMeta.label}
-              </span>
-            </div>
-            <div className="hidden xl:flex items-center gap-1 text-[10px] text-text-muted font-mono">
-              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{runShortcutLabel}</span>
-              <span>{tr("запуск", "run")}</span>
-              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{checkShortcutLabel}</span>
-              <span>{tr("перевірка", "check")}</span>
-              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{saveShortcutLabel}</span>
-              <span>{tr("зберегти", "save")}</span>
-            </div>
-          </div>
-
           <div className="flex-1 min-h-0 flex flex-col">
             <div className="flex-1 min-h-0 flex flex-col bg-bg-base">
 
@@ -2384,20 +2347,10 @@ export const TasksPage: React.FC<Props> = ({
           {showTaskHistory && <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-3 border-b border-border/70 bg-bg-surface/75">
                 <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted">
-                      {tr("Статус проходження", "Progress status")}
-                    </div>
-                    <div className={`mt-1 inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono tracking-wide ${lessonStatusMeta.pillClass}`}>
-                      {lessonStatusMeta.label}
-                    </div>
-                    <div className="text-[10px] font-mono text-text-muted mt-1">
-                      {lessonStatusMeta.hint}
-                    </div>
-                  </div>
-                  <Badge color={sidebarStats.progress >= 100 ? "success" : sidebarStats.progress >= 50 ? "info" : "warn"}>
-                    {sidebarStats.progress}%
-                  </Badge>
+                  <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono tracking-wide ${lessonStatusMeta.pillClass}`}>
+                    {lessonStatusMeta.label}
+                  </span>
+                  <span className="text-[11px] font-mono text-text-secondary">{sidebarStats.progress}%</span>
                 </div>
                 <div className="mt-2 h-1.5 rounded-full bg-bg-hover overflow-hidden">
                   <div
@@ -2405,41 +2358,10 @@ export const TasksPage: React.FC<Props> = ({
                     style={{ width: `${sidebarStats.progress}%` }}
                   />
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-1 text-[10px] font-mono">
-                  <div className="rounded-md border border-border/70 bg-bg-base/50 px-2 py-1">
-                    <div className="text-text-primary">{sidebarStats.completed}</div>
-                    <div className="text-text-muted">{tr("Готово", "Done")}</div>
-                  </div>
-                  <div className="rounded-md border border-border/70 bg-bg-base/50 px-2 py-1">
-                    <div className="text-text-primary">{sidebarStats.reviewing}</div>
-                    <div className="text-text-muted">{tr("На перевірці", "Review")}</div>
-                  </div>
-                  <div className="rounded-md border border-border/70 bg-bg-base/50 px-2 py-1">
-                    <div className="text-text-primary">{sidebarStats.inProgress}</div>
-                    <div className="text-text-muted">{tr("Активні", "Active")}</div>
-                  </div>
-                </div>
-
-                <div className="mt-2 rounded-xl border border-border/70 bg-bg-base/35 p-2.5">
-                  <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted">
-                    {tr("Фокус-сесія", "Focus session")}
-                  </div>
-                  {sidebarFocusItem ? <button
-                      type="button"
-                      onClick={() => openSidebarTask(sidebarFocusItem.item.openTask)}
-                      className="mt-1 w-full text-left rounded-lg border border-border/60 bg-bg-surface/55 px-2 py-1.5 hover:bg-bg-hover transition-fast"
-                    >
-                      <div className="text-xs font-mono text-text-primary truncate">{sidebarFocusItem.item.renderTitle}</div>
-                      <div className="mt-0.5 flex items-center gap-1 text-[10px] font-mono text-text-secondary min-w-0">
-                        <span className="truncate">{sidebarFocusItem.sectionTitle}</span>
-                        {sidebarFocusItem.item.stageLabel ? <>
-                            <span className="text-text-muted">•</span>
-                            <span className="truncate">{sidebarFocusItem.item.stageLabel}</span>
-                          </> : null}
-                      </div>
-                    </button> : <div className="mt-1 text-[10px] font-mono text-text-secondary">
-                      {tr("Усі задачі закриті — можна генерувати нову.", "All tasks are done — you can generate a new one.")}
-                    </div>}
+                <div className="mt-2 flex items-center gap-3 text-[10px] font-mono text-text-muted">
+                  <span><span className="text-text-primary">{sidebarStats.completed}</span> {tr("готово", "done")}</span>
+                  <span><span className="text-text-primary">{sidebarStats.reviewing}</span> {tr("на перевірці", "review")}</span>
+                  <span><span className="text-text-primary">{sidebarStats.inProgress}</span> {tr("активні", "active")}</span>
                 </div>
               </div>
 
@@ -2471,41 +2393,30 @@ export const TasksPage: React.FC<Props> = ({
                       const lessonChip = Number.isFinite(lessonInTopic) && lessonInTopic > 0
                         ? tr(`Урок ${lessonInTopic}`, `Lesson ${lessonInTopic}`)
                         : null;
-                      return <button type="button" key={item.id} className={`group relative w-full rounded-xl border p-3 text-left transition-fast ${isActive ? "border-primary/70 bg-primary/10 shadow-[0_0_0_1px_rgba(34,211,238,0.08)]" : "border-border/70 bg-bg-surface/70 hover:border-primary/45 hover:bg-bg-hover/60"}`} onClick={() => {
+                      const markerLabel = item.isGroupedControl
+                        ? tr("Control work", "Control work")
+                        : isPersonalControlQuizByTask(item.openTask)
+                          ? tr("Quiz step", "Quiz step")
+                          : null;
+                      return <button type="button" key={item.id} title={`${item.renderTitle} · ${statusMeta.label}${lessonChip ? ` · ${lessonChip}` : ""}`} className={`group relative w-full rounded-lg border p-2.5 text-left transition-fast ${isActive ? "border-primary/70 bg-primary/10 shadow-[0_0_0_1px_rgba(34,211,238,0.08)]" : "border-border/70 bg-bg-surface/70 hover:border-primary/45 hover:bg-bg-hover/60"}`} onClick={() => {
                           openSidebarTask(item.openTask);
                         }} aria-current={isActive ? "true" : undefined}>
-                          <span className={`absolute left-0 top-0 h-full w-1 rounded-l-xl transition-fast ${isActive ? "bg-primary" : "bg-transparent group-hover:bg-primary/45"}`} />
+                          <span className={`absolute left-0 top-0 h-full w-1 rounded-l-lg transition-fast ${isActive ? "bg-primary" : "bg-transparent group-hover:bg-primary/45"}`} />
                           <div className="pl-2">
-                            {item.isGroupedControl ? <div className="mb-1 inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
-                                {tr("Control work", "Control work")}
-                              </div> : isPersonalControlQuizByTask(item.openTask) ? <div className="mb-1 inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
-                                {tr("Quiz step", "Quiz step")}
-                              </div> : null}
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`flex-shrink-0 h-2 w-2 rounded-full ${statusMeta.dotClass}`} />
                               <div className="min-w-0 flex-1">
                                 <div className="text-xs font-mono text-text-primary truncate">
                                   {item.renderTitle}
                                 </div>
-                                {item.stageLabel ? <div className="mt-0.5 text-[10px] font-mono text-text-secondary truncate">
-                                    {item.stageLabel}
+                                {(markerLabel || item.stageLabel) ? <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-text-muted min-w-0">
+                                    {markerLabel ? <span className="text-primary flex-shrink-0">{markerLabel}</span> : null}
+                                    {markerLabel && item.stageLabel ? <span className="text-border">·</span> : null}
+                                    {item.stageLabel ? <span className="truncate">{item.stageLabel}</span> : null}
                                   </div> : null}
                               </div>
-                              <span className={`mt-0.5 h-2.5 w-2.5 rounded-full ${statusMeta.dotClass}`} />
                             </div>
-                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[10px] font-mono text-text-muted">
-                                  {new Date(item.createdAt).toLocaleDateString(locale)}
-                                </span>
-                                {lessonChip ? <span className="inline-flex items-center rounded border border-border/70 bg-bg-base/60 px-1.5 py-0.5 text-[9px] font-mono text-text-secondary">
-                                    {lessonChip}
-                                  </span> : null}
-                              </div>
-                              <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${statusMeta.pillClass}`}>
-                                {statusMeta.label}
-                              </span>
-                            </div>
-                            <div className="mt-2 h-1.5 rounded-full bg-bg-hover overflow-hidden">
+                            <div className="mt-2 h-1 rounded-full bg-bg-hover overflow-hidden">
                               <div
                                 className={`h-full transition-slow ${item.status === "GRADED" ? "bg-accent-success" : item.status === "SUBMITTED" ? "bg-secondary" : "bg-accent-warn"}`}
                                 style={{ width: `${itemProgress}%` }}
@@ -2594,48 +2505,29 @@ export const TasksPage: React.FC<Props> = ({
 
         {activeCenterTab === "mission" ? (active ? <>
               {}
-              <div className="border-b border-border/70 bg-gradient-to-b from-bg-surface to-bg-surface/75 p-4 flex-shrink-0">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
+              <div className="border-b border-border/70 bg-bg-surface/70 px-4 py-3 flex-shrink-0">
+                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
-                    <div className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/50 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted">
-                      {tr("Mission focus", "Mission focus")}
-                    </div>
-                    <h1 className="mt-2 text-lg font-mono text-text-primary mb-1 truncate">{active.title}</h1>
-                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-text-secondary">
-                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
-                        {active.kind === "CONTROL" ? tr("Контроль знань", "Knowledge check") : tr("Тема", "Topic")}
-                      </span>
-                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
-                        {activeTaskModeLabel}
-                      </span>
-                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
-                        {tr("Difus:", "Difficulty:")} {user.difus}
-                      </span>
-                      {hasActiveLessonInTopic ? <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/55 px-2 py-0.5">
-                          {tr(`Урок ${activeLessonInTopic}`, `Lesson ${activeLessonInTopic}`)}
-                        </span> : null}
-                      {activeTaskStatusMeta ? <span className={`inline-flex items-center rounded-md border px-2 py-0.5 ${activeTaskStatusMeta.pillClass}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h1 className="text-base font-mono text-text-primary truncate">{active.title}</h1>
+                      {activeTaskStatusMeta ? <span className={`inline-flex flex-shrink-0 items-center rounded-md border px-2 py-0.5 text-[10px] font-mono ${activeTaskStatusMeta.pillClass}`}>
                           {activeTaskStatusMeta.label}
                         </span> : null}
                     </div>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-text-secondary">
-                      {activeSectionProgress ? <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/45 px-2 py-0.5">
-                          {tr("Тема", "Topic")} · {activeSectionProgress.sectionTitle}: {activeSectionProgress.completed}/{activeSectionProgress.total} ({activeSectionProgress.progress}%)
-                        </span> : null}
-                      <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/45 px-2 py-0.5">
-                        {tr("Загальний прогрес", "Overall progress")}: {sidebarStats.completed}/{sidebarStats.total}
-                      </span>
-                      {sidebarStats.reviewing > 0 ? <span className="inline-flex items-center rounded-md border border-border/70 bg-bg-base/45 px-2 py-0.5">
-                          {tr("На перевірці", "In review")}: {sidebarStats.reviewing}
-                        </span> : null}
-                    </div>
-
-                    <div className="mt-2 h-1.5 w-full max-w-[380px] rounded-full bg-bg-hover overflow-hidden">
-                      <div
-                        className={`h-full transition-slow ${sidebarStats.progress >= 100 ? "bg-accent-success" : "bg-primary"}`}
-                        style={{ width: `${sidebarStats.progress}%` }}
-                      />
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-text-muted">
+                      <span>{active.kind === "CONTROL" ? tr("Контроль знань", "Knowledge check") : tr("Тема", "Topic")}</span>
+                      <span className="text-border">·</span>
+                      <span>{activeTaskModeLabel}</span>
+                      <span className="text-border">·</span>
+                      <span>{tr("Difus:", "Difficulty:")} {user.difus}</span>
+                      {hasActiveLessonInTopic ? <>
+                          <span className="text-border">·</span>
+                          <span>{tr(`Урок ${activeLessonInTopic}`, `Lesson ${activeLessonInTopic}`)}</span>
+                        </> : null}
+                      {activeSectionProgress ? <>
+                          <span className="text-border">·</span>
+                          <span className="truncate max-w-[220px]">{activeSectionProgress.sectionTitle}: {activeSectionProgress.completed}/{activeSectionProgress.total}</span>
+                        </> : null}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2685,7 +2577,7 @@ export const TasksPage: React.FC<Props> = ({
                     }
                     handleSaveDraft();
                   }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2" title={saveShortcutLabel}>
-                          <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{saveShortcutLabel}</span>
+                          <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")}
                         </Button>
                         <Button variant="secondary" onClick={() => {
                     if (!editorOpen) {
@@ -2694,7 +2586,7 @@ export const TasksPage: React.FC<Props> = ({
                     }
                     handleRun();
                   }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2" title={runShortcutLabel}>
-                          <PlayCircle className="w-4 h-4 mr-2" /> {tr("Запустити", "Run")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{runShortcutLabel}</span>
+                          <PlayCircle className="w-4 h-4 mr-2" /> {tr("Запустити", "Run")}
                         </Button>
                         <Button variant="primary" onClick={() => {
                     if (!editorOpen) {
@@ -2704,7 +2596,7 @@ export const TasksPage: React.FC<Props> = ({
                     handleSubmit();
                   }} disabled={!canEdit || submitting || !theoryAcknowledged || !currentCodeText.trim()} className="text-sm px-6 py-2" title={checkShortcutLabel}>
                           <CheckCircle2 className="w-4 h-4 mr-2" />{" "}
-                          {tr("Перевірити", "Check")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{checkShortcutLabel}</span>
+                          {tr("Перевірити", "Check")}
                         </Button>
                       </>}
                       </> : aiResult.total < 6 ? <>
@@ -2808,31 +2700,27 @@ export const TasksPage: React.FC<Props> = ({
                     }}
                     className="col-span-1 lg:col-span-6 min-h-0 h-full rounded-2xl border border-border/70 bg-bg-surface/80 overflow-hidden flex flex-col"
                   >
-                    <div className="h-8 px-3 border-b border-border/60 bg-bg-surface/70 flex items-center justify-between text-[11px] text-text-secondary uppercase tracking-wider">
+                    <div className="h-8 px-3 border-b border-border/60 bg-bg-surface/70 flex items-center justify-between text-[10px] font-mono text-text-muted uppercase tracking-[0.14em]">
                       <span className="inline-flex items-center gap-1.5">
                         {block === "statement" ? <FolderCode className="w-3.5 h-3.5" /> : <TerminalSquare className="w-3.5 h-3.5" />}
-                        <span>{block === "statement" ? tr("Блок задачі", "Task block") : tr("Блок редактора", "Editor block")}</span>
-                        <span className="hidden xl:inline text-[10px] normal-case tracking-normal text-text-muted">
-                          {block === "statement" ? tr("умова / приклади", "statement / examples") : tr("код / виконання", "code / execution")}
-                        </span>
+                        <span>{block === "statement" ? tr("Завдання", "Task") : tr("Редактор", "Editor")}</span>
                       </span>
                       <span
                         draggable
                         onDragStart={() => setDraggingMissionBlock(block)}
                         onDragEnd={() => setDraggingMissionBlock(null)}
-                        className="inline-flex items-center gap-1 cursor-grab text-text-muted"
+                        className="inline-flex items-center cursor-grab text-text-muted/70 hover:text-text-secondary transition-fast"
+                        title={tr("Перетягни блок", "Drag block")}
+                        aria-label={tr("Перетягни блок", "Drag block")}
                       >
-                        <GripVertical className="w-3.5 h-3.5" /> {tr("перетягни", "drag")}
+                        <GripVertical className="w-3.5 h-3.5" />
                       </span>
                     </div>
 
                     {block === "statement" ? (
                       <div className="flex-1 min-h-0 border-t-0 border-border bg-bg-code overflow-hidden flex flex-col">
-                        <div className="p-3 border-b border-border flex-shrink-0">
-                          <div className="text-xs font-mono text-text-secondary">
-                            {tr("Практичне завдання", "Practical task")}
-                          </div>
-                          <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+                        <div className="px-3 py-2 border-b border-border flex-shrink-0">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
                             <div className="flex items-center gap-1 flex-wrap">
                               {practiceTabItems.map(([id, label]) => (
                                 <button

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
@@ -15,6 +16,24 @@ type GradebookGrade = GradebookStudent["grades"][number];
 
 const THEMATIC_CANONICAL_NAME = "THEMATIC";
 const PRACTICE_WORK_PAGE_SIZE = 20;
+
+const CountUp: React.FC<{ value: number }> = ({ value }) => {
+  const reduce = useReducedMotion();
+  const [display, setDisplay] = useState(reduce ? value : 0);
+  useEffect(() => {
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: latest => setDisplay(Math.round(latest))
+    });
+    return () => controls.stop();
+  }, [value, reduce]);
+  return <>{display}</>;
+};
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return getErrorMessageFromUnknown(error, fallback);
@@ -396,26 +415,31 @@ export const ClassGradebookPage: React.FC = () => {
     lessonTitle: l.parentTitle || l.title,
     lessonType: l.type
   })));
-  return <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 p-3 sm:p-4 md:p-6 pb-3 sm:pb-4">
+  const totalColumns = gradebook.lessons.reduce((sum, l) => sum + l.tasks.length, 0);
+  const gradedCount = gradebook.students.reduce((sum, s) => sum + s.grades.filter(g => g.grade !== null && g.grade !== undefined).length, 0);
+  return <div className="flex-1 flex flex-col overflow-hidden bg-bg-base">
+      <div className="flex-shrink-0 px-4 md:px-8 pt-8 pb-4">
         <div className="max-w-full mx-auto">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-6">
-            <div className="flex items-center gap-4">
+          {/* Hero */}
+          <span className="font-mono text-xs text-primary/70">// gradebook</span>
+          <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{t('gradebook')}</h1>
+              <p className="mt-1.5 text-sm text-text-secondary">
+                {tr("Оцінки за практичні, контрольні та тематичні — у єдиному журналі.", "Practice, control and thematic grades — in a single gradebook.")}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end shrink-0">
               <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}`)}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 {t('back')}
               </Button>
-              <h1 className="text-2xl font-mono text-text-primary">{t('gradebook')}</h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              <span className="px-2 py-1 text-[10px] border border-border text-text-muted">
-                {tr("Шкала", "Scale")}: {gradingSystemLabel(activeGradingSystem, !!isEn)}
-              </span>
               <Button variant="ghost" onClick={() => setShowCreateThematic(true)} disabled={calculatingThematic}>
+                <Calculator className="w-4 h-4 mr-2" />
                 {tr("Порахувати тематичну", "Calculate thematic")}
               </Button>
               <Button variant="ghost" onClick={recalculateAllThematics} disabled={calculatingThematic}>
-                {tr("Порахувати всі тематичні", "Calculate all thematics")}
+                {tr("Усі тематичні", "All thematics")}
               </Button>
               <Button onClick={exportToCSV}>
                 <Download className="w-4 h-4 mr-2" />
@@ -424,53 +448,72 @@ export const ClassGradebookPage: React.FC = () => {
             </div>
           </div>
 
-          {}
-          <Card className="p-4 mb-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-mono text-text-secondary">{t("filter")}:</span>
-              <button onClick={() => setSelectedLesson("all")} className={`px-3 py-1 text-xs font-mono border transition-fast ${selectedLesson === "all" ? "border-primary bg-bg-hover text-text-primary" : "border-border text-text-secondary hover:text-text-primary"}`}>
-                {tr("Всі уроки", "All lessons")}
-              </button>
-              {(() => {
-              const topicsMap = new Map<number, {
-                id: number;
-                title: string;
-              }>();
-              for (const l of gradebook.lessons) {
-                if (l.type === "TOPIC") {
-                  topicsMap.set(l.id, {
-                    id: l.id,
-                    title: l.title
+          {/* Inline key stats */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={gradebook.students.length} /></span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t('student')}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={totalColumns} /></span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Колонки", "Columns")}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={gradedCount} /></span>
+              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Оцінки", "Grades")}</span>
+            </div>
+            <span className="px-2 py-1 text-[10px] font-mono rounded-full border border-border text-text-muted">
+              {tr("Шкала", "Scale")}: {gradingSystemLabel(activeGradingSystem, !!isEn)}
+            </span>
+          </div>
+
+          <div className="mt-6 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+          {/* Filter */}
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-mono uppercase tracking-[0.08em] text-text-muted">{t("filter")}:</span>
+            <button onClick={() => setSelectedLesson("all")} className={`px-3 py-1 text-xs font-mono rounded-full border transition-fast ${selectedLesson === "all" ? "border-primary bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:border-primary/40"}`}>
+              {tr("Всі уроки", "All lessons")}
+            </button>
+            {(() => {
+            const topicsMap = new Map<number, {
+              id: number;
+              title: string;
+            }>();
+            for (const l of gradebook.lessons) {
+              if (l.type === "TOPIC") {
+                topicsMap.set(l.id, {
+                  id: l.id,
+                  title: l.title
+                });
+              } else if (l.type === "CONTROL" && l.parentId && l.parentTitle) {
+                if (!topicsMap.has(l.parentId)) {
+                  topicsMap.set(l.parentId, {
+                    id: l.parentId,
+                    title: l.parentTitle
                   });
-                } else if (l.type === "CONTROL" && l.parentId && l.parentTitle) {
-                  if (!topicsMap.has(l.parentId)) {
-                    topicsMap.set(l.parentId, {
-                      id: l.parentId,
-                      title: l.parentTitle
-                    });
-                  }
                 }
               }
-              return Array.from(topicsMap.values()).map(topic => <button key={`TOPIC-${topic.id}`} onClick={() => setSelectedLesson(topic.id)} className={`px-3 py-1 text-xs font-mono border transition-fast ${selectedLesson === topic.id ? "border-primary bg-bg-hover text-text-primary" : "border-border text-text-secondary hover:text-text-primary"}`}>
-                    {topic.title}
-                  </button>);
-            })()}
-            </div>
-          </Card>
+            }
+            return Array.from(topicsMap.values()).map(topic => <button key={`TOPIC-${topic.id}`} onClick={() => setSelectedLesson(topic.id)} className={`px-3 py-1 text-xs font-mono rounded-full border transition-fast ${selectedLesson === topic.id ? "border-primary bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:border-primary/40"}`}>
+                  {topic.title}
+                </button>);
+          })()}
+          </div>
         </div>
       </div>
 
       {}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 pb-3 sm:pb-6">
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-6">
         <div className="max-w-full mx-auto">
           {}
-          <Card className="p-0">
-            <div className="overflow-auto max-h-[calc(100dvh-260px)]">
+          <div className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+            <div className="overflow-auto max-h-[calc(100dvh-300px)]">
               <div className="min-w-full">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-border bg-bg-surface">
-                      <th className="px-4 py-3 text-left text-sm font-mono text-text-primary sticky left-0 top-0 bg-bg-surface z-30 border-r border-border">
+                      <th className="px-4 py-3 text-left text-xs font-mono uppercase tracking-[0.08em] text-text-muted sticky left-0 top-0 bg-bg-surface z-30 border-r border-border">
                         {t('student')}
                       </th>
                       {allTasks.map(task => <th key={`${task.type}-${task.id}`} className="px-3 py-3 text-center text-xs font-mono text-text-secondary border-r border-border min-w-[80px] relative group sticky top-0 bg-bg-surface z-20" title={`${task.lessonTitle} - ${task.title}`}>
@@ -535,8 +578,8 @@ export const ClassGradebookPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {gradebook.students.map(student => <tr key={student.studentId} className="border-b border-border hover:bg-bg-hover transition-fast">
-                        <td className="px-4 py-2 text-sm font-mono text-text-primary sticky left-0 bg-bg-base z-10 border-r border-border">
+                    {gradebook.students.map(student => <tr key={student.studentId} className="border-b border-border hover:bg-bg-hover transition-fast group/row">
+                        <td className="px-4 py-2 text-sm font-mono text-text-primary sticky left-0 bg-bg-base z-10 border-r border-border group-hover/row:bg-bg-hover transition-fast">
                           {student.studentName}
                         </td>
                         {allTasks.map(task => {
@@ -550,11 +593,11 @@ export const ClassGradebookPage: React.FC = () => {
                 </table>
               </div>
             </div>
-          </Card>
+          </div>
 
-          {gradebook.students.length === 0 && <Card className="p-8 text-center">
+          {gradebook.students.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
               <p className="text-text-secondary">{t('noStudents')}</p>
-            </Card>}
+            </div>}
         </div>
       </div>
 
