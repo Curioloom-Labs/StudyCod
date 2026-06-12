@@ -4,7 +4,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, MessageSquare, RefreshCw } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import {
   getClass,
   getClassGradeAppeal,
@@ -346,21 +345,27 @@ export const TeacherClassAppealsPage: React.FC = () => {
     return <PageSkeleton variant="default" />;
   }
 
+  const overdueCount = appeals.filter(a => a.isEscalated || a.escalationLevel === "ESCALATED" || a.slaState === "OVERDUE").length;
+
   return (
-    <div className="p-3 sm:p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+    <div className="min-h-full bg-bg-base">
+      {/* Hero */}
+      <div className="px-4 md:px-8 pt-8 pb-6 max-w-7xl mx-auto">
+        <span className="font-mono text-xs text-primary/70">// appeals</span>
+        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+              {tr("Апеляції класу", "Class appeals")}{className ? <span className="text-text-muted font-normal"> · {className}</span> : ""}
+            </h1>
+            <p className="mt-1.5 text-sm text-text-secondary">
+              {tr("Черга апеляцій за оцінки — від пріоритетних до завершених.", "Grade appeals queue — from priority cases to resolved ones.")}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classIdNum}`)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("До класу", "Back to class")}
             </Button>
-            <h1 className="text-2xl font-mono text-text-primary">{tr("Апеляції класу", "Class appeals")}{className ? ` • ${className}` : ""}</h1>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant={filterMode === "ACTIVE" ? "primary" : "ghost"} onClick={() => setFilterMode("ACTIVE")}>{tr("Активні", "Active")}</Button>
-            <Button variant={filterMode === "ALL" ? "primary" : "ghost"} onClick={() => setFilterMode("ALL")}>{tr("Усі", "All")}</Button>
-            <Button variant={filterMode === "RESOLVED" ? "primary" : "ghost"} onClick={() => setFilterMode("RESOLVED")}>{tr("Завершені", "Resolved")}</Button>
             <Button variant="ghost" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
               {tr("Оновити", "Refresh")}
@@ -368,52 +373,80 @@ export const TeacherClassAppealsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Inline key stats */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{appeals.length}</span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("У черзі", "In queue")}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className={`font-mono text-2xl md:text-3xl tabular-nums ${overdueCount > 0 ? "text-accent-error" : "text-text-primary"}`}>{overdueCount}</span>
+            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Пріоритет", "Priority")}</span>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button variant={filterMode === "ACTIVE" ? "primary" : "ghost"} onClick={() => setFilterMode("ACTIVE")}>{tr("Активні", "Active")}</Button>
+          <Button variant={filterMode === "ALL" ? "primary" : "ghost"} onClick={() => setFilterMode("ALL")}>{tr("Усі", "All")}</Button>
+          <Button variant={filterMode === "RESOLVED" ? "primary" : "ghost"} onClick={() => setFilterMode("RESOLVED")}>{tr("Завершені", "Resolved")}</Button>
+        </div>
+      </div>
+
+      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+
+      <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-5 space-y-3">
             {appeals.length === 0 ? (
-              <Card className="p-6 text-center text-text-secondary">
-                <div className="font-mono text-sm">{tr("Немає апеляцій", "No appeals")}</div>
-              </Card>
+              <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                  <MessageSquare className="w-6 h-6 text-primary" />
+                </div>
+                <p className="font-mono text-sm text-text-secondary">{tr("Немає апеляцій", "No appeals")}</p>
+              </div>
             ) : (
-              appeals.map(item => (
-                <Card
-                  key={item.id}
-                  className={`p-4 cursor-pointer transition-fast ${selectedAppealId === item.id ? "border-primary bg-bg-hover" : "hover:bg-bg-hover"}`}
-                  onClick={() => setSelectedAppealId(item.id)}
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="min-w-0">
-                      <div className="text-sm font-mono text-text-primary truncate">#{item.id} • {item.studentName}</div>
-                      <div className="text-xs text-text-secondary mt-1 line-clamp-1">{item.targetTitle}</div>
+              appeals.map(item => {
+                const priorityBadge = getSlaBadge(item);
+                const isPriority = item.isEscalated || item.escalationLevel === "ESCALATED" || item.slaState === "OVERDUE";
+                const isSelected = selectedAppealId === item.id;
+                return (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={`w-full text-left rounded-xl border p-4 cursor-pointer transition-fast hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${isSelected ? "border-primary bg-primary/5 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]" : isPriority ? "border-accent-error/40 bg-accent-error/5 hover:border-accent-error/60" : "border-border bg-bg-surface hover:border-primary/40"}`}
+                    onClick={() => setSelectedAppealId(item.id)}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-mono text-text-primary truncate">#{item.id} • {item.studentName}</div>
+                        <div className="text-xs text-text-secondary mt-1 line-clamp-1">{item.targetTitle}</div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-[10px] font-mono px-2 py-1 rounded-full border border-border text-text-secondary whitespace-nowrap">{formatAppealStatus(item.status)}</span>
+                        {priorityBadge ? <span className={`text-[10px] font-mono px-2 py-1 rounded-full border whitespace-nowrap ${priorityBadge.className}`}>{priorityBadge.text}</span> : null}
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-[10px] px-2 py-1 border border-border text-text-secondary whitespace-nowrap">{formatAppealStatus(item.status)}</span>
-                      {(() => {
-                        const badge = getSlaBadge(item);
-                        if (!badge) return null;
-                        return <span className={`text-[10px] px-2 py-1 border whitespace-nowrap ${badge.className}`}>{badge.text}</span>;
-                      })()}
-                    </div>
-                  </div>
-                  <div className="text-xs text-text-muted line-clamp-2">{item.reasonText}</div>
-                  <div className="mt-2 text-[11px] text-text-muted">{formatDateTime(item.lastMessageAt || item.createdAt)}</div>
-                  {getSlaHint(item) ? (
-                    <div className="mt-1 text-[11px] text-text-muted">{getSlaHint(item)}</div>
-                  ) : null}
-                </Card>
-              ))
+                    <div className="text-xs text-text-muted line-clamp-2">{item.reasonText}</div>
+                    <div className="mt-2 text-[11px] text-text-muted">{formatDateTime(item.lastMessageAt || item.createdAt)}</div>
+                    {getSlaHint(item) ? (
+                      <div className="mt-1 text-[11px] text-text-muted">{getSlaHint(item)}</div>
+                    ) : null}
+                  </button>
+                );
+              })
             )}
           </div>
 
           <div className="lg:col-span-7">
             {!selectedAppealId ? (
-              <Card className="p-6 text-center text-text-secondary">{tr("Оберіть апеляцію", "Select an appeal")}</Card>
+              <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center text-text-secondary">{tr("Оберіть апеляцію", "Select an appeal")}</div>
             ) : loadingDetail ? (
-              <Card className="p-6 text-center text-text-secondary">{tr("Завантаження деталей...", "Loading details...")}</Card>
+              <div className="rounded-xl border border-border bg-bg-surface p-10 text-center text-text-secondary">{tr("Завантаження деталей...", "Loading details...")}</div>
             ) : !selectedAppeal ? (
-              <Card className="p-6 text-center text-text-secondary">{tr("Апеляцію не знайдено", "Appeal not found")}</Card>
+              <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center text-text-secondary">{tr("Апеляцію не знайдено", "Appeal not found")}</div>
             ) : (
-              <Card className="p-4 sm:p-5 space-y-4">
+              <div className="rounded-xl border border-border bg-bg-surface p-5 sm:p-6 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-mono text-text-primary">#{selectedAppeal.id} • {selectedAppeal.studentName}</h2>
@@ -434,13 +467,13 @@ export const TeacherClassAppealsPage: React.FC = () => {
                 ) : null}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="border border-border p-3">
-                    <div className="text-text-muted mb-1">{tr("Було", "Previous")}</div>
-                    <div className="text-text-primary font-mono">{selectedAppeal.previousGrade ?? "—"}</div>
+                  <div className="rounded-lg border border-border bg-bg-base p-3">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-1">{tr("Було", "Previous")}</div>
+                    <div className="text-lg text-text-primary font-mono tabular-nums">{selectedAppeal.previousGrade ?? "—"}</div>
                   </div>
-                  <div className="border border-border p-3">
-                    <div className="text-text-muted mb-1">{tr("Стало", "New")}</div>
-                    <div className="text-text-primary font-mono">{selectedAppeal.newGrade ?? "—"}</div>
+                  <div className="rounded-lg border border-border bg-bg-base p-3">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-1">{tr("Стало", "New")}</div>
+                    <div className="text-lg text-text-primary font-mono tabular-nums">{selectedAppeal.newGrade ?? "—"}</div>
                   </div>
                 </div>
 
@@ -464,8 +497,8 @@ export const TeacherClassAppealsPage: React.FC = () => {
                 ) : null}
 
                 <div>
-                  <div className="flex items-center gap-2 mb-2 text-sm font-mono text-text-primary">
-                    <MessageSquare className="w-4 h-4" />
+                  <div className="flex items-center gap-2 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted">
+                    <MessageSquare className="w-3.5 h-3.5 text-primary" />
                     {tr("Діалог", "Conversation")}
                   </div>
 
@@ -509,8 +542,8 @@ export const TeacherClassAppealsPage: React.FC = () => {
 
                 {selectedAppeal.canTeacherResolve ? (
                   <div className="space-y-3 border-t border-border pt-4">
-                    <div className="text-sm font-mono text-text-primary flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" />
+                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
                       {tr("Дії вчителя", "Teacher actions")}
                     </div>
 
@@ -587,7 +620,7 @@ export const TeacherClassAppealsPage: React.FC = () => {
                     </div>
                   </div>
                 ) : null}
-              </Card>
+              </div>
             )}
           </div>
         </div>

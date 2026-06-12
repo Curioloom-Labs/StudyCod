@@ -3306,70 +3306,51 @@ export const AdminDashboardPage: React.FC = () => {
       </div>;
   }
   return <div className="h-full flex flex-col bg-bg-base">
-      {}
-      <div className="border-b border-border p-3 sm:p-4 bg-bg-secondary">
+      {/* Hero header */}
+      <div className="border-b border-border px-3 sm:px-4 md:px-6 py-3 bg-bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-mono font-bold text-text-primary flex items-center gap-2">
-            <Shield className="w-6 h-6" />
-            Admin Panel
-          </h1>
+          <div>
+            <span className="font-mono text-xs text-primary/70">// system admin</span>
+            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-text-primary flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              Admin Panel
+            </h1>
+          </div>
           <Button variant="secondary" onClick={() => navigate("/?app=home")}>
-            {t("toHome", {
-              defaultValue: "Exit admin panel"
-            })}
+            {t("toHome", { defaultValue: "Exit admin panel" })}
           </Button>
         </div>
+        <div className="mt-3 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
       </div>
 
-      {}
-      <div className="flex gap-2 p-3 sm:p-4 border-b border-border bg-bg-secondary overflow-x-auto whitespace-nowrap">
-        <Button variant={activeTab === "stats" ? "primary" : "secondary"} onClick={() => setActiveTab("stats")} className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4" />
-          Statistics
-        </Button>
-        <Button variant={activeTab === "users" ? "primary" : "secondary"} onClick={() => setActiveTab("users")} className="flex items-center gap-2">
-          <Users className="w-4 h-4" />
-          Users
-        </Button>
-        <Button variant={activeTab === "classes" ? "primary" : "secondary"} onClick={() => setActiveTab("classes")} className="flex items-center gap-2">
-          <BookOpen className="w-4 h-4" />
-          Classes
-        </Button>
-
-        <Button variant={activeTab === "materials" ? "primary" : "secondary"} onClick={() => setActiveTab("materials")} className="flex items-center gap-2">
-          <FileText className="w-4 h-4" />
-          Materials
-        </Button>
-
-        <Button variant={activeTab === "library" ? "primary" : "secondary"} onClick={() => setActiveTab("library")} className="flex items-center gap-2">
-          <Library className="w-4 h-4" />
-          Library
-        </Button>
-
-        <Button variant={activeTab === "emails" ? "primary" : "secondary"} onClick={() => setActiveTab("emails")} className="flex items-center gap-2">
-          <Mail className="w-4 h-4" />
-          Emails
-        </Button>
-
-        <Button variant={activeTab === "mailbox" ? "primary" : "secondary"} onClick={() => setActiveTab("mailbox")} className="flex items-center gap-2">
-          <Mail className="w-4 h-4" />
-          Mailbox
-        </Button>
-
-        <Button variant={activeTab === "support" ? "primary" : "secondary"} onClick={() => setActiveTab("support")} className="flex items-center gap-2">
-          <Shield className="w-4 h-4" />
-          Support
-        </Button>
-
-        <Button variant={activeTab === "maintenance" ? "primary" : "secondary"} onClick={() => setActiveTab("maintenance")} className="flex items-center gap-2">
-          <Wrench className="w-4 h-4" />
-          Maintenance
-        </Button>
-
-        <Button variant={activeTab === "certificates" ? "primary" : "secondary"} onClick={() => setActiveTab("certificates")} className="flex items-center gap-2">
-          <Award className="w-4 h-4" />
-          Certificates
-        </Button>
+      {/* Tab bar */}
+      <div className="flex gap-1.5 px-3 sm:px-4 py-2 border-b border-border bg-bg-surface overflow-x-auto whitespace-nowrap">
+        {([
+          { key: "stats", icon: BarChart3, label: "Statistics" },
+          { key: "users", icon: Users, label: "Users" },
+          { key: "classes", icon: BookOpen, label: "Classes" },
+          { key: "materials", icon: FileText, label: "Materials" },
+          { key: "library", icon: Library, label: "Library" },
+          { key: "emails", icon: Mail, label: "Emails" },
+          { key: "mailbox", icon: Mail, label: "Mailbox" },
+          { key: "support", icon: Shield, label: "Support" },
+          { key: "maintenance", icon: Wrench, label: "Maintenance" },
+          { key: "certificates", icon: Award, label: "Certificates" },
+        ] as const).map(({ key, icon: Icon, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActiveTab(key as Tab)}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-mono border transition-fast ${
+              activeTab === key
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border bg-bg-code text-text-secondary hover:border-primary/30 hover:text-text-primary"
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {label}
+          </button>
+        ))}
       </div>
 
       {}

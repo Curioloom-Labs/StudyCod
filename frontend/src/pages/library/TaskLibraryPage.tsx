@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronUp, Download, Edit2, GripVertical, Play, Plus, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
+import { animate, motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, ChevronDown, ChevronUp, Download, Edit2, GripVertical, Library, Play, Plus, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
@@ -294,6 +295,28 @@ const formatIssue = (it: unknown): string => {
   const path = Array.isArray(pathRaw) ? pathRaw.join(".") : "";
   const p = path ? `${path}: ` : "";
   return p + String(messageRaw ?? "Invalid input");
+};
+
+const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (reduce) {
+      node.textContent = value.toFixed(decimals);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.8,
+      ease: "easeOut",
+      onUpdate: (v) => {
+        node.textContent = v.toFixed(decimals);
+      },
+    });
+    return () => controls.stop();
+  }, [value, decimals, reduce]);
+  return <span ref={ref} className={className}>{value.toFixed(decimals)}</span>;
 };
 
 export const TaskLibraryPage: React.FC = () => {
@@ -1473,57 +1496,76 @@ export const TaskLibraryPage: React.FC = () => {
   return (
     <div className="p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={leaveLibrary}>
+        <motion.div variants={staggerContainer} initial="initial" animate="animate">
+          <motion.div variants={fadeUpItem}>
+            <Button variant="ghost" onClick={leaveLibrary} className="-ml-2 mb-3">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>
-          </div>
+          </motion.div>
 
-          <div className="flex-1">
-            <h1 className="text-2xl font-mono text-text-primary">{tr("Бібліотека завдань", "Task library")}</h1>
-            <p className="text-text-secondary text-sm mt-1">
-              {tr(
-                "Каталог завдань (із модерацією) + ваші чернетки та відправлені на перевірку.",
-                "Task catalog (moderated) + your drafts and submissions."
-              )}
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button variant={view === "approved" ? "primary" : "ghost"} onClick={() => setView("approved")}>
-                {tr("Каталог", "Catalog")}
-              </Button>
-              {canManage ? (
-                <Button variant={view === "mine" ? "primary" : "ghost"} onClick={() => setView("mine")}>
-                  {tr("Мої", "Mine")}
-                </Button>
-              ) : null}
+          <motion.div variants={fadeUpItem} className="flex items-center gap-2 font-mono text-xs text-primary/70">
+            <Library className="w-3.5 h-3.5" />
+            <span>// library</span>
+          </motion.div>
+          <motion.h1 variants={fadeUpItem} className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+            {tr("Бібліотека завдань", "Task library")}
+          </motion.h1>
+          <motion.p variants={fadeUpItem} className="mt-1.5 text-sm text-text-secondary max-w-2xl">
+            {tr(
+              "Каталог завдань (із модерацією) + ваші чернетки та відправлені на перевірку.",
+              "Task catalog (moderated) + your drafts and submissions."
+            )}
+          </motion.p>
 
-              <div className="ml-0 flex w-full flex-wrap items-center gap-2 md:ml-auto md:w-auto">
-                <Badge color="info">
-                  {tr("Показано", "Shown")}: {visibleTasks.length}
-                </Badge>
-                <Badge color={solvedCount ? "success" : "info"}>
-                  {tr("Виконано", "Solved")}: {solvedCount}
-                </Badge>
-                <Badge color={favoritesCount ? "warn" : "info"}>
-                  {tr("Обрані", "Favorites")}: {favoritesCount}
-                </Badge>
-                {typeof total === "number" && view === "approved" ? (
-                  <Badge color="info">
-                    {tr("Всього", "Total")}: {total}
-                  </Badge>
-                ) : null}
-              </div>
+          <motion.div variants={fadeUpItem} className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Показано", "Shown")}</div>
+              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={visibleTasks.length} /></div>
             </div>
-          </div>
-        </div>
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Виконано", "Solved")}</div>
+              <div className={`mt-1 text-3xl font-mono font-semibold ${solvedCount ? "text-accent-success" : "text-text-primary"}`}><CountUp value={solvedCount} /></div>
+            </div>
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Обрані", "Favorites")}</div>
+              <div className={`mt-1 text-3xl font-mono font-semibold ${favoritesCount ? "text-accent-warn" : "text-text-primary"}`}><CountUp value={favoritesCount} /></div>
+            </div>
+            {typeof total === "number" && view === "approved" ? (
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Всього", "Total")}</div>
+                <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={total} /></div>
+              </div>
+            ) : null}
+          </motion.div>
+
+          <motion.div variants={fadeUpItem} className="mt-5 inline-flex items-center gap-1 rounded-xl border border-border bg-bg-surface p-1">
+            <button
+              type="button"
+              onClick={() => setView("approved")}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-mono transition-fast ${view === "approved" ? "bg-primary/15 text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
+            >
+              {tr("Каталог", "Catalog")}
+            </button>
+            {canManage ? (
+              <button
+                type="button"
+                onClick={() => setView("mine")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono transition-fast ${view === "mine" ? "bg-primary/15 text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
+              >
+                {tr("Мої", "Mine")}
+              </button>
+            ) : null}
+          </motion.div>
+        </motion.div>
+
+        <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Filters */}
-          <Card className="p-4 lg:col-span-3 lg:sticky lg:top-4 lg:self-start">
+          <div className="lg:col-span-3 lg:sticky lg:top-4 lg:self-start rounded-xl border border-border bg-bg-surface p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-mono text-text-primary flex items-center gap-2">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
                 {tr("Фільтри", "Filters")}
                 <button
                   type="button"
@@ -1792,13 +1834,13 @@ export const TaskLibraryPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* List */}
           <div ref={listSectionRef} className="lg:col-span-5">
-          <Card className="p-4">
+          <div className="rounded-xl border border-border bg-bg-surface p-4">
             <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="text-sm font-mono text-text-primary">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">
                 {view === "mine" ? tr("Мої завдання", "My tasks") : tr("Каталог", "Catalog")}
               </div>
 
@@ -1834,14 +1876,17 @@ export const TaskLibraryPage: React.FC = () => {
                 ))}
               </div>
             ) : visibleTasks.length === 0 ? (
-              <div className="p-4 border border-border rounded-lg bg-bg-base">
-                <div className="text-sm font-mono text-text-primary">{tr("Нічого не знайдено", "No results")}</div>
-                <div className="text-sm text-text-secondary mt-1">
+              <div className="rounded-xl border border-dashed border-border bg-bg-base px-4 py-10 text-center">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                  <Search className="w-5 h-5 text-primary" />
+                </div>
+                <div className="text-sm font-medium text-text-primary">{tr("Нічого не знайдено", "No results")}</div>
+                <div className="text-xs text-text-secondary mt-1">
                   {tr("Спробуй змінити фільтри або пошук.", "Try adjusting filters or search.")}
                 </div>
               </div>
             ) : (
-              <div className="space-y-2">
+              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-2">
                 {visibleTasks.map((task) => {
                   const isSelected = selectedId === task.id;
                   const isFav = favoriteIds.has(task.id);
@@ -1855,14 +1900,19 @@ export const TaskLibraryPage: React.FC = () => {
                     : null;
 
                   return (
-                    <div
+                    <motion.div
                       key={task.id}
+                      variants={fadeUpItem}
                       role="button"
                       tabIndex={0}
                       aria-current={isSelected ? "true" : undefined}
                       className={
-                        "w-full text-left p-3 rounded-lg border transition-fast focus:outline-none focus:ring-1 focus:ring-primary " +
-                        (isSelected ? "border-primary bg-bg-hover" : "border-border hover:bg-bg-hover")
+                        "w-full text-left p-3 rounded-xl border transition-fast focus:outline-none focus:ring-1 focus:ring-primary hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] " +
+                        (isSelected
+                          ? "border-primary bg-primary/5"
+                          : task.attempt?.solved
+                            ? "border-accent-success/40 bg-bg-base hover:border-accent-success/60"
+                            : "border-border bg-bg-base hover:border-primary/40")
                       }
                       onClick={() => setSelectedId(task.id)}
                       onKeyDown={(e) => {
@@ -2049,21 +2099,24 @@ export const TaskLibraryPage: React.FC = () => {
                           ) : null}
                         </div>
                       ) : null}
-                    </div>
+                    </motion.div>
                   );
                 })}
-              </div>
+              </motion.div>
             )}
-          </Card>
+          </div>
           </div>
 
           {/* Preview */}
           <div ref={previewSectionRef} className="lg:col-span-4">
-          <Card className="p-4">
+          <div className="rounded-xl border border-border bg-bg-surface p-4 lg:sticky lg:top-4 lg:self-start">
             {!selectedId ? (
-              <div className="p-4 border border-border rounded-lg bg-bg-base">
-                <div className="text-sm font-mono text-text-primary">{tr("Вибери задачу", "Pick a task")}</div>
-                <div className="text-sm text-text-secondary mt-1">
+              <div className="rounded-xl border border-dashed border-border bg-bg-base px-4 py-10 text-center">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                  <Play className="w-5 h-5 text-primary" />
+                </div>
+                <div className="text-sm font-medium text-text-primary">{tr("Вибери задачу", "Pick a task")}</div>
+                <div className="text-xs text-text-secondary mt-1">
                   {tr("Праворуч з'явиться швидкий перегляд умови, теорії та тестів.", "You’ll get a quick preview of statement, theory and tests.")}
                 </div>
               </div>
@@ -2120,12 +2173,12 @@ export const TaskLibraryPage: React.FC = () => {
                   </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
                     {details.task.status === "APPROVED" ? (
-                      <Button variant="ghost" size="sm" onClick={() => navigate(buildSolvePath(details.task))}>
+                      <Button variant="primary" size="sm" onClick={() => navigate(buildSolvePath(details.task))}>
                         <Play className="w-4 h-4 mr-2" />
                         {tr("Розв'язати", "Solve")}
                       </Button>
                     ) : null}
-                    <Button size="sm" onClick={() => handleDownload(details.task.id)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleDownload(details.task.id)}>
                       <Download className="w-4 h-4 mr-2" />
                       {tr("Архів", "Archive")}
                     </Button>
@@ -2214,7 +2267,7 @@ export const TaskLibraryPage: React.FC = () => {
                 ) : null}
               </div>
             )}
-          </Card>
+          </div>
           </div>
         </div>
       </div>

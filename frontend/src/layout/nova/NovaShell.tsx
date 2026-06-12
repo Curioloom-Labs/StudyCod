@@ -40,6 +40,10 @@ import {
 
 const KBD_HINT_SEEN_KEY = "studycod.nova.kbdHintSeen";
 
+// The shell remounts on every top-level route change; replaying the sidebar
+// entrance each time reads as a "nav reload", so play it once per session.
+let sidebarEntrancePlayed = false;
+
 const SIDEBAR_COLLAPSED_KEY = "studycod.nova.sidebarCollapsed";
 
 export type NovaShellProps = {
@@ -389,9 +393,11 @@ export const NovaShell: React.FC<NovaShellProps> = ({
     { dependencies: [current, collapsed], scope: asideRef }
   );
 
-  // First-mount one-shot stagger of the desktop nav buttons.
+  // First-mount one-shot stagger of the desktop nav buttons (once per session).
   useGSAP(
     () => {
+      if (sidebarEntrancePlayed) return;
+      sidebarEntrancePlayed = true;
       gsap.from("[data-nav-id]", {
         autoAlpha: 0,
         x: -8,
@@ -652,7 +658,8 @@ export const NovaShell: React.FC<NovaShellProps> = ({
           ))}
         </nav>
 
-        <div className="shrink-0 border-t border-border p-2 flex flex-col gap-1 overflow-hidden">
+        {/* No overflow-hidden here: the account popover renders above via bottom-full. */}
+        <div className="shrink-0 border-t border-border p-2 flex flex-col gap-1">
           <div className="relative" ref={accountRef}>
             <button
               type="button"
