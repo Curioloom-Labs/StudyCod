@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
+import { PageHero } from "../../components/ui/PageHero";
+import { AuroraList, AuroraRow } from "../../components/ui/AuroraList";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
 import { PageSkeleton } from "../../components/ui/Skeleton";
@@ -42,6 +45,7 @@ export const StudentLessonsPage: React.FC = () => {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const isAurora = useUIMode().mode === "aurora";
   const currentLessonsPath = `${location.pathname}${location.search}`;
   const openLesson = (id: number, type: "TOPIC" | "CONTROL") => {
     navigate(`/edu/lessons/${id}?type=${type}`, {
@@ -91,19 +95,12 @@ export const StudentLessonsPage: React.FC = () => {
   const pinnedCount = announcements.filter(a => a.pinned).length;
 
   return <div className="min-h-full bg-bg-base">
-      {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto">
-        <span className="font-mono text-xs text-primary/70">// lessons</span>
-        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-              {t("lessons")}{classInfo?.name && <span className="text-text-muted font-normal"> · {classInfo.name}</span>}
-            </h1>
-            <p className="mt-1.5 text-sm text-text-secondary">
-              {tr("Ваш навчальний маршрут — теми, практика та контрольні роботи.", "Your learning path — topics, practice and control works.")}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+      <PageHero
+        eyebrowClassic="// lessons"
+        eyebrowAurora={tr("Уроки", "Lessons")}
+        title={<>{t("lessons")}{classInfo?.name && <span className="text-text-muted font-normal"> · {classInfo.name}</span>}</>}
+        subtitle={tr("Ваш навчальний маршрут — теми, практика та контрольні роботи.", "Your learning path — topics, practice and control works.")}
+        actions={<>
             {classInfo?.id && (
               <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classInfo.id}/live`)}>
                 <Video className="w-4 h-4 mr-2" />
@@ -118,27 +115,13 @@ export const StudentLessonsPage: React.FC = () => {
               <MessageSquare className="w-4 h-4 mr-2" />
               {tr("Апеляції", "Appeals")}
             </Button>
-          </div>
-        </div>
-
-        {/* Inline key stats */}
-        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={topics.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t("topic")}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={controls.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Контрольні", "Control works")}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={topics.reduce((s, x) => s + (x.tasksCount || 0), 0)} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Практичних", "Practice")}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+          </>}
+        stats={[
+          { value: <CountUp value={topics.length} />, label: t("topic") },
+          { value: <CountUp value={controls.length} />, label: tr("Контрольні", "Control works") },
+          { value: <CountUp value={topics.reduce((s, x) => s + (x.tasksCount || 0), 0)} />, label: tr("Практичних", "Practice") }
+        ]}
+      />
 
       <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto space-y-8">
         {/* Announcements */}
@@ -199,6 +182,43 @@ export const StudentLessonsPage: React.FC = () => {
               </div>
               <p className="text-text-secondary">{tr("Поки немає уроків", "No lessons yet")}</p>
             </div>
+          ) : isAurora ? (
+            <AuroraList>
+              {topics.map((topic, idx) => {
+                const topicControls = controlsByTopic.get(topic.id) || [];
+                return (
+                  <React.Fragment key={`${topic.type}-${topic.id}`}>
+                    <AuroraRow
+                      leading={<span className="w-7 h-7 rounded-full border border-border bg-bg-surface flex items-center justify-center font-mono text-[11px] text-text-muted">{idx + 1}</span>}
+                      title={topic.title}
+                      meta={`${tr("Практичних", "Practice")}: ${topic.tasksCount}${topicControls.length ? ` · ${tr("Контрольних", "Control works")}: ${topicControls.length}` : ""}`}
+                      trailing={<ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-fast" />}
+                      onClick={() => openLesson(topic.id, "TOPIC")}
+                    />
+                    {topicControls.map(cw => (
+                      <AuroraRow
+                        key={`CONTROL-${cw.id}`}
+                        leading={<ShieldCheck className="w-4 h-4 text-accent-warn ml-7" />}
+                        title={cw.title}
+                        meta={`${tr("Контрольна", "Control work")}${cw.timeLimitMinutes ? ` · ${cw.timeLimitMinutes} ${t("min")}` : ""} · ${tr("Завдань", "Tasks")}: ${cw.tasksCount}`}
+                        trailing={<ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-fast" />}
+                        onClick={() => openLesson(cw.id, "CONTROL")}
+                      />
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+              {orphanControls.map(cw => (
+                <AuroraRow
+                  key={`ORPHAN-${cw.id}`}
+                  leading={<ShieldCheck className="w-4 h-4 text-accent-warn" />}
+                  title={cw.title}
+                  meta={`${tr("Контрольна (без теми)", "Control work (no topic)")} · ${tr("Завдань", "Tasks")}: ${cw.tasksCount}`}
+                  trailing={<ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-fast" />}
+                  onClick={() => openLesson(cw.id, "CONTROL")}
+                />
+              ))}
+            </AuroraList>
           ) : (
             <motion.div variants={staggerContainer} initial="initial" animate="animate" className="relative space-y-4">
               {/* Connecting spine */}

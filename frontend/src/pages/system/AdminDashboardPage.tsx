@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Card } from "../../components/ui/Card";
 import { createCertificateTemplate, getCertificateTemplateById, listCertificateTemplates } from "../../lib/api/certificates";
 import { AdminMailWorkspace } from "../../components/admin/AdminMailWorkspace";
@@ -1229,6 +1230,7 @@ export const AdminDashboardPage: React.FC = () => {
   const {
     t
   } = useTranslation();
+  const isAurora = useUIMode().mode === "aurora";
   const [activeTab, setActiveTab] = useState<Tab>("stats");
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -3310,8 +3312,12 @@ export const AdminDashboardPage: React.FC = () => {
       <div className="border-b border-border px-3 sm:px-4 md:px-6 py-3 bg-bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <span className="font-mono text-xs text-primary/70">// system admin</span>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-text-primary flex items-center gap-2">
+            {isAurora ? (
+              <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">System</span>
+            ) : (
+              <span className="font-mono text-xs text-primary/70">// system admin</span>
+            )}
+            <h1 className={`mt-0.5 font-semibold tracking-tight text-text-primary flex items-center gap-2 ${isAurora ? "text-3xl" : "text-2xl"}`}>
               <Shield className="w-5 h-5 text-primary" />
               Admin Panel
             </h1>

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles, LayoutGrid, Zap, Compass } from "lucide-react";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import type { User, CourseLanguage, Grade, PublicProfilePrivacy } from "../../types";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
@@ -430,7 +431,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   return (
     <div className="min-h-0 flex flex-col bg-bg-base overflow-y-auto">
       <div className="px-4 md:px-8 pt-8 pb-6 max-w-5xl mx-auto w-full">
-        <span className="font-mono text-xs text-primary/70">// {t("profile")}</span>
+        <PageEyebrow label={t("profile")} />
         <motion.div
           variants={staggerContainer}
           initial="initial"
@@ -723,13 +724,13 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                     <div className="text-xs font-mono text-text-primary">{tr("Режим інтерфейсу", "UI mode")}</div>
                     <div className="text-[11px] font-mono text-text-secondary mt-1">
                       {tr(
-                        "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K).",
-                        "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K)."
+                        "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K). Aurora — редакторський простір без постійного меню: навігація через зони та палітру (Ctrl+K).",
+                        "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K). Aurora — an editorial workspace without a fixed menu: navigation via zones and the palette (Ctrl+K)."
                       )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <button
                       onClick={() => ui.setMode("classic")}
                       className={
@@ -763,6 +764,17 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       <div className={`mt-2 text-xs font-mono ${ui.mode === "nova" ? "text-primary" : "text-text-primary"}`}>Nova</div>
                       <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Швидка навігація (Ctrl+K)", "Fast nav (Ctrl+K)")}</div>
                     </button>
+                    <button
+                      onClick={() => ui.setMode("aurora")}
+                      className={
+                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
+                        (ui.mode === "aurora" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
+                      }
+                    >
+                      <Sparkles className={`w-4 h-4 ${ui.mode === "aurora" ? "text-primary" : "text-text-muted"}`} />
+                      <div className={`mt-2 text-xs font-mono ${ui.mode === "aurora" ? "text-primary" : "text-text-primary"}`}>Aurora</div>
+                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Редакторський простір", "Editorial workspace")}</div>
+                    </button>
                   </div>
                   <button
                     onClick={() => ui.setClassicForToday()}
@@ -774,7 +786,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                   {ui.override ? (
                     <div className="text-[11px] font-mono text-text-secondary border border-border bg-bg-surface px-3 py-2 flex items-center justify-between gap-3">
                       <span>
-                        {tr("Тимчасовий режим", "Temporary mode")}: <span className="text-text-primary">{ui.override.mode === "classic" ? "Classic" : ui.override.mode === "nova" ? "Nova" : "Momentum UI"}</span>
+                        {tr("Тимчасовий режим", "Temporary mode")}: <span className="text-text-primary">{ui.override.mode === "classic" ? "Classic" : ui.override.mode === "nova" ? "Nova" : ui.override.mode === "aurora" ? "Aurora" : "Momentum UI"}</span>
                       </span>
                       <button
                         onClick={() => ui.clearOverride()}

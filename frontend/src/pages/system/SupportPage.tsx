@@ -5,6 +5,7 @@ import { LifeBuoy, MessageSquarePlus, Paperclip, Send, CheckCircle2, Image as Im
 import { tr } from "../../i18n";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Input } from "../../components/ui/Input";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
@@ -23,6 +24,7 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 export const SupportPage: React.FC = () => {
   const navigate = useNavigate();
   const prefersReducedMotion = useReducedMotion();
+  const isAurora = useUIMode().mode === "aurora";
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<SupportChatConversation[]>([]);
@@ -257,12 +259,16 @@ export const SupportPage: React.FC = () => {
         className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
         <div>
-          <span className="font-mono text-xs text-primary/70">{tr("// підтримка", "// support")}</span>
-          <div className="mt-2 flex items-center gap-2">
-            <LifeBuoy className="w-5 h-5 text-primary" />
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Технічна підтримка", "Technical support")}</h1>
+          {isAurora ? (
+            <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{tr("Підтримка", "Support")}</span>
+          ) : (
+            <span className="font-mono text-xs text-primary/70">{tr("// підтримка", "// support")}</span>
+          )}
+          <div className={`flex items-center gap-2 ${isAurora ? "mt-3" : "mt-2"}`}>
+            <LifeBuoy className={`text-primary ${isAurora ? "w-6 h-6" : "w-5 h-5"}`} />
+            <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{tr("Технічна підтримка", "Technical support")}</h1>
           </div>
-          <p className="mt-1.5 text-sm text-text-secondary max-w-xl">
+          <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary max-w-xl" : "mt-1.5 text-sm text-text-secondary max-w-xl"}>
             {tr("Чат із підтримкою (можна додавати файли).", "Chat with support (attachments are allowed).")}
           </p>
         </div>

@@ -4,10 +4,13 @@ import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Search, Trophy, Clock, CheckCircle2 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Badge } from "../../components/ui/Badge";
 import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import { createContest, joinContestByCode, listContests, type ContestListItem, type ContestVisibility } from "../../lib/api/contests";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -45,6 +48,7 @@ export const ContestsPage: React.FC = () => {
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
   const navigate = useNavigate();
   const prefersReducedMotion = useReducedMotion();
+  const isAurora = useUIMode().mode === "aurora";
 
   const hasToken = React.useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -251,7 +255,7 @@ export const ContestsPage: React.FC = () => {
           </Button>
         </div>
 
-        <span className="font-mono text-xs text-primary/70">{tr("// контести", "// contests")}</span>
+        <PageEyebrow label={tr("Контести", "Contests")} />
 
         <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -484,12 +488,44 @@ export const ContestsPage: React.FC = () => {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border py-14 px-6 flex flex-col items-center text-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Trophy className="w-5 h-5 text-primary" />
-          </div>
-          <div className="text-sm text-text-secondary max-w-sm">{tr("Поки що немає контестів.", "No contests yet.")}</div>
-        </div>
+        <EmptyState icon={Trophy} title={tr("Поки що немає контестів.", "No contests yet.")} />
+      ) : isAurora ? (
+        <motion.div
+          variants={prefersReducedMotion ? undefined : staggerContainer}
+          initial={prefersReducedMotion ? undefined : "initial"}
+          animate={prefersReducedMotion ? undefined : "animate"}
+          className="rounded-[var(--aurora-radius)] border border-border bg-bg-surface/50 overflow-hidden divide-y divide-border"
+        >
+          {filtered.map((c) => {
+            const state = contestState(c);
+            const dot = state === "RUNNING" ? "bg-primary" : state === "UPCOMING" ? "bg-secondary" : "bg-text-muted";
+            const stateLabel = state === "RUNNING" ? tr("Йде", "Live") : state === "UPCOMING" ? tr("Скоро", "Upcoming") : tr("Завершено", "Finished");
+            return (
+              <motion.button
+                key={c.id}
+                variants={prefersReducedMotion ? undefined : fadeUpItem}
+                onClick={() => navigate(`/contests/${c.id}`)}
+                className="group w-full text-left flex items-center gap-4 px-5 py-4 hover:bg-bg-hover transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+              >
+                <span className="relative inline-flex h-2.5 w-2.5 shrink-0" title={stateLabel}>
+                  {state === "RUNNING" && !prefersReducedMotion ? (
+                    <motion.span className="absolute inset-0 rounded-full bg-primary" animate={{ scale: [1, 2.4], opacity: [0.6, 0] }} transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }} />
+                  ) : null}
+                  <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${dot}`} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-medium text-text-primary truncate group-hover:text-primary transition-fast">{c.title}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11px] text-text-muted">
+                    <span className="uppercase tracking-[0.08em]">{stateLabel}</span>
+                    <span>· {c.startsAt ? fmtDate(c.startsAt, i18n.language) : "—"} → {c.endsAt ? fmtDate(c.endsAt, i18n.language) : "—"}</span>
+                    {c.allowUpsolve ? <span>· {tr("Дорішування", "Upsolve")}</span> : null}
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 shrink-0 text-text-muted opacity-0 group-hover:opacity-100 transition-fast" />
+              </motion.button>
+            );
+          })}
+        </motion.div>
       ) : (
         <motion.div
           variants={prefersReducedMotion ? undefined : staggerContainer}

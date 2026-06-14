@@ -8,6 +8,7 @@ import { Logo } from "../Logo";
 import { useUIMode } from "../interface/UIModeProvider";
 import { MomentumShell, type MomentumNavTarget } from "../../layout/momentum/MomentumShell";
 import { NovaShellLazy } from "../../layout/nova/NovaShellLazy";
+import { AuroraShellLazy } from "../../layout/aurora/AuroraShellLazy";
 import { PageSkeleton } from "../ui/Skeleton";
 import { applyTheme, getCurrentTheme, type AppTheme } from "../../theme";
 
@@ -155,7 +156,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       </div>;
   }
 
-  const Shell = ui.mode === "nova" ? NovaShellLazy : MomentumShell;
+  const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
   return <React.Suspense fallback={<div className="min-h-[100dvh] bg-bg-base text-text-primary"><PageSkeleton /></div>}>
       <Shell user={user} current={current} onNavigate={onNavigate} onLogout={onLogout} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
         <SunMoon className="w-3.5 h-3.5" />

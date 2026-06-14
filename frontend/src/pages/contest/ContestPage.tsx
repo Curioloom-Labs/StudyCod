@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award } from "lucide-react";
 import { Button } from "../../components/ui/Button";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
 import { StatusChip, type StatusChipTone } from "../../components/ui/StatusChip";
 import { Badge } from "../../components/ui/Badge";
@@ -3907,7 +3908,7 @@ export const ContestPage: React.FC = () => {
           <Card className="p-5 border border-border/70">
             {/* Hero heading */}
             <div className="space-y-1.5">
-              <span className="font-mono text-xs text-primary/70">// contest</span>
+              <PageEyebrow label="contest" />
               <div className="flex flex-wrap items-start gap-2">
                 <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary leading-tight flex-1">
                   {data.contest.title}

@@ -15,7 +15,7 @@ export const Badge: React.FC<Props> = ({
     "logic-warning": "border border-accent-logic-warning/60 bg-accent-logic-warning/10 text-accent-logic-warning",
     info: "border border-secondary/60 bg-secondary/10 text-secondary"
   };
-  return <span className={clsx("inline-flex items-center px-2 py-0.5 text-xs font-mono rounded-md", colors[color])}>
+  return <span className={clsx("inline-flex items-center px-2 py-0.5 text-xs font-mono rounded-[var(--ui-badge-radius)]", colors[color])}>
       {children}
     </span>;
 };
