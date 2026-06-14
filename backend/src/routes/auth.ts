@@ -429,7 +429,6 @@ authRouter.post("/register", async (req: AuthRequest, res: Response) => {
     }
     const {
       username,
-      email,
       password,
       turnstileToken,
       course,
@@ -439,6 +438,9 @@ authRouter.post("/register", async (req: AuthRequest, res: Response) => {
       birthDay,
       birthMonth
     } = validated.data;
+    // Normalize email so case variants can't create duplicate accounts and so
+    // it matches the lowercased lookups in forgot-password / resend-verification.
+    const email = validated.data.email.trim().toLowerCase();
 
     if (!(await enforceAuthTurnstile(req, res, turnstileToken))) {
       return;
@@ -879,7 +881,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       });
     }
     const googleId: string | null = payload.googleId || null;
-    const email: string | null = payload.email || null;
+    const email: string | null = payload.email ? String(payload.email).trim().toLowerCase() : null;
     const avatarUrl: string | null = payload.avatarUrl || null;
     if (!googleId) {
       return res.status(400).json({
@@ -1002,13 +1004,14 @@ authRouter.get("/verify-email", async (req: AuthRequest, res: Response) => {
 authRouter.post("/resend-verification", emailActionLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const {
-      email
+      email: rawEmail
     } = req.body;
-    if (!email || typeof email !== "string") {
+    if (!rawEmail || typeof rawEmail !== "string") {
       return res.status(400).json({
         message: "EMAIL_REQUIRED"
       });
     }
+    const email = rawEmail.trim().toLowerCase();
     const user = await userRepo().findOne({
       where: {
         email

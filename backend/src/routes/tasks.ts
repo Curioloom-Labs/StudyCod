@@ -271,6 +271,16 @@ function startOfDay(d: Date): Date {
   return copy;
 }
 
+// Difference in whole calendar days between two local dates. Uses the UTC of
+// each date's local Y/M/D so it is immune to DST (a spring-forward day is only
+// 23h, which would make a naive (ms / 86400000) diff round down to 0 and freeze
+// the streak on a legitimate consecutive-day visit).
+function diffInCalendarDays(later: Date, earlier: Date): number {
+  const a = Date.UTC(later.getFullYear(), later.getMonth(), later.getDate());
+  const b = Date.UTC(earlier.getFullYear(), earlier.getMonth(), earlier.getDate());
+  return Math.round((a - b) / MILLISECONDS_PER_DAY);
+}
+
 async function updateLearningStreakForUser(userId: number): Promise<void> {
   const user = await userRepo().findOne({ where: { id: userId } });
   if (!user) return;
@@ -281,7 +291,7 @@ async function updateLearningStreakForUser(userId: number): Promise<void> {
   if (!previous) {
     user.currentStreak = 1;
   } else {
-    const daysDiff = Math.floor((today.getTime() - previous.getTime()) / MILLISECONDS_PER_DAY);
+    const daysDiff = diffInCalendarDays(today, previous);
     if (daysDiff <= 0) {
       // Already had activity today: do not increment streak.
     } else if (daysDiff === 1) {
@@ -1940,12 +1950,6 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
 
     const quizGrade = clampGrade0to100Int(Math.round(correctAnswers / totalQuestions * 100));
 
-    // Persist submission
-    await taskRepo().update({ id: task.id } as any, {
-      completed: 1,
-      finalCode: JSON.stringify(answers)
-    } as any);
-
     const reviewJson = (() => {
       try {
         return JSON.stringify({
@@ -1959,23 +1963,49 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
       }
     })();
 
-    const grade = gradeRepo().create({
-      user: { id: req.userId } as any,
-      task: { id: task.id } as any,
-      total: quizGrade,
-      workScore: 0,
-      optimizationScore: 0,
-      integrityScore: 0,
-      aiFeedback: i18nText(
-        uiLanguage,
-        `Тест: правильних відповідей ${correctAnswers}/${totalQuestions}. Оцінка: ${quizGrade}/100.`,
-        `Quiz: correct answers ${correctAnswers}/${totalQuestions}. Grade: ${quizGrade}/100.`
-      ),
-      codeSnapshot: JSON.stringify(answers),
-      comparisonFeedback: reviewJson,
-      previousGradeId: null
+    // Persist submission atomically. The pre-check above is only a fast path:
+    // two concurrent submits (e.g. a double-click) could both pass it and
+    // create duplicate grades. Serialize per-user with a row lock and re-check
+    // inside the transaction — same pattern as the practice-task submit path.
+    const savedGrade = await AppDataSource.transaction("SERIALIZABLE", async manager => {
+      await manager
+        .createQueryBuilder(User, "user")
+        .setLock("pessimistic_write")
+        .where("user.id = :userId", { userId: req.userId })
+        .getOne();
+
+      const gradeRepoM = manager.getRepository(Grade);
+      const alreadySubmitted = await gradeRepoM.findOne({
+        where: { user: { id: req.userId }, task: { id: task.id } },
+        order: { createdAt: "DESC" }
+      });
+      if (alreadySubmitted) {
+        throw new Error("QUIZ_ALREADY_SUBMITTED");
+      }
+
+      await manager.getRepository(Task).update({ id: task.id } as any, {
+        completed: 1,
+        finalCode: JSON.stringify(answers)
+      } as any);
+
+      const grade = gradeRepoM.create({
+        user: { id: req.userId } as any,
+        task: { id: task.id } as any,
+        total: quizGrade,
+        workScore: 0,
+        optimizationScore: 0,
+        integrityScore: 0,
+        aiFeedback: i18nText(
+          uiLanguage,
+          `Тест: правильних відповідей ${correctAnswers}/${totalQuestions}. Оцінка: ${quizGrade}/100.`,
+          `Quiz: correct answers ${correctAnswers}/${totalQuestions}. Grade: ${quizGrade}/100.`
+        ),
+        codeSnapshot: JSON.stringify(answers),
+        comparisonFeedback: reviewJson,
+        previousGradeId: null
+      });
+      return await gradeRepoM.save(grade);
     });
-    const savedGrade = await gradeRepo().save(grade);
 
     await syncPostLearningProgress({
       userId: req.userId,
@@ -2037,6 +2067,9 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
       summary
     });
   } catch (error: any) {
+    if (error?.message === "QUIZ_ALREADY_SUBMITTED") {
+      return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
+    }
     logger.error("[tasks] POST /:id/submit-quiz error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

@@ -163,19 +163,27 @@ router.get("/classes/:classId/students/export", authRequired, async (req: AuthRe
 
     let csv = `Ім'я,Прізвище,По-батькові,Email,Username,Password\n`;
     if (withPasswords) {
-      for (const s of students) {
-        const plainPassword = generatePassword();
-        s.generatedPassword = await hashPassword(plainPassword);
-        await studentRepo().save(s);
-        csv += [
-          csvEscape(s.firstName),
-          csvEscape(s.lastName),
-          csvEscape(s.middleName || ""),
-          csvEscape(s.email),
-          csvEscape(s.generatedUsername),
-          csvEscape(plainPassword)
-        ].join(",") + "\n";
-      }
+      // Regenerate + persist all passwords atomically so the exported CSV always
+      // matches what is stored (no partial reset on a mid-loop failure).
+      const rows = await AppDataSource.transaction(async (manager) => {
+        const studentRepoTx = manager.getRepository(Student);
+        const out: string[] = [];
+        for (const s of students) {
+          const plainPassword = generatePassword();
+          s.generatedPassword = await hashPassword(plainPassword);
+          await studentRepoTx.save(s);
+          out.push([
+            csvEscape(s.firstName),
+            csvEscape(s.lastName),
+            csvEscape(s.middleName || ""),
+            csvEscape(s.email),
+            csvEscape(s.generatedUsername),
+            csvEscape(plainPassword)
+          ].join(",") + "\n");
+        }
+        return out;
+      });
+      csv += rows.join("");
     } else {
       for (const s of students) {
         csv += [
@@ -229,7 +237,15 @@ router.post("/classes/:classId/students/import", authRequired, async (req: AuthR
       .map((l: string) => l.trim())
       .filter((l: string) => l.length > 0);
 
-    const credentials = [];
+    const credentials: Array<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      middleName: string;
+      email: string;
+      username: string;
+      password: string;
+    }> = [];
 
     const parseCsvLine = (line: string): string[] => {
       const result: string[] = [];
@@ -305,6 +321,10 @@ router.post("/classes/:classId/students/import", authRequired, async (req: AuthR
       return `${candidate}_${crypto.randomBytes(2).toString("hex")}`;
     };
 
+    // Persist the whole batch atomically: a failure partway through must not
+    // leave some students created and others not.
+    await AppDataSource.transaction(async (manager) => {
+    const studentRepoTx = manager.getRepository(Student);
     for (let i = startIndex; i < lines.length; i++) {
       const parts = parseCsvLine(lines[i]);
       if (parts.length < 3) continue;
@@ -348,7 +368,7 @@ router.post("/classes/:classId/students/import", authRequired, async (req: AuthR
       const generatedBase = generateUsername(firstName, lastName, middleName);
       const finalUsername = await ensureUniqueUsername(username?.trim() ? username.trim() : generatedBase);
 
-      const student = studentRepo().create({
+      const student = studentRepoTx.create({
         firstName,
         lastName,
         middleName,
@@ -357,7 +377,7 @@ router.post("/classes/:classId/students/import", authRequired, async (req: AuthR
         generatedUsername: finalUsername,
         generatedPassword: hashedPassword
       });
-      await studentRepo().save(student);
+      await studentRepoTx.save(student);
 
       credentials.push({
         id: student.id,
@@ -369,6 +389,7 @@ router.post("/classes/:classId/students/import", authRequired, async (req: AuthR
         password: plainPassword
       });
     }
+    });
 
     res.status(201).json({
       count: credentials.length,
@@ -392,7 +413,7 @@ router.post("/students/:studentId/regenerate-password", authRequired, async (req
       relations: ["class", "class.teacher"]
     });
 
-    if (!student || student.class.teacher.id !== req.userId) {
+    if (!student || !student.class || !student.class.teacher || student.class.teacher.id !== req.userId) {
       return res.status(404).json({
         message: "STUDENT_NOT_FOUND"
       });

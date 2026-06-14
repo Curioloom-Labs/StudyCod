@@ -48,21 +48,35 @@ export class AddSemesterGrades1748700200000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    const topicSem = await queryRunner.query("SHOW COLUMNS FROM `topics_new` LIKE 'semester'");
-    if (Array.isArray(topicSem) && topicSem.length > 0) {
-      await queryRunner.query("ALTER TABLE `topics_new` DROP COLUMN `semester`");
+    const topicTables = await queryRunner.query("SHOW TABLES LIKE 'topics_new'");
+    if (Array.isArray(topicTables) && topicTables.length > 0) {
+      const topicSem = await queryRunner.query("SHOW COLUMNS FROM `topics_new` LIKE 'semester'");
+      if (Array.isArray(topicSem) && topicSem.length > 0) {
+        await queryRunner.query("ALTER TABLE `topics_new` DROP COLUMN `semester`");
+      }
     }
 
-    // Remove any SEMESTER aggregate rows before narrowing the enum back.
-    await queryRunner.query("DELETE FROM `summary_grades` WHERE `assessment_type` = 'SEMESTER'");
+    const sgTables = await queryRunner.query("SHOW TABLES LIKE 'summary_grades'");
+    if (Array.isArray(sgTables) && sgTables.length > 0) {
+      // Remove any SEMESTER aggregate rows before narrowing the enum back and
+      // restoring topic_id to NOT NULL (only SEMESTER rows carried a null topic_id).
+      await queryRunner.query("DELETE FROM `summary_grades` WHERE `assessment_type` = 'SEMESTER'");
 
-    const sgSem = await queryRunner.query("SHOW COLUMNS FROM `summary_grades` LIKE 'semester'");
-    if (Array.isArray(sgSem) && sgSem.length > 0) {
-      await queryRunner.query("ALTER TABLE `summary_grades` DROP COLUMN `semester`");
+      const sgSem = await queryRunner.query("SHOW COLUMNS FROM `summary_grades` LIKE 'semester'");
+      if (Array.isArray(sgSem) && sgSem.length > 0) {
+        await queryRunner.query("ALTER TABLE `summary_grades` DROP COLUMN `semester`");
+      }
+
+      // Restore topic_id NOT NULL (true inverse of the up() migration).
+      const topicCol = await queryRunner.query("SHOW COLUMNS FROM `summary_grades` LIKE 'topic_id'");
+      const topicNullable = Array.isArray(topicCol) && topicCol.length > 0 ? String((topicCol[0] as any).Null || "") : "";
+      if (topicNullable && topicNullable.toUpperCase() === "YES") {
+        await queryRunner.query("ALTER TABLE `summary_grades` MODIFY COLUMN `topic_id` INT NOT NULL");
+      }
+
+      await queryRunner.query(
+        "ALTER TABLE `summary_grades` MODIFY COLUMN `assessment_type` ENUM('PRACTICE','INTERMEDIATE','CONTROL') NOT NULL DEFAULT 'INTERMEDIATE'"
+      );
     }
-
-    await queryRunner.query(
-      "ALTER TABLE `summary_grades` MODIFY COLUMN `assessment_type` ENUM('PRACTICE','INTERMEDIATE','CONTROL') NOT NULL DEFAULT 'INTERMEDIATE'"
-    );
   }
 }

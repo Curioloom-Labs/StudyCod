@@ -28,7 +28,15 @@ class Tokenizer {
   }
   private readNumber(): number {
     let numStr = '';
+    let seenDot = false;
     while (this.peek() !== null && /[0-9.]/.test(this.peek()!)) {
+      const ch = this.peek()!;
+      if (ch === '.') {
+        // Reject malformed numbers with more than one decimal point (e.g. "3.14.15"),
+        // which parseFloat would otherwise silently truncate to "3.14".
+        if (seenDot) throw new Error(`Invalid number: ${numStr}.`);
+        seenDot = true;
+      }
       numStr += this.advance();
     }
     const num = parseFloat(numStr);

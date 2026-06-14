@@ -947,10 +947,12 @@ export const StudentTaskPage: React.FC = () => {
   };
   const handleSubmitQuiz = async () => {
     if (!taskId || !task) return;
+    if (submitting) return; // guard against double-submit (e.g. a fast double-click)
     if (Object.keys(quizAnswers).length < quizQuestions.length) {
       toastError(t("pleaseAnswerAllQuestions"));
       return;
     }
+    setSubmitting(true);
     try {
       const result = await submitQuizAnswers(parseInt(taskId, 10), quizAnswers);
       setQuizGrade(result.grade.theoryGrade);
@@ -983,6 +985,8 @@ export const StudentTaskPage: React.FC = () => {
       } else {
         toastError(message);
       }
+    } finally {
+      setSubmitting(false);
     }
   };
   const handleSubmit = useCallback(async () => {
@@ -1705,7 +1709,7 @@ export const StudentTaskPage: React.FC = () => {
                                 {tr("питань", "questions")}
                               </span> : <span className="text-accent-success">{tr("Всі питання відповідені", "All questions answered")}</span>}
                           </div>
-                          <Button variant="primary" onClick={handleSubmitQuiz} disabled={Object.keys(quizAnswers).length < quizQuestions.length} className="text-sm px-6 py-2 font-semibold">
+                          <Button variant="primary" onClick={handleSubmitQuiz} disabled={submitting || Object.keys(quizAnswers).length < quizQuestions.length} className="text-sm px-6 py-2 font-semibold">
                             <Send className="w-4 h-4 mr-2" />
                             {tr("Відправити тест", "Submit quiz")}
                           </Button>
