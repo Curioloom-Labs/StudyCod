@@ -5,6 +5,8 @@ __pycache__/
 # Build outputs
 **/dist/
 **/build/
+tmp-index.js
+tmp-index.map
 
 # Environment variables (do not commit secrets)
 **/.env

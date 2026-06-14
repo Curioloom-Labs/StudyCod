@@ -280,7 +280,11 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     }
   }, [isEducational]);
 
+  const libraryReqRef = useRef(0);
   const loadLibraryTasks = useCallback(async (nextCourse: CourseLanguage) => {
+    // Each call gets a token; a later call (e.g. fast course switching) bumps it
+    // so this run's paginated results can't overwrite the newer course's data.
+    const reqId = ++libraryReqRef.current;
     setLibraryLoading(true);
     try {
       const pageSize = 100;
@@ -295,6 +299,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       let all = Array.isArray(first.tasks) ? [...first.tasks] : [];
 
       for (let page = 2; page <= totalPages; page++) {
+        if (libraryReqRef.current !== reqId) return; // superseded by a newer load
         const chunk = await listApprovedLibraryTasks({
           judgeLanguage: courseToJudgeLanguage(nextCourse),
           page,
@@ -303,11 +308,12 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
         if (Array.isArray(chunk.tasks) && chunk.tasks.length > 0) all = all.concat(chunk.tasks);
       }
 
+      if (libraryReqRef.current !== reqId) return; // superseded; don't clobber newer data
       setLibraryTasks(all);
     } catch {
-      setLibraryTasks([]);
+      if (libraryReqRef.current === reqId) setLibraryTasks([]);
     } finally {
-      setLibraryLoading(false);
+      if (libraryReqRef.current === reqId) setLibraryLoading(false);
     }
   }, []);
 
@@ -354,6 +360,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
 
   const switchCourse = async (next: CourseLanguage) => {
     if (next === course || isStudent || isEducational) return;
+    const prevCourse = course;
     setCourse(next);
     setMsg(null);
     try {
@@ -362,7 +369,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       setMsg(tr("Профіль перемкнено на іншу мову.", "Profile switched to another language."));
       await Promise.all([loadGrades(), loadLibraryTasks(next)]);
     } catch (err: unknown) {
-      setCourse(user.course);
+      setCourse(prevCourse);
       setMsg(getErrorMessageFromUnknown(err, tr("Не вдалося перемкнути мову профілю", "Failed to switch profile language")));
     }
   };

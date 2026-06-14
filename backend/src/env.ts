@@ -451,9 +451,9 @@ const EnvSchema = z.object({
     ),
     __liveKitTokenTtlMinutes: (() => {
       const raw = (env.LIVEKIT_TOKEN_TTL_MINUTES ?? "").trim();
-      if (!raw) return 240;
+      if (!raw) return 60;
       const n = Number.parseInt(raw, 10);
-      return Number.isFinite(n) && n >= 5 ? Math.min(n, 720) : 240;
+      return Number.isFinite(n) && n >= 5 ? Math.min(n, 720) : 60;
     })(),
   };
 }).superRefine((env, ctx) => {
@@ -498,6 +498,14 @@ const EnvSchema = z.object({
     // - Judge endpoints will surface a clear configuration error at runtime.
     //
     // We still keep strict checks for core security/runtime settings above.
+    if (env.__cloudflareAiInternalSecret.length === 0 && (env.CLOUDFLARE_AI_URL ?? "").trim().length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["CLOUDFLARE_AI_INTERNAL_SECRET"],
+        message:
+          "CLOUDFLARE_AI_INTERNAL_SECRET must be set in production when CLOUDFLARE_AI_URL is configured — without it the worker is an open proxy to paid Workers AI inference",
+      });
+    }
   }
 });
 export type AppEnv = z.infer<typeof EnvSchema>;
