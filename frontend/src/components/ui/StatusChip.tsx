@@ -30,7 +30,7 @@ export const StatusChip: React.FC<Props> = ({
   const sizeClasses = size === "md" ? "px-2.5 py-1 text-xs" : "px-2 py-0.5 text-[11px]";
 
   return (
-    <span className={clsx("inline-flex items-center gap-1 rounded-md border font-mono", toneClasses[tone], sizeClasses, className)}>
+    <span className={clsx("inline-flex items-center gap-1 rounded-[var(--ui-badge-radius)] border font-mono", toneClasses[tone], sizeClasses, className)}>
       {glyph ? <span>{glyph}</span> : null}
       <span>{label}</span>
     </span>

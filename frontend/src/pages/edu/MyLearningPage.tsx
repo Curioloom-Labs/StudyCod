@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Compass, Target, ArrowRight, Repeat, FileDown, Trophy, Layers3, Gauge, CheckCircle2, Circle, Lock, CircleDot } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { showToast } from "../../lib/toast";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
@@ -38,6 +39,7 @@ const StatTile: React.FC<{ icon: React.ComponentType<{ className?: string }>; la
 export const MyLearningPage: React.FC = () => {
   const navigate = useNavigate();
   const prefersReducedMotion = useReducedMotion();
+  const isAurora = useUIMode().mode === "aurora";
   const [tree, setTree] = useState<SkillTree | null>(null);
   const [daily, setDaily] = useState<DailyChallenge | null>(null);
   const [due, setDue] = useState<ConceptDue[]>([]);
@@ -90,13 +92,17 @@ export const MyLearningPage: React.FC = () => {
           {tr("Назад", "Back")}
         </Button>
 
-        <span className="font-mono text-xs text-primary/70">{tr("// моє навчання", "// my learning")}</span>
+        {isAurora ? (
+          <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{tr("Навчання", "Learning")}</span>
+        ) : (
+          <span className="font-mono text-xs text-primary/70">{tr("// моє навчання", "// my learning")}</span>
+        )}
 
-        <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className={`flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between ${isAurora ? "mt-3" : "mt-2"}`}>
           <div>
             <div className="flex items-center gap-2">
-              <Compass className="w-5 h-5 text-primary" />
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Моє навчання", "My Learning")}</h1>
+              <Compass className={`text-primary ${isAurora ? "w-6 h-6" : "w-5 h-5"}`} />
+              <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{tr("Моє навчання", "My Learning")}</h1>
             </div>
             <p className="mt-1.5 text-sm text-text-secondary max-w-xl">
               {tr("Твій прогрес по темах, задача дня й що варто повторити.", "Your topic progress, the daily challenge, and what to review.")}

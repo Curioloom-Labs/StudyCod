@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { PageHero } from "../../components/ui/PageHero";
 import { ArrowLeft } from "lucide-react";
 import { getClasses } from "../../lib/api/edu";
 import { api } from "../../lib/api/client";
@@ -62,24 +63,19 @@ export const CreateTopicPage: React.FC = () => {
     }
   };
   return <div className="min-h-full bg-bg-base">
-      {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-3xl mx-auto">
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-xs text-primary/70">// new topic</span>
+      <PageHero
+        eyebrowClassic="// new topic"
+        eyebrowAurora={tr("Нова тема", "New topic")}
+        title={tr("Створити тему", "Create topic")}
+        subtitle={tr("Тема обʼєднує практичні завдання та контрольні роботи для класу.", "A topic groups practice tasks and control works for the class.")}
+        maxWidth="3xl"
+        actions={
           <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/classes/${classId}`)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-        </div>
-        <div className="mt-2">
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Створити тему", "Create topic")}</h1>
-          <p className="mt-1.5 text-sm text-text-secondary">
-            {tr("Тема обʼєднує практичні завдання та контрольні роботи для класу.", "A topic groups practice tasks and control works for the class.")}
-          </p>
-        </div>
-      </div>
-
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+        }
+      />
 
       <div className="px-4 md:px-8 py-8 max-w-3xl mx-auto">
         <div className="rounded-xl border border-border bg-bg-surface p-5 sm:p-6 space-y-6">

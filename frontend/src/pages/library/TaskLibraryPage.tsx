@@ -10,6 +10,7 @@ import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import { Badge } from "../../components/ui/Badge";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { getMe } from "../../lib/api/profile";
@@ -322,6 +323,7 @@ const CountUp: React.FC<{ value: number; decimals?: number; className?: string }
 export const TaskLibraryPage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
+  const isAurora = useUIMode().mode === "aurora";
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -1886,7 +1888,12 @@ export const TaskLibraryPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-2">
+              <motion.div
+                variants={staggerContainer}
+                initial="initial"
+                animate="animate"
+                className={isAurora ? "rounded-[var(--aurora-radius)] border border-border bg-bg-surface/40 overflow-hidden divide-y divide-border" : "space-y-2"}
+              >
                 {visibleTasks.map((task) => {
                   const isSelected = selectedId === task.id;
                   const isFav = favoriteIds.has(task.id);
@@ -1907,12 +1914,16 @@ export const TaskLibraryPage: React.FC = () => {
                       tabIndex={0}
                       aria-current={isSelected ? "true" : undefined}
                       className={
-                        "w-full text-left p-3 rounded-xl border transition-fast focus:outline-none focus:ring-1 focus:ring-primary hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] " +
-                        (isSelected
-                          ? "border-primary bg-primary/5"
-                          : task.attempt?.solved
-                            ? "border-accent-success/40 bg-bg-base hover:border-accent-success/60"
-                            : "border-border bg-bg-base hover:border-primary/40")
+                        isAurora
+                          ? ("w-full text-left p-4 transition-fast focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 " +
+                              (isSelected ? "bg-primary/8" : "hover:bg-bg-hover") +
+                              (task.attempt?.solved ? " shadow-[inset_3px_0_0_0_var(--accent-success)]" : isSelected ? " shadow-[inset_3px_0_0_0_var(--primary)]" : ""))
+                          : ("w-full text-left p-3 rounded-xl border transition-fast focus:outline-none focus:ring-1 focus:ring-primary hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] " +
+                              (isSelected
+                                ? "border-primary bg-primary/5"
+                                : task.attempt?.solved
+                                  ? "border-accent-success/40 bg-bg-base hover:border-accent-success/60"
+                                  : "border-border bg-bg-base hover:border-primary/40"))
                       }
                       onClick={() => setSelectedId(task.id)}
                       onKeyDown={(e) => {

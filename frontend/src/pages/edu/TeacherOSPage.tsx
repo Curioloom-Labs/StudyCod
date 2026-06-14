@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
+import { PageHero } from "../../components/ui/PageHero";
 import { Card } from "../../components/ui/Card";
 import {
   applyRiskInterventionPlan,
@@ -279,20 +280,13 @@ export const TeacherOSPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-bg-base">
-      {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-7xl mx-auto">
-        <span className="font-mono text-xs text-primary/70">// teacher os</span>
-        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-              Teacher OS{snapshot?.className ? <span className="text-text-muted font-normal"> · {snapshot.className}</span> : ""}
-            </h1>
-            <p className="mt-1.5 text-sm text-text-secondary">
-              {tr("Операційна панель класу — сигнали, місії та план підтримки в одному місці.", "Class operations surface — signals, missions and the support plan in one place.")}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 shrink-0">
+      <PageHero
+        eyebrowClassic="// teacher os"
+        eyebrowAurora="Teacher OS"
+        title={<>Teacher OS{snapshot?.className ? <span className="text-text-muted font-normal"> · {snapshot.className}</span> : ""}</>}
+        subtitle={tr("Операційна панель класу — сигнали, місії та план підтримки в одному місці.", "Class operations surface — signals, missions and the support plan in one place.")}
+        maxWidth="7xl"
+        actions={<>
             <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classIdNum}`)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("До класу", "Back to class")}
@@ -308,35 +302,15 @@ export const TeacherOSPage: React.FC = () => {
             <Button onClick={onApplyPlan} disabled={refreshing || recalculatingPlan || applyingPlan || !snapshot?.riskPlan || snapshot.riskPlan.tasksSelected.length === 0 || snapshot.riskPlan.studentsTargeted.length === 0}>
               {applyingPlan ? tr("Застосовую...", "Applying...") : tr("Застосувати план", "Apply plan")}
             </Button>
-          </div>
-        </div>
-
-        {/* Inline key stats */}
-        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="flex items-baseline gap-2">
-            <span className={`font-mono text-2xl md:text-3xl tabular-nums ${healthToneClass}`}>{healthScore ?? "—"}</span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Індекс здоров'я", "Health index")}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{snapshot?.analytics ? Math.round(snapshot.analytics.overview.avgScore) : "—"}</span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Сер. бал", "Avg score")}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.completionRate * 100)}%` : "—"}</span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">Completion</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.passRate * 100)}%` : "—"}</span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">Pass rate</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-accent-warning tabular-nums">{snapshot?.digest?.appeals.active ?? snapshot?.activeAppeals.length ?? "—"}</span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Активні апеляції", "Active appeals")}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+          </>}
+        stats={[
+          { value: healthScore ?? "—", label: tr("Індекс здоров'я", "Health index"), tone: healthToneClass.includes("error") ? "error" : healthToneClass.includes("warn") ? "warn" : healthToneClass.includes("success") ? "success" : "default" },
+          { value: snapshot?.analytics ? Math.round(snapshot.analytics.overview.avgScore) : "—", label: tr("Сер. бал", "Avg score") },
+          { value: snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.completionRate * 100)}%` : "—", label: "Completion" },
+          { value: snapshot?.analytics ? `${Math.round(snapshot.analytics.overview.passRate * 100)}%` : "—", label: "Pass rate" },
+          { value: snapshot?.digest?.appeals.active ?? snapshot?.activeAppeals.length ?? "—", label: tr("Активні апеляції", "Active appeals"), tone: "warn" }
+        ]}
+      />
 
       <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto space-y-4">
         <Card className="p-5">

@@ -1,4 +1,13 @@
-export type UIMode = "classic" | "focus" | "nova";
+export type UIMode = "classic" | "focus" | "nova" | "aurora";
+
+// Order in which the "switch interface" affordances cycle modes. Keeping it in
+// one place avoids drift between the three shells + the classic header menu.
+export const UI_MODE_CYCLE: readonly UIMode[] = ["focus", "nova", "aurora", "classic"];
+
+export function nextUIMode(mode: UIMode): UIMode {
+  const i = UI_MODE_CYCLE.indexOf(mode);
+  return UI_MODE_CYCLE[(i + 1) % UI_MODE_CYCLE.length] ?? "focus";
+}
 
 const STORAGE_KEYS = {
   preference: "studycod.uiMode.preference",
@@ -43,7 +52,9 @@ const safeLocalStorage = {
 };
 
 export function parseUIMode(value: unknown): UIMode | null {
-  return value === "classic" || value === "focus" || value === "nova" ? value : null;
+  return value === "classic" || value === "focus" || value === "nova" || value === "aurora"
+    ? value
+    : null;
 }
 
 function getWithLegacy(primaryKey: string, ...legacyKeys: string[]): string | null {

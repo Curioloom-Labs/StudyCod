@@ -10,6 +10,7 @@ import { Button } from "../../components/ui/Button";
 import type { Grade } from "../../types";
 import { tr } from "../../i18n";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 
 const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
   const reduce = useReducedMotion();
@@ -96,6 +97,8 @@ function gradeFillTone(value: number): string {
 export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
+  const ui = useUIMode();
+  const isAurora = ui.mode === "aurora";
   const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
 
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -274,47 +277,77 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
 
   return (
     <div className="h-full flex flex-col bg-bg-base overflow-y-auto">
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto w-full">
+      <div className={`px-4 md:px-8 max-w-6xl mx-auto w-full ${isAurora ? "pt-10 md:pt-16 pb-8" : "pt-8 pb-6"}`}>
         <motion.div
           variants={staggerContainer}
           initial="initial"
           animate="animate"
         >
-          <motion.div variants={fadeUpItem} className="flex items-center gap-2 font-mono text-xs text-primary/70">
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>// grades</span>
-          </motion.div>
-          <motion.h1 variants={fadeUpItem} className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
+          {isAurora ? (
+            <motion.div variants={fadeUpItem} className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">
+              {tr("Успішність", "Performance")}
+            </motion.div>
+          ) : (
+            <motion.div variants={fadeUpItem} className="flex items-center gap-2 font-mono text-xs text-primary/70">
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>// grades</span>
+            </motion.div>
+          )}
+          <motion.h1 variants={fadeUpItem} className={isAurora ? "mt-3 text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>
             {tr("Журнал успішності", "Progress journal")}
           </motion.h1>
-          <motion.p variants={fadeUpItem} className="mt-1.5 text-sm text-text-secondary">
+          <motion.p variants={fadeUpItem} className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary max-w-2xl" : "mt-1.5 text-sm text-text-secondary"}>
             {tr("Твій прогрес, слабкі теми та квест на покращення — в одному місці.", "Your progress, weak topics and an improvement quest — all in one place.")}
           </motion.p>
 
-          <motion.div variants={fadeUpItem} className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
-            <div>
-              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Середній бал", "Average")}</div>
-              <div className={`mt-1 text-3xl font-mono font-semibold ${gradeTone(stats.avg)}`}>
-                <CountUp value={stats.avg} decimals={1} />
+          {isAurora ? (
+            <motion.div variants={fadeUpItem} className="mt-8 flex flex-wrap items-end gap-x-12 gap-y-5">
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.12em] text-text-muted">{tr("Середній бал", "Average")}</div>
+                <div className={`mt-1.5 text-5xl font-semibold tracking-[-0.02em] tabular-nums ${gradeTone(stats.avg)}`}>
+                  <CountUp value={stats.avg} decimals={1} />
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Оцінок", "Grades")}</div>
-              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary">
-                <CountUp value={stats.count} />
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.12em] text-text-muted">{tr("Оцінок", "Grades")}</div>
+                <div className="mt-1.5 text-5xl font-semibold tracking-[-0.02em] tabular-nums text-text-primary">
+                  <CountUp value={stats.count} />
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Тренд", "Trend")}</div>
-              <div className={`mt-1 flex items-center gap-1.5 text-3xl font-mono font-semibold ${trendTone}`}>
-                <TrendIcon className="w-5 h-5" />
-                {stats.trend > 0 ? `+${stats.trend}` : stats.trend}
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.12em] text-text-muted">{tr("Тренд", "Trend")}</div>
+                <div className={`mt-1.5 flex items-center gap-2 text-5xl font-semibold tracking-[-0.02em] tabular-nums ${trendTone}`}>
+                  <TrendIcon className="w-7 h-7" />
+                  {stats.trend > 0 ? `+${stats.trend}` : stats.trend}
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          ) : (
+            <motion.div variants={fadeUpItem} className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Середній бал", "Average")}</div>
+                <div className={`mt-1 text-3xl font-mono font-semibold ${gradeTone(stats.avg)}`}>
+                  <CountUp value={stats.avg} decimals={1} />
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Оцінок", "Grades")}</div>
+                <div className="mt-1 text-3xl font-mono font-semibold text-text-primary">
+                  <CountUp value={stats.count} />
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Тренд", "Trend")}</div>
+                <div className={`mt-1 flex items-center gap-1.5 text-3xl font-mono font-semibold ${trendTone}`}>
+                  <TrendIcon className="w-5 h-5" />
+                  {stats.trend > 0 ? `+${stats.trend}` : stats.trend}
+                </div>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
 
-        <div className="mt-6 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+        {!isAurora ? <div className="mt-6 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" /> : null}
       </div>
 
       <div className="px-4 md:px-8 pb-12 max-w-6xl mx-auto w-full space-y-8">

@@ -23,6 +23,7 @@ import { LiveChallengePanel } from "../../components/LiveChallengePanel";
 import { LiveCodeBoard } from "../../components/LiveCodeBoard";
 import { RaiseHandButton, RaisedHandsBar } from "../../components/LiveRaiseHand";
 import { LessonMaterialsPanel } from "../../components/LessonMaterialsPanel";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { BreakoutPanel } from "../../components/BreakoutPanel";
 import {
   getActiveLiveSession,
@@ -60,6 +61,7 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
   const { classId: classIdParam } = useParams<{ classId: string }>();
   const classId = Number(classIdParam);
   const navigate = useNavigate();
+  const isAurora = useUIMode().mode === "aurora";
 
   const isTeacher = !user?.studentId;
 
@@ -531,14 +533,18 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
           </div>
 
           <div className="p-6">
-            <span className="font-mono text-xs text-primary/70">// live classroom</span>
-            <div className="mt-2 flex items-center gap-2">
-              <Video className="h-5 w-5 shrink-0 text-primary" />
-              <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
+            {isAurora ? (
+              <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{tr("Урок", "Live")}</span>
+            ) : (
+              <span className="font-mono text-xs text-primary/70">// live classroom</span>
+            )}
+            <div className={`flex items-center gap-2 ${isAurora ? "mt-3" : "mt-2"}`}>
+              <Video className={`shrink-0 text-primary ${isAurora ? "h-6 w-6" : "h-5 w-5"}`} />
+              <h1 className={isAurora ? "text-3xl md:text-4xl font-semibold tracking-[-0.02em] text-text-primary" : "text-2xl font-semibold tracking-tight text-text-primary"}>
                 {tr("Живий урок", "Live classroom")}
               </h1>
             </div>
-            <div className="mt-4 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+            <div className={`mt-4 h-px bg-gradient-to-r from-primary/40 via-border to-transparent ${isAurora ? "hidden" : ""}`} />
 
             {phase === "loading" && (
               <p className="mt-6 flex items-center gap-2 text-sm font-mono text-text-secondary">

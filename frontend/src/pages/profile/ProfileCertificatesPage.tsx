@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Award, RefreshCw, ArrowRight } from "lucide-react";
 import { Button } from "../../components/ui/Button";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { getMyCertificates, type ProfileCertificate } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -53,7 +54,7 @@ export const ProfileCertificatesPage: React.FC = () => {
         transition={{ duration: 0.4, ease: easeOutQuint }}
         className="space-y-2"
       >
-        <span className="font-mono text-xs text-primary/70">{tr("// сертифікати", "// certificates")}</span>
+        <PageEyebrow label={tr("Сертифікати", "Certificates")} />
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div className="flex items-center gap-2">
             <Award className="w-5 h-5 text-primary" />

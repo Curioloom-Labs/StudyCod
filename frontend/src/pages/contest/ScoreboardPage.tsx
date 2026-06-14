@@ -4,6 +4,7 @@ import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate, Medal } from "luci
 import { motion, useReducedMotion } from "framer-motion";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Skeleton } from "../../components/ui/Skeleton";
 import {
   getContestScoreboard,
@@ -173,7 +174,7 @@ export const ScoreboardPage: React.FC = () => {
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>
-            <span className="font-mono text-xs text-primary/70">// scoreboard</span>
+            <PageEyebrow label="scoreboard" />
             <h1 className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
               {title || tr("Скорборд", "Scoreboard")}
             </h1>

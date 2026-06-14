@@ -30,6 +30,7 @@ import { useUIMode } from "../../components/interface/UIModeProvider";
 import { WorkspaceViewportProvider } from "../../components/interface/WorkspaceViewport";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { prefetchNavTarget } from "../../lib/prefetchRoutes";
+import { nextUIMode } from "../../lib/uiMode";
 import type { MomentumNavTarget } from "../momentum/MomentumShell";
 import { NOVA, novaDur, prefersReducedMotion } from "../../lib/novaMotion";
 import {
@@ -112,14 +113,16 @@ export const NovaShell: React.FC<NovaShellProps> = ({
   const isUk = (i18n.language || "").startsWith("uk");
 
   const cycleUIMode = () => {
-    ui.setMode(ui.mode === "focus" ? "nova" : ui.mode === "nova" ? "classic" : "focus");
+    ui.setMode(nextUIMode(ui.mode));
   };
   const currentUIModeName =
     ui.mode === "focus"
       ? t("momentumUiName")
       : ui.mode === "nova"
         ? t("novaUiName", { defaultValue: "Nova" })
-        : t("classicUiName");
+        : ui.mode === "aurora"
+          ? t("auroraUiName", { defaultValue: "Aurora" })
+          : t("classicUiName");
 
   const [collapsed, setCollapsed] = React.useState<boolean>(() => readSidebarCollapsed());
   const [accountOpen, setAccountOpen] = React.useState(false);
@@ -296,7 +299,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
       label: `${t("interfaceLabel")}: ${currentUIModeName}`,
       icon: SwatchBook,
       run: () => {
-        ui.setMode(ui.mode === "focus" ? "nova" : ui.mode === "nova" ? "classic" : "focus");
+        ui.setMode(nextUIMode(ui.mode));
       }
     },
     {

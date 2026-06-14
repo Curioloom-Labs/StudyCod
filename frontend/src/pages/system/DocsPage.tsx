@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { showToast } from "../../lib/toast";
 import { MarkdownView } from "../../components/MarkdownView";
 import { getDocsSections, type DocsAudience, type DocsSectionId } from "../../content/docs";
@@ -14,6 +15,7 @@ export const DocsPage: React.FC = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const prefersReducedMotion = useReducedMotion();
+  const isAurora = useUIMode().mode === "aurora";
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [audience, setAudience] = useState<DocsAudience>("ALL");
@@ -184,8 +186,12 @@ export const DocsPage: React.FC = () => {
             >
               <div className="flex items-start justify-between gap-4 mb-5">
                 <div>
-                  <span className="font-mono text-xs text-primary/70">// {selected?.audience?.toLowerCase()}</span>
-                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-text-primary">{selected?.title}</h2>
+                  {isAurora ? (
+                    <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-text-muted">{selected?.audience}</span>
+                  ) : (
+                    <span className="font-mono text-xs text-primary/70">// {selected?.audience?.toLowerCase()}</span>
+                  )}
+                  <h2 className={`mt-1 font-semibold text-text-primary ${isAurora ? "text-3xl md:text-4xl tracking-[-0.02em]" : "text-2xl tracking-tight"}`}>{selected?.title}</h2>
                 </div>
                 <Button
                   variant="ghost"

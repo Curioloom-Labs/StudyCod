@@ -17,6 +17,8 @@ import { SwitchToMomentumNudge } from "./components/interface/SwitchToMomentumNu
 import { WorkspaceViewportProvider } from "./components/interface/WorkspaceViewport";
 import { MomentumShell, type MomentumNavTarget } from "./layout/momentum/MomentumShell";
 import { NovaShellLazy } from "./layout/nova/NovaShellLazy";
+import { AuroraShellLazy } from "./layout/aurora/AuroraShellLazy";
+import { nextUIMode } from "./lib/uiMode";
 import { CommandPalette, type PaletteItem, type PaletteAction } from "./components/interface/CommandPalette";
 import { prefetchNavTarget, prefetchPath } from "./lib/prefetchRoutes";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "./lib/resumeState";
@@ -932,9 +934,9 @@ const AppContent: React.FC = React.memo(() => {
                         </button>
                         <button role="menuitem" onClick={() => {
                       setNavOpen(false);
-                      ui.setMode(ui.mode === "classic" ? "focus" : ui.mode === "focus" ? "nova" : "classic");
+                      ui.setMode(nextUIMode(ui.mode));
                     }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary border-t border-border">
-                          {t("interfaceLabel")}: {ui.mode === "classic" ? t("classicUiName") : ui.mode === "focus" ? t("momentumUiName") : t("novaUiName", { defaultValue: "Nova" })}
+                          {t("interfaceLabel")}: {ui.mode === "classic" ? t("classicUiName") : ui.mode === "focus" ? t("momentumUiName") : ui.mode === "aurora" ? t("auroraUiName", { defaultValue: "Aurora" }) : t("novaUiName", { defaultValue: "Nova" })}
                         </button>
                         <button role="menuitem" onClick={handleLogout} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-accent-error border-t border-border">
                           {t('logout')}
@@ -966,7 +968,7 @@ const AppContent: React.FC = React.memo(() => {
   }
 
         const momentumCurrent: MomentumNavTarget = resolvedPage === "home" ? "continue" : resolvedPage;
-  const Shell = ui.mode === "nova" ? NovaShellLazy : MomentumShell;
+  const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
   return <>
       <Suspense fallback={<PageLoader />}>
       <Shell user={user} current={momentumCurrent} onNavigate={target => {
@@ -1668,7 +1670,7 @@ const EduRoutes: React.FC = React.memo(() => {
       : /^\/edu\/(lessons|tasks|grades)\b/.test(location.pathname)
         ? "lessons"
         : "continue";
-  const Shell = ui.mode === "nova" ? NovaShellLazy : MomentumShell;
+  const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
   return <>
       <Suspense fallback={<PageLoader />}>
       <Shell user={user} current={momentumCurrent} navigationHidden={isControlExamActive} onNavigate={target => {

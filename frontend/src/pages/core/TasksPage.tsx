@@ -17,6 +17,7 @@ import { tr } from "../../i18n";
 import { useTheoryModal } from "../../components/theory/TheoryModalProvider";
 import { TaskGenerationOverlay, type TaskGenerationPhase } from "../../components/TaskGenerationOverlay";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
 import { FailureRecoveryCard, type FailureRecoveryData } from "../../components/FailureRecoveryCard";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
@@ -201,6 +202,7 @@ export const TasksPage: React.FC<Props> = ({
   } = useTranslation();
   const uiLanguage = typeof i18n.language === "string" && i18n.language.startsWith("en") ? "en" : "uk";
   const locale = typeof i18n.language === "string" && i18n.language.startsWith("uk") ? "uk-UA" : "en-US";
+  const isAurora = useUIMode().mode === "aurora";
   const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
   const { element: viewportEl } = useWorkspaceViewport();
   const {
@@ -2204,7 +2206,7 @@ export const TasksPage: React.FC<Props> = ({
   };
 
     return <div className={`relative w-full px-2 sm:px-3 pb-3 ${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)]" : "h-[calc(100dvh-3rem)] md:min-h-[760px]"}`}>
-      <div className={`${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)] overflow-visible" : "h-full overflow-hidden"} rounded-3xl bg-bg-surface border border-border/60 shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex`}>
+      <div className={`${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)] overflow-visible" : "h-full overflow-hidden"} rounded-3xl bg-bg-surface border border-border/60 flex ${isAurora ? "shadow-[var(--aurora-elev-2)]" : "shadow-[0_8px_24px_rgba(0,0,0,0.24)]"}`}>
         <aside className="w-12 sm:w-[58px] border-r border-border/60 bg-bg-surface/70 flex flex-col items-center py-3 gap-2">
           {railItems.map(item => (
             <div key={item.id} className="group relative">

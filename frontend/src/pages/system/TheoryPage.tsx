@@ -5,6 +5,7 @@ import type { User } from "../../types";
 import { tr } from "../../i18n";
 import { getTheoryTopics, type TheoryTopic } from "../../lib/api/theory";
 import { MarkdownView } from "../../components/MarkdownView";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 
 interface TheoryPageProps {
@@ -56,7 +57,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
         <div className="px-4 py-3 border-b border-border bg-bg-code/50">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-primary" />
-            <span className="font-mono text-xs text-primary/70">// theory</span>
+            <PageEyebrow label="theory" />
           </div>
           <div className="mt-1 text-sm font-semibold tracking-tight text-text-primary">
             {tr("Курс:", "Course:")} {courseLabel}
@@ -123,7 +124,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
           <div>
             {/* Content header */}
             <div className="px-5 py-4 border-b border-border bg-bg-code/30">
-              <span className="font-mono text-xs text-primary/70">// {courseLabel.toLowerCase()}</span>
+              <PageEyebrow label={courseLabel} />
               <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-text-primary">
                 {selected.theory?.title || selected.title}
               </h1>
