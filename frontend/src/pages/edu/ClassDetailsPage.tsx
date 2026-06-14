@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
+import { PageHero, type PageHeroStat } from "../../components/ui/PageHero";
+import { AuroraList, AuroraRow } from "../../components/ui/AuroraList";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Modal } from "../../components/ui/Modal";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import {
@@ -69,6 +72,7 @@ export const ClassDetailsPage: React.FC = () => {
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const isEn = i18n.language?.toLowerCase().startsWith("en");
+  const isAurora = useUIMode().mode === "aurora";
   const {
     classId
   } = useParams<{
@@ -354,19 +358,13 @@ export const ClassDetailsPage: React.FC = () => {
     return <PageSkeleton variant="default" />;
   }
   return <div className="min-h-full bg-bg-base">
-      {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-7xl mx-auto">
-        <span className="font-mono text-xs text-primary/70">// class</span>
-        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-              {classInfo?.name || t('classDetails')}
-            </h1>
-            <p className="mt-1.5 text-sm text-text-secondary">
-              {tr("Учні, теми, оголошення та аналітика класу — усе в одному місці.", "Students, topics, announcements and analytics — all in one place.")}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+      <PageHero
+        eyebrowClassic="// class"
+        eyebrowAurora={tr("Клас", "Class")}
+        title={classInfo?.name || t('classDetails')}
+        subtitle={tr("Учні, теми, оголошення та аналітика класу — усе в одному місці.", "Students, topics, announcements and analytics — all in one place.")}
+        maxWidth="7xl"
+        actions={<>
             <Button variant="ghost" onClick={() => navigate("/edu")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {t('toHome')}
@@ -379,33 +377,18 @@ export const ClassDetailsPage: React.FC = () => {
               <Gauge className="w-4 h-4 mr-2" />
               Teacher OS
             </Button>
-          </div>
-        </div>
-
-        {/* Inline key stats */}
-        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={students.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t('students')}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={topics.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t('topic')}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={lessons.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Уроки", "Lessons")}</span>
-          </div>
-          {cohortAnalytics && (
-            <div className="flex items-baseline gap-2">
-              <span className={`font-mono text-2xl md:text-3xl tabular-nums ${cohortAnalytics.overview.riskStudentsCount > 0 ? "text-accent-warning" : "text-text-primary"}`}><CountUp value={cohortAnalytics.overview.riskStudentsCount} /></span>
-              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Учні ризику", "At-risk")}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+          </>}
+        stats={[
+          { value: <CountUp value={students.length} />, label: t('students') },
+          { value: <CountUp value={topics.length} />, label: t('topic') },
+          { value: <CountUp value={lessons.length} />, label: tr("Уроки", "Lessons") },
+          ...(cohortAnalytics ? [{
+            value: <CountUp value={cohortAnalytics.overview.riskStudentsCount} />,
+            label: tr("Учні ризику", "At-risk"),
+            tone: (cohortAnalytics.overview.riskStudentsCount > 0 ? "warn" : "default") as PageHeroStat["tone"]
+          }] : [])
+        ]}
+      />
 
       <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto space-y-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -673,6 +656,16 @@ export const ClassDetailsPage: React.FC = () => {
                 {t('add')}
               </Button>
             </div>
+          ) : isAurora ? (
+            <AuroraList>
+              {students.map(student => (
+                <AuroraRow
+                  key={student.id}
+                  title={`${student.lastName} ${student.firstName} ${student.middleName || ""}`.trim()}
+                  meta={`${student.email} · @${student.generatedUsername}`}
+                />
+              ))}
+            </AuroraList>
           ) : (
             <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {students.map(student => <motion.div key={student.id} variants={fadeUpItem} className="rounded-xl p-4 border border-border bg-bg-surface transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
@@ -771,6 +764,26 @@ export const ClassDetailsPage: React.FC = () => {
                 {t('createTopic')}
               </Button>
             </div>
+          ) : isAurora ? (
+            <AuroraList>
+              {topics.map(topic => {
+                const practiceCount = (topic.tasks || []).filter((taskItem) => (taskItem as { type?: unknown } | null | undefined)?.type === "PRACTICE").length;
+                const controlWorksCount = (topic.controlWorks || []).length;
+                const totalCount = practiceCount + controlWorksCount;
+                const lang = topic.language === "JAVA" ? "Java" : topic.language === "PYTHON" ? "Python" : "C++";
+                const metaParts = [lang];
+                if (totalCount > 0) metaParts.push(`${t('tasksCount')}: ${totalCount}`);
+                if (topic.description) metaParts.push(topic.description);
+                return (
+                  <AuroraRow
+                    key={topic.id}
+                    title={topic.title}
+                    meta={metaParts.join(" · ")}
+                    onClick={() => navigate(`/edu/topics/${topic.id}`)}
+                  />
+                );
+              })}
+            </AuroraList>
           ) : (
             <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {topics.map(topic => <motion.button type="button" key={topic.id} variants={fadeUpItem} className="group w-full p-5 text-left rounded-xl border border-border bg-bg-surface transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]" onClick={() => navigate(`/edu/topics/${topic.id}`)}>

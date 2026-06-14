@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { PageHero } from "../../components/ui/PageHero";
 import { createLesson, generateTheoryPreview, getClasses, type CreateLessonRequest } from "../../lib/api/edu";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { tr } from "../../i18n";
@@ -93,24 +94,19 @@ export const CreateLessonPage: React.FC = () => {
     }
   };
   return <div className="min-h-full bg-bg-base">
-      {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-3xl mx-auto">
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-xs text-primary/70">// new lesson</span>
+      <PageHero
+        eyebrowClassic="// new lesson"
+        eyebrowAurora={tr("Новий урок", "New lesson")}
+        title={tr("Створити урок", "Create lesson")}
+        subtitle={tr("Урок або контрольна — з теорією, практикою та обмеженням часу.", "A lesson or control work — with theory, practice and a time limit.")}
+        maxWidth="3xl"
+        actions={
           <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/classes/${classId}`)}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-        </div>
-        <div className="mt-2">
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Створити урок", "Create lesson")}</h1>
-          <p className="mt-1.5 text-sm text-text-secondary">
-            {tr("Урок або контрольна — з теорією, практикою та обмеженням часу.", "A lesson or control work — with theory, practice and a time limit.")}
-          </p>
-        </div>
-      </div>
-
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+        }
+      />
 
       <div className="px-4 md:px-8 py-8 max-w-3xl mx-auto">
         <div className="rounded-xl border border-border bg-bg-surface p-5 sm:p-6 space-y-6">

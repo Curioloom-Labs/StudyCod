@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "../../components/ui/Button";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
 
 type LegalSection = {
@@ -184,7 +185,7 @@ export const PrivacyPolicyPage: React.FC = () => {
         >
           {/* Hero */}
           <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mb-8">
-            <span className="font-mono text-xs text-primary/70">// privacy</span>
+            <PageEyebrow label="privacy" />
             <h1 className="mt-1 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
               {tr("Політика конфіденційності", "Privacy Policy")}
             </h1>
