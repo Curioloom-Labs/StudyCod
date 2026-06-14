@@ -15,7 +15,24 @@ import { logger } from "../utils/logger";
 import { getUserIadForLang } from "../utils/iad";
 import { env } from "../env";
 import { generateJti } from "../services/auth/jwtRevocation";
+import { createRouteLimiter } from "../middleware/routeRateLimit";
 export const authRouter = Router();
+
+// Pre-computed bcrypt hash used when the user does not exist, so bcrypt.compare
+// always runs regardless of lookup result — prevents response-time timing oracle.
+const DUMMY_BCRYPT_HASH = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+
+const loginLimiter = createRouteLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: "TOO_MANY_LOGIN_ATTEMPTS",
+});
+
+const emailActionLimiter = createRouteLimiter({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: "TOO_MANY_EMAIL_REQUESTS",
+});
 const userRepo = () => AppDataSource.getRepository(User);
 
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -386,7 +403,7 @@ const registerSchema = z.object({
 const googleCompleteSchema = z.object({
   token: z.string().min(1),
   username: z.string().min(3).max(50),
-  password: z.string().min(6),
+  password: z.string().min(8),
   course: z.string().optional(),
   lang: z.string().optional(),
   firstName: z.string().min(1),
@@ -399,7 +416,7 @@ const forgotPasswordSchema = z.object({
 });
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
-  newPassword: z.string().min(6)
+  newPassword: z.string().min(8)
 });
 authRouter.post("/register", async (req: AuthRequest, res: Response) => {
   try {
@@ -477,7 +494,7 @@ authRouter.post("/register", async (req: AuthRequest, res: Response) => {
     });
   }
 });
-authRouter.post("/login", async (req: AuthRequest, res: Response) => {
+authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const {
       username,
@@ -503,7 +520,8 @@ authRouter.post("/login", async (req: AuthRequest, res: Response) => {
         username
       }
     });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    const passwordMatch = await bcrypt.compare(password, user?.password ?? DUMMY_BCRYPT_HASH);
+    if (!user || !passwordMatch) {
       return res.status(400).json({
         message: "INVALID_CREDENTIALS"
       });
@@ -581,7 +599,7 @@ authRouter.get("/google", (req: Request, res: Response, next) => {
   })(req, res, next);
 });
 
-authRouter.post("/contest-login", async (req: AuthRequest, res: Response) => {
+authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { username, password, turnstileToken } = req.body as { username?: string; password?: string; turnstileToken?: string };
     if (!username || !password) {
@@ -593,7 +611,8 @@ authRouter.post("/contest-login", async (req: AuthRequest, res: Response) => {
     }
 
     const user = await userRepo().findOne({ where: { username } });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    const passwordMatch = await bcrypt.compare(password, user?.password ?? DUMMY_BCRYPT_HASH);
+    if (!user || !passwordMatch) {
       return res.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
 
@@ -688,7 +707,9 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
 
     if (user.isNewUser) {
       const tempToken = jwt.sign({
-        ...user,
+        googleId: user.googleId ?? null,
+        email: user.email ?? null,
+        avatarUrl: user.avatarUrl ?? null,
         temp: true,
         jti: generateJti()
       }, JWT_SECRET, {
@@ -978,7 +999,7 @@ authRouter.get("/verify-email", async (req: AuthRequest, res: Response) => {
     });
   }
 });
-authRouter.post("/resend-verification", async (req: AuthRequest, res: Response) => {
+authRouter.post("/resend-verification", emailActionLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const {
       email
@@ -1021,7 +1042,7 @@ authRouter.post("/resend-verification", async (req: AuthRequest, res: Response) 
     });
   }
 });
-authRouter.post("/forgot-password", async (req: AuthRequest, res: Response) => {
+authRouter.post("/forgot-password", emailActionLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const validated = forgotPasswordSchema.safeParse(req.body);
     if (!validated.success) {
