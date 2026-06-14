@@ -244,7 +244,6 @@ adminRouter.patch("/users/:id/role", authRequired, systemAdminGuard, async (req:
         message: "USER_NOT_FOUND"
       });
     }
-    if (validated.data.role === "SYSTEM_ADMIN" && user.role !== "SYSTEM_ADMIN") {}
     user.role = validated.data.role;
     await userRepo().save(user);
     return res.json({

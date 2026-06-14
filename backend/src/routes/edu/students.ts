@@ -84,7 +84,7 @@ router.get("/students/me", authRequired, async (req: AuthRequest, res: Response)
       relations: ["class", "class.teacher"]
     });
 
-    if (!student) {
+    if (!student || !student.class) {
       return res.status(404).json({
         message: "STUDENT_NOT_FOUND"
       });

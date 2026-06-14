@@ -637,15 +637,27 @@ async function buildCohortAnalytics(cls: Class, locale: UiLocale): Promise<Cohor
     completed: number;
     weakTasks: number;
     scores: number[];
+    assignedCount: number;
   }>();
 
+  const allTrackedTasks = [...trackedTasksByTopic.values()].flat();
+
   for (const student of students) {
+    // Tasks actually assigned/visible to THIS student — the correct denominator
+    // for their completion. Using the class-wide tracked count would mark a
+    // selectively-assigned student as "at risk" even when they finished all of
+    // their own tasks.
+    const assignedCount = allTrackedTasks.reduce(
+      (n, task) => (isTaskVisibleToStudent(task, student.id) ? n + 1 : n),
+      0
+    );
     studentAggregates.set(student.id, {
       studentName: `${student.lastName} ${student.firstName}${student.middleName ? ` ${student.middleName}` : ""}`.trim(),
       attempted: 0,
       completed: 0,
       weakTasks: 0,
-      scores: []
+      scores: [],
+      assignedCount
     });
   }
 
@@ -785,7 +797,8 @@ async function buildCohortAnalytics(cls: Class, locale: UiLocale): Promise<Cohor
       const avgScore = agg.scores.length > 0
         ? roundTo(agg.scores.reduce((sum, score) => sum + score, 0) / agg.scores.length, 2)
         : 0;
-      const completion = tasksTracked > 0 ? roundTo(agg.completed / tasksTracked, 4) : 0;
+      const completionDenominator = agg.assignedCount > 0 ? agg.assignedCount : tasksTracked;
+      const completion = completionDenominator > 0 ? roundTo(agg.completed / completionDenominator, 4) : 0;
       return {
         studentId,
         studentName: agg.studentName,

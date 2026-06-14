@@ -415,6 +415,21 @@ export class CertificateService {
           issued_at, pdf_storage_key, qr_code_data_url, checksum_sha256,
           created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, 'rendered', ?, ?, ?, ?, ?, NOW(), ?, ?, ?, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+          certificate_id = VALUES(certificate_id),
+          template_id = VALUES(template_id),
+          status = 'rendered',
+          score = VALUES(score),
+          max_score = VALUES(max_score),
+          place_text = VALUES(place_text),
+          participant_name = VALUES(participant_name),
+          organizer_name = VALUES(organizer_name),
+          issued_at = NOW(),
+          pdf_storage_key = VALUES(pdf_storage_key),
+          qr_code_data_url = VALUES(qr_code_data_url),
+          checksum_sha256 = VALUES(checksum_sha256),
+          revoked_at = NULL,
+          updated_at = NOW()
         `,
         [
           certificateId,
