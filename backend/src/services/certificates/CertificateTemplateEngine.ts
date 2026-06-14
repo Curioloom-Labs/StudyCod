@@ -15,6 +15,23 @@ const ALL_KEYS = new Set([
   "qr_code",
 ]);
 
+const DANGEROUS_CSS_PATTERNS = [
+  /url\s*\(/gi,
+  /@import/gi,
+  /expression\s*\(/gi,
+  /javascript\s*:/gi,
+  /-moz-binding/gi,
+  /behavior\s*:/gi,
+];
+
+function sanitizeCss(input: string): string {
+  let css = input;
+  for (const pattern of DANGEROUS_CSS_PATTERNS) {
+    css = css.replace(pattern, "/* blocked */");
+  }
+  return css;
+}
+
 function escapeHtml(input: unknown): string {
   const s = String(input ?? "");
   return s
@@ -43,7 +60,7 @@ export class CertificateTemplateEngine {
     const p = params.payload;
     const show = (key: string) => enabled.has(key);
 
-    const extraCss = String(params.cssTemplate ?? "").trim();
+    const extraCss = sanitizeCss(String(params.cssTemplate ?? "").trim());
 
     return `<!doctype html>
 <html>
@@ -110,7 +127,7 @@ export class CertificateTemplateEngine {
   }): string {
     const template = Handlebars.compile(params.htmlTemplate, { noEscape: false, strict: false });
     const body = template(params.payload);
-    const css = String(params.cssTemplate ?? "").trim();
+    const css = sanitizeCss(String(params.cssTemplate ?? "").trim());
 
     return `<!doctype html>
 <html>

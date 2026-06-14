@@ -55,7 +55,8 @@ router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: A
     if (!code.trim()) return res.status(400).json({ message: "CODE_REQUIRED" });
     if (code.length > 50_000) return res.status(413).json({ message: "CODE_TOO_LARGE" });
     const stdin = String(b.stdin ?? "").slice(0, MAX_STDIN);
-    const maxSteps = Number.isFinite(Number(b.maxSteps)) ? Number(b.maxSteps) : DEFAULT_MAX_STEPS;
+    const MAX_ALLOWED_STEPS = 2000;
+    const maxSteps = Math.min(MAX_ALLOWED_STEPS, Number.isFinite(Number(b.maxSteps)) ? Number(b.maxSteps) : DEFAULT_MAX_STEPS);
 
     const script = buildPythonTracerScript(code, maxSteps);
     const result = await executeCodeWithInput(script, "PYTHON", stdin, 10_000);
