@@ -517,16 +517,18 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
           .getMany();
 
         const practiceGrades = classGrades.filter(g => !(g.topicTask && g.topicTask.type === "CONTROL"));
-        const practiceBestGrades: Record<number, number> = {};
+        const practiceBestGrades: Record<string, number> = {};
         practiceGrades.forEach(g => {
-          let taskId: number | null = null;
+          // Namespaced string keys so task and topicTask ids can never collide
+          // (the previous "+1000000" offset breaks once a task id reaches 1e6).
+          let taskKey: string | null = null;
           if (g.task) {
-            taskId = g.task.id;
+            taskKey = `task:${g.task.id}`;
           } else if (g.topicTask) {
-            taskId = g.topicTask.id + 1000000;
+            taskKey = `topicTask:${g.topicTask.id}`;
           }
-          if (taskId !== null && (!practiceBestGrades[taskId] || (g.total || 0) > practiceBestGrades[taskId])) {
-            practiceBestGrades[taskId] = g.total || 0;
+          if (taskKey !== null && (!practiceBestGrades[taskKey] || (g.total || 0) > practiceBestGrades[taskKey])) {
+            practiceBestGrades[taskKey] = g.total || 0;
           }
         });
         const practiceScores = Object.values(practiceBestGrades);

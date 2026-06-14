@@ -111,6 +111,10 @@ export class TestRunner implements ITestRunner {
       const expected = testData[i]?.output ?? "";
       const input = testData[i]?.input ?? "";
       const r: any = byId.get(i + 1);
+      // The judge may return fewer results than tests (crash/timeout after test N).
+      // A missing result is a system error, not a wrong answer — don't let it be
+      // silently reported as a failed test.
+      const missingResult = r === undefined;
       const verdict = String(r?.verdict ?? "");
       const actualOutput = String(r?.actual ?? "");
       const ranOk = verdict === "WA" || verdict === "AC";
@@ -120,7 +124,9 @@ export class TestRunner implements ITestRunner {
       const stderr = String(r?.stderr ?? "");
       const error = passed
         ? undefined
-        : (stderr ? filterStderrWithLang(stderr, language) : (ranOk ? "Wrong answer" : verdict || "Execution failed"));
+        : (missingResult
+            ? "No result from judge"
+            : (stderr ? filterStderrWithLang(stderr, language) : (ranOk ? "Wrong answer" : verdict || "Execution failed")));
       testResults.push({
         testIndex: i + 1,
         input,

@@ -53,7 +53,7 @@ router.get("/classes/:classId/announcements", authRequired, async (req: AuthRequ
 
       if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
 
-      if (cls.teacher.id !== req.userId) {
+      if (!cls.teacher || cls.teacher.id !== req.userId) {
         const user = await userRepo().findOne({ where: { id: req.userId } });
         if (!user || user.role !== "SYSTEM_ADMIN") {
           return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -149,7 +149,7 @@ router.post("/classes/:classId/announcements", authRequired, async (req: AuthReq
 
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
 
-    if (cls.teacher.id !== req.userId) {
+    if (!cls.teacher || cls.teacher.id !== req.userId) {
       const user = await userRepo().findOne({ where: { id: req.userId } });
       if (!user || user.role !== "SYSTEM_ADMIN") {
         return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -222,7 +222,7 @@ router.put("/classes/:classId/announcements/:id", authRequired, async (req: Auth
 
     if (!ann) return res.status(404).json({ message: "ANNOUNCEMENT_NOT_FOUND" });
 
-    if (ann.class.teacher.id !== req.userId) {
+    if (!ann.class || !ann.class.teacher || ann.class.teacher.id !== req.userId) {
       const user = await userRepo().findOne({ where: { id: req.userId } });
       if (!user || user.role !== "SYSTEM_ADMIN") {
         return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -259,7 +259,7 @@ router.delete("/classes/:classId/announcements/:id", authRequired, async (req: A
 
     if (!ann) return res.status(404).json({ message: "ANNOUNCEMENT_NOT_FOUND" });
 
-    if (ann.class.teacher.id !== req.userId) {
+    if (!ann.class || !ann.class.teacher || ann.class.teacher.id !== req.userId) {
       const user = await userRepo().findOne({ where: { id: req.userId } });
       if (!user || user.role !== "SYSTEM_ADMIN") {
         return res.status(403).json({ message: "ACCESS_DENIED" });

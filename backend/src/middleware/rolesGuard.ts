@@ -12,8 +12,6 @@ export const rolesGuard = (allowedRoles: UserRole[]) => {
     if (!userRole || !allowedRoles.includes(userRole)) {
       return res.status(403).json({
         message: 'Forbidden: Insufficient permissions',
-        requiredRoles: allowedRoles,
-        userRole: userRole || null
       });
     }
     next();

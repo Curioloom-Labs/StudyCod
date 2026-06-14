@@ -1466,6 +1466,12 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
 
     const prevLang = user.lang;
     const normalizedLang = normalizeLang(course || lang || user.lang);
+    // Placement only has Java/Python tracks (no CPP mastered-until field exists).
+    // Without this guard a CPP course falls into the Python branch below and
+    // silently overwrites the student's Python placement state.
+    if (normalizedLang !== "JAVA" && normalizedLang !== "PYTHON") {
+      return res.status(400).json({ message: "INVALID_LANGUAGE" });
+    }
     if (course !== undefined || lang !== undefined) {
       user.lang = normalizedLang;
       if (prevLang !== normalizedLang) {
