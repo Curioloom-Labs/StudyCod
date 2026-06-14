@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { LiveClassMonitor } from "../../components/LiveClassMonitor";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle, Upload, Download, BookOpen, ShieldCheck, CheckCircle2, Clock } from "lucide-react";
@@ -64,6 +65,7 @@ export const TopicDetailsPage: React.FC = () => {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const isAurora = useUIMode().mode === "aurora";
   const reduce = useReducedMotion();
   const getErrorMessage = (error: unknown, fallback: string): string =>
     getErrorMessageFromUnknown(error, fallback);
@@ -770,26 +772,30 @@ export const TopicDetailsPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-          <span className="font-mono text-xs text-primary/70">// topic</span>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <BookOpen className="w-5 h-5 text-primary shrink-0" />
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{topic.title}</h1>
-            <span className="text-[10px] font-mono uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border border-border text-text-muted">{t("topic")}</span>
+          {isAurora ? (
+            <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{t("topic")}</span>
+          ) : (
+            <span className="font-mono text-xs text-primary/70">// topic</span>
+          )}
+          <div className={`flex flex-wrap items-center gap-3 ${isAurora ? "mt-3" : "mt-2"}`}>
+            <BookOpen className={`text-primary shrink-0 ${isAurora ? "w-6 h-6" : "w-5 h-5"}`} />
+            <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{topic.title}</h1>
+            {!isAurora ? <span className="text-[10px] font-mono uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border border-border text-text-muted">{t("topic")}</span> : null}
           </div>
-          {topic.description && <p className="mt-1.5 text-sm text-text-secondary">{topic.description}</p>}
-          <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{practiceTasks.length}</span>
-              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Практичних", "Practice")}</span>
+          {topic.description && <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary max-w-2xl" : "mt-1.5 text-sm text-text-secondary"}>{topic.description}</p>}
+          <div className={`flex flex-wrap items-baseline ${isAurora ? "mt-8 gap-x-12 gap-y-4" : "mt-5 gap-x-8 gap-y-3"}`}>
+            <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+              <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}>{practiceTasks.length}</span>
+              <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("Практичних", "Practice")}</span>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{controlWorks.length}</span>
-              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Контрольних", "Control works")}</span>
+            <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+              <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}>{controlWorks.length}</span>
+              <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("Контрольних", "Control works")}</span>
             </div>
           </div>
         </motion.div>
 
-        <div className="h-px mb-6 bg-gradient-to-r from-primary/40 via-border to-transparent" />
+        <div className={`h-px mb-6 bg-gradient-to-r from-primary/40 via-border to-transparent ${isAurora ? "hidden" : ""}`} />
 
         {}
         <section className="mb-8">

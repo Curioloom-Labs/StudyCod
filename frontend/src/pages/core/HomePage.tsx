@@ -36,6 +36,7 @@ import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezon
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import type { ResumeState } from "../../lib/resumeState";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "../../lib/resumeState";
+import { EmptyState } from "../../components/ui/EmptyState";
 interface Props {
   user: User;
   onNavigate: (page: "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin") => void;
@@ -458,6 +459,217 @@ export const HomePage: React.FC<Props> = ({
             ) : null}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (ui.mode === "aurora") {
+    const heroEyebrow = !isEducational
+      ? tr("Продовжити сесію", "Continue session")
+      : isTeacher
+        ? tr("Ваш потік", "Your flow")
+        : tr("Наступний урок", "Next lesson");
+
+    const heroTitle = !isEducational
+      ? resumeTitle
+      : isTeacher
+        ? (classes[0]?.name ?? tr("Ваші класи", "Your classes"))
+        : (nextStudentLesson?.title ?? resumeTitle);
+
+    // Headline progress: personal completion %, student average (→%), teacher class fill.
+    const progressPct = !isEducational
+      ? personalStats.progress
+      : isStudent && averageGrade !== null
+        ? Math.round(averageGrade)
+        : null;
+
+    const openHero = () => {
+      if (!isEducational) { openResume(); return; }
+      if (isTeacher) { startTransition(() => onNavigate("teacher")); return; }
+      if (nextStudentLesson?.id) { navigate(`/edu/lessons/${nextStudentLesson.id}`); return; }
+      navigate("/edu/lessons");
+    };
+
+    const glance: Array<{ label: string; value: string; onClick?: () => void }> = !isEducational
+      ? [
+          { label: tr("Прогрес", "Progress"), value: `${personalStats.progress}%` },
+          { label: tr("Виконано", "Done"), value: `${personalStats.done}/${personalStats.total || 0}` },
+          { label: tr("Відкрито", "Open"), value: String(personalStats.open), onClick: () => startTransition(() => onNavigate("tasks")) }
+        ]
+      : isTeacher
+        ? [
+            { label: t("classesCount"), value: String(classes.length), onClick: () => startTransition(() => onNavigate("teacher")) },
+            { label: t("studentsCount"), value: String(totalStudents) }
+          ]
+        : [
+            ...(averageGrade !== null ? [{ label: tr("Середній бал", "Average"), value: averageGrade.toFixed(1) }] : []),
+            { label: tr("Активних уроків", "Active lessons"), value: String(activeLessons), onClick: () => navigate("/edu/lessons") }
+          ];
+
+    // Recent — typographic rows, not heavy cards.
+    type RecentRow = { key: string; title: string; meta: string; trailing: string; tone: "default" | "success" | "warn"; onClick: () => void };
+    const recentRows: RecentRow[] = !isEducational
+      ? allTasks.slice(0, 8).map((task) => ({
+          key: `t-${task.id}`,
+          title: task.title,
+          meta: new Date(task.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA"),
+          trailing: task.status === "GRADED" ? tr("Оцінено", "Graded") : task.status === "SUBMITTED" ? tr("Очікує", "Pending") : tr("Відкрите", "Open"),
+          tone: task.status === "GRADED" ? "success" : task.status === "SUBMITTED" ? "warn" : "default",
+          onClick: () => { sessionStorage.setItem("openTaskId", String(task.id)); startTransition(() => onNavigate("tasks")); }
+        }))
+      : isTeacher
+        ? classes.slice(0, 8).map((cls) => ({
+            key: `c-${cls.id}`,
+            title: cls.name,
+            meta: `${tr("Учнів", "Students")}: ${cls.studentsCount}`,
+            trailing: tr("Відкрити", "Open"),
+            tone: "default" as const,
+            onClick: () => startTransition(() => onNavigate("teacher"))
+          }))
+        : recentGrades.filter((g) => g.task || g.topicTask).map((g) => ({
+            key: `g-${g.id}`,
+            title: g.task?.title || g.topicTask?.title || tr("Завдання", "Task"),
+            meta: new Date(g.createdAt).toLocaleDateString(i18n.language?.toLowerCase().startsWith("en") ? "en-US" : "uk-UA"),
+            trailing: `${g.total}/100`,
+            tone: g.total >= 60 ? "success" as const : g.total > 0 ? "warn" as const : "default" as const,
+            onClick: () => navigate(`/edu/grades/${g.id}`)
+          }));
+
+    const recentHeading = !isEducational
+      ? tr("Останні завдання", "Recent tasks")
+      : isTeacher
+        ? tr("Ваші класи", "Your classes")
+        : tr("Останні оцінки", "Recent grades");
+
+    return (
+      <div className="w-full">
+        <div className="mx-auto w-full max-w-5xl px-5 md:px-8 pt-10 md:pt-16 pb-16">
+          <motion.div variants={staggerContainer} initial="initial" animate="animate">
+            <motion.div variants={fadeUpItem} className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">
+              {isEducational ? (isTeacher ? tr("Викладання", "Teaching") : tr("Навчання", "Learning")) : tr("Робочий простір", "Workspace")}
+            </motion.div>
+            <motion.h1 variants={fadeUpItem} className="mt-3 text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary">
+              {tr("Вітаю", "Welcome")}, <span className="text-primary">{user.username}</span>
+            </motion.h1>
+            <motion.p variants={fadeUpItem} className="mt-3 text-sm md:text-base text-text-secondary">
+              {sessionLabel}
+            </motion.p>
+          </motion.div>
+
+          {/* Hero + at-a-glance — asymmetric editorial grid. */}
+          <div className="mt-9 grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
+            <motion.button
+              type="button"
+              onClick={openHero}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              className="group relative overflow-hidden text-left rounded-[var(--aurora-radius)] border border-border bg-bg-surface p-6 md:p-9 shadow-[var(--aurora-elev-1)] transition-fast hover:border-primary/50 hover:shadow-[var(--aurora-elev-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              <div className="text-[11px] font-mono uppercase tracking-[0.16em] text-primary/80">{heroEyebrow}</div>
+              <div className="mt-4 text-2xl md:text-4xl font-semibold tracking-[-0.01em] leading-[1.12] text-text-primary line-clamp-3" title={heroTitle}>
+                {loading ? tr("Завантаження…", "Loading…") : heroTitle}
+              </div>
+
+              {progressPct !== null ? (
+                <div className="mt-7 max-w-md">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-text-muted">
+                    <span>{isStudent ? tr("Середній бал", "Average") : tr("Прогрес курсу", "Course progress")}</span>
+                    <span className="text-text-secondary">{isStudent && averageGrade !== null ? averageGrade.toFixed(1) : `${personalStats.progress}%`}</span>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-bg-hover overflow-hidden">
+                    <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }} />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-8 inline-flex items-center gap-2 text-sm font-mono font-medium text-primary">
+                {tr("Продовжити", "Resume")}
+                <ArrowRight className="w-4 h-4 transition-fast group-hover:translate-x-0.5" />
+              </div>
+            </motion.button>
+
+            <motion.aside
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
+              className="rounded-[var(--aurora-radius)] border border-border bg-bg-surface/60 p-2 shadow-[var(--aurora-elev-1)] flex flex-col"
+            >
+              <div className="px-4 pt-3 pb-2 text-[11px] font-mono uppercase tracking-[0.14em] text-text-muted">
+                {tr("Коротко", "At a glance")}
+              </div>
+              <div className="flex flex-col">
+                {glance.map((g, i) => {
+                  const inner = (
+                    <>
+                      <span className="text-sm text-text-secondary">{g.label}</span>
+                      <span className="text-2xl font-semibold tracking-[-0.01em] text-text-primary tabular-nums">{g.value}</span>
+                    </>
+                  );
+                  return g.onClick ? (
+                    <button key={i} onClick={g.onClick} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl hover:bg-bg-hover transition-fast text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
+                      {inner}
+                    </button>
+                  ) : (
+                    <div key={i} className="flex items-center justify-between gap-3 px-4 py-3">{inner}</div>
+                  );
+                })}
+              </div>
+            </motion.aside>
+          </div>
+
+          {/* Recent — quiet typographic rows. */}
+          <section className="mt-12">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-lg font-semibold tracking-[-0.01em] text-text-primary">{recentHeading}</h2>
+            </div>
+            <div className="mt-4 rounded-[var(--aurora-radius)] border border-border bg-bg-surface/50 overflow-hidden divide-y divide-border">
+              {loading ? (
+                <div className="px-5 py-4 text-sm text-text-secondary">{tr("Завантаження…", "Loading…")}</div>
+              ) : recentRows.length === 0 ? (
+                <EmptyState
+                  icon={Layers3}
+                  title={tr("Поки що порожньо", "Nothing here yet")}
+                  description={!isEducational
+                    ? tr("Відкрий першу задачу — вона зʼявиться тут.", "Open your first task — it will show up here.")
+                    : isTeacher
+                      ? tr("Створи клас, щоб почати.", "Create a class to get started.")
+                      : tr("Виконані завдання та оцінки зʼявляться тут.", "Completed tasks and grades will appear here.")}
+                  className="border-0 bg-transparent py-12"
+                />
+              ) : (
+                recentRows.map((row) => (
+                  <button
+                    key={row.key}
+                    onClick={row.onClick}
+                    className="group w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-bg-hover transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-medium text-text-primary truncate group-hover:text-primary transition-fast">{row.title}</div>
+                      <div className="mt-0.5 text-[11px] font-mono text-text-muted">{row.meta}</div>
+                    </div>
+                    <span className={
+                      "shrink-0 text-xs font-mono tabular-nums " +
+                      (row.tone === "success" ? "text-accent-success" : row.tone === "warn" ? "text-accent-warn" : "text-text-secondary")
+                    }>
+                      {row.trailing}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        {isStudent && averageGrade !== null && hasControlInAverage ? (
+          <Modal open={showAverageBreakdown} onClose={() => setShowAverageBreakdown(false)} title={tr("Середній бал — розрахунок", "Average grade — calculation")}>
+            <div className="p-6 space-y-4">
+              <div className="text-sm text-text-secondary font-mono">
+                {tr("Середній бал рахується як середнє по всіх оцінках > 0 у поточному класі (практика + контрольні).", "The average grade is calculated as the mean of all grades > 0 in the current class (practice + control works).")}
+              </div>
+            </div>
+          </Modal>
+        ) : null}
       </div>
     );
   }

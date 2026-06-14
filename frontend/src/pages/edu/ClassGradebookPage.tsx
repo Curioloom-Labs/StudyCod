@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, updateSemesterGrade, deleteThematicForTopic, getControlWorkDetails, getControlWorkStudentWork, getTopicTaskStudentWork, getTopicTaskAIDetection, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork, type TopicTaskAIDetectionResponse } from "../../lib/api/edu";
@@ -45,6 +47,7 @@ export const ClassGradebookPage: React.FC = () => {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const isAurora = useUIMode().mode === "aurora";
   const isEn = i18n.language?.toLowerCase().startsWith("en");
   const {
     classId
@@ -421,7 +424,7 @@ export const ClassGradebookPage: React.FC = () => {
       <div className="flex-shrink-0 px-4 md:px-8 pt-8 pb-4">
         <div className="max-w-full mx-auto">
           {/* Hero */}
-          <span className="font-mono text-xs text-primary/70">// gradebook</span>
+          <PageEyebrow label="gradebook" />
           <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{t('gradebook')}</h1>
@@ -507,7 +510,7 @@ export const ClassGradebookPage: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-6">
         <div className="max-w-full mx-auto">
           {}
-          <div className="rounded-xl border border-border bg-bg-surface overflow-hidden">
+          <div className={`border border-border bg-bg-surface overflow-hidden ${isAurora ? "rounded-[var(--aurora-radius)] shadow-[var(--aurora-elev-1)]" : "rounded-xl"}`}>
             <div className="overflow-auto max-h-[calc(100dvh-300px)]">
               <div className="min-w-full">
                 <table className="w-full border-collapse">

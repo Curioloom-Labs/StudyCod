@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
+import { PageHero } from "../../components/ui/PageHero";
 import { Modal } from "../../components/ui/Modal";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { getStudents, getSummaryGrades, createSummaryGrade, updateSummaryGrade, deleteSummaryGrade, getTaskGrades, getTopics, type Student, type SummaryGradeGroup, type Topic } from "../../lib/api/edu";
@@ -127,11 +128,12 @@ export const SummaryGradesPage: React.FC = () => {
   }
   const totalGrades = summaryGrades.reduce((s, g) => s + g.grades.length, 0);
   return <div className="min-h-full bg-bg-base">
-      {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto">
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-xs text-primary/70">// summary grades</span>
-          <div className="flex flex-wrap gap-2 shrink-0">
+      <PageHero
+        eyebrowClassic="// summary grades"
+        eyebrowAurora={tr("Підсумок", "Summary")}
+        title={tr("Проміжні оцінки", "Intermediate grades")}
+        subtitle={tr("Тематичні та проміжні оцінки за темами класу.", "Thematic and intermediate grades grouped by class topics.")}
+        actions={<>
             <Button variant="ghost" className="text-xs" onClick={() => navigate(`/edu/classes/${classId}`)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
@@ -140,33 +142,13 @@ export const SummaryGradesPage: React.FC = () => {
               <Plus className="w-4 h-4 mr-2" />
               {tr("Створити", "Create")}
             </Button>
-          </div>
-        </div>
-        <div className="mt-2">
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Проміжні оцінки", "Intermediate grades")}</h1>
-          <p className="mt-1.5 text-sm text-text-secondary">
-            {tr("Тематичні та проміжні оцінки за темами класу.", "Thematic and intermediate grades grouped by class topics.")}
-          </p>
-        </div>
-
-        {/* Inline key stats */}
-        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={summaryGrades.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Колонки", "Columns")}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={students.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Учні", "Students")}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={totalGrades} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Оцінки", "Grades")}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+          </>}
+        stats={[
+          { value: <CountUp value={summaryGrades.length} />, label: tr("Колонки", "Columns") },
+          { value: <CountUp value={students.length} />, label: tr("Учні", "Students") },
+          { value: <CountUp value={totalGrades} />, label: tr("Оцінки", "Grades") }
+        ]}
+      />
 
       <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto">
         {summaryGrades.length === 0 ? (

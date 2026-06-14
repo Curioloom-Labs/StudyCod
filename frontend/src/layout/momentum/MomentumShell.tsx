@@ -10,6 +10,7 @@ import { WorkspaceViewportProvider } from "../../components/interface/WorkspaceV
 import { CommandPalette, type PaletteAction, type PaletteItem } from "../../components/interface/CommandPalette";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { prefetchNavTarget } from "../../lib/prefetchRoutes";
+import { nextUIMode } from "../../lib/uiMode";
 
 export type MomentumNavTarget =
   | "continue"
@@ -62,14 +63,16 @@ export const MomentumShell: React.FC<Props> = ({
   const navigate = useNavigate();
   const ui = useUIMode();
   const cycleUIMode = () => {
-    ui.setMode(ui.mode === "focus" ? "nova" : ui.mode === "nova" ? "classic" : "focus");
+    ui.setMode(nextUIMode(ui.mode));
   };
   const currentUIModeName =
     ui.mode === "focus"
       ? t("momentumUiName")
       : ui.mode === "nova"
         ? t("novaUiName", { defaultValue: "Nova" })
-        : t("classicUiName");
+        : ui.mode === "aurora"
+          ? t("auroraUiName", { defaultValue: "Aurora" })
+          : t("classicUiName");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
@@ -215,7 +218,7 @@ export const MomentumShell: React.FC<Props> = ({
       label: `${t("interfaceLabel")}: ${currentUIModeName}`,
       icon: SwatchBook,
       run: () => {
-        ui.setMode(ui.mode === "focus" ? "nova" : ui.mode === "nova" ? "classic" : "focus");
+        ui.setMode(nextUIMode(ui.mode));
       }
     },
     {

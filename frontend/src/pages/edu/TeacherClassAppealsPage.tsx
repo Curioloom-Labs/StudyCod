@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, MessageSquare, RefreshCw } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import {
   getClass,
   getClassGradeAppeal,
@@ -26,6 +27,7 @@ const RESOLVED_STATUSES: GradeAppealStatus[] = ["RESOLVED_ACCEPTED", "RESOLVED_P
 export const TeacherClassAppealsPage: React.FC = () => {
   const { i18n } = useTranslation();
   const { classId } = useParams<{ classId: string }>();
+  const isAurora = useUIMode().mode === "aurora";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tr = useCallback((uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk), [i18n.language]);
@@ -397,7 +399,7 @@ export const TeacherClassAppealsPage: React.FC = () => {
 
       <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-5 space-y-3">
+          <div className={isAurora ? "lg:col-span-5 rounded-[var(--aurora-radius)] border border-border bg-bg-surface/40 overflow-hidden divide-y divide-border self-start" : "lg:col-span-5 space-y-3"}>
             {appeals.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
                 <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
@@ -414,7 +416,11 @@ export const TeacherClassAppealsPage: React.FC = () => {
                   <button
                     type="button"
                     key={item.id}
-                    className={`w-full text-left rounded-xl border p-4 cursor-pointer transition-fast hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${isSelected ? "border-primary bg-primary/5 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]" : isPriority ? "border-accent-error/40 bg-accent-error/5 hover:border-accent-error/60" : "border-border bg-bg-surface hover:border-primary/40"}`}
+                    className={
+                      isAurora
+                        ? `w-full text-left p-4 cursor-pointer transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${isSelected ? "bg-primary/8 shadow-[inset_3px_0_0_0_var(--primary)]" : isPriority ? "bg-accent-error/5 shadow-[inset_3px_0_0_0_var(--accent-error)]" : "hover:bg-bg-hover"}`
+                        : `w-full text-left rounded-xl border p-4 cursor-pointer transition-fast hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${isSelected ? "border-primary bg-primary/5 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]" : isPriority ? "border-accent-error/40 bg-accent-error/5 hover:border-accent-error/60" : "border-border bg-bg-surface hover:border-primary/40"}`
+                    }
                     onClick={() => setSelectedAppealId(item.id)}
                   >
                     <div className="flex items-start justify-between gap-3 mb-2">

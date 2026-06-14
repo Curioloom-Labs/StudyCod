@@ -120,6 +120,7 @@ export default {
   momentumUiName: 'Momentum UI',
   classicUiName: 'Classic',
   novaUiName: 'Nova',
+  auroraUiName: 'Aurora',
   switchToMomentumPermanent: 'Switch permanently to Momentum UI?',
   switchToMomentumNow: 'Switch to Momentum UI',
   notNow: 'Not now',

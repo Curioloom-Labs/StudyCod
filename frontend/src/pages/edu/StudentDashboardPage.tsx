@@ -23,6 +23,9 @@ import { FileText, BookOpen, MessageSquare, Sparkles, Target, GraduationCap, Arr
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { AuroraSection, AuroraList, AuroraRow } from "../../components/ui/AuroraList";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import type { User } from "../../types";
 interface Props {
   user: User;
@@ -80,6 +83,8 @@ export const StudentDashboardPage: React.FC<Props> = ({
     t,
     i18n
   } = useTranslation();
+  const ui = useUIMode();
+  const isAurora = ui.mode === "aurora";
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const isEn = i18n.language?.toLowerCase().startsWith("en");
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -163,12 +168,16 @@ export const StudentDashboardPage: React.FC<Props> = ({
 
   return <div className="flex-1 min-h-0 overflow-y-auto bg-bg-base">
       {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto">
-        <span className="font-mono text-xs text-primary/70">// journal</span>
-        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+      <div className={`px-4 md:px-8 max-w-6xl mx-auto ${isAurora ? "pt-10 md:pt-16 pb-8" : "pt-8 pb-6"}`}>
+        {isAurora ? (
+          <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{tr("Навчання", "Learning")}</span>
+        ) : (
+          <span className="font-mono text-xs text-primary/70">// journal</span>
+        )}
+        <div className={`flex flex-col lg:flex-row lg:items-end justify-between gap-4 ${isAurora ? "mt-3" : "mt-2"}`}>
           <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{t('myJournal')}</h1>
-            <p className="mt-1.5 text-sm text-text-secondary">
+            <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{t('myJournal')}</h1>
+            <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary" : "mt-1.5 text-sm text-text-secondary"}>
               {tr("Ваші оцінки, прогрес та персональні рекомендації.", "Your grades, progress and personal recommendations.")}
               <span className="text-text-muted"> · {tr("Шкала", "Scale")}: {gradingSystemLabel(gradingSystem, !!isEn)}</span>
             </p>
@@ -186,27 +195,27 @@ export const StudentDashboardPage: React.FC<Props> = ({
         </div>
 
         {/* Inline aggregate stats */}
-        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+        <div className={`flex flex-wrap items-baseline ${isAurora ? "mt-8 gap-x-12 gap-y-4" : "mt-5 gap-x-8 gap-y-3"}`}>
           {masteryPath && (
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={Math.round(masteryPath.summary.averageMasteryPercent)} />%</span>
-              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Mastery", "Mastery")}</span>
+            <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+              <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}><CountUp value={Math.round(masteryPath.summary.averageMasteryPercent)} />%</span>
+              <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("Mastery", "Mastery")}</span>
             </div>
           )}
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={taskGrades.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Завдань", "Tasks")}</span>
+          <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+            <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}><CountUp value={taskGrades.length} /></span>
+            <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("Завдань", "Tasks")}</span>
           </div>
           {avgTestPercent > 0 && (
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={Math.round(avgTestPercent)} />%</span>
-              <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Тести", "Tests")}</span>
+            <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+              <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}><CountUp value={Math.round(avgTestPercent)} />%</span>
+              <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("Тести", "Tests")}</span>
             </div>
           )}
         </div>
       </div>
 
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+      {!isAurora ? <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" /> : null}
 
       <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto space-y-8">
         {masteryPath && <section>
@@ -303,11 +312,58 @@ export const StudentDashboardPage: React.FC<Props> = ({
           </section>}
 
         {grades.length === 0 && summaryGrades.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-              <GraduationCap className="w-6 h-6 text-primary" />
-            </div>
-            <p className="text-text-secondary">{t('noGradesYet')}</p>
+          <EmptyState icon={GraduationCap} title={t('noGradesYet')} />
+        ) : isAurora ? (
+          <div className="space-y-10">
+            {intermediateGrades.length > 0 ? (
+              <AuroraSection title={t('intermediateGrades')}>
+                <AuroraList>
+                  {intermediateGrades.map(sg => (
+                    <AuroraRow
+                      key={sg.id}
+                      title={sg.name}
+                      meta={`${new Date(sg.createdAt).toLocaleDateString(isEn ? "en-US" : "uk-UA")}${sg.topicTitle ? ` · ${sg.topicTitle}` : ""}`}
+                      trailing={<span className={getGradeColor(sg.grade, gradingSystem)}>{formatGradeForSystem(sg.grade, gradingSystem)}</span>}
+                      onClick={() => navigate(`/edu/appeals?new=1&targetType=SUMMARY_GRADE&targetId=${sg.id}`)}
+                    />
+                  ))}
+                </AuroraList>
+              </AuroraSection>
+            ) : null}
+            {controlGrades.length > 0 ? (
+              <AuroraSection title={tr("Контрольні оцінки", "Control work grades")}>
+                <AuroraList>
+                  {controlGrades.map(sg => (
+                    <AuroraRow
+                      key={sg.id}
+                      title={sg.controlWorkTitle || sg.name}
+                      meta={`${new Date(sg.createdAt).toLocaleDateString(isEn ? "en-US" : "uk-UA")}${sg.topicTitle ? ` · ${sg.topicTitle}` : ""}`}
+                      trailing={<span className={getGradeColor(sg.grade, gradingSystem)}>{formatGradeForSystem(sg.grade, gradingSystem)}</span>}
+                      onClick={() => navigate(`/edu/appeals?new=1&targetType=SUMMARY_GRADE&targetId=${sg.id}`)}
+                    />
+                  ))}
+                </AuroraList>
+              </AuroraSection>
+            ) : null}
+            {grades.length > 0 ? (
+              <AuroraSection title={tr("Оцінки за завдання", "Task grades")}>
+                <AuroraList>
+                  {taskGrades.map(grade => {
+                    const taskId = grade.task?.id ?? grade.topicTask?.id;
+                    const title = grade.task?.title ?? grade.topicTask?.title ?? tr("Без назви", "Untitled");
+                    return (
+                      <AuroraRow
+                        key={grade.id}
+                        title={title}
+                        meta={`${new Date(grade.createdAt).toLocaleDateString(isEn ? "en-US" : "uk-UA")} · ${grade.testsPassed}/${grade.testsTotal} ${t("tests")}`}
+                        trailing={<span className={getGradeColor(grade.total, gradingSystem)}>{formatGradeForSystem(grade.total, gradingSystem)}</span>}
+                        onClick={taskId ? () => navigate(`/edu/tasks/${taskId}`) : undefined}
+                      />
+                    );
+                  })}
+                </AuroraList>
+              </AuroraSection>
+            ) : null}
           </div>
         ) : <div className="space-y-8">
             {intermediateGrades.length > 0 && <section>

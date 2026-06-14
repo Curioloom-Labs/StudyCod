@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, FlaskConical, Play, Microscope, Link2, Terminal } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { CodeEditor } from "../../components/CodeEditor";
 import { showToast } from "../../lib/toast";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
@@ -122,7 +123,7 @@ export const PlaygroundPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("Назад", "Back")}
           </Button>
-          <span className="font-mono text-xs text-primary/70">{tr("// пісочниця", "// playground")}</span>
+          <PageEyebrow label={tr("Пісочниця", "Playground")} />
           <div className="mt-2 flex items-center gap-2">
             <FlaskConical className="w-5 h-5 text-primary" />
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Пісочниця коду", "Code Playground")}</h1>

@@ -13,6 +13,8 @@ import { CodeEditor } from "../../components/CodeEditor";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
+import { useUIMode } from "../../components/interface/UIModeProvider";
+import { AuroraList } from "../../components/ui/AuroraList";
 
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
   const reduce = useReducedMotion();
@@ -39,6 +41,8 @@ export const TeacherDashboardPage: React.FC = () => {
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const isEn = i18n.language?.toLowerCase().startsWith("en");
+  const ui = useUIMode();
+  const isAurora = ui.mode === "aurora";
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,12 +128,16 @@ export const TeacherDashboardPage: React.FC = () => {
 
   return <div className="min-h-full bg-bg-base">
       {/* Hero */}
-      <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto">
-        <span className="font-mono text-xs text-primary/70">// command center</span>
-        <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+      <div className={`px-4 md:px-8 max-w-6xl mx-auto ${isAurora ? "pt-10 md:pt-16 pb-8" : "pt-8 pb-6"}`}>
+        {isAurora ? (
+          <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{tr("Викладання", "Teaching")}</span>
+        ) : (
+          <span className="font-mono text-xs text-primary/70">// command center</span>
+        )}
+        <div className={`flex flex-col lg:flex-row lg:items-end justify-between gap-4 ${isAurora ? "mt-3" : "mt-2"}`}>
           <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{t('myClasses')}</h1>
-            <p className="mt-1.5 text-sm text-text-secondary">
+            <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{t('myClasses')}</h1>
+            <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary" : "mt-1.5 text-sm text-text-secondary"}>
               {tr("Ваші класи, учні та черга перевірок — усе в одному місці.", "Your classes, students and review queue — all in one place.")}
             </p>
           </div>
@@ -153,23 +161,23 @@ export const TeacherDashboardPage: React.FC = () => {
         </div>
 
         {/* Inline key stats */}
-        <div className="mt-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={classes.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t('myClasses')}</span>
+        <div className={`flex flex-wrap items-baseline ${isAurora ? "mt-8 gap-x-12 gap-y-4" : "mt-5 gap-x-8 gap-y-3"}`}>
+          <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+            <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}><CountUp value={classes.length} /></span>
+            <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{t('myClasses')}</span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums"><CountUp value={totalStudents} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{t('students')}</span>
+          <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+            <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}><CountUp value={totalStudents} /></span>
+            <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{t('students')}</span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className={`font-mono text-2xl md:text-3xl tabular-nums ${pendingReviews.length > 0 ? "text-accent-error" : "text-text-primary"}`}><CountUp value={pendingReviews.length} /></span>
-            <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("На перевірку", "Pending")}</span>
+          <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
+            <span className={`tabular-nums ${isAurora ? "text-5xl font-semibold tracking-[-0.02em] order-2" : "font-mono text-2xl md:text-3xl"} ${pendingReviews.length > 0 ? "text-accent-error" : "text-text-primary"}`}><CountUp value={pendingReviews.length} /></span>
+            <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("На перевірку", "Pending")}</span>
           </div>
         </div>
       </div>
 
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
+      {!isAurora ? <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" /> : null}
 
       <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto space-y-8">
         {/* Pending review queue (prioritized) */}
@@ -229,6 +237,36 @@ export const TeacherDashboardPage: React.FC = () => {
               <p className="text-text-secondary mb-4">{t('noClassesYet')}</p>
               <Button onClick={() => setShowCreateClass(true)}>{t('createFirstClass')}</Button>
             </div>
+          ) : isAurora ? (
+            <AuroraList>
+              {classes.map(cls => (
+                <motion.div
+                  key={cls.id}
+                  variants={fadeUpItem}
+                  className="group flex items-center gap-4 px-5 py-4 transition-fast hover:bg-bg-hover"
+                >
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/edu/classes/${cls.id}`)}
+                    className="min-w-0 flex-1 text-left focus-visible:outline-none"
+                  >
+                    <div className="text-[15px] font-medium text-text-primary truncate group-hover:text-primary transition-fast">{cls.name}</div>
+                    <div className="mt-0.5 text-[11px] font-mono text-text-muted truncate">
+                      {cls.language} · {gradingSystemLabel(normalizeGradingSystem(cls.gradingSystem), !!isEn)} · {cls.studentsCount} {t('students')}
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-1 shrink-0 text-text-muted">
+                    <button type="button" title={tr("Апеляції", "Appeals")} aria-label={tr("Апеляції", "Appeals")} onClick={() => navigate(`/edu/classes/${cls.id}/appeals`)} className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-bg-surface hover:text-text-primary transition-fast">
+                      <MessageSquare className="w-4 h-4" />
+                    </button>
+                    <button type="button" title="Teacher OS" aria-label="Teacher OS" onClick={() => navigate(`/edu/classes/${cls.id}/teacher-os`)} className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-bg-surface hover:text-text-primary transition-fast">
+                      <Gauge className="w-4 h-4" />
+                    </button>
+                    <ArrowRight className="w-4 h-4 ml-1 opacity-0 group-hover:opacity-100 transition-fast" />
+                  </div>
+                </motion.div>
+              ))}
+            </AuroraList>
           ) : (
             <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {classes.map(cls => (

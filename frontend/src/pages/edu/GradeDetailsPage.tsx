@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion, animate } from "framer-motion";
 import { easeOutQuint } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getStudentCode, updateGrade, type UpdateGradeRequest } from "../../lib/api/edu";
@@ -70,6 +71,7 @@ export const GradeDetailsPage: React.FC = () => {
     gradeId: string;
   }>();
   const navigate = useNavigate();
+  const isAurora = useUIMode().mode === "aurora";
   const [code, setCode] = useState("");
   const [student, setStudent] = useState<GradeStudent | null>(null);
   const [task, setTask] = useState<GradeTask | null>(null);
@@ -136,8 +138,12 @@ export const GradeDetailsPage: React.FC = () => {
             {tr("Назад", "Back")}
           </Button>
           <div className="min-w-0">
-            <span className="font-mono text-xs text-primary/70">// grade</span>
-            <h1 className="text-lg md:text-xl font-semibold tracking-tight text-text-primary truncate">{task?.title}</h1>
+            {isAurora ? (
+              <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-muted">{i18n.language?.toLowerCase().startsWith("en") ? "Grade" : "Оцінка"}</span>
+            ) : (
+              <span className="font-mono text-xs text-primary/70">// grade</span>
+            )}
+            <h1 className={`font-semibold text-text-primary truncate ${isAurora ? "text-xl md:text-2xl tracking-[-0.01em]" : "text-lg md:text-xl tracking-tight"}`}>{task?.title}</h1>
             <div className="text-xs text-text-secondary font-mono truncate">
               {student?.lastName} {student?.firstName} {student?.middleName || ""}
             </div>
