@@ -2,10 +2,12 @@ import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Pin, Settings, Tag } from "lucide-react";
+import { ArrowLeft, Clock, MessageSquare, Pin, Settings, Tag } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { MarkdownView } from "../../components/MarkdownView";
+import { ReactionBar } from "../../components/blog/ReactionBar";
+import { CommentsSection } from "../../components/blog/CommentsSection";
 import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { getMe } from "../../lib/api/profile";
@@ -23,10 +25,7 @@ type Tr = (uk: string, en: string) => string;
 function useTr(): { tr: Tr; locale: string } {
   const { i18n } = useTranslation();
   const isEn = i18n.language?.toLowerCase().startsWith("en");
-  return {
-    tr: (uk, en) => (isEn ? en : uk),
-    locale: isEn ? "en-US" : "uk-UA"
-  };
+  return { tr: (uk, en) => (isEn ? en : uk), locale: isEn ? "en-US" : "uk-UA" };
 }
 
 const CATEGORY_LABEL: Record<BlogCategory, [string, string]> = {
@@ -54,6 +53,21 @@ const CategoryBadge: React.FC<{ category: BlogCategory; tr: Tr }> = ({ category,
   </span>
 );
 
+const AuthorRow: React.FC<{ name: string | null; avatar: string | null; meta: string }> = ({ name, avatar, meta }) => (
+  <div className="flex items-center gap-2 text-xs text-text-secondary">
+    {avatar ? (
+      <img src={avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
+    ) : name ? (
+      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-hover text-[10px] font-mono">
+        {name.slice(0, 1).toUpperCase()}
+      </div>
+    ) : null}
+    {name ? <span className="text-text-primary">{name}</span> : null}
+    {name ? <span aria-hidden>·</span> : null}
+    <span>{meta}</span>
+  </div>
+);
+
 function formatDate(iso: string | null, locale: string): string {
   if (!iso) return "";
   try {
@@ -69,6 +83,7 @@ function formatDate(iso: string | null, locale: string): string {
 
 export const BlogPage: React.FC = () => {
   const navigate = useNavigate();
+  const { tag: tagParam } = useParams<{ tag?: string }>();
   const { tr, locale } = useTr();
   const prefersReducedMotion = useReducedMotion();
 
@@ -94,7 +109,10 @@ export const BlogPage: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listBlogPosts(category === "ALL" ? {} : { category })
+    const params: { category?: BlogCategory; tag?: string } = {};
+    if (category !== "ALL") params.category = category;
+    if (tagParam) params.tag = tagParam;
+    listBlogPosts(params)
       .then((res) => {
         if (!cancelled) setPosts(res.posts);
       })
@@ -107,7 +125,7 @@ export const BlogPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [category]);
+  }, [category, tagParam]);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
@@ -121,7 +139,7 @@ export const BlogPage: React.FC = () => {
             <div>
               <PageEyebrow label={tr("Девблог", "Devblog")} />
               <h1 className="mt-3 text-2xl font-mono font-semibold text-text-primary">
-                {tr("Новини та оновлення", "News & updates")}
+                {tagParam ? `#${tagParam}` : tr("Новини та оновлення", "News & updates")}
               </h1>
             </div>
             {isAdmin ? (
@@ -131,33 +149,38 @@ export const BlogPage: React.FC = () => {
               </Button>
             ) : null}
           </div>
-          <p className="mt-2 text-sm leading-6 text-text-secondary">
-            {tr(
-              "Що нового у StudyCod: анонси, зміни та виправлення.",
-              "What's new in StudyCod: announcements, changes and fixes."
-            )}
-          </p>
+          {tagParam ? (
+            <button onClick={() => navigate("/blog")} className="mt-2 text-xs text-primary hover:underline">
+              ← {tr("Усі записи", "All posts")}
+            </button>
+          ) : (
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              {tr(
+                "Що нового у StudyCod: анонси, зміни та виправлення.",
+                "What's new in StudyCod: announcements, changes and fixes."
+              )}
+            </p>
+          )}
         </motion.div>
 
-        <motion.div
-          variants={prefersReducedMotion ? undefined : fadeUpItem}
-          className="mt-6 flex flex-wrap gap-2"
-        >
-          {(["ALL", ...BLOG_CATEGORIES] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCategory(c)}
-              className={`rounded-full border px-3 py-1 text-xs font-mono transition ${
-                category === c
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-text-secondary hover:border-primary/40 hover:text-text-primary"
-              }`}
-            >
-              {c === "ALL" ? tr("Усі", "All") : tr(CATEGORY_LABEL[c][0], CATEGORY_LABEL[c][1])}
-            </button>
-          ))}
-        </motion.div>
+        {!tagParam ? (
+          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mt-6 flex flex-wrap gap-2">
+            {(["ALL", ...BLOG_CATEGORIES] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCategory(c)}
+                className={`rounded-full border px-3 py-1 text-xs font-mono transition ${
+                  category === c
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-text-secondary hover:border-primary/40 hover:text-text-primary"
+                }`}
+              >
+                {c === "ALL" ? tr("Усі", "All") : tr(CATEGORY_LABEL[c][0], CATEGORY_LABEL[c][1])}
+              </button>
+            ))}
+          </motion.div>
+        ) : null}
 
         <div className="mt-6 space-y-3">
           {loading ? (
@@ -165,9 +188,7 @@ export const BlogPage: React.FC = () => {
           ) : error ? (
             <p className="py-12 text-center text-sm text-rose-500">{error}</p>
           ) : posts.length === 0 ? (
-            <p className="py-12 text-center text-sm text-text-secondary">
-              {tr("Поки що немає записів.", "No posts yet.")}
-            </p>
+            <p className="py-12 text-center text-sm text-text-secondary">{tr("Поки що немає записів.", "No posts yet.")}</p>
           ) : (
             posts.map((post) => (
               <motion.button
@@ -175,22 +196,41 @@ export const BlogPage: React.FC = () => {
                 type="button"
                 variants={prefersReducedMotion ? undefined : fadeUpItem}
                 onClick={() => navigate(`/blog/${post.slug}`)}
-                className="block w-full rounded-xl border border-border bg-surface p-4 text-left transition hover:border-primary/40 hover:shadow-sm"
+                className="block w-full overflow-hidden rounded-xl border border-border bg-surface text-left transition hover:border-primary/40 hover:shadow-sm"
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  <CategoryBadge category={post.category} tr={tr} />
-                  {post.version ? (
-                    <span className="font-mono text-[11px] text-text-secondary">{post.version}</span>
-                  ) : null}
-                  {post.pinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : null}
-                  <span className="ml-auto font-mono text-[11px] text-text-secondary">
-                    {formatDate(post.publishedAt, locale)}
-                  </span>
-                </div>
-                <h2 className="mt-2 text-base font-semibold text-text-primary">{post.title}</h2>
-                {post.excerpt ? (
-                  <p className="mt-1 text-sm leading-6 text-text-secondary line-clamp-2">{post.excerpt}</p>
+                {post.coverUrl ? (
+                  <img src={post.coverUrl} alt="" className="h-40 w-full object-cover" loading="lazy" />
                 ) : null}
+                <div className="p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CategoryBadge category={post.category} tr={tr} />
+                    {post.version ? <span className="font-mono text-[11px] text-text-secondary">{post.version}</span> : null}
+                    {post.pinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : null}
+                    <span className="ml-auto font-mono text-[11px] text-text-secondary">
+                      {formatDate(post.publishedAt, locale)}
+                    </span>
+                  </div>
+                  <h2 className="mt-2 text-base font-semibold text-text-primary">{post.title}</h2>
+                  {post.excerpt ? (
+                    <p className="mt-1 text-sm leading-6 text-text-secondary line-clamp-2">{post.excerpt}</p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-text-secondary">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {post.readingMinutes} {tr("хв", "min")}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      {post.commentCount}
+                    </span>
+                    {post.reactionCount > 0 ? <span>· {post.reactionCount} 👍</span> : null}
+                    {post.tags.slice(0, 3).map((t) => (
+                      <span key={t.slug} className="rounded-full bg-bg-hover px-2 py-0.5 font-mono">
+                        #{t.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </motion.button>
             ))
           )}
@@ -213,12 +253,18 @@ export const BlogPostPage: React.FC = () => {
   const [post, setPost] = React.useState<BlogPostDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    getMe().then((u) => setIsAdmin(u.role === "SYSTEM_ADMIN")).catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     if (!slug) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setPost(null);
     getBlogPost(slug)
       .then((p) => {
         if (!cancelled) setPost(p);
@@ -251,26 +297,66 @@ export const BlogPostPage: React.FC = () => {
           animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: easeOutQuint }}
         >
+          {post.coverUrl ? (
+            <img src={post.coverUrl} alt="" className="mb-6 max-h-80 w-full rounded-xl border border-border object-cover" />
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-2">
             <CategoryBadge category={post.category} tr={tr} />
-            {post.version ? (
-              <span className="font-mono text-xs text-text-secondary">{post.version}</span>
-            ) : null}
+            {post.version ? <span className="font-mono text-xs text-text-secondary">{post.version}</span> : null}
             {post.pinned ? <Pin className="h-4 w-4 text-primary" /> : null}
           </div>
           <h1 className="mt-3 text-2xl font-mono font-semibold text-text-primary">{post.title}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-            <span>{formatDate(post.publishedAt, locale)}</span>
-            {post.author ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>{post.author}</span>
-              </>
-            ) : null}
+
+          <div className="mt-3">
+            <AuthorRow
+              name={post.author}
+              avatar={post.authorAvatar}
+              meta={`${formatDate(post.publishedAt, locale)} · ${post.readingMinutes} ${tr("хв читання", "min read")}`}
+            />
           </div>
+
+          {post.tags.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {post.tags.map((t) => (
+                <button
+                  key={t.slug}
+                  onClick={() => navigate(`/blog/tag/${t.slug}`)}
+                  className="rounded-full border border-border px-2 py-0.5 text-xs font-mono text-text-secondary hover:border-primary/40 hover:text-primary"
+                >
+                  #{t.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           <div className="mt-6 border-t border-border pt-6">
             <MarkdownView content={post.content} />
           </div>
+
+          <div className="mt-8 border-t border-border pt-4">
+            <ReactionBar targetType="POST" targetId={post.id} initial={post.reactions} />
+          </div>
+
+          {post.related.length > 0 ? (
+            <div className="mt-10">
+              <h2 className="text-sm font-mono font-semibold text-text-primary">{tr("Читайте також", "Read also")}</h2>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                {post.related.map((r) => (
+                  <button
+                    key={r.slug}
+                    onClick={() => navigate(`/blog/${r.slug}`)}
+                    className="overflow-hidden rounded-lg border border-border bg-surface text-left transition hover:border-primary/40"
+                  >
+                    {r.coverUrl ? <img src={r.coverUrl} alt="" className="h-20 w-full object-cover" loading="lazy" /> : null}
+                    <span className="block p-2 text-xs font-medium text-text-primary line-clamp-2">{r.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <CommentsSection slug={post.slug} isAdmin={isAdmin} initialLocked={post.commentsLocked} />
         </motion.article>
       ) : null}
     </div>

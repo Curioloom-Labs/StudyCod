@@ -43,6 +43,13 @@ import { SubmissionIntegrity } from "./entities/SubmissionIntegrity";
 import { SolveSession } from "./entities/SolveSession";
 import { PlaygroundSnippet } from "./entities/PlaygroundSnippet";
 import { BlogPost } from "./entities/BlogPost";
+import { BlogMedia } from "./entities/BlogMedia";
+import { BlogTag } from "./entities/BlogTag";
+import { BlogPostTag } from "./entities/BlogPostTag";
+import { BlogComment } from "./entities/BlogComment";
+import { BlogReaction } from "./entities/BlogReaction";
+import { BlogCommentReport } from "./entities/BlogCommentReport";
+import { Notification } from "./entities/Notification";
 const dbPort = env.DB_PORT != null ? parseInt(env.DB_PORT, 10) : 3306;
 const runtimeMigrationExtension = path.extname(__filename) === ".ts" ? "ts" : "js";
 const BLOCKED_MIGRATION_TIMESTAMPS = new Set(["1736206400000"]);
@@ -81,7 +88,7 @@ export const AppDataSource = new DataSource({
     password: env.DB_PASS || "",
     database: env.DB_NAME || "studycod"
   }),
-  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost],
+  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification],
   synchronize: false,
   logging: false,
   migrations: migrationGlobs,
