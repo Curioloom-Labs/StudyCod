@@ -173,7 +173,7 @@ router.post("/classes/:classId/live-sessions", authRequired, async (req: AuthReq
 
     if (!session) {
       // Fresh lesson — clear any stale breakout state from a previous one.
-      closeBreakouts(classId);
+      await closeBreakouts(classId);
       session = liveRepo().create({
         class: cls,
         lesson: lesson ?? null,
@@ -308,7 +308,7 @@ router.post("/live-sessions/:id/end", authRequired, async (req: AuthRequest, res
       session.endedAt = new Date();
       await liveRepo().save(session);
       // Tear down any breakout rooms so they don't linger into the next lesson.
-      closeBreakouts(session.class.id);
+      await closeBreakouts(session.class.id);
     }
 
     disableCache(res);
@@ -435,7 +435,7 @@ router.post("/tasks/:taskId/live-code", authRequired, async (req: AuthRequest, r
     });
     if (!liveSession) return res.status(204).end(); // no live lesson → don't stream
 
-    setLiveCode(student.id, { classId: student.class.id, taskId, taskTitle, code });
+    await setLiveCode(student.id, { classId: student.class.id, taskId, taskTitle, code });
     return res.status(204).end();
   } catch (error: any) {
     logger.error("[edu/live] publish code failed", { requestId: req.requestId, err: error });
@@ -463,7 +463,7 @@ router.get("/classes/:classId/students/:studentId/live-code", authRequired, asyn
     const student = await studentRepo().findOne({ where: { id: studentId, class: { id: classId } } });
     if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
 
-    const snap = getLiveCode(studentId);
+    const snap = await getLiveCode(studentId);
     disableCache(res);
     if (!snap || snap.classId !== classId) {
       return res.json({ snapshot: null });
@@ -546,7 +546,7 @@ router.post("/classes/:classId/live-challenges", authRequired, async (req: AuthR
     const task = await taskRepo().findOne({ where: { id: taskId, isClosed: false, lesson: { class: { id: classId } } } });
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
-    const challenge = startChallenge({ classId, taskId, taskTitle: task.title, durationSec });
+    const challenge = await startChallenge({ classId, taskId, taskTitle: task.title, durationSec });
     disableCache(res);
     return res.json({ challenge: challengeDto(challenge) });
   } catch (error: any) {
@@ -564,7 +564,7 @@ router.get("/classes/:classId/live-challenges/active", authRequired, async (req:
     const access = await resolveClassAccess(req, res, classId);
     if (!access) return;
 
-    const challenge = getChallenge(classId);
+    const challenge = await getChallenge(classId);
     disableCache(res);
     return res.json({ challenge: challenge ? challengeDto(challenge) : null });
   } catch (error: any) {
@@ -586,7 +586,7 @@ router.get("/classes/:classId/live-challenges/leaderboard", authRequired, async 
     const access = await resolveClassAccess(req, res, classId);
     if (!access) return;
 
-    const challenge = getChallenge(classId);
+    const challenge = await getChallenge(classId);
     if (!challenge) {
       disableCache(res);
       return res.json({ challenge: null, entries: [], generatedAtMs: Date.now() });
@@ -779,7 +779,7 @@ router.post("/classes/:classId/live-challenges/end", authRequired, async (req: A
     const cls = await loadTeacherClass(req, classId);
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
 
-    endChallenge(classId);
+    await endChallenge(classId);
     disableCache(res);
     return res.json({ ok: true });
   } catch (error: any) {
@@ -825,7 +825,7 @@ router.post("/classes/:classId/breakouts", authRequired, async (req: AuthRequest
 
     const count = parseInt(String(req.body?.count ?? ""), 10);
     const students = await studentRepo().find({ where: { class: { id: classId } } });
-    const state = openBreakouts(classId, Number.isFinite(count) ? count : 2, students.map((s) => s.id));
+    const state = await openBreakouts(classId, Number.isFinite(count) ? count : 2, students.map((s) => s.id));
 
     disableCache(res);
     return res.json(await buildBreakoutDto(state));
@@ -844,13 +844,14 @@ router.get("/classes/:classId/breakouts", authRequired, async (req: AuthRequest,
     const access = await resolveClassAccess(req, res, classId);
     if (!access) return;
 
-    const state = getBreakouts(classId);
+    const state = await getBreakouts(classId);
     disableCache(res);
     if (!state) return res.json({ active: false, groups: [], myGroupIndex: null });
 
     const dto = await buildBreakoutDto(state);
-    const myGroupIndex =
-      req.userType === "STUDENT" && req.studentId ? findStudentGroup(classId, req.studentId)?.index ?? null : null;
+    const myGroup =
+      req.userType === "STUDENT" && req.studentId ? await findStudentGroup(classId, req.studentId) : null;
+    const myGroupIndex = myGroup?.index ?? null;
     return res.json({ active: true, ...dto, myGroupIndex });
   } catch (error: any) {
     logger.error("[edu/live] get breakouts failed", { requestId: req.requestId, err: error });
@@ -871,7 +872,7 @@ router.get("/classes/:classId/breakouts/my-token", authRequired, async (req: Aut
     const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
     if (!student || student.class?.id !== classId) return res.status(403).json({ message: "NOT_A_CLASS_MEMBER" });
 
-    const group = findStudentGroup(classId, req.studentId);
+    const group = await findStudentGroup(classId, req.studentId);
     disableCache(res);
     if (!group) return res.json({ active: false });
 
@@ -902,7 +903,7 @@ router.post("/classes/:classId/breakouts/token/:index", authRequired, async (req
     const cls = await loadTeacherClass(req, classId);
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
 
-    const group = getGroup(classId, index);
+    const group = await getGroup(classId, index);
     if (!group) return res.status(404).json({ message: "GROUP_NOT_FOUND" });
 
     const teacher = await userRepo().findOne({ where: { id: req.userId }, select: ["id", "username"] });

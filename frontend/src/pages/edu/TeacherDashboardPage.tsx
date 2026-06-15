@@ -139,6 +139,14 @@ export const TeacherDashboardPage: React.FC = () => {
               <BookOpen className="w-4 h-4 mr-2" />
               {tr("Бібліотека завдань", "Task library")}
             </Button>
+            <Button variant="ghost" onClick={() => navigate("/edu/courses")}>
+              <BookOpen className="w-4 h-4 mr-2" />
+              {tr("Курси", "Courses")}
+            </Button>
+            <Button variant="ghost" onClick={() => navigate("/edu/organization")}>
+              <BookOpen className="w-4 h-4 mr-2" />
+              {tr("Організація", "Organization")}
+            </Button>
             {pendingReviews.length > 0 && <Button variant="ghost" onClick={() => setShowPendingReviews(true)} className="relative border-accent-error/40 text-accent-error hover:bg-accent-error/10">
                 <Clock className="w-4 h-4 mr-2" />
                 {t('reviewTasks')}
