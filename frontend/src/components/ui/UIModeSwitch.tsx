@@ -2,14 +2,15 @@ import React from "react";
 import clsx from "classnames";
 import { useTranslation } from "react-i18next";
 import { useUIMode } from "../interface/UIModeProvider";
-import type { UIMode } from "../../lib/uiMode";
+import { availableUIModes, type UIMode } from "../../lib/uiMode";
 
-const MODES: Array<{ id: UIMode; label: string }> = [
-  { id: "focus", label: "Momentum" },
-  { id: "classic", label: "Classic" },
-  { id: "nova", label: "Nova" },
-  { id: "aurora", label: "Aurora" }
-];
+const MODE_LABELS: Record<UIMode, string> = {
+  focus: "Momentum",
+  classic: "Classic",
+  nova: "Nova",
+  aurora: "Aurora"
+};
+const MODE_ORDER: UIMode[] = ["focus", "classic", "nova", "aurora"];
 
 /**
  * Inline UI-version switcher — lets the user flip between StudyCod UI versions
@@ -19,6 +20,8 @@ const MODES: Array<{ id: UIMode; label: string }> = [
 export const UIModeSwitch: React.FC<{ className?: string; label?: boolean }> = ({ className, label = true }) => {
   const ui = useUIMode();
   const { t } = useTranslation();
+  const allowed = availableUIModes();
+  const modes = MODE_ORDER.filter((m) => allowed.includes(m));
 
   return (
     <div className={clsx("flex flex-wrap items-center gap-2", className)}>
@@ -28,20 +31,20 @@ export const UIModeSwitch: React.FC<{ className?: string; label?: boolean }> = (
         </span>
       ) : null}
       <div className="inline-flex flex-wrap gap-1 rounded-full border border-border bg-bg-surface/60 p-1" role="group" aria-label={t("interfaceLabel", { defaultValue: "Interface" })}>
-        {MODES.map((m) => {
-          const active = ui.mode === m.id;
+        {modes.map((m) => {
+          const active = ui.mode === m;
           return (
             <button
-              key={m.id}
+              key={m}
               type="button"
-              onClick={() => ui.setMode(m.id)}
+              onClick={() => ui.setMode(m)}
               aria-pressed={active}
               className={clsx(
                 "px-3 h-7 rounded-full text-xs font-mono font-medium tracking-[0.02em] transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                 active ? "bg-primary/15 text-primary" : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"
               )}
             >
-              {m.label}
+              {MODE_LABELS[m]}
             </button>
           );
         })}
