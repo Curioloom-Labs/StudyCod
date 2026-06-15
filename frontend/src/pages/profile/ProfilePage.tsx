@@ -36,6 +36,7 @@ import { prepareGoogleLinkSession } from "../../lib/api/auth";
 import { listGrades } from "../../lib/api/grades";
 import { listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem } from "../../lib/api/library";
 import { useUIMode } from "../../components/interface/UIModeProvider";
+import { AURORA_ENABLED } from "../../lib/uiMode";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
@@ -723,14 +724,19 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                   <div>
                     <div className="text-xs font-mono text-text-primary">{tr("Режим інтерфейсу", "UI mode")}</div>
                     <div className="text-[11px] font-mono text-text-secondary mt-1">
-                      {tr(
-                        "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K). Aurora — редакторський простір без постійного меню: навігація через зони та палітру (Ctrl+K).",
-                        "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K). Aurora — an editorial workspace without a fixed menu: navigation via zones and the palette (Ctrl+K)."
-                      )}
+                      {AURORA_ENABLED
+                        ? tr(
+                            "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K). Aurora — редакторський простір без постійного меню: навігація через зони та палітру (Ctrl+K).",
+                            "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K). Aurora — an editorial workspace without a fixed menu: navigation via zones and the palette (Ctrl+K)."
+                          )
+                        : tr(
+                            "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K).",
+                            "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K)."
+                          )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className={`grid grid-cols-2 gap-2.5 ${AURORA_ENABLED ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                     <button
                       onClick={() => ui.setMode("classic")}
                       className={
@@ -764,17 +770,19 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       <div className={`mt-2 text-xs font-mono ${ui.mode === "nova" ? "text-primary" : "text-text-primary"}`}>Nova</div>
                       <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Швидка навігація (Ctrl+K)", "Fast nav (Ctrl+K)")}</div>
                     </button>
-                    <button
-                      onClick={() => ui.setMode("aurora")}
-                      className={
-                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
-                        (ui.mode === "aurora" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
-                      }
-                    >
-                      <Sparkles className={`w-4 h-4 ${ui.mode === "aurora" ? "text-primary" : "text-text-muted"}`} />
-                      <div className={`mt-2 text-xs font-mono ${ui.mode === "aurora" ? "text-primary" : "text-text-primary"}`}>Aurora</div>
-                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Редакторський простір", "Editorial workspace")}</div>
-                    </button>
+                    {AURORA_ENABLED ? (
+                      <button
+                        onClick={() => ui.setMode("aurora")}
+                        className={
+                          "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
+                          (ui.mode === "aurora" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
+                        }
+                      >
+                        <Sparkles className={`w-4 h-4 ${ui.mode === "aurora" ? "text-primary" : "text-text-muted"}`} />
+                        <div className={`mt-2 text-xs font-mono ${ui.mode === "aurora" ? "text-primary" : "text-text-primary"}`}>Aurora</div>
+                        <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Редакторський простір", "Editorial workspace")}</div>
+                      </button>
+                    ) : null}
                   </div>
                   <button
                     onClick={() => ui.setClassicForToday()}
