@@ -67,6 +67,14 @@ export class BlogPost {
   @Column({ type: "varchar", length: 40, nullable: true })
   version!: string | null;
 
+  /** Public media key of the cover image (see BlogMedia). Optional. */
+  @Column({ type: "varchar", length: 64, name: "cover_image_key", nullable: true })
+  coverImageKey!: string | null;
+
+  /** When true, no new comments may be posted (admin moderation). */
+  @Column({ type: "boolean", name: "comments_locked", default: false })
+  commentsLocked!: boolean;
+
   @Column({ type: "boolean", default: false })
   pinned!: boolean;
 

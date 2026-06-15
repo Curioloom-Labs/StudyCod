@@ -29,7 +29,8 @@ const NAV_IMPORTS: Record<MomentumNavTarget, () => Promise<unknown>> = {
   contests: () => import("../pages/contest/ContestsPage"),
   playground: () => import("../pages/system/PlaygroundPage"),
   learn: () => import("../pages/edu/MyLearningPage"),
-  support: () => import("../pages/system/SupportPage")
+  support: () => import("../pages/system/SupportPage"),
+  blog: () => import("../pages/system/BlogPage")
 };
 
 const PATH_IMPORTS: Record<string, () => Promise<unknown>> = {

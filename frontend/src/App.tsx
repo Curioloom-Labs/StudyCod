@@ -28,6 +28,7 @@ import { getAdminMaintenance } from "./lib/api/admin";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
 import { getControlWorkStatus } from "./lib/api/edu";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
+import { NotificationsBell } from "./components/blog/NotificationsBell";
 import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
 import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
@@ -987,6 +988,10 @@ const AppContent: React.FC = React.memo(() => {
         navigate("/support");
         return;
       }
+      if (target === "blog") {
+        navigate("/blog");
+        return;
+      }
       if (target === "contests") {
         navigate("/contests");
         return;
@@ -1011,10 +1016,10 @@ const AppContent: React.FC = React.memo(() => {
       if (pageTarget) {
         handleSetPage(pageTarget);
       }
-        }} onLogout={handleLogout} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+        }} onLogout={handleLogout} topRight={<div className="flex items-center gap-2"><NotificationsBell /><button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
           <SunMoon className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
-          </button>}>
+          </button></div>}>
         {content}
       </Shell>
       </Suspense>
@@ -1102,7 +1107,7 @@ export const App: React.FC = () => {
                 </StandaloneShell>
               </RequireToken>} />
           <Route path="/blog" element={<RequireToken>
-                <StandaloneShell current="support">
+                <StandaloneShell current="blog">
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <BlogPage />
@@ -1111,7 +1116,7 @@ export const App: React.FC = () => {
                 </StandaloneShell>
               </RequireToken>} />
           <Route path="/blog/admin" element={<RequireToken>
-                <StandaloneShell current="support">
+                <StandaloneShell current="blog">
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <BlogAdminPage />
@@ -1119,8 +1124,17 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
+          <Route path="/blog/tag/:tag" element={<RequireToken>
+                <StandaloneShell current="blog">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <BlogPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
           <Route path="/blog/:slug" element={<RequireToken>
-                <StandaloneShell current="support">
+                <StandaloneShell current="blog">
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <BlogPostPage />
@@ -1718,6 +1732,10 @@ const EduRoutes: React.FC = React.memo(() => {
         navigate("/support");
         return;
       }
+      if (target === "blog") {
+        navigate("/blog");
+        return;
+      }
       if (target === "contests") {
         navigate("/contests");
         return;
@@ -1748,10 +1766,10 @@ const EduRoutes: React.FC = React.memo(() => {
     }} onLogout={() => {
       localStorage.removeItem("token");
       navigate("/");
-    }} topRight={<button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+    }} topRight={<div className="flex items-center gap-2"><NotificationsBell /><button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
           <SunMoon className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
-          </button>}>
+          </button></div>}>
         {eduMain}
       </Shell>
       </Suspense>
