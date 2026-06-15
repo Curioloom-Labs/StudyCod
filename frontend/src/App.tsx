@@ -81,6 +81,9 @@ const PlaygroundPage = React.lazy(() => import("./pages/system/PlaygroundPage").
 const ScoreboardPage = React.lazy(() => import("./pages/contest/ScoreboardPage").then(mod => ({ default: mod.ScoreboardPage })));
 const MyLearningPage = React.lazy(() => import("./pages/edu/MyLearningPage").then(mod => ({ default: mod.MyLearningPage })));
 const SolveReplayPage = React.lazy(() => import("./pages/core/SolveReplayPage").then(mod => ({ default: mod.SolveReplayPage })));
+const BlogPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPage })));
+const BlogPostPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPostPage })));
+const BlogAdminPage = React.lazy(() => import("./pages/system/BlogAdminPage").then(mod => ({ default: mod.BlogAdminPage })));
 const PageLoader: React.FC = () => {
   return <div className="min-h-[100dvh] bg-bg-base text-text-primary">
       <PageSkeleton />
@@ -1094,6 +1097,33 @@ export const App: React.FC = () => {
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <SupportPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
+          <Route path="/blog" element={<RequireToken>
+                <StandaloneShell current="support">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <BlogPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
+          <Route path="/blog/admin" element={<RequireToken>
+                <StandaloneShell current="support">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <BlogAdminPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
+          <Route path="/blog/:slug" element={<RequireToken>
+                <StandaloneShell current="support">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <BlogPostPage />
                     </AnimatedPage>
                   </Suspense>
                 </StandaloneShell>
