@@ -1,14 +1,17 @@
 import { randomBytes } from "crypto";
+import { setLiveState, getLiveState, deleteLiveState } from "./liveStateStore";
 
 /**
  * Ephemeral "live challenge" state — the timed mini-task a teacher fires during
- * a live lesson ("solve this in 90s"). One active challenge per class, held in
- * memory: it is transient session state, not a gradebook artifact. The actual
- * solving reuses the normal task/judge/grade pipeline; this only records WHICH
- * task is the current challenge and WHEN it started, so the leaderboard can rank
- * passes that happened after the start.
+ * a live lesson ("solve this in 90s"). One active challenge per class. It is
+ * transient session state, not a gradebook artifact: the actual solving reuses
+ * the normal task/judge/grade pipeline; this only records WHICH task is the
+ * current challenge and WHEN it started, so the leaderboard can rank passes that
+ * happened after the start.
  *
- * Single-instance scope (same caveat as liveCode): move to Redis for multi-node.
+ * Backed by {@link ./liveStateStore} (Redis when configured, in-process Map
+ * otherwise). The entry's TTL = duration + grace, so a challenge a teacher never
+ * ends still stops being "active" instead of lingering across days.
  */
 export interface LiveChallenge {
   id: string;
@@ -19,22 +22,17 @@ export interface LiveChallenge {
   durationSec: number;
 }
 
-// Hard ceiling: even if a teacher never ends it, a challenge stops being
-// "active" well after its timer so it can't linger across days.
-const HARD_EXPIRY_GRACE_MS = 30 * 60_000;
+const NS = "challenge";
+// Hard ceiling beyond the timer: still resolvable for late leaderboard reads,
+// but auto-expires afterward.
+const HARD_EXPIRY_GRACE_SEC = 30 * 60;
 
-const byClass = new Map<number, LiveChallenge>();
-
-function isExpired(ch: LiveChallenge, nowMs: number): boolean {
-  return nowMs > ch.startedAtMs + ch.durationSec * 1000 + HARD_EXPIRY_GRACE_MS;
-}
-
-export function startChallenge(input: {
+export async function startChallenge(input: {
   classId: number;
   taskId: number;
   taskTitle: string;
   durationSec: number;
-}): LiveChallenge {
+}): Promise<LiveChallenge> {
   const challenge: LiveChallenge = {
     id: randomBytes(8).toString("hex"),
     classId: input.classId,
@@ -43,20 +41,15 @@ export function startChallenge(input: {
     startedAtMs: Date.now(),
     durationSec: input.durationSec
   };
-  byClass.set(input.classId, challenge);
+  const ttlSec = Math.max(1, Math.ceil(input.durationSec)) + HARD_EXPIRY_GRACE_SEC;
+  await setLiveState(NS, input.classId, challenge, ttlSec);
   return challenge;
 }
 
-export function getChallenge(classId: number): LiveChallenge | null {
-  const ch = byClass.get(classId);
-  if (!ch) return null;
-  if (isExpired(ch, Date.now())) {
-    byClass.delete(classId);
-    return null;
-  }
-  return ch;
+export async function getChallenge(classId: number): Promise<LiveChallenge | null> {
+  return await getLiveState<LiveChallenge>(NS, classId);
 }
 
-export function endChallenge(classId: number): void {
-  byClass.delete(classId);
+export async function endChallenge(classId: number): Promise<void> {
+  await deleteLiveState(NS, classId);
 }

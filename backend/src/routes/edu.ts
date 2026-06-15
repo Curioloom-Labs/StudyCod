@@ -11,6 +11,7 @@ import { User, UserLang } from "../entities/User";
 import { Class } from "../entities/Class";
 import { Student } from "../entities/Student";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
+import { requireCapability, orgIdFromClassParam } from "../middleware/orgContext";
 import { generateUsername, generatePassword, hashPassword } from "../services/studentCredentialsService";
 import { emailService } from "../services/emailService";
 import { EduLesson, LessonType } from "../entities/EduLesson";
@@ -54,6 +55,12 @@ import appealsRouter from "./edu/appeals";
 import insightsRouter from "./edu/insights";
 import gradebookRouter from "./edu/gradebook";
 import liveClassroomRouter from "./edu/liveClassroom";
+import orgsRouter from "./edu/orgs";
+import coursesRouter from "./edu/courses";
+import manualTasksRouter from "./edu/manualTasks";
+import lessonQuizRouter from "./edu/lessonQuiz";
+import gradebookConfigRouter from "./edu/gradebookConfig";
+import enrollmentRouter from "./edu/enrollment";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -166,6 +173,12 @@ eduRouter.use(appealsRouter);
 eduRouter.use(insightsRouter);
 eduRouter.use(gradebookRouter);
 eduRouter.use(liveClassroomRouter);
+eduRouter.use(orgsRouter);
+eduRouter.use(coursesRouter);
+eduRouter.use(manualTasksRouter);
+eduRouter.use(lessonQuizRouter);
+eduRouter.use(gradebookConfigRouter);
+eduRouter.use(enrollmentRouter);
 const registerTeacherSchema = z.object({
   username: z.string().min(3).max(50),
   email: z.string().email(),
@@ -338,7 +351,7 @@ eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
     });
   }
 });
-eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response) => {
+eduRouter.post("/classes", authRequired, requireCapability("CLASS_CREATE"), async (req: AuthRequest, res: Response) => {
   try {
     const user = await userRepo().findOne({
       where: {
@@ -477,7 +490,7 @@ eduRouter.get("/classes/:classId", authRequired, async (req: AuthRequest, res: R
     });
   }
 });
-eduRouter.put("/classes/:classId/grading-system", authRequired, async (req: AuthRequest, res: Response) => {
+eduRouter.put("/classes/:classId/grading-system", authRequired, requireCapability("CLASS_EDIT", { resolveOrgId: orgIdFromClassParam() }), async (req: AuthRequest, res: Response) => {
   try {
     const classId = parseInt(req.params.classId, 10);
     if (!Number.isFinite(classId)) {
@@ -727,7 +740,7 @@ eduRouter.get("/classes/:classId/lessons", authRequired, async (req: AuthRequest
     });
   }
 });
-eduRouter.post("/classes/:classId/lessons", authRequired, async (req: AuthRequest, res: Response) => {
+eduRouter.post("/classes/:classId/lessons", authRequired, requireCapability("CONTENT_AUTHOR", { resolveOrgId: orgIdFromClassParam() }), async (req: AuthRequest, res: Response) => {
   const user = await userRepo().findOne({
     where: {
       id: req.userId

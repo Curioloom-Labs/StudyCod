@@ -45,6 +45,8 @@ import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { ClassJoinCodeButton } from "../../components/ClassJoinCodeButton";
+import { CourseUpdatesBanner } from "../../components/CourseUpdatesBanner";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
 
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
@@ -391,6 +393,7 @@ export const ClassDetailsPage: React.FC = () => {
       />
 
       <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto space-y-8">
+        {classId ? <CourseUpdatesBanner classId={classId} /> : null}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -742,6 +745,11 @@ export const ClassDetailsPage: React.FC = () => {
                 <FileText className="w-4 h-4 mr-1" />
                 {t('gradebook')}
               </Button>
+              <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/gradebook-config`)} className="text-xs">
+                <FileText className="w-4 h-4 mr-1" />
+                {tr("Зважений журнал", "Weighted gradebook")}
+              </Button>
+              {classId ? <ClassJoinCodeButton classId={classId} /> : null}
               <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/appeals`)} className="text-xs">
                 <MessageSquare className="w-4 h-4 mr-1" />
                 {tr("Апеляції", "Appeals")}
