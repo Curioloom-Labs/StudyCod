@@ -32,9 +32,17 @@ const toneClass: Record<NonNullable<PageHeroStat["tone"]>, string> = {
   success: "text-accent-success"
 };
 
-// Shared page header used across pages so Aurora's editorial treatment (calm
-// eyebrow, display title, big numbers, no gradient rule) is applied once and
-// stays consistent. Classic/focus/nova keep the original terminal styling.
+const toneText: Record<NonNullable<PageHeroStat["tone"]>, string> = {
+  default: "text-text-secondary",
+  warn: "text-accent-warning",
+  error: "text-accent-error",
+  success: "text-accent-success"
+};
+
+// Shared page header. Aurora is laconic by design: calm eyebrow, a moderate
+// title (no display-size), and stats rendered as one quiet prose line (not a
+// big-number grid) — matching the command-canvas language. Classic/focus/nova
+// keep the original terminal styling with big inline numbers.
 export const PageHero: React.FC<PageHeroProps> = ({
   eyebrowClassic,
   eyebrowAurora,
@@ -63,35 +71,44 @@ export const PageHero: React.FC<PageHeroProps> = ({
             <motion.span variants={fadeUpItem} className="block font-mono text-xs text-primary/70">{eyebrowClassic}</motion.span>
           )}
 
-          <motion.div variants={fadeUpItem} className={clsx("flex flex-col lg:flex-row lg:items-end justify-between gap-4", isAurora ? "mt-3" : "mt-2")}>
+          <motion.div variants={fadeUpItem} className={clsx("flex flex-col lg:flex-row lg:items-end justify-between gap-4", isAurora ? "mt-2" : "mt-2")}>
             <div className="min-w-0">
-              <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>
+              <h1 className={isAurora ? "text-2xl md:text-3xl font-semibold tracking-[-0.01em] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>
                 {title}
               </h1>
               {subtitle ? (
-                <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary max-w-2xl" : "mt-1.5 text-sm text-text-secondary"}>{subtitle}</p>
+                <p className={isAurora ? "mt-2 text-[13px] text-text-secondary max-w-2xl" : "mt-1.5 text-sm text-text-secondary"}>{subtitle}</p>
               ) : null}
             </div>
             {actions ? <div className="flex flex-wrap gap-2 shrink-0">{actions}</div> : null}
           </motion.div>
 
           {stats && stats.length ? (
-            <motion.div variants={fadeUpItem} className={clsx("flex flex-wrap items-baseline", isAurora ? "mt-8 gap-x-12 gap-y-4" : "mt-5 gap-x-8 gap-y-3")}>
-              {stats.map((s, i) => (
-                <div key={i} className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
-                  <span className={clsx(
-                    "tabular-nums",
-                    isAurora ? "text-5xl font-semibold tracking-[-0.02em] order-2" : "font-mono text-2xl md:text-3xl",
-                    toneClass[s.tone ?? "default"]
-                  )}>
-                    {s.value}
+            isAurora ? (
+              // Laconic: one quiet prose line, no big-number tiles.
+              <motion.div variants={fadeUpItem} className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px] font-mono text-text-muted">
+                {stats.map((s, i) => (
+                  <span key={i} className="inline-flex items-baseline gap-1.5">
+                    {i > 0 ? <span className="text-border mr-1.5">·</span> : null}
+                    <span className={clsx("tabular-nums", toneText[s.tone ?? "default"])}>{s.value}</span>
+                    <span>{s.label}</span>
                   </span>
-                  <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>
-                    {s.label}
-                  </span>
-                </div>
-              ))}
-            </motion.div>
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div variants={fadeUpItem} className="flex flex-wrap items-baseline mt-5 gap-x-8 gap-y-3">
+                {stats.map((s, i) => (
+                  <div key={i} className="flex items-baseline gap-2">
+                    <span className={clsx("tabular-nums font-mono text-2xl md:text-3xl", toneClass[s.tone ?? "default"])}>
+                      {s.value}
+                    </span>
+                    <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
+              </motion.div>
+            )
           ) : null}
         </motion.div>
       </div>

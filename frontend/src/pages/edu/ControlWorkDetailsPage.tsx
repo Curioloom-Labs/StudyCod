@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, ShieldCheck, Clock, Calculator } from "lucide-react";
@@ -148,6 +149,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
   const createDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const editDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const isAurora = useUIMode().mode === "aurora";
   const normalizeSubtask = (value: string | null | undefined): string | null => {
     const normalized = String(value ?? "").trim();
     return normalized.length > 0 ? normalized.slice(0, 64) : null;
@@ -841,7 +843,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-2" />
             {t("back")}
           </Button>
-          <span className="font-mono text-xs text-accent-warn/80">// control work</span>
+          <span className={`font-mono text-accent-warn/80 ${isAurora ? "text-[11px] uppercase tracking-[0.2em]" : "text-xs"}`}>{isAurora ? tr("Контрольна", "Control work") : "// control work"}</span>
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             {editingTitle ? <div className="flex items-center gap-2 flex-1">
                 <input type="text" value={controlWorkTitle} onChange={e => setControlWorkTitle(e.target.value)} className="px-3 py-1 bg-bg-surface border border-border text-text-primary font-mono text-2xl focus:outline-none focus:border-primary" placeholder={tr("Назва контрольної роботи", "Control work title")} autoFocus onKeyDown={async e => {

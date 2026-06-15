@@ -266,7 +266,7 @@ export const SupportPage: React.FC = () => {
           )}
           <div className={`flex items-center gap-2 ${isAurora ? "mt-3" : "mt-2"}`}>
             <LifeBuoy className={`text-primary ${isAurora ? "w-6 h-6" : "w-5 h-5"}`} />
-            <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{tr("Технічна підтримка", "Technical support")}</h1>
+            <h1 className={isAurora ? "text-2xl md:text-3xl font-semibold tracking-[-0.01em] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{tr("Технічна підтримка", "Technical support")}</h1>
           </div>
           <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary max-w-xl" : "mt-1.5 text-sm text-text-secondary max-w-xl"}>
             {tr("Чат із підтримкою (можна додавати файли).", "Chat with support (attachments are allowed).")}
