@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2, MessageSquare, RefreshCw } from "lucide-react"
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
 import { useUIMode } from "../../components/interface/UIModeProvider";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import {
   getClass,
   getClassGradeAppeal,
@@ -353,7 +354,7 @@ export const TeacherClassAppealsPage: React.FC = () => {
     <div className="min-h-full bg-bg-base">
       {/* Hero */}
       <div className="px-4 md:px-8 pt-8 pb-6 max-w-7xl mx-auto">
-        <span className="font-mono text-xs text-primary/70">// appeals</span>
+        <PageEyebrow label="appeals" />
         <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
