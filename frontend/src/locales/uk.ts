@@ -17,6 +17,7 @@ export default {
   grades: 'Оцінки',
   library: 'Бібліотека',
   contests: 'Контести',
+  blog: 'Девблог',
   myLearning: 'Моє навчання',
   playground: 'Пісочниця',
   profile: 'Профіль',

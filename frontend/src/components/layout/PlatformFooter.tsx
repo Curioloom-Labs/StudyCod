@@ -9,10 +9,9 @@ type PlatformFooterProps = {
 };
 
 export const PlatformFooter: React.FC<PlatformFooterProps> = ({ className = "", compact = false }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const year = new Date().getFullYear();
-  const blogLabel = i18n.language?.toLowerCase().startsWith("en") ? "Blog" : "Девблог";
 
   return (
     <footer className={`border-t border-border bg-bg-surface/70 text-text-secondary ${className}`}>
@@ -53,7 +52,7 @@ export const PlatformFooter: React.FC<PlatformFooterProps> = ({ className = "", 
             onClick={() => navigate("/blog")}
             className="inline-flex items-center px-2.5 py-1 text-[11px] font-mono border border-border bg-bg-base/50 text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
           >
-            {blogLabel}
+            {t("blog")}
           </button>
           <button
             type="button"
