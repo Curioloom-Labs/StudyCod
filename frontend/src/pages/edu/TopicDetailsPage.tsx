@@ -778,21 +778,29 @@ export const TopicDetailsPage: React.FC = () => {
             <span className="font-mono text-xs text-primary/70">// topic</span>
           )}
           <div className={`flex flex-wrap items-center gap-3 ${isAurora ? "mt-3" : "mt-2"}`}>
-            <BookOpen className={`text-primary shrink-0 ${isAurora ? "w-6 h-6" : "w-5 h-5"}`} />
-            <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{topic.title}</h1>
+            <BookOpen className="text-primary shrink-0 w-5 h-5" />
+            <h1 className={isAurora ? "text-2xl md:text-3xl font-semibold tracking-[-0.01em] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{topic.title}</h1>
             {!isAurora ? <span className="text-[10px] font-mono uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border border-border text-text-muted">{t("topic")}</span> : null}
           </div>
-          {topic.description && <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary max-w-2xl" : "mt-1.5 text-sm text-text-secondary"}>{topic.description}</p>}
-          <div className={`flex flex-wrap items-baseline ${isAurora ? "mt-8 gap-x-12 gap-y-4" : "mt-5 gap-x-8 gap-y-3"}`}>
-            <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
-              <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}>{practiceTasks.length}</span>
-              <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("Практичних", "Practice")}</span>
+          {topic.description && <p className={isAurora ? "mt-2 text-[13px] text-text-secondary max-w-2xl" : "mt-1.5 text-sm text-text-secondary"}>{topic.description}</p>}
+          {isAurora ? (
+            <div className="mt-4 flex flex-wrap items-baseline gap-x-2 text-[13px] font-mono text-text-muted">
+              <span className="inline-flex items-baseline gap-1.5"><span className="text-text-secondary tabular-nums">{practiceTasks.length}</span><span>{tr("практичних", "practice")}</span></span>
+              <span className="text-border mx-1.5">·</span>
+              <span className="inline-flex items-baseline gap-1.5"><span className="text-text-secondary tabular-nums">{controlWorks.length}</span><span>{tr("контрольних", "control works")}</span></span>
             </div>
-            <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
-              <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}>{controlWorks.length}</span>
-              <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("Контрольних", "Control works")}</span>
+          ) : (
+            <div className="mt-5 flex flex-wrap items-baseline gap-x-8 gap-y-3">
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{practiceTasks.length}</span>
+                <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Практичних", "Practice")}</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-2xl md:text-3xl text-text-primary tabular-nums">{controlWorks.length}</span>
+                <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">{tr("Контрольних", "Control works")}</span>
+              </div>
             </div>
-          </div>
+          )}
         </motion.div>
 
         <div className={`h-px mb-6 bg-gradient-to-r from-primary/40 via-border to-transparent ${isAurora ? "hidden" : ""}`} />

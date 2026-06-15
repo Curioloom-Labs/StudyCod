@@ -191,7 +191,7 @@ export const DocsPage: React.FC = () => {
                   ) : (
                     <span className="font-mono text-xs text-primary/70">// {selected?.audience?.toLowerCase()}</span>
                   )}
-                  <h2 className={`mt-1 font-semibold text-text-primary ${isAurora ? "text-3xl md:text-4xl tracking-[-0.02em]" : "text-2xl tracking-tight"}`}>{selected?.title}</h2>
+                  <h2 className={`mt-1 font-semibold text-text-primary ${isAurora ? "text-2xl md:text-3xl tracking-[-0.01em]" : "text-2xl tracking-tight"}`}>{selected?.title}</h2>
                 </div>
                 <Button
                   variant="ghost"

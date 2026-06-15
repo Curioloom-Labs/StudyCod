@@ -102,7 +102,7 @@ export const MyLearningPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <Compass className={`text-primary ${isAurora ? "w-6 h-6" : "w-5 h-5"}`} />
-              <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{tr("Моє навчання", "My Learning")}</h1>
+              <h1 className={isAurora ? "text-2xl md:text-3xl font-semibold tracking-[-0.01em] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{tr("Моє навчання", "My Learning")}</h1>
             </div>
             <p className="mt-1.5 text-sm text-text-secondary max-w-xl">
               {tr("Твій прогрес по темах, задача дня й що варто повторити.", "Your topic progress, the daily challenge, and what to review.")}

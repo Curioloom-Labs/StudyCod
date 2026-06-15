@@ -17,6 +17,7 @@ import type { User } from "../../types";
 import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezone";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { buildResumeState, clearResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -63,6 +64,7 @@ export const LessonDetailsPage: React.FC = () => {
     i18n
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const isAurora = useUIMode().mode === "aurora";
   const reduce = useReducedMotion();
   const {
     lessonId
@@ -757,8 +759,10 @@ export const LessonDetailsPage: React.FC = () => {
               <ArrowLeft className="w-4 h-4 mr-2" />
               {t("back")}
             </Button>}
-          <span className={`font-mono text-xs ${lesson.type === "CONTROL" ? "text-accent-warn/80" : "text-primary/70"}`}>
-            {lesson.type === "CONTROL" ? "// control work" : lesson.type === "TOPIC" ? "// topic" : "// lesson"}
+          <span className={`font-mono ${isAurora ? "text-[11px] uppercase tracking-[0.2em]" : "text-xs"} ${lesson.type === "CONTROL" ? "text-accent-warn/80" : isAurora ? "text-text-muted" : "text-primary/70"}`}>
+            {isAurora
+              ? (lesson.type === "CONTROL" ? tr("Контрольна", "Control work") : lesson.type === "TOPIC" ? t("topic") : t("lesson"))
+              : (lesson.type === "CONTROL" ? "// control work" : lesson.type === "TOPIC" ? "// topic" : "// lesson")}
           </span>
           <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
             <div className="min-w-0">
