@@ -104,6 +104,10 @@ const EnvSchema = z.object({
   TURNSTILE_ENFORCE_CONTEST_SUBMIT: z.string().optional(),
   TURNSTILE_ENFORCE_AUTH: z.string().optional(),
 
+  // EDU SaaS RBAC: when off (default) capability checks run in shadow mode
+  // (audit a would-be denial, but allow). Flip on to hard-enforce org roles.
+  EDU_RBAC_ENFORCE: z.string().optional(),
+
   // Cloudflare AI worker base URL (used by LLM provider and can be reused for translation)
   CLOUDFLARE_AI_URL: z.string().optional(),
   // Shared secret sent to the Cloudflare AI worker as `x-internal-secret`.
@@ -241,6 +245,7 @@ const EnvSchema = z.object({
     __judgeWorkerEntry: (env.JUDGE_WORKER_ENTRY ?? "").trim(),
     __turnstileEnforceContestSubmit: parseBoolEnv(env.TURNSTILE_ENFORCE_CONTEST_SUBMIT),
     __turnstileEnforceAuth: parseBoolEnv(env.TURNSTILE_ENFORCE_AUTH),
+    __eduRbacEnforce: parseBoolEnv(env.EDU_RBAC_ENFORCE),
     __nsjailPath: ((env.NSJAIL_PATH ?? "") || "/usr/bin/nsjail").trim(),
     __nsjailConfig: (env.NSJAIL_CONFIG ?? "").trim(),
     __nsjailUseConfig: parseBoolEnv(env.NSJAIL_USE_CONFIG),

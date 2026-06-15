@@ -3,9 +3,12 @@ import crypto from "crypto";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { requireCapability, orgIdFromClassParam, orgIdFromStudentParam } from "../../middleware/orgContext";
 import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { generatePassword, generateUsername, hashPassword } from "../../services/studentCredentialsService";
+import { writeAudit } from "../../services/audit/auditLog";
+import { exportStudentData, eraseStudentData, setStudentConsent } from "../../services/edu/dataPrivacy";
 import { logger } from "../../utils/logger";
 
 const router = Router();
@@ -55,7 +58,7 @@ router.get("/classes/:classId/students", authRequired, async (req: AuthRequest, 
   }
 });
 
-router.post("/classes/:classId/students", authRequired, async (req: AuthRequest, res: Response) => {
+router.post("/classes/:classId/students", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromClassParam() }), async (req: AuthRequest, res: Response) => {
   try {
     const classId = parseInt(req.params.classId, 10);
     const cls = await classRepo().findOne({
@@ -403,7 +406,7 @@ router.post("/classes/:classId/students/import", authRequired, async (req: AuthR
   }
 });
 
-router.post("/students/:studentId/regenerate-password", authRequired, async (req: AuthRequest, res: Response) => {
+router.post("/students/:studentId/regenerate-password", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
   try {
     const studentId = parseInt(req.params.studentId, 10);
     const student = await studentRepo().findOne({
@@ -423,6 +426,18 @@ router.post("/students/:studentId/regenerate-password", authRequired, async (req
     student.generatedPassword = await hashPassword(plainPassword);
     await studentRepo().save(student);
 
+    // Sensitive action on a (likely minor) student's credentials → audit trail.
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId ?? null,
+      action: "student.password.regenerate",
+      targetType: "student",
+      targetId: student.id,
+      metadata: { classId: student.class.id },
+      requestId: req.requestId,
+      ip: req.ip
+    });
+
     res.json({
       username: student.generatedUsername,
       password: plainPassword
@@ -432,6 +447,106 @@ router.post("/students/:studentId/regenerate-password", authRequired, async (req
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
+  }
+});
+
+// Helper: load a student and assert the caller is the owning teacher.
+async function loadOwnedStudent(req: AuthRequest): Promise<Student | null> {
+  const studentId = parseInt(req.params.studentId, 10);
+  if (!Number.isFinite(studentId)) return null;
+  const student = await studentRepo().findOne({
+    where: { id: studentId },
+    relations: ["class", "class.teacher"]
+  });
+  if (!student || student.class?.teacher?.id !== req.userId) return null;
+  return student;
+}
+
+// Right-to-access: export everything held about a student (audited data access).
+router.get("/students/:studentId/data-export", authRequired, requireCapability("STUDENT_DATA_VIEW", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
+  try {
+    const student = await loadOwnedStudent(req);
+    if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+
+    const data = await exportStudentData(student.id);
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId ?? null,
+      action: "student.data.export",
+      targetType: "student",
+      targetId: student.id,
+      orgId: student.class?.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({ export: data });
+  } catch (error) {
+    logger.error("[edu/classStudents] data-export error", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Right-to-erasure: delete a student's record (cascade removes grades/links).
+router.post("/students/:studentId/erase", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
+  try {
+    const student = await loadOwnedStudent(req);
+    if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+
+    const orgId = student.class?.organizationId ?? null;
+    const ok = await eraseStudentData(student.id);
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId ?? null,
+      action: "student.data.erase",
+      targetType: "student",
+      targetId: student.id,
+      orgId,
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({ ok });
+  } catch (error) {
+    logger.error("[edu/classStudents] erase error", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Record age / parental consent for a student.
+router.put("/students/:studentId/consent", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
+  try {
+    const student = await loadOwnedStudent(req);
+    if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+
+    const parsed = z
+      .object({
+        birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+        consentGiven: z.boolean().optional()
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+
+    const updated = await setStudentConsent(student.id, parsed.data);
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId ?? null,
+      action: "student.consent.update",
+      targetType: "student",
+      targetId: student.id,
+      orgId: student.class?.organizationId ?? null,
+      metadata: { consentGiven: parsed.data.consentGiven ?? null },
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({
+      student: {
+        id: updated!.id,
+        birthDate: updated!.birthDate ?? null,
+        parentalConsentAt: updated!.parentalConsentAt ?? null
+      }
+    });
+  } catch (error) {
+    logger.error("[edu/classStudents] consent error", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 
