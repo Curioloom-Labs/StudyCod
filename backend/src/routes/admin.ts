@@ -12,6 +12,7 @@ import adminLibraryRouter from "./adminLibrary";
 import adminMaterialsRouter from "./adminMaterials";
 import adminBroadcastRouter from "./adminBroadcast";
 import adminMailRouter from "./adminMail";
+import adminBlogRouter from "./adminBlog";
 import { logger } from "../utils/logger";
 import { getUserIadForLang } from "../utils/iad";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS } from "../types/GradingSystem";
@@ -28,6 +29,7 @@ adminRouter.use("/library", adminLibraryRouter);
 adminRouter.use("/materials", adminMaterialsRouter);
 adminRouter.use("/emails", adminBroadcastRouter);
 adminRouter.use("/mail", adminMailRouter);
+adminRouter.use("/blog", adminBlogRouter);
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
 function normalizeLang(input?: string | null): UserLang {
