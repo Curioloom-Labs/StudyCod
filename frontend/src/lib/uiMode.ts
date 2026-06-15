@@ -1,12 +1,23 @@
 export type UIMode = "classic" | "focus" | "nova" | "aurora";
 
+// Temporary kill-switch: Aurora is built but disabled product-wide. Flip back to
+// `true` to re-enable it everywhere (switchers, cycle, mode resolution).
+export const AURORA_ENABLED = false;
+
+// Modes currently offered to users (Aurora filtered out while disabled).
+export function availableUIModes(): UIMode[] {
+  const all: UIMode[] = ["focus", "classic", "nova", "aurora"];
+  return all.filter((m) => m !== "aurora" || AURORA_ENABLED);
+}
+
 // Order in which the "switch interface" affordances cycle modes. Keeping it in
 // one place avoids drift between the three shells + the classic header menu.
 export const UI_MODE_CYCLE: readonly UIMode[] = ["focus", "nova", "aurora", "classic"];
 
 export function nextUIMode(mode: UIMode): UIMode {
-  const i = UI_MODE_CYCLE.indexOf(mode);
-  return UI_MODE_CYCLE[(i + 1) % UI_MODE_CYCLE.length] ?? "focus";
+  const cycle = UI_MODE_CYCLE.filter((m) => m !== "aurora" || AURORA_ENABLED);
+  const i = cycle.indexOf(mode);
+  return cycle[(i + 1) % cycle.length] ?? "focus";
 }
 
 const STORAGE_KEYS = {
@@ -123,17 +134,20 @@ export function getEffectiveUIMode(now = Date.now()): {
   mode: UIMode;
   source: "override" | "preference" | "default";
 } {
+  // While Aurora is disabled, any stored aurora preference/override falls back
+  // to focus so the app never renders the disabled version.
+  const coerce = (mode: UIMode): UIMode => (mode === "aurora" && !AURORA_ENABLED ? "focus" : mode);
   const override = getOverrideUIMode(now);
   if (override) {
     return {
-      mode: override.mode,
+      mode: coerce(override.mode),
       source: "override"
     };
   }
   const pref = getPreferredUIMode();
   if (pref) {
     return {
-      mode: pref,
+      mode: coerce(pref),
       source: "preference"
     };
   }
