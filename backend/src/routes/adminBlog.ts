@@ -188,6 +188,51 @@ router.get("/", authRequired, systemAdminGuard, async (_req: AuthRequest, res: R
   return res.json({ posts: posts.map(p => toAdminDto(p, tagsByPost.get(p.id) ?? [])) });
 });
 
+// GET /admin/blog/reports — open comment reports queue.
+// NOTE: must be registered before "/:id" so Express 5 doesn't treat "reports"
+// as an :id (which would fail the numeric check with 400).
+router.get("/reports", authRequired, systemAdminGuard, async (_req: AuthRequest, res: Response) => {
+  const reports = await reportRepo().find({
+    where: { status: "OPEN" },
+    relations: { comment: true },
+    order: { createdAt: "DESC" },
+    take: 100
+  });
+
+  const reporterRefs = reports.map(r => ({ type: r.reporterType, id: r.reporterId }));
+  const principals = await resolvePrincipals(reporterRefs);
+
+  // Resolve post slug per reported comment for deep-linking.
+  const commentIds = reports.map(r => r.comment?.id).filter(Boolean) as number[];
+  const postByComment = new Map<number, { slug: string; title: string }>();
+  if (commentIds.length) {
+    const rows = await commentRepo()
+      .createQueryBuilder("c")
+      .innerJoin(BlogPost, "p", "p.id = c.postId")
+      .select(["c.id AS commentId", "p.slug AS slug", "p.title AS title"])
+      .where("c.id IN (:...ids)", { ids: commentIds })
+      .getRawMany<{ commentId: number; slug: string; title: string }>();
+    for (const r of rows) postByComment.set(Number(r.commentId), { slug: r.slug, title: r.title });
+  }
+
+  return res.json({
+    reports: reports.map(r => {
+      const info = principals.get(principalKey(r.reporterType, r.reporterId));
+      const post = r.comment ? postByComment.get(r.comment.id) : undefined;
+      return {
+        id: r.id,
+        commentId: r.comment?.id ?? null,
+        commentContent: r.comment?.content ?? null,
+        reason: r.reason,
+        reporter: info?.name ?? "—",
+        postSlug: post?.slug ?? null,
+        postTitle: post?.title ?? null,
+        createdAt: r.createdAt
+      };
+    })
+  });
+});
+
 // GET /admin/blog/:id — single post for editing.
 router.get("/:id", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
   const id = Number(req.params.id);
@@ -336,49 +381,6 @@ router.post("/comments/:id/pin", authRequired, systemAdminGuard, async (req: Aut
   comment.pinned = !comment.pinned;
   await commentRepo().save(comment);
   return res.json({ ok: true, pinned: comment.pinned });
-});
-
-// GET /admin/blog/reports — open comment reports queue.
-router.get("/reports", authRequired, systemAdminGuard, async (_req: AuthRequest, res: Response) => {
-  const reports = await reportRepo().find({
-    where: { status: "OPEN" },
-    relations: { comment: true },
-    order: { createdAt: "DESC" },
-    take: 100
-  });
-
-  const reporterRefs = reports.map(r => ({ type: r.reporterType, id: r.reporterId }));
-  const principals = await resolvePrincipals(reporterRefs);
-
-  // Resolve post slug per reported comment for deep-linking.
-  const commentIds = reports.map(r => r.comment?.id).filter(Boolean) as number[];
-  const postByComment = new Map<number, { slug: string; title: string }>();
-  if (commentIds.length) {
-    const rows = await commentRepo()
-      .createQueryBuilder("c")
-      .innerJoin(BlogPost, "p", "p.id = c.postId")
-      .select(["c.id AS commentId", "p.slug AS slug", "p.title AS title"])
-      .where("c.id IN (:...ids)", { ids: commentIds })
-      .getRawMany<{ commentId: number; slug: string; title: string }>();
-    for (const r of rows) postByComment.set(Number(r.commentId), { slug: r.slug, title: r.title });
-  }
-
-  return res.json({
-    reports: reports.map(r => {
-      const info = principals.get(principalKey(r.reporterType, r.reporterId));
-      const post = r.comment ? postByComment.get(r.comment.id) : undefined;
-      return {
-        id: r.id,
-        commentId: r.comment?.id ?? null,
-        commentContent: r.comment?.content ?? null,
-        reason: r.reason,
-        reporter: info?.name ?? "—",
-        postSlug: post?.slug ?? null,
-        postTitle: post?.title ?? null,
-        createdAt: r.createdAt
-      };
-    })
-  });
 });
 
 // POST /admin/blog/reports/:id/resolve — mark a report handled (optionally delete the comment).
