@@ -1,4 +1,6 @@
 export * from "./AdminDashboardPage";
+export * from "./BlogPage";
+export * from "./BlogAdminPage";
 export * from "./CookiePolicyPage";
 export * from "./DevEditorPage";
 export * from "./DocsPage";
