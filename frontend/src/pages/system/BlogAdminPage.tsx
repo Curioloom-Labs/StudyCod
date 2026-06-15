@@ -93,13 +93,15 @@ export const BlogAdminPage: React.FC = () => {
 
   const reload = React.useCallback(() => {
     setLoading(true);
-    Promise.all([adminListBlogPosts(), adminGetReports()])
-      .then(([p, r]) => {
-        setPosts(p);
-        setReports(r);
-      })
-      .catch((err) => showToast({ type: "error", message: getErrorMessageFromUnknown(err, tr("Помилка", "Error")) }))
-      .finally(() => setLoading(false));
+    // Load posts and reports independently — a failure in one must not blank the
+    // other (e.g. the reports endpoint erroring should never hide the post list).
+    const postsP = adminListBlogPosts()
+      .then(setPosts)
+      .catch((err) => showToast({ type: "error", message: getErrorMessageFromUnknown(err, tr("Помилка", "Error")) }));
+    const reportsP = adminGetReports()
+      .then(setReports)
+      .catch(() => setReports([]));
+    void Promise.allSettled([postsP, reportsP]).then(() => setLoading(false));
   }, [isEn]);
 
   React.useEffect(() => {
