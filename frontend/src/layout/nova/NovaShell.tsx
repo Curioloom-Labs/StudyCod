@@ -15,6 +15,7 @@ import {
   Library,
   LogOut,
   Menu,
+  Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -80,7 +81,8 @@ const GROUP_OF: Partial<Record<MomentumNavTarget, NavGroupId>> = {
   playground: "explore",
   learn: "explore",
   admin: "system",
-  support: "system"
+  support: "system",
+  blog: "system"
 };
 
 // Warm the target route chunk on hover/focus so the click feels instant.
@@ -188,6 +190,12 @@ export const NovaShell: React.FC<NovaShellProps> = ({
       id: "support",
       label: t("support"),
       icon: HelpCircle,
+      show: true
+    },
+    {
+      id: "blog",
+      label: t("blog"),
+      icon: Newspaper,
       show: true
     },
     {

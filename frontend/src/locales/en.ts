@@ -16,6 +16,7 @@ export default {
   grades: 'Grades',
   library: 'Library',
   contests: 'Contests',
+  blog: 'Devblog',
   myLearning: 'My Learning',
   playground: 'Playground',
   profile: 'Profile',
