@@ -277,7 +277,7 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
       <div className="flex h-[calc(100vh-4rem)] flex-col bg-bg-base" data-lk-theme="default">
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <div className="min-w-0">
-            <span className="font-mono text-xs text-primary/70">// device check</span>
+            <span className={`font-mono ${isAurora ? "text-[11px] uppercase tracking-[0.2em] text-text-muted" : "text-xs text-primary/70"}`}>{isAurora ? tr("Перевірка", "Device check") : "// device check"}</span>
             <div className="mt-0.5 flex items-center gap-2">
               <Video className="h-4 w-4 shrink-0 text-primary" />
               <span className="truncate text-sm font-semibold tracking-tight text-text-primary">
@@ -540,7 +540,7 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
             )}
             <div className={`flex items-center gap-2 ${isAurora ? "mt-3" : "mt-2"}`}>
               <Video className={`shrink-0 text-primary ${isAurora ? "h-6 w-6" : "h-5 w-5"}`} />
-              <h1 className={isAurora ? "text-3xl md:text-4xl font-semibold tracking-[-0.02em] text-text-primary" : "text-2xl font-semibold tracking-tight text-text-primary"}>
+              <h1 className={isAurora ? "text-2xl md:text-3xl font-semibold tracking-[-0.01em] text-text-primary" : "text-2xl font-semibold tracking-tight text-text-primary"}>
                 {tr("Живий урок", "Live classroom")}
               </h1>
             </div>

@@ -6,6 +6,7 @@ import { CheckCircle2, ShieldX, RefreshCw, BadgeCheck, ArrowLeft } from "lucide-
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Skeleton } from "../../components/ui/Skeleton";
+import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { getCertificateVerification, type CertificateVerification } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { easeOutQuint } from "../../lib/motion";
@@ -63,7 +64,7 @@ export const CertificateVerifyPage: React.FC = () => {
         transition={{ duration: 0.4, ease: easeOutQuint }}
         className="space-y-2"
       >
-        <span className="font-mono text-xs text-primary/70">{tr("// перевірка сертифіката", "// certificate verification")}</span>
+        <PageEyebrow label={tr("Сертифікат", "Certificate verification")} />
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div className="flex items-center gap-2">
             <BadgeCheck className="w-5 h-5 text-primary" />

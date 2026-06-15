@@ -15,6 +15,7 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeGradingSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import { AuroraList } from "../../components/ui/AuroraList";
+import { PageHero } from "../../components/ui/PageHero";
 
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
   const reduce = useReducedMotion();
@@ -127,21 +128,13 @@ export const TeacherDashboardPage: React.FC = () => {
   const totalStudents = classes.reduce((s, c) => s + (c.studentsCount || 0), 0);
 
   return <div className="min-h-full bg-bg-base">
-      {/* Hero */}
-      <div className={`px-4 md:px-8 max-w-6xl mx-auto ${isAurora ? "pt-10 md:pt-16 pb-8" : "pt-8 pb-6"}`}>
-        {isAurora ? (
-          <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{tr("Викладання", "Teaching")}</span>
-        ) : (
-          <span className="font-mono text-xs text-primary/70">// command center</span>
-        )}
-        <div className={`flex flex-col lg:flex-row lg:items-end justify-between gap-4 ${isAurora ? "mt-3" : "mt-2"}`}>
-          <div className="min-w-0">
-            <h1 className={isAurora ? "text-4xl md:text-5xl font-semibold tracking-[-0.02em] leading-[1.05] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>{t('myClasses')}</h1>
-            <p className={isAurora ? "mt-3 text-sm md:text-base text-text-secondary" : "mt-1.5 text-sm text-text-secondary"}>
-              {tr("Ваші класи, учні та черга перевірок — усе в одному місці.", "Your classes, students and review queue — all in one place.")}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+      <PageHero
+        eyebrowClassic="// command center"
+        eyebrowAurora={tr("Викладання", "Teaching")}
+        title={t('myClasses')}
+        subtitle={tr("Ваші класи, учні та черга перевірок — усе в одному місці.", "Your classes, students and review queue — all in one place.")}
+        maxWidth="6xl"
+        actions={<>
             <Button variant="ghost" onClick={() => navigate("/edu/library")}>
               <BookOpen className="w-4 h-4 mr-2" />
               {tr("Бібліотека завдань", "Task library")}
@@ -157,27 +150,13 @@ export const TeacherDashboardPage: React.FC = () => {
               <Plus className="w-4 h-4 mr-2" />
               {t('createClass')}
             </Button>
-          </div>
-        </div>
-
-        {/* Inline key stats */}
-        <div className={`flex flex-wrap items-baseline ${isAurora ? "mt-8 gap-x-12 gap-y-4" : "mt-5 gap-x-8 gap-y-3"}`}>
-          <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
-            <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}><CountUp value={classes.length} /></span>
-            <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{t('myClasses')}</span>
-          </div>
-          <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
-            <span className={isAurora ? "text-5xl font-semibold tracking-[-0.02em] text-text-primary tabular-nums order-2" : "font-mono text-2xl md:text-3xl text-text-primary tabular-nums"}><CountUp value={totalStudents} /></span>
-            <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{t('students')}</span>
-          </div>
-          <div className={isAurora ? "flex flex-col gap-1" : "flex items-baseline gap-2"}>
-            <span className={`tabular-nums ${isAurora ? "text-5xl font-semibold tracking-[-0.02em] order-2" : "font-mono text-2xl md:text-3xl"} ${pendingReviews.length > 0 ? "text-accent-error" : "text-text-primary"}`}><CountUp value={pendingReviews.length} /></span>
-            <span className={isAurora ? "text-[11px] text-text-muted uppercase tracking-[0.12em] font-mono order-1" : "text-xs text-text-muted uppercase tracking-[0.08em] font-mono"}>{tr("На перевірку", "Pending")}</span>
-          </div>
-        </div>
-      </div>
-
-      {!isAurora ? <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" /> : null}
+          </>}
+        stats={[
+          { value: <CountUp value={classes.length} />, label: t('myClasses') },
+          { value: <CountUp value={totalStudents} />, label: t('students') },
+          { value: <CountUp value={pendingReviews.length} />, label: tr("на перевірку", "pending"), tone: pendingReviews.length > 0 ? "error" : "default" }
+        ]}
+      />
 
       <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto space-y-8">
         {/* Pending review queue (prioritized) */}

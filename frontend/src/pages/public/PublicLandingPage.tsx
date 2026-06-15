@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Logo } from "../../components/Logo";
 import { Button } from "../../components/ui/Button";
+import { UIModeSwitch } from "../../components/ui/UIModeSwitch";
+import { useUIMode } from "../../components/interface/UIModeProvider";
 import { IntroSplash } from "../../components/IntroSplash";
 import { GraduationCap, User, Library, BookOpen, ShieldCheck, Timer, CheckCircle2, MessageCircleQuestion, ArrowRight, Terminal, Code2, Trophy } from "lucide-react";
 import { applyTheme, getCurrentTheme } from "../../theme";
@@ -13,6 +15,7 @@ export const PublicLandingPage: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const prefersReducedMotion = useReducedMotion();
+  const isAurora = useUIMode().mode === "aurora";
 
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
   const topMenuButtonClass =
@@ -42,6 +45,102 @@ export const PublicLandingPage: React.FC = () => {
     { Icon: GraduationCap, title: t("landingCardEduTitle"), body: t("landingCardEduBody") },
     { Icon: Library, title: t("landingCardLibraryTitle"), body: t("landingCardLibraryBody") },
   ];
+
+  const headerActions = (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-bg-code/35 p-1.5">
+      <button type="button" onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className={topMenuButtonClass} title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
+        {i18n.language === "uk" ? "EN" : "UA"}
+      </button>
+      <button type="button" onClick={() => { const next = theme === "dark" ? "light" : "dark"; applyTheme(next); setTheme(next); }} className={topMenuButtonClass} title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+        {theme === "dark" ? "Light" : "Dark"}
+      </button>
+      <button type="button" className={topMenuButtonClass} onClick={() => navigate("/docs")}>{t("help")}</button>
+    </div>
+  );
+
+  if (isAurora) {
+    // Laconic Aurora landing — single column, hairline rows, prose. No terminal
+    // card, no heavy grids/shadows; same value prop, calmer composition.
+    const valueRows = [...features, ...cards];
+    return (
+      <div className="min-h-[100dvh] bg-bg-base text-text-primary">
+        <IntroSplash />
+        <header className="h-16 flex items-center justify-between px-5 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <Logo size={22} className="text-primary" />
+            <span className="font-mono font-semibold text-sm tracking-tight text-text-primary">StudyCod</span>
+          </div>
+          {headerActions}
+        </header>
+
+        <main className="px-5 sm:px-6 pb-16">
+          <div className="mx-auto w-full max-w-[680px]">
+            <div className="pt-12 md:pt-20">
+              <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">StudyCod</span>
+              <h1 className="mt-3 text-3xl md:text-4xl font-semibold tracking-[-0.02em] leading-[1.1] text-text-primary">{t("landingTitle")}</h1>
+              <p className="mt-3 text-[15px] text-text-secondary leading-relaxed max-w-xl">{t("landingSubtitle")}</p>
+
+              <div className="mt-7 flex flex-wrap gap-2.5">
+                <Button onClick={() => navigate("/?auth=register")}>{t("landingCtaRegister")}</Button>
+                <Button variant="ghost" onClick={() => navigate("/?auth=login")}>{t("landingCtaLogin")}</Button>
+                <Button variant="ghost" onClick={() => navigate("/?auth=login&next=%2Flibrary")}>{t("landingCtaLibrary")}</Button>
+              </div>
+              <p className="mt-3 text-xs font-mono text-text-muted">{t("landingNote")}</p>
+
+              <div className="mt-6 space-y-2">
+                <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-text-muted">
+                  {t("chooseUiVersion", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Choose a UI version" : "Оберіть версію інтерфейсу" })}
+                </div>
+                <UIModeSwitch label={false} />
+              </div>
+            </div>
+
+            {/* What you get — one uniform hairline list (features + modes merged). */}
+            <div className="mt-14">
+              {valueRows.map(({ Icon, title, body }) => (
+                <div key={title} className="flex items-start gap-3.5 py-4 border-t border-border first:border-t-0">
+                  <Icon className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-[15px] text-text-primary">{title}</div>
+                    <div className="mt-0.5 text-[13px] text-text-muted leading-relaxed">{body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick start as a plain ordered list. */}
+            <div className="mt-12">
+              <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-text-muted">{t("landingStepsTitle")}</div>
+              <ol className="mt-3 space-y-2.5 text-[14px] text-text-secondary">
+                {[t("landingStep1"), t("landingStep2"), t("landingStep3")].map((step, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="text-text-muted font-mono text-xs tabular-nums pt-0.5">{String(i + 1).padStart(2, "0")}</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* Stats as one quiet prose line. */}
+            <p className="mt-10 text-[13px] font-mono text-text-muted">
+              200+ {tr("задач у бібліотеці", "library tasks")} · 50+ {tr("контестів", "contests")} · 10k+ {tr("подань оцінено", "submissions judged")}
+            </p>
+
+            <div className="mt-14 flex flex-wrap items-center justify-between text-xs font-mono text-text-muted border-t border-border pt-6 gap-4">
+              <div>© {new Date().getFullYear()} StudyCod</div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/privacy")}>{t("footerPrivacyPolicy")}</button>
+                <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/terms")}>{t("footerTermsOfUse")}</button>
+                <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/cookies")}>{t("footerCookiePolicy")}</button>
+                <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/support")}>{t("landingSupport")}</button>
+                <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/docs")}>{t("help")}</button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-bg-base text-text-primary">
@@ -118,6 +217,13 @@ export const PublicLandingPage: React.FC = () => {
               </div>
 
               <div className="text-xs font-mono text-text-muted">{t("landingNote")}</div>
+
+              <div className="space-y-2 pt-1">
+                <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-text-muted">
+                  {t("chooseUiVersion", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Choose a UI version" : "Оберіть версію інтерфейсу" })}
+                </div>
+                <UIModeSwitch label={false} />
+              </div>
 
               {/* Mini feature pills */}
               <motion.div
