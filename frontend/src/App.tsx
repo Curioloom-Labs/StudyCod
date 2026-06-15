@@ -58,6 +58,15 @@ const StudentAppealsPage = React.lazy(() => import("./pages/edu/StudentAppealsPa
 const TeacherClassAppealsPage = React.lazy(() => import("./pages/edu/TeacherClassAppealsPage").then(mod => ({ default: mod.TeacherClassAppealsPage })));
 const SummaryGradesPage = React.lazy(() => import("./pages/edu/SummaryGradesPage").then(mod => ({ default: mod.SummaryGradesPage })));
 const ClassGradebookPage = React.lazy(() => import("./pages/edu/ClassGradebookPage").then(mod => ({ default: mod.ClassGradebookPage })));
+const GradebookConfigPage = React.lazy(() => import("./pages/edu/GradebookConfigPage").then(mod => ({ default: mod.GradebookConfigPage })));
+const JoinClassPage = React.lazy(() => import("./pages/edu/JoinClassPage").then(mod => ({ default: mod.JoinClassPage })));
+const CoursesPage = React.lazy(() => import("./pages/edu/CoursesPage").then(mod => ({ default: mod.CoursesPage })));
+const CourseDetailPage = React.lazy(() => import("./pages/edu/CourseDetailPage").then(mod => ({ default: mod.CourseDetailPage })));
+const LessonQuizPage = React.lazy(() => import("./pages/edu/LessonQuizPage").then(mod => ({ default: mod.LessonQuizPage })));
+const TeacherQuizReviewPage = React.lazy(() => import("./pages/edu/TeacherQuizReviewPage").then(mod => ({ default: mod.TeacherQuizReviewPage })));
+const ManualTaskPage = React.lazy(() => import("./pages/edu/ManualTaskPage").then(mod => ({ default: mod.ManualTaskPage })));
+const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualTaskSubmissionsPage").then(mod => ({ default: mod.ManualTaskSubmissionsPage })));
+const OrgMembersPage = React.lazy(() => import("./pages/edu/OrgMembersPage").then(mod => ({ default: mod.OrgMembersPage })));
 const LiveClassroomPage = React.lazy(() => import("./pages/edu/LiveClassroomPage").then(mod => ({ default: mod.LiveClassroomPage })));
 const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
 const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminDashboardPage").then(mod => ({ default: mod.AdminDashboardPage })));
@@ -1644,6 +1653,15 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="control-works/:controlWorkId" element={<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>} />
             <Route path="classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
             <Route path="classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
+            <Route path="classes/:classId/gradebook-config" element={<AnimatedPage><GradebookConfigPage /></AnimatedPage>} />
+            <Route path="join" element={<AnimatedPage><JoinClassPage /></AnimatedPage>} />
+            <Route path="courses" element={<AnimatedPage><CoursesPage /></AnimatedPage>} />
+            <Route path="courses/:courseId" element={<AnimatedPage><CourseDetailPage /></AnimatedPage>} />
+            <Route path="lessons/:lessonId/quiz" element={<AnimatedPage><LessonQuizPage /></AnimatedPage>} />
+            <Route path="lessons/:lessonId/quiz/review" element={<AnimatedPage><TeacherQuizReviewPage /></AnimatedPage>} />
+            <Route path="manual-tasks/:taskId" element={<AnimatedPage><ManualTaskPage /></AnimatedPage>} />
+            <Route path="manual-tasks/:taskId/submissions" element={<AnimatedPage><ManualTaskSubmissionsPage /></AnimatedPage>} />
+            <Route path="organization" element={<AnimatedPage><OrgMembersPage /></AnimatedPage>} />
             <Route path="classes/:classId/live" element={<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>} />
             <Route path="classes/:classId/appeals" element={<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>} />
             <Route path="journal" element={<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>} />

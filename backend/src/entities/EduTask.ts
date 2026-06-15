@@ -3,7 +3,7 @@ import { EduLesson } from "./EduLesson";
 import { TestData } from "./TestData";
 import { EduGrade } from "./EduGrade";
 import { TaskTheory } from "./TaskTheory";
-export type EduTaskMode = "CODE" | "WEB";
+export type EduTaskMode = "CODE" | "WEB" | "MANUAL";
 export type WebValidationProfileId = "FREE_WEB" | "HTML_ONLY" | "HTML_CSS_NO_JS" | "HTML_JS_NO_CSS" | "JS_ONLY_DOM" | "CSS_ONLY" | "HTML_AND_INLINE_ONLY";
 @Entity("edu_tasks")
 export class EduTask {
@@ -28,7 +28,7 @@ export class EduTask {
   template!: string;
   @Column({
     type: "enum",
-    enum: ["CODE", "WEB"],
+    enum: ["CODE", "WEB", "MANUAL"],
     default: "CODE",
     name: "task_mode"
   })
@@ -94,6 +94,15 @@ export class EduTask {
     name: "max_attempts"
   })
   maxAttempts!: number;
+  // Weighted-gradebook category this task counts toward (P2.6c). Null = ungraded
+  // by the weighted gradebook. References a category id in Class.gradebookConfig.
+  @Column({
+    type: "varchar",
+    length: 64,
+    nullable: true,
+    name: "gradebook_category_id"
+  })
+  gradebookCategoryId?: string | null;
   @Column({
     type: "datetime",
     nullable: true,

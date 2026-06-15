@@ -50,6 +50,17 @@ import { BlogComment } from "./entities/BlogComment";
 import { BlogReaction } from "./entities/BlogReaction";
 import { BlogCommentReport } from "./entities/BlogCommentReport";
 import { Notification } from "./entities/Notification";
+import { AuditLog } from "./entities/AuditLog";
+import { Organization } from "./entities/Organization";
+import { Membership } from "./entities/Membership";
+import { OrgInvitation } from "./entities/OrgInvitation";
+import { ParentLink } from "./entities/ParentLink";
+import { Course } from "./entities/Course";
+import { CourseModule } from "./entities/CourseModule";
+import { CourseItem } from "./entities/CourseItem";
+import { CourseAssignment } from "./entities/CourseAssignment";
+import { ManualSubmission } from "./entities/ManualSubmission";
+import { QuizAttempt } from "./entities/QuizAttempt";
 const dbPort = env.DB_PORT != null ? parseInt(env.DB_PORT, 10) : 3306;
 const runtimeMigrationExtension = path.extname(__filename) === ".ts" ? "ts" : "js";
 const BLOCKED_MIGRATION_TIMESTAMPS = new Set(["1736206400000"]);
@@ -88,7 +99,7 @@ export const AppDataSource = new DataSource({
     password: env.DB_PASS || "",
     database: env.DB_NAME || "studycod"
   }),
-  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification],
+  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification, AuditLog, Organization, Membership, OrgInvitation, ParentLink, Course, CourseModule, CourseItem, CourseAssignment, ManualSubmission, QuizAttempt],
   synchronize: false,
   logging: false,
   migrations: migrationGlobs,

@@ -50,6 +50,22 @@ export class Student {
   })
   email!: string;
 
+  // COPPA/FERPA/GDPR-K hooks (design-for-later): age gating + parental consent.
+  @Column({
+    type: "date",
+    nullable: true,
+    name: "birth_date"
+  })
+  birthDate?: string | null;
+
+  /** Null = no recorded parental consent; a timestamp = consent given. */
+  @Column({
+    type: "timestamp",
+    nullable: true,
+    name: "parental_consent_at"
+  })
+  parentalConsentAt?: Date | null;
+
   @Column({
     type: "enum",
     enum: ["uk", "en"],
