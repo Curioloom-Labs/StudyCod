@@ -4,6 +4,8 @@ import * as os from "os";
 import { spawnSync } from "child_process";
 import { Runner } from "./engine/runner";
 import type { JudgeRequest, JudgeResponse } from "./engine/result";
+import { LANGUAGE_IDS } from "./languages/registry";
+import type { LanguageId } from "./languages/types";
 
 function readIntEnv(name: string, fallback: number): number {
   const raw = parseInt(String(process.env[name] ?? ""), 10);
@@ -242,38 +244,19 @@ async function main() {
   const hasRootfs = fs.existsSync(ROOTFS);
   const envChroot = (process.env.NSJAIL_CHROOT || "").trim();
   const defaultChrootFallback = hasRootfs ? ROOTFS : "";
-  const chrootDefaultSource = envChroot || defaultChrootFallback;
-  const chrootDefault = chrootDefaultSource.trim();
-  const javaChrootEnv = (process.env.NSJAIL_CHROOT_JAVA || "").trim();
-  const javaChrootFallback = hasRootfs ? ROOTFS : "/sandbox/java";
-  const javaChrootSource = javaChrootEnv || chrootDefault || javaChrootFallback;
-  const cppChrootEnv = (process.env.NSJAIL_CHROOT_CPP || "").trim();
-  const cppChrootFallback = hasRootfs ? ROOTFS : "/sandbox/cpp";
-  const cppChrootSource = cppChrootEnv || chrootDefault || cppChrootFallback;
+  const chrootDefault = (envChroot || defaultChrootFallback).trim();
 
-  // C typically shares the same toolchain rootfs as C++.
-  const cChrootEnv = (process.env.NSJAIL_CHROOT_C || "").trim();
-  const cChrootFallback = cppChrootSource.trim() || (hasRootfs ? ROOTFS : "/sandbox/c");
-  const cChrootSource = cChrootEnv || chrootDefault || cChrootFallback;
-
-  const kotlinChrootEnv = (process.env.NSJAIL_CHROOT_KOTLIN || "").trim();
-  const kotlinChrootFallback = hasRootfs ? ROOTFS : "/sandbox/kotlin";
-  const kotlinChrootSource = kotlinChrootEnv || chrootDefault || kotlinChrootFallback;
-
-  const csharpChrootEnv = (process.env.NSJAIL_CHROOT_CSHARP || "").trim();
-  const csharpChrootFallback = hasRootfs ? ROOTFS : "/sandbox/csharp";
-  const csharpChrootSource = csharpChrootEnv || chrootDefault || csharpChrootFallback;
-  const pythonChrootEnv = (process.env.NSJAIL_CHROOT_PYTHON || "").trim();
-  const pythonChrootFallback = hasRootfs ? ROOTFS : "/sandbox/python";
-  const pythonChrootSource = pythonChrootEnv || chrootDefault || pythonChrootFallback;
-  const chrootByLanguage = {
-    java: javaChrootSource.trim(),
-    cpp: cppChrootSource.trim(),
-    c: cChrootSource.trim(),
-    python: pythonChrootSource.trim(),
-    kotlin: kotlinChrootSource.trim(),
-    csharp: csharpChrootSource.trim()
-  } as const;
+  // Per-language chroot resolution. Every family resolves to: explicit
+  // NSJAIL_CHROOT_<LANG> env → shared default (NSJAIL_CHROOT / rootfs) → per-language
+  // fallback dir. Driven by the language registry so new families need no edits here.
+  const resolveLangChroot = (lang: LanguageId): string => {
+    const explicit = (process.env[`NSJAIL_CHROOT_${lang.toUpperCase()}`] || "").trim();
+    const fallback = hasRootfs ? ROOTFS : `/sandbox/${lang}`;
+    return (explicit || chrootDefault || fallback).trim();
+  };
+  const chrootByLanguage = Object.fromEntries(
+    LANGUAGE_IDS.map(lang => [lang, resolveLangChroot(lang)])
+  ) as Record<LanguageId, string>;
   const cwd = (process.env.NSJAIL_CWD || "/work").trim();
 
   if (hasArg("--health")) {

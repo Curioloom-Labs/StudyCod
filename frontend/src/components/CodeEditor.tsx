@@ -350,7 +350,7 @@ const Editor = React.lazy(() => import("@monaco-editor/react").then(mod => ({
   default: mod.default
 })));
 interface Props {
-  language: "JAVA" | "PYTHON" | "CPP" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin" | "html" | "css" | "javascript";
+  language: "JAVA" | "PYTHON" | "CPP" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin" | "js" | "go" | "rust" | "pascal" | "d" | "dart" | "haskell" | "lisp" | "lua" | "perl" | "php" | "ruby" | "swift" | "html" | "css" | "javascript";
   value: string;
   onChange?: (code: string) => void;
   readOnly?: boolean;
@@ -383,6 +383,35 @@ const toMonacoLanguage = (language: Props["language"]) => {
       return "csharp";
     case "kotlin":
       return "kotlin";
+    case "js":
+      return "javascript";
+    case "go":
+      return "go";
+    case "rust":
+      return "rust";
+    case "pascal":
+      return "pascal";
+    case "dart":
+      return "dart";
+    case "lua":
+      return "lua";
+    case "perl":
+      return "perl";
+    case "php":
+      return "php";
+    case "ruby":
+      return "ruby";
+    case "swift":
+      return "swift";
+    case "lisp":
+      // Monaco has no Common Lisp grammar; Scheme is the closest s-expression highlighter.
+      return "scheme";
+    case "d":
+      // No D grammar in Monaco; C++ highlighting is a close approximation.
+      return "cpp";
+    case "haskell":
+      // No Haskell grammar shipped with Monaco.
+      return "plaintext";
     case "html":
       return "html";
     case "css":

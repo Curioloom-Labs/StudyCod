@@ -1,8 +1,11 @@
 import * as path from "path";
 import { writeFile } from "fs/promises";
-import { LanguageAdapter } from "./types";
+import { COMPILE_BUDGET, LanguageAdapter } from "./types";
 export const pythonLanguage: LanguageAdapter = {
   id: "python",
+  entryFile: "main.py",
+  defaultLimits: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
+  compileTimeLimitMs: COMPILE_BUDGET.interpreted,
   async writeSource(workDir: string, source: string): Promise<void> {
     const filePath = path.join(workDir, "main.py");
     await writeFile(filePath, source, {

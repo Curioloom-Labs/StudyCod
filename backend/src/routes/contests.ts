@@ -15,6 +15,7 @@ import { Class } from "../entities/Class";
 import { LibraryTask } from "../entities/LibraryTask";
 import { TestData } from "../entities/TestData";
 import { judgeWithSemaphore } from "../services/judgeWorker";
+import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1 } from "../utils/multiFileSubmission";
 import { logger } from "../utils/logger";
@@ -2845,7 +2846,21 @@ contestsRouter.post(
       const task = await libraryRepo().findOne({ where: { id: taskId } as any, relations: ["author"] as any });
       if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
-      const tests = await testDataRepo().find({ where: { libraryTask: { id: task.id } } as any, order: { id: "ASC" } as any });
+      // Metadata-only: exclude the big `input` column (read lazily for cache misses only).
+      const tests = await testDataRepo().find({
+        where: { libraryTask: { id: task.id } } as any,
+        order: { id: "ASC" } as any,
+        select: {
+          id: true,
+          isHidden: true,
+          kind: true,
+          points: true,
+          subtask: true,
+          expectedOutput: true,
+          inputSha256: true,
+          outputSha256: true
+        } as any
+      });
       if (!tests.length) return res.status(400).json({ message: "NO_TESTS_DEFINED_FOR_THIS_TASK" });
 
       const requested = normalizeJudgeLanguage(validated.data.language);
@@ -2892,6 +2907,16 @@ contestsRouter.post(
       const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
 
       const principalTag = req.userType === "STUDENT" ? `student_${req.studentId}` : `user_${req.userId}`;
+      const { tests: workerTests } = await buildJudgeTests(tests, {
+        meta: (t) => {
+          const subtaskRaw = (t as any).subtask ?? "";
+          const subtaskGroup = String(subtaskRaw ?? "").trim();
+          const group = hasSubtasks ? (subtaskGroup ? subtaskGroup : `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
+          return { hidden: t.isHidden === true, group, weight: t.points || 1 };
+        },
+        hashes: (t) => ({ inputHash: (t as any).inputSha256, outputHash: (t as any).outputSha256 }),
+        loadContent: loadTestContentByIds
+      });
       const workerReq: WorkerJudgeRequest = {
         submission_id: `contest_${contestId}_${problemId}_${principalTag}_${Date.now()}`,
         language: judgeLang,
@@ -2900,19 +2925,7 @@ contestsRouter.post(
         // IOI-style binary subtasks: each `test.subtask` becomes a group,
         // group score is 0/full depending on whether all tests in the subtask passed.
         group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : undefined,
-        tests: tests.map((t) => {
-          const subtaskRaw = (t as any).subtask ?? "";
-          const subtaskGroup = String(subtaskRaw ?? "").trim();
-          const group = hasSubtasks ? (subtaskGroup ? subtaskGroup : `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
-          return {
-            id: t.id,
-            input: t.input || "",
-            output: t.expectedOutput || "",
-            hidden: t.isHidden === true,
-            group,
-            weight: t.points || 1,
-          };
-        }),
+        tests: workerTests,
         limits: effectiveLimits,
         checker: effectiveChecker,
         // Debug captures per-test actual/expected so we can return failing-test
@@ -3006,7 +3019,9 @@ contestsRouter.post(
                   verdict,
                   hidden: false,
                   group,
-                  input: truncateForClient(t.input ?? ""),
+                  // Input sample comes from the judge (debug) since the route no longer
+                  // loads the full `input` column; expected output is still in metadata.
+                  input: truncateForClient((r as any)?.input ?? ""),
                   expected: truncateForClient(t.expectedOutput ?? ""),
                   actual: truncateForClient((r as any)?.actual ?? ""),
                   stderr: truncateForClient((r as any)?.stderr ?? "", 2_000),
@@ -3153,7 +3168,7 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
   }
 });
 
-// Per-problem progress summary for the current participant (used for e-olymp-like table).
+// Per-problem progress summary for the current participant (used for the scoreboard-like table).
 // Includes best contest-phase score and last submission (any phase).
 // Participant integrity signal (tab/focus loss, large paste, fullscreen exit).
 // Best-effort, recorded only during the active window for non-managers.
