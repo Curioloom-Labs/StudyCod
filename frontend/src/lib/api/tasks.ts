@@ -217,7 +217,8 @@ export type ExplainErrorFailure = {
 };
 
 export type ExplainErrorPayload = {
-  language: "JAVA" | "PYTHON" | "CPP";
+  // Judge language hint (free-form, e.g. "PYTHON", "GO"). Backend treats unknown values generically.
+  language: string;
   code: string;
   verdict?: string | null;
   stderr?: string | null;

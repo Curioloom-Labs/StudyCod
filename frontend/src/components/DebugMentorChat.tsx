@@ -4,7 +4,8 @@ import { Button } from "./ui/Button";
 import { debugChat, type DebugChatMessage, type ExplainErrorFailure } from "../lib/api/tasks";
 
 type Props = {
-  language: "JAVA" | "PYTHON" | "CPP";
+  // Judge language hint (free-form, e.g. "PYTHON", "GO"). Forwarded to the AI mentor.
+  language: string;
   code: string;
   verdict?: string | null;
   stderr?: string | null;

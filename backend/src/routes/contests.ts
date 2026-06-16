@@ -40,7 +40,35 @@ const classRepo = () => AppDataSource.getRepository(Class);
 const libraryRepo = () => AppDataSource.getRepository(LibraryTask);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 
-const ALL_JUDGE_LANGS = ["java", "python", "cpp", "c", "csharp", "kotlin"] as const;
+const ALL_JUDGE_LANGS = [
+  "java", "python", "cpp", "c", "csharp", "kotlin",
+  "js", "go", "rust", "pascal",
+  "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift"
+] as const;
+
+const NATIVE_LIMITS = { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 };
+const SCRIPTING_LIMITS = { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 };
+const DEFAULT_LIMITS_BY_LANG: Record<JudgeLanguage, { time_limit_ms: number; memory_limit_mb: number; output_limit_kb: number }> = {
+  java: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
+  python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
+  cpp: { ...NATIVE_LIMITS },
+  c: { ...NATIVE_LIMITS },
+  csharp: { time_limit_ms: 1200, memory_limit_mb: 1024, output_limit_kb: 64 },
+  kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
+  js: { ...SCRIPTING_LIMITS },
+  go: { time_limit_ms: 1000, memory_limit_mb: 256, output_limit_kb: 64 },
+  rust: { ...NATIVE_LIMITS },
+  pascal: { time_limit_ms: 1000, memory_limit_mb: 256, output_limit_kb: 64 },
+  d: { ...NATIVE_LIMITS },
+  dart: { ...SCRIPTING_LIMITS },
+  haskell: { ...NATIVE_LIMITS },
+  lisp: { time_limit_ms: 2000, memory_limit_mb: 384, output_limit_kb: 64 },
+  lua: { ...SCRIPTING_LIMITS },
+  perl: { ...SCRIPTING_LIMITS },
+  php: { ...SCRIPTING_LIMITS },
+  ruby: { ...SCRIPTING_LIMITS },
+  swift: { ...NATIVE_LIMITS },
+};
 type JudgeLanguage = (typeof ALL_JUDGE_LANGS)[number];
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
@@ -90,21 +118,21 @@ function normalizeJudgeLanguage(raw: unknown): JudgeLanguage | null {
   return (ALL_JUDGE_LANGS as readonly string[]).includes(s) ? (s as JudgeLanguage) : null;
 }
 
+// Optional compiler/version id (e.g. "pypy3", "java21"); judge validates family membership.
+function normCompilerId(raw: unknown): string | undefined {
+  const s = String(raw ?? "").trim();
+  return /^[a-z0-9_+-]{1,32}$/i.test(s) ? s : undefined;
+}
+
+const ENTRY_FILE_BY_LANG: Record<JudgeLanguage, string> = {
+  java: "Main.java", python: "main.py", cpp: "main.cpp", c: "main.c",
+  csharp: "Program.cs", kotlin: "Main.kt", js: "main.js", go: "main.go",
+  rust: "main.rs", pascal: "main.pas", d: "main.d", dart: "main.dart",
+  haskell: "main.hs", lisp: "main.lisp", lua: "main.lua", perl: "main.pl",
+  php: "main.php", ruby: "main.rb", swift: "main.swift",
+};
 function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
-  switch (lang) {
-    case "java":
-      return "Main.java";
-    case "python":
-      return "main.py";
-    case "cpp":
-      return "main.cpp";
-    case "c":
-      return "main.c";
-    case "csharp":
-      return "Program.cs";
-    case "kotlin":
-      return "Main.kt";
-  }
+  return ENTRY_FILE_BY_LANG[lang] ?? "Main.java";
 }
 
 type ApiCodeFile = { path: string; content: string };
@@ -124,16 +152,8 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   return [...byPath.values()];
 }
 
-function getAllowedJudgeLanguages(task: LibraryTask): JudgeLanguage[] {
-  const raw = Array.isArray((task as any).allowedLanguages) ? (task as any).allowedLanguages : null;
-  const normalized = (raw || [])
-    .map((x: any) => String(x ?? "").trim().toLowerCase())
-    .filter(Boolean);
-  const allowed = new Set<JudgeLanguage>();
-  for (const x of normalized) {
-    if ((ALL_JUDGE_LANGS as readonly string[]).includes(x)) allowed.add(x as JudgeLanguage);
-  }
-  if (allowed.size > 0) return Array.from(allowed);
+function getAllowedJudgeLanguages(_task: LibraryTask): JudgeLanguage[] {
+  // No per-problem restriction: every contest problem accepts every supported language.
   return Array.from(ALL_JUDGE_LANGS) as JudgeLanguage[];
 }
 
@@ -2645,6 +2665,7 @@ contestsRouter.post(
         code: z.string().min(1).max(200_000).optional(),
         files: z.array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) })).max(64).optional(),
         language: z.string().optional(),
+        compiler: z.string().max(32).optional(),
         input: z.string().max(200_000).optional(),
       }).refine((v) => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
         message: "code or files required",
@@ -2672,14 +2693,7 @@ contestsRouter.post(
         memory_limit_mb: Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0 ? (task as any).memoryLimitMb : undefined,
         output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : undefined,
       };
-      const defaultLimitsByLang: Record<JudgeLanguage, { time_limit_ms: number; memory_limit_mb: number; output_limit_kb: number }> = {
-        java: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
-        python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
-        cpp: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
-        c: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
-        csharp: { time_limit_ms: 1200, memory_limit_mb: 1024, output_limit_kb: 64 },
-        kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
-      };
+      const defaultLimitsByLang = DEFAULT_LIMITS_BY_LANG;
       const effectiveLimits = {
         time_limit_ms: taskLimits.time_limit_ms ?? defaultLimitsByLang[judgeLang].time_limit_ms,
         memory_limit_mb: taskLimits.memory_limit_mb ?? defaultLimitsByLang[judgeLang].memory_limit_mb,
@@ -2700,6 +2714,7 @@ contestsRouter.post(
       const workerReq: WorkerJudgeRequest = {
         submission_id: `contest_run_${contestId}_${problemId}_${Date.now()}`,
         language: judgeLang,
+        ...(normCompilerId((validated.data as any).compiler) ? { compiler: normCompilerId((validated.data as any).compiler) } : {}),
         source: sourceText,
         ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
         tests: [
@@ -2811,6 +2826,7 @@ contestsRouter.post(
           code: z.string().min(1).max(200_000).optional(),
           files: z.array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) })).max(64).optional(),
           language: z.string().optional(),
+          compiler: z.string().max(32).optional(),
           turnstileToken: z.string().min(1).max(4096).optional(),
         })
         .refine((v) => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
@@ -2875,14 +2891,7 @@ contestsRouter.post(
         memory_limit_mb: Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0 ? (task as any).memoryLimitMb : undefined,
         output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : undefined,
       };
-      const defaultLimitsByLang: Record<JudgeLanguage, { time_limit_ms: number; memory_limit_mb: number; output_limit_kb: number }> = {
-        java: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
-        python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
-        cpp: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
-        c: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
-        csharp: { time_limit_ms: 1200, memory_limit_mb: 1024, output_limit_kb: 64 },
-        kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
-      };
+      const defaultLimitsByLang = DEFAULT_LIMITS_BY_LANG;
       const effectiveLimits = {
         time_limit_ms: taskLimits.time_limit_ms ?? defaultLimitsByLang[judgeLang].time_limit_ms,
         memory_limit_mb: taskLimits.memory_limit_mb ?? defaultLimitsByLang[judgeLang].memory_limit_mb,
@@ -2917,9 +2926,11 @@ contestsRouter.post(
         hashes: (t) => ({ inputHash: (t as any).inputSha256, outputHash: (t as any).outputSha256 }),
         loadContent: loadTestContentByIds
       });
+      const submitCompiler = normCompilerId((validated.data as any).compiler);
       const workerReq: WorkerJudgeRequest = {
         submission_id: `contest_${contestId}_${problemId}_${principalTag}_${Date.now()}`,
         language: judgeLang,
+        ...(submitCompiler ? { compiler: submitCompiler } : {}),
         source: sourceText,
         ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
         // IOI-style binary subtasks: each `test.subtask` becomes a group,
