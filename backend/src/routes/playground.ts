@@ -3,7 +3,7 @@ import { AppDataSource } from "../data-source";
 import { authRequired, authOptional, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
 import { PlaygroundSnippet } from "../entities/PlaygroundSnippet";
-import { executeCodeWithInput } from "../services/codeExecutionService";
+import { executeCodeWithInput, COMPILER_CATALOGUE, type ExecLanguage } from "../services/codeExecutionService";
 import { generateShareId, isValidShareId } from "../services/playground/shareId";
 import { buildPythonTracerScript, parseTraceOutput, DEFAULT_MAX_STEPS } from "../services/visualizer/pythonTracer";
 import { logger } from "../utils/logger";
@@ -19,18 +19,47 @@ function normLang(raw: unknown): "JAVA" | "PYTHON" | "CPP" | null {
   return s === "JAVA" || s === "PYTHON" || s === "CPP" ? s : null;
 }
 
+// Languages runnable via the playground "/run" endpoint. Accepts the legacy uppercase
+// trio (JAVA/PYTHON/CPP) and every lower-case judge family. Snippet storage stays on the
+// legacy trio (see normLang) to avoid a DB enum migration.
+const RUN_LANGUAGES = new Set<ExecLanguage>([
+  "JAVA", "PYTHON", "CPP",
+  "java", "python", "cpp", "c", "csharp", "kotlin", "js", "go", "rust", "pascal",
+  "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift"
+]);
+
+function normRunLang(raw: unknown): ExecLanguage | null {
+  const s = String(raw ?? "").trim();
+  if (RUN_LANGUAGES.has(s.toUpperCase() as ExecLanguage)) return s.toUpperCase() as ExecLanguage;
+  if (RUN_LANGUAGES.has(s.toLowerCase() as ExecLanguage)) return s.toLowerCase() as ExecLanguage;
+  return null;
+}
+
+function normCompiler(raw: unknown): string | undefined {
+  const s = String(raw ?? "").trim();
+  if (!s) return undefined;
+  // Keep it conservative: short, identifier-ish ids only. The judge validates the rest.
+  return /^[a-z0-9_+-]{1,32}$/i.test(s) ? s : undefined;
+}
+
+// Public catalogue of selectable compilers/versions (picker source).
+router.get("/compilers", authOptional, (_req: AuthRequest, res: Response) => {
+  return res.json({ compilers: COMPILER_CATALOGUE });
+});
+
 // Run arbitrary code through the judge sandbox. Rate-limited.
 router.post("/run", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const b = (req.body ?? {}) as Record<string, unknown>;
-    const language = normLang(b.language);
+    const language = normRunLang(b.language);
     if (!language) return res.status(400).json({ message: "INVALID_LANGUAGE" });
+    const compiler = normCompiler(b.compiler);
     const code = String(b.code ?? "");
     if (!code.trim()) return res.status(400).json({ message: "CODE_REQUIRED" });
     if (code.length > MAX_CODE) return res.status(413).json({ message: "CODE_TOO_LARGE" });
     const stdin = String(b.stdin ?? "").slice(0, MAX_STDIN);
 
-    const result = await executeCodeWithInput(code, language, stdin, 10_000);
+    const result = await executeCodeWithInput(code, language, stdin, 10_000, { compiler });
     return res.json({
       stdout: result.stdout,
       stderr: result.stderr,

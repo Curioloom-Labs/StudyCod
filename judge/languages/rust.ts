@@ -2,19 +2,18 @@ import * as path from "path";
 import { writeFile } from "fs/promises";
 import { COMPILE_BUDGET, LanguageAdapter } from "./types";
 
-export const cLanguage: LanguageAdapter = {
-  id: "c",
-  entryFile: "main.c",
+export const rustLanguage: LanguageAdapter = {
+  id: "rust",
+  entryFile: "main.rs",
   defaultLimits: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
-  compileTimeLimitMs: COMPILE_BUDGET.fast,
+  compileTimeLimitMs: COMPILE_BUDGET.slow,
   async writeSource(workDir: string, source: string): Promise<void> {
-    const filePath = path.join(workDir, "main.c");
-    await writeFile(filePath, source, { encoding: "utf8" });
+    await writeFile(path.join(workDir, "main.rs"), source, { encoding: "utf8" });
   },
   getCompilePlan() {
     return {
-      display: "gcc -B/usr/bin main.c -o app",
-      argv: ["/usr/bin/gcc", "-B/usr/bin", "-O2", "-pipe", "-std=gnu11", "-fno-omit-frame-pointer", "main.c", "-o", "app"]
+      display: "rustc -O --edition 2021 main.rs -o app",
+      argv: ["/usr/bin/rustc", "-O", "--edition", "2021", "-C", "panic=abort", "-o", "app", "main.rs"]
     };
   },
   getRunPlan() {

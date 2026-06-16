@@ -39,7 +39,64 @@ export interface CodeExecutionResult {
   success: boolean;
 }
 
+export interface CompilerProfileInfo {
+  /** Wire id passed as `compiler`, e.g. "pypy3", "java21". */
+  id: string;
+  /** Base judge language family. */
+  family: JudgeLanguage;
+  /** Human-readable label for pickers. */
+  label: string;
+}
+
+/**
+ * Catalogue of selectable compilers/versions, mirroring judge/languages/profiles.ts.
+ * The first entry per family is that family's default. Kept in sync manually because the
+ * judge runs as a separate package/process.
+ */
+export const COMPILER_CATALOGUE: readonly CompilerProfileInfo[] = [
+  { id: "python", family: "python", label: "Python 3.14" },
+  { id: "python-libs", family: "python", label: "Python 3.14 (with extra libs)" },
+  { id: "pypy3", family: "python", label: "Python 3.11 (PyPy)" },
+  { id: "pypy3-libs", family: "python", label: "Python 3.11 (PyPy with libs)" },
+  { id: "c", family: "c", label: "C (gnu 11)" },
+  { id: "c17", family: "c", label: "C 17 (gnu 14)" },
+  { id: "c23", family: "c", label: "C 23 (gnu 14)" },
+  { id: "cpp", family: "cpp", label: "C++ 17 (gnu 14.2)" },
+  { id: "cpp20", family: "cpp", label: "C++ 20 (gnu 14.2)" },
+  { id: "cpp20-gmp", family: "cpp", label: "C++ 20 (gnu 14.2 with gmp)" },
+  { id: "cpp23", family: "cpp", label: "C++ 23 (gnu 14.2)" },
+  { id: "cpp23-gmp", family: "cpp", label: "C++ 23 (gnu 14.2 with gmp)" },
+  { id: "csharp", family: "csharp", label: "C# (.NET)" },
+  { id: "csharp-mono", family: "csharp", label: "C# (Mono)" },
+  { id: "d", family: "d", label: "D (dmd)" },
+  { id: "d-gdc", family: "d", label: "D (gdc)" },
+  { id: "dart", family: "dart", label: "Dart 3.6" },
+  { id: "go", family: "go", label: "Go 1.24" },
+  { id: "haskell", family: "haskell", label: "Haskell (ghc 8.8)" },
+  { id: "java", family: "java", label: "Java (OpenJDK, default)" },
+  { id: "java17", family: "java", label: "Java (openjdk 17)" },
+  { id: "java21", family: "java", label: "Java (openjdk 21)" },
+  { id: "java25", family: "java", label: "Java (openjdk 25)" },
+  { id: "js", family: "js", label: "JavaScript (node 18)" },
+  { id: "kotlin", family: "kotlin", label: "Kotlin 1.9" },
+  { id: "lisp", family: "lisp", label: "Common Lisp (SBCL 2.4)" },
+  { id: "lua", family: "lua", label: "Lua 5.1" },
+  { id: "pascal", family: "pascal", label: "Pascal (fpc 3.2)" },
+  { id: "perl", family: "perl", label: "Perl 5.32" },
+  { id: "php", family: "php", label: "PHP 7.4" },
+  { id: "ruby", family: "ruby", label: "Ruby 2.4" },
+  { id: "rust", family: "rust", label: "Rust 1.78" },
+  { id: "swift", family: "swift", label: "Swift 5.6" }
+];
+
 export type ExecuteCodeMode = "auto" | "judge";
+
+/**
+ * Languages accepted by {@link executeCodeWithInput}. The legacy uppercase trio
+ * (JAVA/PYTHON/CPP) is kept for backwards-compatibility with older callers; new code
+ * may pass any lower-case judge family directly.
+ */
+export type ExecLanguage = "JAVA" | "PYTHON" | "CPP" | JudgeLanguage;
 
 export interface ExecuteCodeOptions {
   /**
@@ -47,17 +104,32 @@ export interface ExecuteCodeOptions {
    * Execution is always routed through the judge sandbox.
    */
   mode?: ExecuteCodeMode;
+  /**
+   * Optional compiler/version selector (e.g. "pypy3", "java21", "cpp20").
+   * Must belong to the resolved language family. When omitted, the family default is used.
+   */
+  compiler?: string;
 }
 
-function mapToJudgeLanguage(lang: "JAVA" | "PYTHON" | "CPP"): JudgeLanguage {
-  return lang === "JAVA" ? "java" : lang === "PYTHON" ? "python" : "cpp";
+function mapToJudgeLanguage(lang: ExecLanguage): JudgeLanguage {
+  switch (lang) {
+    case "JAVA":
+      return "java";
+    case "PYTHON":
+      return "python";
+    case "CPP":
+      return "cpp";
+    default:
+      return lang;
+  }
 }
 
-async function executeViaJudge(code: string, language: "JAVA" | "PYTHON" | "CPP", input: string, timeout: number): Promise<CodeExecutionResult> {
+async function executeViaJudge(code: string, language: ExecLanguage, input: string, timeout: number, compiler?: string): Promise<CodeExecutionResult> {
   const judgeLang = mapToJudgeLanguage(language);
   const req: JudgeRequest = {
     submission_id: `exec_${judgeLang}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     language: judgeLang,
+    ...(compiler ? { compiler } : {}),
     source: code,
     tests: [
       {
@@ -72,7 +144,7 @@ async function executeViaJudge(code: string, language: "JAVA" | "PYTHON" | "CPP"
     ],
     limits: {
       time_limit_ms: Math.max(200, timeout),
-      memory_limit_mb: language === "PYTHON" ? 256 : 384,
+      memory_limit_mb: judgeLang === "python" ? 256 : 384,
       output_limit_kb: 256
     },
     checker: { type: "exact" },
@@ -104,7 +176,7 @@ async function executeViaJudge(code: string, language: "JAVA" | "PYTHON" | "CPP"
 
 export async function executeCodeWithInput(
   code: string,
-  language: "JAVA" | "PYTHON" | "CPP",
+  language: ExecLanguage,
   input: string,
   timeout: number = 10000,
   options: ExecuteCodeOptions = {}
@@ -119,7 +191,7 @@ export async function executeCodeWithInput(
     });
   }
   try {
-    return await executeViaJudge(code, language, input, timeout);
+    return await executeViaJudge(code, language, input, timeout, options.compiler);
   } catch (e: any) {
     if (e instanceof HttpError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
