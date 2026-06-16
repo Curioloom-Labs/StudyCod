@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, FlaskConical, Play, Microscope, Link2, Terminal } from "lucide-react";
+import { ArrowLeft, FlaskConical, Play, Microscope, Link2, Terminal, Clock } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { CodeEditor } from "../../components/CodeEditor";
+import ErrorExplainButton from "../../components/ErrorExplainButton";
 import { showToast } from "../../lib/toast";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import {
@@ -13,9 +14,12 @@ import {
   tracePlayground,
   savePlaygroundSnippet,
   getPlaygroundSnippet,
+  getVisualizerLanguages,
+  getMyPlaygroundSnippets,
   normalizePlaygroundLanguage,
   type PlaygroundLanguage,
   type PlaygroundRunResult,
+  type PlaygroundSnippetSummary,
   type TraceResult,
 } from "../../lib/api/playground";
 import {
@@ -67,6 +71,22 @@ export const PlaygroundPage: React.FC = () => {
   const [run, setRun] = useState<PlaygroundRunResult | null>(null);
   const [trace, setTrace] = useState<TraceResult | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
+  const [vizLangs, setVizLangs] = useState<string[]>(["python"]);
+  const canVisualize = vizLangs.includes(language);
+  const [showHistory, setShowHistory] = useState(false);
+  const [mySnippets, setMySnippets] = useState<PlaygroundSnippetSummary[] | null>(null);
+
+  const toggleHistory = async () => {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next && mySnippets === null) setMySnippets(await getMyPlaygroundSnippets());
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    getVisualizerLanguages().then((l) => { if (!cancelled && l.length) setVizLangs(l); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const shareId = params.shareId;
@@ -106,7 +126,7 @@ export const PlaygroundPage: React.FC = () => {
   const doTrace = async () => {
     setTracing(true);
     try {
-      const t = await tracePlayground({ code, stdin });
+      const t = await tracePlayground({ language, code, stdin });
       setTrace(t);
       setStepIdx(0);
       setRun({ stdout: t.programOutput, stderr: t.stderr, exitCode: t.ok ? 0 : 1, success: t.ok });
@@ -122,6 +142,7 @@ export const PlaygroundPage: React.FC = () => {
       const { shareId } = await savePlaygroundSnippet({ language, code, stdin });
       const url = `${window.location.origin}/playground/${shareId}`;
       try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+      setMySnippets(null); // invalidate history cache so the new snippet shows next open
       showToast({ type: "success", message: tr("Лінк скопійовано: ", "Link copied: ") + url });
     } catch {
       showToast({ type: "error", message: tr("Не вдалося поділитися.", "Couldn't share.") });
@@ -130,6 +151,32 @@ export const PlaygroundPage: React.FC = () => {
 
   const codeLines = useMemo(() => code.replace(/\r\n?/g, "\n").split("\n"), [code]);
   const currentStep = trace && trace.steps.length ? trace.steps[Math.min(stepIdx, trace.steps.length - 1)] : null;
+
+  // Render a trace value to a short string, resolving heap references (Python heap model).
+  // `{ref:id}` → the heap object's compact form, with a #id badge so aliasing is visible.
+  // Non-Python tracers inline values directly, so those just stringify.
+  const renderValue = (v: unknown, heap: Record<string, any> | undefined, depth = 0): string => {
+    if (v === null || v === undefined) return "None";
+    if (typeof v === "object" && v !== null && "ref" in (v as any)) {
+      const id = String((v as any).ref);
+      const obj = heap?.[id];
+      if (!obj || depth > 2) return `#${id}`;
+      const tag = `#${id}`;
+      const child = (x: unknown) => renderValue(x, heap, depth + 1);
+      if (obj.kind === "list" || obj.kind === "tuple" || obj.kind === "set") {
+        const open = obj.kind === "list" ? "[" : obj.kind === "set" ? "{" : "(";
+        const close = obj.kind === "list" ? "]" : obj.kind === "set" ? "}" : ")";
+        return `${open}${(obj.items || []).map(child).join(", ")}${close} ${tag}`;
+      }
+      if (obj.kind === "dict") {
+        return `{${(obj.entries || []).map(([k, val]: [string, unknown]) => `${k}: ${child(val)}`).join(", ")}} ${tag}`;
+      }
+      if (obj.repr) return `${obj.repr} ${tag}`;
+      return `${obj.type || "object"}(${(obj.attrs || []).map(([k, val]: [string, unknown]) => `${k}=${child(val)}`).join(", ")}) ${tag}`;
+    }
+    if (typeof v === "string") return JSON.stringify(v);
+    return String(v);
+  };
 
   const selectCls = "bg-bg-base border border-border text-text-primary px-3 py-2 font-mono text-sm focus:outline-none focus:border-primary";
 
@@ -153,7 +200,7 @@ export const PlaygroundPage: React.FC = () => {
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Пісочниця коду", "Code Playground")}</h1>
           </div>
           <p className="mt-1.5 text-sm text-text-secondary max-w-xl">
-            {tr("Запускай код, візуалізуй виконання (Python) і ділись лінком.", "Run code, visualize execution (Python), and share a link.")}
+            {tr("Запускай код, візуалізуй виконання покроково і ділись лінком.", "Run code, step through execution, and share a link.")}
           </p>
         </div>
 
@@ -174,7 +221,7 @@ export const PlaygroundPage: React.FC = () => {
             <Play className="w-4 h-4 mr-2" />
             {running ? tr("Запуск…", "Running…") : tr("Запустити", "Run")}
           </Button>
-          {language === "python" && (
+          {canVisualize && (
             <Button variant="secondary" onClick={doTrace} disabled={running || tracing}>
               <Microscope className="w-4 h-4 mr-2" />
               {tracing ? tr("Трасування…", "Tracing…") : tr("Візуалізувати", "Visualize")}
@@ -184,6 +231,32 @@ export const PlaygroundPage: React.FC = () => {
             <Link2 className="w-4 h-4 mr-2" />
             {tr("Поділитися", "Share")}
           </Button>
+          <div className="relative">
+            <Button variant="ghost" onClick={toggleHistory}>
+              <Clock className="w-4 h-4 mr-2" />
+              {tr("Історія", "History")}
+            </Button>
+            {showHistory && (
+              <div className="absolute right-0 z-20 mt-2 w-72 max-h-80 overflow-auto rounded-xl border border-border bg-bg-surface shadow-lg p-2">
+                {mySnippets === null ? (
+                  <div className="text-sm text-text-secondary p-2">{tr("Завантаження…", "Loading…")}</div>
+                ) : mySnippets.length === 0 ? (
+                  <div className="text-sm text-text-secondary p-2">{tr("Ще немає збережених сніпетів.", "No saved snippets yet.")}</div>
+                ) : (
+                  mySnippets.map((s) => (
+                    <button
+                      key={s.shareId}
+                      onClick={() => { setShowHistory(false); navigate(`/playground/${s.shareId}`); }}
+                      className="w-full text-left px-2 py-2 rounded-lg hover:bg-bg-hover flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate text-sm text-text-primary">{s.title || tr("Без назви", "Untitled")}</span>
+                      <span className="text-[10px] font-mono uppercase text-text-muted shrink-0">{JUDGE_LANGUAGE_LABELS[s.language as PlaygroundLanguage] || s.language}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </motion.div>
 
@@ -227,8 +300,16 @@ export const PlaygroundPage: React.FC = () => {
               <Terminal className="w-3.5 h-3.5 text-text-muted" />
               <span className="text-[10px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Вивід", "Output")}</span>
               {run && (
-                <span className="ml-auto font-mono text-xs text-text-secondary">
-                  exit={run.exitCode} {run.success ? <span className="text-accent-success">✓</span> : <span className="text-accent-error">✗</span>}
+                <span className="ml-auto font-mono text-xs text-text-secondary flex items-center gap-2">
+                  {typeof run.timeMs === "number" && (
+                    <span title={tr("Час виконання", "Run time")}>{run.timeMs} ms</span>
+                  )}
+                  {typeof run.memoryKb === "number" && (
+                    <span title={tr("Пік пам'яті", "Peak memory")}>
+                      {run.memoryKb >= 1024 ? `${(run.memoryKb / 1024).toFixed(1)} MB` : `${run.memoryKb} KB`}
+                    </span>
+                  )}
+                  <span>exit={run.exitCode} {run.success ? <span className="text-accent-success">✓</span> : <span className="text-accent-error">✗</span>}</span>
                 </span>
               )}
             </div>
@@ -237,6 +318,16 @@ export const PlaygroundPage: React.FC = () => {
               {run?.stdout && <pre className="text-sm text-text-primary whitespace-pre-wrap break-words">{run.stdout}</pre>}
               {run?.stderr && <pre className="text-sm text-accent-error whitespace-pre-wrap break-words mt-2">{run.stderr}</pre>}
               {run && !run.stdout && !run.stderr && <div className="text-sm text-text-secondary">{tr("(порожній вивід)", "(empty output)")}</div>}
+              {run && !run.success && (run.stderr || run.exitCode !== 0) && (
+                <div className="mt-3">
+                  <ErrorExplainButton
+                    language={language.toUpperCase()}
+                    code={code}
+                    verdict={run.success ? "AC" : "RE"}
+                    stderr={run.stderr}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
@@ -286,18 +377,42 @@ export const PlaygroundPage: React.FC = () => {
                 })}
               </pre>
               <div className="text-sm font-mono">
-                <div className="text-text-secondary mb-2 text-xs uppercase tracking-[0.04em]">{tr("Змінні на цьому кроці", "Variables at this step")}</div>
-                <div className="border border-border bg-bg-code rounded-lg p-3 max-h-80 overflow-auto">
-                  {currentStep && Object.keys(currentStep.locals).length > 0 ? (
-                    Object.entries(currentStep.locals).map(([k, v]) => (
-                      <div key={k} className="flex justify-between gap-3 border-b border-border/40 py-1.5 last:border-b-0">
-                        <span className="text-primary">{k}</span>
-                        <span className="text-text-primary break-all text-right">{JSON.stringify(v)}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-text-secondary">{tr("(немає локальних змінних)", "(no locals)")}</div>
-                  )}
+                <div className="text-text-secondary mb-2 text-xs uppercase tracking-[0.04em]">{tr("Стек викликів", "Call stack")}</div>
+                <div className="border border-border bg-bg-code rounded-lg p-3 max-h-80 overflow-auto space-y-3">
+                  {(() => {
+                    // Prefer the call stack; fall back to flat locals (older traces).
+                    const frames = currentStep?.stack && currentStep.stack.length
+                      ? currentStep.stack
+                      : currentStep
+                        ? [{ func: "<module>", line: currentStep.line, locals: currentStep.locals }]
+                        : [];
+                    if (!frames.length) return <div className="text-text-secondary">{tr("(немає кадрів)", "(no frames)")}</div>;
+                    // Top frame (current) first.
+                    return [...frames].reverse().map((fr, idx) => {
+                      const isTop = idx === 0;
+                      const entries = Object.entries(fr.locals || {});
+                      return (
+                        <div key={idx} className={`rounded-lg border ${isTop ? "border-primary/50 bg-primary/5" : "border-border/50"} p-2`}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className={isTop ? "text-primary font-medium" : "text-text-secondary"}>
+                              {fr.func === "<module>" ? tr("(модуль)", "(module)") : `${fr.func}()`}
+                            </span>
+                            <span className="text-[10px] text-text-muted">{tr("рядок", "line")} {fr.line}</span>
+                          </div>
+                          {entries.length > 0 ? (
+                            entries.map(([k, v]) => (
+                              <div key={k} className="flex justify-between gap-3 border-b border-border/30 py-1 last:border-b-0">
+                                <span className="text-primary/90">{k}</span>
+                                <span className="text-text-primary break-all text-right">{renderValue(v, currentStep?.heap)}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-text-secondary text-xs">{tr("(немає локальних)", "(no locals)")}</div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>

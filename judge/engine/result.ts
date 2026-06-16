@@ -65,6 +65,12 @@ export interface JudgeRequest {
   run_all?: boolean;
   rerun_failed_once?: boolean;
   /**
+   * Execution-visualizer trace mode. When set, compiled (native) languages are compiled with
+   * debug info and run under gdb instead of normally; the unified trace JSON is emitted to the
+   * test's stdout (between sentinels) for the backend to parse. Single-test requests only.
+   */
+  trace?: { mode: "step"; maxSteps?: number };
+  /**
    * How to convert per-group test results into group score (and overall `score`).
    * - SUM (default): score is sum of weights for tests with `verdict=AC` inside the group.
    * - BINARY_ALL_OR_NOT: group gets full max_score only if *all* tests in the group are AC,
