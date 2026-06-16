@@ -5,7 +5,10 @@ import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit
 import { PlaygroundSnippet } from "../entities/PlaygroundSnippet";
 import { executeCodeWithInput, COMPILER_CATALOGUE, type ExecLanguage } from "../services/codeExecutionService";
 import { generateShareId, isValidShareId } from "../services/playground/shareId";
-import { buildPythonTracerScript, parseTraceOutput, DEFAULT_MAX_STEPS } from "../services/visualizer/pythonTracer";
+import { parseTraceOutput, DEFAULT_MAX_STEPS } from "../services/visualizer/trace";
+import { buildTracer, visualizerLanguages, isGdbTraceLanguage } from "../services/visualizer";
+import { judgeWithSemaphore } from "../services/judgeWorker";
+import type { JudgeRequest as WorkerJudgeRequest } from "../services/judgeWorker/types";
 import { logger } from "../utils/logger";
 
 const router = Router();
@@ -65,6 +68,8 @@ router.post("/run", authRequired, submissionRateLimitMiddleware, async (req: Aut
       stderr: result.stderr,
       exitCode: result.exitCode,
       success: result.success,
+      timeMs: result.timeMs ?? null,
+      memoryKb: result.memoryKb ?? null,
     });
   } catch (error: any) {
     const status = Number(error?.statusCode ?? error?.status ?? 503);
@@ -73,13 +78,19 @@ router.post("/run", authRequired, submissionRateLimitMiddleware, async (req: Aut
   }
 });
 
-// Execution visualizer (Python only): run code under a line tracer in the
-// sandbox and return per-step (line, locals) for step-through visualization.
+// Public: which languages support step visualization (gates the Visualize button).
+router.get("/visualizer-languages", authOptional, (_req: AuthRequest, res: Response) => {
+  return res.json({ languages: visualizerLanguages() });
+});
+
+// Execution visualizer: run code under an in-language tracer in the sandbox and return
+// per-step call stack + locals for step-through visualization. Supports any language with
+// a Tier-A tracer (Python, Ruby, ...); others get TRACE_UNSUPPORTED_LANGUAGE.
 router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const b = (req.body ?? {}) as Record<string, unknown>;
-    const language = normLang(b.language);
-    if (language !== "PYTHON") return res.status(400).json({ message: "TRACE_PYTHON_ONLY" });
+    const language = normRunLang(b.language);
+    if (!language) return res.status(400).json({ message: "INVALID_LANGUAGE" });
     const code = String(b.code ?? "");
     if (!code.trim()) return res.status(400).json({ message: "CODE_REQUIRED" });
     if (code.length > 50_000) return res.status(413).json({ message: "CODE_TOO_LARGE" });
@@ -87,9 +98,45 @@ router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: A
     const MAX_ALLOWED_STEPS = 2000;
     const maxSteps = Math.min(MAX_ALLOWED_STEPS, Number.isFinite(Number(b.maxSteps)) ? Number(b.maxSteps) : DEFAULT_MAX_STEPS);
 
-    const script = buildPythonTracerScript(code, maxSteps);
-    const result = await executeCodeWithInput(script, "PYTHON", stdin, 10_000);
-    const trace = parseTraceOutput(result.stdout);
+    // normRunLang may return legacy uppercase (JAVA/PYTHON/CPP); lower-case for the tracer.
+    const family = String(language).toLowerCase();
+
+    let traceStdout = "";
+    let traceStderr = "";
+    const plan = buildTracer(family, code, maxSteps);
+    if (plan) {
+      // Tier-A: in-language wrapper runs as ordinary source.
+      const result = await executeCodeWithInput(plan.source, plan.judgeLanguage, stdin, 10_000);
+      traceStdout = result.stdout;
+      traceStderr = result.stderr;
+    } else if (isGdbTraceLanguage(family)) {
+      // Tier-B: compiled language step-traced by gdb inside the judge. Stepping is slow, so
+      // give a generous per-test time budget.
+      const judgeReq: WorkerJudgeRequest = {
+        submission_id: `pg_trace_${family}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        language: family as any,
+        source: code,
+        tests: [{ id: 1, input: stdin, output: "", hidden: false, group: "trace", weight: 1 }],
+        limits: { time_limit_ms: 20_000, memory_limit_mb: 512, output_limit_kb: 1024 },
+        checker: { type: "exact" },
+        debug: true,
+        run_all: true,
+        trace: { mode: "step", maxSteps },
+      };
+      const jr = await judgeWithSemaphore(judgeReq);
+      if (jr.verdict === "CE" && jr.compile) {
+        const combined = [jr.compile.stderr, jr.compile.stdout].filter(Boolean).join("\n").trim();
+        return res.json({ ok: false, steps: [], truncated: false, programOutput: "", stderr: combined || "Compilation error" });
+      }
+      const t0: any = jr.tests?.[0];
+      traceStdout = String(t0?.actual ?? "");
+      traceStderr = String(t0?.stderr ?? "");
+    } else {
+      return res.status(400).json({ message: "TRACE_UNSUPPORTED_LANGUAGE" });
+    }
+
+    const trace = parseTraceOutput(traceStdout);
+    const result = { stdout: traceStdout, stderr: traceStderr };
 
     if (!trace) {
       // No trace block → the program errored before tracing completed.
@@ -106,6 +153,27 @@ router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: A
     const status = Number(error?.statusCode ?? error?.status ?? 503);
     logger.warn("[playground] trace failed", { requestId: req.requestId, error: error?.message });
     return res.status(Number.isFinite(status) ? status : 503).json({ message: error?.message || "TRACE_FAILED" });
+  }
+});
+
+// List the current principal's saved snippets (newest first). "My snippets" history.
+router.get("/snippets", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const principalType = req.userType === "STUDENT" ? "STUDENT" : "USER";
+    const principalId = req.principalId ?? (req.userType === "STUDENT" ? req.studentId : req.userId) ?? null;
+    if (principalId == null) return res.json({ snippets: [] });
+    const rows = await snippetRepo().find({
+      where: { principalType, principalId: Number(principalId) } as any,
+      order: { createdAt: "DESC" } as any,
+      take: 100,
+      select: { shareId: true, language: true, title: true, createdAt: true } as any,
+    });
+    return res.json({
+      snippets: rows.map(r => ({ shareId: r.shareId, language: r.language, title: r.title ?? null, createdAt: r.createdAt })),
+    });
+  } catch (error: any) {
+    logger.warn("[playground] snippet list failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "LIST_FAILED" });
   }
 });
 

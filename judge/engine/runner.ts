@@ -13,7 +13,98 @@ import { checkWhitespace } from "../checkers/whitespace";
 import { checkFloat } from "../checkers/float";
 import { getLanguage, isLanguageId } from "../languages/registry";
 import { resolveProfile } from "../languages/profiles";
+import { buildGdbDriver } from "./gdbTracer";
 import type { LanguageId } from "../languages/types";
+
+// Native families whose compiled binary (`./app`) step-traces cleanly under gdb (verified:
+// clear user call stacks + locals). Rust/D/Swift are excluded — their runtimes ship debug
+// info that makes gdb `step` descend into stdlib (Rust hangs; Swift/D yield no useful user
+// frames). Those degrade gracefully (no Visualize button). One-liner to add later if solved.
+const GDB_TRACEABLE = new Set<LanguageId>(["c", "cpp", "pascal", "go"]);
+
+/** Candidate gdb breakpoint locations for a language's user entry (first that resolves wins). */
+function gdbBreakSpecs(language: LanguageId): string[] {
+  switch (language) {
+    case "rust": return ["main::main", "main"];
+    case "go": return ["main.main", "main"];
+    case "d": return ["_Dmain", "D main", "main"];
+    case "pascal": return ["main", "PASCALMAIN", "P$M$main"];
+    case "swift": return ["main", "$main"];
+    default: return ["main"];
+  }
+}
+
+/**
+ * Rewrite a compile argv for debugging (DWARF symbols + no optimisation) so gdb shows
+ * accurate lines/locals. Per-family because optimisation/debug flags differ.
+ */
+function toDebugCompileArgv(language: LanguageId, argv: string[]): string[] {
+  switch (language) {
+    case "c":
+    case "cpp": {
+      // gcc/g++: -O*→-O0, ensure -g.
+      const out: string[] = [];
+      let hasG = false;
+      for (const a of argv) {
+        if (/^-O[0-3s]$/.test(a)) { out.push("-O0"); continue; }
+        if (a === "-g") hasG = true;
+        out.push(a);
+      }
+      if (!hasG) out.splice(1, 0, "-g");
+      return out;
+    }
+    case "rust": {
+      // rustc: drop -O, force opt-level=0, add -g.
+      const out: string[] = [];
+      for (const a of argv) {
+        if (a === "-O") continue;
+        out.push(a);
+      }
+      out.splice(1, 0, "-g", "-C", "opt-level=0", "-C", "debuginfo=2");
+      return out;
+    }
+    case "pascal": {
+      // fpc: -O2→-O-, add -gw (DWARF).
+      const out: string[] = [];
+      for (const a of argv) {
+        if (/^-O[0-3]?$/.test(a)) continue;
+        out.push(a);
+      }
+      out.splice(1, 0, "-gw3", "-O-");
+      return out;
+    }
+    case "d": {
+      // dmd: drop -O -release -inline, add -g (DWARF debug info for gdb).
+      const out: string[] = [];
+      for (const a of argv) {
+        if (a === "-O" || a === "-release" || a === "-inline") continue;
+        out.push(a);
+      }
+      out.splice(1, 0, "-g");
+      return out;
+    }
+    case "go": {
+      // go build: disable optimisation + inlining for accurate stepping.
+      const out = [...argv];
+      const buildIdx = out.indexOf("build");
+      if (buildIdx >= 0) out.splice(buildIdx + 1, 0, "-gcflags=all=-N -l");
+      return out;
+    }
+    case "swift": {
+      // swiftc: -O→-Onone, add -g after the swiftc binary (argv may be wrapped by /usr/bin/env).
+      const out: string[] = [];
+      for (const a of argv) {
+        if (a === "-O") { out.push("-Onone"); continue; }
+        out.push(a);
+      }
+      const ci = out.findIndex(a => /swiftc$/.test(a));
+      out.splice(ci >= 0 ? ci + 1 : 1, 0, "-g");
+      return out;
+    }
+    default:
+      return argv;
+  }
+}
 
 type JudgeFile = { path: string; content: string };
 
@@ -312,7 +403,19 @@ export class Runner {
       // Compile/run plans: a selected compiler profile overrides the family default.
       // Multi-file submissions still prefer the per-files compile plan when available.
       const profileCompilePlan = profile.compile ? profile.compile() : adapter.getCompilePlan();
-      const compilePlan = wantsFiles ? (buildCompilePlanForFiles(req.language, reqFiles) ?? profileCompilePlan) : profileCompilePlan;
+      let compilePlan = wantsFiles ? (buildCompilePlanForFiles(req.language, reqFiles) ?? profileCompilePlan) : profileCompilePlan;
+
+      // Execution-visualizer trace mode (Tier-B): for gdb-traceable native families, compile
+      // with debug info + no optimisation and run the program under gdb instead of normally.
+      const traceReq = (req as any).trace;
+      const wantsTrace = !!traceReq && traceReq.mode === "step" && GDB_TRACEABLE.has(req.language);
+      let traceRunPlan: { argv: string[]; display: string } | null = null;
+      if (wantsTrace && compilePlan) {
+        compilePlan = { argv: toDebugCompileArgv(req.language, compilePlan.argv), display: compilePlan.display + " (debug)" };
+        const driver = buildGdbDriver(defaultEntryFile(req.language), Math.max(1, Math.min(2000, Number(traceReq.maxSteps) || 1000)), gdbBreakSpecs(req.language));
+        await fs.writeFile(path.join(workDir, "__sc_trace.py"), driver, { encoding: "utf8" });
+        traceRunPlan = { argv: ["/usr/bin/gdb", "--batch", "-nx", "-x", "__sc_trace.py", "./app"], display: "gdb --batch -x __sc_trace.py ./app" };
+      }
       const scoringPlan = computeScoringPlan(req);
       const needsDotnetFixes = !this.cfg.useConfig && req.language === "csharp";
       const extraNsJailArgsList: string[] = needsDotnetFixes
@@ -397,7 +500,7 @@ export class Runner {
       const binaryGroupScoring = groupScoringMode === "BINARY_ALL_OR_NOT" && runAll;
       const groupFailed: Record<string, boolean> = {};
 
-      const runPlan = profile.run ? profile.run() : adapter.getRunPlan();
+      const runPlan = traceRunPlan ?? (profile.run ? profile.run() : adapter.getRunPlan());
       for (let i = 0; i < req.tests.length; i++) {
         const test = req.tests[i];
         const group = normalizeGroup(test.group, test.hidden);
