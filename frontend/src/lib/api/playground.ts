@@ -15,6 +15,8 @@ export type PlaygroundRunResult = {
   stderr: string;
   exitCode: number;
   success: boolean;
+  timeMs?: number | null;
+  memoryKb?: number | null;
 };
 
 export async function runPlayground(payload: { language: PlaygroundLanguage; compiler?: string; code: string; stdin?: string }): Promise<PlaygroundRunResult> {
@@ -22,7 +24,23 @@ export async function runPlayground(payload: { language: PlaygroundLanguage; com
   return res.data as PlaygroundRunResult;
 }
 
-export type TraceStep = { line: number; locals: Record<string, unknown> };
+export type TraceFrame = { func: string; line: number; locals: Record<string, unknown> };
+export type HeapObject = {
+  kind: "list" | "tuple" | "set" | "dict" | "object";
+  type?: string;
+  items?: unknown[];
+  entries?: [string, unknown][];
+  attrs?: [string, unknown][];
+  repr?: string;
+};
+export type TraceStep = {
+  line: number;
+  event?: "call" | "line" | "return";
+  stack?: TraceFrame[];
+  stdoutLen?: number;
+  locals: Record<string, unknown>;
+  heap?: Record<string, HeapObject>;
+};
 export type TraceResult = {
   ok: boolean;
   steps: TraceStep[];
@@ -31,9 +49,22 @@ export type TraceResult = {
   stderr: string;
 };
 
-export async function tracePlayground(payload: { code: string; stdin?: string; maxSteps?: number }): Promise<TraceResult> {
-  const res = await api.post("/playground/trace", { ...payload, language: "PYTHON" });
+export async function tracePlayground(payload: { language: PlaygroundLanguage; code: string; stdin?: string; maxSteps?: number }): Promise<TraceResult> {
+  const res = await api.post("/playground/trace", payload);
   return res.data as TraceResult;
+}
+
+let _vizLangsCache: string[] | null = null;
+export async function getVisualizerLanguages(): Promise<string[]> {
+  if (_vizLangsCache) return _vizLangsCache;
+  try {
+    const res = await api.get("/playground/visualizer-languages");
+    const langs = Array.isArray(res.data?.languages) ? (res.data.languages as string[]) : [];
+    _vizLangsCache = langs;
+    return langs;
+  } catch {
+    return ["python"];
+  }
 }
 
 export async function savePlaygroundSnippet(payload: { language: PlaygroundLanguage; code: string; stdin?: string; title?: string }): Promise<{ shareId: string }> {
@@ -49,6 +80,22 @@ export type PlaygroundSnippet = {
   title: string | null;
   createdAt: string;
 };
+
+export type PlaygroundSnippetSummary = {
+  shareId: string;
+  language: string;
+  title: string | null;
+  createdAt: string;
+};
+
+export async function getMyPlaygroundSnippets(): Promise<PlaygroundSnippetSummary[]> {
+  try {
+    const res = await api.get("/playground/snippets");
+    return Array.isArray(res.data?.snippets) ? (res.data.snippets as PlaygroundSnippetSummary[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 export async function getPlaygroundSnippet(shareId: string): Promise<PlaygroundSnippet> {
   const res = await api.get(`/playground/snippets/${encodeURIComponent(shareId)}`);
