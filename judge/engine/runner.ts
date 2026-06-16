@@ -11,30 +11,101 @@ import { checkExact } from "../checkers/exact";
 import { checkNonEmpty } from "../checkers/nonempty";
 import { checkWhitespace } from "../checkers/whitespace";
 import { checkFloat } from "../checkers/float";
-import { cppLanguage } from "../languages/cpp";
-import { cLanguage } from "../languages/c";
-import { csharpLanguage } from "../languages/csharp";
-import { javaLanguage } from "../languages/java";
-import { kotlinLanguage } from "../languages/kotlin";
-import { pythonLanguage } from "../languages/python";
-import type { LanguageAdapter, LanguageId } from "../languages/types";
+import { getLanguage, isLanguageId } from "../languages/registry";
+import { resolveProfile } from "../languages/profiles";
+import type { LanguageId } from "../languages/types";
 
 type JudgeFile = { path: string; content: string };
 
 function defaultEntryFile(language: LanguageId): string {
-  switch (language) {
-    case "java":
-      return "Main.java";
-    case "python":
-      return "main.py";
-    case "cpp":
-      return "main.cpp";
-    case "c":
-      return "main.c";
-    case "kotlin":
-      return "Main.kt";
-    case "csharp":
-      return "Program.cs";
+  return getLanguage(language).entryFile;
+}
+
+// ---- File-referenced tests --------------------------------------------------
+// Large stored-test suites pass test data by file reference instead of inline, so the
+// worker streams input (constant memory) and reads expected output lazily.
+
+function intEnv(name: string, fallback: number): number {
+  const v = parseInt(String(process.env[name] ?? ""), 10);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
+/** Upper bound for a referenced input file (streamed, never fully held in RAM). */
+function maxTestInputFileBytes(): number {
+  return intEnv("JUDGE_MAX_TEST_INPUT_FILE_BYTES", 256 * 1024 * 1024);
+}
+/** Upper bound for a referenced expected-output file (read into RAM for the checker). */
+function maxTestOutputFileBytes(): number {
+  return intEnv("JUDGE_MAX_TEST_OUTPUT_FILE_BYTES", 64 * 1024 * 1024);
+}
+
+function testHasRefInput(t: { input_path?: string }): boolean {
+  return typeof t.input_path === "string" && t.input_path.length > 0;
+}
+function testHasRefOutput(t: { output_path?: string }): boolean {
+  return typeof t.output_path === "string" && t.output_path.length > 0;
+}
+
+/**
+ * Defence-in-depth: when JUDGE_TEST_CACHE_DIR is configured, only allow referenced test
+ * files that live under it. Paths come from our own backend, not from users, but this keeps
+ * a stray/buggy path from reading arbitrary host files.
+ */
+function assertSafeTestPath(p: string): void {
+  const resolved = path.resolve(p);
+  const root = (process.env.JUDGE_TEST_CACHE_DIR || "").trim();
+  if (root) {
+    const r = path.resolve(root);
+    if (resolved !== r && !resolved.startsWith(r + path.sep)) {
+      throw new Error("INVALID_REQUEST: test file path outside cache root");
+    }
+  }
+}
+
+/** Read up to `maxBytes` from a file as UTF-8 (used for expected output and small samples). */
+async function readFileCapped(p: string, maxBytes: number): Promise<string> {
+  const fh = await fs.open(p, "r");
+  try {
+    const st = await fh.stat();
+    const len = Math.min(st.size, Math.max(0, maxBytes));
+    if (len <= 0) return "";
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, 0);
+    return buf.toString("utf8");
+  } finally {
+    await fh.close();
+  }
+}
+
+/** Async validation for referenced test files (existence, type, size, path safety). */
+async function validateTestRefs(req: JudgeRequest): Promise<void> {
+  const maxIn = maxTestInputFileBytes();
+  const maxOut = maxTestOutputFileBytes();
+  for (const t of req.tests) {
+    if (testHasRefInput(t)) {
+      const p = t.input_path as string;
+      assertSafeTestPath(p);
+      let st: import("fs").Stats;
+      try {
+        st = await fs.stat(p);
+      } catch {
+        throw new Error("INVALID_REQUEST: test.input_path not found");
+      }
+      if (!st.isFile()) throw new Error("INVALID_REQUEST: test.input_path not a file");
+      if (st.size > maxIn) throw new Error(`INVALID_REQUEST: test.input too large (max ${maxIn} bytes)`);
+    }
+    if (testHasRefOutput(t)) {
+      const p = t.output_path as string;
+      assertSafeTestPath(p);
+      let st: import("fs").Stats;
+      try {
+        st = await fs.stat(p);
+      } catch {
+        throw new Error("INVALID_REQUEST: test.output_path not found");
+      }
+      if (!st.isFile()) throw new Error("INVALID_REQUEST: test.output_path not a file");
+      if (st.size > maxOut) throw new Error(`INVALID_REQUEST: test.output too large (max ${maxOut} bytes)`);
+    }
   }
 }
 
@@ -117,6 +188,31 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
       argv: ["/usr/bin/gcc", "-B/usr/bin", "-O2", "-pipe", "-std=gnu11", "-fno-omit-frame-pointer", ...cFiles, "-o", "app"]
     };
   }
+  if (language === "go") {
+    const goFiles = paths.filter(p => /\.go$/i.test(p));
+    if (goFiles.length === 0) return null;
+    return {
+      display: `go build -o app ${goFiles.join(" ")}`,
+      argv: [
+        "/usr/bin/env",
+        "HOME=/work",
+        "GOCACHE=/work/.gocache",
+        "GOPATH=/work/.gopath",
+        "GO111MODULE=off",
+        "GOTOOLCHAIN=local",
+        "GOFLAGS=-trimpath",
+        "CGO_ENABLED=0",
+        "/usr/bin/go",
+        "build",
+        "-o",
+        "app",
+        ...goFiles
+      ]
+    };
+  }
+  // JS (node --check on entry), Rust and Pascal compile from the single entry file;
+  // multi-file builds fall back to the adapter/profile plan.
+  if (language === "js" || language === "rust" || language === "pascal") return null;
   // C# compilation handled by dotnet build (project-based). Adding extra files is fine.
   if (language === "csharp") return null;
   return null;
@@ -131,7 +227,7 @@ function parseDisabledLanguagesEnv(): Set<LanguageId> {
     .filter(Boolean);
   const disabled = new Set<LanguageId>();
   for (const p of parts) {
-    if (p === "java" || p === "python" || p === "cpp" || p === "c" || p === "csharp" || p === "kotlin") {
+    if (isLanguageId(p)) {
       disabled.add(p);
     }
   }
@@ -150,7 +246,10 @@ export class Runner {
   constructor(private cfg: RunnerConfig) {}
   async run(req: JudgeRequest): Promise<JudgeResponse> {
     validateRequest(req);
+    await validateTestRefs(req);
     const adapter = getLanguage(req.language);
+    // Optional compiler/version selection. Falls back to the family default.
+    const profile = resolveProfile(req.language, (req as any).compiler);
     const limits = validateAndResolveLimits(req.language, req.limits);
     const checker = normalizeChecker(req.checker);
     const chroot = this.resolveChroot(req.language);
@@ -190,8 +289,10 @@ export class Runner {
         await adapter.writeSource(workDir, String(source ?? ""));
       }
 
-      // Prefer per-files compile plan when we got multi-file sources.
-      const compilePlan = wantsFiles ? (buildCompilePlanForFiles(req.language, reqFiles) ?? adapter.getCompilePlan()) : adapter.getCompilePlan();
+      // Compile/run plans: a selected compiler profile overrides the family default.
+      // Multi-file submissions still prefer the per-files compile plan when available.
+      const profileCompilePlan = profile.compile ? profile.compile() : adapter.getCompilePlan();
+      const compilePlan = wantsFiles ? (buildCompilePlanForFiles(req.language, reqFiles) ?? profileCompilePlan) : profileCompilePlan;
       const scoringPlan = computeScoringPlan(req);
       const needsDotnetFixes = !this.cfg.useConfig && req.language === "csharp";
       const extraNsJailArgs = needsDotnetFixes
@@ -258,13 +359,21 @@ export class Runner {
       const binaryGroupScoring = groupScoringMode === "BINARY_ALL_OR_NOT" && runAll;
       const groupFailed: Record<string, boolean> = {};
 
-      const runPlan = adapter.getRunPlan();
+      const runPlan = profile.run ? profile.run() : adapter.getRunPlan();
       for (let i = 0; i < req.tests.length; i++) {
         const test = req.tests[i];
         const group = normalizeGroup(test.group, test.hidden);
         const weight = normalizeWeight(test.weight);
-        const input = test.input ?? "";
-        const expected = test.output ?? "";
+        const useRefInput = testHasRefInput(test);
+        const useRefOutput = testHasRefOutput(test);
+        const inlineInput = test.input ?? "";
+        // Expected output: streamed inputs keep input out of RAM, but expected must be
+        // materialised for the checker (bounded by the output-file cap).
+        const expected = useRefOutput
+          ? await readFileCapped(test.output_path as string, maxTestOutputFileBytes())
+          : (test.output ?? "");
+        const execStdin = useRefInput ? "" : inlineInput;
+        const execStdinFile = useRefInput ? (test.input_path as string) : undefined;
         const r = await this.exec.exec({
           nsjailPath: this.cfg.nsjailPath,
           nsjailConfigPath: this.cfg.nsjailConfigPath,
@@ -272,7 +381,8 @@ export class Runner {
           chroot,
           cwd: this.cfg.cwd,
           hostWorkDir: workDir,
-          stdin: input,
+          stdin: execStdin,
+          stdinFile: execStdinFile,
           timeLimitMs: limits.timeLimitMs,
           memoryLimitBytes: limits.memoryLimitBytes,
           addressSpaceLimitBytes,
@@ -304,7 +414,8 @@ export class Runner {
               chroot,
               cwd: this.cfg.cwd,
               hostWorkDir: workDir,
-              stdin: input,
+              stdin: execStdin,
+              stdinFile: execStdinFile,
               timeLimitMs: limits.timeLimitMs,
               memoryLimitBytes: limits.memoryLimitBytes,
               addressSpaceLimitBytes,
@@ -348,7 +459,11 @@ export class Runner {
             base.verdict = "WA";
             base.message = "Wrong answer";
             if (allowDetails) {
-              base.input = truncate(input, 4096);
+              // For referenced inputs, read only a small prefix for the user-facing sample.
+              const inputSample = useRefInput
+                ? await readFileCapped(test.input_path as string, 4096)
+                : inlineInput;
+              base.input = truncate(inputSample, 4096);
               base.expected = truncate(expected, 4096);
               base.actual = truncate(r.stdout, 4096);
               base.stderr = truncate(stderrForUser, 2048);
@@ -379,7 +494,10 @@ export class Runner {
           groupFailed[group] = true;
         }
         if (allowDetails) {
-          base.input = truncate(input, 4096);
+          const inputSample = useRefInput
+            ? await readFileCapped(test.input_path as string, 4096)
+            : inlineInput;
+          base.input = truncate(inputSample, 4096);
           base.expected = truncate(expected, 4096);
           base.actual = truncate(r.stdout, 4096);
           base.stderr = truncate(stderrForUser, 4096);
@@ -426,23 +544,7 @@ export class Runner {
   }
 }
 function resolveCompileTimeLimitMs(language: LanguageId, runTimeLimitMs: number): number {
-  const base = Math.max(500, Math.min(30_000, runTimeLimitMs));
-  switch (language) {
-    case "java":
-      return Math.min(20_000, Math.max(8_000, base * 2 + 1_000));
-    case "cpp":
-      return Math.min(15_000, Math.max(4_000, base * 2));
-    case "c":
-      return Math.min(12_000, Math.max(3_000, base * 2));
-    case "python":
-      return Math.min(8_000, Math.max(2_000, base + 500));
-    case "kotlin":
-      // Kotlin compilation (especially -include-runtime) can be slow on small VPS.
-      return Math.min(60_000, Math.max(25_000, base * 3 + 5_000));
-    case "csharp":
-      // dotnet build can be slow and needs extra headroom.
-      return Math.min(60_000, Math.max(30_000, base * 3 + 7_000));
-  }
+  return getLanguage(language).compileTimeLimitMs(runTimeLimitMs);
 }
 type GroupAgg = Record<string, { score: number; max_score: number }>;
 
@@ -492,22 +594,6 @@ function worsen(current: Verdict, next: Verdict): Verdict {
   };
   return rank[next] > rank[current] ? next : current;
 }
-function getLanguage(id: LanguageId): LanguageAdapter {
-  switch (id) {
-    case "java":
-      return javaLanguage;
-    case "python":
-      return pythonLanguage;
-    case "cpp":
-      return cppLanguage;
-    case "c":
-      return cLanguage;
-    case "kotlin":
-      return kotlinLanguage;
-    case "csharp":
-      return csharpLanguage;
-  }
-}
 function normalizeChecker(spec?: CheckerSpec): CheckerSpec {
   if (!spec) return {
     type: "whitespace"
@@ -554,8 +640,12 @@ async function safeRm(dir: string) {
 function validateRequest(req: JudgeRequest) {
   if (!req || typeof req !== "object") throw new Error("INVALID_REQUEST: not an object");
   if (!req.submission_id || typeof req.submission_id !== "string") throw new Error("INVALID_REQUEST: submission_id required");
-  if (req.language !== "java" && req.language !== "python" && req.language !== "cpp" && req.language !== "c" && req.language !== "csharp" && req.language !== "kotlin") {
-    throw new Error("INVALID_REQUEST: language must be java|python|cpp|c|csharp|kotlin");
+  if (!isLanguageId(req.language)) {
+    throw new Error("INVALID_REQUEST: unsupported language");
+  }
+  const compiler = (req as any).compiler;
+  if (compiler !== undefined && compiler !== null && typeof compiler !== "string") {
+    throw new Error("INVALID_REQUEST: compiler must be a string");
   }
 
   const disabled = parseDisabledLanguagesEnv();
@@ -603,12 +693,29 @@ function validateRequest(req: JudgeRequest) {
     Number.isFinite(maxTestOutputBytesRaw) && maxTestOutputBytesRaw > 0 ? maxTestOutputBytesRaw : 1024 * 1024;
   for (const t of req.tests) {
     if (!t) throw new Error("INVALID_REQUEST: bad test");
-    if (t.output === undefined || t.output === null) throw new Error("INVALID_REQUEST: test.output required");
-    const inp = t.input ?? "";
-    if (typeof inp !== "string") throw new Error("INVALID_REQUEST: test.input must be string");
-    if (typeof t.output !== "string") throw new Error("INVALID_REQUEST: test.output must be string");
-    if (inp.length > maxTestInputBytes) throw new Error(`INVALID_REQUEST: test.input too large (max ${maxTestInputBytes} bytes)`);
-    if (t.output.length > maxTestOutputBytes) throw new Error(`INVALID_REQUEST: test.output too large (max ${maxTestOutputBytes} bytes)`);
+    const hasRefInput = testHasRefInput(t);
+    const hasRefOutput = testHasRefOutput(t);
+    if ((t as any).input_path !== undefined && typeof (t as any).input_path !== "string") {
+      throw new Error("INVALID_REQUEST: test.input_path must be string");
+    }
+    if ((t as any).output_path !== undefined && typeof (t as any).output_path !== "string") {
+      throw new Error("INVALID_REQUEST: test.output_path must be string");
+    }
+    // Expected output may be inline OR referenced by file.
+    if (!hasRefOutput && (t.output === undefined || t.output === null)) {
+      throw new Error("INVALID_REQUEST: test.output required");
+    }
+    // Inline input/output are size-checked here; referenced files are validated (size +
+    // path safety) asynchronously before the run loop.
+    if (!hasRefInput) {
+      const inp = t.input ?? "";
+      if (typeof inp !== "string") throw new Error("INVALID_REQUEST: test.input must be string");
+      if (inp.length > maxTestInputBytes) throw new Error(`INVALID_REQUEST: test.input too large (max ${maxTestInputBytes} bytes)`);
+    }
+    if (!hasRefOutput) {
+      if (typeof t.output !== "string") throw new Error("INVALID_REQUEST: test.output must be string");
+      if (t.output.length > maxTestOutputBytes) throw new Error(`INVALID_REQUEST: test.output too large (max ${maxTestOutputBytes} bytes)`);
+    }
 
     if (t.group !== undefined && t.group !== null && typeof t.group !== "string") {
       throw new Error("INVALID_REQUEST: test.group must be string");

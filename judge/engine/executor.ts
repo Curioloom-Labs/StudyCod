@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { createReadStream } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
 export interface ExecOptions {
@@ -8,7 +9,13 @@ export interface ExecOptions {
   chroot: string;
   cwd: string;
   hostWorkDir: string;
+  /** Inline stdin. Ignored when `stdinFile` is provided. */
   stdin: string;
+  /**
+   * When set, stdin is streamed from this host file (constant memory) instead of `stdin`.
+   * A trailing newline is appended if the file doesn't already end with one.
+   */
+  stdinFile?: string;
   timeLimitMs: number;
   memoryLimitBytes: number;
   // Address space limit (RLIMIT_AS). If omitted, derived from memoryLimitBytes.
@@ -106,7 +113,42 @@ export class NsJailExecutor {
       timedOut = true;
       killChild();
     }, opts.timeLimitMs + 30);
-    if (opts.stdin && child.stdin) {
+    // Swallow EPIPE etc.: a solution may exit before consuming all of stdin.
+    child.stdin?.on("error", () => {});
+    if (opts.stdinFile && child.stdin) {
+      const stdinPipe = child.stdin;
+      // Determine whether a trailing newline is needed without reading the whole file.
+      let needTrailingNewline = false;
+      try {
+        const st = await fs.stat(opts.stdinFile);
+        if (st.size > 0) {
+          const fh = await fs.open(opts.stdinFile, "r");
+          try {
+            const last = Buffer.alloc(1);
+            await fh.read(last, 0, 1, st.size - 1);
+            needTrailingNewline = last[0] !== 0x0a;
+          } finally {
+            await fh.close();
+          }
+        }
+      } catch {
+        needTrailingNewline = false;
+      }
+      const rs = createReadStream(opts.stdinFile);
+      rs.on("error", () => {
+        try {
+          stdinPipe.end();
+        } catch {}
+      });
+      // Pipe without auto-ending so we can append the trailing newline ourselves.
+      rs.pipe(stdinPipe, { end: false });
+      rs.on("end", () => {
+        try {
+          if (needTrailingNewline) stdinPipe.write("\n");
+          stdinPipe.end();
+        } catch {}
+      });
+    } else if (opts.stdin && child.stdin) {
       const data = opts.stdin.endsWith("\n") ? opts.stdin : opts.stdin + "\n";
       child.stdin.write(data, "utf8", () => {
         try {
