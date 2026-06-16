@@ -72,10 +72,20 @@ export class NsJailExecutor {
     nsArgs.push("--time_limit", String(timeLimitSec), "--rlimit_cpu", String(cpuLimitSec), "--rlimit_as", String(rlimitAs), "--rlimit_fsize", String(rlimitFsize));
     nsArgs.push("--bindmount", `${opts.hostWorkDir}:/work`);
 
-    // Ensure a UTF-8 locale inside the jail.
-    // Without this, some runtimes (notably Java when locale is C/POSIX) may fall back to US-ASCII
-    // and replace non-ASCII (e.g., Cyrillic) output with '?'.
+    // PATH/HOME inside the jail. nsjail starts with a clean environment, so compilers that
+    // shell out to helper tools by bare name (rust→`cc`, fpc/dmd/gdc/swift→`ld`/`as`,
+    // go→its linker) fail with "cc/ld not found" unless PATH is set. gcc/g++ work without
+    // this only because our adapters pass `-B/usr/bin`. HOME=/work gives toolchains a
+    // writable home (the per-submission bind mount).
+    const sandboxPath = (process.env.JUDGE_SANDBOX_PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").trim();
     nsArgs.push(
+      "--env",
+      `PATH=${sandboxPath}`,
+      "--env",
+      "HOME=/work",
+      // Ensure a UTF-8 locale inside the jail. Without this, some runtimes (notably Java when
+      // locale is C/POSIX) may fall back to US-ASCII and replace non-ASCII (e.g. Cyrillic)
+      // output with '?'.
       "--env",
       "LANG=C.UTF-8",
       "--env",

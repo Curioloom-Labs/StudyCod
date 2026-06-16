@@ -10,7 +10,9 @@ function goEnv(args: string[]): string[] {
   return [
     "/usr/bin/env",
     "HOME=/work",
-    "GOCACHE=/work/.gocache",
+    // GOCACHE points at a persistent cache bind-mounted by the runner (see goCacheMount).
+    // This makes builds warm (~0.5s) instead of cold (~18s, recompiling stdlib every run).
+    "GOCACHE=/gocache",
     "GOPATH=/work/.gopath",
     "GO111MODULE=off",
     "GOTOOLCHAIN=local",
