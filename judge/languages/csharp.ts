@@ -59,8 +59,9 @@ export const csharpLanguage: LanguageAdapter = {
         "/m:1",
         "/nodeReuse:false",
         "/p:BuildInParallel=false",
-        "-v",
-        "q"
+        // MSBuild verbosity must be a single token (-v:q); "-v q" makes MSBuild error
+        // "Specify the verbosity level".
+        "-v:q"
       ])
     };
   },
