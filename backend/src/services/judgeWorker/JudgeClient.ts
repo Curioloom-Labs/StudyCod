@@ -401,18 +401,21 @@ function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, max);
 }
+// Per-language compile-phase headroom (ms) for the backend→judge request timeout.
+const CLIENT_COMPILE_HEADROOM_MS: Partial<Record<JudgeRequest["language"], number>> = {
+  python: 500, js: 500, dart: 500, lisp: 500, lua: 500, perl: 500, php: 500, ruby: 500,
+  cpp: 2500, c: 2500, pascal: 2500, d: 2500,
+  java: 4000, go: 10_000,
+  rust: 18_000, swift: 18_000, haskell: 18_000,
+  // Kotlin/C# toolchains can be slow in sandboxed environments.
+  kotlin: 30_000, csharp: 35_000
+};
+
 function estimateOverallTimeoutMs(req: JudgeRequest): number {
   const perTest = Math.max(1, req.limits.time_limit_ms);
   const tests = Math.max(1, req.tests.length);
   const base = tests * (perTest + 80);
-  const compileHeadroom =
-    req.language === "python" ? 500 :
-    req.language === "cpp" || req.language === "c" ? 2500 :
-    req.language === "java" ? 4000 :
-    // Kotlin/C# toolchains can be slow in sandboxed environments.
-    req.language === "kotlin" ? 30_000 :
-    req.language === "csharp" ? 35_000 :
-    3000;
+  const compileHeadroom = CLIENT_COMPILE_HEADROOM_MS[req.language] ?? 3000;
 
   const capRaw = parseInt(String(process.env.JUDGE_CLIENT_TIMEOUT_CAP_MS ?? ""), 10);
   const cap = Number.isFinite(capRaw) && capRaw > 0 ? capRaw : 60_000;

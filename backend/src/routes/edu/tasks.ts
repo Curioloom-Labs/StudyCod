@@ -12,6 +12,7 @@ import { TaskTheory } from "../../entities/TaskTheory";
 import { executeCodeWithInput, compareOutput, filterStderr } from "../../services/codeExecutionService";
 import { generateAlgorithmicHints } from "../../services/ai/failureHints";
 import { judgeWithSemaphore } from "../../services/judgeWorker";
+import { buildJudgeTests, loadTestContentByIds } from "../../services/judgeWorker/testCache";
 import type { JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../../services/judgeWorker/types";
 import { JudgeBusyError } from "../../services/judgeWorker/Semaphore";
 import { ControlWork } from "../../entities/ControlWork";
@@ -247,24 +248,22 @@ function normalizeEduSubtaskGroup(raw: unknown): string | null {
   return normalized.slice(0, 64);
 }
 
-function buildEduJudgeTests(tests: TestData[]): {
+async function buildEduJudgeTests(tests: TestData[]): Promise<{
   hasSubtasks: boolean;
   judgeTests: WorkerJudgeRequest["tests"];
-} {
+}> {
   const subtasks = tests.map(t => normalizeEduSubtaskGroup((t as any).subtask));
   const hasSubtasks = subtasks.some(Boolean);
+  const subtaskById = new Map(tests.map((t, idx) => [String(t.id), subtasks[idx]] as const));
 
-  const judgeTests = tests.map((t, idx) => {
-    const subtask = subtasks[idx];
-    const group = hasSubtasks ? (subtask || `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
-    return {
-      id: t.id,
-      input: t.input || "",
-      output: t.expectedOutput || "",
-      hidden: t.isHidden === true,
-      group,
-      weight: t.points || 1
-    };
+  const { tests: judgeTests } = await buildJudgeTests(tests, {
+    meta: t => {
+      const subtask = subtaskById.get(String(t.id));
+      const group = hasSubtasks ? (subtask || `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
+      return { hidden: t.isHidden === true, group, weight: t.points || 1 };
+    },
+    hashes: t => ({ inputHash: (t as any).inputSha256, outputHash: (t as any).outputSha256 }),
+    loadContent: loadTestContentByIds
   });
 
   return {
@@ -1341,7 +1340,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     const {
       hasSubtasks,
       judgeTests
-    } = buildEduJudgeTests(tests);
+    } = await buildEduJudgeTests(tests);
 
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_${studentId}_${taskId}_${Date.now()}`,
@@ -1885,7 +1884,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     const {
       hasSubtasks,
       judgeTests
-    } = buildEduJudgeTests(tests);
+    } = await buildEduJudgeTests(tests);
 
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_complete_${studentId}_${taskId}_${Date.now()}`,
