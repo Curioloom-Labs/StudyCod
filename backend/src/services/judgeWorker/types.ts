@@ -59,6 +59,8 @@ export interface JudgeRequest {
   debug?: boolean;
   run_all?: boolean;
   rerun_failed_once?: boolean;
+  /** Execution-visualizer trace mode for compiled languages (gdb-driven; trace JSON in stdout). */
+  trace?: { mode: "step"; maxSteps?: number };
   /**
    * How to convert per-group test results into group score (and overall `score`).
    * - SUM (default): score is sum of weights for tests with `verdict=AC` inside the group.

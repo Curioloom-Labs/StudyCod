@@ -37,6 +37,10 @@ export interface CodeExecutionResult {
   stderr: string;
   exitCode: number;
   success: boolean;
+  /** Wall time of the run in ms (from the judge), when available. */
+  timeMs?: number | null;
+  /** Peak memory in KB (from the judge cgroup), when available. */
+  memoryKb?: number | null;
 }
 
 export interface CompilerProfileInfo {
@@ -162,7 +166,7 @@ async function executeViaJudge(code: string, language: ExecLanguage, input: stri
   }
   if (res.verdict === "CE" && res.compile) {
     const combined = [res.compile.stderr, res.compile.stdout].filter(Boolean).join("\n").trim();
-    return { stdout: "", stderr: combined || "Compilation error", exitCode: 1, success: false };
+    return { stdout: "", stderr: combined || "Compilation error", exitCode: 1, success: false, timeMs: res.compile.time_ms ?? null, memoryKb: res.compile.memory_kb ?? null };
   }
   const t0: any = res.tests?.[0];
   const stdout = String(t0?.actual ?? "");
@@ -171,7 +175,9 @@ async function executeViaJudge(code: string, language: ExecLanguage, input: stri
   // Treat WA as success: the program ran, output just doesn't match expected (we used empty expected).
   const success = verdict === "AC" || verdict === "WA";
   const exitCode = success ? 0 : 1;
-  return { stdout, stderr, exitCode, success };
+  const timeMs = Number.isFinite(t0?.time_ms) ? Number(t0.time_ms) : (Number.isFinite(res.time_ms) ? Number(res.time_ms) : null);
+  const memoryKb = Number.isFinite(t0?.memory_kb) ? Number(t0.memory_kb) : (Number.isFinite(res.memory_kb) ? Number(res.memory_kb) : null);
+  return { stdout, stderr, exitCode, success, timeMs, memoryKb };
 }
 
 export async function executeCodeWithInput(
