@@ -13,32 +13,47 @@ import {
   tracePlayground,
   savePlaygroundSnippet,
   getPlaygroundSnippet,
+  normalizePlaygroundLanguage,
   type PlaygroundLanguage,
   type PlaygroundRunResult,
   type TraceResult,
 } from "../../lib/api/playground";
+import {
+  JUDGE_LANGUAGE_LABELS,
+  JUDGE_ENTRY_FILES,
+  enabledJudgeLanguages,
+  compilersForFamily,
+  defaultCompilerForFamily,
+} from "../../lib/judgeLanguages";
 
-const STARTERS: Record<PlaygroundLanguage, string> = {
-  PYTHON: "n = 5\ntotal = 0\nfor i in range(1, n + 1):\n    total += i\nprint(total)\n",
-  JAVA: "public class Main {\n  public static void main(String[] args) {\n    int total = 0;\n    for (int i = 1; i <= 5; i++) total += i;\n    System.out.println(total);\n  }\n}\n",
-  CPP: "#include <iostream>\nint main(){\n  int total=0;\n  for(int i=1;i<=5;i++) total+=i;\n  std::cout<<total<<std::endl;\n}\n",
+// Starter snippets for the common families; others start from an empty buffer.
+const STARTERS: Partial<Record<PlaygroundLanguage, string>> = {
+  python: "n = 5\ntotal = 0\nfor i in range(1, n + 1):\n    total += i\nprint(total)\n",
+  java: "public class Main {\n  public static void main(String[] args) {\n    int total = 0;\n    for (int i = 1; i <= 5; i++) total += i;\n    System.out.println(total);\n  }\n}\n",
+  cpp: "#include <iostream>\nint main(){\n  int total=0;\n  for(int i=1;i<=5;i++) total+=i;\n  std::cout<<total<<std::endl;\n}\n",
+  c: "#include <stdio.h>\nint main(){\n  int total=0;\n  for(int i=1;i<=5;i++) total+=i;\n  printf(\"%d\\n\", total);\n  return 0;\n}\n",
+  js: "let total = 0;\nfor (let i = 1; i <= 5; i++) total += i;\nconsole.log(total);\n",
+  go: "package main\nimport \"fmt\"\nfunc main(){\n  total := 0\n  for i := 1; i <= 5; i++ { total += i }\n  fmt.Println(total)\n}\n",
+  rust: "fn main(){\n  let mut total = 0;\n  for i in 1..=5 { total += i; }\n  println!(\"{}\", total);\n}\n",
+  ruby: "total = 0\n(1..5).each { |i| total += i }\nputs total\n",
 };
+
+const starterFor = (lang: PlaygroundLanguage): string => STARTERS[lang] ?? "";
 
 const PANEL = "rounded-xl border border-border bg-bg-surface";
 const PANEL_HEAD = "px-5 py-3 border-b border-border text-xs font-mono font-medium uppercase tracking-[0.04em] text-text-secondary flex items-center gap-2";
 
-const LANG_FILE: Record<PlaygroundLanguage, string> = {
-  PYTHON: "main.py",
-  JAVA: "Main.java",
-  CPP: "main.cpp",
-};
+const PLAYGROUND_LANGS = enabledJudgeLanguages();
+const LANG_FILE = JUDGE_ENTRY_FILES;
 
 export const PlaygroundPage: React.FC = () => {
   const navigate = useNavigate();
   const params = useParams<{ shareId?: string }>();
   const prefersReducedMotion = useReducedMotion();
-  const [language, setLanguage] = useState<PlaygroundLanguage>("PYTHON");
-  const [code, setCode] = useState<string>(STARTERS.PYTHON);
+  const [language, setLanguage] = useState<PlaygroundLanguage>("python");
+  const [compiler, setCompiler] = useState<string>(defaultCompilerForFamily("python"));
+  const [code, setCode] = useState<string>(starterFor("python"));
+  const compilerOptions = compilersForFamily(language);
   const [stdin, setStdin] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [tracing, setTracing] = useState(false);
@@ -53,7 +68,7 @@ export const PlaygroundPage: React.FC = () => {
     getPlaygroundSnippet(shareId)
       .then((s) => {
         if (cancelled) return;
-        setLanguage(s.language);
+        setLanguage(normalizePlaygroundLanguage(s.language));
         setCode(s.code);
         setStdin(s.stdin ?? "");
       })
@@ -63,15 +78,17 @@ export const PlaygroundPage: React.FC = () => {
 
   const onLanguageChange = (lang: PlaygroundLanguage) => {
     setLanguage(lang);
+    setCompiler(defaultCompilerForFamily(lang));
     setTrace(null);
-    if (!code.trim() || Object.values(STARTERS).includes(code)) setCode(STARTERS[lang]);
+    // Swap in the new starter only if the buffer is empty or still an untouched starter.
+    if (!code.trim() || Object.values(STARTERS).includes(code)) setCode(starterFor(lang));
   };
 
   const doRun = async () => {
     setRunning(true);
     setTrace(null);
     try {
-      setRun(await runPlayground({ language, code, stdin }));
+      setRun(await runPlayground({ language, compiler, code, stdin }));
     } catch (e: any) {
       showToast({ type: "error", message: e?.response?.data?.message || tr("Помилка запуску.", "Run failed.") });
     } finally {
@@ -135,15 +152,22 @@ export const PlaygroundPage: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           <select value={language} onChange={(e) => onLanguageChange(e.target.value as PlaygroundLanguage)} className={selectCls}>
-            <option value="PYTHON">Python</option>
-            <option value="JAVA">Java</option>
-            <option value="CPP">C++</option>
+            {PLAYGROUND_LANGS.map((l) => (
+              <option key={l} value={l}>{JUDGE_LANGUAGE_LABELS[l]}</option>
+            ))}
           </select>
+          {compilerOptions.length > 1 && (
+            <select value={compiler} onChange={(e) => setCompiler(e.target.value)} className={selectCls} aria-label={tr("Компілятор / версія", "Compiler / version")}>
+              {compilerOptions.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          )}
           <Button variant="primary" onClick={doRun} disabled={running || tracing}>
             <Play className="w-4 h-4 mr-2" />
             {running ? tr("Запуск…", "Running…") : tr("Запустити", "Run")}
           </Button>
-          {language === "PYTHON" && (
+          {language === "python" && (
             <Button variant="secondary" onClick={doTrace} disabled={running || tracing}>
               <Microscope className="w-4 h-4 mr-2" />
               {tracing ? tr("Трасування…", "Tracing…") : tr("Візуалізувати", "Visualize")}
