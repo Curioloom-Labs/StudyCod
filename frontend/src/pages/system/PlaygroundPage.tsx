@@ -36,6 +36,13 @@ const STARTERS: Partial<Record<PlaygroundLanguage, string>> = {
   go: "package main\nimport \"fmt\"\nfunc main(){\n  total := 0\n  for i := 1; i <= 5; i++ { total += i }\n  fmt.Println(total)\n}\n",
   rust: "fn main(){\n  let mut total = 0;\n  for i in 1..=5 { total += i; }\n  println!(\"{}\", total);\n}\n",
   ruby: "total = 0\n(1..5).each { |i| total += i }\nputs total\n",
+  // Full class form so the starter works under both .NET and Mono.
+  csharp: "using System;\nclass Program {\n  static void Main() {\n    int total = 0;\n    for (int i = 1; i <= 5; i++) total += i;\n    Console.WriteLine(total);\n  }\n}\n",
+  kotlin: "fun main() {\n  var total = 0\n  for (i in 1..5) total += i\n  println(total)\n}\n",
+  pascal: "var i, total: integer;\nbegin\n  total := 0;\n  for i := 1 to 5 do total := total + i;\n  writeln(total);\nend.\n",
+  php: "<?php\n$total = 0;\nfor ($i = 1; $i <= 5; $i++) $total += $i;\necho $total, \"\\n\";\n",
+  swift: "var total = 0\nfor i in 1...5 { total += i }\nprint(total)\n",
+  dart: "void main() {\n  var total = 0;\n  for (var i = 1; i <= 5; i++) total += i;\n  print(total);\n}\n",
 };
 
 const starterFor = (lang: PlaygroundLanguage): string => STARTERS[lang] ?? "";
