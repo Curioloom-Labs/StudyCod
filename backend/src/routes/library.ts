@@ -218,10 +218,15 @@ const JUDGE_LANGUAGES: readonly JudgeLanguage[] = [
   "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift"
 ];
 
-// Languages auto-allowed on tasks that don't explicitly restrict languages. New families
-// (js/go/rust/pascal) are intentionally NOT here: they must be opted into per task so a
-// student can't submit in a language whose toolchain may be absent or unintended.
-const ALL_JUDGE_LANGS: JudgeLanguage[] = ["java", "python", "cpp", "c", "csharp", "kotlin"];
+// Every task accepts every supported language — no per-task language restriction.
+const ALL_JUDGE_LANGS: JudgeLanguage[] = [...JUDGE_LANGUAGES];
+
+// Optional compiler/version id (e.g. "pypy3", "java21", "cpp23"). The judge validates that
+// it belongs to the language family; here we only sanity-check the shape.
+function normCompilerId(raw: unknown): string | undefined {
+  const s = String(raw ?? "").trim();
+  return /^[a-z0-9_+-]{1,32}$/i.test(s) ? s : undefined;
+}
 
 function parseDisabledJudgeLanguagesEnv(): Set<JudgeLanguage> {
   const raw = String(process.env.JUDGE_DISABLED_LANGUAGES ?? process.env.DISABLED_JUDGE_LANGUAGES ?? "").trim();
@@ -284,17 +289,9 @@ function normalizeJudgeLanguage(input: any): JudgeLanguage | null {
   return (JUDGE_LANGUAGES as readonly string[]).includes(raw) ? (raw as JudgeLanguage) : null;
 }
 
-function getAllowedJudgeLanguages(task: LibraryTask): JudgeLanguage[] {
-  const configured = (task as any).allowedLanguages as any;
-  if (Array.isArray(configured) && configured.length > 0) {
-    const normalized = configured.map((x: any) => normalizeJudgeLanguage(x)).filter(Boolean) as JudgeLanguage[];
-    const filtered = filterEnabledJudgeLanguages(Array.from(new Set(normalized)));
-    if (filtered.length > 0) return filtered;
-    // If task is configured with only disabled/unknown languages, fall back to globally enabled set.
-    const fallback = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS);
-    return fallback.length > 0 ? fallback : ["java"];
-  }
-  // If task doesn't explicitly restrict languages, allow all supported languages.
+function getAllowedJudgeLanguages(_task: LibraryTask): JudgeLanguage[] {
+  // No per-task restriction: every task accepts every globally-enabled language.
+  // (A task's stored `allowedLanguages` is intentionally ignored here.)
   const filteredAll = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS);
   return filteredAll.length > 0 ? filteredAll : ["java"];
 }
@@ -1318,6 +1315,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
           .optional(),
         input: z.string().optional(),
         language: z.string().optional(),
+        compiler: z.string().max(32).optional(),
       })
       .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
         message: "code or files required",
@@ -1334,6 +1332,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const selectedLang = normalizeJudgeLanguage(validated.data.language) ?? defaultJudgeLanguageFromTask(task);
+    const selectedCompiler = normCompilerId((validated.data as any).compiler);
     const allowedLangs = getAllowedJudgeLanguages(task);
     if (!allowedLangs.includes(selectedLang)) {
       return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
@@ -1371,7 +1370,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     // For Java/Python we can run locally for single-file submissions; for multi-file always use judge worker.
     if (!isMultiFile && (selectedLang === "java" || selectedLang === "python")) {
       const localLang = selectedLang === "java" ? "JAVA" : "PYTHON";
-      const r = await executeCodeWithInput(sourceText, localLang as any, validated.data.input ?? "", 10000);
+      const r = await executeCodeWithInput(sourceText, localLang as any, validated.data.input ?? "", 10000, { compiler: selectedCompiler });
       return res.json({
         stdout: r.stdout,
         stderr: filterStderrWithLang(r.stderr, localLang as any),
@@ -1384,6 +1383,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     const workerReq: WorkerJudgeRequest = {
       submission_id: `library_run_${principalTag}_${task.id}_${Date.now()}`,
       language: selectedLang,
+      ...(selectedCompiler ? { compiler: selectedCompiler } : {}),
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
       tests: [
@@ -1457,6 +1457,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
           .max(64)
           .optional(),
         language: z.string().optional(),
+        compiler: z.string().max(32).optional(),
       })
       .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
         message: "code or files required",
@@ -1501,6 +1502,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const requested = normalizeJudgeLanguage(validated.data.language);
     const allowedLangs = getAllowedJudgeLanguages(task);
     const judgeLang: JudgeLanguage = (requested ?? defaultJudgeLanguageFromTask(task));
+    const selectedCompiler = normCompilerId((validated.data as any).compiler);
     if (!allowedLangs.includes(judgeLang)) {
       return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
     }
@@ -1545,6 +1547,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const workerReq: WorkerJudgeRequest = {
       submission_id: `library_${principalTag}_${task.id}_${Date.now()}`,
       language: judgeLang,
+      ...(selectedCompiler ? { compiler: selectedCompiler } : {}),
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
       tests: workerTests,
