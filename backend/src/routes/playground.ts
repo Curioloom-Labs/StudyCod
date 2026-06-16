@@ -113,7 +113,8 @@ router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: A
 router.post("/snippets", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const b = (req.body ?? {}) as Record<string, unknown>;
-    const language = normLang(b.language);
+    // Snippets accept any runnable judge language (stored as the lowercase family id).
+    const language = normRunLang(b.language);
     if (!language) return res.status(400).json({ message: "INVALID_LANGUAGE" });
     const code = String(b.code ?? "");
     if (!code.trim()) return res.status(400).json({ message: "CODE_REQUIRED" });
@@ -124,7 +125,7 @@ router.post("/snippets", authRequired, async (req: AuthRequest, res: Response) =
 
     const snippet = snippetRepo().create({
       shareId: generateShareId(),
-      language,
+      language: String(language).toLowerCase(),
       code,
       stdin: b.stdin == null ? null : String(b.stdin).slice(0, MAX_STDIN),
       title: b.title == null ? null : String(b.title).slice(0, 120),

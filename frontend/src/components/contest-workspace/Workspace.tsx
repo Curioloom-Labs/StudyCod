@@ -73,6 +73,8 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   statement,
   language,
   onLanguageChange,
+  compiler,
+  onCompilerChange,
   code,
   onCodeChange,
   onRun,
@@ -296,6 +298,8 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
             statement={statement}
             language={language}
             onLanguageChange={onLanguageChange}
+            compiler={compiler}
+            onCompilerChange={onCompilerChange}
             code={code}
             onCodeChange={onCodeChange}
             runInput={runInput}

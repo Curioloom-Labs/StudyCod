@@ -36,41 +36,13 @@ import {
   type JudgeLanguage,
   type WebTaskFile,
 } from "../../lib/api/library";
+import { JUDGE_LANGUAGE_LABELS, JUDGE_ENTRY_FILES, enabledJudgeLanguages, compilersForFamily, defaultCompilerForFamily } from "../../lib/judgeLanguages";
 
-const FRIENDLY_LANG: Record<JudgeLanguage, string> = {
-  java: "Java",
-  python: "Python",
-  cpp: "C++",
-  c: "C",
-  csharp: "C#",
-  kotlin: "Kotlin",
-};
+const FRIENDLY_LANG = JUDGE_LANGUAGE_LABELS;
 
-const BASE_JUDGE_LANGS: JudgeLanguage[] = ["java", "python", "cpp", "c", "csharp", "kotlin"];
-const DISABLED_JUDGE_LANGS = (() => {
-  const raw = String(import.meta.env.VITE_JUDGE_DISABLED_LANGUAGES ?? "").trim();
-  if (!raw) return new Set<JudgeLanguage>();
-  const parts = raw
-    .split(/[,\s]+/g)
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean);
-  const disabled = new Set<JudgeLanguage>();
-  for (const p of parts) {
-    if ((BASE_JUDGE_LANGS as readonly string[]).includes(p)) disabled.add(p as JudgeLanguage);
-  }
-  return disabled;
-})();
-
-const ALL_JUDGE_LANGS: JudgeLanguage[] = (() => {
-  const filtered = BASE_JUDGE_LANGS.filter(l => !DISABLED_JUDGE_LANGS.has(l));
-  return filtered.length ? filtered : BASE_JUDGE_LANGS;
-})();
-
-const getAllowedJudgeLanguages = (task: { allowedLanguages?: JudgeLanguage[] | null }): JudgeLanguage[] => {
-  const allowed = (task.allowedLanguages || []).filter(Boolean);
-  if (allowed.length) return Array.from(new Set(allowed));
-  // If task doesn't explicitly restrict languages, allow all supported languages.
-  return ALL_JUDGE_LANGS;
+// Every task accepts every supported language — no per-task language restriction.
+const getAllowedJudgeLanguages = (_task: { allowedLanguages?: JudgeLanguage[] | null }): JudgeLanguage[] => {
+  return enabledJudgeLanguages();
 };
 
 const getTemplateForLanguage = (
@@ -83,22 +55,7 @@ const getTemplateForLanguage = (
 };
 
 function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
-  switch (lang) {
-    case "java":
-      return "Main.java";
-    case "python":
-      return "main.py";
-    case "cpp":
-      return "main.cpp";
-    case "c":
-      return "main.c";
-    case "kotlin":
-      return "Main.kt";
-    case "csharp":
-      return "Program.cs";
-    default:
-      return "Main.java";
-  }
+  return JUDGE_ENTRY_FILES[lang] ?? "Main.java";
 }
 
 function normalizeFiles(fs: CodeFile[]): CodeFile[] {
@@ -284,6 +241,10 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const effectiveTaskId = task?.id ?? taskId;
 
   const [judgeLanguage, setJudgeLanguage] = useState<JudgeLanguage>("java");
+  const [judgeCompiler, setJudgeCompiler] = useState<string>(defaultCompilerForFamily("java"));
+  const compilerOptions = compilersForFamily(judgeLanguage);
+  // Reset the compiler to the family default whenever the language changes.
+  useEffect(() => { setJudgeCompiler(defaultCompilerForFamily(judgeLanguage)); }, [judgeLanguage]);
 
   type DraftState = {
     useFiles: boolean;
@@ -656,8 +617,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
       }
       const runInput = normalizeStdinBeforeRun(stdin);
       const payload: Parameters<typeof runLibraryTask>[1] = useFiles
-        ? { files, input: runInput, language: judgeLanguage }
-        : { code, input: runInput, language: judgeLanguage };
+        ? { files, input: runInput, language: judgeLanguage, compiler: judgeCompiler }
+        : { code, input: runInput, language: judgeLanguage, compiler: judgeCompiler };
       const r = await runLibraryTask(effectiveTaskId, payload);
       setRunResult(r);
       setResultsTab("run");
@@ -703,8 +664,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
         return;
       }
       const payload: Parameters<typeof checkLibraryTask>[1] = useFiles
-        ? { files, language: judgeLanguage }
-        : { code, language: judgeLanguage };
+        ? { files, language: judgeLanguage, compiler: judgeCompiler }
+        : { code, language: judgeLanguage, compiler: judgeCompiler };
       const r = await checkLibraryTask(effectiveTaskId, payload);
       setCheckResult(r);
       setShowCompactStatuses(false);
@@ -1049,6 +1010,18 @@ export const LibraryTaskSolvePage: React.FC = () => {
                       ))}
                     </select>
                   ) : null}
+                  {!isWebTask && compilerOptions.length > 1 ? (
+                    <select
+                      value={judgeCompiler}
+                      onChange={(e) => setJudgeCompiler(e.target.value)}
+                      className="w-full sm:w-auto px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
+                      title={tr("Компілятор / версія", "Compiler / version")}
+                    >
+                      {compilerOptions.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                  ) : null}
                 <div className={`flex flex-wrap gap-2 ${isCompactViewport ? "w-full" : ""}`}>
                   {!useFiles ? (
                     <Button
@@ -1185,7 +1158,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
                   failed.length > 0 ||
                   (!!runResult && !runResult.success && !!stderr);
                 if (!hasError) return null;
-                const lang = String(judgeLanguage).toUpperCase() as "JAVA" | "PYTHON" | "CPP";
+                const lang = String(judgeLanguage).toUpperCase();
                 return (
                   <div className="mb-3 flex flex-col gap-2">
                     <ErrorExplainButton
