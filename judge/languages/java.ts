@@ -26,6 +26,12 @@ export const javaLanguage: LanguageAdapter = {
         "-Xms64m",
         "-Xmx128m",
         "-XX:+UseSerialGC",
+        // Startup tuning (safe for throughput — C2 JIT stays enabled):
+        //  -XX:-UsePerfData   : skip writing /tmp/hsperfdata (faster boot, less I/O)
+        //  -Xshare:auto       : use the JDK's class-data-sharing archive (faster class load)
+        //  -XX:+UseStringDeduplication off by default; not added.
+        "-XX:-UsePerfData",
+        "-Xshare:auto",
         "-Dfile.encoding=UTF-8",
         "-Dsun.stdout.encoding=UTF-8",
         "-Dsun.stderr.encoding=UTF-8",

@@ -66,8 +66,11 @@ export const COMPILE_BUDGET = {
   java: (run: number) => clamp(8_000, 20_000, clamp(500, 30_000, run) * 2 + 1_000),
   /** Slow optimising compilers (rust, haskell, swift). */
   slow: (run: number) => clamp(12_000, 45_000, clamp(500, 30_000, run) * 3 + 4_000),
-  /** Go toolchain. */
-  go: (run: number) => clamp(8_000, 30_000, clamp(500, 30_000, run) * 2 + 3_000),
+  /**
+   * Go toolchain. With the persistent bind-mounted GOCACHE (see runner) warm builds are
+   * ~0.5s; the floor covers a one-time cold build (~18s, recompiling the stdlib).
+   */
+  go: (run: number) => clamp(20_000, 45_000, clamp(500, 30_000, run) * 3 + 10_000),
   /** Kotlin (kotlinc -include-runtime is heavy). */
   kotlin: (run: number) => clamp(25_000, 60_000, clamp(500, 30_000, run) * 3 + 5_000),
   /** dotnet build. */

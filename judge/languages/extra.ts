@@ -40,7 +40,9 @@ export const dartLanguage: LanguageAdapter = {
   getRunPlan() {
     return {
       display: "dart main.dart",
-      argv: ["/usr/bin/env", "HOME=/work", "PUB_CACHE=/work/.pubcache", "/usr/bin/dart", "--disable-analytics", "main.dart"]
+      // Analytics are disabled via env (DART_* / CI) rather than a CLI flag, since the flag
+      // name has changed across Dart versions and unknown flags abort the VM.
+      argv: ["/usr/bin/env", "HOME=/work", "PUB_CACHE=/work/.pubcache", "CI=true", "/usr/bin/dart", "main.dart"]
     };
   }
 };
@@ -76,7 +78,9 @@ export const lispLanguage: LanguageAdapter = {
   getRunPlan() {
     return {
       display: "sbcl --script main.lisp",
-      argv: ["/usr/bin/sbcl", "--dynamic-space-size", "300", "--non-interactive", "--script", "main.lisp"]
+      // --noinform suppresses the startup banner (some sbcl builds still print it with
+      // --script). Runtime options must precede --script.
+      argv: ["/usr/bin/sbcl", "--noinform", "--dynamic-space-size", "300", "--disable-ldb", "--script", "main.lisp"]
     };
   }
 };
