@@ -21,6 +21,26 @@ function defaultEntryFile(language: LanguageId): string {
   return getLanguage(language).entryFile;
 }
 
+// Persistent Go build cache shared across submissions (bind-mounted into the jail at
+// /gocache). Created once; world-writable so the sandboxed uid can write to it.
+let goCacheDirPromise: Promise<string | null> | null = null;
+function ensureGoCacheDir(): Promise<string | null> {
+  if (!goCacheDirPromise) {
+    goCacheDirPromise = (async () => {
+      const dir = (process.env.JUDGE_GO_CACHE_DIR || path.join(os.tmpdir(), "studycod-go-cache")).trim();
+      try {
+        await fs.mkdir(dir, { recursive: true });
+        await fs.chmod(dir, 0o777);
+        return dir;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return goCacheDirPromise;
+}
+
+
 // ---- File-referenced tests --------------------------------------------------
 // Large stored-test suites pass test data by file reference instead of inline, so the
 // worker streams input (constant memory) and reads expected output lazily.
@@ -295,7 +315,7 @@ export class Runner {
       const compilePlan = wantsFiles ? (buildCompilePlanForFiles(req.language, reqFiles) ?? profileCompilePlan) : profileCompilePlan;
       const scoringPlan = computeScoringPlan(req);
       const needsDotnetFixes = !this.cfg.useConfig && req.language === "csharp";
-      const extraNsJailArgs = needsDotnetFixes
+      const extraNsJailArgsList: string[] = needsDotnetFixes
         ? [
             "--bindmount",
             "/proc:/proc",
@@ -312,8 +332,26 @@ export class Runner {
             "--rlimit_nproc",
             "512"
           ]
-        : undefined;
+        : [];
+      // Go: bind-mount a persistent, writable GOCACHE so builds are warm (~0.5s) instead of
+      // recompiling the stdlib cold (~18s) every submission. Best-effort; if the host dir
+      // can't be created we simply don't mount it (build falls back to cold under /gocache
+      // which won't exist -> go uses default; budget covers a cold build).
+      if (req.language === "go") {
+        const goCacheHost = await ensureGoCacheDir();
+        if (goCacheHost) extraNsJailArgsList.push("--bindmount", `${goCacheHost}:/gocache`);
+      }
+      const extraNsJailArgs = extraNsJailArgsList.length > 0 ? extraNsJailArgsList : undefined;
       const addressSpaceLimitBytes = req.language === "csharp" ? 4 * 1024 * 1024 * 1024 : undefined;
+      // Compilers (go, rust, swift, javac, ghc...) routinely need far more RAM than the
+      // program's runtime limit. Give the COMPILE step a generous memory floor so a task
+      // with a small run-time memory limit doesn't fail to build. Configurable.
+      const compileMemFloorBytes = (() => {
+        const mb = parseInt(String(process.env.JUDGE_COMPILE_MEMORY_FLOOR_MB ?? ""), 10);
+        return (Number.isFinite(mb) && mb > 0 ? mb : 768) * 1024 * 1024;
+      })();
+      const compileMemoryBytes = Math.max(limits.memoryLimitBytes, compileMemFloorBytes);
+      const compileAddressSpaceBytes = addressSpaceLimitBytes ?? compileMemoryBytes + 256 * 1024 * 1024;
       if (compilePlan) {
         const compileTimeLimitMs = resolveCompileTimeLimitMs(req.language, limits.timeLimitMs);
         const compileRes = await this.compiler.compile({
@@ -325,11 +363,11 @@ export class Runner {
           cwd: this.cfg.cwd,
           hostWorkDir: workDir,
           extraNsJailArgs,
-          addressSpaceLimitBytes,
+          addressSpaceLimitBytes: compileAddressSpaceBytes,
           argv: compilePlan.argv,
           display: compilePlan.display,
           timeLimitMs: compileTimeLimitMs,
-          memoryLimitBytes: limits.memoryLimitBytes,
+          memoryLimitBytes: compileMemoryBytes,
           outputLimitBytes: Math.max(64 * 1024, limits.outputLimitBytes)
         });
         if (!compileRes.ok) {

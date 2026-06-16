@@ -101,6 +101,8 @@ function pypyProfile(id: string, label: string): CompilerProfile {
 }
 
 // ---- C# (Mono) --------------------------------------------------------------
+// Requires the full `mono-devel` package in the rootfs (the `mono-mcs`-only install is
+// incomplete: mcs can't resolve reference assemblies and misreports "source file not found").
 const csharpMonoProfile: CompilerProfile = {
   id: "csharp-mono",
   family: "csharp",
