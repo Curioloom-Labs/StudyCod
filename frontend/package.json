@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/generate-sitemap.mjs",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vite build && node scripts/generate-sitemap.mjs",
     "preview": "vite preview",
     "clean:comments": "node scripts/clean-comments.mjs"
   },
@@ -49,6 +49,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.3",
     "autoprefixer": "^10.4.24",
+    "cross-env": "^10.1.0",
     "fast-glob": "^3.3.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
