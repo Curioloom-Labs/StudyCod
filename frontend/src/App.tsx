@@ -3,7 +3,7 @@ import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } fr
 import { AnimatePresence } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon, Search, SwatchBook, LogOut } from "lucide-react";
+import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon, Search, SwatchBook, LogOut, Users } from "lucide-react";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
@@ -61,6 +61,10 @@ const ClassGradebookPage = React.lazy(() => import("./pages/edu/ClassGradebookPa
 const GradebookConfigPage = React.lazy(() => import("./pages/edu/GradebookConfigPage").then(mod => ({ default: mod.GradebookConfigPage })));
 const JoinClassPage = React.lazy(() => import("./pages/edu/JoinClassPage").then(mod => ({ default: mod.JoinClassPage })));
 const CoursesPage = React.lazy(() => import("./pages/edu/CoursesPage").then(mod => ({ default: mod.CoursesPage })));
+const CalendarPage = React.lazy(() => import("./pages/edu/CalendarPage").then(mod => ({ default: mod.CalendarPage })));
+const AttendancePage = React.lazy(() => import("./pages/edu/AttendancePage").then(mod => ({ default: mod.AttendancePage })));
+const SimilarityPage = React.lazy(() => import("./pages/edu/SimilarityPage").then(mod => ({ default: mod.SimilarityPage })));
+const TutorPage = React.lazy(() => import("./pages/edu/TutorPage").then(mod => ({ default: mod.TutorPage })));
 const CourseDetailPage = React.lazy(() => import("./pages/edu/CourseDetailPage").then(mod => ({ default: mod.CourseDetailPage })));
 const LessonQuizPage = React.lazy(() => import("./pages/edu/LessonQuizPage").then(mod => ({ default: mod.LessonQuizPage })));
 const TeacherQuizReviewPage = React.lazy(() => import("./pages/edu/TeacherQuizReviewPage").then(mod => ({ default: mod.TeacherQuizReviewPage })));
@@ -75,6 +79,7 @@ const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(m
 const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
 const TermsOfUsePage = React.lazy(() => import("./pages/system/TermsOfUsePage").then(mod => ({ default: mod.TermsOfUsePage })));
 const CookiePolicyPage = React.lazy(() => import("./pages/system/CookiePolicyPage").then(mod => ({ default: mod.CookiePolicyPage })));
+const PricingPage = React.lazy(() => import("./pages/system/PricingPage").then(mod => ({ default: mod.PricingPage })));
 const MaintenancePage = React.lazy(() => import("./pages/system/MaintenancePage").then(mod => ({ default: mod.MaintenancePage })));
 const ProfileCertificatesPage = React.lazy(() => import("./pages/profile/ProfileCertificatesPage").then(mod => ({ default: mod.ProfileCertificatesPage })));
 const CertificateVerifyPage = React.lazy(() => import("./pages/public/CertificateVerifyPage").then(mod => ({ default: mod.CertificateVerifyPage })));
@@ -85,6 +90,7 @@ const ContestsPage = React.lazy(() => import("./pages/contest/ContestsPage").the
 const ContestPage = React.lazy(() => import("./pages/contest/ContestPage").then(mod => ({ default: mod.ContestPage })));
 const ContestProblemSolvePage = React.lazy(() => import("./pages/contest/ContestProblemSolvePage").then(mod => ({ default: mod.ContestProblemSolvePage })));
 const DevEditorPage = React.lazy(() => import("./pages/system/DevEditorPage").then(mod => ({ default: mod.DevEditorPage })));
+const CollabDemoPage = React.lazy(() => import("./pages/system/CollabDemoPage").then(mod => ({ default: mod.CollabDemoPage })));
 const OnboardingEntry = React.lazy(() => import("./components/onboarding/OnboardingEntry").then(mod => ({ default: mod.OnboardingEntry })));
 const PlacementEntry = React.lazy(() => import("./components/placement/PlacementEntry").then(mod => ({ default: mod.PlacementEntry })));
 const PlaygroundPage = React.lazy(() => import("./pages/system/PlaygroundPage").then(mod => ({ default: mod.PlaygroundPage })));
@@ -808,6 +814,15 @@ const AppContent: React.FC = React.memo(() => {
     }} />
     </Suspense>;
   }
+  // EDU users live entirely under /edu — the main app shell only serves them the
+  // shared pages (profile/admin). Anything else bounces to /edu so there is a
+  // single EDU router (no duplicate teacher/student rendering here).
+  // Personal/Contest users are unaffected.
+  if (user.userMode === "EDUCATIONAL"
+    && requestedAppPage !== "profile" && requestedAppPage !== "admin"
+    && resolvedPage !== "profile" && resolvedPage !== "admin") {
+    return <Navigate to="/edu" replace />;
+  }
   const content = <Suspense fallback={<PageLoader />}>
       {(() => {
       if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
@@ -816,8 +831,8 @@ const AppContent: React.FC = React.memo(() => {
       }
       if (resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       if (resolvedPage === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
-      if (resolvedPage === "teacher" && user.userMode === "EDUCATIONAL" && !user.studentId) return <TeacherDashboardPage />;
-      if (resolvedPage === "student" && user.userMode === "EDUCATIONAL") return <StudentDashboardPage user={user} />;
+      // EDU teacher/student dashboards live under /edu only (the redirect guard
+      // above bounces EDU users here away from the main shell).
       if (resolvedPage === "profile") return <ProfilePage user={user} onUserChange={setUser} />;
       return null;
     })()}
@@ -1021,6 +1036,30 @@ const AppContent: React.FC = React.memo(() => {
         navigate("/edu/lessons");
         return;
       }
+      if (target === "teacher") {
+        navigate("/edu");
+        return;
+      }
+      if (target === "org") {
+        navigate("/edu/organization");
+        return;
+      }
+      if (target === "courses") {
+        navigate("/edu/courses");
+        return;
+      }
+      if (target === "calendar") {
+        navigate("/edu/calendar");
+        return;
+      }
+      if (target === "tutor") {
+        navigate("/edu/tutor");
+        return;
+      }
+      if (target === "student") {
+        navigate("/edu/journal");
+        return;
+      }
       const pageTarget = toMomentumPageTarget(target);
       if (pageTarget) {
         handleSetPage(pageTarget);
@@ -1057,6 +1096,11 @@ export const App: React.FC = () => {
           {import.meta.env.DEV ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <DevEditorPage />
+                </AnimatedPage>
+              </Suspense>} /> : null}
+          {import.meta.env.DEV ? <Route path="/__dev/collab" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <CollabDemoPage />
                 </AnimatedPage>
               </Suspense>} /> : null}
           <Route path="/verify-email" element={<Suspense fallback={<PageLoader />}>
@@ -1104,6 +1148,11 @@ export const App: React.FC = () => {
           <Route path="/cookies" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <CookiePolicyPage />
+                </AnimatedPage>
+              </Suspense>} />
+          <Route path="/pricing" element={<Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <PricingPage />
                 </AnimatedPage>
               </Suspense>} />
           <Route path="/support" element={<RequireToken>
@@ -1602,8 +1651,14 @@ const EduRoutes: React.FC = React.memo(() => {
       list.push({ id: "student", label: t("myJournal"), icon: BookOpen, group: navLabel });
       list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
       list.push({ id: "appeals", label: i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції", icon: HelpCircle, group: navLabel });
+      list.push({ id: "calendar", label: t("eduNavCalendar", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Calendar" : "Календар" }), icon: BookOpen, group: navLabel });
+      list.push({ id: "tutor", label: t("eduNavTutor", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "AI tutor" : "AI-тьютор" }), icon: BookOpen, group: navLabel });
     } else {
-      list.push({ id: "teacher", label: t("myClasses"), icon: GraduationCap, group: navLabel });
+      list.push({ id: "teacher", label: t("eduNavSchool", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "School" : "Школа" }), icon: GraduationCap, group: navLabel });
+      list.push({ id: "calendar", label: t("eduNavCalendar", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Calendar" : "Календар" }), icon: BookOpen, group: navLabel });
+      list.push({ id: "org", label: t("eduNavMembers", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Members" : "Учасники" }), icon: Users, group: navLabel });
+      list.push({ id: "courses", label: t("eduNavCourses", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Courses" : "Курси" }), icon: BookOpen, group: navLabel });
+      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
     }
     return list;
   }, [user?.id, user?.studentId, t, i18n.language]);
@@ -1624,6 +1679,10 @@ const EduRoutes: React.FC = React.memo(() => {
     else if (id === "student") navigate("/edu/journal");
     else if (id === "library") navigate("/edu/library");
     else if (id === "appeals") navigate("/edu/appeals");
+    else if (id === "org") navigate("/edu/organization");
+    else if (id === "courses") navigate("/edu/courses");
+    else if (id === "calendar") navigate("/edu/calendar");
+    else if (id === "tutor") navigate("/edu/tutor");
     else if (id === "teacher") navigate("/edu");
   }, [navigate]);
 
@@ -1640,7 +1699,7 @@ const EduRoutes: React.FC = React.memo(() => {
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             {}
-            <Route index element={user.studentId ? <Navigate to="lessons" replace /> : <AnimatedPage>
+            <Route index element={user.studentId ? <Navigate to="/edu/lessons" replace /> : <AnimatedPage>
                     <TeacherDashboardPage />
                   </AnimatedPage>} />
             <Route path="classes/:classId" element={<AnimatedPage><ClassDetailsPage /></AnimatedPage>} />
@@ -1653,9 +1712,13 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="control-works/:controlWorkId" element={<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>} />
             <Route path="classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
             <Route path="classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
+            <Route path="classes/:classId/attendance" element={<AnimatedPage><AttendancePage /></AnimatedPage>} />
+            <Route path="classes/:classId/similarity" element={<AnimatedPage><SimilarityPage /></AnimatedPage>} />
             <Route path="classes/:classId/gradebook-config" element={<AnimatedPage><GradebookConfigPage /></AnimatedPage>} />
             <Route path="join" element={<AnimatedPage><JoinClassPage /></AnimatedPage>} />
             <Route path="courses" element={<AnimatedPage><CoursesPage /></AnimatedPage>} />
+            <Route path="calendar" element={<AnimatedPage><CalendarPage /></AnimatedPage>} />
+            <Route path="tutor" element={<AnimatedPage><TutorPage /></AnimatedPage>} />
             <Route path="courses/:courseId" element={<AnimatedPage><CourseDetailPage /></AnimatedPage>} />
             <Route path="lessons/:lessonId/quiz" element={<AnimatedPage><LessonQuizPage /></AnimatedPage>} />
             <Route path="lessons/:lessonId/quiz/review" element={<AnimatedPage><TeacherQuizReviewPage /></AnimatedPage>} />
@@ -1673,7 +1736,7 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="appeals" element={<AnimatedPage><StudentAppealsPage /></AnimatedPage>} />
             <Route path="docs" element={<AnimatedPage><DocsPage /></AnimatedPage>} />
             {}
-            <Route path="*" element={<Navigate to={user.studentId ? "lessons" : ""} replace />} />
+            <Route path="*" element={<Navigate to={user.studentId ? "/edu/lessons" : "/edu"} replace />} />
           </Routes>
         </AnimatePresence>
       </Suspense>
@@ -1725,13 +1788,23 @@ const EduRoutes: React.FC = React.memo(() => {
       </div>;
   }
 
-  const momentumCurrent: MomentumNavTarget = /^\/edu\/library/.test(location.pathname)
-    ? "library"
-    : /^\/edu\/journal/.test(location.pathname)
-      ? "student"
-      : /^\/edu\/(lessons|tasks|grades)\b/.test(location.pathname)
-        ? "lessons"
-        : "continue";
+  const momentumCurrent: MomentumNavTarget = /^\/edu\/organization/.test(location.pathname)
+    ? "org"
+    : /^\/edu\/courses/.test(location.pathname)
+      ? "courses"
+      : /^\/edu\/calendar/.test(location.pathname)
+      ? "calendar"
+      : /^\/edu\/tutor/.test(location.pathname)
+      ? "tutor"
+      : /^\/edu\/library/.test(location.pathname)
+        ? "library"
+        : /^\/edu\/journal/.test(location.pathname)
+          ? "student"
+          : /^\/edu\/(lessons|tasks|grades)\b/.test(location.pathname)
+            ? "lessons"
+            : user.studentId
+              ? "lessons"
+              : "teacher";
   const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
   return <>
       <Suspense fallback={<PageLoader />}>
@@ -1759,14 +1832,29 @@ const EduRoutes: React.FC = React.memo(() => {
         return;
       }
       if (target === "profile") {
-        try {
-          sessionStorage.setItem("studycod.openPage", "profile");
-        } catch {}
-        navigate("/");
+        // Profile is a shared page rendered by the main app shell; use the URL
+        // intent param so the shell resolves it synchronously (no redirect race).
+        navigate("/?app=profile");
         return;
       }
       if (target === "teacher") {
         navigate("/edu");
+        return;
+      }
+      if (target === "org") {
+        navigate("/edu/organization");
+        return;
+      }
+      if (target === "courses") {
+        navigate("/edu/courses");
+        return;
+      }
+      if (target === "calendar") {
+        navigate("/edu/calendar");
+        return;
+      }
+      if (target === "tutor") {
+        navigate("/edu/tutor");
         return;
       }
       if (target === "student") {

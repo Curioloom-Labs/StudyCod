@@ -7,6 +7,7 @@ import { requireCapability, orgIdFromClassParam, orgIdFromStudentParam } from ".
 import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { generatePassword, generateUsername, hashPassword } from "../../services/studentCredentialsService";
+import { provisionStudent } from "../../services/edu/studentProvision";
 import { writeAudit } from "../../services/audit/auditLog";
 import { exportStudentData, eraseStudentData, setStudentConsent } from "../../services/edu/dataPrivacy";
 import { logger } from "../../utils/logger";
@@ -90,21 +91,35 @@ router.post("/classes/:classId/students", authRequired, requireCapability("STUDE
     const credentials = [];
 
     for (const s of validated.data.students) {
-      const plainPassword = generatePassword();
-      const hashedPassword = await hashPassword(plainPassword);
-      const username = generateUsername(s.firstName, s.lastName, s.middleName);
+      let student;
+      let username: string;
+      let plainPassword: string;
+      try {
+        // Preferred: a real User-backed account (boots into the student view,
+        // can use the full platform; same creds also work on /student-login).
+        const prov = await provisionStudent(cls, s);
+        student = prov.student;
+        username = prov.username;
+        plainPassword = prov.password;
+      } catch (provErr) {
+        // Graceful fallback so teacher-add never regresses: legacy shell student
+        // (no User), claimable later via POST /edu/students/claim.
+        logger.warn("[edu/classStudents] User provisioning fell back to shell student", { requestId: req.requestId, err: (provErr as any)?.message });
+        plainPassword = generatePassword();
+        const hashedPassword = await hashPassword(plainPassword);
+        username = generateUsername(s.firstName, s.lastName, s.middleName);
+        student = studentRepo().create({
+          firstName: s.firstName,
+          lastName: s.lastName,
+          middleName: s.middleName,
+          email: s.email,
+          class: cls,
+          generatedUsername: username,
+          generatedPassword: hashedPassword
+        });
+        await studentRepo().save(student);
+      }
 
-      const student = studentRepo().create({
-        firstName: s.firstName,
-        lastName: s.lastName,
-        middleName: s.middleName,
-        email: s.email,
-        class: cls,
-        generatedUsername: username,
-        generatedPassword: hashedPassword
-      });
-
-      await studentRepo().save(student);
       results.push(student);
       credentials.push({
         id: student.id,
