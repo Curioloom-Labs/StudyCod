@@ -21,7 +21,7 @@ type MonacoDebugWindow = Window & {
   };
 };
 
-const ensureStudyCodMonacoThemes = (monaco: MonacoApi) => {
+export const ensureStudyCodMonacoThemes = (monaco: MonacoApi) => {
   if (!monaco || studycodMonacoThemesRegistered) return;
   studycodMonacoThemesRegistered = true;
 

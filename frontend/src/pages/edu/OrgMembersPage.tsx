@@ -11,6 +11,8 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 interface Org { orgId: number; role: string; name: string | null; }
 interface Member { userId: number; role: string; username: string | null; name: string | null; email: string | null; }
 interface Invite { id: number; email: string; role: string; status: string; }
+interface ClassSummary { id: number; name: string; language: string; studentsCount: number; teacherName: string | null; }
+interface Overview { totals: { classes: number; students: number; teachers: number }; classes: ClassSummary[]; }
 
 const ROLES = ["TEACHER", "ASSISTANT", "ORG_ADMIN"] as const;
 
@@ -31,6 +33,7 @@ export const OrgMembersPage: React.FC = () => {
   const [activeOrg, setActiveOrg] = useState<number | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<(typeof ROLES)[number]>("TEACHER");
@@ -50,12 +53,14 @@ export const OrgMembersPage: React.FC = () => {
 
   const loadOrg = async (orgId: number) => {
     try {
-      const [m, i] = await Promise.all([
+      const [m, i, o] = await Promise.all([
         api.get(`/edu/orgs/${orgId}/members`),
-        api.get(`/edu/orgs/${orgId}/invites`)
+        api.get(`/edu/orgs/${orgId}/invites`),
+        api.get(`/edu/orgs/${orgId}/overview`).catch(() => ({ data: null }))
       ]);
       setMembers(m.data?.members ?? []);
       setInvites(i.data?.invites ?? []);
+      setOverview(o.data ?? null);
     } catch (error) {
       showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
     }
@@ -122,6 +127,39 @@ export const OrgMembersPage: React.FC = () => {
             <option key={o.orgId} value={o.orgId}>{o.name ?? `Org ${o.orgId}`}</option>
           ))}
         </select>
+      )}
+
+      {overview && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {[
+              { label: tr("Класи", "Classes"), value: overview.totals.classes },
+              { label: tr("Учні", "Students"), value: overview.totals.students },
+              { label: tr("Викладачі", "Teachers"), value: overview.totals.teachers }
+            ].map((s, i) => (
+              <div key={i} style={{ flex: 1, minWidth: 120, border: "1px solid rgba(128,128,128,0.2)", borderRadius: 10, padding: "12px 14px" }}>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{s.value}</div>
+                <div style={{ fontSize: 12, opacity: 0.6 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {overview.classes.length > 0 && (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              {overview.classes.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => navigate(`/edu/classes/${c.id}`)}
+                  style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 8, background: "transparent", cursor: "pointer" }}
+                >
+                  <strong>{c.name}</strong>
+                  <span style={{ fontSize: 12, opacity: 0.6 }}>{c.language}{c.teacherName ? ` · ${c.teacherName}` : ""}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>{c.studentsCount} {tr("учнів", "students")}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>

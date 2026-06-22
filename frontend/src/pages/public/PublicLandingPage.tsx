@@ -129,6 +129,7 @@ export const PublicLandingPage: React.FC = () => {
             <div className="mt-14 flex flex-wrap items-center justify-between text-xs font-mono text-text-muted border-t border-border pt-6 gap-4">
               <div>© {new Date().getFullYear()} StudyCod</div>
               <div className="flex flex-wrap items-center gap-3">
+                <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/pricing")}>{tr("Тарифи", "Pricing")}</button>
                 <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/privacy")}>{t("footerPrivacyPolicy")}</button>
                 <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/terms")}>{t("footerTermsOfUse")}</button>
                 <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/cookies")}>{t("footerCookiePolicy")}</button>
@@ -397,6 +398,9 @@ export const PublicLandingPage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between text-xs font-mono text-text-muted border-t border-border pt-6 gap-4">
             <div>© {new Date().getFullYear()} StudyCod</div>
             <div className="flex flex-wrap items-center gap-3">
+              <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/pricing")}>
+                {tr("Тарифи", "Pricing")}
+              </button>
               <button className="hover:text-text-primary transition-fast" onClick={() => navigate("/privacy")}>
                 {t("footerPrivacyPolicy")}
               </button>
