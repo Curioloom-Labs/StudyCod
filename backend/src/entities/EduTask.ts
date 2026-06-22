@@ -109,6 +109,13 @@ export class EduTask {
     name: "deadline"
   })
   deadline?: Date | null;
+  // Rubric criteria for manual grading (Tier 1). Null = no rubric (plain total).
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "rubric"
+  })
+  rubric?: Array<{ id: string; label: string; maxPoints: number }> | null;
   @Column({
     type: "boolean",
     default: false,

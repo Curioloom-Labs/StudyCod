@@ -61,6 +61,10 @@ import manualTasksRouter from "./edu/manualTasks";
 import lessonQuizRouter from "./edu/lessonQuiz";
 import gradebookConfigRouter from "./edu/gradebookConfig";
 import enrollmentRouter from "./edu/enrollment";
+import agendaRouter from "./edu/agenda";
+import attendanceRouter from "./edu/attendance";
+import similarityRouter from "./edu/similarity";
+import tutorRouter from "./edu/tutor";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -179,6 +183,10 @@ eduRouter.use(manualTasksRouter);
 eduRouter.use(lessonQuizRouter);
 eduRouter.use(gradebookConfigRouter);
 eduRouter.use(enrollmentRouter);
+eduRouter.use(agendaRouter);
+eduRouter.use(attendanceRouter);
+eduRouter.use(similarityRouter);
+eduRouter.use(tutorRouter);
 const registerTeacherSchema = z.object({
   username: z.string().min(3).max(50),
   email: z.string().email(),

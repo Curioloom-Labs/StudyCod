@@ -110,6 +110,13 @@ export class EduGrade {
     name: "group_scores"
   })
   groupScores!: string | null;
+  // Per-criterion rubric breakdown as JSON {criterionId: points} (Tier 1).
+  @Column({
+    type: "text",
+    nullable: true,
+    name: "rubric_scores"
+  })
+  rubricScores!: string | null;
   @CreateDateColumn({
     name: "created_at"
   })

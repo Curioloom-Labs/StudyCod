@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, FileText, GraduationCap, HelpCircle, Home, Library, Newspaper, Search, Shield, SwatchBook, Trophy, User as UserIcon, LogOut, Languages, Menu, FlaskConical, Compass } from "lucide-react";
+import { BookOpen, FileText, GraduationCap, HelpCircle, Home, Library, Newspaper, Search, Shield, SwatchBook, Trophy, User as UserIcon, LogOut, Languages, Menu, FlaskConical, Compass, Users, CalendarDays, Bot } from "lucide-react";
 import type { User } from "../../types";
 import { Logo } from "../../components/Logo";
 import { PlatformFooter } from "../../components/layout/PlatformFooter";
@@ -25,6 +25,10 @@ export type MomentumNavTarget =
   | "learn"
   | "student"
   | "teacher"
+  | "org"
+  | "courses"
+  | "calendar"
+  | "tutor"
   | "admin"
   | "profile";
 
@@ -83,8 +87,8 @@ export const MomentumShell: React.FC<Props> = ({
   const isEducational = user.userMode === "EDUCATIONAL";
   const isStudent = Boolean(user.studentId);
   const isTeacher = isEducational && !isStudent;
-  const primaryHomeId: MomentumNavTarget = isEducational && isStudent ? "lessons" : "continue";
-  const primaryHomeLabel = isEducational && isStudent ? t("lessons") : t("session");
+  const primaryHomeId: MomentumNavTarget = isStudent ? "lessons" : isTeacher ? "teacher" : "continue";
+  const primaryHomeLabel = isStudent ? t("lessons") : isTeacher ? t("eduNavSchool", { defaultValue: isUk ? "Школа" : "School" }) : t("session");
 
   const items = React.useMemo<NavItem[]>(() => [
     {
@@ -112,10 +116,28 @@ export const MomentumShell: React.FC<Props> = ({
       show: isEducational && isStudent
     },
     {
-      id: "teacher",
-      label: t("myClasses"),
-      icon: GraduationCap,
-      show: isEducational && isTeacher
+      id: "org",
+      label: t("eduNavMembers", { defaultValue: isUk ? "Учасники" : "Members" }),
+      icon: Users,
+      show: isTeacher
+    },
+    {
+      id: "courses",
+      label: t("eduNavCourses", { defaultValue: isUk ? "Курси" : "Courses" }),
+      icon: BookOpen,
+      show: isTeacher
+    },
+    {
+      id: "calendar",
+      label: t("eduNavCalendar", { defaultValue: isUk ? "Календар" : "Calendar" }),
+      icon: CalendarDays,
+      show: isEducational
+    },
+    {
+      id: "tutor",
+      label: t("eduNavTutor", { defaultValue: isUk ? "AI-тьютор" : "AI tutor" }),
+      icon: Bot,
+      show: isEducational && isStudent
     },
     {
       id: "admin",
@@ -168,7 +190,7 @@ export const MomentumShell: React.FC<Props> = ({
       icon: UserIcon,
       show: true
     }
-  ], [isEducational, isStudent, isTeacher, primaryHomeId, primaryHomeLabel, t, user.role]);
+  ], [isEducational, isStudent, isTeacher, primaryHomeId, primaryHomeLabel, t, isUk, user.role]);
 
   const [workspaceViewportEl, setWorkspaceViewportEl] = React.useState<HTMLDivElement | null>(null);
 
@@ -176,7 +198,7 @@ export const MomentumShell: React.FC<Props> = ({
     const preferred: MomentumNavTarget[] = isEducational
       ? (isStudent
         ? ["lessons", "student", "library", "contests", "profile"]
-        : ["continue", "teacher", "library", "contests", "profile"])
+        : ["teacher", "courses", "org", "library", "profile"])
       : ["continue", "tasks", "grades", "library", "profile"];
 
     return preferred.filter((id) => items.some((it) => it.id === id && it.show));

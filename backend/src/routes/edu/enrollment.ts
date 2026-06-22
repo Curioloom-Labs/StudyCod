@@ -4,6 +4,7 @@ import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { Class } from "../../entities/Class";
 import { setJoinCode, enrollViaJoinCode } from "../../services/edu/joinCode";
+import { claimStudentProfile } from "../../services/edu/studentLink";
 import { writeAudit } from "../../services/audit/auditLog";
 import { logger } from "../../utils/logger";
 
@@ -96,6 +97,49 @@ router.post("/classes/join", authRequired, async (req: AuthRequest, res: Respons
     }
   } catch (error: any) {
     logger.error("[edu/enrollment] enroll failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Authenticated User claims a LEGACY generated-credential Student profile,
+// becoming a normal User-backed student. Incremental migration: existing shell
+// students keep working until claimed.
+router.post("/students/claim", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+      return res.status(403).json({ message: "ONLY_USERS_CAN_CLAIM" });
+    }
+    const parsed = z.object({
+      username: z.string().min(1).max(120),
+      password: z.string().min(1).max(200)
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+
+    try {
+      const result = await claimStudentProfile(req.userId, parsed.data.username, parsed.data.password);
+      if (!result.alreadyClaimed) {
+        await writeAudit({
+          actorType: "USER",
+          actorId: req.userId,
+          action: "student.claim",
+          targetType: "student",
+          targetId: result.studentId,
+          metadata: { classId: result.classId },
+          requestId: req.requestId,
+          ip: req.ip
+        });
+      }
+      return res.status(result.alreadyClaimed ? 200 : 201).json({ claim: result });
+    } catch (e: any) {
+      const msg = String(e?.message || "");
+      if (msg === "INVALID_CREDENTIALS") return res.status(401).json({ message: "INVALID_CREDENTIALS" });
+      if (msg === "ALREADY_CLAIMED") return res.status(409).json({ message: "ALREADY_CLAIMED" });
+      if (msg === "INVALID_INPUT") return res.status(400).json({ message: "INVALID_INPUT" });
+      if (msg === "USER_NOT_FOUND") return res.status(401).json({ message: "UNAUTHORIZED" });
+      throw e;
+    }
+  } catch (error: any) {
+    logger.error("[edu/enrollment] claim failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

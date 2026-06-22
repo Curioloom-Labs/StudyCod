@@ -82,6 +82,7 @@ coverage/
 # Uploads (user files)
 **/uploads/
 
+frontend/.design-sync
 .gitignore
 .agents/
 .github/

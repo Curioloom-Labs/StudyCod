@@ -366,6 +366,76 @@ export async function getClasses(): Promise<Class[]> {
   const res = await api.get("/edu/classes");
   return res.data.classes;
 }
+
+export type AgendaBucket = "overdue" | "today" | "soon" | "later";
+export interface AgendaItemDto {
+  kind: "TASK" | "CONTROL";
+  id: number;
+  title: string;
+  deadline: string;
+  deadlineMs: number;
+  bucket: AgendaBucket;
+  classId: number;
+  className: string;
+  lessonId?: number;
+  topicId?: number;
+}
+export interface AgendaResponse {
+  items: AgendaItemDto[];
+  summary: Record<AgendaBucket, number>;
+}
+export async function getAgenda(): Promise<AgendaResponse> {
+  const res = await api.get("/edu/agenda");
+  return res.data;
+}
+
+export type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+export interface AttendanceRecordDto {
+  studentId: number;
+  status: AttendanceStatus;
+}
+export interface AttendanceResponse {
+  date: string;
+  records: AttendanceRecordDto[];
+  summary: { present: number; absent: number; late: number; excused: number; total: number };
+}
+export async function getAttendance(classId: number, date: string): Promise<AttendanceResponse> {
+  const res = await api.get(`/edu/classes/${classId}/attendance`, { params: { date } });
+  return res.data;
+}
+export async function setAttendance(classId: number, date: string, entries: AttendanceRecordDto[], lessonId?: number): Promise<AttendanceResponse> {
+  const res = await api.post(`/edu/classes/${classId}/attendance`, { date, entries, lessonId });
+  return res.data;
+}
+
+export interface SimilarityPairDto {
+  a: { id: number; name: string };
+  b: { id: number; name: string };
+  similarity: number;
+}
+export interface SimilarityGroupDto {
+  taskId: number;
+  taskTitle: string;
+  pairs: SimilarityPairDto[];
+}
+export interface SimilarityResponse {
+  minSimilarity: number;
+  groups: SimilarityGroupDto[];
+}
+export async function getClassSimilarity(classId: number): Promise<SimilarityResponse> {
+  const res = await api.get(`/edu/classes/${classId}/similarity`);
+  return res.data;
+}
+export interface SimilarityCompareDto {
+  taskTitle: string;
+  a: { studentId: number; name: string; code: string };
+  b: { studentId: number; name: string; code: string };
+  shared: { aShared: boolean[]; bShared: boolean[] };
+}
+export async function compareSimilarity(classId: number, taskId: number, a: number, b: number): Promise<SimilarityCompareDto> {
+  const res = await api.get(`/edu/classes/${classId}/similarity/compare`, { params: { taskId, a, b } });
+  return res.data;
+}
 export interface ClassDetails {
   id: number;
   name: string;
@@ -1123,6 +1193,49 @@ export async function updateGrade(gradeId: number, update: UpdateGradeRequest): 
   const res = await api.put(`/edu/grades/${gradeId}`, update);
   return res.data;
 }
+
+export interface RubricCriterion {
+  id: string;
+  label: string;
+  maxPoints: number;
+}
+export async function getTaskRubric(taskId: number): Promise<{ rubric: RubricCriterion[] }> {
+  const res = await api.get(`/edu/tasks/${taskId}/rubric`);
+  return res.data;
+}
+export async function setTaskRubric(taskId: number, rubric: RubricCriterion[]): Promise<{ rubric: RubricCriterion[] }> {
+  const res = await api.put(`/edu/tasks/${taskId}/rubric`, { rubric });
+  return res.data;
+}
+export async function gradeByRubric(gradeId: number, scores: Record<string, number>, feedback?: string): Promise<{ message: string; grade: { id: number; total: number; feedback?: string } }> {
+  const res = await api.post(`/edu/grades/${gradeId}/rubric`, { scores, feedback });
+  return res.data;
+}
+
+export type ReviewSeverity = "info" | "suggestion" | "warning" | "error";
+export interface ReviewComment {
+  line: number | null;
+  severity: ReviewSeverity;
+  message: string;
+}
+export interface CodeReviewResult {
+  summary: string;
+  comments: ReviewComment[];
+}
+export async function aiReviewGrade(gradeId: number): Promise<{ review: CodeReviewResult }> {
+  const res = await api.post(`/edu/grades/${gradeId}/ai-review`);
+  return res.data;
+}
+
+export interface TutorAnswerDto {
+  answer: string;
+  tips: string[];
+}
+export async function askAiTutor(question: string): Promise<{ tutor: TutorAnswerDto }> {
+  const res = await api.post(`/edu/tutor`, { question });
+  return res.data;
+}
+
 export interface PendingReview {
   gradeId: number;
   student: {
@@ -1135,6 +1248,7 @@ export interface PendingReview {
   task: {
     id: number;
     title: string;
+    rubric?: RubricCriterion[];
     lesson?: {
       id: number;
       title: string;
