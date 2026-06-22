@@ -6,7 +6,10 @@ import { User } from "../../entities/User";
 import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { TopicTask } from "../../entities/TopicTask";
+import { EduTask } from "../../entities/EduTask";
 import { EduGrade } from "../../entities/EduGrade";
+import { normalizeRubric, computeRubricTotal } from "../../services/edu/rubric";
+import { reviewCode } from "../../services/edu/aiCodeReview";
 import { SummaryGrade } from "../../entities/SummaryGrade";
 import { ControlWork } from "../../entities/ControlWork";
 import { detectAICode } from "../../services/ai/aiCodeDetector";
@@ -24,6 +27,7 @@ const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
+const eduTaskRepo = () => AppDataSource.getRepository(EduTask);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
 const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
@@ -310,6 +314,7 @@ router.get("/tasks/pending-review", authRequired, async (req: AuthRequest, res: 
         ? {
             id: (grade as any).task.id,
             title: (grade as any).task.title,
+            rubric: normalizeRubric((grade as any).task.rubric),
             lesson: (grade as any).task.lesson
               ? {
                   id: (grade as any).task.lesson.id,
@@ -875,6 +880,169 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
 
     logger.error("Error updating grade", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// --- Rubric grading (Tier 1) ---
+
+async function ownedEduTaskOr403(req: AuthRequest, res: Response): Promise<EduTask | null> {
+  if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+    res.status(403).json({ message: "ONLY_TEACHERS" });
+    return null;
+  }
+  const taskId = parseInt(req.params.taskId, 10);
+  if (isNaN(taskId)) {
+    res.status(400).json({ message: "INVALID_ID" });
+    return null;
+  }
+  const task = await eduTaskRepo()
+    .createQueryBuilder("t")
+    .leftJoinAndSelect("t.lesson", "l")
+    .leftJoinAndSelect("l.class", "c")
+    .leftJoinAndSelect("c.teacher", "teacher")
+    .where("t.id = :taskId", { taskId })
+    .getOne();
+  if (!task) {
+    res.status(404).json({ message: "TASK_NOT_FOUND" });
+    return null;
+  }
+  if (!task.lesson?.class || task.lesson.class.teacher?.id !== req.userId) {
+    res.status(403).json({ message: "ACCESS_DENIED" });
+    return null;
+  }
+  return task;
+}
+
+// Read a task's rubric (teacher).
+router.get("/tasks/:taskId/rubric", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const task = await ownedEduTaskOr403(req, res);
+    if (!task) return;
+    return res.json({ rubric: normalizeRubric(task.rubric) });
+  } catch (error: any) {
+    logger.error("[edu/rubric] get failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Define/replace a task's rubric (teacher).
+router.put("/tasks/:taskId/rubric", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const task = await ownedEduTaskOr403(req, res);
+    if (!task) return;
+    const parsed = z.object({ rubric: z.array(z.any()) }).safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const rubric = normalizeRubric(parsed.data.rubric);
+    task.rubric = rubric.length ? rubric : null;
+    await eduTaskRepo().save(task);
+    return res.json({ rubric });
+  } catch (error: any) {
+    logger.error("[edu/rubric] put failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Grade a submission by rubric: total is derived from per-criterion scores.
+router.post("/grades/:gradeId/rubric", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user || user.userMode !== "EDUCATIONAL") {
+      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_UPDATE_GRADES" });
+    }
+    const gradeId = parseInt(req.params.gradeId, 10);
+    if (isNaN(gradeId)) return res.status(400).json({ message: "INVALID_GRADE_ID" });
+
+    const parsed = z.object({
+      scores: z.record(z.string(), z.number()),
+      feedback: z.string().optional()
+    }).safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+
+    const grade = await gradeRepo().findOne({
+      where: { id: gradeId },
+      relations: ["student", "student.class", "student.class.teacher", "task", "topicTask"]
+    });
+    if (!grade) return res.status(404).json({ message: "GRADE_NOT_FOUND" });
+    if (!grade.student.class || grade.student.class.teacher?.id !== user.id) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+    const rubric = normalizeRubric(grade.task?.rubric);
+    if (!rubric.length) return res.status(400).json({ message: "NO_RUBRIC" });
+
+    const result = computeRubricTotal(rubric, parsed.data.scores);
+    grade.total = result.percent;
+    grade.rubricScores = JSON.stringify(parsed.data.scores);
+    if (parsed.data.feedback !== undefined) grade.feedback = parsed.data.feedback || null;
+    grade.isManuallyGraded = true;
+    await gradeRepo().save(grade);
+
+    res.json({
+      message: "GRADE_UPDATED",
+      grade: { id: grade.id, total: grade.total, feedback: grade.feedback || undefined, rubric: result }
+    });
+
+    void notifyStudentGradeChange({
+      student: {
+        id: grade.student.id,
+        email: grade.student.email,
+        firstName: grade.student.firstName,
+        lastName: grade.student.lastName,
+        middleName: grade.student.middleName,
+        uiLanguage: grade.student.uiLanguage
+      },
+      kind: "task",
+      event: "updated",
+      itemTitle: grade.task?.title || `Task #${grade.id}`,
+      grade: result.percent,
+      feedback: grade.feedback || null,
+      className: grade.student.class?.name ?? null,
+      gradingSystem: grade.student.class?.gradingSystem ?? null,
+      gradeScaleMode: normalizeScaleMode(grade.student.class?.gradeScaleMode),
+      fallbackLocale: resolveRequestLocale(req),
+      requestId: req.requestId
+    });
+  } catch (error: any) {
+    logger.error("[edu/rubric] grade failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// AI inline code-review of a submission (Tier 2). On-demand, teacher-only.
+router.post("/grades/:gradeId/ai-review", authRequired, aiDetectLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS" });
+    }
+    const gradeId = parseInt(req.params.gradeId, 10);
+    if (isNaN(gradeId)) return res.status(400).json({ message: "INVALID_GRADE_ID" });
+
+    const grade = await gradeRepo().findOne({
+      where: { id: gradeId },
+      relations: ["student", "student.class", "student.class.teacher", "task"]
+    });
+    if (!grade) return res.status(404).json({ message: "GRADE_NOT_FOUND" });
+    if (!grade.student.class || grade.student.class.teacher?.id !== req.userId) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+    const code = grade.submittedCode || "";
+    if (!code.trim()) return res.status(400).json({ message: "NO_CODE" });
+
+    try {
+      const review = await reviewCode({
+        code,
+        language: (grade.student.class.language as string) || "JAVA",
+        taskDescription: grade.task?.description || undefined
+      });
+      return res.json({ review });
+    } catch (e: any) {
+      if (String(e?.message) === "AI_UNAVAILABLE") {
+        return res.status(503).json({ message: "AI_UNAVAILABLE" });
+      }
+      throw e;
+    }
+  } catch (error: any) {
+    logger.error("[edu/aiCodeReview] route failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

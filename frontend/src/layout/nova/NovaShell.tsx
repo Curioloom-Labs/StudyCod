@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { gsap } from "gsap";
 import { useGSAP } from "@gsap/react";
 import {
+  Bot,
   BookOpen,
+  CalendarDays,
   Compass,
   FileText,
   FlaskConical,
@@ -22,7 +24,8 @@ import {
   Shield,
   SwatchBook,
   Trophy,
-  User as UserIcon
+  User as UserIcon,
+  Users
 } from "lucide-react";
 import type { User } from "../../types";
 import { Logo } from "../../components/Logo";
@@ -76,6 +79,10 @@ const GROUP_OF: Partial<Record<MomentumNavTarget, NavGroupId>> = {
   grades: "workspace",
   student: "workspace",
   teacher: "workspace",
+  org: "workspace",
+  courses: "workspace",
+  calendar: "workspace",
+  tutor: "workspace",
   library: "explore",
   contests: "explore",
   playground: "explore",
@@ -146,8 +153,8 @@ export const NovaShell: React.FC<NovaShellProps> = ({
   const isEducational = user.userMode === "EDUCATIONAL";
   const isStudent = Boolean(user.studentId);
   const isTeacher = isEducational && !isStudent;
-  const primaryHomeId: MomentumNavTarget = isEducational && isStudent ? "lessons" : "continue";
-  const primaryHomeLabel = isEducational && isStudent ? t("lessons") : t("session");
+  const primaryHomeId: MomentumNavTarget = isStudent ? "lessons" : isTeacher ? "teacher" : "continue";
+  const primaryHomeLabel = isStudent ? t("lessons") : isTeacher ? t("eduNavSchool", { defaultValue: isUk ? "Школа" : "School" }) : t("session");
 
   const items = React.useMemo<NavItem[]>(() => [
     {
@@ -175,10 +182,28 @@ export const NovaShell: React.FC<NovaShellProps> = ({
       show: isEducational && isStudent
     },
     {
-      id: "teacher",
-      label: t("myClasses"),
-      icon: GraduationCap,
-      show: isEducational && isTeacher
+      id: "org",
+      label: t("eduNavMembers", { defaultValue: isUk ? "Учасники" : "Members" }),
+      icon: Users,
+      show: isTeacher
+    },
+    {
+      id: "courses",
+      label: t("eduNavCourses", { defaultValue: isUk ? "Курси" : "Courses" }),
+      icon: BookOpen,
+      show: isTeacher
+    },
+    {
+      id: "calendar",
+      label: t("eduNavCalendar", { defaultValue: isUk ? "Календар" : "Calendar" }),
+      icon: CalendarDays,
+      show: isEducational
+    },
+    {
+      id: "tutor",
+      label: t("eduNavTutor", { defaultValue: isUk ? "AI-тьютор" : "AI tutor" }),
+      icon: Bot,
+      show: isEducational && isStudent
     },
     {
       id: "admin",
@@ -231,7 +256,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
       icon: UserIcon,
       show: true
     }
-  ], [isEducational, isStudent, isTeacher, primaryHomeId, primaryHomeLabel, t, user.role]);
+  ], [isEducational, isStudent, isTeacher, primaryHomeId, primaryHomeLabel, t, isUk, user.role]);
 
   const groupLabels = React.useMemo<Record<NavGroupId, string>>(() => ({
     workspace: t("novaGroupWorkspace", { defaultValue: isUk ? "Робочий простір" : "Workspace" }),
@@ -253,7 +278,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
     const preferred: MomentumNavTarget[] = isEducational
       ? (isStudent
         ? ["lessons", "student", "library", "contests", "profile"]
-        : ["continue", "teacher", "library", "contests", "profile"])
+        : ["teacher", "courses", "org", "library", "profile"])
       : ["continue", "tasks", "grades", "library", "profile"];
 
     return preferred.filter((id) => items.some((it) => it.id === id && it.show));

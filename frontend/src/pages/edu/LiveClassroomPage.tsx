@@ -15,12 +15,14 @@ import {
   RotateCcw,
   LogOut,
   PlayCircle,
+  Code2,
 } from "lucide-react";
 import { tr } from "../../i18n";
 import { ClassLiveOverview } from "../../components/ClassLiveOverview";
 import { StudentCodeStream } from "../../components/StudentCodeStream";
 import { LiveChallengePanel } from "../../components/LiveChallengePanel";
 import { LiveCodeBoard } from "../../components/LiveCodeBoard";
+import { LivePairEditor } from "../../components/edu/LivePairEditor";
 import { RaiseHandButton, RaisedHandsBar } from "../../components/LiveRaiseHand";
 import { LessonMaterialsPanel } from "../../components/LessonMaterialsPanel";
 import { useUIMode } from "../../components/interface/UIModeProvider";
@@ -38,7 +40,7 @@ import {
 } from "../../lib/api/liveClassroom";
 
 type Phase = "loading" | "lobby" | "prejoin" | "in_room" | "disabled" | "error";
-type LeftPanel = "none" | "board" | "materials";
+type LeftPanel = "none" | "board" | "materials" | "collab";
 type ActiveRoom = { token: string; url: string; kind: string }; // kind: "main" | "breakout:N"
 
 type DeviceChoices = {
@@ -346,6 +348,16 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
               <BookOpen className="h-3.5 w-3.5" />
               {tr("Матеріали", "Materials")}
             </button>
+            <button
+              type="button"
+              onClick={() => togglePanel("collab")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-mono transition-fast ${
+                leftPanel === "collab" ? "border border-primary/40 bg-primary/15 text-primary" : "border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+              }`}
+            >
+              <Code2 className="h-3.5 w-3.5" />
+              {tr("Спільний код", "Live code")}
+            </button>
             {isTeacher && (
               <button
                 type="button"
@@ -434,6 +446,11 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
                   {leftPanel === "materials" && (
                     <div className="min-w-0 flex-1 border-r border-border">
                       <LessonMaterialsPanel classId={classId} sessionId={join.session.id} isTeacher={isTeacher} />
+                    </div>
+                  )}
+                  {leftPanel === "collab" && (
+                    <div className="min-w-0 flex-1 border-r border-border">
+                      <LivePairEditor topic={`class-${classId}-collab`} userName={isTeacher ? tr("Викладач", "Teacher") : tr("Учень", "Student")} height="100%" />
                     </div>
                   )}
                   <div className={leftPanel === "none" ? "h-full w-full" : "w-72 shrink-0"}>

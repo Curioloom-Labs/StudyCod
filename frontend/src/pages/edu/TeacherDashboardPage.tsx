@@ -6,8 +6,8 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
-import { getClasses, createClass, type Class, getPendingReviews, updateGrade, type PendingReview } from "../../lib/api/edu";
-import { Plus, Users, BookOpen, FileText, CheckCircle, Clock, MessageSquare, Gauge, ArrowRight, AlertCircle } from "lucide-react";
+import { getClasses, createClass, type Class, getPendingReviews, updateGrade, gradeByRubric, aiReviewGrade, type PendingReview, type CodeReviewResult } from "../../lib/api/edu";
+import { Plus, Users, CheckCircle, Clock, ArrowRight, AlertCircle } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { CodeEditor } from "../../components/CodeEditor";
 import { showToast } from "../../lib/toast";
@@ -57,6 +57,31 @@ export const TeacherDashboardPage: React.FC = () => {
   const [reviewGrade, setReviewGrade] = useState<number>(1);
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [rubricScores, setRubricScores] = useState<Record<string, number>>({});
+  const [aiReview, setAiReview] = useState<CodeReviewResult | null>(null);
+  const [aiReviewLoading, setAiReviewLoading] = useState(false);
+  useEffect(() => {
+    // Reset the AI review whenever the open submission changes.
+    setAiReview(null);
+    setAiReviewLoading(false);
+  }, [selectedReview?.gradeId]);
+  const runAiReview = async () => {
+    if (!selectedReview) return;
+    setAiReviewLoading(true);
+    try {
+      const { review } = await aiReviewGrade(selectedReview.gradeId);
+      setAiReview(review);
+    } catch (error: unknown) {
+      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("AI-рев'ю зараз недоступне", "AI review is unavailable right now")) });
+    } finally {
+      setAiReviewLoading(false);
+    }
+  };
+  const severityTone = (s: string) =>
+    s === "error" ? "text-accent-error border-accent-error/40"
+    : s === "warning" ? "text-accent-warning border-accent-warning/40"
+    : s === "suggestion" ? "text-primary border-primary/40"
+    : "text-text-secondary border-border";
   const parseClassLanguage = (value: string): "JAVA" | "PYTHON" | "CPP" | null => {
     if (value === "JAVA" || value === "PYTHON" || value === "CPP") return value;
     return null;
@@ -69,7 +94,7 @@ export const TeacherDashboardPage: React.FC = () => {
   const loadPendingReviews = async () => {
     try {
       const data = await getPendingReviews();
-      setPendingReviews(data.pendingReviews);
+      setPendingReviews(Array.isArray(data?.pendingReviews) ? data.pendingReviews : []);
     } catch (error) {
       console.error("Failed to load pending reviews:", error);
     }
@@ -77,7 +102,7 @@ export const TeacherDashboardPage: React.FC = () => {
   const loadClasses = async () => {
     try {
       const data = await getClasses();
-      setClasses(data);
+      setClasses(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to load classes:", error);
     } finally {
@@ -98,22 +123,33 @@ export const TeacherDashboardPage: React.FC = () => {
       showToast({ type: "error", message: t('failedToCreateClass') });
     }
   };
+  const reviewRubric = selectedReview?.task?.rubric ?? [];
+  const hasRubric = reviewRubric.length > 0;
+  const rubricMax = reviewRubric.reduce((s, c) => s + (Number(c.maxPoints) || 0), 0);
+  const rubricRaw = reviewRubric.reduce((s, c) => s + Math.max(0, Math.min(Number(c.maxPoints) || 0, Number(rubricScores[c.id]) || 0)), 0);
+  const rubricPercent = rubricMax > 0 ? Math.round((rubricRaw / rubricMax) * 100) : 0;
+
   const handleReviewGrade = async () => {
     if (!selectedReview) return;
-    if (reviewGrade < 0 || reviewGrade > 100) {
+    if (!hasRubric && (reviewGrade < 0 || reviewGrade > 100)) {
       showToast({ type: "error", message: t('gradeMustBe') });
       return;
     }
     setReviewing(true);
     try {
-      await updateGrade(selectedReview.gradeId, {
-        total: reviewGrade,
-        feedback: reviewFeedback || undefined
-      });
+      if (hasRubric) {
+        await gradeByRubric(selectedReview.gradeId, rubricScores, reviewFeedback || undefined);
+      } else {
+        await updateGrade(selectedReview.gradeId, {
+          total: reviewGrade,
+          feedback: reviewFeedback || undefined
+        });
+      }
       await loadPendingReviews();
       setSelectedReview(null);
       setReviewGrade(1);
       setReviewFeedback("");
+      setRubricScores({});
       showToast({ type: "success", message: t('gradeSetSuccessfully') });
     } catch (error: unknown) {
       console.error("Failed to review grade:", error);
@@ -135,18 +171,6 @@ export const TeacherDashboardPage: React.FC = () => {
         subtitle={tr("Ваші класи, учні та черга перевірок — усе в одному місці.", "Your classes, students and review queue — all in one place.")}
         maxWidth="6xl"
         actions={<>
-            <Button variant="ghost" onClick={() => navigate("/edu/library")}>
-              <BookOpen className="w-4 h-4 mr-2" />
-              {tr("Бібліотека завдань", "Task library")}
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/edu/courses")}>
-              <BookOpen className="w-4 h-4 mr-2" />
-              {tr("Курси", "Courses")}
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/edu/organization")}>
-              <BookOpen className="w-4 h-4 mr-2" />
-              {tr("Організація", "Organization")}
-            </Button>
             {pendingReviews.length > 0 && <Button variant="ghost" onClick={() => setShowPendingReviews(true)} className="relative border-accent-error/40 text-accent-error hover:bg-accent-error/10">
                 <Clock className="w-4 h-4 mr-2" />
                 {t('reviewTasks')}
@@ -243,12 +267,6 @@ export const TeacherDashboardPage: React.FC = () => {
                     </div>
                   </button>
                   <div className="flex items-center gap-1 shrink-0 text-text-muted">
-                    <button type="button" title={tr("Апеляції", "Appeals")} aria-label={tr("Апеляції", "Appeals")} onClick={() => navigate(`/edu/classes/${cls.id}/appeals`)} className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-bg-surface hover:text-text-primary transition-fast">
-                      <MessageSquare className="w-4 h-4" />
-                    </button>
-                    <button type="button" title="Teacher OS" aria-label="Teacher OS" onClick={() => navigate(`/edu/classes/${cls.id}/teacher-os`)} className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-bg-surface hover:text-text-primary transition-fast">
-                      <Gauge className="w-4 h-4" />
-                    </button>
                     <ArrowRight className="w-4 h-4 ml-1 opacity-0 group-hover:opacity-100 transition-fast" />
                   </div>
                 </motion.div>
@@ -281,14 +299,6 @@ export const TeacherDashboardPage: React.FC = () => {
                   <div className="mt-4 flex gap-2 opacity-90 sm:opacity-70 sm:group-hover:opacity-100 transition-fast">
                     <Button variant="ghost" className="flex-1 text-xs" onClick={e => { e.stopPropagation(); navigate(`/edu/classes/${cls.id}`); }}>
                       {t('open')}
-                    </Button>
-                    <Button variant="ghost" className="flex-1 text-xs" onClick={e => { e.stopPropagation(); navigate(`/edu/classes/${cls.id}/appeals`); }}>
-                      <MessageSquare className="w-3 h-3 mr-1" />
-                      {tr("Апеляції", "Appeals")}
-                    </Button>
-                    <Button variant="ghost" className="flex-1 text-xs" onClick={e => { e.stopPropagation(); navigate(`/edu/classes/${cls.id}/teacher-os`); }}>
-                      <Gauge className="w-3 h-3 mr-1" />
-                      Teacher OS
                     </Button>
                   </div>
                 </motion.div>
@@ -386,14 +396,71 @@ export const TeacherDashboardPage: React.FC = () => {
                   <div className="border border-border">
                     <CodeEditor value={selectedReview.submittedCode || ""} onChange={() => {}} language="java" readOnly height="300px" />
                   </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-xs text-text-muted">{tr("AI-рев'ю коду — порядкові підказки.", "AI code review — line-level hints.")}</span>
+                    <Button variant="ghost" className="text-xs" onClick={runAiReview} disabled={aiReviewLoading || !selectedReview.submittedCode}>
+                      {aiReviewLoading ? tr("Аналіз...", "Analyzing...") : tr("AI-рев'ю", "AI review")}
+                    </Button>
+                  </div>
+                  {aiReview && (
+                    <div className="mt-2 rounded-lg border border-border bg-bg-surface p-3 space-y-2">
+                      {aiReview.summary && <p className="text-sm text-text-primary">{aiReview.summary}</p>}
+                      {aiReview.comments.length === 0 ? (
+                        <p className="text-xs text-text-muted">{tr("Зауважень немає.", "No remarks.")}</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {aiReview.comments.map((c, i) => (
+                            <div key={i} className="flex items-start gap-2 text-xs">
+                              <span className={`shrink-0 font-mono px-1.5 py-0.5 rounded border ${severityTone(c.severity)}`}>
+                                {c.line != null ? `L${c.line}` : c.severity}
+                              </span>
+                              <span className="text-text-secondary">{c.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-mono text-text-secondary mb-2">
-                    {t('gradeLabel')}
-                  </label>
-                  <input type="number" min="1" max="100" value={reviewGrade} onChange={e => setReviewGrade(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
-                </div>
+                {hasRubric ? (
+                  <div>
+                    <label className="block text-sm font-mono text-text-secondary mb-2">
+                      {tr("Критерії оцінювання", "Rubric")}
+                    </label>
+                    <div className="space-y-2">
+                      {reviewRubric.map(c => (
+                        <div key={c.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-bg-surface p-2.5">
+                          <span className="text-sm text-text-primary min-w-0 truncate">{c.label}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input
+                              type="number"
+                              min={0}
+                              max={c.maxPoints}
+                              value={rubricScores[c.id] ?? 0}
+                              onChange={e => {
+                                const v = Math.max(0, Math.min(c.maxPoints, parseInt(e.target.value) || 0));
+                                setRubricScores(s => ({ ...s, [c.id]: v }));
+                              }}
+                              className="w-20 px-2 py-1 bg-bg-base border border-border text-text-primary font-mono text-sm text-right focus:outline-none focus:border-primary"
+                            />
+                            <span className="text-xs font-mono text-text-muted tabular-nums">/ {c.maxPoints}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-right text-sm font-mono text-text-secondary tabular-nums">
+                      {tr("Разом", "Total")}: <span className="text-primary">{rubricRaw}/{rubricMax}</span> · {rubricPercent}%
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-mono text-text-secondary mb-2">
+                      {t('gradeLabel')}
+                    </label>
+                    <input type="number" min="1" max="100" value={reviewGrade} onChange={e => setReviewGrade(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary" />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-mono text-text-secondary mb-2">

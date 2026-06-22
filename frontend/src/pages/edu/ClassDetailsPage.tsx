@@ -39,7 +39,7 @@ import {
   type TeacherDigestResponse,
   type RiskInterventionPlanResponse,
 } from "../../lib/api/edu";
-import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, FileText, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap } from "lucide-react";
+import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -85,6 +85,7 @@ export const ClassDetailsPage: React.FC = () => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"overview" | "members" | "lessons">("overview");
   const [showAddStudents, setShowAddStudents] = useState(false);
   const [newStudents, setNewStudents] = useState([{
     firstName: "",
@@ -147,8 +148,8 @@ export const ClassDetailsPage: React.FC = () => {
       setLessons(lessonsData || []);
       setTopics(topicsData || []);
       setAnnouncements(announcementsData.announcements || []);
-      setClassInfo(classData);
-      setSelectedGradingSystem(normalizeGradingSystem(classData.gradingSystem));
+      setClassInfo(classData ?? null);
+      setSelectedGradingSystem(normalizeGradingSystem(classData?.gradingSystem));
       setCohortAnalytics(analyticsResult.status === "fulfilled" ? analyticsResult.value : null);
       setTeacherCopilot(copilotResult.status === "fulfilled" ? copilotResult.value : null);
       setHintsQuality(hintsResult.status === "fulfilled" ? hintsResult.value : null);
@@ -394,7 +395,42 @@ export const ClassDetailsPage: React.FC = () => {
 
       <div className="px-4 md:px-8 py-8 max-w-7xl mx-auto space-y-8">
         {classId ? <CourseUpdatesBanner classId={classId} /> : null}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <div className="flex flex-wrap items-center gap-1 border-b border-border">
+          {([
+            { id: "overview", label: t("eduTabOverview") },
+            { id: "members", label: t("eduNavMembers") },
+            { id: "lessons", label: t("eduTabLessons") }
+          ] as const).map(tabItem => (
+            <button
+              key={tabItem.id}
+              type="button"
+              onClick={() => setActiveTab(tabItem.id)}
+              className={`px-4 py-2 text-sm font-mono border-b-2 -mb-px transition-fast ${activeTab === tabItem.id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text-primary"}`}
+            >
+              {tabItem.label}
+            </button>
+          ))}
+          <span className="mx-1 h-4 w-px bg-border self-center" />
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}/gradebook`)} className="px-4 py-2 text-sm font-mono border-b-2 -mb-px border-transparent text-text-secondary hover:text-text-primary transition-fast">
+            {t('gradebook')}
+          </button>
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}/gradebook-config`)} className="px-4 py-2 text-sm font-mono border-b-2 -mb-px border-transparent text-text-secondary hover:text-text-primary transition-fast">
+            {t("eduWeightedGradebook")}
+          </button>
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}/appeals`)} className="px-4 py-2 text-sm font-mono border-b-2 -mb-px border-transparent text-text-secondary hover:text-text-primary transition-fast">
+            {t("appeals")}
+          </button>
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}/attendance`)} className="px-4 py-2 text-sm font-mono border-b-2 -mb-px border-transparent text-text-secondary hover:text-text-primary transition-fast">
+            {t("eduAttendance")}
+          </button>
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}/similarity`)} className="px-4 py-2 text-sm font-mono border-b-2 -mb-px border-transparent text-text-secondary hover:text-text-primary transition-fast">
+            {t("eduSimilarity")}
+          </button>
+        </div>
+
+        <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-8">
+        {activeTab === "overview" && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
@@ -622,9 +658,9 @@ export const ClassDetailsPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>}
 
-        {/* Students */}
+        {activeTab === "members" && (
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
@@ -645,6 +681,7 @@ export const ClassDetailsPage: React.FC = () => {
                 <Plus className="w-4 h-4 mr-1" />
                 {t('add')}
               </Button>
+              {classId ? <ClassJoinCodeButton classId={classId} /> : null}
             </div>
           </div>
 
@@ -681,8 +718,9 @@ export const ClassDetailsPage: React.FC = () => {
             </motion.div>
           )}
         </section>
+        )}
 
-        {/* Announcements */}
+        {activeTab === "overview" && (
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
@@ -731,8 +769,9 @@ export const ClassDetailsPage: React.FC = () => {
             </motion.div>
           )}
         </section>
+        )}
 
-        {/* Topics */}
+        {activeTab === "lessons" && (
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
@@ -741,19 +780,6 @@ export const ClassDetailsPage: React.FC = () => {
               <span className="text-text-muted/70">· {topics.length}</span>
             </h2>
             <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/gradebook`)} className="text-xs">
-                <FileText className="w-4 h-4 mr-1" />
-                {t('gradebook')}
-              </Button>
-              <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/gradebook-config`)} className="text-xs">
-                <FileText className="w-4 h-4 mr-1" />
-                {tr("Зважений журнал", "Weighted gradebook")}
-              </Button>
-              {classId ? <ClassJoinCodeButton classId={classId} /> : null}
-              <Button variant="ghost" onClick={() => navigate(`/edu/classes/${classId}/appeals`)} className="text-xs">
-                <MessageSquare className="w-4 h-4 mr-1" />
-                {tr("Апеляції", "Appeals")}
-              </Button>
               <Button onClick={() => navigate(`/edu/classes/${classId}/topics/new`)} className="text-xs">
                 <Plus className="w-4 h-4 mr-1" />
                 {t('createTopic')}
@@ -817,6 +843,8 @@ export const ClassDetailsPage: React.FC = () => {
             </motion.div>
           )}
         </section>
+        )}
+        </motion.div>
       </div>
 
       {}

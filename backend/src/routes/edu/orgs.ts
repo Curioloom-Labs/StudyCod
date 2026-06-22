@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { Student } from "../../entities/Student";
+import { Class } from "../../entities/Class";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { createOrganization, listUserMemberships, listOrgMembers, getUserOrgRole } from "../../services/edu/membership";
 import {
@@ -18,6 +19,7 @@ import { logger } from "../../utils/logger";
 
 const router = Router();
 const studentRepo = () => AppDataSource.getRepository(Student);
+const classRepo = () => AppDataSource.getRepository(Class);
 
 /** New endpoints → real authorization from day one (no legacy to shadow). */
 function requireUser(req: AuthRequest, res: Response): boolean {
@@ -293,6 +295,53 @@ router.post("/invites/:token/accept", authRequired, async (req: AuthRequest, res
       return res.status(400).json({ message: "INVALID_INVITE" });
     }
     logger.error("[edu/orgs] accept invite failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Org-wide overview for admins (Tier 3): totals + per-class summary.
+router.get("/orgs/:orgId/overview", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const orgId = parseInt(req.params.orgId, 10);
+    if (!Number.isFinite(orgId)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
+
+    const classes = await classRepo().find({ where: { organizationId: orgId }, relations: ["teacher"] });
+    const ids = classes.map((c) => c.id);
+
+    const countRows = ids.length
+      ? await studentRepo()
+          .createQueryBuilder("s")
+          .select("s.class_id", "classId")
+          .addSelect("COUNT(*)", "cnt")
+          .where("s.class_id IN (:...ids)", { ids })
+          .groupBy("s.class_id")
+          .getRawMany()
+      : [];
+    const countByClass = new Map<number, number>(countRows.map((r) => [Number(r.classId), Number(r.cnt)]));
+
+    const classSummaries = classes.map((c) => ({
+      id: c.id,
+      name: c.name,
+      language: c.language,
+      studentsCount: countByClass.get(c.id) ?? 0,
+      teacherName: c.teacher ? `${c.teacher.firstName ?? ""} ${c.teacher.lastName ?? ""}`.trim() || c.teacher.username : null
+    }));
+
+    const teacherIds = new Set<number>();
+    for (const c of classes) if (c.teacher?.id) teacherIds.add(c.teacher.id);
+
+    return res.json({
+      totals: {
+        classes: classes.length,
+        students: classSummaries.reduce((s, c) => s + c.studentsCount, 0),
+        teachers: teacherIds.size
+      },
+      classes: classSummaries
+    });
+  } catch (error: any) {
+    logger.error("[edu/orgs] overview failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

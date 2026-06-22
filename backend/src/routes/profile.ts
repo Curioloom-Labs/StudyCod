@@ -16,6 +16,7 @@ import {
 } from "../services/placementAssessmentService";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
+import { findActiveStudentForUser, applyStudentViewToUserDto } from "../services/edu/studentLink";
 import {
   getIadDeltaByGrade,
   getIadReasonKeyByGrade,
@@ -1115,7 +1116,12 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         message: "USER_NOT_FOUND"
       });
     }
-    return res.json(buildUserDto(user));
+    const dto = buildUserDto(user);
+    // A User that owns a roster Student profile (join-code enrolment or a claimed
+    // legacy profile) is an EDU student — surface the student view so the
+    // frontend gates (`userMode` + `studentId`) render the student experience.
+    const linkedStudent = await findActiveStudentForUser(user.id);
+    return res.json(linkedStudent ? applyStudentViewToUserDto(dto, linkedStudent) : dto);
   } catch (err) {
     logger.error("[profile] GET /profile/me error", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({
@@ -1270,7 +1276,11 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       });
     }
     await userRepo().save(user);
-    return res.json(buildUserDto(user));
+    const dto = buildUserDto(user);
+    // Keep the student view sticky across profile edits (Track B): a User-backed
+    // student must not flip to the personal view after updating their avatar.
+    const linkedStudent = await findActiveStudentForUser(user.id);
+    return res.json(linkedStudent ? applyStudentViewToUserDto(dto, linkedStudent) : dto);
   } catch (err) {
     if (err instanceof HttpError) {
       return res.status(err.statusCode).json({ message: err.message });
