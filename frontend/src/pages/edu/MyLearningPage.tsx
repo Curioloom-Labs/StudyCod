@@ -24,6 +24,7 @@ const STATUS_META: Record<SkillNode["status"], { icon: React.ComponentType<{ cla
   in_progress: { icon: CircleDot, label: tr("У процесі", "In progress"), tone: "text-accent-warn" },
   available: { icon: Circle, label: tr("Доступно", "Available"), tone: "text-text-secondary" },
   locked: { icon: Lock, label: tr("Замкнено", "Locked"), tone: "text-text-muted" },
+  closed: { icon: Lock, label: tr("Закрито", "Closed"), tone: "text-accent-error" },
 };
 
 const StatTile: React.FC<{ icon: React.ComponentType<{ className?: string }>; label: string; value: string }> = ({ icon: Icon, label, value }) => (
@@ -264,6 +265,7 @@ export const MyLearningPage: React.FC = () => {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`font-semibold truncate ${n.status === "locked" ? "text-text-muted" : "text-text-primary"}`}>{n.title}</span>
+                          <span className={`text-[10px] font-mono uppercase tracking-wide shrink-0 ${meta.tone}`}>{meta.label}</span>
                           {n.isNext && (
                             <span className="text-[10px] font-mono uppercase tracking-wide text-primary border border-primary/40 rounded-md px-1.5 py-0.5 shrink-0">
                               {tr("наступне", "next")}

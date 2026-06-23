@@ -4,8 +4,21 @@ import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { systemAdminGuard } from "../middleware/rolesGuard";
 import { studyCodMailService } from "../services/studycodMailService";
 import { logger } from "../utils/logger";
+import fs from "fs";
+import path from "path";
 
 const router = Router();
+
+// Persistent (cross-device) signature for the admin mailbox — a small file so it
+// survives restarts and doesn't depend on the (flaky) Redis instance.
+const SIGNATURE_FILE = process.env.MAIL_SIGNATURE_FILE || path.join(process.cwd(), "data", "mail-signature.txt");
+function readSignature(): string {
+  try { return fs.readFileSync(SIGNATURE_FILE, "utf8"); } catch { return ""; }
+}
+function writeSignature(sig: string): void {
+  fs.mkdirSync(path.dirname(SIGNATURE_FILE), { recursive: true });
+  fs.writeFileSync(SIGNATURE_FILE, sig, "utf8");
+}
 
 const listMessagesSchema = z.object({
   folder: z.string().min(1).max(255).optional().default("INBOX"),
@@ -22,6 +35,15 @@ const searchSchema = z.object({
   q: z.string().min(1).max(255),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
+
+const mailAttachmentsSchema = z
+  .array(z.object({
+    filename: z.string().min(1).max(255),
+    contentType: z.string().max(255).optional(),
+    contentBase64: z.string().max(50_000_000)
+  }))
+  .max(10)
+  .optional();
 
 const folderSchema = z.object({
   folder: z.string().min(1).max(255).optional().default("INBOX"),
@@ -48,6 +70,7 @@ const sendSchema = z.object({
   replyTo: z.string().email().optional(),
   inReplyTo: z.string().max(998).optional(),
   references: z.string().max(4000).optional(),
+  attachments: mailAttachmentsSchema,
 });
 
 const draftSchema = z.object({
@@ -60,6 +83,7 @@ const draftSchema = z.object({
   html: z.string().optional(),
   inReplyTo: z.string().max(998).optional(),
   references: z.string().max(4000).optional(),
+  attachments: mailAttachmentsSchema,
 });
 
 router.get("/status", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
@@ -68,6 +92,22 @@ router.get("/status", authRequired, systemAdminGuard, async (req: AuthRequest, r
     ok: cfg.ok,
     issues: cfg.issues,
   });
+});
+
+router.get("/signature", authRequired, systemAdminGuard, async (_req: AuthRequest, res: Response) => {
+  return res.json({ signature: readSignature() });
+});
+
+router.put("/signature", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  const parsed = z.object({ signature: z.string().max(5000) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    writeSignature(parsed.data.signature);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    logger.error("[admin-mail] PUT /signature failed", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(500).json({ message: "WRITE_FAILED" });
+  }
 });
 
 router.get("/folders", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {

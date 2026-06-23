@@ -626,6 +626,16 @@ export async function getAdminMailStatus(): Promise<{ ok: boolean; issues: strin
   return res.data;
 }
 
+export async function getAdminMailSignature(): Promise<{ signature: string }> {
+  const res = await api.get("/admin/mail/signature");
+  return res.data;
+}
+
+export async function setAdminMailSignature(signature: string): Promise<{ ok: boolean }> {
+  const res = await api.put("/admin/mail/signature", { signature });
+  return res.data;
+}
+
 export async function getAdminMailFolders(): Promise<{ folders: AdminMailFolder[] }> {
   const res = await api.get("/admin/mail/folders");
   return res.data;
@@ -673,6 +683,7 @@ export async function sendAdminMailMessage(data: {
   replyTo?: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: Array<{ filename: string; contentType?: string; contentBase64: string }>;
 }): Promise<{ ok: boolean; messageId: string | null }> {
   const res = await api.post("/admin/mail/messages/send", data);
   return res.data;
@@ -688,6 +699,7 @@ export async function saveAdminMailDraft(data: {
   html?: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: Array<{ filename: string; contentType?: string; contentBase64: string }>;
 }): Promise<{ ok: boolean }> {
   const res = await api.post("/admin/mail/messages/draft", data);
   return res.data;
