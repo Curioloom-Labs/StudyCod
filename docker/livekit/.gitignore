@@ -1,0 +1,3 @@
+# Host-only LiveKit secret (key:secret for LIVEKIT_KEYS). Never commit.
+.env
+livekit.yaml.bak-*

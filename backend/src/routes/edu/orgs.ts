@@ -307,7 +307,14 @@ router.get("/orgs/:orgId/overview", authRequired, async (req: AuthRequest, res: 
     if (!Number.isFinite(orgId)) return res.status(400).json({ message: "INVALID_ID" });
     if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
 
-    const classes = await classRepo().find({ where: { organizationId: orgId }, relations: ["teacher"] });
+    // `Class.organizationId` is a @ManyToOne relation property (column `org_id`),
+    // so a `where: { organizationId: number }` find is fragile. Filter on the raw
+    // FK column via the query builder instead — unambiguous and 500-proof.
+    const classes = await classRepo()
+      .createQueryBuilder("class")
+      .leftJoinAndSelect("class.teacher", "teacher")
+      .where("class.org_id = :orgId", { orgId })
+      .getMany();
     const ids = classes.map((c) => c.id);
 
     const countRows = ids.length

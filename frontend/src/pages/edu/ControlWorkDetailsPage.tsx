@@ -889,7 +889,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
         {}
         <Card className="p-5 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
               <Settings className="w-3.5 h-3.5" />
               {tr("Налаштування", "Settings")}
             </h2>
@@ -935,7 +935,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
         {}
         <Card className="p-5 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
               <FileText className="w-3.5 h-3.5" />
               {tr("Теоретична частина", "Theory part")}
               <span className="text-text-muted/70">· {quizQuestions.length}</span>
@@ -1021,7 +1021,7 @@ export const ControlWorkDetailsPage: React.FC = () => {
         {}
         {hasPractice && <Card className="p-5 mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent-warn" />
                 {tr("Практична частина", "Practice part")}
                 <span className="text-text-muted/70">· {controlWork.tasks?.length || 0}</span>

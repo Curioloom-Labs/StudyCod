@@ -9,6 +9,7 @@ import { Modal } from "../../components/ui/Modal";
 import { CodeEditor } from "../../components/CodeEditor";
 import { MultiFileEditor } from "../../components/MultiFileEditor";
 import { MarkdownView } from "../../components/MarkdownView";
+import { LessonTheoryView } from "../../components/lesson/LessonTheoryView";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import {
   getTask,
@@ -35,7 +36,7 @@ import {
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
 import { easeOutQuint } from "../../lib/motion";
 import { publishLiveCode } from "../../lib/api/liveClassroom";
-import { ArrowLeft, Play, Send, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload, MoreHorizontal, Terminal, BookOpen, FilePlus2, ListChecks } from "lucide-react";
+import { ArrowLeft, Play, Send, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload, MoreHorizontal, Terminal, BookOpen, FilePlus2, ListChecks, Lock } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { isDeadlineExpired } from "../../utils/timezone";
 import { getMe } from "../../lib/api/profile";
@@ -1615,7 +1616,7 @@ export const StudentTaskPage: React.FC = () => {
                 <div className="max-w-3xl mx-auto">
                   <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted mb-4">// {t("theory")}</div>
                   <div className="prose prose-invert max-w-none text-text-secondary font-mono">
-                    <MarkdownView content={task.lesson.theory || ""} />
+                    <LessonTheoryView theory={task.lesson.theory || ""} />
                   </div>
                 </div>
               </div>
@@ -1644,6 +1645,32 @@ export const StudentTaskPage: React.FC = () => {
                 </button>}
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-bg-base" ref={setTaskPaneEl}>
+                {task.isClosed && (
+                  <div className="mb-4 rounded-[var(--ui-card-radius)] border border-accent-error/40 bg-accent-error/10 p-3">
+                    <div className="flex items-start gap-2">
+                      <Lock className="w-4 h-4 shrink-0 text-accent-error mt-0.5" />
+                      <div className="min-w-0">
+                        <div className="text-sm font-mono text-accent-error">{tr("Завдання закрите", "Task is closed")}</div>
+                        <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                          {tr(
+                            "Тему закрито — самостійно змінити оцінку вже не можна. Якщо вважаєш оцінку несправедливою, подай апеляцію вчителю.",
+                            "This topic is closed — you can no longer change the grade yourself. If you think the grade is unfair, submit an appeal to the teacher."
+                          )}
+                        </p>
+                        {task.grade?.id != null && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="mt-2.5"
+                            onClick={() => navigate(`/edu/appeals?targetType=EDU_GRADE&targetId=${task.grade?.id}`)}
+                          >
+                            {tr("Оскаржити оцінку", "Appeal the grade")}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {task.lesson.type === "CONTROL" && quizQuestions.length > 0 ? <div className="space-y-4">
                     <div className="mb-4 pb-3 border-b border-border">
                       <h3 className="text-lg font-mono text-text-primary mb-1">{tr("Теоретична частина", "Theory part")}</h3>

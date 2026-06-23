@@ -606,6 +606,8 @@ export type AdminMailMessageDetails = {
   cc: string;
   bcc: string;
   replyTo: string;
+  messageId: string;
+  references: string;
   date: string | null;
   seen: boolean;
   flagged: boolean;
@@ -643,6 +645,23 @@ export async function getAdminMailMessage(folder: string, uid: number): Promise<
   return res.data;
 }
 
+export async function searchAdminMail(params: {
+  folder: string;
+  q: string;
+  limit?: number;
+}): Promise<{ folder: string; items: AdminMailMessageListItem[]; nextCursorUid: number | null }> {
+  const res = await api.get("/admin/mail/search", { params });
+  return res.data;
+}
+
+export async function getAdminMailAttachment(folder: string, uid: number, index: number): Promise<Blob> {
+  const res = await api.get(`/admin/mail/messages/${uid}/attachments/${index}`, {
+    params: { folder },
+    responseType: "blob",
+  });
+  return res.data as Blob;
+}
+
 export async function sendAdminMailMessage(data: {
   from?: string;
   to: string[];
@@ -652,8 +671,25 @@ export async function sendAdminMailMessage(data: {
   text?: string;
   html?: string;
   replyTo?: string;
+  inReplyTo?: string;
+  references?: string;
 }): Promise<{ ok: boolean; messageId: string | null }> {
   const res = await api.post("/admin/mail/messages/send", data);
+  return res.data;
+}
+
+export async function saveAdminMailDraft(data: {
+  from?: string;
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  text?: string;
+  html?: string;
+  inReplyTo?: string;
+  references?: string;
+}): Promise<{ ok: boolean }> {
+  const res = await api.post("/admin/mail/messages/draft", data);
   return res.data;
 }
 
