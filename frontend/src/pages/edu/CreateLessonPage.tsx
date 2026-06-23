@@ -3,11 +3,15 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
-import { createLesson, generateTheoryPreview, getClasses, type CreateLessonRequest } from "../../lib/api/edu";
+import { createLesson, generateTheoryPreview, generateInteractiveLesson, getClasses, type CreateLessonRequest } from "../../lib/api/edu";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { LessonBlocksEditor } from "../../components/lesson/LessonBlocksEditor";
+import { normalizeInteractiveLesson, type InteractiveLesson } from "../../lib/lessonBlocks";
+
+const EMPTY_LESSON: InteractiveLesson = { objectives: [], sections: [{ heading: "", blocks: [] }], summary: [] };
 export const CreateLessonPage: React.FC = () => {
   const {
     i18n
@@ -26,6 +30,9 @@ export const CreateLessonPage: React.FC = () => {
   const [controlHasTheory, setControlHasTheory] = useState(false);
   const [controlHasPractice, setControlHasPractice] = useState(true);
   const [generatingTheory, setGeneratingTheory] = useState(false);
+  const [theoryMode, setTheoryMode] = useState<"markdown" | "interactive">("markdown");
+  const [lessonBlocks, setLessonBlocks] = useState<InteractiveLesson>(EMPTY_LESSON);
+  const [generatingInteractive, setGeneratingInteractive] = useState(false);
   const [topicTitle, setTopicTitle] = useState("");
   const [language, setLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("JAVA");
   const safeServerMessage = (value: unknown) => {
@@ -93,6 +100,26 @@ export const CreateLessonPage: React.FC = () => {
       setGeneratingTheory(false);
     }
   };
+  const handleGenerateInteractive = async () => {
+    if (!topicTitle.trim()) {
+      showToast({ type: "error", message: tr("Введіть назву теми", "Enter a topic name") });
+      return;
+    }
+    setGeneratingInteractive(true);
+    try {
+      const { lesson } = await generateInteractiveLesson(topicTitle, language);
+      const normalized = normalizeInteractiveLesson(lesson);
+      if (!normalized) throw new Error("INVALID_LESSON");
+      setLessonBlocks(normalized);
+      setTheory(JSON.stringify(normalized));
+      showToast({ type: "success", message: tr("Урок згенеровано", "Lesson generated") });
+    } catch (error: unknown) {
+      const raw = safeServerMessage(getErrorMessageFromUnknown(error, ""));
+      showToast({ type: "error", message: raw || tr("Не вдалося згенерувати урок", "Failed to generate lesson") });
+    } finally {
+      setGeneratingInteractive(false);
+    }
+  };
   return <div className="min-h-full bg-bg-base">
       <PageHero
         eyebrowClassic="// new lesson"
@@ -136,15 +163,44 @@ export const CreateLessonPage: React.FC = () => {
                 <input type="checkbox" checked={hasTheory} onChange={e => setHasTheory(e.target.checked)} className="w-4 h-4" />
                 {tr("Додати теорію", "Add theory")}
               </label>
-              {hasTheory && <div className="mt-2">
-                  <textarea value={theory} onChange={e => setTheory(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] transition-fast" placeholder={tr("Введіть теорію або згенеруйте через ШІ...", "Write theory or generate it with AI...")} />
-                  <div className="mt-2 flex flex-col sm:flex-row gap-2">
-                    <input type="text" value={topicTitle} onChange={e => setTopicTitle(e.target.value)} placeholder={tr("Назва теми для генерації", "Topic name for generation")} className="flex-1 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast" />
-                    <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory} className="text-xs">
-                      <Sparkles className="w-4 h-4 mr-1" />
-                      {generatingTheory ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+              {hasTheory && <div className="mt-2 space-y-2">
+                  <div className="flex gap-2">
+                    <Button variant={theoryMode === "markdown" ? "primary" : "ghost"} size="sm" onClick={() => setTheoryMode("markdown")}>Markdown</Button>
+                    <Button
+                      variant={theoryMode === "interactive" ? "primary" : "ghost"}
+                      size="sm"
+                      onClick={() => {
+                        const parsed = normalizeInteractiveLesson(theory);
+                        if (parsed) setLessonBlocks(parsed);
+                        setTheoryMode("interactive");
+                      }}
+                    >
+                      {tr("Інтерактивний", "Interactive")}
                     </Button>
                   </div>
+                  {theoryMode === "markdown" ? (
+                    <>
+                      <textarea value={theory} onChange={e => setTheory(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] transition-fast" placeholder={tr("Введіть теорію або згенеруйте через ШІ...", "Write theory or generate it with AI...")} />
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input type="text" value={topicTitle} onChange={e => setTopicTitle(e.target.value)} placeholder={tr("Назва теми для генерації", "Topic name for generation")} className="flex-1 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast" />
+                        <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory} className="text-xs">
+                          <Sparkles className="w-4 h-4 mr-1" />
+                          {generatingTheory ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input type="text" value={topicTitle} onChange={e => setTopicTitle(e.target.value)} placeholder={tr("Назва теми для генерації", "Topic name for generation")} className="flex-1 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast" />
+                        <Button variant="ghost" onClick={handleGenerateInteractive} disabled={generatingInteractive} className="text-xs">
+                          <Sparkles className="w-4 h-4 mr-1" />
+                          {generatingInteractive ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+                        </Button>
+                      </div>
+                      <LessonBlocksEditor value={lessonBlocks} onChange={(l) => { setLessonBlocks(l); setTheory(JSON.stringify(l)); }} />
+                    </>
+                  )}
                 </div>}
             </div>
 
