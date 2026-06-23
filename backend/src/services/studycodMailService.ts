@@ -61,6 +61,7 @@ type SendMessageParams = {
   replyTo?: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: Array<{ filename: string; contentType?: string; contentBase64: string }>;
 };
 
 class StudyCodMailService {
@@ -380,6 +381,13 @@ class StudyCodMailService {
     });
   }
 
+  private buildAttachments(data: SendMessageParams) {
+    const list = (data.attachments || [])
+      .filter((a) => a && a.filename && a.contentBase64)
+      .map((a) => ({ filename: a.filename, contentType: a.contentType, content: Buffer.from(a.contentBase64, "base64") }));
+    return list.length ? list : undefined;
+  }
+
   async sendMessage(data: SendMessageParams): Promise<{ messageId: string | null }> {
     const cfg = this.isConfigured();
     if (!cfg.ok) throw new Error(`MAIL_NOT_CONFIGURED: ${cfg.issues.join("; ")}`);
@@ -408,6 +416,7 @@ class StudyCodMailService {
       replyTo: data.replyTo,
       inReplyTo: data.inReplyTo,
       references: data.references,
+      attachments: this.buildAttachments(data),
     });
 
     logger.info("[studycod-mail] message sent", { messageId: info?.messageId || null });
@@ -444,6 +453,7 @@ class StudyCodMailService {
         html: data.html,
         inReplyTo: data.inReplyTo,
         references: data.references,
+        attachments: this.buildAttachments(data),
       })
         .compile()
         .build((err: Error | null, message: Buffer) => (err ? reject(err) : resolve(message)));

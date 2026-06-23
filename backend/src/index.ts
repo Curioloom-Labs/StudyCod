@@ -28,6 +28,8 @@ import playgroundRouter from "./routes/playground";
 import blogRouter from "./routes/blog";
 import notificationsRouter from "./routes/notifications";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
+import { geoBlockMiddleware } from "./middleware/geoBlockMiddleware";
+import { evaluateGeoBlock } from "./services/geoBlockService";
 import { requestContextMiddleware } from "./middleware/requestContext";
 import { placementGate } from "./middleware/placementGate";
 import { authMiddleware } from "./middleware/authMiddleware";
@@ -446,6 +448,7 @@ app.use((req, res, next) => {
   (isLargeBodyPath(req.path) ? urlencodedParserLarge : urlencodedParserDefault)(req, res, next);
 });
 app.use(requestContextMiddleware);
+app.use(geoBlockMiddleware);
 app.use(maintenanceMiddleware);
 const sessionStore = createSessionStore();
 const sessionMiddleware = session({
@@ -515,6 +518,17 @@ app.get(["/health", "/api/health"], (_req, res) => {
     buildTime: process.env.BUILD_TIME || null,
     nodeEnv: process.env.NODE_ENV || null,
     isProduction: IS_PRODUCTION
+  });
+});
+
+// Geo verdict endpoint. Always returns 200 (never blocked) so the SPA can read
+// the decision and render the dedicated block page. Exempt from geoBlockMiddleware
+// via the bypass list. We expose only the boolean + country, never the raw IP.
+app.get(["/geo", "/api/geo"], (req, res) => {
+  const verdict = evaluateGeoBlock(req);
+  res.json({
+    geoBlocked: verdict.blocked,
+    country: verdict.country
   });
 });
 
