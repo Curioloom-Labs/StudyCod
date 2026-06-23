@@ -1,4 +1,6 @@
 import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ReactMarkdown from "react-markdown";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import {
@@ -8,6 +10,8 @@ import {
   getAdminMailMessage,
   getAdminMailMessages,
   getAdminMailStatus,
+  getAdminMailSignature,
+  setAdminMailSignature,
   moveAdminMailMessage,
   searchAdminMail,
   saveAdminMailDraft,
@@ -57,6 +61,17 @@ function forwardBody(m: AdminMailMessageDetails): string {
 }
 const SELF_ADDR = "studycod@studycod.space";
 
+const blobToBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const r = String(reader.result || "");
+      resolve(r.includes(",") ? r.split(",")[1] : r);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
 function senderName(raw: string): string {
   const s = String(raw || "").trim();
   const m = s.match(/^"?([^"<]+?)"?\s*<[^>]+>/);
@@ -99,14 +114,37 @@ export const AdminMailWorkspace: React.FC = () => {
   const [searchActive, setSearchActive] = React.useState(false);
   const [savingDraft, setSavingDraft] = React.useState(false);
   const [composeFrom, setComposeFrom] = React.useState("");
-  const [signature, setSignature] = React.useState(() => {
-    try { return localStorage.getItem("admin-mail-signature") || ""; } catch { return ""; }
-  });
+  const [signature, setSignature] = React.useState("");
+  React.useEffect(() => {
+    getAdminMailSignature().then((d) => setSignature(d.signature || "")).catch(() => {});
+  }, []);
   const [attachmentPreviews, setAttachmentPreviews] = React.useState<Record<number, string>>({});
+  const [composeAttachments, setComposeAttachments] = React.useState<Array<{ filename: string; contentType: string; contentBase64: string }>>([]);
+  const [composeFormatted, setComposeFormatted] = React.useState(false);
+  const composeHtmlBody = (): string | undefined =>
+    composeFormatted && composeText.trim() ? renderToStaticMarkup(<ReactMarkdown>{composeText}</ReactMarkdown>) : undefined;
 
-  const updateSignature = (v: string) => {
-    setSignature(v);
-    try { localStorage.setItem("admin-mail-signature", v); } catch { /* ignore */ }
+  const addComposeFiles = async (files: FileList | null) => {
+    if (!files || !files.length) return;
+    const read = (file: File) => new Promise<{ filename: string; contentType: string; contentBase64: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        resolve({ filename: file.name, contentType: file.type || "application/octet-stream", contentBase64: result.includes(",") ? result.split(",")[1] : result });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    try {
+      const added = await Promise.all(Array.from(files).map(read));
+      setComposeAttachments((prev) => [...prev, ...added].slice(0, 10));
+    } catch {
+      toast.error("Failed to read file");
+    }
+  };
+
+  const saveSignature = () => {
+    setAdminMailSignature(signature).catch(() => {});
   };
   const sigBlock = (): string => (signature.trim() ? `\n\n-- \n${signature.trim()}` : "");
 
@@ -219,6 +257,7 @@ export const AdminMailWorkspace: React.FC = () => {
     setComposeText(sigBlock());
     setComposeInReplyTo("");
     setComposeReferences("");
+    setComposeAttachments([]);
     setComposeOpen(true);
   };
 
@@ -260,8 +299,10 @@ export const AdminMailWorkspace: React.FC = () => {
         bcc: parseEmails(composeBcc),
         subject: composeSubject.trim(),
         text: composeText,
+        html: composeHtmlBody(),
         inReplyTo: composeInReplyTo || undefined,
         references: composeReferences || undefined,
+        attachments: composeAttachments.length ? composeAttachments : undefined,
       });
       setComposeOpen(false);
       setComposeTo("");
@@ -271,6 +312,7 @@ export const AdminMailWorkspace: React.FC = () => {
       setComposeText("");
       setComposeInReplyTo("");
       setComposeReferences("");
+      setComposeAttachments([]);
       await loadMessages(activeFolder);
       toast.success("Message sent");
     } catch (e: unknown) {
@@ -290,8 +332,10 @@ export const AdminMailWorkspace: React.FC = () => {
         bcc: parseEmails(composeBcc),
         subject: composeSubject.trim(),
         text: composeText,
+        html: composeHtmlBody(),
         inReplyTo: composeInReplyTo || undefined,
         references: composeReferences || undefined,
+        attachments: composeAttachments.length ? composeAttachments : undefined,
       });
       toast.success("Draft saved");
       setComposeOpen(false);
@@ -302,6 +346,7 @@ export const AdminMailWorkspace: React.FC = () => {
       setComposeText("");
       setComposeInReplyTo("");
       setComposeReferences("");
+      setComposeAttachments([]);
     } catch (e: unknown) {
       toast.error(getApiErrorMessage(e) || "Failed to save draft");
     } finally {
@@ -342,6 +387,7 @@ export const AdminMailWorkspace: React.FC = () => {
       cc = Array.from(new Set(others)).join(", ");
     }
     setComposeFrom("");
+    setComposeAttachments([]);
     setComposeTo(replyToAddr);
     setComposeCc(cc);
     setComposeBcc("");
@@ -352,17 +398,34 @@ export const AdminMailWorkspace: React.FC = () => {
     setComposeOpen(true);
   };
 
-  const openForward = () => {
+  const openForward = async () => {
     if (!selected) return;
+    const msg = selected;
     setComposeFrom("");
+    setComposeAttachments([]);
     setComposeTo("");
     setComposeCc("");
     setComposeBcc("");
-    setComposeSubject(fwdSubject(selected.subject));
-    setComposeText(`${signature.trim() ? signature.trim() + "\n\n" : ""}${forwardBody(selected)}`);
+    setComposeSubject(fwdSubject(msg.subject));
+    setComposeText(`${signature.trim() ? signature.trim() + "\n\n" : ""}${forwardBody(msg)}`);
     setComposeInReplyTo("");
     setComposeReferences("");
     setComposeOpen(true);
+    // Carry the original attachments into the forward.
+    if (msg.attachments.length) {
+      try {
+        const fetched = await Promise.all(
+          msg.attachments.map(async (a, idx) => ({
+            filename: a.filename || `attachment-${idx}`,
+            contentType: a.contentType || "application/octet-stream",
+            contentBase64: await blobToBase64(await getAdminMailAttachment(activeFolder, msg.uid, idx))
+          }))
+        );
+        setComposeAttachments(fetched);
+      } catch {
+        toast.error("Couldn't attach forwarded files");
+      }
+    }
   };
 
   return (
@@ -560,11 +623,34 @@ export const AdminMailWorkspace: React.FC = () => {
             <input value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder="Cc (optional)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
             <input value={composeBcc} onChange={(e) => setComposeBcc(e.target.value)} placeholder="Bcc (optional)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
           </div>
-          <textarea value={composeText} onChange={(e) => setComposeText(e.target.value)} rows={10} className="mt-3 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" placeholder="Message body" />
+          <textarea value={composeText} onChange={(e) => setComposeText(e.target.value)} rows={10} className="mt-3 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" placeholder={composeFormatted ? "Message body (Markdown: **bold**, # heading, - list, [link](url))" : "Message body"} />
+          <label className="mt-2 inline-flex items-center gap-2 text-xs font-mono text-text-secondary cursor-pointer">
+            <input type="checkbox" checked={composeFormatted} onChange={(e) => setComposeFormatted(e.target.checked)} />
+            Formatted (Markdown → HTML)
+          </label>
           <details className="mt-2">
-            <summary className="text-xs font-mono text-text-muted cursor-pointer select-none">Signature (saved on this device)</summary>
-            <textarea value={signature} onChange={(e) => updateSignature(e.target.value)} rows={3} placeholder="Your signature…" className="mt-1.5 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-xs" />
+            <summary className="text-xs font-mono text-text-muted cursor-pointer select-none">Signature</summary>
+            <textarea value={signature} onChange={(e) => setSignature(e.target.value)} onBlur={saveSignature} rows={3} placeholder="Your signature…" className="mt-1.5 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-xs" />
           </details>
+          <div className="mt-2">
+            <label className="inline-flex items-center gap-1.5 text-xs font-mono text-text-secondary border border-border rounded-md px-2 py-1.5 cursor-pointer hover:bg-bg-hover transition-fast">
+              <Paperclip className="w-3.5 h-3.5" />
+              Attach files
+              <input type="file" multiple className="hidden" onChange={(e) => { addComposeFiles(e.target.files); e.target.value = ""; }} />
+            </label>
+            {composeAttachments.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {composeAttachments.map((a, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 text-xs font-mono border border-border rounded-md px-2 py-1 text-text-secondary">
+                    <Paperclip className="w-3 h-3" /> {a.filename}
+                    <button type="button" onClick={() => setComposeAttachments(prev => prev.filter((_, j) => j !== i))} className="text-text-muted hover:text-accent-error" aria-label="Remove">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <div className="mt-3 flex gap-2 justify-end">
             <Button variant="secondary" onClick={() => setComposeOpen(false)} disabled={sending || savingDraft}>Cancel</Button>
             <Button variant="secondary" onClick={saveDraft} disabled={sending || savingDraft}>{savingDraft ? "Saving…" : "Save draft"}</Button>

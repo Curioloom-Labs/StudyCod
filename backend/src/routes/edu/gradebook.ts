@@ -1103,7 +1103,7 @@ router.get("/classes/:classId/topic-tasks/:taskId/live", authRequired, async (re
 async function computePracticeMasteryByTopic(
   studentId: number,
   classId: number
-): Promise<Map<number, { practiceAverage: number | null; started: boolean }>> {
+): Promise<Map<number, { practiceAverage: number | null; started: boolean; closed: boolean }>> {
   const topics = await topicRepo()
     .createQueryBuilder("topic")
     .leftJoinAndSelect("topic.tasks", "task", "task.type = :practiceType", { practiceType: "PRACTICE" })
@@ -1128,13 +1128,13 @@ async function computePracticeMasteryByTopic(
     latestByTask.set(g.topicTask.id, clampGradeToInt(g.total));
   }
 
-  const result = new Map<number, { practiceAverage: number | null; started: boolean }>();
+  const result = new Map<number, { practiceAverage: number | null; started: boolean; closed: boolean }>();
   for (const topic of topics) {
     const tasks = (topic.tasks || []).filter((t) =>
       isAssignedToStudent(t.isAssigned, (t as any).assignedStudentIds, studentId)
     );
     if (tasks.length === 0) {
-      result.set(topic.id, { practiceAverage: null, started: false });
+      result.set(topic.id, { practiceAverage: null, started: false, closed: false });
       continue;
     }
     let sum = 0;
@@ -1146,7 +1146,10 @@ async function computePracticeMasteryByTopic(
         graded += 1;
       }
     }
-    result.set(topic.id, { practiceAverage: sum / tasks.length, started: graded > 0 });
+    // A topic is "closed" for the student once every assigned practice task is
+    // closed — they can no longer submit/improve (only appeals remain).
+    const closed = tasks.every((t) => t.isClosed);
+    result.set(topic.id, { practiceAverage: sum / tasks.length, started: graded > 0, closed });
   }
   return result;
 }
@@ -1181,6 +1184,7 @@ router.get("/my/skill-tree", authRequired, async (req: AuthRequest, res: Respons
         prerequisites: i > 0 ? [topics[i - 1].id] : [],
         masteryPct: Math.max(0, Math.min(1, (Number(m?.practiceAverage) || 0) / 100)),
         started: m?.started ?? false,
+        closed: m?.closed ?? false,
       };
     });
 
