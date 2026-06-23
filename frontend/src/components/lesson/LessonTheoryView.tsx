@@ -11,5 +11,7 @@ import { normalizeInteractiveLesson } from "../../lib/lessonBlocks";
 export const LessonTheoryView: React.FC<{ theory: string }> = ({ theory }) => {
   const lesson = useMemo(() => normalizeInteractiveLesson(theory), [theory]);
   if (lesson) return <LessonBlocksView lesson={lesson} />;
+  // Looks like (empty/invalid) interactive JSON — render nothing rather than dumping raw JSON.
+  if (theory.trim().startsWith("{")) return null;
   return <MarkdownView content={theory} />;
 };
