@@ -1542,7 +1542,7 @@ export const TaskLibraryPage: React.FC = () => {
           {/* Filters */}
           <div className="lg:col-span-3 lg:sticky lg:top-4 lg:self-start rounded-xl border border-border bg-bg-surface p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                 {tr("Фільтри", "Filters")}
                 <button
                   type="button"

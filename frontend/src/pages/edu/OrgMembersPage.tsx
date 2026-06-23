@@ -16,6 +16,10 @@ interface Overview { totals: { classes: number; students: number; teachers: numb
 
 const ROLES = ["TEACHER", "ASSISTANT", "ORG_ADMIN"] as const;
 
+// Shared input/select chrome matching the Input primitive (theme tokens, focus ring).
+const controlClass =
+  "bg-bg-code border border-border text-text-primary rounded-[var(--ui-control-radius)] px-4 py-2.5 text-sm leading-[1.45] focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/70 transition-colors placeholder:text-text-muted";
+
 const roleLabel = (r: string): string => {
   switch (r) {
     case "ORG_ADMIN": return tr("Адмін", "Admin");
@@ -96,16 +100,16 @@ export const OrgMembersPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div className="max-w-3xl mx-auto px-4 py-10 font-mono text-text-muted">{tr("Завантаження...", "Loading...")}</div>;
 
   if (orgs.length === 0) {
     return (
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "24px 16px" }}>
+      <div className="max-w-2xl mx-auto px-4 pb-12">
         <PageHero eyebrowClassic="// org" eyebrowAurora={tr("Організація", "Organization")} title={tr("Учасники", "Members")} />
-        <p style={{ opacity: 0.7, marginTop: 16, display: "flex", alignItems: "center", gap: 8 }}>
-          <Building2 size={18} /> {tr("Ви не адміністратор жодної організації.", "You don't administer any organization.")}
+        <p className="mt-4 flex items-center gap-2 text-sm text-text-secondary">
+          <Building2 className="w-4 h-4 shrink-0 text-primary" /> {tr("Ви не адміністратор жодної організації.", "You don't administer any organization.")}
         </p>
-        <Button variant="ghost" onClick={() => navigate("/edu/courses")} style={{ marginTop: 12 }}>
+        <Button variant="ghost" onClick={() => navigate("/edu/courses")} className="mt-3">
           {tr("Створити організацію", "Create one")}
         </Button>
       </div>
@@ -113,7 +117,7 @@ export const OrgMembersPage: React.FC = () => {
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px 48px" }}>
+    <div className="max-w-3xl mx-auto px-4 pb-12">
       <PageHero
         eyebrowClassic="// org"
         eyebrowAurora={tr("Організація", "Organization")}
@@ -122,7 +126,7 @@ export const OrgMembersPage: React.FC = () => {
       />
 
       {orgs.length > 1 && (
-        <select value={activeOrg ?? ""} onChange={e => setActiveOrg(Number(e.target.value))} style={{ marginTop: 16, padding: "6px 10px", borderRadius: 6 }}>
+        <select value={activeOrg ?? ""} onChange={e => setActiveOrg(Number(e.target.value))} className={controlClass + " mt-4"}>
           {orgs.map(o => (
             <option key={o.orgId} value={o.orgId}>{o.name ?? `Org ${o.orgId}`}</option>
           ))}
@@ -130,31 +134,31 @@ export const OrgMembersPage: React.FC = () => {
       )}
 
       {overview && (
-        <div style={{ marginTop: 20 }}>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div className="mt-5">
+          <div className="flex gap-3 flex-wrap">
             {[
               { label: tr("Класи", "Classes"), value: overview.totals.classes },
               { label: tr("Учні", "Students"), value: overview.totals.students },
               { label: tr("Викладачі", "Teachers"), value: overview.totals.teachers }
             ].map((s, i) => (
-              <div key={i} style={{ flex: 1, minWidth: 120, border: "1px solid rgba(128,128,128,0.2)", borderRadius: 10, padding: "12px 14px" }}>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>{s.value}</div>
-                <div style={{ fontSize: 12, opacity: 0.6 }}>{s.label}</div>
+              <div key={i} className="flex-1 min-w-[120px] rounded-[var(--ui-card-radius)] border border-border bg-bg-surface px-4 py-3">
+                <div className="text-2xl font-mono font-semibold text-text-primary tabular-nums">{s.value}</div>
+                <div className="text-xs text-text-muted mt-0.5">{s.label}</div>
               </div>
             ))}
           </div>
           {overview.classes.length > 0 && (
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="mt-3 flex flex-col gap-1.5">
               {overview.classes.map(c => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => navigate(`/edu/classes/${c.id}`)}
-                  style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 8, background: "transparent", cursor: "pointer" }}
+                  className="flex items-center gap-2.5 px-3 py-2 text-left rounded-[var(--ui-card-radius)] border border-border bg-bg-surface transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                  <strong>{c.name}</strong>
-                  <span style={{ fontSize: 12, opacity: 0.6 }}>{c.language}{c.teacherName ? ` · ${c.teacherName}` : ""}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>{c.studentsCount} {tr("учнів", "students")}</span>
+                  <strong className="font-mono text-text-primary truncate">{c.name}</strong>
+                  <span className="text-xs text-text-muted">{c.language}{c.teacherName ? ` · ${c.teacherName}` : ""}</span>
+                  <span className="ml-auto text-xs text-text-secondary tabular-nums">{c.studentsCount} {tr("учнів", "students")}</span>
                 </button>
               ))}
             </div>
@@ -162,31 +166,31 @@ export const OrgMembersPage: React.FC = () => {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+      <div className="mt-4 flex flex-col sm:flex-row gap-2">
         <input
           type="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
           placeholder={tr("email викладача", "teacher email")}
-          style={{ flex: 1, minWidth: 200, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
+          className={controlClass + " flex-1 min-w-[200px]"}
         />
-        <select value={role} onChange={e => setRole(e.target.value as any)} style={{ borderRadius: 6, padding: "0 8px" }}>
+        <select value={role} onChange={e => setRole(e.target.value as any)} className={controlClass}>
           {ROLES.map(r => (
             <option key={r} value={r}>{roleLabel(r)}</option>
           ))}
         </select>
         <Button onClick={invite} disabled={busy || !email.trim()}>
-          <UserPlus size={16} /> {tr("Запросити", "Invite")}
+          <UserPlus className="w-4 h-4 mr-1.5" /> {tr("Запросити", "Invite")}
         </Button>
       </div>
 
-      <h3 style={{ marginTop: 28 }}>{tr("Учасники", "Members")}</h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <h3 className="mt-7 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted leading-none">{tr("Учасники", "Members")}</h3>
+      <div className="flex flex-col gap-1.5">
         {members.map(m => (
-          <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 8 }}>
-            <strong>{m.name || m.username || `#${m.userId}`}</strong>
-            {m.email && <span style={{ fontSize: 13, opacity: 0.6 }}>{m.email}</span>}
-            <span style={{ marginLeft: "auto", fontSize: 12, padding: "2px 8px", borderRadius: 999, border: "1px solid rgba(128,128,128,0.3)" }}>
+          <div key={m.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
+            <strong className="font-mono text-text-primary">{m.name || m.username || `#${m.userId}`}</strong>
+            {m.email && <span className="text-xs text-text-muted truncate">{m.email}</span>}
+            <span className="ml-auto text-xs font-mono px-2 py-0.5 rounded-full border border-border text-text-secondary">
               {roleLabel(m.role)}
             </span>
           </div>
@@ -195,14 +199,14 @@ export const OrgMembersPage: React.FC = () => {
 
       {invites.length > 0 && (
         <>
-          <h3 style={{ marginTop: 28 }}>{tr("Очікують", "Pending")}</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <h3 className="mt-7 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted leading-none">{tr("Очікують", "Pending")}</h3>
+          <div className="flex flex-col gap-1.5">
             {invites.map(i => (
-              <div key={i.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px dashed rgba(128,128,128,0.3)", borderRadius: 8 }}>
-                <span>{i.email}</span>
-                <span style={{ fontSize: 12, opacity: 0.6 }}>{roleLabel(i.role)}</span>
-                <Button variant="ghost" className="text-xs" onClick={() => revoke(i.id)} style={{ marginLeft: "auto" }} aria-label={tr("Відкликати", "Revoke")}>
-                  <X size={14} />
+              <div key={i.id} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-dashed border-border">
+                <span className="text-text-primary">{i.email}</span>
+                <span className="text-xs text-text-muted">{roleLabel(i.role)}</span>
+                <Button variant="ghost" className="text-xs ml-auto" onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
+                  <X className="w-3.5 h-3.5" />
                 </Button>
               </div>
             ))}

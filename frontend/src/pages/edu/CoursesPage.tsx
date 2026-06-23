@@ -20,6 +20,10 @@ interface Course {
   status: "DRAFT" | "PUBLISHED";
 }
 
+// Shared input/select chrome matching the Input primitive (theme tokens, focus ring).
+const controlClass =
+  "bg-bg-code border border-border text-text-primary rounded-[var(--ui-control-radius)] px-4 py-2.5 text-sm leading-[1.45] focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/70 transition-colors placeholder:text-text-muted";
+
 export const CoursesPage: React.FC = () => {
   const navigate = useNavigate();
   const [orgs, setOrgs] = useState<Org[]>([]);
@@ -87,10 +91,10 @@ export const CoursesPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div className="max-w-3xl mx-auto px-4 py-10 font-mono text-text-muted">{tr("Завантаження...", "Loading...")}</div>;
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px 48px" }}>
+    <div className="max-w-3xl mx-auto px-4 pb-12">
       <PageHero
         eyebrowClassic="// courses"
         eyebrowAurora={tr("Курси", "Courses")}
@@ -102,22 +106,22 @@ export const CoursesPage: React.FC = () => {
       />
 
       {orgs.length === 0 ? (
-        <div style={{ marginTop: 24, padding: 16, border: "1px solid rgba(128,128,128,0.25)", borderRadius: 8 }}>
-          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-            <Building2 size={18} /> {tr("Створіть організацію", "Create an organization")}
+        <div className="mt-6 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface p-5">
+          <h3 className="flex items-center gap-2 text-base font-mono text-text-primary leading-none">
+            <Building2 className="w-4 h-4 shrink-0 text-primary" /> {tr("Створіть організацію", "Create an organization")}
           </h3>
-          <p style={{ fontSize: 13, opacity: 0.7, marginTop: 0 }}>
+          <p className="mt-2 text-sm text-text-secondary">
             {tr("Курси належать організації. Створіть свою, щоб почати.", "Courses belong to an organization. Create yours to start.")}
           </p>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="mt-4 flex gap-2">
             <input
               value={orgName}
               onChange={e => setOrgName(e.target.value)}
               placeholder={tr("Назва організації", "Organization name")}
-              style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
+              className={controlClass + " flex-1"}
             />
             <Button onClick={createOrg} disabled={busy}>
-              <Plus size={16} /> {tr("Створити", "Create")}
+              <Plus className="w-4 h-4 mr-1.5" /> {tr("Створити", "Create")}
             </Button>
           </div>
         </div>
@@ -127,7 +131,7 @@ export const CoursesPage: React.FC = () => {
             <select
               value={activeOrg ?? ""}
               onChange={e => setActiveOrg(Number(e.target.value))}
-              style={{ marginTop: 16, padding: "6px 10px", borderRadius: 6 }}
+              className={controlClass + " mt-4"}
             >
               {orgs.map(o => (
                 <option key={o.orgId} value={o.orgId}>
@@ -137,53 +141,37 @@ export const CoursesPage: React.FC = () => {
             </select>
           )}
 
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
             <input
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder={tr("Назва нового курсу", "New course title")}
-              style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
+              className={controlClass + " flex-1"}
             />
-            <select value={language} onChange={e => setLanguage(e.target.value as any)} style={{ borderRadius: 6, padding: "0 8px" }}>
+            <select value={language} onChange={e => setLanguage(e.target.value as any)} className={controlClass}>
               <option value="PYTHON">Python</option>
               <option value="JAVA">Java</option>
               <option value="CPP">C++</option>
             </select>
             <Button onClick={createCourse} disabled={busy || !title.trim()}>
-              <Plus size={16} /> {tr("Курс", "Course")}
+              <Plus className="w-4 h-4 mr-1.5" /> {tr("Курс", "Course")}
             </Button>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
-            {courses.length === 0 && <p style={{ opacity: 0.6 }}>{tr("Ще немає курсів.", "No courses yet.")}</p>}
+          <div className="mt-5 flex flex-col gap-2">
+            {courses.length === 0 && (
+              <p className="text-sm text-text-muted">{tr("Ще немає курсів.", "No courses yet.")}</p>
+            )}
             {courses.map(c => (
               <button
                 key={c.id}
                 onClick={() => navigate(`/edu/courses/${c.id}`)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "12px 14px",
-                  border: "1px solid rgba(128,128,128,0.25)",
-                  borderRadius: 8,
-                  background: "transparent",
-                  cursor: "pointer",
-                  textAlign: "left"
-                }}
+                className="flex items-center gap-3 px-4 py-3 text-left rounded-[var(--ui-card-radius)] border border-border bg-bg-surface transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                <FolderOpen size={18} />
-                <span style={{ fontWeight: 600 }}>{c.title}</span>
-                <span style={{ fontSize: 12, opacity: 0.6 }}>{c.language}</span>
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    fontSize: 11,
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    border: "1px solid rgba(128,128,128,0.3)"
-                  }}
-                >
+                <FolderOpen className="w-4 h-4 shrink-0 text-primary" />
+                <span className="font-mono font-semibold text-text-primary truncate">{c.title}</span>
+                <span className="text-xs text-text-muted">{c.language}</span>
+                <span className="ml-auto text-[11px] font-mono px-2 py-0.5 rounded-full border border-border text-text-secondary">
                   {c.status === "PUBLISHED" ? tr("Опубліковано", "Published") : tr("Чернетка", "Draft")}
                 </span>
               </button>
