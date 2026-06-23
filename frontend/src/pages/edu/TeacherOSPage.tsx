@@ -338,7 +338,7 @@ export const TeacherOSPage: React.FC = () => {
           <div className="xl:col-span-2 space-y-4">
             <Card className="p-5">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                   <Sparkles className="w-3.5 h-3.5 text-primary" />
                   {tr("Місії Teacher Copilot", "Teacher Copilot missions")}
                 </div>
@@ -383,7 +383,7 @@ export const TeacherOSPage: React.FC = () => {
 
             <Card className="p-5">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                   <Target className="w-3.5 h-3.5 text-primary" />
                   {tr("Теплова карта тем", "Topic heatmap")}
                 </div>
@@ -431,7 +431,7 @@ export const TeacherOSPage: React.FC = () => {
 
             <Card className="p-5">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                   <MessageSquare className="w-3.5 h-3.5 text-primary" />
                   {tr("Черга апеляцій", "Appeals queue")}
                 </div>
@@ -466,7 +466,7 @@ export const TeacherOSPage: React.FC = () => {
 
           <div className="space-y-4">
             <Card className="p-5">
-              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 mb-3">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none mb-3">
                 <CalendarClock className="w-3.5 h-3.5 text-primary" />
                 {tr("Orchestrator: план підтримки", "Orchestrator: support plan")}
               </div>
@@ -545,7 +545,7 @@ export const TeacherOSPage: React.FC = () => {
             </Card>
 
             <Card className="p-5">
-              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 mb-3">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none mb-3">
                 <Users className="w-3.5 h-3.5 text-primary" />
                 {tr("Risk radar", "Risk radar")}
               </div>
@@ -577,7 +577,7 @@ export const TeacherOSPage: React.FC = () => {
             </Card>
 
             <Card className="p-5">
-              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 mb-3">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none mb-3">
                 <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
                 {tr("Якість підказок та дайджест", "Hints quality and digest")}
               </div>

@@ -9,6 +9,7 @@ import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle, Upload, Download, BookOpen, ShieldCheck, CheckCircle2, Clock } from "lucide-react";
+import { SectionHeading } from "../../components/ui/SectionHeading";
 import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { api } from "../../lib/api/client";
 import { getMe } from "../../lib/api/profile";
@@ -808,11 +809,9 @@ export const TopicDetailsPage: React.FC = () => {
         {}
         <section className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5" />
+            <SectionHeading icon={FileText} count={practiceTasks.length}>
               {t('practicalTasks')}
-              <span className="text-text-muted/70">· {practiceTasks.length}</span>
-            </h2>
+            </SectionHeading>
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex items-center gap-2">
                 <input key={importArchiveKey} id="import-task-archive" type="file" accept=".zip" className="hidden" onChange={e => {
               const f = e.target.files?.[0] || null;
@@ -950,7 +949,7 @@ export const TopicDetailsPage: React.FC = () => {
         {}
         <section className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
               <ShieldCheck className="w-3.5 h-3.5 text-accent-warn" />
               {t('controlWorks')}
               <span className="text-text-muted/70">· {controlWorks.length}</span>

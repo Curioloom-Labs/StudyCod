@@ -1112,7 +1112,7 @@ export const LessonDetailsPage: React.FC = () => {
           </Card>}
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+          <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
             <FileText className="w-3.5 h-3.5" />
             {lesson.type === "CONTROL" ? tr("Блок 2: Практика", "Block 2: Practice") : t("tasks")}
             <span className="text-text-muted/70">· {lesson.tasks.length}</span>

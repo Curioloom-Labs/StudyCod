@@ -1,0 +1,27 @@
+# Production LiveKit SFU for the EDU live, code-aware classroom.
+#
+# Deploy on the host (studycod.space):
+#   cd /var/www/studycod/docker/livekit
+#   # one-time: create .env (gitignored) with the key:secret matching backend/.env
+#   #   echo 'LIVEKIT_KEYS=studycod_key: <LIVEKIT_API_SECRET from backend/.env>' > .env
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# This config is git-safe: livekit.prod.yaml holds NO secret (keys come from the
+# LIVEKIT_KEYS env), so a `git pull` can never reset the SFU secret or external-IP
+# setting the way editing the shared livekit.yaml would.
+#
+# backend/.env must also have:  LIVEKIT_URL=wss://studycod.space/livekit
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    environment:
+      # "key: secret" — same value as backend LIVEKIT_API_KEY / LIVEKIT_API_SECRET.
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS}
+    ports:
+      - "7880:7880"                     # signaling / WebSocket (behind nginx /livekit/)
+      - "7881:7881"                     # RTC over TCP fallback
+      - "50000-50100:50000-50100/udp"   # RTC media (matches port_range in livekit.prod.yaml)
+    volumes:
+      - ./livekit.prod.yaml:/etc/livekit.yaml:ro
