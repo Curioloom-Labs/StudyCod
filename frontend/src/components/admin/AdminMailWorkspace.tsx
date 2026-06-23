@@ -82,6 +82,8 @@ export const AdminMailWorkspace: React.FC = () => {
   const [items, setItems] = React.useState<AdminMailMessageListItem[]>([]);
   const [selectedUid, setSelectedUid] = React.useState<number | null>(null);
   const [selected, setSelected] = React.useState<AdminMailMessageDetails | null>(null);
+  const selectedUidRef = React.useRef<number | null>(null);
+  React.useEffect(() => { selectedUidRef.current = selectedUid; }, [selectedUid]);
 
   const [composeOpen, setComposeOpen] = React.useState(false);
   const [composeTo, setComposeTo] = React.useState("");
@@ -127,9 +129,15 @@ export const AdminMailWorkspace: React.FC = () => {
       setSelected(null);
       return;
     }
-    const keep = data.items.find((m) => m.uid === selectedUid) ?? data.items[0];
-    setSelectedUid(keep.uid);
-  }, [activeFolder, selectedUid]);
+    // Keep the current selection if it's still listed; otherwise select the first.
+    // Reads selectedUid via a ref on purpose — depending on selectedUid here would
+    // recreate this callback (and the reload effect) on every message click, which
+    // made the list self-switch and refresh constantly.
+    const cur = selectedUidRef.current;
+    if (cur == null || !data.items.some((m) => m.uid === cur)) {
+      setSelectedUid(data.items[0].uid);
+    }
+  }, [activeFolder]);
 
   const loadMessage = React.useCallback(async (folder: string, uid: number) => {
     const data = await getAdminMailMessage(folder, uid);
@@ -160,8 +168,12 @@ export const AdminMailWorkspace: React.FC = () => {
   }, [loadStatus, loadFolders, loadMessages, activeFolder]);
 
   React.useEffect(() => {
+    // Run once on mount + via the Refresh button. Folder switches load messages
+    // explicitly, so this must NOT depend on reloadAll's identity (that re-fired on
+    // every selection change → constant refresh / self-switching).
     reloadAll();
-  }, [reloadAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     setAttachmentPreviews({});
