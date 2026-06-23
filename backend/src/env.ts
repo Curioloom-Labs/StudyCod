@@ -108,6 +108,14 @@ const EnvSchema = z.object({
   // (audit a would-be denial, but allow). Flip on to hard-enforce org roles.
   EDU_RBAC_ENFORCE: z.string().optional(),
 
+  // Geo-blocking: deny access from sanctioned/aggressor states (RU, BY by
+  // default). Detection is hybrid — a trusted proxy country header (Cloudflare
+  // CF-IPCountry / nginx GeoIP) is preferred, with an offline geoip-lite lookup
+  // as the fallback so the block works even without any proxy infra.
+  GEO_BLOCK_ENABLED: z.string().optional(),
+  GEO_BLOCKED_COUNTRIES: z.string().optional(),
+  GEO_COUNTRY_HEADERS: z.string().optional(),
+
   // Cloudflare AI worker base URL (used by LLM provider and can be reused for translation)
   CLOUDFLARE_AI_URL: z.string().optional(),
   // Shared secret sent to the Cloudflare AI worker as `x-internal-secret`.
@@ -246,6 +254,31 @@ const EnvSchema = z.object({
     __turnstileEnforceContestSubmit: parseBoolEnv(env.TURNSTILE_ENFORCE_CONTEST_SUBMIT),
     __turnstileEnforceAuth: parseBoolEnv(env.TURNSTILE_ENFORCE_AUTH),
     __eduRbacEnforce: parseBoolEnv(env.EDU_RBAC_ENFORCE),
+
+    // Geo-block: ON by default (the platform must refuse RU/BY traffic). Set
+    // GEO_BLOCK_ENABLED=false to disable entirely. Private/loopback IPs are
+    // always allowed by the resolver, so local dev is unaffected.
+    __geoBlockEnabled: (() => {
+      const raw = (env.GEO_BLOCK_ENABLED ?? "").trim();
+      if (!raw) return true;
+      return parseBoolEnv(raw);
+    })(),
+    __geoBlockedCountries: (() => {
+      const raw = (env.GEO_BLOCKED_COUNTRIES ?? "").trim();
+      const list = (raw || "RU,BY")
+        .split(",")
+        .map(s => s.trim().toUpperCase())
+        .filter(Boolean);
+      return Array.from(new Set(list));
+    })(),
+    __geoCountryHeaders: (() => {
+      const raw = (env.GEO_COUNTRY_HEADERS ?? "").trim();
+      const list = (raw || "cf-ipcountry,x-country,x-geo-country,x-vercel-ip-country")
+        .split(",")
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+      return Array.from(new Set(list));
+    })(),
     __nsjailPath: ((env.NSJAIL_PATH ?? "") || "/usr/bin/nsjail").trim(),
     __nsjailConfig: (env.NSJAIL_CONFIG ?? "").trim(),
     __nsjailUseConfig: parseBoolEnv(env.NSJAIL_USE_CONFIG),
