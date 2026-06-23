@@ -170,9 +170,13 @@ eduRouter.use(announcementsRouter);
 eduRouter.use(classStudentsRouter);
 eduRouter.use(studentsRouter);
 eduRouter.use(lessonsRouter);
+// gradingRouter owns the literal GET /tasks/pending-review; it must mount before
+// tasksRouter's GET /tasks/:taskId, otherwise "pending-review" is parsed as a
+// task id and the request 400s. Their :taskId sub-routes have disjoint suffixes,
+// so this reorder introduces no new shadowing.
+eduRouter.use(gradingRouter);
 eduRouter.use(tasksRouter);
 eduRouter.use(testDataRouter);
-eduRouter.use(gradingRouter);
 eduRouter.use(appealsRouter);
 eduRouter.use(insightsRouter);
 eduRouter.use(gradebookRouter);

@@ -17,6 +17,12 @@ const uidSchema = z.object({
   uid: z.coerce.number().int().positive(),
 });
 
+const searchSchema = z.object({
+  folder: z.string().min(1).max(255).optional().default("INBOX"),
+  q: z.string().min(1).max(255),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
 const folderSchema = z.object({
   folder: z.string().min(1).max(255).optional().default("INBOX"),
 });
@@ -40,6 +46,20 @@ const sendSchema = z.object({
   text: z.string().optional(),
   html: z.string().optional(),
   replyTo: z.string().email().optional(),
+  inReplyTo: z.string().max(998).optional(),
+  references: z.string().max(4000).optional(),
+});
+
+const draftSchema = z.object({
+  from: z.string().email().optional(),
+  to: z.array(z.string().email()).optional().default([]),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional(),
+  subject: z.string().max(240).optional().default(""),
+  text: z.string().optional(),
+  html: z.string().optional(),
+  inReplyTo: z.string().max(998).optional(),
+  references: z.string().max(4000).optional(),
 });
 
 router.get("/status", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
@@ -74,6 +94,38 @@ router.get("/messages", authRequired, systemAdminGuard, async (req: AuthRequest,
   }
 });
 
+router.get("/search", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = searchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    }
+    const result = await studyCodMailService.searchMessages(parsed.data.folder, parsed.data.q, parsed.data.limit);
+    return res.json(result);
+  } catch (err: any) {
+    logger.error("[admin-mail] GET /search failed", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+  }
+});
+
+router.get("/messages/:uid/attachments/:index", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const uid = Number(req.params.uid);
+    const index = Number(req.params.index);
+    const folder = String((req.query.folder as string) || "INBOX");
+    if (!Number.isFinite(uid) || !Number.isFinite(index)) {
+      return res.status(400).json({ message: "INVALID_INPUT" });
+    }
+    const att = await studyCodMailService.getAttachment(folder, uid, index);
+    res.setHeader("Content-Type", att.contentType);
+    res.setHeader("Content-Disposition", `inline; filename="${att.filename.replace(/["\r\n]/g, "")}"`);
+    return res.send(att.content);
+  } catch (err: any) {
+    logger.error("[admin-mail] GET /attachment failed", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+  }
+});
+
 router.get("/messages/:uid", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
   try {
     const uidParsed = uidSchema.safeParse(req.params);
@@ -92,6 +144,20 @@ router.get("/messages/:uid", authRequired, systemAdminGuard, async (req: AuthReq
     return res.json({ message });
   } catch (err: any) {
     logger.error("[admin-mail] GET /messages/:uid failed", { requestId: req.requestId, userId: req.userId, err });
+    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+  }
+});
+
+router.post("/messages/draft", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = draftSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    }
+    await studyCodMailService.saveDraft(parsed.data);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    logger.error("[admin-mail] POST /messages/draft failed", { requestId: req.requestId, userId: req.userId, err });
     return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
   }
 });
