@@ -1,5 +1,6 @@
 import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, startTransition } from "react";
 import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } from "react-router-dom";
+import { enforceSubdomain } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
@@ -1087,6 +1088,10 @@ export const App: React.FC = () => {
     if (/^\/edu(?:\/|$)/.test(path)) return "/edu";
     if (/^\/contest(?:\/|$)/.test(path)) return "/contest";
     return path;
+  }, [location.pathname]);
+  useEffect(() => {
+    // Keep EDU on school.* and contests on contest.* (separate entry points).
+    enforceSubdomain(location.pathname);
   }, [location.pathname]);
   return <TheoryModalProvider>
       <UIModeProvider>
