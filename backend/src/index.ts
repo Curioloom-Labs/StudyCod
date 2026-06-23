@@ -460,7 +460,10 @@ const sessionMiddleware = session({
     secure: IS_PRODUCTION,
     httpOnly: true,
     sameSite: "lax",
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000,
+    // Set COOKIE_DOMAIN=.studycod.space in prod to share the session across
+    // subdomains (school./contest.). Unset = host-only (current behaviour).
+    domain: (process.env.COOKIE_DOMAIN || "").trim() || undefined
   }
 });
 
