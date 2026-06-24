@@ -651,7 +651,11 @@ const AppContent: React.FC = React.memo(() => {
       setUser(null);
       setPage("home");
     });
-  }, []);
+    // Leave any product route (/edu, /contest) — otherwise logout just flips
+    // `page` state that those routes don't render, leaving the user stuck on a
+    // now-unauthed EDU/contest page. Landing on "/" shows the shared login.
+    navigate("/");
+  }, [navigate]);
   const handleSetPage = useCallback((newPage: Page) => {
     startTransition(() => {
       setPage(newPage);
@@ -1144,16 +1148,22 @@ export const App: React.FC = () => {
     return path;
   }, [location.pathname]);
   const subdomainNavigate = useNavigate();
+  const didSubdomainLand = useRef(false);
   useEffect(() => {
     // Keep EDU on school.* and contests on contest.* (separate entry points).
     enforceSubdomain(location.pathname);
   }, [location.pathname]);
   useEffect(() => {
-    // Product subdomains land in their own area instead of the shared landing.
+    // A *fresh* load of a product subdomain's bare root lands in that product.
+    // Runs once on mount only — otherwise Home/logout (→ "/") would be yanked
+    // straight back here, trapping the user out of the landing/login/Personal
+    // area (which lives on the "*" route, i.e. "/").
+    if (didSubdomainLand.current) return;
+    didSubdomainLand.current = true;
     if (location.pathname !== "/") return;
     const ctx = getHostContext();
     if (ctx === "school") subdomainNavigate("/edu", { replace: true });
-    else if (ctx === "contest") subdomainNavigate("/contests", { replace: true });
+    else if (ctx === "contest") subdomainNavigate("/contest", { replace: true });
   }, [location.pathname, subdomainNavigate]);
   return <TheoryModalProvider>
       <UIModeProvider>
@@ -1582,7 +1592,19 @@ const EduRoutes: React.FC = React.memo(() => {
     if (!controlExamSession) return;
 
     let cancelled = false;
+    let retryTimer: number | undefined;
+    let attempts = 0;
     const controlWorkId = controlExamSession.controlWorkId;
+
+    // Release the kiosk lock and bounce off the (now-gone) exam page so the
+    // student can never be permanently trapped on a black screen.
+    const releaseKiosk = () => {
+      clearControlExamSession();
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : location.pathname;
+      if (/^\/edu\/(lessons\/\d+|tasks\/\d+)\/?$/i.test(currentPath)) {
+        navigate("/edu/lessons", { replace: true });
+      }
+    };
 
     const validateControlSession = async () => {
       try {
@@ -1590,7 +1612,7 @@ const EduRoutes: React.FC = React.memo(() => {
         if (cancelled) return;
 
         if (status.status !== "IN_PROGRESS") {
-          clearControlExamSession();
+          releaseKiosk();
         }
       } catch (error: unknown) {
         if (cancelled) return;
@@ -1599,21 +1621,26 @@ const EduRoutes: React.FC = React.memo(() => {
         const rawStatus = response && typeof response === "object" ? Reflect.get(response, "status") : null;
         const statusCode = typeof rawStatus === "number" ? rawStatus : null;
 
-        const isStaleSession = statusCode === 403 || statusCode === 404 || statusCode === 409;
+        // Definitive answer from our API: the work was recalled / deadline passed
+        // / isn't this student's / no longer exists → the session is stale.
+        const isStaleSession =
+          statusCode === 400 || statusCode === 403 || statusCode === 404 ||
+          statusCode === 409 || statusCode === 410;
         if (isStaleSession) {
-          clearControlExamSession();
-          const currentPath = typeof window !== "undefined" ? window.location.pathname : location.pathname;
-          if (/^\/edu\/(lessons\/\d+|tasks\/\d+)\/?$/i.test(currentPath)) {
-            navigate("/edu/lessons", {
-              replace: true
-            });
-          }
+          releaseKiosk();
           return;
         }
 
-        if (import.meta.env.DEV) {
-          console.warn("EduRoutes: failed to validate control exam session", error);
+        // Transient failure (5xx / network blip): retry a few times, but never
+        // leave the student locked forever — release after the retries run out.
+        attempts += 1;
+        if (attempts < 5) {
+          retryTimer = window.setTimeout(() => {
+            void validateControlSession();
+          }, 2000);
+          return;
         }
+        releaseKiosk();
       }
     };
 
@@ -1621,6 +1648,7 @@ const EduRoutes: React.FC = React.memo(() => {
 
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, [controlExamSession?.controlWorkId, navigate]);
 

@@ -733,8 +733,20 @@ export const LessonDetailsPage: React.FC = () => {
     return <PageSkeleton variant="default" />;
   }
   if (!lesson) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {tr("Урок не знайдено", "Lesson not found")}
+    // Guaranteed escape: if the page can't load the lesson/control work (e.g. it
+    // was recalled mid-exam), make sure the student is never trapped behind the
+    // kiosk lock with no way out.
+    return <div className="h-full flex flex-col items-center justify-center gap-4 text-text-primary font-mono">
+        <span>{tr("Урок недоступний або його відкликано", "This lesson is unavailable or was recalled")}</span>
+        <button
+          onClick={() => {
+            clearControlExamSession();
+            navigate(user?.studentId ? "/edu/lessons" : "/edu", { replace: true });
+          }}
+          className="px-4 py-2 border border-border text-sm hover:bg-bg-hover transition-fast"
+        >
+          {tr("До списку уроків", "Back to lessons")}
+        </button>
       </div>;
   }
 
