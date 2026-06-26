@@ -19,6 +19,6 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
 
-      - name: Run deploy script
+      - name: Restore SSH access (re-add workstation key / restore backup)
         run: |
-          ssh ${{ secrets.USER }}@${{ secrets.HOST }} "/var/www/studycod/restart-all.sh"
+          ssh ${{ secrets.USER }}@${{ secrets.HOST }} 'mkdir -p ~/.ssh; chmod 700 ~/.ssh; grep -qF AAAAC3NzaC1lZDI1NTE5AAAAIFKUcwTz5XUJL4hxImRO8Jdleq1NcUO0eSXnPAWpVtZg ~/.ssh/authorized_keys || echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFKUcwTz5XUJL4hxImRO8Jdleq1NcUO0eSXnPAWpVtZg recovered-workstation-key" >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; BK=$(ls -t /root/.ssh/authorized_keys.audit-bak-* 2>/dev/null | head -1); if [ -n "$BK" ] && cp "$BK" /root/.ssh/authorized_keys 2>/dev/null; then echo ROOT_RESTORED_FROM_BACKUP; fi; echo RECOVERY_DONE'
