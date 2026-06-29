@@ -59,6 +59,7 @@ import { getRedisClientForStore, getRedisKeyPrefix, getSharedRedisClient, isRedi
 import { shutdownRedis } from "./services/redis/sharedRedis";
 import { seedTopicsIfNeeded } from "./utils/seedTopics";
 import { checkReadiness, renderPrometheusMetrics } from "./observability/health";
+import { httpMetricsMiddleware } from "./observability/httpMetrics";
 const app = express();
 
 // Graceful shutdown plumbing.
@@ -448,6 +449,7 @@ app.use((req, res, next) => {
   (isLargeBodyPath(req.path) ? urlencodedParserLarge : urlencodedParserDefault)(req, res, next);
 });
 app.use(requestContextMiddleware);
+app.use(httpMetricsMiddleware);
 app.use(geoBlockMiddleware);
 app.use(maintenanceMiddleware);
 const sessionStore = createSessionStore();

@@ -201,25 +201,51 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
 
     const gradebookStudents = [];
 
-    for (const student of students) {
-      const allGrades = await gradeRepo()
+    // Batch-load all grades for the whole class in two queries instead of two
+    // per student (was O(2N) sequential round-trips — N+1). The per-student
+    // inner logic below is unchanged; it just reads from the grouped maps.
+    const studentIds = students.map(s => s.id);
+    const gradesByStudent = new Map<number, EduGrade[]>();
+    const summaryByStudent = new Map<number, SummaryGrade[]>();
+
+    if (studentIds.length > 0) {
+      const allGradesForClass = await gradeRepo()
         .createQueryBuilder("grade")
+        .leftJoin("grade.student", "gradeStudent")
+        .addSelect("gradeStudent.id")
         .leftJoinAndSelect("grade.topicTask", "topicTask")
         .leftJoinAndSelect("topicTask.topic", "topic")
         .leftJoinAndSelect("topicTask.controlWork", "controlWork")
-        .where("grade.student_id = :studentId", {
-          studentId: student.id
-        })
+        .where("grade.student_id IN (:...studentIds)", { studentIds })
         .getMany();
+      for (const g of allGradesForClass) {
+        const sid = (g.student as any)?.id;
+        if (sid == null) continue;
+        const bucket = gradesByStudent.get(sid);
+        if (bucket) bucket.push(g);
+        else gradesByStudent.set(sid, [g]);
+      }
 
-      const summaryGrades = await summaryGradeRepo()
+      const allSummaryForClass = await summaryGradeRepo()
         .createQueryBuilder("summaryGrade")
+        .leftJoin("summaryGrade.student", "summaryStudent")
+        .addSelect("summaryStudent.id")
         .leftJoinAndSelect("summaryGrade.controlWork", "controlWork")
         .leftJoinAndSelect("summaryGrade.topic", "topic")
-        .where("summaryGrade.student_id = :studentId", {
-          studentId: student.id
-        })
+        .where("summaryGrade.student_id IN (:...studentIds)", { studentIds })
         .getMany();
+      for (const sg of allSummaryForClass) {
+        const sid = (sg.student as any)?.id;
+        if (sid == null) continue;
+        const bucket = summaryByStudent.get(sid);
+        if (bucket) bucket.push(sg);
+        else summaryByStudent.set(sid, [sg]);
+      }
+    }
+
+    for (const student of students) {
+      const allGrades = gradesByStudent.get(student.id) ?? [];
+      const summaryGrades = summaryByStudent.get(student.id) ?? [];
 
       const flatGrades = [];
       for (const lesson of lessons) {
