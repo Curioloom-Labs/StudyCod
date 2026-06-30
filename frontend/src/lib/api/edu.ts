@@ -440,6 +440,7 @@ export interface ClassDetails {
   id: number;
   name: string;
   language: "JAVA" | "PYTHON" | "CPP";
+  organizationId?: number | null;
   gradingSystem: ClassGradingSystem;
   gradeScaleMode?: GradeScaleMode;
   createdAt: string;

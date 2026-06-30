@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import type { EntityManager } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { Organization } from "../../entities/Organization";
 import { Membership } from "../../entities/Membership";
@@ -111,5 +112,60 @@ export async function listOrgMembers(orgId: number): Promise<Membership[]> {
     where: { organization: { id: orgId } },
     relations: ["user"],
     order: { createdAt: "ASC" }
+  });
+}
+
+export type MembershipMutationResult = { ok: true } | { ok: false; reason: "NOT_A_MEMBER" | "LAST_ORG_ADMIN" };
+
+/**
+ * Count an org's ORG_ADMIN memberships with a row lock, so two concurrent
+ * demote/remove calls can't both observe "2 admins, safe to proceed" and both
+ * succeed, leaving the org with zero admins. Must run inside the same
+ * transaction/manager as the subsequent write.
+ */
+async function countOrgAdminsForUpdate(manager: EntityManager, orgId: number): Promise<number> {
+  return await manager
+    .createQueryBuilder(Membership, "m")
+    .setLock("pessimistic_write")
+    .where("m.org_id = :orgId AND m.role = :role", { orgId, role: "ORG_ADMIN" })
+    .getCount();
+}
+
+/**
+ * Change a member's role within an org. Refuses to demote the org's last
+ * ORG_ADMIN (which would leave the tenant unmanageable). Locks the org's admin
+ * rows so the count-then-write can't race against a concurrent demote/remove.
+ */
+export async function setMembershipRole(orgId: number, userId: number, role: OrgRole): Promise<MembershipMutationResult> {
+  return await AppDataSource.transaction(async (manager) => {
+    const repo = manager.getRepository(Membership);
+    const membership = await repo.findOne({ where: { user: { id: userId }, organization: { id: orgId } } });
+    if (!membership) return { ok: false, reason: "NOT_A_MEMBER" };
+    if (membership.role === role) return { ok: true };
+    if (membership.role === "ORG_ADMIN" && role !== "ORG_ADMIN") {
+      const admins = await countOrgAdminsForUpdate(manager, orgId);
+      if (admins <= 1) return { ok: false, reason: "LAST_ORG_ADMIN" };
+    }
+    membership.role = role;
+    await repo.save(membership);
+    return { ok: true };
+  });
+}
+
+/**
+ * Remove a user's membership from an org. Refuses to remove the last ORG_ADMIN
+ * (same orphaning guard, same row-lock race protection, as {@link setMembershipRole}).
+ */
+export async function removeMembership(orgId: number, userId: number): Promise<MembershipMutationResult> {
+  return await AppDataSource.transaction(async (manager) => {
+    const repo = manager.getRepository(Membership);
+    const membership = await repo.findOne({ where: { user: { id: userId }, organization: { id: orgId } } });
+    if (!membership) return { ok: false, reason: "NOT_A_MEMBER" };
+    if (membership.role === "ORG_ADMIN") {
+      const admins = await countOrgAdminsForUpdate(manager, orgId);
+      if (admins <= 1) return { ok: false, reason: "LAST_ORG_ADMIN" };
+    }
+    await repo.remove(membership);
+    return { ok: true };
   });
 }

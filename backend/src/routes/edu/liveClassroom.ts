@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { randomBytes } from "crypto";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassAction } from "../../services/edu/classAccess";
 import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { EduLesson } from "../../entities/EduLesson";
@@ -73,15 +74,17 @@ function newRoomName(classId: number): string {
 }
 
 /**
- * Load the class only if the authenticated USER is allowed to teach it
- * (owner teacher, or any SYSTEM_ADMIN). Returns null when not permitted so the
- * caller can answer 404 without leaking existence.
+ * Load the class only if the authenticated USER is allowed to teach it —
+ * teaching staff of the class's org (owner teacher, co-teaching ASSISTANT,
+ * ORG_ADMIN) or any SYSTEM_ADMIN — via the central authorizer. Returns null when
+ * not permitted so the caller can answer 404 without leaking existence.
  */
 async function loadTeacherClass(req: AuthRequest, classId: number): Promise<Class | null> {
-  const isAdmin = req.userRole === "SYSTEM_ADMIN";
-  return classRepo().findOne({
-    where: isAdmin ? { id: classId } : { id: classId, teacher: { id: req.userId } }
+  if (!req.userId) return null;
+  const access = await authorizeClassAction(req.userId, classId, "CLASS_VIEW", {
+    isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
   });
+  return access && access.allowed ? access.cls : null;
 }
 
 function requireEnabled(res: Response): boolean {

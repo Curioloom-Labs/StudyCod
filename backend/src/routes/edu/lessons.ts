@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { User } from "../../entities/User";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { Student } from "../../entities/Student";
 import { TopicNew } from "../../entities/TopicNew";
 import { ControlWork } from "../../entities/ControlWork";
@@ -18,7 +18,6 @@ import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
 
 const router = Router();
 
-const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
@@ -123,7 +122,6 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
     const requestedType = requestedTypeRaw.toUpperCase().trim();
 
     let classIdScope: number | null = null;
-    let isSystemAdmin = false;
 
     if (req.studentId) {
       const student = await studentRepo().findOne({
@@ -138,17 +136,9 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       }
 
       classIdScope = student.class.id;
-    } else if (req.userId) {
-      const user = await userRepo().findOne({
-        where: { id: req.userId }
-      });
-
-      if (!user) return res.status(404).json({
-        message: "USER_NOT_FOUND"
-      });
-
-      isSystemAdmin = user.role === "SYSTEM_ADMIN";
     }
+    // USER principals are not query-scoped here; each matched resource is
+    // authorized against its class below via the central authorizer.
 
     let controlWorkQb = controlWorkRepo()
       .createQueryBuilder("controlWork")
@@ -160,10 +150,6 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
     if (classIdScope) {
       controlWorkQb = controlWorkQb.andWhere("class.id = :classIdScope", {
         classIdScope
-      });
-    } else if (req.userId && !isSystemAdmin) {
-      controlWorkQb = controlWorkQb.andWhere("teacher.id = :teacherId", {
-        teacherId: req.userId
       });
     }
 
@@ -195,17 +181,10 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           });
         }
       } else if (req.userId) {
-        const user = await userRepo().findOne({
-          where: { id: req.userId }
-        });
-
-        if (!user || user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN") {
-          return res.status(403).json({
-            message: "ONLY_TEACHERS_CAN_VIEW_LESSONS"
-          });
-        }
-
-        if (controlWork.topic.class && controlWork.topic.class.teacher.id !== user.id && user.role !== "SYSTEM_ADMIN") {
+        const classId = controlWork.topic.class?.id;
+        const access = classId ? await authorizeClassForReq(req, classId, "CLASS_VIEW") : null;
+        const allowed = classId ? Boolean(access?.allowed) : req.userRole === "SYSTEM_ADMIN";
+        if (!allowed) {
           return res.status(403).json({
             message: "ACCESS_DENIED"
           });
@@ -507,8 +486,6 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
 
     if (classIdScope) {
       topicQb = topicQb.andWhere("class.id = :classIdScope", { classIdScope });
-    } else if (req.userId && !isSystemAdmin) {
-      topicQb = topicQb.andWhere("teacher.id = :teacherId", { teacherId: req.userId });
     }
 
     const topic = requestedType === "CONTROL" ? null : await topicQb.getOne();
@@ -528,17 +505,10 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           });
         }
       } else if (req.userId) {
-        const user = await userRepo().findOne({
-          where: { id: req.userId }
-        });
-
-        if (!user || user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN") {
-          return res.status(403).json({
-            message: "ONLY_TEACHERS_CAN_VIEW_LESSONS"
-          });
-        }
-
-        if (topic.class && topic.class.teacher.id !== user.id && user.role !== "SYSTEM_ADMIN") {
+        const classId = topic.class?.id;
+        const access = classId ? await authorizeClassForReq(req, classId, "CLASS_VIEW") : null;
+        const allowed = classId ? Boolean(access?.allowed) : req.userRole === "SYSTEM_ADMIN";
+        if (!allowed) {
           return res.status(403).json({
             message: "ACCESS_DENIED"
           });

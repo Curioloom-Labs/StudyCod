@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { UserPlus, X, Building2 } from "lucide-react";
+import { UserPlus, X, Building2, Link2 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getMe } from "../../lib/api/profile";
 
 interface Org { orgId: number; role: string; name: string | null; }
 interface Member { userId: number; role: string; username: string | null; name: string | null; email: string | null; }
-interface Invite { id: number; email: string; role: string; status: string; }
+interface Invite { id: number; email: string; role: string; status: string; token?: string; }
 interface ClassSummary { id: number; name: string; language: string; studentsCount: number; teacherName: string | null; }
 interface Overview { totals: { classes: number; students: number; teachers: number }; classes: ClassSummary[]; }
 
 const ROLES = ["TEACHER", "ASSISTANT", "ORG_ADMIN"] as const;
+
+// Shared input/select chrome matching the Input primitive (theme tokens, focus ring).
+const controlClass =
+  "bg-bg-code border border-border text-text-primary rounded-[var(--ui-control-radius)] px-4 py-2.5 text-sm leading-[1.45] focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/70 transition-colors placeholder:text-text-muted";
 
 const roleLabel = (r: string): string => {
   switch (r) {
@@ -38,8 +43,11 @@ export const OrgMembersPage: React.FC = () => {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<(typeof ROLES)[number]>("TEACHER");
   const [busy, setBusy] = useState(false);
+  const [orgNameDraft, setOrgNameDraft] = useState("");
+  const [selfUserId, setSelfUserId] = useState<number | null>(null);
 
   useEffect(() => {
+    getMe().then(me => setSelfUserId(me.id)).catch(() => {});
     api
       .get(`/edu/orgs`)
       .then(({ data }) => {
@@ -71,6 +79,23 @@ export const OrgMembersPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrg]);
 
+  useEffect(() => {
+    setOrgNameDraft(orgs.find(o => o.orgId === activeOrg)?.name ?? "");
+  }, [activeOrg, orgs]);
+
+  const renameOrg = async () => {
+    if (activeOrg == null) return;
+    const name = orgNameDraft.trim();
+    if (!name) return;
+    try {
+      await api.patch(`/edu/orgs/${activeOrg}`, { name });
+      setOrgs(prev => prev.map(o => (o.orgId === activeOrg ? { ...o, name } : o)));
+      showToast({ message: tr("Назву оновлено", "Name updated"), type: "success" });
+    } catch (error) {
+      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося перейменувати", "Couldn't rename")), type: "error" });
+    }
+  };
+
   const invite = async () => {
     if (activeOrg == null || !email.trim()) return;
     setBusy(true);
@@ -96,24 +121,66 @@ export const OrgMembersPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  const copyInviteLink = async (token: string) => {
+    const link = `${window.location.origin}/invite/${token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast({ message: tr("Посилання скопійовано", "Link copied"), type: "success" });
+    } catch {
+      showToast({ message: link, type: "info" });
+    }
+  };
+
+  const changeRole = async (userId: number, newRole: string) => {
+    if (activeOrg == null) return;
+    try {
+      await api.patch(`/edu/orgs/${activeOrg}/members/${userId}/role`, { role: newRole });
+      setMembers(prev => prev.map(m => (m.userId === userId ? { ...m, role: newRole } : m)));
+      showToast({ message: tr("Роль оновлено", "Role updated"), type: "success" });
+    } catch (error) {
+      // Resync on failure (e.g. refusing to demote the last admin).
+      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося змінити роль", "Couldn't change role")), type: "error" });
+      await loadOrg(activeOrg);
+    }
+  };
+
+  const removeMember = async (userId: number, name: string) => {
+    if (activeOrg == null) return;
+    if (!confirm(tr(`Видалити "${name}" з організації?`, `Remove "${name}" from the organization?`))) return;
+    try {
+      await api.delete(`/edu/orgs/${activeOrg}/members/${userId}`);
+      setMembers(prev => prev.filter(m => m.userId !== userId));
+      showToast({ message: tr("Учасника видалено", "Member removed"), type: "success" });
+    } catch (error) {
+      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося видалити", "Couldn't remove")), type: "error" });
+    }
+  };
+
+  if (loading) return <div className="max-w-3xl mx-auto px-4 py-10 font-mono text-text-muted">{tr("Завантаження...", "Loading...")}</div>;
 
   if (orgs.length === 0) {
     return (
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "24px 16px" }}>
+      <div className="max-w-2xl mx-auto px-4 pb-12">
         <PageHero eyebrowClassic="// org" eyebrowAurora={tr("Організація", "Organization")} title={tr("Учасники", "Members")} />
-        <p style={{ opacity: 0.7, marginTop: 16, display: "flex", alignItems: "center", gap: 8 }}>
-          <Building2 size={18} /> {tr("Ви не адміністратор жодної організації.", "You don't administer any organization.")}
+        <p className="mt-4 flex items-center gap-2 text-sm text-text-secondary">
+          <Building2 className="w-4 h-4 shrink-0 text-primary" /> {tr("Ви не адміністратор жодної організації.", "You don't administer any organization.")}
         </p>
-        <Button variant="ghost" onClick={() => navigate("/edu/courses")} style={{ marginTop: 12 }}>
+        <Button variant="ghost" onClick={() => navigate("/edu/courses")} className="mt-3">
           {tr("Створити організацію", "Create one")}
         </Button>
       </div>
     );
   }
 
+  // This page manages staff (teachers/assistants/admins) — students/parents
+  // join via class join-codes / parent invites and have their own dedicated
+  // views (class roster, parent dashboard), so they're summarized, not listed,
+  // to keep this list usable as a class roster grows.
+  const staffMembers = members.filter(m => (ROLES as readonly string[]).includes(m.role));
+  const nonStaffCount = members.length - staffMembers.length;
+
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px 48px" }}>
+    <div className="max-w-3xl mx-auto px-4 pb-12">
       <PageHero
         eyebrowClassic="// org"
         eyebrowAurora={tr("Організація", "Organization")}
@@ -122,39 +189,57 @@ export const OrgMembersPage: React.FC = () => {
       />
 
       {orgs.length > 1 && (
-        <select value={activeOrg ?? ""} onChange={e => setActiveOrg(Number(e.target.value))} style={{ marginTop: 16, padding: "6px 10px", borderRadius: 6 }}>
+        <select value={activeOrg ?? ""} onChange={e => setActiveOrg(Number(e.target.value))} className={controlClass + " mt-4"}>
           {orgs.map(o => (
             <option key={o.orgId} value={o.orgId}>{o.name ?? `Org ${o.orgId}`}</option>
           ))}
         </select>
       )}
 
+      {activeOrg != null && (
+        <div className="mt-4 flex flex-col sm:flex-row gap-2">
+          <input
+            value={orgNameDraft}
+            onChange={e => setOrgNameDraft(e.target.value)}
+            placeholder={tr("Назва організації", "Organization name")}
+            className={controlClass + " flex-1 min-w-[200px]"}
+          />
+          <Button
+            variant="secondary"
+            onClick={renameOrg}
+            disabled={!orgNameDraft.trim() || orgNameDraft.trim() === (orgs.find(o => o.orgId === activeOrg)?.name ?? "")}
+          >
+            {tr("Перейменувати", "Rename")}
+          </Button>
+        </div>
+      )}
+
       {overview && (
-        <div style={{ marginTop: 20 }}>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div className="mt-5">
+          <div className="flex gap-3 flex-wrap">
             {[
               { label: tr("Класи", "Classes"), value: overview.totals.classes },
               { label: tr("Учні", "Students"), value: overview.totals.students },
               { label: tr("Викладачі", "Teachers"), value: overview.totals.teachers }
             ].map((s, i) => (
-              <div key={i} style={{ flex: 1, minWidth: 120, border: "1px solid rgba(128,128,128,0.2)", borderRadius: 10, padding: "12px 14px" }}>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>{s.value}</div>
-                <div style={{ fontSize: 12, opacity: 0.6 }}>{s.label}</div>
+              <div key={i} className="flex-1 min-w-[120px] rounded-[var(--ui-card-radius)] border border-border bg-bg-surface px-4 py-3">
+                <div className="text-2xl font-mono font-semibold text-text-primary tabular-nums">{s.value}</div>
+                <div className="text-xs text-text-muted mt-0.5">{s.label}</div>
               </div>
             ))}
           </div>
           {overview.classes.length > 0 && (
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="mt-3 flex flex-col gap-1.5">
               {overview.classes.map(c => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => navigate(`/edu/classes/${c.id}`)}
-                  style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 8, background: "transparent", cursor: "pointer" }}
+                  className="flex items-center gap-2.5 px-3 py-2 text-left rounded-[var(--ui-card-radius)] border border-border bg-bg-surface transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                  <strong>{c.name}</strong>
-                  <span style={{ fontSize: 12, opacity: 0.6 }}>{c.language}{c.teacherName ? ` · ${c.teacherName}` : ""}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>{c.studentsCount} {tr("учнів", "students")}</span>
+                  <strong className="font-mono text-text-primary truncate">{c.name}</strong>
+                  <span className="text-xs text-text-muted">{c.language}{c.teacherName ? ` · ${c.teacherName}` : ""}</span>
+                  <span className="ml-auto text-xs text-text-secondary tabular-nums">{c.studentsCount} {tr("учнів", "students")}</span>
                 </button>
               ))}
             </div>
@@ -162,47 +247,77 @@ export const OrgMembersPage: React.FC = () => {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+      <div className="mt-4 flex flex-col sm:flex-row gap-2">
         <input
           type="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
           placeholder={tr("email викладача", "teacher email")}
-          style={{ flex: 1, minWidth: 200, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
+          className={controlClass + " flex-1 min-w-[200px]"}
         />
-        <select value={role} onChange={e => setRole(e.target.value as any)} style={{ borderRadius: 6, padding: "0 8px" }}>
+        <select value={role} onChange={e => setRole(e.target.value as any)} className={controlClass}>
           {ROLES.map(r => (
             <option key={r} value={r}>{roleLabel(r)}</option>
           ))}
         </select>
         <Button onClick={invite} disabled={busy || !email.trim()}>
-          <UserPlus size={16} /> {tr("Запросити", "Invite")}
+          <UserPlus className="w-4 h-4 mr-1.5" /> {tr("Запросити", "Invite")}
         </Button>
       </div>
 
-      <h3 style={{ marginTop: 28 }}>{tr("Учасники", "Members")}</h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {members.map(m => (
-          <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 8 }}>
-            <strong>{m.name || m.username || `#${m.userId}`}</strong>
-            {m.email && <span style={{ fontSize: 13, opacity: 0.6 }}>{m.email}</span>}
-            <span style={{ marginLeft: "auto", fontSize: 12, padding: "2px 8px", borderRadius: 999, border: "1px solid rgba(128,128,128,0.3)" }}>
-              {roleLabel(m.role)}
-            </span>
+      <h3 className="mt-7 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted leading-none">{tr("Учасники", "Members")}</h3>
+      <div className="flex flex-col gap-1.5">
+        {staffMembers.map(m => (
+          <div key={m.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
+            <strong className="font-mono text-text-primary">{m.name || m.username || `#${m.userId}`}</strong>
+            {m.email && <span className="text-xs text-text-muted truncate">{m.email}</span>}
+            <select
+              value={m.role}
+              onChange={e => changeRole(m.userId, e.target.value)}
+              className={controlClass + " ml-auto !py-1 !px-2 text-xs"}
+              aria-label={tr("Роль", "Role")}
+            >
+              {ROLES.map(r => (
+                <option key={r} value={r}>{roleLabel(r)}</option>
+              ))}
+            </select>
+            <Button
+              variant="ghost"
+              className="text-xs"
+              disabled={m.userId === selfUserId}
+              title={m.userId === selfUserId ? tr("Не можна видалити себе", "Can't remove yourself") : undefined}
+              onClick={() => removeMember(m.userId, m.name || m.username || `#${m.userId}`)}
+              aria-label={tr("Видалити", "Remove")}
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
           </div>
         ))}
+        {nonStaffCount > 0 && (
+          <p className="text-xs text-text-muted mt-1">
+            {tr(
+              `+ ${nonStaffCount} учнів/батьків (керуються через клас і запрошення батьків)`,
+              `+ ${nonStaffCount} students/parents (managed via the class roster and parent invites)`
+            )}
+          </p>
+        )}
       </div>
 
       {invites.length > 0 && (
         <>
-          <h3 style={{ marginTop: 28 }}>{tr("Очікують", "Pending")}</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <h3 className="mt-7 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted leading-none">{tr("Очікують", "Pending")}</h3>
+          <div className="flex flex-col gap-1.5">
             {invites.map(i => (
-              <div key={i.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px dashed rgba(128,128,128,0.3)", borderRadius: 8 }}>
-                <span>{i.email}</span>
-                <span style={{ fontSize: 12, opacity: 0.6 }}>{roleLabel(i.role)}</span>
-                <Button variant="ghost" className="text-xs" onClick={() => revoke(i.id)} style={{ marginLeft: "auto" }} aria-label={tr("Відкликати", "Revoke")}>
-                  <X size={14} />
+              <div key={i.id} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-dashed border-border">
+                <span className="text-text-primary">{i.email}</span>
+                <span className="text-xs text-text-muted">{roleLabel(i.role)}</span>
+                {i.token && (
+                  <Button variant="ghost" className="text-xs ml-auto" onClick={() => copyInviteLink(i.token!)} aria-label={tr("Копіювати посилання", "Copy link")}>
+                    <Link2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+                <Button variant="ghost" className={"text-xs" + (i.token ? "" : " ml-auto")} onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
+                  <X className="w-3.5 h-3.5" />
                 </Button>
               </div>
             ))}

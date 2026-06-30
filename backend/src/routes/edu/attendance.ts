@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import { z } from "zod";
-import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
+import type { Capability } from "../../services/edu/rbac";
 import { Class } from "../../entities/Class";
 import { getAttendanceForDate, setAttendanceForDate, summarizeAttendance, isValidDate } from "../../services/edu/attendance";
 import { writeAudit } from "../../services/audit/auditLog";
@@ -12,11 +13,14 @@ import { logger } from "../../utils/logger";
  * for a date. EDU-only.
  */
 const router = Router();
-const classRepo = () => AppDataSource.getRepository(Class);
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-async function ownedClassOr404(req: AuthRequest, res: Response): Promise<Class | null> {
+async function ownedClassOr404(
+  req: AuthRequest,
+  res: Response,
+  capability: Capability = "CLASS_EDIT"
+): Promise<Class | null> {
   if (req.userType === "STUDENT" || req.studentId || !req.userId) {
     res.status(403).json({ message: "ONLY_TEACHERS" });
     return null;
@@ -26,17 +30,17 @@ async function ownedClassOr404(req: AuthRequest, res: Response): Promise<Class |
     res.status(400).json({ message: "INVALID_ID" });
     return null;
   }
-  const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-  if (!cls || cls.teacher?.id !== req.userId) {
+  const access = await authorizeClassForReq(req, classId, capability);
+  if (!access || !access.allowed) {
     res.status(404).json({ message: "CLASS_NOT_FOUND" });
     return null;
   }
-  return cls;
+  return access.cls;
 }
 
 router.get("/classes/:classId/attendance", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const cls = await ownedClassOr404(req, res);
+    const cls = await ownedClassOr404(req, res, "CLASS_VIEW");
     if (!cls) return;
     const date = typeof req.query.date === "string" && isValidDate(req.query.date) ? req.query.date : todayIso();
     const records = await getAttendanceForDate(cls.id, date);

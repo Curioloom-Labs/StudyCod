@@ -96,6 +96,8 @@ const PlacementEntry = React.lazy(() => import("./components/placement/Placement
 const PlaygroundPage = React.lazy(() => import("./pages/system/PlaygroundPage").then(mod => ({ default: mod.PlaygroundPage })));
 const ScoreboardPage = React.lazy(() => import("./pages/contest/ScoreboardPage").then(mod => ({ default: mod.ScoreboardPage })));
 const MyLearningPage = React.lazy(() => import("./pages/edu/MyLearningPage").then(mod => ({ default: mod.MyLearningPage })));
+const ParentDashboardPage = React.lazy(() => import("./pages/edu/ParentDashboardPage").then(mod => ({ default: mod.ParentDashboardPage })));
+const AcceptInvitePage = React.lazy(() => import("./pages/edu/AcceptInvitePage").then(mod => ({ default: mod.AcceptInvitePage })));
 const SolveReplayPage = React.lazy(() => import("./pages/core/SolveReplayPage").then(mod => ({ default: mod.SolveReplayPage })));
 const BlogPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPage })));
 const BlogPostPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPostPage })));
@@ -1257,6 +1259,15 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
+          <Route path="/invite/:token" element={<RequireToken>
+                <StandaloneShell current="learn">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <AcceptInvitePage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
           <Route path="/replay/:id" element={<RequireToken>
                 <StandaloneShell current="grades">
                   <Suspense fallback={<PageLoader />}>
@@ -1719,6 +1730,7 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="courses" element={<AnimatedPage><CoursesPage /></AnimatedPage>} />
             <Route path="calendar" element={<AnimatedPage><CalendarPage /></AnimatedPage>} />
             <Route path="tutor" element={<AnimatedPage><TutorPage /></AnimatedPage>} />
+            <Route path="parent" element={<AnimatedPage><ParentDashboardPage /></AnimatedPage>} />
             <Route path="courses/:courseId" element={<AnimatedPage><CourseDetailPage /></AnimatedPage>} />
             <Route path="lessons/:lessonId/quiz" element={<AnimatedPage><LessonQuizPage /></AnimatedPage>} />
             <Route path="lessons/:lessonId/quiz/review" element={<AnimatedPage><TeacherQuizReviewPage /></AnimatedPage>} />
