@@ -3,8 +3,9 @@ import crypto from "crypto";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { requireCapability, orgIdFromClassParam, orgIdFromStudentParam } from "../../middleware/orgContext";
-import { Class } from "../../entities/Class";
+import { requireClassCapability, type ClassAccessRequest } from "../../middleware/orgContext";
+import { authorizeStudentAction } from "../../services/edu/classAccess";
+import type { Capability } from "../../services/edu/rbac";
 import { Student } from "../../entities/Student";
 import { generatePassword, generateUsername, hashPassword } from "../../services/studentCredentialsService";
 import { provisionStudent } from "../../services/edu/studentProvision";
@@ -14,27 +15,15 @@ import { logger } from "../../utils/logger";
 
 const router = Router();
 
-const classRepo = () => AppDataSource.getRepository(Class);
 const studentRepo = () => AppDataSource.getRepository(Student);
 
 const studentsImportSchema = z.object({
   csvData: z.string().min(1).max(2_000_000)
 });
 
-router.get("/classes/:classId/students", authRequired, async (req: AuthRequest, res: Response) => {
+router.get("/classes/:classId/students", authRequired, requireClassCapability("STUDENT_DATA_VIEW"), async (req: ClassAccessRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      }
-    });
-    if (!cls) return res.status(404).json({
-      message: "CLASS_NOT_FOUND"
-    });
+    const classId = req.classAccess!.cls.id;
 
     const students = await studentRepo().find({
       where: {
@@ -49,7 +38,9 @@ router.get("/classes/:classId/students", authRequired, async (req: AuthRequest, 
     });
 
     res.json({
-      students
+      students,
+      // Org of the class — lets the client target the parent-invite endpoint.
+      organizationId: req.classAccess!.cls.organizationId ?? null
     });
   } catch (error) {
     logger.error("[edu/classStudents] GET /classes/:classId/students error", { requestId: req.requestId, userId: req.userId, error });
@@ -59,20 +50,9 @@ router.get("/classes/:classId/students", authRequired, async (req: AuthRequest, 
   }
 });
 
-router.post("/classes/:classId/students", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromClassParam() }), async (req: AuthRequest, res: Response) => {
+router.post("/classes/:classId/students", authRequired, requireClassCapability("STUDENT_MANAGE"), async (req: ClassAccessRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      }
-    });
-    if (!cls) return res.status(404).json({
-      message: "CLASS_NOT_FOUND"
-    });
+    const cls = req.classAccess!.cls;
 
     const schema = z.object({
       students: z.array(z.object({
@@ -144,20 +124,9 @@ router.post("/classes/:classId/students", authRequired, requireCapability("STUDE
   }
 });
 
-router.get("/classes/:classId/students/export", authRequired, async (req: AuthRequest, res: Response) => {
+router.get("/classes/:classId/students/export", authRequired, requireClassCapability("STUDENT_MANAGE"), async (req: ClassAccessRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      }
-    });
-    if (!cls) return res.status(404).json({
-      message: "CLASS_NOT_FOUND"
-    });
+    const classId = req.classAccess!.cls.id;
 
     const students = await studentRepo().find({
       where: {
@@ -226,20 +195,9 @@ router.get("/classes/:classId/students/export", authRequired, async (req: AuthRe
   }
 });
 
-router.post("/classes/:classId/students/import", authRequired, async (req: AuthRequest, res: Response) => {
+router.post("/classes/:classId/students/import", authRequired, requireClassCapability("STUDENT_MANAGE"), async (req: ClassAccessRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      }
-    });
-    if (!cls) return res.status(404).json({
-      message: "CLASS_NOT_FOUND"
-    });
+    const cls = req.classAccess!.cls;
 
     const parsed = studentsImportSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -421,21 +379,10 @@ router.post("/classes/:classId/students/import", authRequired, async (req: AuthR
   }
 });
 
-router.post("/students/:studentId/regenerate-password", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
+router.post("/students/:studentId/regenerate-password", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const studentId = parseInt(req.params.studentId, 10);
-    const student = await studentRepo().findOne({
-      where: {
-        id: studentId
-      },
-      relations: ["class", "class.teacher"]
-    });
-
-    if (!student || !student.class || !student.class.teacher || student.class.teacher.id !== req.userId) {
-      return res.status(404).json({
-        message: "STUDENT_NOT_FOUND"
-      });
-    }
+    const student = await requireStudent(req, res, "STUDENT_MANAGE");
+    if (!student) return;
 
     const plainPassword = generatePassword();
     student.generatedPassword = await hashPassword(plainPassword);
@@ -465,23 +412,38 @@ router.post("/students/:studentId/regenerate-password", authRequired, requireCap
   }
 });
 
-// Helper: load a student and assert the caller is the owning teacher.
-async function loadOwnedStudent(req: AuthRequest): Promise<Student | null> {
+// Helper: load a student and authorize the caller against the student's class
+// for `capability`. Writes the error response and returns null on 404/403, so
+// callers can `const s = await requireStudent(...); if (!s) return;`.
+async function requireStudent(
+  req: AuthRequest,
+  res: Response,
+  capability: Capability
+): Promise<Student | null> {
   const studentId = parseInt(req.params.studentId, 10);
-  if (!Number.isFinite(studentId)) return null;
-  const student = await studentRepo().findOne({
-    where: { id: studentId },
-    relations: ["class", "class.teacher"]
+  if (!Number.isFinite(studentId)) {
+    res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+    return null;
+  }
+  const result = await authorizeStudentAction(req.userId!, studentId, capability, {
+    isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
   });
-  if (!student || student.class?.teacher?.id !== req.userId) return null;
-  return student;
+  if (!result) {
+    res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+    return null;
+  }
+  if (!result.access.allowed) {
+    res.status(403).json({ message: "FORBIDDEN" });
+    return null;
+  }
+  return result.student;
 }
 
 // Right-to-access: export everything held about a student (audited data access).
-router.get("/students/:studentId/data-export", authRequired, requireCapability("STUDENT_DATA_VIEW", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
+router.get("/students/:studentId/data-export", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const student = await loadOwnedStudent(req);
-    if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+    const student = await requireStudent(req, res, "STUDENT_DATA_VIEW");
+    if (!student) return;
 
     const data = await exportStudentData(student.id);
     await writeAudit({
@@ -502,10 +464,10 @@ router.get("/students/:studentId/data-export", authRequired, requireCapability("
 });
 
 // Right-to-erasure: delete a student's record (cascade removes grades/links).
-router.post("/students/:studentId/erase", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
+router.post("/students/:studentId/erase", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const student = await loadOwnedStudent(req);
-    if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+    const student = await requireStudent(req, res, "STUDENT_MANAGE");
+    if (!student) return;
 
     const orgId = student.class?.organizationId ?? null;
     const ok = await eraseStudentData(student.id);
@@ -527,10 +489,10 @@ router.post("/students/:studentId/erase", authRequired, requireCapability("STUDE
 });
 
 // Record age / parental consent for a student.
-router.put("/students/:studentId/consent", authRequired, requireCapability("STUDENT_MANAGE", { resolveOrgId: orgIdFromStudentParam() }), async (req: AuthRequest, res: Response) => {
+router.put("/students/:studentId/consent", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const student = await loadOwnedStudent(req);
-    if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+    const student = await requireStudent(req, res, "STUDENT_MANAGE");
+    if (!student) return;
 
     const parsed = z
       .object({

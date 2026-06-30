@@ -39,7 +39,8 @@ import {
   type TeacherDigestResponse,
   type RiskInterventionPlanResponse,
 } from "../../lib/api/edu";
-import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap } from "lucide-react";
+import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap, Mail, Link2 } from "lucide-react";
+import { api } from "../../lib/api/client";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -98,6 +99,10 @@ export const ClassDetailsPage: React.FC = () => {
   const [showImport, setShowImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [classInfo, setClassInfo] = useState<ClassDetails | null>(null);
+  const [parentInviteFor, setParentInviteFor] = useState<Student | null>(null);
+  const [parentEmail, setParentEmail] = useState("");
+  const [parentInviteLink, setParentInviteLink] = useState("");
+  const [parentInviteBusy, setParentInviteBusy] = useState(false);
   const [selectedGradingSystem, setSelectedGradingSystem] = useState<ClassGradingSystem>(DEFAULT_GRADING_SYSTEM);
   const [savingGradingSystem, setSavingGradingSystem] = useState(false);
   const [announcements, setAnnouncements] = useState<ClassAnnouncementDto[]>([]);
@@ -284,6 +289,29 @@ export const ClassDetailsPage: React.FC = () => {
       [field]: value
     };
     setNewStudents(updated);
+  };
+  const openParentInvite = (student: Student) => {
+    setParentInviteFor(student);
+    setParentEmail("");
+    setParentInviteLink("");
+  };
+  const sendParentInvite = async () => {
+    const orgId = classInfo?.organizationId;
+    if (!orgId || !parentInviteFor || !parentEmail.trim()) {
+      showToast({ type: "error", message: tr("Клас не належить організації — призначте курс/школу.", "Class has no organization yet.") });
+      return;
+    }
+    setParentInviteBusy(true);
+    try {
+      const { data } = await api.post(`/edu/orgs/${orgId}/parent-invites`, { email: parentEmail.trim(), studentId: parentInviteFor.id });
+      const token = data?.invite?.token;
+      setParentInviteLink(token ? `${window.location.origin}/invite/${token}` : "");
+      showToast({ type: "success", message: tr("Запрошення створено", "Invitation created") });
+    } catch (error: unknown) {
+      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося створити запрошення", "Couldn't create invitation")) });
+    } finally {
+      setParentInviteBusy(false);
+    }
   };
   const handleSubmitStudents = async () => {
     if (!classId) return;
@@ -714,6 +742,9 @@ export const ClassDetailsPage: React.FC = () => {
                   </div>
                   <div className="text-xs text-text-secondary mt-1 truncate">{student.email}</div>
                   <div className="text-xs text-text-muted font-mono">@{student.generatedUsername}</div>
+                  <button type="button" onClick={() => openParentInvite(student)} className="mt-2 inline-flex items-center gap-1 text-[11px] font-mono text-text-muted hover:text-primary transition-fast focus-visible:outline-none focus-visible:text-primary">
+                    <Mail className="w-3 h-3" /> {tr("Запросити батьків", "Invite parent")}
+                  </button>
                 </motion.div>)}
             </motion.div>
           )}
@@ -846,6 +877,34 @@ export const ClassDetailsPage: React.FC = () => {
         )}
         </motion.div>
       </div>
+
+      {parentInviteFor && <Modal open={!!parentInviteFor} onClose={() => setParentInviteFor(null)} title={tr("Запросити батьків", "Invite parent")} showCloseButton={false}>
+        <div className="flex flex-col gap-3">
+          <div className="text-sm text-text-secondary">
+            {tr("Учень", "Student")}: <strong className="text-text-primary font-mono">{parentInviteFor.lastName} {parentInviteFor.firstName}</strong>
+          </div>
+          {parentInviteLink ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-text-secondary">{tr("Надішліть це посилання батькам:", "Share this link with the parent:")}</p>
+              <div className="flex items-center gap-2">
+                <input readOnly value={parentInviteLink} onFocus={e => e.currentTarget.select()} className="flex-1 px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-xs rounded" />
+                <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(parentInviteLink).then(() => showToast({ type: "success", message: tr("Скопійовано", "Copied") })).catch(() => {}); }} aria-label={tr("Копіювати", "Copy")}>
+                  <Link2 className="w-4 h-4" />
+                </Button>
+              </div>
+              <Button onClick={() => setParentInviteFor(null)}>{tr("Готово", "Done")}</Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <input type="email" value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder={tr("email батьків", "parent email")} className="px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm rounded focus:outline-none focus:border-primary" />
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" onClick={() => setParentInviteFor(null)}>{tr("Скасувати", "Cancel")}</Button>
+                <Button onClick={sendParentInvite} disabled={parentInviteBusy || !parentEmail.trim()}>{parentInviteBusy ? tr("Створення...", "Creating...") : tr("Створити запрошення", "Create invite")}</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>}
 
       {}
       {showAnnouncementModal && <Modal open={showAnnouncementModal} onClose={() => setShowAnnouncementModal(false)} title={editingAnnouncementId ? tr("Редагувати оголошення", "Edit announcement") : tr("Нове оголошення", "New announcement")} showCloseButton={false}>

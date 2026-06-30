@@ -3,17 +3,16 @@ import { z } from "zod";
 
 import { AppDataSource } from "../../data-source";
 import { User } from "../../entities/User";
-import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { ClassAnnouncement } from "../../entities/ClassAnnouncement";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { emailService } from "../../services/emailService";
 import { logger } from "../../utils/logger";
 
 const router = Router();
 
 const userRepo = () => AppDataSource.getRepository(User);
-const classRepo = () => AppDataSource.getRepository(Class);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const announcementRepo = () => AppDataSource.getRepository(ClassAnnouncement);
 
@@ -46,19 +45,9 @@ router.get("/classes/:classId/announcements", authRequired, async (req: AuthRequ
         return res.status(403).json({ message: "ACCESS_DENIED" });
       }
     } else {
-      const cls = await classRepo().findOne({
-        where: { id: classId },
-        relations: ["teacher"]
-      });
-
-      if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
-
-      if (!cls.teacher || cls.teacher.id !== req.userId) {
-        const user = await userRepo().findOne({ where: { id: req.userId } });
-        if (!user || user.role !== "SYSTEM_ADMIN") {
-          return res.status(403).json({ message: "ACCESS_DENIED" });
-        }
-      }
+      const access = await authorizeClassForReq(req, classId, "CLASS_VIEW");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
     const items = await announcementRepo().find({
@@ -142,19 +131,10 @@ router.post("/classes/:classId/announcements", authRequired, async (req: AuthReq
     const parsed = announcementCreateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
 
-    const cls = await classRepo().findOne({
-      where: { id: classId },
-      relations: ["teacher"]
-    });
-
-    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
-
-    if (!cls.teacher || cls.teacher.id !== req.userId) {
-      const user = await userRepo().findOne({ where: { id: req.userId } });
-      if (!user || user.role !== "SYSTEM_ADMIN") {
-        return res.status(403).json({ message: "ACCESS_DENIED" });
-      }
-    }
+    const access = await authorizeClassForReq(req, classId, "CONTENT_AUTHOR");
+    if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const cls = access.cls;
 
     const author = await userRepo().findOne({ where: { id: req.userId } });
     if (!author) return res.status(404).json({ message: "USER_NOT_FOUND" });
@@ -222,11 +202,9 @@ router.put("/classes/:classId/announcements/:id", authRequired, async (req: Auth
 
     if (!ann) return res.status(404).json({ message: "ANNOUNCEMENT_NOT_FOUND" });
 
-    if (!ann.class || !ann.class.teacher || ann.class.teacher.id !== req.userId) {
-      const user = await userRepo().findOne({ where: { id: req.userId } });
-      if (!user || user.role !== "SYSTEM_ADMIN") {
-        return res.status(403).json({ message: "ACCESS_DENIED" });
-      }
+    const annAccess = ann.class?.id ? await authorizeClassForReq(req, ann.class.id, "CONTENT_AUTHOR") : null;
+    if (!annAccess || !annAccess.allowed) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
     if ("title" in parsed.data) ann.title = parsed.data.title ?? null;
@@ -259,11 +237,9 @@ router.delete("/classes/:classId/announcements/:id", authRequired, async (req: A
 
     if (!ann) return res.status(404).json({ message: "ANNOUNCEMENT_NOT_FOUND" });
 
-    if (!ann.class || !ann.class.teacher || ann.class.teacher.id !== req.userId) {
-      const user = await userRepo().findOne({ where: { id: req.userId } });
-      if (!user || user.role !== "SYSTEM_ADMIN") {
-        return res.status(403).json({ message: "ACCESS_DENIED" });
-      }
+    const annAccess = ann.class?.id ? await authorizeClassForReq(req, ann.class.id, "CONTENT_AUTHOR") : null;
+    if (!annAccess || !annAccess.allowed) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
     await announcementRepo().remove(ann);

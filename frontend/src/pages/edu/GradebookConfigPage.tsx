@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Download } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
@@ -27,6 +27,8 @@ export const GradebookConfigPage: React.FC = () => {
   const [whatIf, setWhatIf] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<{ final: number | null } | null>(null);
   const [tasks, setTasks] = useState<Array<{ id: number; title: string; categoryId: string | null }>>([]);
+  const [finals, setFinals] = useState<Array<{ studentId: number; studentName: string; final: number | null; display: string }>>([]);
+  const [finalsLoading, setFinalsLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -97,6 +99,37 @@ export const GradebookConfigPage: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const loadFinals = async () => {
+    if (!classId) return;
+    setFinalsLoading(true);
+    try {
+      const { data } = await api.get(`/edu/classes/${classId}/gradebook/finals`);
+      setFinals(data?.finals ?? []);
+    } catch (error) {
+      showToast({ message: getErrorMessageFromUnknown(error, tr("Спочатку збережіть конфіг", "Save the config first")), type: "error" });
+    } finally {
+      setFinalsLoading(false);
+    }
+  };
+
+  const downloadFinalsCsv = () => {
+    if (finals.length === 0) return;
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const header = [tr("Учень", "Student"), tr("Підсумок", "Final"), "Raw/100"].map(esc).join(",");
+    const lines = finals.map(f => [esc(f.studentName), esc(f.display), esc(f.final ?? "")].join(","));
+    // BOM so Excel reads UTF-8 Cyrillic names correctly; CRLF line endings.
+    const csv = "﻿" + [header, ...lines].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `gradebook_finals_${classId}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const runPreview = async () => {
@@ -208,6 +241,24 @@ export const GradebookConfigPage: React.FC = () => {
         </div>
       )}
 
+      {categories.length > 0 && tasks.length === 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "12px 16px",
+            border: "1px dashed rgba(128,128,128,0.4)",
+            borderRadius: 8,
+            fontSize: 13,
+            opacity: 0.8
+          }}
+        >
+          {tr(
+            "Поки немає завдань для прив'язки. Зважений журнал оцінює завдання з призначеного курс-шаблону — призначте курс цьому класу, щоб користуватись ним. (Тематичний журнал працює окремо.)",
+            "No taggable tasks yet. The weighted gradebook grades tasks from an assigned course template — assign a course to this class to use it. (The thematic gradebook works separately.)"
+          )}
+        </div>
+      )}
+
       {categories.length > 0 && (
         <div style={{ marginTop: 28, padding: 16, border: "1px solid rgba(128,128,128,0.25)", borderRadius: 8 }}>
           <h3 style={{ marginTop: 0 }}>{tr("Передперегляд «що-якщо»", "What-if preview")}</h3>
@@ -242,6 +293,60 @@ export const GradebookConfigPage: React.FC = () => {
               </strong>
             )}
           </div>
+        </div>
+      )}
+
+      {categories.length > 0 && (
+        <div style={{ marginTop: 28, padding: 16, border: "1px solid rgba(128,128,128,0.25)", borderRadius: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <h3 style={{ margin: 0, flex: 1 }}>{tr("Підсумки класу", "Class finals")}</h3>
+            {finals.length > 0 && (
+              <Button variant="ghost" onClick={downloadFinalsCsv}>
+                <Download size={16} /> {tr("Експорт CSV", "Export CSV")}
+              </Button>
+            )}
+            <Button variant="secondary" onClick={loadFinals} disabled={finalsLoading}>
+              {finalsLoading ? tr("Обчислення...", "Computing...") : tr("Оновити", "Refresh")}
+            </Button>
+          </div>
+          <p style={{ fontSize: 13, opacity: 0.7, marginTop: 8 }}>
+            {tr(
+              "Зважений підсумок кожного учня з реальних оцінок у шкалі класу. Потрібен збережений конфіг.",
+              "Each student's weighted final from real grades, in the class scale. Requires a saved config."
+            )}
+          </p>
+          {finals.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, marginTop: 8 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "6px 8px", borderBottom: "1px solid rgba(128,128,128,0.25)" }}>
+                    {tr("Учень", "Student")}
+                  </th>
+                  <th style={{ textAlign: "right", padding: "6px 8px", borderBottom: "1px solid rgba(128,128,128,0.25)" }}>
+                    {tr("Підсумок", "Final")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {finals.map(f => (
+                  <tr key={f.studentId}>
+                    <td style={{ padding: "6px 8px", borderBottom: "1px solid rgba(128,128,128,0.12)" }}>{f.studentName}</td>
+                    <td
+                      style={{
+                        padding: "6px 8px",
+                        textAlign: "right",
+                        borderBottom: "1px solid rgba(128,128,128,0.12)",
+                        fontVariantNumeric: "tabular-nums",
+                        opacity: f.final == null ? 0.5 : 1
+                      }}
+                    >
+                      {f.display}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

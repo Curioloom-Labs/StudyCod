@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { User } from "../../entities/User";
+import { authorizeClassForReq } from "../../middleware/orgContext";
+import { isParentOf } from "../../services/edu/parentLinks";
 import { Student } from "../../entities/Student";
 import { TopicNew } from "../../entities/TopicNew";
 import { ControlWork } from "../../entities/ControlWork";
@@ -16,7 +17,6 @@ import { normalizeScaleMode } from "../../utils/gradingScale";
 
 const router = Router();
 
-const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
@@ -417,19 +417,12 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
     }
 
     if (!req.studentId) {
-      const user = await userRepo().findOne({
-        where: {
-          id: req.userId
-        }
-      });
-
-      if (!user || user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN") {
-        return res.status(403).json({
-          message: "ONLY_TEACHERS_CAN_VIEW_OTHER_STUDENTS"
-        });
-      }
-
-      if (!targetStudent.class || !targetStudent.class.teacher || targetStudent.class.teacher.id !== user.id) {
+      const classId = targetStudent.class?.id;
+      const access = classId ? await authorizeClassForReq(req, classId, "STUDENT_DATA_VIEW") : null;
+      const isStaff = Boolean(access?.allowed);
+      // A linked parent may view their own child's grades (read-only observer).
+      const isParent = isStaff ? false : await isParentOf(req.userId!, studentId);
+      if (!isStaff && !isParent) {
         return res.status(403).json({
           message: "ACCESS_DENIED"
         });

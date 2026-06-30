@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { User } from "../../entities/User";
 import { Student } from "../../entities/Student";
 import { TopicTask } from "../../entities/TopicTask";
@@ -516,11 +517,10 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
 
       await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
     } else if (req.userId) {
-      const user = await userRepo().findOne({ where: { id: req.userId } });
-      if (!user || (user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN")) {
-        return res.status(403).json({ message: "ONLY_TEACHERS_CAN_VIEW_TASKS" });
-      }
-      if (topicTask.topic.class && topicTask.topic.class.teacher.id !== user.id && user.role !== "SYSTEM_ADMIN") {
+      const classId = topicTask.topic.class?.id;
+      const access = classId ? await authorizeClassForReq(req, classId, "CLASS_VIEW") : null;
+      const allowed = classId ? Boolean(access?.allowed) : req.userRole === "SYSTEM_ADMIN";
+      if (!allowed) {
         return res.status(403).json({ message: "ACCESS_DENIED" });
       }
     }
@@ -2434,8 +2434,11 @@ router.post("/topics/tasks/:taskId/unassign", authRequired, async (req: AuthRequ
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
-    if (task.topic.class && task.topic.class.teacher.id !== req.userId) {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (task.topic.class) {
+      const access = await authorizeClassForReq(req, task.topic.class.id, "CONTENT_AUTHOR");
+      if (!access || !access.allowed) {
+        return res.status(403).json({ message: "ACCESS_DENIED" });
+      }
     }
 
     await AppDataSource.transaction(async manager => {
@@ -2494,8 +2497,11 @@ router.post("/topics/control-works/:controlWorkId/unassign", authRequired, async
       return res.status(404).json({ message: "CONTROL_WORK_NOT_FOUND" });
     }
 
-    if (controlWork.topic.class && controlWork.topic.class.teacher.id !== req.userId) {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (controlWork.topic.class) {
+      const access = await authorizeClassForReq(req, controlWork.topic.class.id, "CONTENT_AUTHOR");
+      if (!access || !access.allowed) {
+        return res.status(403).json({ message: "ACCESS_DENIED" });
+      }
     }
 
     await AppDataSource.transaction(async manager => {
