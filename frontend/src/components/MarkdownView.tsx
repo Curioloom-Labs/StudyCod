@@ -4,6 +4,7 @@ import type { Components } from "react-markdown";
 import type { Pluggable, PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import { decodeEscapedInputText, normalizeMarkdownEscapes } from "../utils/inputTextNormalization";
+import { InteractiveBlock, parseInteractiveSpec } from "./theory/InteractiveBlock";
 const MATH_MARKUP_RE = /(\$\$[^$]+?\$\$)|(\$[^$\n]+?\$)|\\\(|\\\[|\\begin\{/;
 const CODE_FENCE_RE = /(^|\n)\s*```[^\n]*\n/;
 
@@ -528,6 +529,12 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     }) {
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : "";
+      if (!inline && language === "interactive") {
+        const raw = String(children).replace(/\n$/, "");
+        const spec = parseInteractiveSpec(raw);
+        if (spec) return <InteractiveBlock spec={spec} />;
+        return <PlainCodeBlock code={raw} />;
+      }
       if (!inline && match) {
         const code = decodeEscapedInputText(String(children).replace(/\n$/, ""));
         if (!SyntaxHighlighter || !syntaxStyle) {
