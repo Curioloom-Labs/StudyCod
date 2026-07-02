@@ -187,7 +187,8 @@ export const TeacherDashboardPage: React.FC = () => {
   }
   const totalStudents = classes.reduce((s, c) => s + (c.studentsCount || 0), 0);
 
-  return <div className="min-h-full bg-bg-base">
+  return (
+    <div className="min-h-full bg-bg-base">
       <PageHero
         eyebrowClassic="// command center"
         eyebrowAurora={tr("Викладання", "Teaching")}
@@ -578,5 +579,6 @@ export const TeacherDashboardPage: React.FC = () => {
               </div>}
           </div>
         </Modal>}
-    </div>;
+    </div>
+  );
 };
