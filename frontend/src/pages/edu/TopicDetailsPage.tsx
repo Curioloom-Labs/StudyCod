@@ -9,13 +9,18 @@ import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { ArrowLeft, Plus, Trash2, Edit2, Sparkles, Settings, Save, X, FileText, XCircle, Upload, Download, BookOpen, ShieldCheck, CheckCircle2, Clock } from "lucide-react";
+import { SectionHeading } from "../../components/ui/SectionHeading";
 import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { api } from "../../lib/api/client";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
 import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
-import { generateTestData, getTestData, getTestDataItem, addTestData, updateTestData, deleteTestData, deleteGeneratedTestData, unassignTask, unassignControlWork, getStudents, type Student as ClassStudent, type TestData } from "../../lib/api/edu";
+import { generateTestData, getTestData, getTestDataItem, addTestData, updateTestData, deleteTestData, deleteGeneratedTestData, unassignTask, unassignControlWork, getStudents, generateInteractiveLesson, type Student as ClassStudent, type TestData } from "../../lib/api/edu";
+import { LessonBlocksEditor } from "../../components/lesson/LessonBlocksEditor";
+import { normalizeInteractiveLesson, type InteractiveLesson } from "../../lib/lessonBlocks";
+
+const EMPTY_LESSON: InteractiveLesson = { objectives: [], sections: [{ heading: "", blocks: [] }], summary: [] };
 import { convertLocalToUTC, convertUTCToLocal, formatDeadlineForDisplay, getUserTimezone } from "../../utils/timezone";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 import { showToast } from "../../lib/toast";
@@ -106,6 +111,9 @@ export const TopicDetailsPage: React.FC = () => {
   const [generatingCondition, setGeneratingCondition] = useState(false);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [generatingTheory, setGeneratingTheory] = useState(false);
+  const [taskTheoryMode, setTaskTheoryMode] = useState<"markdown" | "interactive">("markdown");
+  const [taskLessonBlocks, setTaskLessonBlocks] = useState<InteractiveLesson>(EMPTY_LESSON);
+  const [generatingTaskInteractive, setGeneratingTaskInteractive] = useState(false);
   const [taskDifficulty, setTaskDifficulty] = useState<"1" | "2" | "3" | "4" | "5">("3");
   const [aiResponseLanguage, setAiResponseLanguage] = useState(i18n.language?.toLowerCase().startsWith("en") ? "English" : "Українська");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -317,6 +325,26 @@ export const TopicDetailsPage: React.FC = () => {
       setGeneratingTheory(false);
     }
   };
+  const handleGenerateTaskInteractive = async () => {
+    const topicForGen = newTask.title.trim() || topic?.title?.trim() || "";
+    if (!topic || !topicForGen) {
+      showToast({ type: "error", message: tr("Спершу вкажіть назву завдання", "Enter a task title first") });
+      return;
+    }
+    setGeneratingTaskInteractive(true);
+    try {
+      const { lesson } = await generateInteractiveLesson(topicForGen, topic.language);
+      const normalized = normalizeInteractiveLesson(lesson);
+      if (!normalized) throw new Error("INVALID_LESSON");
+      setTaskLessonBlocks(normalized);
+      setNewTask({ ...newTask, theory: JSON.stringify(normalized) });
+      showToast({ type: "success", message: tr("Теорію згенеровано", "Theory generated") });
+    } catch (error: unknown) {
+      showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося згенерувати", "Generation failed")) });
+    } finally {
+      setGeneratingTaskInteractive(false);
+    }
+  };
   const handleCreateControlWork = async () => {
     if (!topicId) return;
     try {
@@ -346,6 +374,7 @@ export const TopicDetailsPage: React.FC = () => {
         template: newTask.template,
         maxAttempts: newTask.maxAttempts
       });
+      await api.post(`/topics/${topicId}/tasks/${editingTask.id}/theory`, { content: newTask.theory }).catch(() => {});
       await loadTopic();
       setShowEditTask(false);
       setEditingTask(null);
@@ -808,11 +837,9 @@ export const TopicDetailsPage: React.FC = () => {
         {}
         <section className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5" />
+            <SectionHeading icon={FileText} count={practiceTasks.length}>
               {t('practicalTasks')}
-              <span className="text-text-muted/70">· {practiceTasks.length}</span>
-            </h2>
+            </SectionHeading>
             {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="flex items-center gap-2">
                 <input key={importArchiveKey} id="import-task-archive" type="file" accept=".zip" className="hidden" onChange={e => {
               const f = e.target.files?.[0] || null;
@@ -825,7 +852,7 @@ export const TopicDetailsPage: React.FC = () => {
                   <Upload className="w-4 h-4 mr-2" />
                   {tr("Імпорт", "Import")}
                 </Button>
-                <Button onClick={() => setShowCreateTask(true)}>
+                <Button onClick={() => { setTaskTheoryMode("markdown"); setTaskLessonBlocks(EMPTY_LESSON); setShowCreateTask(true); }}>
                   <Plus className="w-4 h-4 mr-2" />
                   {t('addTask')}
                 </Button>
@@ -890,14 +917,18 @@ export const TopicDetailsPage: React.FC = () => {
                           <Button variant="ghost" onClick={e => {
                     e.stopPropagation();
                     setEditingTask(task);
+                    const existingTheory = task.theory?.content || "";
                     setNewTask({
                       title: task.title,
                       description: task.description,
                       template: task.template,
                       type: task.type,
                       maxAttempts: task.maxAttempts,
-                      theory: task.theory?.content || ""
+                      theory: existingTheory
                     });
+                    const parsedTheory = normalizeInteractiveLesson(existingTheory);
+                    setTaskTheoryMode(parsedTheory ? "interactive" : "markdown");
+                    setTaskLessonBlocks(parsedTheory ?? EMPTY_LESSON);
                     setShowEditTask(true);
                   }} className="text-xs">
                             <Edit2 className="w-3 h-3 mr-1" />
@@ -950,7 +981,7 @@ export const TopicDetailsPage: React.FC = () => {
         {}
         <section className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
               <ShieldCheck className="w-3.5 h-3.5 text-accent-warn" />
               {t('controlWorks')}
               <span className="text-text-muted/70">· {controlWorks.length}</span>
@@ -1105,17 +1136,39 @@ export const TopicDetailsPage: React.FC = () => {
                 </div>}
 
               <div>
-                <label className="block text-sm font-mono text-text-secondary mb-2">
-                  {tr("Теорія (необов'язково)", "Theory (optional)")}
-                  <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory || !newTask.description.trim()} className="ml-2 text-xs">
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    {generatingTheory ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+                <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Теорія (необов'язково)", "Theory (optional)")}</label>
+                <div className="flex gap-2 mb-2">
+                  <Button variant={taskTheoryMode === "markdown" ? "primary" : "ghost"} size="sm" onClick={() => setTaskTheoryMode("markdown")} className="text-xs">Markdown</Button>
+                  <Button
+                    variant={taskTheoryMode === "interactive" ? "primary" : "ghost"}
+                    size="sm"
+                    onClick={() => {
+                      const parsed = normalizeInteractiveLesson(newTask.theory);
+                      if (parsed) setTaskLessonBlocks(parsed);
+                      setTaskTheoryMode("interactive");
+                    }}
+                    className="text-xs"
+                  >
+                    {tr("Інтерактивний", "Interactive")}
                   </Button>
-                </label>
-                <textarea value={newTask.theory} onChange={e => setNewTask({
-              ...newTask,
-              theory: e.target.value
-            })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Теорія до завдання (Markdown)...", "Task theory (Markdown)...")} />
+                </div>
+                {taskTheoryMode === "markdown" ? (
+                  <>
+                    <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory || !newTask.description.trim()} className="mb-2 text-xs">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      {generatingTheory ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+                    </Button>
+                    <textarea value={newTask.theory} onChange={e => setNewTask({ ...newTask, theory: e.target.value })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Теорія до завдання (Markdown)...", "Task theory (Markdown)...")} />
+                  </>
+                ) : (
+                  <>
+                    <Button variant="ghost" onClick={handleGenerateTaskInteractive} disabled={generatingTaskInteractive} className="mb-2 text-xs">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      {generatingTaskInteractive ? tr("Генерація...", "Generating...") : tr("Згенерувати інтерактивний", "Generate interactive")}
+                    </Button>
+                    <LessonBlocksEditor value={taskLessonBlocks} onChange={(l) => { setTaskLessonBlocks(l); setNewTask(prev => ({ ...prev, theory: JSON.stringify(l) })); }} />
+                  </>
+                )}
                 <p className="text-xs text-text-muted mt-1">
                   {tr("Теорія буде доступна учням для вивчення та як підказка після помилки", "Theory will be available to students for learning and as a hint after mistakes")}
                 </p>
@@ -1245,6 +1298,29 @@ export const TopicDetailsPage: React.FC = () => {
                     {tr("Впливає на складність згенерованої умови завдання", "Affects the difficulty of the generated task description")}
                   </p>
                 </div>}
+
+              <div>
+                <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Теорія (необов'язково)", "Theory (optional)")}</label>
+                <div className="flex gap-2 mb-2">
+                  <Button variant={taskTheoryMode === "markdown" ? "primary" : "ghost"} size="sm" onClick={() => setTaskTheoryMode("markdown")} className="text-xs">Markdown</Button>
+                  <Button variant={taskTheoryMode === "interactive" ? "primary" : "ghost"} size="sm" onClick={() => { const parsed = normalizeInteractiveLesson(newTask.theory); if (parsed) setTaskLessonBlocks(parsed); setTaskTheoryMode("interactive"); }} className="text-xs">{tr("Інтерактивний", "Interactive")}</Button>
+                </div>
+                {taskTheoryMode === "markdown" ? (
+                  <>
+                    <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory || !newTask.description.trim()} className="mb-2 text-xs">
+                      <Sparkles className="w-3 h-3 mr-1" /> {generatingTheory ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+                    </Button>
+                    <textarea value={newTask.theory} onChange={e => setNewTask({ ...newTask, theory: e.target.value })} className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[150px]" placeholder={tr("Теорія до завдання (Markdown)...", "Task theory (Markdown)...")} />
+                  </>
+                ) : (
+                  <>
+                    <Button variant="ghost" onClick={handleGenerateTaskInteractive} disabled={generatingTaskInteractive} className="mb-2 text-xs">
+                      <Sparkles className="w-3 h-3 mr-1" /> {generatingTaskInteractive ? tr("Генерація...", "Generating...") : tr("Згенерувати інтерактивний", "Generate interactive")}
+                    </Button>
+                    <LessonBlocksEditor value={taskLessonBlocks} onChange={(l) => { setTaskLessonBlocks(l); setNewTask(prev => ({ ...prev, theory: JSON.stringify(l) })); }} />
+                  </>
+                )}
+              </div>
 
               <div className="flex gap-2 justify-end">
                 <Button variant="ghost" onClick={() => {

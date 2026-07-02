@@ -574,6 +574,8 @@ test('OpenRouterProvider falls back when gpt-oss endpoint requires reasoning to 
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     OPENROUTER_BACKUP_API_KEYS: process.env.OPENROUTER_BACKUP_API_KEYS,
     OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
+    OPENROUTER_TEXT_MODEL: process.env.OPENROUTER_TEXT_MODEL,
+    OPENROUTER_JSON_MODEL: process.env.OPENROUTER_JSON_MODEL,
     OPENROUTER_REASONING_ENABLED: process.env.OPENROUTER_REASONING_ENABLED,
     OPENROUTER_FALLBACK_MODELS: process.env.OPENROUTER_FALLBACK_MODELS,
     OPENROUTER_URL: process.env.OPENROUTER_URL
@@ -582,6 +584,12 @@ test('OpenRouterProvider falls back when gpt-oss endpoint requires reasoning to 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-gptoss_reasoning_mandatory_fallback';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
   process.env.OPENROUTER_MODEL = 'openai/gpt-oss-20b:free';
+  // Neutralize ambient OPENROUTER_TEXT_MODEL/JSON_MODEL from a loaded .env so the
+  // candidate chain is exactly [primary, ...OPENROUTER_FALLBACK_MODELS]. Without
+  // this the configured text model leaks in as the 2nd candidate, making the
+  // fallback-model assertion non-deterministic across environments.
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
   process.env.OPENROUTER_REASONING_ENABLED = '0';
   process.env.OPENROUTER_FALLBACK_MODELS = 'google/gemma-3-12b-it:free';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -622,6 +630,8 @@ test('OpenRouterProvider falls back when gpt-oss endpoint requires reasoning to 
   process.env.OPENROUTER_API_KEY = old.OPENROUTER_API_KEY;
   process.env.OPENROUTER_BACKUP_API_KEYS = old.OPENROUTER_BACKUP_API_KEYS;
   process.env.OPENROUTER_MODEL = old.OPENROUTER_MODEL;
+  process.env.OPENROUTER_TEXT_MODEL = old.OPENROUTER_TEXT_MODEL;
+  process.env.OPENROUTER_JSON_MODEL = old.OPENROUTER_JSON_MODEL;
   process.env.OPENROUTER_REASONING_ENABLED = old.OPENROUTER_REASONING_ENABLED;
   process.env.OPENROUTER_FALLBACK_MODELS = old.OPENROUTER_FALLBACK_MODELS;
   process.env.OPENROUTER_URL = old.OPENROUTER_URL;

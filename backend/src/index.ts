@@ -28,6 +28,8 @@ import playgroundRouter from "./routes/playground";
 import blogRouter from "./routes/blog";
 import notificationsRouter from "./routes/notifications";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
+import { geoBlockMiddleware } from "./middleware/geoBlockMiddleware";
+import { evaluateGeoBlock } from "./services/geoBlockService";
 import { requestContextMiddleware } from "./middleware/requestContext";
 import { placementGate } from "./middleware/placementGate";
 import { authMiddleware } from "./middleware/authMiddleware";
@@ -42,6 +44,7 @@ import * as path from "path";
 import { resolveJudgeSandboxConfig, resolveJudgeWorkerEntry } from "./services/judgeWorker/workerPaths";
 import { getExecutionQueueMode } from "./services/execution/distributedJudgeQueueSingleton";
 import { getJudgeExecutionMetrics } from "./services/judgeWorker";
+import { sweepTestCache } from "./services/judgeWorker/testCache";
 import { getOpenRouterRuntimeDiagnostics } from "./services/llm/OpenRouterProvider";
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
@@ -57,6 +60,7 @@ import { getRedisClientForStore, getRedisKeyPrefix, getSharedRedisClient, isRedi
 import { shutdownRedis } from "./services/redis/sharedRedis";
 import { seedTopicsIfNeeded } from "./utils/seedTopics";
 import { checkReadiness, renderPrometheusMetrics } from "./observability/health";
+import { httpMetricsMiddleware } from "./observability/httpMetrics";
 const app = express();
 
 // Graceful shutdown plumbing.
@@ -446,6 +450,8 @@ app.use((req, res, next) => {
   (isLargeBodyPath(req.path) ? urlencodedParserLarge : urlencodedParserDefault)(req, res, next);
 });
 app.use(requestContextMiddleware);
+app.use(httpMetricsMiddleware);
+app.use(geoBlockMiddleware);
 app.use(maintenanceMiddleware);
 const sessionStore = createSessionStore();
 const sessionMiddleware = session({
@@ -460,7 +466,10 @@ const sessionMiddleware = session({
     secure: IS_PRODUCTION,
     httpOnly: true,
     sameSite: "lax",
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000,
+    // Set COOKIE_DOMAIN=.studycod.space in prod to share the session across
+    // subdomains (school./contest.). Unset = host-only (current behaviour).
+    domain: (process.env.COOKIE_DOMAIN || "").trim() || undefined
   }
 });
 
@@ -512,6 +521,17 @@ app.get(["/health", "/api/health"], (_req, res) => {
     buildTime: process.env.BUILD_TIME || null,
     nodeEnv: process.env.NODE_ENV || null,
     isProduction: IS_PRODUCTION
+  });
+});
+
+// Geo verdict endpoint. Always returns 200 (never blocked) so the SPA can read
+// the decision and render the dedicated block page. Exempt from geoBlockMiddleware
+// via the bypass list. We expose only the boolean + country, never the raw IP.
+app.get(["/geo", "/api/geo"], (req, res) => {
+  const verdict = evaluateGeoBlock(req);
+  res.json({
+    geoBlocked: verdict.blocked,
+    country: verdict.country
   });
 });
 
@@ -1097,6 +1117,13 @@ async function bootstrap(): Promise<void> {
     // Avoid hanging sockets blocking shutdown forever.
     httpServer.keepAliveTimeout = 60_000;
     httpServer.headersTimeout = 65_000;
+
+    // Periodically GC the on-disk test cache (TTL-based). Best-effort; never throws.
+    const cacheSweepMs = Math.max(60 * 60 * 1000, parseInt(String(process.env.JUDGE_TEST_CACHE_SWEEP_MS ?? ""), 10) || 6 * 60 * 60 * 1000);
+    const cacheSweepTimer = setInterval(() => {
+      void sweepTestCache().catch(() => undefined);
+    }, cacheSweepMs);
+    cacheSweepTimer.unref?.();
   } catch (err) {
     logger.error("Database initialization error", {
       err

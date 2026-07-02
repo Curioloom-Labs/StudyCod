@@ -84,7 +84,7 @@ export const SimilarityPage: React.FC = () => {
         ) : (
           groups.map(g => (
             <section key={g.taskId}>
-              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 mb-3">
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none mb-3">
                 <ShieldAlert className="w-3.5 h-3.5 text-accent-warning" />
                 {g.taskTitle}
                 <span className="text-text-muted/70">· {g.pairs.length}</span>

@@ -733,8 +733,20 @@ export const LessonDetailsPage: React.FC = () => {
     return <PageSkeleton variant="default" />;
   }
   if (!lesson) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {tr("Урок не знайдено", "Lesson not found")}
+    // Guaranteed escape: if the page can't load the lesson/control work (e.g. it
+    // was recalled mid-exam), make sure the student is never trapped behind the
+    // kiosk lock with no way out.
+    return <div className="h-full flex flex-col items-center justify-center gap-4 text-text-primary font-mono">
+        <span>{tr("Урок недоступний або його відкликано", "This lesson is unavailable or was recalled")}</span>
+        <button
+          onClick={() => {
+            clearControlExamSession();
+            navigate(user?.studentId ? "/edu/lessons" : "/edu", { replace: true });
+          }}
+          className="px-4 py-2 border border-border text-sm hover:bg-bg-hover transition-fast"
+        >
+          {tr("До списку уроків", "Back to lessons")}
+        </button>
       </div>;
   }
 
@@ -1112,7 +1124,7 @@ export const LessonDetailsPage: React.FC = () => {
           </Card>}
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+          <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
             <FileText className="w-3.5 h-3.5" />
             {lesson.type === "CONTROL" ? tr("Блок 2: Практика", "Block 2: Practice") : t("tasks")}
             <span className="text-text-muted/70">· {lesson.tasks.length}</span>

@@ -1,7 +1,7 @@
 import { api } from "./client";
 
 // --- Skill tree ---
-export type SkillNodeStatus = "locked" | "available" | "in_progress" | "mastered";
+export type SkillNodeStatus = "locked" | "available" | "in_progress" | "mastered" | "closed";
 export interface SkillNode {
   id: number;
   title: string;

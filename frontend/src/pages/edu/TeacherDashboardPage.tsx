@@ -7,7 +7,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { getClasses, createClass, type Class, getPendingReviews, updateGrade, gradeByRubric, aiReviewGrade, type PendingReview, type CodeReviewResult } from "../../lib/api/edu";
-import { Plus, Users, CheckCircle, Clock, ArrowRight, AlertCircle } from "lucide-react";
+import { Plus, Users, CheckCircle, Clock, ArrowRight, AlertCircle, Building2, BookOpen, CalendarDays } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { CodeEditor } from "../../components/CodeEditor";
 import { showToast } from "../../lib/toast";
@@ -16,6 +16,7 @@ import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, gradingSystemLabel, normalizeG
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import { AuroraList } from "../../components/ui/AuroraList";
 import { PageHero } from "../../components/ui/PageHero";
+import { CreateSchoolOnboarding } from "../../components/onboarding/CreateSchoolOnboarding";
 import { api } from "../../lib/api/client";
 
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
@@ -49,6 +50,10 @@ export const TeacherDashboardPage: React.FC = () => {
   const [classes, setClasses] = useState<Class[]>([]);
   const [childrenCount, setChildrenCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  // null = still checking; false = teacher has no school yet → show onboarding.
+  const [hasOrg, setHasOrg] = useState<boolean | null>(null);
+  const [org, setOrg] = useState<{ orgId: number; name: string | null; role: string } | null>(null);
+  const [orgTotals, setOrgTotals] = useState<{ classes: number; students: number; teachers: number } | null>(null);
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [newClassName, setNewClassName] = useState("");
   const [newClassLanguage, setNewClassLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("JAVA");
@@ -94,6 +99,18 @@ export const TeacherDashboardPage: React.FC = () => {
     loadPendingReviews();
     // Parents land here too — surface a link to their children's progress.
     api.get("/edu/parent/children").then(({ data }) => setChildrenCount((data?.children ?? []).length)).catch(() => {});
+    // Fail open: on error assume a school exists so we never block the dashboard.
+    api.get("/edu/orgs").then(({ data }) => {
+      const list: Array<{ orgId: number; name: string | null; role: string }> = data?.orgs ?? [];
+      setHasOrg(list.length > 0);
+      if (list.length > 0) {
+        const first = list[0];
+        setOrg(first);
+        if (first.role === "ORG_ADMIN") {
+          api.get(`/edu/orgs/${first.orgId}/overview`).then(({ data: ov }) => setOrgTotals(ov?.totals ?? null)).catch(() => {});
+        }
+      }
+    }).catch(() => setHasOrg(true));
   }, []);
   const loadPendingReviews = async () => {
     try {
@@ -162,12 +179,16 @@ export const TeacherDashboardPage: React.FC = () => {
       setReviewing(false);
     }
   };
-  if (loading) {
+  if (loading || hasOrg === null) {
     return <PageSkeleton variant="cards" />;
+  }
+  if (hasOrg === false) {
+    return <CreateSchoolOnboarding onCreated={() => { setHasOrg(true); loadClasses(); }} />;
   }
   const totalStudents = classes.reduce((s, c) => s + (c.studentsCount || 0), 0);
 
-  return <div className="min-h-full bg-bg-base">
+  return (
+    <div className="min-h-full bg-bg-base">
       <PageHero
         eyebrowClassic="// command center"
         eyebrowAurora={tr("Викладання", "Teaching")}
@@ -213,12 +234,44 @@ export const TeacherDashboardPage: React.FC = () => {
         </div>
       )}
 
+      {org && (
+        <div className="px-4 md:px-8 pt-6 max-w-6xl mx-auto">
+          <div className="rounded-[var(--ui-card-radius)] border border-border bg-bg-surface p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="w-9 h-9 shrink-0 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Building2 className="w-4 h-4 text-primary" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-mono text-text-primary truncate">{org.name || tr("Моя школа", "My school")}</div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-muted">
+                  {org.role === "ORG_ADMIN" ? tr("Адміністратор", "Administrator") : org.role === "ASSISTANT" ? tr("Асистент", "Assistant") : tr("Викладач", "Teacher")}
+                  {orgTotals ? ` · ${orgTotals.teachers} ${tr("вчителів", "teachers")}` : ""}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {org.role === "ORG_ADMIN" && (
+                <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/edu/organization")}>
+                  <Users className="w-3.5 h-3.5 mr-1.5" /> {tr("Учасники", "Members")}
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/edu/courses")}>
+                <BookOpen className="w-3.5 h-3.5 mr-1.5" /> {tr("Курси", "Courses")}
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/edu/calendar")}>
+                <CalendarDays className="w-3.5 h-3.5 mr-1.5" /> {tr("Календар", "Calendar")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto space-y-8">
         {/* Pending review queue (prioritized) */}
         {pendingReviews.length > 0 && (
           <section>
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                 <AlertCircle className="w-3.5 h-3.5 text-accent-error" />
                 {t('reviewTasks')}
                 <span className="text-accent-error">· {pendingReviews.length}</span>
@@ -529,5 +582,6 @@ export const TeacherDashboardPage: React.FC = () => {
               </div>}
           </div>
         </Modal>}
-    </div>;
+    </div>
+  );
 };

@@ -41,6 +41,8 @@ import {
 } from "../../lib/api/edu";
 import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap, Mail, Link2 } from "lucide-react";
 import { api } from "../../lib/api/client";
+import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap } from "lucide-react";
+import { SectionHeading } from "../../components/ui/SectionHeading";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -461,10 +463,9 @@ export const ClassDetailsPage: React.FC = () => {
         {activeTab === "overview" && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-                <Settings className="w-3.5 h-3.5 text-primary" />
+              <SectionHeading icon={Settings}>
                 {tr("Система оцінювання", "Grading system")}
-              </h2>
+              </SectionHeading>
             </div>
 
             <div className="space-y-3">
@@ -489,10 +490,9 @@ export const ClassDetailsPage: React.FC = () => {
 
           <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-                <BarChart3 className="w-3.5 h-3.5 text-primary" />
+              <SectionHeading icon={BarChart3}>
                 {tr("Аналітика класу", "Class analytics")}
-              </h2>
+              </SectionHeading>
               <Button variant="ghost" className="text-xs" onClick={loadData}>
                 {tr("Оновити", "Refresh")}
               </Button>
@@ -565,10 +565,9 @@ export const ClassDetailsPage: React.FC = () => {
 
           <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <SectionHeading icon={Sparkles}>
                 {tr("Teacher Copilot", "Teacher Copilot")}
-              </h2>
+              </SectionHeading>
             </div>
 
             {!teacherCopilot || teacherCopilot.suggestions.length === 0 ? <div className="text-sm text-text-secondary">
@@ -596,10 +595,9 @@ export const ClassDetailsPage: React.FC = () => {
 
           <div className="rounded-xl border border-border bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-primary" />
+              <SectionHeading icon={Zap}>
                 {tr("Інсайти та втручання", "Insights & interventions")}
-              </h2>
+              </SectionHeading>
             </div>
 
             <div className="space-y-4">
@@ -691,11 +689,9 @@ export const ClassDetailsPage: React.FC = () => {
         {activeTab === "members" && (
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-              <Users className="w-3.5 h-3.5 text-primary" />
+            <SectionHeading icon={Users} count={students.length}>
               {t('studentsCountLabel')}
-              <span className="text-text-muted/70">· {students.length}</span>
-            </h2>
+            </SectionHeading>
             <div className="flex flex-wrap gap-2">
               <Button variant="ghost" onClick={handleExport} className="text-xs">
                 <Download className="w-4 h-4 mr-1" />
@@ -754,11 +750,9 @@ export const ClassDetailsPage: React.FC = () => {
         {activeTab === "overview" && (
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-              <MessageSquare className="w-3.5 h-3.5 text-primary" />
+            <SectionHeading icon={MessageSquare} count={announcements.length > 0 ? announcements.length : null}>
               {tr("Оголошення", "Announcements")}
-              {announcements.length > 0 && <span className="text-text-muted/70">· {announcements.length}</span>}
-            </h2>
+            </SectionHeading>
             <Button onClick={openCreateAnnouncement} className="text-xs">
               <Plus className="w-4 h-4 mr-1" />
               {t("add")}
@@ -805,11 +799,9 @@ export const ClassDetailsPage: React.FC = () => {
         {activeTab === "lessons" && (
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
-              <BookOpen className="w-3.5 h-3.5 text-primary" />
+            <SectionHeading icon={BookOpen} count={topics.length}>
               {t('topicsCountLabel')}
-              <span className="text-text-muted/70">· {topics.length}</span>
-            </h2>
+            </SectionHeading>
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => navigate(`/edu/classes/${classId}/topics/new`)} className="text-xs">
                 <Plus className="w-4 h-4 mr-1" />

@@ -1,6 +1,6 @@
 import * as path from "path";
 import { writeFile } from "fs/promises";
-import { LanguageAdapter } from "./types";
+import { COMPILE_BUDGET, LanguageAdapter } from "./types";
 
 function dotnetArgs(args: string[]): string[] {
   // Use /usr/bin/env to inject env vars even if the sandbox strips the parent environment.
@@ -38,6 +38,9 @@ function csprojXml(): string {
 
 export const csharpLanguage: LanguageAdapter = {
   id: "csharp",
+  entryFile: "Program.cs",
+  defaultLimits: { time_limit_ms: 1400, memory_limit_mb: 1024, output_limit_kb: 64 },
+  compileTimeLimitMs: COMPILE_BUDGET.csharp,
   async writeSource(workDir: string, source: string): Promise<void> {
     // dotnet build requires a project.
     await writeFile(path.join(workDir, "App.csproj"), csprojXml(), { encoding: "utf8" });
@@ -56,8 +59,9 @@ export const csharpLanguage: LanguageAdapter = {
         "/m:1",
         "/nodeReuse:false",
         "/p:BuildInParallel=false",
-        "-v",
-        "q"
+        // MSBuild verbosity must be a single token (-v:q); "-v q" makes MSBuild error
+        // "Specify the verbosity level".
+        "-v:q"
       ])
     };
   },

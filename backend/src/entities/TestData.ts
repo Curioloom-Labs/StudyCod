@@ -88,6 +88,25 @@ export class TestData {
     nullable: true,
   })
   subtask?: string | null;
+
+  // sha256 (hex) of `input` / `expected_output`, used to address the on-disk test cache so
+  // /check can read metadata only and skip pulling large text blobs. Lazily backfilled.
+  @Column({
+    type: "char",
+    length: 64,
+    nullable: true,
+    name: "input_sha256",
+  })
+  inputSha256?: string | null;
+
+  @Column({
+    type: "char",
+    length: 64,
+    nullable: true,
+    name: "output_sha256",
+  })
+  outputSha256?: string | null;
+
   @CreateDateColumn({
     name: "created_at"
   })

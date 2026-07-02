@@ -1,3 +1,4 @@
+import type { LanguageId } from "../languages/types";
 export type Verdict = "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE";
 export interface JudgeLimits {
   time_limit_ms: number;
@@ -21,10 +22,17 @@ export type CheckerSpec = CheckerSpecExact | CheckerSpecWhitespace | CheckerSpec
 export interface TestCase {
   id: number | string;
   input?: string;
-  output: string;
+  output?: string;
   hidden?: boolean;
   group?: string;
   weight?: number;
+  /**
+   * Optional host file references. When present the worker streams the test input from
+   * `input_path` (constant memory) and reads expected output from `output_path`, instead
+   * of using the inline `input`/`output`. Used for large stored-test suites.
+   */
+  input_path?: string;
+  output_path?: string;
 }
 
 export interface JudgeFile {
@@ -35,7 +43,12 @@ export interface JudgeFile {
 }
 export interface JudgeRequest {
   submission_id: string;
-  language: "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
+  language: LanguageId;
+  /**
+   * Optional compiler/version selector (e.g. "pypy3", "java21", "cpp20").
+   * Must belong to `language`'s family. When omitted, the family default is used.
+   */
+  compiler?: string;
   // Backwards-compatible single-file source.
   // When `files` is provided, `source` may be omitted.
   source?: string;
@@ -51,6 +64,12 @@ export interface JudgeRequest {
   debug?: boolean;
   run_all?: boolean;
   rerun_failed_once?: boolean;
+  /**
+   * Execution-visualizer trace mode. When set, compiled (native) languages are compiled with
+   * debug info and run under gdb instead of normally; the unified trace JSON is emitted to the
+   * test's stdout (between sentinels) for the backend to parse. Single-test requests only.
+   */
+  trace?: { mode: "step"; maxSteps?: number };
   /**
    * How to convert per-group test results into group score (and overall `score`).
    * - SUM (default): score is sum of weights for tests with `verdict=AC` inside the group.

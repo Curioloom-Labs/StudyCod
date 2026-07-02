@@ -1,4 +1,7 @@
-export type JudgeLanguage = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
+export type JudgeLanguage =
+  | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin"
+  | "js" | "go" | "rust" | "pascal"
+  | "d" | "dart" | "haskell" | "lisp" | "lua" | "perl" | "php" | "ruby" | "swift";
 export type JudgeVerdict = "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE";
 export type CheckerSpec = {
   type: "exact";
@@ -18,10 +21,17 @@ export interface JudgeLimits {
 export interface JudgeTestCase {
   id: number | string;
   input?: string;
-  output: string;
+  output?: string;
   hidden?: boolean;
   group?: string;
   weight?: number;
+  /**
+   * Optional host file references for large stored-test suites. When present the worker
+   * streams the input from `input_path` and reads expected output from `output_path`
+   * instead of the inline `input`/`output`.
+   */
+  input_path?: string;
+  output_path?: string;
 }
 
 export interface JudgeFile {
@@ -32,6 +42,11 @@ export interface JudgeFile {
 export interface JudgeRequest {
   submission_id: string;
   language: JudgeLanguage;
+  /**
+   * Optional compiler/version selector (e.g. "pypy3", "java21", "cpp20").
+   * Must belong to `language`'s family. When omitted, the family default is used.
+   */
+  compiler?: string;
   // Backwards-compatible single-file source.
   source?: string;
   // Optional multi-file submission.
@@ -44,6 +59,8 @@ export interface JudgeRequest {
   debug?: boolean;
   run_all?: boolean;
   rerun_failed_once?: boolean;
+  /** Execution-visualizer trace mode for compiled languages (gdb-driven; trace JSON in stdout). */
+  trace?: { mode: "step"; maxSteps?: number };
   /**
    * How to convert per-group test results into group score (and overall `score`).
    * - SUM (default): score is sum of weights for tests with `verdict=AC` inside the group.
