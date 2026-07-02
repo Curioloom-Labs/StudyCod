@@ -8,12 +8,31 @@ import { TestData } from "../../entities/TestData";
 import { safeAICall } from "../../services/ai/safeAICall";
 import { logger } from "../../utils/logger";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
+import { authorizeClassAction } from "../../services/edu/classAccess";
+import type { Capability } from "../../services/edu/rbac";
 
 const router = Router();
 
 const userRepo = () => AppDataSource.getRepository(User);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
+
+/**
+ * Authorize the caller (USER) against the class that owns a loaded topic-task,
+ * via the central org/owner authorizer. Returns true if permitted.
+ */
+async function canActOnTopicTaskClass(
+  req: AuthRequest,
+  topicTask: { topic?: { class?: { id?: number } | null } | null } | null,
+  capability: Capability
+): Promise<boolean> {
+  const isSystemAdmin = req.userRole === "SYSTEM_ADMIN";
+  const classId = topicTask?.topic?.class?.id;
+  if (!classId) return isSystemAdmin;
+  if (!req.userId) return false;
+  const access = await authorizeClassAction(req.userId, classId, capability, { isSystemAdmin });
+  return Boolean(access?.allowed);
+}
 
 function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxMs = 55_000): number {
   const raw = Number(process.env[envKey]);
@@ -182,7 +201,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
     if (!req.userId) {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
-    if (topicTask.topic.class?.teacher?.id !== req.userId && !isSystemAdmin) {
+    if (!(await canActOnTopicTaskClass(req, topicTask, "CLASS_VIEW"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -362,7 +381,7 @@ router.get("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
       return res.status(404).json({ message: "TASK_NOT_FOUND", taskId });
     }
 
-    if (topicTask.topic.class?.teacher?.id !== req.userId && !isSystemAdmin) {
+    if (!(await canActOnTopicTaskClass(req, topicTask, "CLASS_VIEW"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -417,7 +436,7 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
-    if (topicTask.topic.class.teacher.id !== req.userId && !isSystemAdmin) {
+    if (!(await canActOnTopicTaskClass(req, topicTask, "CONTENT_AUTHOR"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -488,7 +507,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       return res.status(404).json({ message: "TASK_NOT_FOUND", taskId });
     }
 
-    if (topicTask.topic.class.teacher.id !== req.userId && !isSystemAdmin) {
+    if (!(await canActOnTopicTaskClass(req, topicTask, "CONTENT_AUTHOR"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -647,7 +666,7 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_UPDATE_TEST_DATA" });
     }
 
-    if (topicTask.topic.class.teacher.id !== user.id && user.role !== "SYSTEM_ADMIN") {
+    if (!(await canActOnTopicTaskClass(req, topicTask, "CONTENT_AUTHOR"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -717,7 +736,7 @@ router.delete("/tasks/:taskId/test-data/generated", authRequired, async (req: Au
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_DELETE_TEST_DATA" });
     }
 
-    if (topicTask.topic.class.teacher.id !== user.id && user.role !== "SYSTEM_ADMIN") {
+    if (!(await canActOnTopicTaskClass(req, topicTask, "CONTENT_AUTHOR"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -766,7 +785,7 @@ router.delete("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: 
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_DELETE_TEST_DATA" });
     }
 
-    if (topicTask.topic.class.teacher.id !== user.id && user.role !== "SYSTEM_ADMIN") {
+    if (!(await canActOnTopicTaskClass(req, topicTask, "CONTENT_AUTHOR"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 

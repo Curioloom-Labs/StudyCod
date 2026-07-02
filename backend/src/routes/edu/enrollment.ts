@@ -1,8 +1,7 @@
 import { Router, Response } from "express";
 import { z } from "zod";
-import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { Class } from "../../entities/Class";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { setJoinCode, enrollViaJoinCode } from "../../services/edu/joinCode";
 import { claimStudentProfile } from "../../services/edu/studentLink";
 import { writeAudit } from "../../services/audit/auditLog";
@@ -14,7 +13,6 @@ import { logger } from "../../utils/logger";
  * generated-credential students are untouched.
  */
 const router = Router();
-const classRepo = () => AppDataSource.getRepository(Class);
 
 // Teacher reads their class's current join code.
 router.get("/classes/:classId/join-code", authRequired, async (req: AuthRequest, res: Response) => {
@@ -24,8 +22,9 @@ router.get("/classes/:classId/join-code", authRequired, async (req: AuthRequest,
     }
     const classId = parseInt(req.params.classId, 10);
     if (!Number.isFinite(classId)) return res.status(400).json({ message: "INVALID_ID" });
-    const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-    if (!cls || cls.teacher?.id !== req.userId) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const access = await authorizeClassForReq(req, classId, "STUDENT_MANAGE");
+    if (!access || !access.allowed) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const cls = access.cls;
     return res.json({ joinCode: cls.joinCode ?? null });
   } catch (error: any) {
     logger.error("[edu/enrollment] get join code failed", { requestId: req.requestId, err: error });
@@ -41,8 +40,9 @@ router.post("/classes/:classId/join-code", authRequired, async (req: AuthRequest
     }
     const classId = parseInt(req.params.classId, 10);
     if (!Number.isFinite(classId)) return res.status(400).json({ message: "INVALID_ID" });
-    const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-    if (!cls || cls.teacher?.id !== req.userId) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const access = await authorizeClassForReq(req, classId, "STUDENT_MANAGE");
+    if (!access || !access.allowed) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const cls = access.cls;
 
     const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });

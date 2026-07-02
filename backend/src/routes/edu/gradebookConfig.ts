@@ -1,31 +1,37 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
+import type { Capability } from "../../services/edu/rbac";
 import { Class } from "../../entities/Class";
 import { EduTask } from "../../entities/EduTask";
 import { EduGrade } from "../../entities/EduGrade";
-import { computeWeightedGrade, mapGradesToCategoryGrades, normalizeGradebookConfig } from "../../services/edu/gradebookCalc";
+import { Student } from "../../entities/Student";
+import { computeWeightedGrade, mapGradesToCategoryGrades, normalizeGradebookConfig, computeClassWeightedFinals } from "../../services/edu/gradebookCalc";
 import { formatGradeForSystem, normalizeScaleMode } from "../../utils/gradingScale";
 import { DEFAULT_GRADING_SYSTEM } from "../../types/GradingSystem";
 import { logger } from "../../utils/logger";
 
 /**
- * Weighted-category gradebook config per class (P2.6). Setting a config opts the
- * class into the generalized gradebook; null keeps the thematic/semester model.
- * Item→category tagging + full aggregation is a later step (P2.6c); the preview
- * endpoint computes a final from explicitly supplied category percents.
+ * Weighted-category gradebook per class (P2.6). Setting a config opts the class
+ * into the generalized gradebook; null keeps the thematic/semester model.
+ * Endpoints: config CRUD, a what-if `preview` from supplied percents, item→
+ * category tagging (`PUT /tasks/:taskId/gradebook-category`), a single-student
+ * weighted final, and a class-wide finals aggregation (P2.6c, `/gradebook/finals`)
+ * computed from real grades via services/edu/gradebookCalc.ts.
  */
 const router = Router();
 const classRepo = () => AppDataSource.getRepository(Class);
 const taskRepo = () => AppDataSource.getRepository(EduTask);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
+const studentRepo = () => AppDataSource.getRepository(Student);
 
-async function loadOwnedClass(req: AuthRequest): Promise<Class | null> {
+async function loadOwnedClass(req: AuthRequest, capability: Capability = "CLASS_VIEW"): Promise<Class | null> {
   const classId = parseInt(req.params.classId, 10);
   if (!Number.isFinite(classId)) return null;
-  const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-  if (!cls || cls.teacher?.id !== req.userId) return null;
-  return cls;
+  const access = await authorizeClassForReq(req, classId, capability);
+  if (!access || !access.allowed) return null;
+  return access.cls;
 }
 
 function ensureTeacher(req: AuthRequest, res: Response): boolean {
@@ -51,7 +57,7 @@ router.get("/classes/:classId/gradebook-config", authRequired, async (req: AuthR
 router.put("/classes/:classId/gradebook-config", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!ensureTeacher(req, res)) return;
-    const cls = await loadOwnedClass(req);
+    const cls = await loadOwnedClass(req, "GRADE_EDIT");
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
 
     // null/empty clears the config (revert to thematic/semester model).
@@ -126,7 +132,12 @@ router.put("/tasks/:taskId/gradebook-category", authRequired, async (req: AuthRe
       where: { id: taskId },
       relations: ["lesson", "lesson.class", "lesson.class.teacher"]
     });
-    if (!task || task.lesson?.class?.teacher?.id !== req.userId) {
+    if (!task) {
+      return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    }
+    const taskClassId = task.lesson?.class?.id;
+    const taskAccess = taskClassId ? await authorizeClassForReq(req, taskClassId, "GRADE_EDIT") : null;
+    if (!taskAccess || !taskAccess.allowed) {
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
@@ -179,6 +190,64 @@ router.get("/classes/:classId/gradebook/student/:studentId/final", authRequired,
     return res.json({ final: result.final, display, categories: result.categories });
   } catch (error: any) {
     logger.error("[edu/gradebookConfig] student final failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Class-wide weighted finals (P2.6c): every roster student's weighted final in a
+// single pass for the gradebook column — same per-student computation as the
+// single-student endpoint, but one roster query + one grade query (no N+1).
+router.get("/classes/:classId/gradebook/finals", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!ensureTeacher(req, res)) return;
+    const cls = await loadOwnedClass(req);
+    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    if (!cls.gradebookConfig) return res.status(409).json({ message: "NO_GRADEBOOK_CONFIG" });
+
+    const students = await studentRepo().find({
+      where: { class: { id: cls.id } },
+      order: { lastName: "ASC", firstName: "ASC" }
+    });
+    const studentIds = students.map((s) => s.id);
+
+    // Graded, category-tagged tasks in this class for the whole roster.
+    const rows =
+      studentIds.length === 0
+        ? []
+        : await gradeRepo()
+            .createQueryBuilder("grade")
+            .innerJoin("grade.task", "task")
+            .innerJoin("task.lesson", "lesson")
+            .where("lesson.class_id = :classId", { classId: cls.id })
+            .andWhere("task.gradebook_category_id IS NOT NULL")
+            .andWhere("grade.total IS NOT NULL")
+            .select(["grade.student_id AS studentId", "grade.total AS total", "task.gradebook_category_id AS categoryId"])
+            .getRawMany();
+
+    const finals = computeClassWeightedFinals(
+      cls.gradebookConfig,
+      rows.map((r: any) => ({ studentId: Number(r.studentId), categoryId: r.categoryId, total: Number(r.total) })),
+      studentIds
+    );
+    const finalById = new Map(finals.map((f) => [f.studentId, f]));
+
+    const gradingSystem = cls.gradingSystem || DEFAULT_GRADING_SYSTEM;
+    const scaleMode = normalizeScaleMode(cls.gradeScaleMode);
+
+    return res.json({
+      finals: students.map((s) => {
+        const f = finalById.get(s.id)!;
+        return {
+          studentId: s.id,
+          studentName: `${s.lastName} ${s.firstName} ${s.middleName || ""}`.trim(),
+          final: f.final,
+          display: f.final == null ? "-" : formatGradeForSystem(f.final, gradingSystem, scaleMode),
+          categories: f.categories
+        };
+      })
+    });
+  } catch (error: any) {
+    logger.error("[edu/gradebookConfig] class finals failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

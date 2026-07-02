@@ -48,6 +48,7 @@ export const TeacherDashboardPage: React.FC = () => {
   const isAurora = ui.mode === "aurora";
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
+  const [childrenCount, setChildrenCount] = useState(0);
   const [loading, setLoading] = useState(true);
   // null = still checking; false = teacher has no school yet → show onboarding.
   const [hasOrg, setHasOrg] = useState<boolean | null>(null);
@@ -96,6 +97,8 @@ export const TeacherDashboardPage: React.FC = () => {
   useEffect(() => {
     loadClasses();
     loadPendingReviews();
+    // Parents land here too — surface a link to their children's progress.
+    api.get("/edu/parent/children").then(({ data }) => setChildrenCount((data?.children ?? []).length)).catch(() => {});
     // Fail open: on error assume a school exists so we never block the dashboard.
     api.get("/edu/orgs").then(({ data }) => {
       const list: Array<{ orgId: number; name: string | null; role: string }> = data?.orgs ?? [];
@@ -211,6 +214,22 @@ export const TeacherDashboardPage: React.FC = () => {
         ]}
       />
 
+      {childrenCount > 0 && (
+        <div className="px-4 md:px-8 pt-6 max-w-6xl mx-auto">
+          <button
+            type="button"
+            onClick={() => navigate("/edu/parent")}
+            className="w-full rounded-[var(--ui-card-radius)] border border-border bg-bg-surface p-4 flex items-center gap-3 text-left transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <span className="w-9 h-9 shrink-0 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Users className="w-4 h-4 text-primary" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-mono text-text-primary">{tr("Прогрес дітей", "Children's progress")}</div>
+              <div className="text-[11px] font-mono text-text-muted">{childrenCount} {tr("дітей прив'язано", "children linked")}</div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-text-muted" />
+          </button>
       {org && (
         <div className="px-4 md:px-8 pt-6 max-w-6xl mx-auto">
           <div className="rounded-[var(--ui-card-radius)] border border-border bg-bg-surface p-4 flex flex-wrap items-center justify-between gap-3">

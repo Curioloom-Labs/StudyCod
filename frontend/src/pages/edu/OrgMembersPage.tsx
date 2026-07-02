@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { UserPlus, X, Building2 } from "lucide-react";
+import { UserPlus, X, Building2, Link2 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getMe } from "../../lib/api/profile";
 
 interface Org { orgId: number; role: string; name: string | null; }
 interface Member { userId: number; role: string; username: string | null; name: string | null; email: string | null; }
-interface Invite { id: number; email: string; role: string; status: string; }
+interface Invite { id: number; email: string; role: string; status: string; token?: string; }
 interface ClassSummary { id: number; name: string; language: string; studentsCount: number; teacherName: string | null; }
 interface Overview { totals: { classes: number; students: number; teachers: number }; classes: ClassSummary[]; }
 
@@ -42,8 +43,11 @@ export const OrgMembersPage: React.FC = () => {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<(typeof ROLES)[number]>("TEACHER");
   const [busy, setBusy] = useState(false);
+  const [orgNameDraft, setOrgNameDraft] = useState("");
+  const [selfUserId, setSelfUserId] = useState<number | null>(null);
 
   useEffect(() => {
+    getMe().then(me => setSelfUserId(me.id)).catch(() => {});
     api
       .get(`/edu/orgs`)
       .then(({ data }) => {
@@ -75,6 +79,23 @@ export const OrgMembersPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrg]);
 
+  useEffect(() => {
+    setOrgNameDraft(orgs.find(o => o.orgId === activeOrg)?.name ?? "");
+  }, [activeOrg, orgs]);
+
+  const renameOrg = async () => {
+    if (activeOrg == null) return;
+    const name = orgNameDraft.trim();
+    if (!name) return;
+    try {
+      await api.patch(`/edu/orgs/${activeOrg}`, { name });
+      setOrgs(prev => prev.map(o => (o.orgId === activeOrg ? { ...o, name } : o)));
+      showToast({ message: tr("Назву оновлено", "Name updated"), type: "success" });
+    } catch (error) {
+      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося перейменувати", "Couldn't rename")), type: "error" });
+    }
+  };
+
   const invite = async () => {
     if (activeOrg == null || !email.trim()) return;
     setBusy(true);
@@ -100,6 +121,41 @@ export const OrgMembersPage: React.FC = () => {
     }
   };
 
+  const copyInviteLink = async (token: string) => {
+    const link = `${window.location.origin}/invite/${token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast({ message: tr("Посилання скопійовано", "Link copied"), type: "success" });
+    } catch {
+      showToast({ message: link, type: "info" });
+    }
+  };
+
+  const changeRole = async (userId: number, newRole: string) => {
+    if (activeOrg == null) return;
+    try {
+      await api.patch(`/edu/orgs/${activeOrg}/members/${userId}/role`, { role: newRole });
+      setMembers(prev => prev.map(m => (m.userId === userId ? { ...m, role: newRole } : m)));
+      showToast({ message: tr("Роль оновлено", "Role updated"), type: "success" });
+    } catch (error) {
+      // Resync on failure (e.g. refusing to demote the last admin).
+      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося змінити роль", "Couldn't change role")), type: "error" });
+      await loadOrg(activeOrg);
+    }
+  };
+
+  const removeMember = async (userId: number, name: string) => {
+    if (activeOrg == null) return;
+    if (!confirm(tr(`Видалити "${name}" з організації?`, `Remove "${name}" from the organization?`))) return;
+    try {
+      await api.delete(`/edu/orgs/${activeOrg}/members/${userId}`);
+      setMembers(prev => prev.filter(m => m.userId !== userId));
+      showToast({ message: tr("Учасника видалено", "Member removed"), type: "success" });
+    } catch (error) {
+      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося видалити", "Couldn't remove")), type: "error" });
+    }
+  };
+
   if (loading) return <div className="max-w-3xl mx-auto px-4 py-10 font-mono text-text-muted">{tr("Завантаження...", "Loading...")}</div>;
 
   if (orgs.length === 0) {
@@ -116,6 +172,13 @@ export const OrgMembersPage: React.FC = () => {
     );
   }
 
+  // This page manages staff (teachers/assistants/admins) — students/parents
+  // join via class join-codes / parent invites and have their own dedicated
+  // views (class roster, parent dashboard), so they're summarized, not listed,
+  // to keep this list usable as a class roster grows.
+  const staffMembers = members.filter(m => (ROLES as readonly string[]).includes(m.role));
+  const nonStaffCount = members.length - staffMembers.length;
+
   return (
     <div className="max-w-3xl mx-auto px-4 pb-12">
       <PageHero
@@ -131,6 +194,24 @@ export const OrgMembersPage: React.FC = () => {
             <option key={o.orgId} value={o.orgId}>{o.name ?? `Org ${o.orgId}`}</option>
           ))}
         </select>
+      )}
+
+      {activeOrg != null && (
+        <div className="mt-4 flex flex-col sm:flex-row gap-2">
+          <input
+            value={orgNameDraft}
+            onChange={e => setOrgNameDraft(e.target.value)}
+            placeholder={tr("Назва організації", "Organization name")}
+            className={controlClass + " flex-1 min-w-[200px]"}
+          />
+          <Button
+            variant="secondary"
+            onClick={renameOrg}
+            disabled={!orgNameDraft.trim() || orgNameDraft.trim() === (orgs.find(o => o.orgId === activeOrg)?.name ?? "")}
+          >
+            {tr("Перейменувати", "Rename")}
+          </Button>
+        </div>
       )}
 
       {overview && (
@@ -186,6 +267,30 @@ export const OrgMembersPage: React.FC = () => {
 
       <h3 className="mt-7 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted leading-none">{tr("Учасники", "Members")}</h3>
       <div className="flex flex-col gap-1.5">
+        {staffMembers.map(m => (
+          <div key={m.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
+            <strong className="font-mono text-text-primary">{m.name || m.username || `#${m.userId}`}</strong>
+            {m.email && <span className="text-xs text-text-muted truncate">{m.email}</span>}
+            <select
+              value={m.role}
+              onChange={e => changeRole(m.userId, e.target.value)}
+              className={controlClass + " ml-auto !py-1 !px-2 text-xs"}
+              aria-label={tr("Роль", "Role")}
+            >
+              {ROLES.map(r => (
+                <option key={r} value={r}>{roleLabel(r)}</option>
+              ))}
+            </select>
+            <Button
+              variant="ghost"
+              className="text-xs"
+              disabled={m.userId === selfUserId}
+              title={m.userId === selfUserId ? tr("Не можна видалити себе", "Can't remove yourself") : undefined}
+              onClick={() => removeMember(m.userId, m.name || m.username || `#${m.userId}`)}
+              aria-label={tr("Видалити", "Remove")}
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
         {members.map(m => (
           <div key={m.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
             <strong className="font-mono text-text-primary">{m.name || m.username || `#${m.userId}`}</strong>
@@ -195,6 +300,14 @@ export const OrgMembersPage: React.FC = () => {
             </span>
           </div>
         ))}
+        {nonStaffCount > 0 && (
+          <p className="text-xs text-text-muted mt-1">
+            {tr(
+              `+ ${nonStaffCount} учнів/батьків (керуються через клас і запрошення батьків)`,
+              `+ ${nonStaffCount} students/parents (managed via the class roster and parent invites)`
+            )}
+          </p>
+        )}
       </div>
 
       {invites.length > 0 && (
@@ -205,6 +318,12 @@ export const OrgMembersPage: React.FC = () => {
               <div key={i.id} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-dashed border-border">
                 <span className="text-text-primary">{i.email}</span>
                 <span className="text-xs text-text-muted">{roleLabel(i.role)}</span>
+                {i.token && (
+                  <Button variant="ghost" className="text-xs ml-auto" onClick={() => copyInviteLink(i.token!)} aria-label={tr("Копіювати посилання", "Copy link")}>
+                    <Link2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+                <Button variant="ghost" className={"text-xs" + (i.token ? "" : " ml-auto")} onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
                 <Button variant="ghost" className="text-xs ml-auto" onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
                   <X className="w-3.5 h-3.5" />
                 </Button>

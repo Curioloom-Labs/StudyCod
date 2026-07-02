@@ -17,6 +17,14 @@ test("TEACHER can author/grade/manage students but not org members", () => {
   assert.equal(roleCan("TEACHER", "ORG_SETTINGS"), false);
 });
 
+test("teaching staff can view classes", () => {
+  assert.equal(roleCan("ORG_ADMIN", "CLASS_VIEW"), true);
+  assert.equal(roleCan("TEACHER", "CLASS_VIEW"), true);
+  assert.equal(roleCan("ASSISTANT", "CLASS_VIEW"), true);
+  assert.equal(roleCan("STUDENT", "CLASS_VIEW"), false);
+  assert.equal(roleCan("PARENT", "CLASS_VIEW"), false);
+});
+
 test("ASSISTANT edits/grades but cannot delete classes or manage students", () => {
   assert.equal(roleCan("ASSISTANT", "CLASS_EDIT"), true);
   assert.equal(roleCan("ASSISTANT", "CONTENT_AUTHOR"), true);

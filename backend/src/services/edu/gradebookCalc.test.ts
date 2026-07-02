@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeWeightedGrade, mapGradesToCategoryGrades, normalizeGradebookConfig } from "./gradebookCalc";
+import { computeWeightedGrade, mapGradesToCategoryGrades, normalizeGradebookConfig, computeClassWeightedFinals } from "./gradebookCalc";
 
 const config = {
   categories: [
@@ -95,6 +95,27 @@ test("mapGradesToCategoryGrades drops rows without a category or score, then fee
   // (20/70)*90 + (50/70)*90 = 90
   const r = computeWeightedGrade(config, mapped);
   assert.equal(r.final, 90);
+});
+
+test("computeClassWeightedFinals groups rows per student and includes ungraded students", () => {
+  const finals = computeClassWeightedFinals(
+    config,
+    [
+      // student 1: hw avg 90, exam 90, proj empty → renormalize → 90
+      { studentId: 1, categoryId: "hw", total: 80 },
+      { studentId: 1, categoryId: "hw", total: 100 },
+      { studentId: 1, categoryId: "exam", total: 90 },
+      // student 2: only an exam → final is that exam (single active category)
+      { studentId: 2, categoryId: "exam", total: 70 },
+      // stray row for a student not on the roster → ignored by studentIds projection
+      { studentId: 99, categoryId: "exam", total: 10 }
+    ],
+    [1, 2, 3] // student 3 has no grades
+  );
+  assert.equal(finals.length, 3, "one entry per requested student");
+  assert.equal(finals.find(f => f.studentId === 1)!.final, 90);
+  assert.equal(finals.find(f => f.studentId === 2)!.final, 70);
+  assert.equal(finals.find(f => f.studentId === 3)!.final, null, "ungraded student → null, still listed");
 });
 
 test("normalizeGradebookConfig validates ids and weights", () => {

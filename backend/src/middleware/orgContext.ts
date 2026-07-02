@@ -1,102 +1,94 @@
 import type { NextFunction, Response } from "express";
 import type { AuthRequest } from "./authMiddleware";
-import { env } from "../env";
 import { logger } from "../utils/logger";
-import { AppDataSource } from "../data-source";
-import { Class } from "../entities/Class";
-import { Student } from "../entities/Student";
-import { listUserMemberships } from "../services/edu/membership";
-import { roleCan, type Capability } from "../services/edu/rbac";
+import { authorizeClassAction, type ClassAccessResult } from "../services/edu/classAccess";
 import { writeAudit } from "../services/audit/auditLog";
-import type { OrgRole } from "../types/OrgRole";
+import type { Capability } from "../services/edu/rbac";
 
-/** Resolve the target org from a `:classId`-style route param (the class's org). */
-export function orgIdFromClassParam(param = "classId") {
-  return async (req: AuthRequest): Promise<number | null> => {
-    const id = parseInt(String(req.params[param]), 10);
-    if (!Number.isFinite(id)) return null;
-    const cls = await AppDataSource.getRepository(Class).findOne({ where: { id } });
-    return cls?.organizationId ?? null;
-  };
-}
+/** Request carrying the resolved class-access decision (set by requireClassCapability). */
+export type ClassAccessRequest = AuthRequest & { classAccess?: ClassAccessResult };
 
-/** Resolve the target org from a `:studentId`-style route param (the student's class's org). */
-export function orgIdFromStudentParam(param = "studentId") {
-  return async (req: AuthRequest): Promise<number | null> => {
-    const id = parseInt(String(req.params[param]), 10);
-    if (!Number.isFinite(id)) return null;
-    const student = await AppDataSource.getRepository(Student).findOne({ where: { id }, relations: ["class"] });
-    return student?.class?.organizationId ?? null;
-  };
+export interface RequireClassCapabilityOptions {
+  /** Route param holding the class id. Default `"classId"`. */
+  param?: string;
 }
 
 /**
- * Org-scoped capability guard for EDU routes. Resolves the caller's role in the
- * relevant organization (their membership) and checks {@link roleCan}.
+ * In-handler authorization for an already-resolved class id, wiring the request's
+ * SYSTEM_ADMIN flag into {@link authorizeClassAction}. Use this in handlers that
+ * resolve the class from a non-`classId` resource (task → topic → class, grade →
+ * student → class, …) and can't use the {@link requireClassCapability} middleware.
  *
- * Two modes via EDU_RBAC_ENFORCE:
- *  - shadow (default): a would-be denial is audited as "rbac.shadow_deny" but
- *    the request still proceeds. Lets us validate the matrix + backfill against
- *    real traffic before anything can lock a teacher out.
- *  - enforce: a denial returns 403.
- *
- * Fail-open: any internal error (DB hiccup, etc.) logs and allows, so this guard
- * can never become the reason a legitimate action breaks. Applies only to
- * USER-type principals; students/parents as principals arrive in a later phase.
+ * Returns `null` when the class does not exist (404). Otherwise the result's
+ * `allowed` carries the decision (403 when false).
  */
-export interface RequireCapabilityOptions {
-  /** Resolve the org the action targets (e.g. from a class's org_id). Omit to use the user's sole org. */
-  resolveOrgId?: (req: AuthRequest) => Promise<number | null> | number | null;
+export function authorizeClassForReq(req: AuthRequest, classId: number, capability: Capability) {
+  return authorizeClassAction(req.userId as number, classId, capability, {
+    isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+  });
 }
 
-export function requireCapability(capability: Capability, opts: RequireCapabilityOptions = {}) {
-  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+/**
+ * Enforcing per-class capability guard built on {@link authorizeClassAction}.
+ *
+ * This guard is **always enforcing** and **not fail-open**: it is the
+ * load-bearing replacement for the legacy `class.teacher_id` ownership filter. It
+ * is safe to enforce because the class owner is grandfathered to TEACHER, so no
+ * existing teacher can be locked out of their own class; the only behavioural
+ * changes are (a) org admins/assistants gain access to classes in their org and
+ * (b) unrelated users are denied. (Org-level actions without a class — creating
+ * orgs, managing members — are guarded separately in `routes/edu/orgs.ts`.)
+ *
+ * On success the resolved {@link ClassAccessResult} is attached to
+ * `req.classAccess` so the handler can reuse the loaded class without refetching.
+ */
+export function requireClassCapability(capability: Capability, opts: RequireClassCapabilityOptions = {}) {
+  const param = opts.param ?? "classId";
+  return async (req: ClassAccessRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       if (!req.userId || (req.userType && req.userType !== "USER")) {
-        return next();
-      }
-
-      const memberships = await listUserMemberships(req.userId);
-
-      let orgId: number | null = null;
-      if (opts.resolveOrgId) {
-        orgId = await opts.resolveOrgId(req);
-      } else if (memberships.length === 1) {
-        orgId = memberships[0].organizationId;
-      }
-
-      let role: OrgRole | null = null;
-      if (orgId != null) {
-        role = memberships.find((m) => m.organizationId === orgId)?.role ?? null;
-      }
-
-      const allowed = role != null && roleCan(role, capability);
-      if (allowed) return next();
-
-      const enforce = Boolean(env.__eduRbacEnforce);
-      await writeAudit({
-        actorType: "USER",
-        actorId: req.userId,
-        action: enforce ? "rbac.deny" : "rbac.shadow_deny",
-        targetType: "capability",
-        targetId: orgId ?? null,
-        orgId: orgId ?? null,
-        metadata: { capability, role, enforce },
-        requestId: req.requestId,
-        ip: req.ip
-      });
-
-      if (enforce) {
         res.status(403).json({ message: "FORBIDDEN" });
         return;
       }
+      const classId = parseInt(String(req.params[param]), 10);
+      if (!Number.isFinite(classId)) {
+        res.status(400).json({ message: "INVALID_CLASS_ID" });
+        return;
+      }
+
+      const access = await authorizeClassAction(req.userId, classId, capability, {
+        isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+      });
+      if (!access) {
+        res.status(404).json({ message: "CLASS_NOT_FOUND" });
+        return;
+      }
+      if (!access.allowed) {
+        await writeAudit({
+          actorType: "USER",
+          actorId: req.userId,
+          action: "rbac.deny",
+          targetType: "class",
+          targetId: classId,
+          orgId: access.cls.organizationId ?? null,
+          metadata: { capability, role: access.effectiveRole },
+          requestId: req.requestId,
+          ip: req.ip
+        });
+        res.status(403).json({ message: "FORBIDDEN" });
+        return;
+      }
+
+      req.classAccess = access;
       return next();
     } catch (err: unknown) {
-      logger.warn("[rbac] capability check errored; allowing", {
+      // Not fail-open: an authorization check that errors must deny, not allow.
+      logger.error("[rbac] class capability check errored; denying", {
         capability,
         message: err instanceof Error ? err.message : String(err)
       });
-      return next();
+      res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+      return;
     }
   };
 }
