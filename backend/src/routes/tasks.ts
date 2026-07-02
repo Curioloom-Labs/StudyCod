@@ -28,6 +28,7 @@ import { getStableDifus } from "../utils/adaptiveDifficulty";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
 import { judgeWithSemaphore } from "../services/judgeWorker";
+import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { normalizeMarkdownText } from "../utils/markdownNormalize";
 import { inferNeedsInput } from "../utils/inferNeedsInput";
@@ -3764,14 +3765,15 @@ tasksRouter.post(
   // For free-output tasks we only need to ensure non-empty stdout once.
   // Collapse to a single test to reduce judge load and keep grading scale (12) stable via weight.
   const judgedTests = effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? sorted.slice(0, 1) : sorted;
-  const tests = judgedTests.map(t => ({
-    id: t.id,
-    input: t.input || "",
-    output: t.expectedOutput || "",
-    hidden: false,
-    group: "public",
-    weight: effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (t.points || 1)
-  }));
+  const { tests } = await buildJudgeTests(judgedTests, {
+    meta: t => ({
+      hidden: false,
+      group: "public",
+      weight: effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (t.points || 1)
+    }),
+    hashes: t => ({ inputHash: (t as any).inputSha256, outputHash: (t as any).outputSha256 }),
+    loadContent: loadTestContentByIds
+  });
   const judgeLang = task.lang === "JAVA" ? "java" : task.lang === "PYTHON" ? "python" : "cpp";
   const defaultLimitsByLang = {
     java: {

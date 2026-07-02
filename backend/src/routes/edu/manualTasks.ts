@@ -5,6 +5,7 @@ import path from "path";
 import multer from "multer";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { EduTask } from "../../entities/EduTask";
 import { Student } from "../../entities/Student";
 import {
@@ -128,7 +129,9 @@ router.get("/manual-tasks/:taskId/submissions", authRequired, async (req: AuthRe
     const taskId = parseInt(req.params.taskId, 10);
     const task = await loadManualTask(taskId);
     if (!task) return res.status(404).json({ message: "MANUAL_TASK_NOT_FOUND" });
-    if (task.lesson?.class?.teacher?.id !== req.userId) {
+    const taskClassId = task.lesson?.class?.id;
+    const access = taskClassId ? await authorizeClassForReq(req, taskClassId, "STUDENT_DATA_VIEW") : null;
+    if (!access || !access.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 

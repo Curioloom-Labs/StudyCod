@@ -15,6 +15,8 @@ import { normalizeAssignedStudentIds, normalizeTargetedAssignmentForStorage } fr
 import { logger } from "../../utils/logger";
 import { resolveHintStrategyVariant, type HintStrategyVariant } from "../../services/edu/hintStrategy";
 import { syncTopicTaskAssignmentsWithManager } from "../../services/edu/assignmentTargetsService";
+import { authorizeClassAction } from "../../services/edu/classAccess";
+import type { Capability } from "../../services/edu/rbac";
 
 type UiLocale = "uk" | "en";
 type MasteryStatus = "NOT_STARTED" | "IN_PROGRESS" | "MASTERED";
@@ -543,40 +545,38 @@ async function buildStudentMasteryPayload(student: Student, locale: UiLocale): P
   };
 }
 
-async function resolveTeacherClassAccess(req: AuthRequest, classId: number): Promise<{ user: User; cls: Class } | null> {
-  if (req.studentId || req.userType === "STUDENT") {
+/**
+ * Authorize a teacher-side class action via the central {@link authorizeClassAction}
+ * (org membership + owner grandfather + SYSTEM_ADMIN), then return the class with
+ * its students loaded for analytics. `null` => caller should 403/deny.
+ */
+async function resolveTeacherClassAccess(
+  req: AuthRequest,
+  classId: number,
+  capability: Capability = "CLASS_VIEW"
+): Promise<{ cls: Class } | null> {
+  if (req.studentId || req.userType === "STUDENT" || !req.userId) {
     return null;
   }
 
-  if (!req.userId) {
+  const access = await authorizeClassAction(req.userId, classId, capability, {
+    isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+  });
+  if (!access || !access.allowed) {
     return null;
   }
 
-  const user = await userRepo().findOne({ where: { id: req.userId } });
-  if (!user) {
-    return null;
-  }
-
+  // Reload with the students relation the analytics builders need (the
+  // authorizer only loads `teacher`).
   const cls = await classRepo().findOne({
     where: { id: classId },
     relations: ["teacher", "students"]
   });
-
   if (!cls) {
     return null;
   }
 
-  const isAdmin = user.role === "SYSTEM_ADMIN";
-  const hasAccess = isAdmin || cls.teacher?.id === user.id;
-  if (!hasAccess) {
-    return null;
-  }
-
-  if (!isAdmin && user.userMode !== "EDUCATIONAL") {
-    return null;
-  }
-
-  return { user, cls };
+  return { cls };
 }
 
 async function buildCohortAnalytics(cls: Class, locale: UiLocale): Promise<CohortAnalyticsPayload> {
@@ -1498,7 +1498,7 @@ router.post("/classes/:classId/risk-interventions/apply", authRequired, async (r
       return res.status(400).json({ message: "INVALID_CLASS_ID" });
     }
 
-    const access = await resolveTeacherClassAccess(req, classId);
+    const access = await resolveTeacherClassAccess(req, classId, "CLASS_EDIT");
     if (!access) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }

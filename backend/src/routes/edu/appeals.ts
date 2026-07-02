@@ -3,6 +3,8 @@ import { z } from "zod";
 import { In } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
+import type { Capability } from "../../services/edu/rbac";
 import { User } from "../../entities/User";
 import { Student } from "../../entities/Student";
 import { Class } from "../../entities/Class";
@@ -222,19 +224,20 @@ function serializeAppealMessage(message: GradeAppealMessage) {
   };
 }
 
-async function getTeacherAccessForClass(req: AuthRequest, classId: number): Promise<{ user: User; cls: Class } | null> {
-  if (req.userType === "STUDENT" || req.studentId) return null;
-  if (!req.userId) return null;
+async function getTeacherAccessForClass(
+  req: AuthRequest,
+  classId: number,
+  capability: Capability = "GRADE_EDIT"
+): Promise<{ user: User; cls: Class } | null> {
+  if (req.userType === "STUDENT" || req.studentId || !req.userId) return null;
+
+  const access = await authorizeClassForReq(req, classId, capability);
+  if (!access || !access.allowed) return null;
 
   const user = await userRepo().findOne({ where: { id: req.userId } });
   if (!user) return null;
-  if (user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN") return null;
 
-  const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-  if (!cls) return null;
-  if (user.role !== "SYSTEM_ADMIN" && cls.teacher.id !== user.id) return null;
-
-  return { user, cls };
+  return { user, cls: access.cls };
 }
 
 async function loadAppealWithDetails(appealId: number): Promise<GradeAppeal | null> {
@@ -460,7 +463,7 @@ router.get("/appeals/:appealId", authRequired, async (req: AuthRequest, res: Res
       }
     } else {
       if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
-      const access = await getTeacherAccessForClass(req, appeal.class?.id ?? 0);
+      const access = await getTeacherAccessForClass(req, appeal.class?.id ?? 0, "CLASS_VIEW");
       if (!access) {
         return res.status(403).json({ message: "ACCESS_DENIED" });
       }
@@ -586,7 +589,7 @@ router.get("/classes/:classId/appeals", authRequired, async (req: AuthRequest, r
       return res.status(400).json({ message: "INVALID_CLASS_ID" });
     }
 
-    const access = await getTeacherAccessForClass(req, classId);
+    const access = await getTeacherAccessForClass(req, classId, "CLASS_VIEW");
     if (!access) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
@@ -635,7 +638,7 @@ router.get("/classes/:classId/appeals/:appealId", authRequired, async (req: Auth
       return res.status(400).json({ message: "INVALID_APPEAL_ID" });
     }
 
-    const access = await getTeacherAccessForClass(req, classId);
+    const access = await getTeacherAccessForClass(req, classId, "CLASS_VIEW");
     if (!access) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }

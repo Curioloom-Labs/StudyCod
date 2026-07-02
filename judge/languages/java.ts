@@ -1,8 +1,11 @@
 import * as path from "path";
 import { writeFile } from "fs/promises";
-import { LanguageAdapter } from "./types";
+import { COMPILE_BUDGET, LanguageAdapter } from "./types";
 export const javaLanguage: LanguageAdapter = {
   id: "java",
+  entryFile: "Main.java",
+  defaultLimits: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
+  compileTimeLimitMs: COMPILE_BUDGET.java,
   async writeSource(workDir: string, source: string): Promise<void> {
     const filePath = path.join(workDir, "Main.java");
     await writeFile(filePath, source, {
@@ -23,6 +26,12 @@ export const javaLanguage: LanguageAdapter = {
         "-Xms64m",
         "-Xmx128m",
         "-XX:+UseSerialGC",
+        // Startup tuning (safe for throughput — C2 JIT stays enabled):
+        //  -XX:-UsePerfData   : skip writing /tmp/hsperfdata (faster boot, less I/O)
+        //  -Xshare:auto       : use the JDK's class-data-sharing archive (faster class load)
+        //  -XX:+UseStringDeduplication off by default; not added.
+        "-XX:-UsePerfData",
+        "-Xshare:auto",
         "-Dfile.encoding=UTF-8",
         "-Dsun.stdout.encoding=UTF-8",
         "-Dsun.stderr.encoding=UTF-8",

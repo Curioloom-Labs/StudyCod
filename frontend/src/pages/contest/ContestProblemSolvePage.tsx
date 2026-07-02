@@ -18,6 +18,7 @@ import {
   type JudgeLanguage,
   type ScoreboardRow,
 } from "../../lib/api/contests";
+import { enabledJudgeLanguages, defaultCompilerForFamily } from "../../lib/judgeLanguages";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Skeleton } from "../../components/ui/Skeleton";
@@ -190,6 +191,9 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [contestMeta, setContestMeta] = React.useState<ContestMeta>({ title: "Contest", startsAt: null, endsAt: null });
 
   const [judgeLanguage, setJudgeLanguage] = React.useState<JudgeLanguage>("java");
+  const [judgeCompiler, setJudgeCompiler] = React.useState<string>(defaultCompilerForFamily("java"));
+  // Reset compiler to the family default whenever the language changes.
+  React.useEffect(() => { setJudgeCompiler(defaultCompilerForFamily(judgeLanguage)); }, [judgeLanguage]);
   const [code, setCode] = React.useState("");
   const [runInput, setRunInput] = React.useState("");
   const [running, setRunning] = React.useState(false);
@@ -268,7 +272,8 @@ export const ContestProblemSolvePage: React.FC = () => {
   const hydrateDraft = React.useCallback(
     (stmt: ContestProblemStatement) => {
       if (!storageBase) return;
-      const allowed = (stmt.task.allowedLanguages || []).filter(Boolean) as JudgeLanguage[];
+      // Every problem accepts every supported language — no per-problem restriction.
+      const allowed = enabledJudgeLanguages();
       const fallbackLang = (allowed[0] ?? "java") as JudgeLanguage;
 
       try {
@@ -545,6 +550,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         contestId,
         problemId,
         language: judgeLanguage,
+        compiler: judgeCompiler,
         input: runInput,
         code,
       });
@@ -573,6 +579,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         contestId,
         problemId,
         language: judgeLanguage,
+        compiler: judgeCompiler,
         code,
         turnstileToken: tokenForSubmit,
       });
@@ -680,6 +687,8 @@ export const ContestProblemSolvePage: React.FC = () => {
         statement={statement}
         language={judgeLanguage}
         onLanguageChange={setJudgeLanguage}
+        compiler={judgeCompiler}
+        onCompilerChange={setJudgeCompiler}
         code={code}
         onCodeChange={setCode}
         onRun={doRun}

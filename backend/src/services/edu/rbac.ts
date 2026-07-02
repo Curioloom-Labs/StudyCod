@@ -7,6 +7,7 @@ import type { OrgRole } from "../../types/OrgRole";
  */
 export const CAPABILITIES = [
   "CLASS_CREATE",
+  "CLASS_VIEW", // read a class and its content/roster (teaching staff)
   "CLASS_EDIT",
   "CLASS_DELETE",
   "CONTENT_AUTHOR", // create/edit lessons, tasks, topics
@@ -23,6 +24,7 @@ const MATRIX: Record<OrgRole, ReadonlySet<Capability>> = {
   ORG_ADMIN: new Set(CAPABILITIES), // everything
   TEACHER: new Set<Capability>([
     "CLASS_CREATE",
+    "CLASS_VIEW",
     "CLASS_EDIT",
     "CLASS_DELETE",
     "CONTENT_AUTHOR",
@@ -31,6 +33,7 @@ const MATRIX: Record<OrgRole, ReadonlySet<Capability>> = {
     "STUDENT_DATA_VIEW"
   ]),
   ASSISTANT: new Set<Capability>([
+    "CLASS_VIEW",
     "CLASS_EDIT",
     "CONTENT_AUTHOR",
     "GRADE_EDIT",

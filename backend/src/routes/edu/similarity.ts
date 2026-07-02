@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { Class } from "../../entities/Class";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { EduGrade } from "../../entities/EduGrade";
 import { buildSimilarityPairs, markSharedLines, type SimilaritySubmission } from "../../services/edu/similarity";
 import { logger } from "../../utils/logger";
@@ -11,7 +11,6 @@ import { logger } from "../../utils/logger";
  * Reuses contest plagiarism fingerprinting over existing code submissions.
  */
 const router = Router();
-const classRepo = () => AppDataSource.getRepository(Class);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 
 const MIN_SIMILARITY = 0.7;
@@ -24,8 +23,9 @@ router.get("/classes/:classId/similarity", authRequired, async (req: AuthRequest
     const classId = parseInt(req.params.classId, 10);
     if (!Number.isFinite(classId)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-    if (!cls || cls.teacher?.id !== req.userId) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const access = await authorizeClassForReq(req, classId, "CLASS_VIEW");
+    if (!access || !access.allowed) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const cls = access.cls;
 
     const rows = await gradeRepo()
       .createQueryBuilder("g")
@@ -94,8 +94,9 @@ router.get("/classes/:classId/similarity/compare", authRequired, async (req: Aut
     const bId = parseInt(String(req.query.b), 10);
     if (![classId, taskId, aId, bId].every(Number.isFinite)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-    if (!cls || cls.teacher?.id !== req.userId) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const access = await authorizeClassForReq(req, classId, "CLASS_VIEW");
+    if (!access || !access.allowed) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    const cls = access.cls;
 
     const rows = await gradeRepo()
       .createQueryBuilder("g")

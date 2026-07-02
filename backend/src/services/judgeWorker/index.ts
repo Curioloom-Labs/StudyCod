@@ -316,6 +316,15 @@ export async function replayJudgeDeadLetterQueue(limit = 20): Promise<JudgeDeadL
   }
 }
 
+// Per-language compile-phase headroom (ms) added to the backend hard timeout.
+const COMPILE_HEADROOM_MS: Partial<Record<JudgeRequest["language"], number>> = {
+  python: 1_000, js: 1_000, dart: 1_000, lisp: 1_000, lua: 1_000, perl: 1_000, php: 1_000, ruby: 1_000,
+  cpp: 4_000, c: 4_000, pascal: 4_000, d: 4_000,
+  java: 8_000, go: 12_000,
+  rust: 20_000, swift: 20_000, haskell: 20_000,
+  kotlin: 35_000, csharp: 40_000
+};
+
 function estimateBackendHardTimeoutMs(req: JudgeRequest): number {
   const tests = Math.max(1, req.tests?.length ?? 0);
   const perTestMs = Math.max(1, req.limits?.time_limit_ms ?? 1000);
@@ -323,13 +332,7 @@ function estimateBackendHardTimeoutMs(req: JudgeRequest): number {
   // Backend timeout should exceed expected worker timeout to avoid premature aborts,
   // especially for compile-heavy languages and larger test suites.
   const baseMs = tests * (perTestMs + 120);
-  const compileHeadroomMs =
-    req.language === "python" ? 1_000 :
-    req.language === "cpp" || req.language === "c" ? 4_000 :
-    req.language === "java" ? 8_000 :
-    req.language === "kotlin" ? 35_000 :
-    req.language === "csharp" ? 40_000 :
-    5_000;
+  const compileHeadroomMs = COMPILE_HEADROOM_MS[req.language] ?? 5_000;
 
   // Small fixed margin for scheduler/process overhead.
   const estimatedMs = baseMs + compileHeadroomMs + 3_000;
