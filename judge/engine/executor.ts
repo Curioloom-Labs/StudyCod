@@ -67,6 +67,20 @@ export class NsJailExecutor {
     if (opts.useConfig) {
       nsArgs.push("--config", opts.nsjailConfigPath);
     } else {
+      // No nsjail config => this fallback runs with --disable_clone_newnet, i.e. the
+      // sandboxed process SHARES the host network namespace (it can reach the network).
+      // That is only acceptable for local/dev. Fail closed in production so a missing or
+      // misnamed config can never silently downgrade isolation and let submitted code
+      // exfiltrate or SSRF from the judge host. Set JUDGE_ALLOW_INSECURE_FALLBACK=1 to
+      // explicitly opt in (trusted, non-production environments only).
+      const allowInsecureFallback = process.env.JUDGE_ALLOW_INSECURE_FALLBACK === "1";
+      if (process.env.NODE_ENV === "production" && !allowInsecureFallback) {
+        throw new Error(
+          "judge sandbox: refusing to execute without an nsjail config in production " +
+          "(network isolation would be disabled). Provide NSJAIL_CONFIG/useConfig, or set " +
+          "JUDGE_ALLOW_INSECURE_FALLBACK=1 for trusted non-prod environments."
+        );
+      }
       nsArgs.push("--mode", "o", "--chroot", opts.chroot, "--cwd", opts.cwd, "--disable_clone_newnet");
     }
     nsArgs.push("--time_limit", String(timeLimitSec), "--rlimit_cpu", String(cpuLimitSec), "--rlimit_as", String(rlimitAs), "--rlimit_fsize", String(rlimitFsize));

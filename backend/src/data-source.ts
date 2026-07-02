@@ -1,8 +1,38 @@
 import "reflect-metadata";
-import { DataSource } from "typeorm";
+import { DataSource, type Logger as TypeOrmLogger, type QueryRunner } from "typeorm";
 import path from "path";
 import fs from "fs";
 import { env } from "./env";
+import { logger } from "./utils/logger";
+
+// App-side slow-query visibility. The MySQL slow_query_log captures the SQL at the
+// DB level; this bridge additionally attributes slow queries to the running process
+// (and exposes a counter for /metrics) so "which code path is slow" is answerable
+// without grepping. Threshold is configurable; default 500ms matches DB-1.
+const DB_SLOW_QUERY_MS = (() => {
+  const n = Number.parseInt(String(process.env.DB_SLOW_QUERY_MS ?? ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : 500;
+})();
+let dbSlowQueryCount = 0;
+let dbQueryErrorCount = 0;
+export function getDbSlowQueryCount(): number { return dbSlowQueryCount; }
+export function getDbQueryErrorCount(): number { return dbQueryErrorCount; }
+
+/** Minimal logger: only surfaces slow queries + errors, stays silent otherwise. */
+class SlowQueryLogger implements TypeOrmLogger {
+  logQuery(): void {}
+  logQuerySlow(time: number, query: string, _params?: any[], _qr?: QueryRunner): void {
+    dbSlowQueryCount += 1;
+    logger.warn("[db] slow query", { timeMs: time, query: query.slice(0, 500) });
+  }
+  logQueryError(error: string | Error, query: string, _params?: any[], _qr?: QueryRunner): void {
+    dbQueryErrorCount += 1;
+    logger.error("[db] query error", { error: String((error as any)?.message ?? error), query: query.slice(0, 500) });
+  }
+  logSchemaBuild(): void {}
+  logMigration(): void {}
+  log(): void {}
+}
 import { User } from "./entities/User";
 import { Task } from "./entities/Task";
 import { Grade } from "./entities/Grade";
@@ -102,7 +132,9 @@ export const AppDataSource = new DataSource({
   }),
   entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification, AuditLog, Organization, Membership, OrgInvitation, ParentLink, Course, CourseModule, CourseItem, CourseAssignment, ManualSubmission, QuizAttempt, Attendance],
   synchronize: false,
-  logging: false,
+  logging: ["error", "warn"],
+  logger: new SlowQueryLogger(),
+  maxQueryExecutionTime: DB_SLOW_QUERY_MS,
   migrations: migrationGlobs,
   extra: {
     connectionLimit: parseInt(env.DB_POOL_SIZE || "10", 10),

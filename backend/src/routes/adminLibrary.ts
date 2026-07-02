@@ -7,6 +7,7 @@ import { LibraryTask, type LibraryTaskStatus } from "../entities/LibraryTask";
 import { TestData } from "../entities/TestData";
 import { TaskTheory } from "../entities/TaskTheory";
 import { LibraryTaskRevision } from "../entities/LibraryTaskRevision";
+import { encodeSnapshot, parseSnapshot } from "../utils/revisionSnapshot";
 import { logger } from "../utils/logger";
 import type { CheckerSpec } from "../services/judgeWorker/types";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
@@ -334,7 +335,7 @@ adminLibraryRouter.post("/tasks/:id/approve", authRequired, systemAdminGuard, as
         version,
         action: "APPROVE",
         comment: null,
-        snapshot: JSON.stringify(snapshot),
+        snapshot: encodeSnapshot(snapshot),
         createdByUserId: req.userId,
         createdByUser: { id: req.userId } as any,
       })
@@ -391,7 +392,7 @@ adminLibraryRouter.get("/tasks/:id/revisions/:version", authRequired, systemAdmi
 
     let snapshot: any = null;
     try {
-      snapshot = JSON.parse(String(r.snapshot ?? "null"));
+      snapshot = parseSnapshot(r.snapshot);
     } catch {
       snapshot = null;
     }
@@ -437,7 +438,7 @@ adminLibraryRouter.post(
 
       let snapshot: any;
       try {
-        snapshot = JSON.parse(String(r.snapshot ?? "null"));
+        snapshot = parseSnapshot(r.snapshot);
       } catch {
         return res.status(500).json({ message: "CORRUPT_REVISION_SNAPSHOT" });
       }
@@ -454,7 +455,7 @@ adminLibraryRouter.post(
             version: next,
             action: "ROLLBACK",
             comment: validated.data.comment?.trim() || `rollback-to:${version}`,
-            snapshot: JSON.stringify(currentSnapshot),
+            snapshot: encodeSnapshot(currentSnapshot),
             createdByUserId: req.userId,
             createdByUser: { id: req.userId } as any,
           })
