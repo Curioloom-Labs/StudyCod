@@ -291,30 +291,6 @@ export const OrgMembersPage: React.FC = () => {
             >
               <X className="w-3.5 h-3.5" />
             </Button>
-        {members.map(m => (
-          <div key={m.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
-            <strong className="font-mono text-text-primary">{m.name || m.username || `#${m.userId}`}</strong>
-            {m.email && <span className="text-xs text-text-muted truncate">{m.email}</span>}
-            <select
-              value={m.role}
-              onChange={e => changeRole(m.userId, e.target.value)}
-              className={controlClass + " ml-auto !py-1 !px-2 text-xs"}
-              aria-label={tr("Роль", "Role")}
-            >
-              {ROLES.map(r => (
-                <option key={r} value={r}>{roleLabel(r)}</option>
-              ))}
-            </select>
-            <Button
-              variant="ghost"
-              className="text-xs"
-              disabled={m.userId === selfUserId}
-              title={m.userId === selfUserId ? tr("Не можна видалити себе", "Can't remove yourself") : undefined}
-              onClick={() => removeMember(m.userId, m.name || m.username || `#${m.userId}`)}
-              aria-label={tr("Видалити", "Remove")}
-            >
-              <X className="w-3.5 h-3.5" />
-            </Button>
           </div>
         ))}
         {nonStaffCount > 0 && (
@@ -341,7 +317,6 @@ export const OrgMembersPage: React.FC = () => {
                   </Button>
                 )}
                 <Button variant="ghost" className={"text-xs" + (i.token ? "" : " ml-auto")} onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
-                <Button variant="ghost" className="text-xs ml-auto" onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
                   <X className="w-3.5 h-3.5" />
                 </Button>
               </div>

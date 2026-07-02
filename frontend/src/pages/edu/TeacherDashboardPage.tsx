@@ -231,6 +231,9 @@ export const TeacherDashboardPage: React.FC = () => {
             </div>
             <ArrowRight className="w-4 h-4 text-text-muted" />
           </button>
+        </div>
+      )}
+
       {org && (
         <div className="px-4 md:px-8 pt-6 max-w-6xl mx-auto">
           <div className="rounded-[var(--ui-card-radius)] border border-border bg-bg-surface p-4 flex flex-wrap items-center justify-between gap-3">
