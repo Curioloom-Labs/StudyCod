@@ -76,7 +76,8 @@ export type UpdateContestRequest = {
   scoringMode?: ContestScoringMode;
 };
 
-export type JudgeLanguage = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
+import type { JudgeLanguage } from "../judgeLanguages";
+export type { JudgeLanguage };
 
 export type ContestProblemStatement = {
   problem: { id: number; order: number; label: string };
@@ -344,12 +345,14 @@ export async function checkContestProblem(params: {
   contestId: number;
   problemId: number;
   language: JudgeLanguage;
+  compiler?: string;
   code?: string;
   files?: CodeFile[];
   turnstileToken?: string;
 }): Promise<ContestCheckResult> {
   const res = await api.post(`/contests/${params.contestId}/problems/${params.problemId}/check`, {
     language: params.language,
+    compiler: params.compiler,
     code: params.code,
     files: params.files,
     turnstileToken: params.turnstileToken,
@@ -361,12 +364,14 @@ export async function runContestProblem(params: {
   contestId: number;
   problemId: number;
   language: JudgeLanguage;
+  compiler?: string;
   input?: string;
   code?: string;
   files?: CodeFile[];
 }): Promise<ContestRunResult> {
   const res = await api.post(`/contests/${params.contestId}/problems/${params.problemId}/run`, {
     language: params.language,
+    compiler: params.compiler,
     input: params.input,
     code: params.code,
     files: params.files,

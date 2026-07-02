@@ -1,0 +1,20 @@
+# Production LiveKit SFU config for the EDU live classroom.
+#
+# Differs from livekit.yaml (local dev) in the two things that matter on a public host:
+#   - use_external_ip: true  → ICE advertises the server's real public IP, so WebRTC
+#     media works from remote browsers (the studycod VPS has a direct public IP, no NAT).
+#   - NO keys in this file    → supplied via the LIVEKIT_KEYS env var (see
+#     docker-compose.prod.yml + docker/livekit/.env on the host) so the secret never
+#     lives in git. LIVEKIT_KEYS MUST equal the backend's LIVEKIT_API_KEY/SECRET,
+#     otherwise the SFU rejects every token the backend mints.
+#
+# Browser signaling path: wss://studycod.space/livekit  (nginx proxies /livekit/ →
+# 127.0.0.1:7880 with WS upgrade). Set in backend/.env:  LIVEKIT_URL=wss://studycod.space/livekit
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+logging:
+  level: info

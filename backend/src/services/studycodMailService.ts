@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import MailComposer from "nodemailer/lib/mail-composer";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { logger } from "../utils/logger";
@@ -28,6 +29,8 @@ type MailMessageDetails = {
   cc: string;
   bcc: string;
   replyTo: string;
+  messageId: string;
+  references: string;
   date: string | null;
   seen: boolean;
   flagged: boolean;
@@ -56,6 +59,9 @@ type SendMessageParams = {
   text?: string;
   html?: string;
   replyTo?: string;
+  inReplyTo?: string;
+  references?: string;
+  attachments?: Array<{ filename: string; contentType?: string; contentBase64: string }>;
 };
 
 class StudyCodMailService {
@@ -199,6 +205,44 @@ class StudyCodMailService {
     });
   }
 
+  async searchMessages(
+    folderRaw: string,
+    queryRaw: string,
+    limitRaw?: number
+  ): Promise<{ folder: string; items: MailListItem[]; nextCursorUid: number | null }> {
+    const folder = String(folderRaw || "INBOX").trim() || "INBOX";
+    const q = String(queryRaw || "").trim();
+    const limit = Math.max(1, Math.min(100, Number(limitRaw) || 40));
+    if (!q) return { folder, items: [], nextCursorUid: null };
+
+    return this.withImap(async (client) => {
+      const lock = await client.getMailboxLock(folder);
+      try {
+        // Match the query across the common headers + body (server-side IMAP SEARCH).
+        const found = await client.search({ or: [{ subject: q }, { from: q }, { to: q }, { body: q }] }, { uid: true });
+        const uids = (Array.isArray(found) ? found : [])
+          .map(Number)
+          .filter((n) => Number.isFinite(n))
+          .sort((a, b) => b - a)
+          .slice(0, limit);
+        const rows: MailListItem[] = [];
+        if (uids.length) {
+          for await (const msg of client.fetch(
+            uids.join(","),
+            { uid: true, envelope: true, internalDate: true, flags: true, size: true },
+            { uid: true }
+          )) {
+            rows.push(this.mapListItem(msg));
+          }
+        }
+        rows.sort((a, b) => b.uid - a.uid);
+        return { folder, items: rows, nextCursorUid: null };
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
   async getMessage(folderRaw: string, uid: number): Promise<MailMessageDetails> {
     const folder = String(folderRaw || "INBOX").trim() || "INBOX";
     const id = Number(uid || 0);
@@ -232,6 +276,10 @@ class StudyCodMailService {
           cc: this.formatAddresses(env?.cc),
           bcc: this.formatAddresses(env?.bcc),
           replyTo: this.formatAddresses(env?.replyTo),
+          messageId: String((parsed as any).messageId || env?.messageId || ""),
+          references: Array.isArray((parsed as any).references)
+            ? (parsed as any).references.join(" ")
+            : String((parsed as any).references || ""),
           date: isoDate,
           seen: flags.has("\\Seen"),
           flagged: flags.has("\\Flagged"),
@@ -245,6 +293,36 @@ class StudyCodMailService {
                 contentId: a.cid || null,
               }))
             : [],
+        };
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
+  async getAttachment(
+    folderRaw: string,
+    uid: number,
+    index: number
+  ): Promise<{ filename: string; contentType: string; content: Buffer }> {
+    const folder = String(folderRaw || "INBOX").trim() || "INBOX";
+    const id = Number(uid || 0);
+    const idx = Number(index);
+    if (!Number.isFinite(id) || id <= 0) throw new Error("INVALID_UID");
+    if (!Number.isInteger(idx) || idx < 0) throw new Error("INVALID_INDEX");
+
+    return this.withImap(async (client) => {
+      const lock = await client.getMailboxLock(folder);
+      try {
+        const msg: any = await client.fetchOne(String(id), { uid: true, source: true });
+        if (!msg?.source) throw new Error("MESSAGE_NOT_FOUND");
+        const parsed = await simpleParser(msg.source as Buffer);
+        const att = Array.isArray(parsed.attachments) ? parsed.attachments[idx] : null;
+        if (!att || !att.content) throw new Error("ATTACHMENT_NOT_FOUND");
+        return {
+          filename: String(att.filename || `attachment-${idx}`),
+          contentType: String(att.contentType || "application/octet-stream"),
+          content: att.content as Buffer,
         };
       } finally {
         lock.release();
@@ -303,6 +381,13 @@ class StudyCodMailService {
     });
   }
 
+  private buildAttachments(data: SendMessageParams) {
+    const list = (data.attachments || [])
+      .filter((a) => a && a.filename && a.contentBase64)
+      .map((a) => ({ filename: a.filename, contentType: a.contentType, content: Buffer.from(a.contentBase64, "base64") }));
+    return list.length ? list : undefined;
+  }
+
   async sendMessage(data: SendMessageParams): Promise<{ messageId: string | null }> {
     const cfg = this.isConfigured();
     if (!cfg.ok) throw new Error(`MAIL_NOT_CONFIGURED: ${cfg.issues.join("; ")}`);
@@ -329,10 +414,56 @@ class StudyCodMailService {
       text: data.text,
       html: data.html,
       replyTo: data.replyTo,
+      inReplyTo: data.inReplyTo,
+      references: data.references,
+      attachments: this.buildAttachments(data),
     });
 
     logger.info("[studycod-mail] message sent", { messageId: info?.messageId || null });
     return { messageId: info?.messageId || null };
+  }
+
+  private async resolveDraftsFolder(client: any): Promise<string> {
+    try {
+      const list = await client.list();
+      const match = (Array.isArray(list) ? list : []).find((f: any) => {
+        const su = String(f.specialUse || "").toLowerCase();
+        const path = String(f.path || "").toLowerCase();
+        return su === "\\drafts" || path === "drafts";
+      });
+      return match?.path || "Drafts";
+    } catch {
+      return "Drafts";
+    }
+  }
+
+  async saveDraft(data: SendMessageParams): Promise<void> {
+    const cfg = this.isConfigured();
+    if (!cfg.ok) throw new Error(`MAIL_NOT_CONFIGURED: ${cfg.issues.join("; ")}`);
+    const from = String(data.from || this.smtpFrom || this.smtpUser).trim();
+
+    const raw: Buffer = await new Promise((resolve, reject) => {
+      new MailComposer({
+        from,
+        to: data.to,
+        cc: data.cc,
+        bcc: data.bcc,
+        subject: data.subject,
+        text: data.text,
+        html: data.html,
+        inReplyTo: data.inReplyTo,
+        references: data.references,
+        attachments: this.buildAttachments(data),
+      })
+        .compile()
+        .build((err: Error | null, message: Buffer) => (err ? reject(err) : resolve(message)));
+    });
+
+    return this.withImap(async (client) => {
+      const drafts = await this.resolveDraftsFolder(client);
+      await client.append(drafts, raw, ["\\Draft"]);
+      logger.info("[studycod-mail] draft saved", { folder: drafts });
+    });
   }
 }
 

@@ -4,7 +4,8 @@ import { Button } from "./ui/Button";
 import { explainTaskError, type ExplainErrorFailure } from "../lib/api/tasks";
 
 type Props = {
-  language: "JAVA" | "PYTHON" | "CPP";
+  // Judge language hint for the AI explainer (e.g. "PYTHON", "GO", "RUST"). Free-form.
+  language: string;
   code: string;
   verdict?: string | null;
   stderr?: string | null;

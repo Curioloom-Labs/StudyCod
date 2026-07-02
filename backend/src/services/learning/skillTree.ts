@@ -22,9 +22,11 @@ export interface SkillTopicInput {
   masteryPct?: number;
   /** Whether the learner has attempted anything in this topic. */
   started?: boolean;
+  /** Topic is closed for submissions — the learner can no longer improve it. */
+  closed?: boolean;
 }
 
-export type SkillNodeStatus = "locked" | "available" | "in_progress" | "mastered";
+export type SkillNodeStatus = "locked" | "available" | "in_progress" | "mastered" | "closed";
 
 export interface SkillNode {
   id: number;
@@ -58,6 +60,7 @@ export function buildSkillTree(topics: SkillTopicInput[], masteredThreshold = 0.
 
     let status: SkillNodeStatus;
     if (masteryPct >= masteredThreshold) status = "mastered";
+    else if (t.closed) status = "closed";
     else if (!prereqsMet) status = "locked";
     else if (t.started || masteryPct > 0) status = "in_progress";
     else status = "available";

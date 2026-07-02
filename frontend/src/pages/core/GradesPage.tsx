@@ -236,12 +236,16 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   }, [validGrades, i18n.language]);
 
   const focusQuest = useMemo(() => {
-    const sortedByWeakness = [...topicHeatmap].sort((a, b) => a.average - b.average);
-    const weakest = sortedByWeakness.filter((t) => t.average < 65).slice(0, 3);
-    const picked = weakest.length > 0 ? weakest : sortedByWeakness.slice(0, Math.min(3, sortedByWeakness.length));
+    const target = 65;
+    // Only topics genuinely below the target belong in the quest. Picking the
+    // "weakest" unconditionally surfaced already-mastered topics (e.g. average
+    // 100) with a lower target, which read as "study worse to reach 65".
+    const picked = [...topicHeatmap]
+      .filter((t) => t.average < target)
+      .sort((a, b) => a.average - b.average)
+      .slice(0, 3);
 
     return picked.map((topic) => {
-      const target = 65;
       const gap = Math.max(0, target - topic.average);
       const sessions = Math.max(1, Math.min(4, Math.ceil(gap / 10)));
       return {

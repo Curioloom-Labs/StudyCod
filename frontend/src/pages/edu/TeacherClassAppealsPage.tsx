@@ -549,7 +549,7 @@ export const TeacherClassAppealsPage: React.FC = () => {
 
                 {selectedAppeal.canTeacherResolve ? (
                   <div className="space-y-3 border-t border-border pt-4">
-                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+                    <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                       <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
                       {tr("Дії вчителя", "Teacher actions")}
                     </div>

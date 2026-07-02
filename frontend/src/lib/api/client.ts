@@ -51,6 +51,21 @@ function emitMaintenance(payload: MaintenancePayload) {
     detail: payload
   }));
 }
+
+type GeoBlockPayload = {
+  geoBlocked: true;
+  country: string | null;
+};
+
+function emitGeoBlock(payload: GeoBlockPayload) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem("studycod.geoblock", JSON.stringify(payload));
+  } catch {}
+  window.dispatchEvent(new CustomEvent("studycod:geoblock", {
+    detail: payload
+  }));
+}
 function joinApiBase(url: string): string {
   let base = String(url || "").trim();
   // Remove trailing slashes
@@ -143,6 +158,15 @@ api.interceptors.response.use((response: AxiosResponse) => {
         title: String(data.title ?? ""),
         message: String(data.message ?? ""),
         until: data.until ? String(data.until) : null
+      });
+    }
+  }
+  if (error.response?.status === 451) {
+    const data = error.response?.data as { geoBlocked?: boolean; country?: unknown } | undefined;
+    if (data && data.geoBlocked === true) {
+      emitGeoBlock({
+        geoBlocked: true,
+        country: typeof data.country === "string" ? data.country : null
       });
     }
   }

@@ -577,6 +577,12 @@ export async function generateTheoryPreview(topicTitle: string, language: "JAVA"
   });
   return res.data;
 }
+export async function generateInteractiveLesson(topicTitle: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
+  lesson: unknown;
+}> {
+  const res = await api.post(`/edu/generate-interactive-lesson`, { topicTitle, language });
+  return res.data;
+}
 export async function generateQuiz(lessonId: number, count?: number, topicTitle?: string): Promise<{
   count: number;
   quiz: QuizItem[];

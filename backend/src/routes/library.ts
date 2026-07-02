@@ -20,6 +20,7 @@ import { TopicNew } from "../entities/TopicNew";
 import { TopicTask } from "../entities/TopicTask";
 import { executeCodeWithInput, compareOutput, filterStderrWithLang } from "../services/codeExecutionService";
 import { judgeWithSemaphore } from "../services/judgeWorker";
+import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
 import { JudgeBusyError } from "../services/judgeWorker/Semaphore";
 import type { CheckerSpec, JudgeLanguage, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { In, Not } from "typeorm";
@@ -98,6 +99,32 @@ function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
       return "Main.kt";
     case "csharp":
       return "Program.cs";
+    case "js":
+      return "main.js";
+    case "go":
+      return "main.go";
+    case "rust":
+      return "main.rs";
+    case "pascal":
+      return "main.pas";
+    case "d":
+      return "main.d";
+    case "dart":
+      return "main.dart";
+    case "haskell":
+      return "main.hs";
+    case "lisp":
+      return "main.lisp";
+    case "lua":
+      return "main.lua";
+    case "perl":
+      return "main.pl";
+    case "php":
+      return "main.php";
+    case "ruby":
+      return "main.rb";
+    case "swift":
+      return "main.swift";
   }
 }
 
@@ -185,7 +212,21 @@ async function allocateUniqueProblemCode(base: string, excludeTaskId?: number): 
   return `${baseCode.slice(0, 56)}_${Date.now().toString().slice(-7)}`;
 }
 
-const ALL_JUDGE_LANGS: JudgeLanguage[] = ["java", "python", "cpp", "c", "csharp", "kotlin"];
+const JUDGE_LANGUAGES: readonly JudgeLanguage[] = [
+  "java", "python", "cpp", "c", "csharp", "kotlin",
+  "js", "go", "rust", "pascal",
+  "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift"
+];
+
+// Every task accepts every supported language — no per-task language restriction.
+const ALL_JUDGE_LANGS: JudgeLanguage[] = [...JUDGE_LANGUAGES];
+
+// Optional compiler/version id (e.g. "pypy3", "java21", "cpp23"). The judge validates that
+// it belongs to the language family; here we only sanity-check the shape.
+function normCompilerId(raw: unknown): string | undefined {
+  const s = String(raw ?? "").trim();
+  return /^[a-z0-9_+-]{1,32}$/i.test(s) ? s : undefined;
+}
 
 function parseDisabledJudgeLanguagesEnv(): Set<JudgeLanguage> {
   const raw = String(process.env.JUDGE_DISABLED_LANGUAGES ?? process.env.DISABLED_JUDGE_LANGUAGES ?? "").trim();
@@ -196,9 +237,8 @@ function parseDisabledJudgeLanguagesEnv(): Set<JudgeLanguage> {
     .filter(Boolean);
   const disabled = new Set<JudgeLanguage>();
   for (const p of parts) {
-    if (p === "java" || p === "python" || p === "cpp" || p === "c" || p === "csharp" || p === "kotlin") {
-      disabled.add(p);
-    }
+    const lang = normalizeJudgeLanguage(p);
+    if (lang) disabled.add(lang);
   }
   return disabled;
 }
@@ -218,6 +258,19 @@ const DEFAULT_LIMITS_BY_LANG: Record<JudgeLanguage, { time_limit_ms: number; mem
   // dotnet CLI is memory-hungry under nsjail/chroot. Keep a higher default.
   csharp: { time_limit_ms: 2000, memory_limit_mb: 1024, output_limit_kb: 64 },
   kotlin: { time_limit_ms: 1400, memory_limit_mb: 384, output_limit_kb: 64 },
+  js: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 },
+  go: { time_limit_ms: 1000, memory_limit_mb: 256, output_limit_kb: 64 },
+  rust: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
+  pascal: { time_limit_ms: 1000, memory_limit_mb: 256, output_limit_kb: 64 },
+  d: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
+  dart: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 },
+  haskell: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
+  lisp: { time_limit_ms: 2000, memory_limit_mb: 384, output_limit_kb: 64 },
+  lua: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 },
+  perl: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 },
+  php: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 },
+  ruby: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 },
+  swift: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
 };
 
 function normalizeLang(input: any): LibraryTaskLang {
@@ -233,21 +286,12 @@ function defaultJudgeLanguageFromTask(task: LibraryTask): JudgeLanguage {
 
 function normalizeJudgeLanguage(input: any): JudgeLanguage | null {
   const raw = String(input ?? "").trim().toLowerCase();
-  if (raw === "java" || raw === "python" || raw === "cpp" || raw === "c" || raw === "csharp" || raw === "kotlin") return raw;
-  return null;
+  return (JUDGE_LANGUAGES as readonly string[]).includes(raw) ? (raw as JudgeLanguage) : null;
 }
 
-function getAllowedJudgeLanguages(task: LibraryTask): JudgeLanguage[] {
-  const configured = (task as any).allowedLanguages as any;
-  if (Array.isArray(configured) && configured.length > 0) {
-    const normalized = configured.map((x: any) => normalizeJudgeLanguage(x)).filter(Boolean) as JudgeLanguage[];
-    const filtered = filterEnabledJudgeLanguages(Array.from(new Set(normalized)));
-    if (filtered.length > 0) return filtered;
-    // If task is configured with only disabled/unknown languages, fall back to globally enabled set.
-    const fallback = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS);
-    return fallback.length > 0 ? fallback : ["java"];
-  }
-  // If task doesn't explicitly restrict languages, allow all supported languages.
+function getAllowedJudgeLanguages(_task: LibraryTask): JudgeLanguage[] {
+  // No per-task restriction: every task accepts every globally-enabled language.
+  // (A task's stored `allowedLanguages` is intentionally ignored here.)
   const filteredAll = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS);
   return filteredAll.length > 0 ? filteredAll : ["java"];
 }
@@ -1271,6 +1315,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
           .optional(),
         input: z.string().optional(),
         language: z.string().optional(),
+        compiler: z.string().max(32).optional(),
       })
       .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
         message: "code or files required",
@@ -1287,6 +1332,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const selectedLang = normalizeJudgeLanguage(validated.data.language) ?? defaultJudgeLanguageFromTask(task);
+    const selectedCompiler = normCompilerId((validated.data as any).compiler);
     const allowedLangs = getAllowedJudgeLanguages(task);
     if (!allowedLangs.includes(selectedLang)) {
       return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
@@ -1324,7 +1370,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     // For Java/Python we can run locally for single-file submissions; for multi-file always use judge worker.
     if (!isMultiFile && (selectedLang === "java" || selectedLang === "python")) {
       const localLang = selectedLang === "java" ? "JAVA" : "PYTHON";
-      const r = await executeCodeWithInput(sourceText, localLang as any, validated.data.input ?? "", 10000);
+      const r = await executeCodeWithInput(sourceText, localLang as any, validated.data.input ?? "", 10000, { compiler: selectedCompiler });
       return res.json({
         stdout: r.stdout,
         stderr: filterStderrWithLang(r.stderr, localLang as any),
@@ -1337,6 +1383,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     const workerReq: WorkerJudgeRequest = {
       submission_id: `library_run_${principalTag}_${task.id}_${Date.now()}`,
       language: selectedLang,
+      ...(selectedCompiler ? { compiler: selectedCompiler } : {}),
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
       tests: [
@@ -1410,6 +1457,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
           .max(64)
           .optional(),
         language: z.string().optional(),
+        compiler: z.string().max(32).optional(),
       })
       .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
         message: "code or files required",
@@ -1425,9 +1473,22 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
+    // Metadata-only load: deliberately exclude the big `input` column. Test input is read
+    // lazily (only for cache misses) during materialisation, so a warm cache reads no input
+    // blobs. `expected_output` is kept for checker auto-selection (typically small).
     const tests = await testDataRepo().find({
       where: { libraryTask: { id: task.id } } as any,
-      order: { id: "ASC" }
+      order: { id: "ASC" },
+      select: {
+        id: true,
+        isHidden: true,
+        kind: true,
+        points: true,
+        subtask: true,
+        expectedOutput: true,
+        inputSha256: true,
+        outputSha256: true
+      } as any
     });
     if (!tests.length) return res.status(400).json({ message: "NO_TESTS_DEFINED_FOR_THIS_TASK" });
 
@@ -1441,6 +1502,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const requested = normalizeJudgeLanguage(validated.data.language);
     const allowedLangs = getAllowedJudgeLanguages(task);
     const judgeLang: JudgeLanguage = (requested ?? defaultJudgeLanguageFromTask(task));
+    const selectedCompiler = normCompilerId((validated.data as any).compiler);
     if (!allowedLangs.includes(judgeLang)) {
       return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
     }
@@ -1473,19 +1535,22 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
 
     const principalTag = req.userType === "STUDENT" ? `student_${req.studentId}` : `user_${req.userId}`;
-    const workerReq: WorkerJudgeRequest = {
-      submission_id: `library_${principalTag}_${task.id}_${Date.now()}`,
-      language: judgeLang,
-      source: sourceText,
-      ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
-      tests: tests.map(t => ({
-        id: t.id,
-        input: t.input || "",
-        output: t.expectedOutput || "",
+    const { tests: workerTests } = await buildJudgeTests(tests, {
+      meta: t => ({
         hidden: t.isHidden === true,
         group: t.isHidden === true ? "hidden" : "public",
         weight: t.points || 1
-      })),
+      }),
+      hashes: t => ({ inputHash: t.inputSha256, outputHash: t.outputSha256 }),
+      loadContent: loadTestContentByIds
+    });
+    const workerReq: WorkerJudgeRequest = {
+      submission_id: `library_${principalTag}_${task.id}_${Date.now()}`,
+      language: judgeLang,
+      ...(selectedCompiler ? { compiler: selectedCompiler } : {}),
+      source: sourceText,
+      ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
+      tests: workerTests,
       limits: effectiveLimits,
       checker: effectiveChecker,
       debug: false,

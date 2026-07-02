@@ -34,6 +34,7 @@ import {
   type WebTaskRule,
   type LibraryTaskStatus,
 } from "../../lib/api/library";
+import { JUDGE_LANGUAGE_LABELS, enabledJudgeLanguages } from "../../lib/judgeLanguages";
 
 type TaskDetails = {
   task: LibraryTaskListItem;
@@ -91,34 +92,8 @@ type ImportReportState = {
   status: "partial" | "failed";
 };
 
-const BASE_JUDGE_LANGS: JudgeLanguage[] = ["java", "python", "cpp", "c", "csharp", "kotlin"];
-const DISABLED_JUDGE_LANGS = (() => {
-  const raw = String(import.meta.env.VITE_JUDGE_DISABLED_LANGUAGES ?? "").trim();
-  if (!raw) return new Set<JudgeLanguage>();
-  const parts = raw
-    .split(/[,\s]+/g)
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean);
-  const disabled = new Set<JudgeLanguage>();
-  for (const p of parts) {
-    if ((BASE_JUDGE_LANGS as readonly string[]).includes(p)) disabled.add(p as JudgeLanguage);
-  }
-  return disabled;
-})();
-
-const ALL_JUDGE_LANGS: JudgeLanguage[] = (() => {
-  const filtered = BASE_JUDGE_LANGS.filter(l => !DISABLED_JUDGE_LANGS.has(l));
-  return filtered.length ? filtered : BASE_JUDGE_LANGS;
-})();
-
-const FRIENDLY_JUDGE_LANG: Record<JudgeLanguage, string> = {
-  java: "Java",
-  python: "Python",
-  cpp: "C++",
-  c: "C",
-  csharp: "C#",
-  kotlin: "Kotlin",
-};
+const ALL_JUDGE_LANGS: JudgeLanguage[] = enabledJudgeLanguages();
+const FRIENDLY_JUDGE_LANG = JUDGE_LANGUAGE_LABELS;
 
 const FRIENDLY_DIFFICULTY: Record<LibraryTaskDifficulty, { uk: string; en: string; color: "success" | "warn" | "error" | "info" }> = {
   EASY: { uk: "Легка", en: "Easy", color: "success" },
@@ -1567,7 +1542,7 @@ export const TaskLibraryPage: React.FC = () => {
           {/* Filters */}
           <div className="lg:col-span-3 lg:sticky lg:top-4 lg:self-start rounded-xl border border-border bg-bg-surface p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
                 {tr("Фільтри", "Filters")}
                 <button
                   type="button"

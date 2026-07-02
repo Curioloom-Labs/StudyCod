@@ -127,7 +127,7 @@ export const StudentLessonsPage: React.FC = () => {
         {/* Announcements */}
         <section>
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2">
+            <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
               <Megaphone className="w-3.5 h-3.5" />
               {tr("Оголошення", "Announcements")}
               {pinnedCount > 0 && <span className="text-primary/70">· {pinnedCount}</span>}

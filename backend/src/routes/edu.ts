@@ -41,6 +41,7 @@ import { detectAICode } from "../services/ai/aiCodeDetector";
 import { markControlWorkAttemptCompletedIfReadyWithManager, saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
 import { notifyStudentGradeChange } from "../services/edu/gradeNotificationService";
 import { logger } from "../utils/logger";
+import { generateInteractiveLessonWithAI } from "../services/openRouterService";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { resolveUiLocaleFromHeaders } from "../utils/uiLocale";
 import { convertGradeToRaw100, shouldConvertLegacyGrades, normalizeScaleMode, GRADE_SCALE_MODES, DEFAULT_GRADE_SCALE_MODE } from "../utils/gradingScale";
@@ -171,9 +172,13 @@ eduRouter.use(announcementsRouter);
 eduRouter.use(classStudentsRouter);
 eduRouter.use(studentsRouter);
 eduRouter.use(lessonsRouter);
+// gradingRouter owns the literal GET /tasks/pending-review; it must mount before
+// tasksRouter's GET /tasks/:taskId, otherwise "pending-review" is parsed as a
+// task id and the request 400s. Their :taskId sub-routes have disjoint suffixes,
+// so this reorder introduces no new shadowing.
+eduRouter.use(gradingRouter);
 eduRouter.use(tasksRouter);
 eduRouter.use(testDataRouter);
-eduRouter.use(gradingRouter);
 eduRouter.use(appealsRouter);
 eduRouter.use(insightsRouter);
 eduRouter.use(gradebookRouter);
@@ -188,6 +193,27 @@ eduRouter.use(agendaRouter);
 eduRouter.use(attendanceRouter);
 eduRouter.use(similarityRouter);
 eduRouter.use(tutorRouter);
+
+// Generate an interactive lesson (typed-block JSON for the LessonBlocks editor/reader).
+eduRouter.post("/generate-interactive-lesson", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = z.object({
+      topicTitle: z.string().min(1).max(300),
+      language: z.enum(["JAVA", "PYTHON", "CPP"])
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const result = await generateInteractiveLessonWithAI({
+      topicTitle: parsed.data.topicTitle.trim(),
+      lang: parsed.data.language,
+      userId: req.userId
+    });
+    return res.json(result);
+  } catch (error: any) {
+    logger.error("[edu] generate-interactive-lesson failed", { requestId: req.requestId, err: error });
+    return res.status(502).json({ message: error?.message || "AI_GENERATION_FAILED" });
+  }
+});
+
 const registerTeacherSchema = z.object({
   username: z.string().min(3).max(50),
   email: z.string().email(),

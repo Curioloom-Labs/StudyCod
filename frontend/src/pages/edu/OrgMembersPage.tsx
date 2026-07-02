@@ -291,6 +291,13 @@ export const OrgMembersPage: React.FC = () => {
             >
               <X className="w-3.5 h-3.5" />
             </Button>
+        {members.map(m => (
+          <div key={m.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
+            <strong className="font-mono text-text-primary">{m.name || m.username || `#${m.userId}`}</strong>
+            {m.email && <span className="text-xs text-text-muted truncate">{m.email}</span>}
+            <span className="ml-auto text-xs font-mono px-2 py-0.5 rounded-full border border-border text-text-secondary">
+              {roleLabel(m.role)}
+            </span>
           </div>
         ))}
         {nonStaffCount > 0 && (
@@ -317,6 +324,7 @@ export const OrgMembersPage: React.FC = () => {
                   </Button>
                 )}
                 <Button variant="ghost" className={"text-xs" + (i.token ? "" : " ml-auto")} onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
+                <Button variant="ghost" className="text-xs ml-auto" onClick={() => revoke(i.id)} aria-label={tr("Відкликати", "Revoke")}>
                   <X className="w-3.5 h-3.5" />
                 </Button>
               </div>

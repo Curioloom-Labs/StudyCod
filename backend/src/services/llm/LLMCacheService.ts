@@ -13,6 +13,14 @@ interface CacheAdapter {
 class MemoryCacheAdapter implements CacheAdapter {
   private cache = new Map<string, CacheEntry<any>>();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  // Hard cap on entries so a single instance can't grow unbounded within the TTL
+  // window (large LLM JSON values × high prompt cardinality could exhaust RAM on a
+  // memory-constrained box). Map keeps insertion order, so we evict the oldest
+  // entry (LRU: get() refreshes recency by re-inserting).
+  private readonly maxEntries: number = (() => {
+    const n = Number.parseInt(String(process.env.LLM_MEMORY_CACHE_MAX_ENTRIES ?? ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : 500;
+  })();
   constructor() {
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
@@ -25,14 +33,25 @@ class MemoryCacheAdapter implements CacheAdapter {
       this.cache.delete(key);
       return null;
     }
+    // Refresh recency for LRU ordering.
+    this.cache.delete(key);
+    this.cache.set(key, entry);
     return entry.data as T;
   }
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     const expiresAt = Date.now() + ttlSeconds * 1000;
+    // Re-insert to move the key to the most-recent position.
+    this.cache.delete(key);
     this.cache.set(key, {
       data: value,
       expiresAt
     });
+    // Evict least-recently-used entries beyond the cap.
+    while (this.cache.size > this.maxEntries) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
   }
   async delete(key: string): Promise<void> {
     this.cache.delete(key);
