@@ -10,10 +10,11 @@
  * The metrics renderer exposes the judge queue + process counters in Prometheus
  * text format so they can be scraped instead of grepped out of logs.
  */
-import { AppDataSource } from "../data-source";
+import { AppDataSource, getDbSlowQueryCount, getDbQueryErrorCount } from "../data-source";
 import { getJudgeExecutionMetrics } from "../services/judgeWorker";
 import { getExecutionQueueMode } from "../services/execution/distributedJudgeQueueSingleton";
 import { isRedisEnabled, getSharedRedisClient } from "../services/redis/sharedRedis";
+import { renderHttpMetrics } from "./httpMetrics";
 
 export interface ReadinessResult {
   ready: boolean;
@@ -82,6 +83,9 @@ export function renderPrometheusMetrics(): string {
   metricLine(out, "studycod_process_resident_memory_bytes", "Resident set size in bytes", mem.rss);
   metricLine(out, "studycod_process_heap_used_bytes", "V8 heap used in bytes", mem.heapUsed);
 
+  metricLine(out, "studycod_db_slow_query_total", "Total queries exceeding the slow-query threshold", getDbSlowQueryCount(), "counter");
+  metricLine(out, "studycod_db_query_error_total", "Total database query errors", getDbQueryErrorCount(), "counter");
+
   metricLine(out, "studycod_judge_active", "Currently executing judge jobs", m.active);
   metricLine(out, "studycod_judge_queued", "Judge jobs waiting in queue", m.queued);
   metricLine(out, "studycod_judge_peak_active", "Peak concurrent judge jobs observed", m.peakActive);
@@ -102,5 +106,5 @@ export function renderPrometheusMetrics(): string {
   out.push('# TYPE studycod_execution_queue_mode gauge');
   out.push(`studycod_execution_queue_mode{mode="${mode}"} 1`);
 
-  return out.join("\n") + "\n";
+  return out.join("\n") + "\n" + renderHttpMetrics();
 }

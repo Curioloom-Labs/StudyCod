@@ -69,11 +69,29 @@ const closeConversationSchema = z.object({
 });
 
 const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
+// Generous allowlist for support attachments. Files are stored via memoryStorage
+// (no path traversal) and served with `res.download` (attachment disposition, so no
+// inline render), so this is defense-in-depth: it keeps out script/markup types that
+// could be abused if the serving behaviour ever changes, while still accepting the
+// screenshots, logs, docs and archives users legitimately attach to tickets.
+const ALLOWED_SUPPORT_MIME = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/avif",
+  "application/pdf", "text/plain", "application/json", "text/csv",
+  "application/zip", "application/x-zip-compressed",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+]);
 const supportUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024,
     files: 5
+  },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_SUPPORT_MIME.has(String(file.mimetype || "").toLowerCase())) cb(null, true);
+    else cb(new Error("UNSUPPORTED_MEDIA_TYPE"));
   }
 });
 
@@ -91,7 +109,20 @@ function safeFilename(name: string): string {
 const maybeParseMultipartFiles = (req: any, res: any, next: any) => {
   const ct = String(req.headers["content-type"] || "");
   if (ct.includes("multipart/form-data")) {
-    return supportUpload.array("files", 5)(req, res, next);
+    return supportUpload.array("files", 5)(req, res, (err: any) => {
+      if (err) {
+        const code = err instanceof multer.MulterError ? err.code : undefined;
+        const message = err?.message === "UNSUPPORTED_MEDIA_TYPE"
+          ? "UNSUPPORTED_MEDIA_TYPE"
+          : code === "LIMIT_FILE_SIZE"
+            ? "FILE_TOO_LARGE"
+            : code === "LIMIT_FILE_COUNT"
+              ? "TOO_MANY_FILES"
+              : "UPLOAD_FAILED";
+        return res.status(400).json({ message });
+      }
+      return next();
+    });
   }
   return next();
 };
