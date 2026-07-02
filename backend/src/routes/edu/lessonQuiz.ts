@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { EduLesson } from "../../entities/EduLesson";
 import { Student } from "../../entities/Student";
 import { QuizAttempt } from "../../entities/QuizAttempt";
@@ -122,7 +123,8 @@ router.get("/lessons/:lessonId/quiz/attempts", authRequired, async (req: AuthReq
     const lessonId = parseInt(req.params.lessonId, 10);
     const lesson = await loadLessonWithClass(lessonId);
     if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
-    if (lesson.class?.teacher?.id !== req.userId) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const lessonAccess = lesson.class?.id ? await authorizeClassForReq(req, lesson.class.id, "GRADE_EDIT") : null;
+    if (!lessonAccess || !lessonAccess.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const attempts = await attemptRepo().find({
       where: { lesson: { id: lessonId } },
@@ -159,7 +161,8 @@ router.get("/lessons/:lessonId/quiz/attempts/:studentId", authRequired, async (r
     }
     const lesson = await loadLessonWithClass(lessonId);
     if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
-    if (lesson.class?.teacher?.id !== req.userId) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const lessonAccess = lesson.class?.id ? await authorizeClassForReq(req, lesson.class.id, "GRADE_EDIT") : null;
+    if (!lessonAccess || !lessonAccess.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const attempt = await attemptRepo().findOne({ where: { lesson: { id: lessonId }, student: { id: studentId } } });
     if (!attempt) return res.status(404).json({ message: "ATTEMPT_NOT_FOUND" });
@@ -205,7 +208,8 @@ router.post("/lessons/:lessonId/quiz/attempts/:studentId/grade-manual", authRequ
     }
     const lesson = await loadLessonWithClass(lessonId);
     if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
-    if (lesson.class?.teacher?.id !== req.userId) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const lessonAccess = lesson.class?.id ? await authorizeClassForReq(req, lesson.class.id, "GRADE_EDIT") : null;
+    if (!lessonAccess || !lessonAccess.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const attempt = await attemptRepo().findOne({ where: { lesson: { id: lessonId }, student: { id: studentId } } });
     if (!attempt) return res.status(404).json({ message: "ATTEMPT_NOT_FOUND" });

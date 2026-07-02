@@ -13,6 +13,8 @@ import { normalizeScaleMode } from "../../utils/gradingScale";
 import { computeThematicGrade, resolveThematicFormula, validateThematicFormula } from "../../utils/thematicFormula";
 import { recomputeSemesterGrades } from "../../services/edu/semesterGrading";
 import { notifyStudentGradeChange } from "../../services/edu/gradeNotificationService";
+import { authorizeClassAction } from "../../services/edu/classAccess";
+import type { Capability } from "../../services/edu/rbac";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { logger } from "../../utils/logger";
@@ -70,31 +72,16 @@ function semesterLabelForLocale(locale: "uk" | "en", semester: number): string {
 
 router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (req.userType === "STUDENT" || req.studentId) {
-      return res.status(403).json({
-        message: "ONLY_TEACHERS_CAN_VIEW_GRADEBOOK"
-      });
-    }
-    if (!req.userId) {
-      return res.status(401).json({
-        message: "UNAUTHORIZED"
-      });
-    }
-
     const classId = parseInt(req.params.classId, 10);
     const locale = resolveRequestLocale(req);
     const thematicLabel = thematicLabelForLocale(locale);
 
+    const authorized = await loadTeacherClassForConfig(req, res, classId, "CLASS_VIEW");
+    if (!authorized) return;
     const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      },
+      where: { id: classId },
       relations: ["students"]
     });
-
     if (!cls) {
       return res.status(404).json({
         message: "CLASS_NOT_FOUND"
@@ -341,20 +328,8 @@ router.get("/classes/:classId/summary-grades", authRequired, async (req: AuthReq
     const locale = resolveRequestLocale(req);
     const thematicLabel = thematicLabelForLocale(locale);
 
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      }
-    });
-
-    if (!cls) {
-      return res.status(404).json({
-        message: "CLASS_NOT_FOUND"
-      });
-    }
+    const cls = await loadTeacherClassForConfig(req, res, classId, "CLASS_VIEW");
+    if (!cls) return;
 
     const allSummaryGrades = await summaryGradeRepo().find({
       where: {
@@ -402,16 +377,12 @@ router.get("/classes/:classId/summary-grades", authRequired, async (req: AuthReq
 router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const classId = parseInt(req.params.classId, 10);
+    const authorized = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
+    if (!authorized) return;
     const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      },
+      where: { id: classId },
       relations: ["students"]
     });
-
     if (!cls) {
       return res.status(404).json({
         message: "CLASS_NOT_FOUND"
@@ -649,6 +620,9 @@ router.put("/classes/:classId/summary-grades/:id", authRequired, async (req: Aut
     const classId = parseInt(req.params.classId, 10);
     const summaryGradeId = parseInt(req.params.id, 10);
 
+    const authorized = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
+    if (!authorized) return;
+
     const sg = await summaryGradeRepo().findOne({
       where: {
         id: summaryGradeId,
@@ -659,7 +633,7 @@ router.put("/classes/:classId/summary-grades/:id", authRequired, async (req: Aut
       relations: ["class", "class.teacher", "student", "topic", "controlWork"]
     });
 
-    if (!sg || sg.class.teacher.id !== req.userId) {
+    if (!sg) {
       return res.status(404).json({
         message: "SUMMARY_GRADE_NOT_FOUND"
       });
@@ -711,6 +685,9 @@ router.delete("/classes/:classId/summary-grades/:id", authRequired, async (req: 
     const classId = parseInt(req.params.classId, 10);
     const summaryGradeId = parseInt(req.params.id, 10);
 
+    const authorized = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
+    if (!authorized) return;
+
     const sg = await summaryGradeRepo().findOne({
       where: {
         id: summaryGradeId,
@@ -721,7 +698,7 @@ router.delete("/classes/:classId/summary-grades/:id", authRequired, async (req: 
       relations: ["class", "class.teacher"]
     });
 
-    if (!sg || sg.class.teacher.id !== req.userId) {
+    if (!sg) {
       return res.status(404).json({
         message: "SUMMARY_GRADE_NOT_FOUND"
       });
@@ -741,12 +718,6 @@ router.delete("/classes/:classId/summary-grades/:id", authRequired, async (req: 
 
 router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (req.userType === "STUDENT" || req.studentId) {
-      return res.status(403).json({
-        message: "ONLY_TEACHERS_CAN_DELETE_THEMATIC"
-      });
-    }
-
     const classId = parseInt(req.params.classId, 10);
     const topicId = parseInt(req.params.topicId, 10);
     if (isNaN(classId) || isNaN(topicId)) {
@@ -755,31 +726,8 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
       });
     }
 
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId
-      },
-      relations: ["teacher"]
-    });
-
-    if (!cls) {
-      return res.status(404).json({
-        message: "CLASS_NOT_FOUND"
-      });
-    }
-
-    if (cls.teacher.id !== req.userId) {
-      const user = await userRepo().findOne({
-        where: {
-          id: req.userId
-        }
-      });
-      if (!user || user.role !== "SYSTEM_ADMIN") {
-        return res.status(403).json({
-          message: "ACCESS_DENIED"
-        });
-      }
-    }
+    const cls = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
+    if (!cls) return;
 
     const topic = await topicRepo().findOne({
       where: {
@@ -834,26 +782,32 @@ function normalizeFormulaInput(raw: unknown): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-// Resolve the class for a thematic-config request, enforcing teacher-of-class
-// (or SYSTEM_ADMIN) access. Returns the class or null (response already sent).
-async function loadTeacherClassForConfig(req: AuthRequest, res: Response, classId: number): Promise<Class | null> {
-  if (req.userType === "STUDENT" || req.studentId) {
+// Resolve + authorize the class for a gradebook-config request via the central
+// authorizer (org role + owner grandfather + SYSTEM_ADMIN). Returns the class or
+// null (response already sent). Default capability is GRADE_EDIT; read routes
+// pass CLASS_VIEW.
+async function loadTeacherClassForConfig(
+  req: AuthRequest,
+  res: Response,
+  classId: number,
+  capability: Capability = "GRADE_EDIT"
+): Promise<Class | null> {
+  if (req.userType === "STUDENT" || req.studentId || !req.userId) {
     res.status(403).json({ message: "ONLY_TEACHERS_CAN_EDIT_FORMULA" });
     return null;
   }
-  const cls = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
-  if (!cls) {
+  const access = await authorizeClassAction(req.userId, classId, capability, {
+    isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+  });
+  if (!access) {
     res.status(404).json({ message: "CLASS_NOT_FOUND" });
     return null;
   }
-  if (cls.teacher.id !== req.userId) {
-    const user = await userRepo().findOne({ where: { id: req.userId } });
-    if (!user || user.role !== "SYSTEM_ADMIN") {
-      res.status(403).json({ message: "ACCESS_DENIED" });
-      return null;
-    }
+  if (!access.allowed) {
+    res.status(403).json({ message: "ACCESS_DENIED" });
+    return null;
   }
-  return cls;
+  return access.cls;
 }
 
 // Thematic-grade formula config: the class-level default plus every topic's
@@ -864,7 +818,7 @@ router.get("/classes/:classId/thematic-config", authRequired, async (req: AuthRe
     if (isNaN(classId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
-    const cls = await loadTeacherClassForConfig(req, res, classId);
+    const cls = await loadTeacherClassForConfig(req, res, classId, "CLASS_VIEW");
     if (!cls) return;
 
     const topics = await topicRepo()
@@ -1002,7 +956,7 @@ router.get("/classes/:classId/semester-grades", authRequired, async (req: AuthRe
     if (isNaN(classId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
-    const cls = await loadTeacherClassForConfig(req, res, classId);
+    const cls = await loadTeacherClassForConfig(req, res, classId, "CLASS_VIEW");
     if (!cls) return;
 
     const rows = await summaryGradeRepo()
@@ -1076,9 +1030,10 @@ router.get("/classes/:classId/topic-tasks/:taskId/live", authRequired, async (re
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    const authorized = await loadTeacherClassForConfig(req, res, classId, "CLASS_VIEW");
+    if (!authorized) return;
     const cls = await classRepo().findOne({
-      where: isAdmin ? { id: classId } : { id: classId, teacher: { id: req.userId } },
+      where: { id: classId },
       relations: ["students"],
     });
     if (!cls) {
