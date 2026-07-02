@@ -2,8 +2,9 @@ import { Router, Response } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
+import { authorizeClassForReq } from "../../middleware/orgContext";
+import { authorizeClassAction } from "../../services/edu/classAccess";
 import { User } from "../../entities/User";
-import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { TopicTask } from "../../entities/TopicTask";
 import { EduTask } from "../../entities/EduTask";
@@ -24,7 +25,6 @@ import { normalizeScaleMode } from "../../utils/gradingScale";
 const router = Router();
 
 const userRepo = () => AppDataSource.getRepository(User);
-const classRepo = () => AppDataSource.getRepository(Class);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const eduTaskRepo = () => AppDataSource.getRepository(EduTask);
@@ -119,7 +119,10 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
-    if (!task.topic.class || task.topic.class.teacher.id !== req.userId) {
+    const taskClassAccess = task.topic.class
+      ? await authorizeClassForReq(req, task.topic.class.id, "GRADE_EDIT")
+      : null;
+    if (!taskClassAccess || !taskClassAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -232,7 +235,10 @@ router.delete("/tasks/:taskId/grades/:studentId", authRequired, async (req: Auth
 
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
-    if (!task.topic.class || task.topic.class.teacher.id !== req.userId) {
+    const taskClassAccess = task.topic.class
+      ? await authorizeClassForReq(req, task.topic.class.id, "GRADE_EDIT")
+      : null;
+    if (!taskClassAccess || !taskClassAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -274,16 +280,15 @@ router.get("/tasks/pending-review", authRequired, async (req: AuthRequest, res: 
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_VIEW_PENDING_REVIEWS" });
     }
 
-    const classes = await classRepo().find({
-      where: { teacher: { id: user.id } as any },
-      relations: ["students"]
-    });
-
-    if (classes.length === 0) {
-      return res.json({ pendingReviews: [] });
-    }
-
-    const studentIds = (classes as any[]).flatMap(c => (c.students || []).map((s: any) => s.id));
+    // Fetch only the student ids for this teacher's classes — avoids hydrating
+    // full Student rows (incl. password hashes) just to read their ids.
+    const studentIdRows = await studentRepo()
+      .createQueryBuilder("s")
+      .select("s.id", "id")
+      .innerJoin("s.class", "class")
+      .where("class.teacher_id = :teacherId", { teacherId: user.id })
+      .getRawMany();
+    const studentIds = studentIdRows.map(r => Number(r.id));
     if (studentIds.length === 0) {
       return res.json({ pendingReviews: [] });
     }
@@ -378,7 +383,11 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       return res.status(404).json({ message: "CONTROL_WORK_NOT_FOUND" });
     }
 
-    if (!controlWork.topic.class || controlWork.topic.class.teacher.id !== req.userId) {
+    if (!controlWork.topic.class) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+    const cwClassAccess = await authorizeClassForReq(req, controlWork.topic.class.id, "GRADE_EDIT");
+    if (!cwClassAccess || !cwClassAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -487,20 +496,17 @@ router.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, async 
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
-    if (!topicTask.topic.class.teacher || topicTask.topic.class.teacher.id !== user.id) {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
-    }
-
     const student = await studentRepo().findOne({ where: { id: studentId }, relations: ["class", "class.teacher"] });
     if (!student || !student.class) {
       return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
     }
 
-    if (!student.class.teacher || student.class.teacher.id !== user.id) {
+    if (student.class.id !== topicTask.topic.class.id) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    if (student.class.id !== topicTask.topic.class.id) {
+    const workAccess = await authorizeClassForReq(req, student.class.id, "STUDENT_DATA_VIEW");
+    if (!workAccess || !workAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -600,20 +606,17 @@ router.get("/topic-tasks/:taskId/students/:studentId/ai-detect", authRequired, a
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
-    if (!topicTask.topic.class.teacher || topicTask.topic.class.teacher.id !== user.id) {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
-    }
-
     const student = await studentRepo().findOne({ where: { id: studentId }, relations: ["class", "class.teacher"] });
     if (!student || !student.class) {
       return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
     }
 
-    if (!student.class.teacher || student.class.teacher.id !== user.id) {
+    if (student.class.id !== topicTask.topic.class.id) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    if (student.class.id !== topicTask.topic.class.id) {
+    const aiDetectAccess = await authorizeClassForReq(req, student.class.id, "STUDENT_DATA_VIEW");
+    if (!aiDetectAccess || !aiDetectAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -682,20 +685,17 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
       return res.status(404).json({ message: "CONTROL_WORK_NOT_FOUND" });
     }
 
-    if (!controlWork.topic.class.teacher || controlWork.topic.class.teacher.id !== user.id) {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
-    }
-
     const student = await studentRepo().findOne({ where: { id: studentId }, relations: ["class", "class.teacher"] });
     if (!student || !student.class) {
       return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
     }
 
-    if (!student.class.teacher || student.class.teacher.id !== user.id) {
+    if (student.class.id !== controlWork.topic.class.id) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    if (student.class.id !== controlWork.topic.class.id) {
+    const cwWorkAccess = await authorizeClassForReq(req, student.class.id, "STUDENT_DATA_VIEW");
+    if (!cwWorkAccess || !cwWorkAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
@@ -815,7 +815,13 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
         throw new Error("GRADE_NOT_FOUND");
       }
 
-      if (!grade.student.class || grade.student.class.teacher.id !== user.id) {
+      const access = grade.student.class
+        ? await authorizeClassAction(req.userId as number, grade.student.class.id, "GRADE_EDIT", {
+            manager,
+            isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+          })
+        : null;
+      if (!access || !access.allowed) {
         throw new Error("ACCESS_DENIED");
       }
 
@@ -906,7 +912,10 @@ async function ownedEduTaskOr403(req: AuthRequest, res: Response): Promise<EduTa
     res.status(404).json({ message: "TASK_NOT_FOUND" });
     return null;
   }
-  if (!task.lesson?.class || task.lesson.class.teacher?.id !== req.userId) {
+  const access = task.lesson?.class
+    ? await authorizeClassForReq(req, task.lesson.class.id, "CONTENT_AUTHOR")
+    : null;
+  if (!access || !access.allowed) {
     res.status(403).json({ message: "ACCESS_DENIED" });
     return null;
   }
@@ -963,7 +972,10 @@ router.post("/grades/:gradeId/rubric", authRequired, async (req: AuthRequest, re
       relations: ["student", "student.class", "student.class.teacher", "task", "topicTask"]
     });
     if (!grade) return res.status(404).json({ message: "GRADE_NOT_FOUND" });
-    if (!grade.student.class || grade.student.class.teacher?.id !== user.id) {
+    const rubricGradeAccess = grade.student.class
+      ? await authorizeClassForReq(req, grade.student.class.id, "GRADE_EDIT")
+      : null;
+    if (!rubricGradeAccess || !rubricGradeAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     const rubric = normalizeRubric(grade.task?.rubric);
@@ -1021,7 +1033,10 @@ router.post("/grades/:gradeId/ai-review", authRequired, aiDetectLimiter, async (
       relations: ["student", "student.class", "student.class.teacher", "task"]
     });
     if (!grade) return res.status(404).json({ message: "GRADE_NOT_FOUND" });
-    if (!grade.student.class || grade.student.class.teacher?.id !== req.userId) {
+    const aiReviewAccess = grade.student.class
+      ? await authorizeClassForReq(req, grade.student.class.id, "GRADE_EDIT")
+      : null;
+    if (!aiReviewAccess || !aiReviewAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     const code = grade.submittedCode || "";

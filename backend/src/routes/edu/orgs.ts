@@ -3,8 +3,9 @@ import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { Student } from "../../entities/Student";
 import { Class } from "../../entities/Class";
+import { Organization } from "../../entities/Organization";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { createOrganization, listUserMemberships, listOrgMembers, getUserOrgRole } from "../../services/edu/membership";
+import { createOrganization, listUserMemberships, listOrgMembers, getUserOrgRole, setMembershipRole, removeMembership } from "../../services/edu/membership";
 import {
   createInvitation,
   acceptInvitation,
@@ -15,9 +16,32 @@ import { listChildren } from "../../services/edu/parentLinks";
 import { roleCan } from "../../services/edu/rbac";
 import { normalizeOrgRole } from "../../types/OrgRole";
 import { writeAudit } from "../../services/audit/auditLog";
+import { emailService } from "../../services/emailService";
+import { FRONTEND_URL } from "../../config";
+import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { logger } from "../../utils/logger";
 
 const router = Router();
+
+// Invite creation now sends a real email — cap it so a compromised/malicious
+// org-admin account can't be used to spam arbitrary inboxes.
+const inviteLimiter = createRouteLimiter({ windowMs: 60 * 60 * 1000, limit: 20, message: "RATE_LIMIT" });
+
+/** Best-effort invitation email with the accept link (no-op if SMTP is off). */
+function sendInviteEmail(email: string, role: string, token: string): void {
+  const link = `${FRONTEND_URL}/invite/${token}`;
+  const roleUk =
+    role === "PARENT" ? "спостерігача (батьки)" : role === "ASSISTANT" ? "асистента" : role === "ORG_ADMIN" ? "адміністратора" : "викладача";
+  emailService
+    .sendNotificationEmail({
+      to: email,
+      subject: "Запрошення до StudyCod / StudyCod invitation",
+      title: "Вас запросили до StudyCod",
+      contentHtml: `<p>Вас запросили приєднатися як ${roleUk}. Перейдіть за посиланням, щоб прийняти запрошення:</p><p><a href="${link}">${link}</a></p><hr><p>You've been invited to StudyCod. Open the link to accept the invitation:</p><p><a href="${link}">${link}</a></p>`,
+      text: `Запрошення до StudyCod / StudyCod invitation: ${link}`
+    })
+    .catch((err: any) => logger.warn("[edu/orgs] invite email failed", { message: err?.message }));
+}
 const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
 
@@ -112,8 +136,106 @@ router.get("/orgs/:orgId/members", authRequired, async (req: AuthRequest, res: R
   }
 });
 
+// Rename an organization (ORG_SETTINGS).
+router.patch("/orgs/:orgId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const orgId = parseInt(req.params.orgId, 10);
+    if (!Number.isFinite(orgId)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!(await requireOrgCapability(req, res, orgId, "ORG_SETTINGS"))) return;
+
+    const name = String(req.body?.name ?? "").trim();
+    if (!name || name.length > 200) return res.status(400).json({ message: "INVALID_NAME" });
+
+    await AppDataSource.getRepository(Organization).update({ id: orgId }, { name });
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId ?? null,
+      action: "org.settings.rename",
+      targetType: "org",
+      targetId: orgId,
+      orgId,
+      metadata: { name },
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({ ok: true, orgId, name });
+  } catch (error: any) {
+    logger.error("[edu/orgs] rename org failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Change a member's org role (MEMBER_MANAGE). Cannot demote the last ORG_ADMIN.
+router.patch("/orgs/:orgId/members/:userId/role", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const orgId = parseInt(req.params.orgId, 10);
+    const targetUserId = parseInt(req.params.userId, 10);
+    if (!Number.isFinite(orgId) || !Number.isFinite(targetUserId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
+
+    const role = normalizeOrgRole(req.body?.role);
+    if (!role) return res.status(400).json({ message: "INVALID_ROLE" });
+
+    const result = await setMembershipRole(orgId, targetUserId, role);
+    if (!result.ok) {
+      return res.status(result.reason === "NOT_A_MEMBER" ? 404 : 409).json({ message: result.reason });
+    }
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId ?? null,
+      action: "org.member.role_change",
+      targetType: "user",
+      targetId: targetUserId,
+      orgId,
+      metadata: { role },
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({ ok: true, userId: targetUserId, role });
+  } catch (error: any) {
+    logger.error("[edu/orgs] change member role failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Remove a member from the org (MEMBER_MANAGE). Cannot remove the last ORG_ADMIN.
+router.delete("/orgs/:orgId/members/:userId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const orgId = parseInt(req.params.orgId, 10);
+    const targetUserId = parseInt(req.params.userId, 10);
+    if (!Number.isFinite(orgId) || !Number.isFinite(targetUserId)) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
+
+    const result = await removeMembership(orgId, targetUserId);
+    if (!result.ok) {
+      return res.status(result.reason === "NOT_A_MEMBER" ? 404 : 409).json({ message: result.reason });
+    }
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId ?? null,
+      action: "org.member.remove",
+      targetType: "user",
+      targetId: targetUserId,
+      orgId,
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({ ok: true, userId: targetUserId });
+  } catch (error: any) {
+    logger.error("[edu/orgs] remove member failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 // Issue an invitation (ORG_ADMIN-level: MEMBER_MANAGE).
-router.post("/orgs/:orgId/invites", authRequired, async (req: AuthRequest, res: Response) => {
+router.post("/orgs/:orgId/invites", authRequired, inviteLimiter, async (req: AuthRequest, res: Response) => {
   try {
     if (!requireUser(req, res)) return;
     const orgId = parseInt(req.params.orgId, 10);
@@ -133,6 +255,7 @@ router.post("/orgs/:orgId/invites", authRequired, async (req: AuthRequest, res: 
       role,
       invitedByUserId: req.userId!
     });
+    sendInviteEmail(invite.email, invite.role, invite.token);
     await writeAudit({
       actorType: "USER",
       actorId: req.userId!,
@@ -174,6 +297,7 @@ router.get("/orgs/:orgId/invites", authRequired, async (req: AuthRequest, res: R
         id: i.id,
         email: i.email,
         role: i.role,
+        token: i.token,
         status: i.status,
         expiresAt: i.expiresAt,
         createdAt: i.createdAt
@@ -206,7 +330,7 @@ router.post("/orgs/:orgId/invites/:invitationId/revoke", authRequired, async (re
 });
 
 // Invite a parent and link them to a specific student (teacher-level: STUDENT_MANAGE).
-router.post("/orgs/:orgId/parent-invites", authRequired, async (req: AuthRequest, res: Response) => {
+router.post("/orgs/:orgId/parent-invites", authRequired, inviteLimiter, async (req: AuthRequest, res: Response) => {
   try {
     if (!requireUser(req, res)) return;
     const orgId = parseInt(req.params.orgId, 10);
@@ -231,6 +355,7 @@ router.post("/orgs/:orgId/parent-invites", authRequired, async (req: AuthRequest
       studentId: student.id,
       invitedByUserId: req.userId!
     });
+    sendInviteEmail(invite.email, invite.role, invite.token);
     await writeAudit({
       actorType: "USER",
       actorId: req.userId!,

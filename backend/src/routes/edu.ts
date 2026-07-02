@@ -11,7 +11,8 @@ import { User, UserLang } from "../entities/User";
 import { Class } from "../entities/Class";
 import { Student } from "../entities/Student";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
-import { requireCapability, orgIdFromClassParam } from "../middleware/orgContext";
+import { requireClassCapability, type ClassAccessRequest } from "../middleware/orgContext";
+import { authorizeClassAction } from "../services/edu/classAccess";
 import { generateUsername, generatePassword, hashPassword } from "../services/studentCredentialsService";
 import { emailService } from "../services/emailService";
 import { EduLesson, LessonType } from "../entities/EduLesson";
@@ -385,7 +386,7 @@ eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
     });
   }
 });
-eduRouter.post("/classes", authRequired, requireCapability("CLASS_CREATE"), async (req: AuthRequest, res: Response) => {
+eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const user = await userRepo().findOne({
       where: {
@@ -443,17 +444,14 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
         message: "ONLY_TEACHERS_CAN_VIEW_CLASSES"
       });
     }
-    const classes = await classRepo().find({
-      where: {
-        teacher: {
-          id: user.id
-        }
-      },
-      relations: ["students"],
-      order: {
-        createdAt: "DESC"
-      }
-    });
+    // Count students via a grouped COUNT (loadRelationCountAndMap) instead of
+    // loading every student row across every class just to read `.length`.
+    const classes = await classRepo()
+      .createQueryBuilder("class")
+      .loadRelationCountAndMap("class.studentsCount", "class.students")
+      .where("class.teacher_id = :teacherId", { teacherId: user.id })
+      .orderBy("class.created_at", "DESC")
+      .getMany();
     res.json({
       classes: classes.map(c => ({
         id: c.id,
@@ -461,7 +459,7 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
         language: c.language,
         gradingSystem: c.gradingSystem || DEFAULT_GRADING_SYSTEM,
         gradeScaleMode: normalizeScaleMode(c.gradeScaleMode),
-        studentsCount: c.students?.length || 0,
+        studentsCount: (c as unknown as { studentsCount?: number }).studentsCount ?? 0,
         createdAt: c.createdAt
       }))
     });
@@ -472,45 +470,16 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
     });
   }
 });
-eduRouter.get("/classes/:classId", authRequired, async (req: AuthRequest, res: Response) => {
+eduRouter.get("/classes/:classId", authRequired, requireClassCapability("CLASS_VIEW"), async (req: ClassAccessRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    if (!Number.isFinite(classId)) {
-      return res.status(400).json({
-        message: "INVALID_CLASS_ID"
-      });
-    }
-
-    const user = await userRepo().findOne({
-      where: {
-        id: req.userId
-      }
-    });
-    if (!user || user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN") {
-      return res.status(403).json({
-        message: "ONLY_TEACHERS_CAN_VIEW_CLASSES"
-      });
-    }
-
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: user.id
-        }
-      }
-    });
-    if (!cls) {
-      return res.status(404).json({
-        message: "CLASS_NOT_FOUND"
-      });
-    }
+    const cls = req.classAccess!.cls;
 
     return res.json({
       class: {
         id: cls.id,
         name: cls.name,
         language: cls.language,
+        organizationId: cls.organizationId ?? null,
         gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         gradeScaleMode: normalizeScaleMode(cls.gradeScaleMode),
         createdAt: cls.createdAt,
@@ -524,25 +493,9 @@ eduRouter.get("/classes/:classId", authRequired, async (req: AuthRequest, res: R
     });
   }
 });
-eduRouter.put("/classes/:classId/grading-system", authRequired, requireCapability("CLASS_EDIT", { resolveOrgId: orgIdFromClassParam() }), async (req: AuthRequest, res: Response) => {
+eduRouter.put("/classes/:classId/grading-system", authRequired, requireClassCapability("CLASS_EDIT"), async (req: ClassAccessRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    if (!Number.isFinite(classId)) {
-      return res.status(400).json({
-        message: "INVALID_CLASS_ID"
-      });
-    }
-
-    const user = await userRepo().findOne({
-      where: {
-        id: req.userId
-      }
-    });
-    if (!user || user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN") {
-      return res.status(403).json({
-        message: "ONLY_TEACHERS_CAN_EDIT_CLASSES"
-      });
-    }
+    const classId = req.classAccess!.cls.id;
 
     const parsedBody = z.object({
       gradingSystem: z.enum(GRADING_SYSTEMS),
@@ -554,19 +507,7 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, requireCapabilit
       });
     }
 
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: user.id
-        }
-      }
-    });
-    if (!cls) {
-      return res.status(404).json({
-        message: "CLASS_NOT_FOUND"
-      });
-    }
+    const cls = req.classAccess!.cls;
 
     const requestedGradingSystem = parsedBody.data.gradingSystem as GradingSystem;
     const previousGradingSystem = (cls.gradingSystem || DEFAULT_GRADING_SYSTEM) as GradingSystem;
@@ -582,7 +523,9 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, requireCapabilit
         .where("class.id = :classId", { classId })
         .getOne();
 
-      if (!lockedClass || lockedClass.teacher.id !== user.id) {
+      // Authorization already enforced by requireClassCapability; the lock just
+      // guards the read-modify-write of grades against concurrent conversions.
+      if (!lockedClass) {
         throw new Error("CLASS_NOT_FOUND");
       }
 
@@ -665,10 +608,7 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, requireCapabilit
 
     const updatedClass = await classRepo().findOne({
       where: {
-        id: classId,
-        teacher: {
-          id: user.id
-        }
+        id: classId
       }
     });
 
@@ -707,37 +647,9 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, requireCapabilit
     });
   }
 });
-eduRouter.get("/classes/:classId/lessons", authRequired, async (req: AuthRequest, res: Response) => {
+eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability("CLASS_VIEW"), async (req: ClassAccessRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    if (isNaN(classId)) {
-      return res.status(400).json({
-        message: "INVALID_CLASS_ID"
-      });
-    }
-    const user = await userRepo().findOne({
-      where: {
-        id: req.userId
-      }
-    });
-    if (!user || user.userMode !== "EDUCATIONAL") {
-      return res.status(403).json({
-        message: "ONLY_TEACHERS_CAN_VIEW_LESSONS"
-      });
-    }
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: user.id
-        }
-      }
-    });
-    if (!cls) {
-      return res.status(404).json({
-        message: "CLASS_NOT_FOUND"
-      });
-    }
+    const classId = req.classAccess!.cls.id;
     const topics = await topicRepo().createQueryBuilder("topic").leftJoinAndSelect("topic.tasks", "task").where("topic.class_id = :classId", {
       classId
     }).orderBy("topic.order", "ASC").addOrderBy("topic.created_at", "ASC").getMany();
@@ -774,17 +686,7 @@ eduRouter.get("/classes/:classId/lessons", authRequired, async (req: AuthRequest
     });
   }
 });
-eduRouter.post("/classes/:classId/lessons", authRequired, requireCapability("CONTENT_AUTHOR", { resolveOrgId: orgIdFromClassParam() }), async (req: AuthRequest, res: Response) => {
-  const user = await userRepo().findOne({
-    where: {
-      id: req.userId
-    }
-  });
-  if (!user || user.userMode !== "EDUCATIONAL") {
-    return res.status(403).json({
-      message: "ONLY_TEACHERS_CAN_CREATE_LESSONS"
-    });
-  }
+eduRouter.post("/classes/:classId/lessons", authRequired, requireClassCapability("CONTENT_AUTHOR"), async (req: ClassAccessRequest, res: Response) => {
   const parsedBody = createLessonBodySchema.safeParse(req.body ?? {});
   if (!parsedBody.success) {
     return res.status(400).json({
@@ -794,17 +696,7 @@ eduRouter.post("/classes/:classId/lessons", authRequired, requireCapability("CON
 
   const type = parsedBody.data.type as LessonType;
   const title = parsedBody.data.title;
-  const cls = await classRepo().findOne({
-    where: {
-      id: Number(req.params.classId),
-      teacher: {
-        id: user.id
-      }
-    }
-  });
-  if (!cls) return res.status(404).json({
-    message: "CLASS_NOT_FOUND"
-  });
+  const cls = req.classAccess!.cls;
   const lesson = lessonRepo().create({
     class: cls,
     type,

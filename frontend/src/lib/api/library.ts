@@ -4,7 +4,8 @@ import i18n from "../../i18n";
 export type LibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
 export type LibraryTaskLang = "JAVA" | "PYTHON" | "CPP";
 export type LibraryTaskDifficulty = "EASY" | "MEDIUM" | "HARD";
-export type JudgeLanguage = "java" | "python" | "cpp" | "c" | "csharp" | "kotlin";
+import type { JudgeLanguage } from "../judgeLanguages";
+export type { JudgeLanguage };
 export type LibraryCheckerSpec = { type: "exact" } | { type: "whitespace" } | { type: "float"; epsilon: number };
 
 export type CodeFile = { path: string; content: string };
@@ -376,7 +377,7 @@ export async function saveLibraryTaskDraft(id: number, draftCodeOrFiles: string 
   return res.data as { ok: true };
 }
 
-export async function runLibraryTask(id: number, payload: { input?: string; language?: JudgeLanguage } & ({ code: string } | { files: CodeFile[] } | { code?: string; files?: CodeFile[] })) {
+export async function runLibraryTask(id: number, payload: { input?: string; language?: JudgeLanguage; compiler?: string } & ({ code: string } | { files: CodeFile[] } | { code?: string; files?: CodeFile[] })) {
   const res = await api.post(`/library/tasks/${id}/run`, payload);
   return res.data as LibraryRunResult;
 }
@@ -401,7 +402,7 @@ export async function submitLibraryWebTask(id: number, files: WebTaskFile[]) {
   return res.data as LibraryCheckResult;
 }
 
-export async function checkLibraryTask(id: number, payload: { language?: JudgeLanguage } & ({ code: string } | { files: CodeFile[] } | { code?: string; files?: CodeFile[] })) {
+export async function checkLibraryTask(id: number, payload: { language?: JudgeLanguage; compiler?: string } & ({ code: string } | { files: CodeFile[] } | { code?: string; files?: CodeFile[] })) {
   const lang = (payload.language ?? "java") as JudgeLanguage;
   const res = await api.post(`/library/tasks/${id}/check`, { ...payload, language: lang });
   const data = res.data as LibraryCheckResult;

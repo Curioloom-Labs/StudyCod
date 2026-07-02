@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { AppDataSource } from "../../data-source";
 import { OrgInvitation } from "../../entities/OrgInvitation";
+import { User } from "../../entities/User";
 import { ensureMembership } from "./membership";
 import { createParentLink } from "./parentLinks";
 import type { OrgRole } from "../../types/OrgRole";
@@ -36,15 +37,36 @@ export interface CreateInvitationInput {
   studentId?: number | null;
 }
 
+/**
+ * Issue an invite, or reuse the existing PENDING one for the same
+ * (org, email, role, student) so re-inviting doesn't pile up duplicate rows
+ * with separate tokens (and separate emails) for the same target. The reused
+ * invite's expiry is refreshed.
+ */
 export async function createInvitation(input: CreateInvitationInput): Promise<OrgInvitation> {
   const email = normalizeEmail(input.email);
   if (!email) throw new Error("EMAIL_REQUIRED");
+  const studentId = input.studentId ?? null;
+
+  const existing = await inviteRepo().findOne({
+    where: {
+      organization: { id: input.orgId } as any,
+      email,
+      role: input.role,
+      studentId: studentId as any,
+      status: "PENDING"
+    }
+  });
+  if (existing) {
+    existing.expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+    return await inviteRepo().save(existing);
+  }
 
   const invite = inviteRepo().create({
     organization: { id: input.orgId } as any,
     email,
     role: input.role,
-    studentId: input.studentId ?? null,
+    studentId,
     token: randomBytes(24).toString("base64url"),
     status: "PENDING",
     invitedByUserId: input.invitedByUserId,
@@ -78,6 +100,9 @@ export async function acceptInvitation(token: string, userId: number): Promise<A
 
   if (invite.role === "PARENT" && invite.studentId) {
     await createParentLink(userId, invite.studentId);
+    // Route a pure-personal parent into the EDU shell so they can reach the
+    // children view. The conditional WHERE never touches teacher/contest modes.
+    await AppDataSource.getRepository(User).update({ id: userId, userMode: "PERSONAL" }, { userMode: "EDUCATIONAL" });
   }
 
   invite.status = "ACCEPTED";

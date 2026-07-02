@@ -12,6 +12,14 @@ import { getCachedUser, setCachedUser, type CachedUser } from '../services/auth/
 import { getStudentUiLangMarker, setStudentUiLangMarker } from '../services/auth/studentUiLangCache';
 import { setRequestContextFields } from '../utils/requestContextStore';
 
+/**
+ * Carries the authenticated principal. EDU runs a deliberate dual identity model
+ * (real `User` accounts vs class-scoped `Student` profiles); exactly one of
+ * `userId` / `studentId` is set per request. This seam is FROZEN — see
+ * docs/edu-identity-model.md before branching on it or touching student auth.
+ * Notably: never delete a Student to "migrate" identity (grades cascade off
+ * `student_id`); link in place via `students.user_id` instead.
+ */
 export interface AuthRequest extends Request<ParamsFlatDictionary, any, any, any, Record<string, any>> {
   userId?: number;
   studentId?: number;

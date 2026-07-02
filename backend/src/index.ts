@@ -44,6 +44,7 @@ import * as path from "path";
 import { resolveJudgeSandboxConfig, resolveJudgeWorkerEntry } from "./services/judgeWorker/workerPaths";
 import { getExecutionQueueMode } from "./services/execution/distributedJudgeQueueSingleton";
 import { getJudgeExecutionMetrics } from "./services/judgeWorker";
+import { sweepTestCache } from "./services/judgeWorker/testCache";
 import { getOpenRouterRuntimeDiagnostics } from "./services/llm/OpenRouterProvider";
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
@@ -1116,6 +1117,13 @@ async function bootstrap(): Promise<void> {
     // Avoid hanging sockets blocking shutdown forever.
     httpServer.keepAliveTimeout = 60_000;
     httpServer.headersTimeout = 65_000;
+
+    // Periodically GC the on-disk test cache (TTL-based). Best-effort; never throws.
+    const cacheSweepMs = Math.max(60 * 60 * 1000, parseInt(String(process.env.JUDGE_TEST_CACHE_SWEEP_MS ?? ""), 10) || 6 * 60 * 60 * 1000);
+    const cacheSweepTimer = setInterval(() => {
+      void sweepTestCache().catch(() => undefined);
+    }, cacheSweepMs);
+    cacheSweepTimer.unref?.();
   } catch (err) {
     logger.error("Database initialization error", {
       err

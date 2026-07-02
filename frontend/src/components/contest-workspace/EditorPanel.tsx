@@ -4,20 +4,14 @@ import { Button } from "../ui/Button";
 import { CodeEditor } from "../CodeEditor";
 import { Play, Rocket, ScanSearch, Minus, Plus, WrapText, RotateCcw, Copy, Check } from "lucide-react";
 import type { ContestProblemStatement, JudgeLanguage } from "../../lib/api/contests";
-
-const FRIENDLY_LANG: Record<JudgeLanguage, string> = {
-  java: "Java",
-  python: "Python",
-  cpp: "C++",
-  c: "C",
-  csharp: "C#",
-  kotlin: "Kotlin",
-};
+import { JUDGE_LANGUAGE_LABELS as FRIENDLY_LANG, enabledJudgeLanguages, compilersForFamily } from "../../lib/judgeLanguages";
 
 type EditorPanelProps = {
   statement: ContestProblemStatement;
   language: JudgeLanguage;
   onLanguageChange: (next: JudgeLanguage) => void;
+  compiler: string;
+  onCompilerChange: (next: string) => void;
   code: string;
   onCodeChange: (next: string) => void;
   runInput: string;
@@ -53,6 +47,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   statement,
   language,
   onLanguageChange,
+  compiler,
+  onCompilerChange,
   code,
   onCodeChange,
   runInput,
@@ -64,7 +60,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onToggleFocusMode,
   focusMode,
 }) => {
-  const allowedLangs = (statement.task.allowedLanguages || []).filter(Boolean);
+  // Every problem accepts every supported language — no per-problem restriction.
+  const allowedLangs = enabledJudgeLanguages();
+  const compilerOptions = compilersForFamily(language);
   const difficulty = difficultyFromLimits(statement);
 
   const [fontSize, setFontSize] = React.useState<number>(() => {
@@ -150,12 +148,25 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             aria-label="Select solution language"
             className="h-11 w-full sm:w-auto px-3 rounded-xl bg-bg-base border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-secondary/50"
           >
-            {(allowedLangs.length ? allowedLangs : (["java"] satisfies JudgeLanguage[])).map((lang) => (
+            {allowedLangs.map((lang) => (
               <option key={lang} value={lang}>
                 {FRIENDLY_LANG[lang] ?? lang}
               </option>
             ))}
           </select>
+
+          {compilerOptions.length > 1 && (
+            <select
+              value={compiler}
+              onChange={(e) => onCompilerChange(e.target.value)}
+              aria-label="Select compiler / version"
+              className="h-11 w-full sm:w-auto px-3 rounded-xl bg-bg-base border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-secondary/50"
+            >
+              {compilerOptions.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          )}
 
           <div className="inline-flex items-center rounded-xl border border-border bg-bg-base overflow-hidden" role="group" aria-label="Editor font size">
             <button type="button" onClick={() => adjustFont(-1)} disabled={fontSize <= FONT_MIN} className="h-11 w-9 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40" aria-label="Decrease font size" title="Decrease font size">

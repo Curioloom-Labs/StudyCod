@@ -294,10 +294,16 @@ export function explainStderr(language: LanguageId, stderr: string): ExplainedEr
     case "kotlin":
       return explainJava(s);
     case "cpp":
-      return explainCpp(s);
     case "c":
+    // Native runtime signals (SIGSEGV/SIGFPE/OOM) are shared, so reuse the C++ explainer.
+    case "rust":
+    case "pascal":
+    case "d":
+    case "swift":
+    case "haskell":
       return explainCpp(s);
-    case "csharp":
+    default:
+      // csharp, js, go, dart, lisp, lua, perl, php, ruby — no bespoke explainer yet.
       return null;
   }
 }

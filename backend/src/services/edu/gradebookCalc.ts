@@ -122,6 +122,36 @@ export function mapGradesToCategoryGrades(
   return out;
 }
 
+export interface StudentWeightedFinal {
+  studentId: number;
+  final: number | null;
+  categories: CategoryBreakdown[];
+}
+
+/**
+ * Class-wide weighted finals (P2.6c): group raw graded rows by student and run
+ * {@link computeWeightedGrade} for each id in `studentIds`. Every requested
+ * student is returned — those with no counting grades get `final: null` — so the
+ * gradebook column lists the whole roster, not only the graded ones. Pure.
+ */
+export function computeClassWeightedFinals(
+  config: GradebookConfig,
+  rows: Array<{ studentId: number; categoryId?: string | null; total?: number | null }>,
+  studentIds: number[]
+): StudentWeightedFinal[] {
+  const byStudent = new Map<number, Array<{ categoryId?: string | null; total?: number | null }>>();
+  for (const r of rows ?? []) {
+    const sid = Number(r.studentId);
+    if (!Number.isFinite(sid)) continue;
+    if (!byStudent.has(sid)) byStudent.set(sid, []);
+    byStudent.get(sid)!.push({ categoryId: r.categoryId, total: r.total });
+  }
+  return studentIds.map((studentId) => {
+    const result = computeWeightedGrade(config, mapGradesToCategoryGrades(byStudent.get(studentId) ?? []));
+    return { studentId, final: result.final, categories: result.categories };
+  });
+}
+
 /** Validate/normalize a class gradebook config: unique non-empty ids, positive weights. */
 export function normalizeGradebookConfig(input: unknown): GradebookConfig | null {
   if (!input || typeof input !== "object") return null;

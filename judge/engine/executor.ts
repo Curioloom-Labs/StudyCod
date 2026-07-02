@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { createReadStream } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
 export interface ExecOptions {
@@ -8,7 +9,13 @@ export interface ExecOptions {
   chroot: string;
   cwd: string;
   hostWorkDir: string;
+  /** Inline stdin. Ignored when `stdinFile` is provided. */
   stdin: string;
+  /**
+   * When set, stdin is streamed from this host file (constant memory) instead of `stdin`.
+   * A trailing newline is appended if the file doesn't already end with one.
+   */
+  stdinFile?: string;
   timeLimitMs: number;
   memoryLimitBytes: number;
   // Address space limit (RLIMIT_AS). If omitted, derived from memoryLimitBytes.
@@ -79,10 +86,20 @@ export class NsJailExecutor {
     nsArgs.push("--time_limit", String(timeLimitSec), "--rlimit_cpu", String(cpuLimitSec), "--rlimit_as", String(rlimitAs), "--rlimit_fsize", String(rlimitFsize));
     nsArgs.push("--bindmount", `${opts.hostWorkDir}:/work`);
 
-    // Ensure a UTF-8 locale inside the jail.
-    // Without this, some runtimes (notably Java when locale is C/POSIX) may fall back to US-ASCII
-    // and replace non-ASCII (e.g., Cyrillic) output with '?'.
+    // PATH/HOME inside the jail. nsjail starts with a clean environment, so compilers that
+    // shell out to helper tools by bare name (rust→`cc`, fpc/dmd/gdc/swift→`ld`/`as`,
+    // go→its linker) fail with "cc/ld not found" unless PATH is set. gcc/g++ work without
+    // this only because our adapters pass `-B/usr/bin`. HOME=/work gives toolchains a
+    // writable home (the per-submission bind mount).
+    const sandboxPath = (process.env.JUDGE_SANDBOX_PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").trim();
     nsArgs.push(
+      "--env",
+      `PATH=${sandboxPath}`,
+      "--env",
+      "HOME=/work",
+      // Ensure a UTF-8 locale inside the jail. Without this, some runtimes (notably Java when
+      // locale is C/POSIX) may fall back to US-ASCII and replace non-ASCII (e.g. Cyrillic)
+      // output with '?'.
       "--env",
       "LANG=C.UTF-8",
       "--env",
@@ -120,7 +137,42 @@ export class NsJailExecutor {
       timedOut = true;
       killChild();
     }, opts.timeLimitMs + 30);
-    if (opts.stdin && child.stdin) {
+    // Swallow EPIPE etc.: a solution may exit before consuming all of stdin.
+    child.stdin?.on("error", () => {});
+    if (opts.stdinFile && child.stdin) {
+      const stdinPipe = child.stdin;
+      // Determine whether a trailing newline is needed without reading the whole file.
+      let needTrailingNewline = false;
+      try {
+        const st = await fs.stat(opts.stdinFile);
+        if (st.size > 0) {
+          const fh = await fs.open(opts.stdinFile, "r");
+          try {
+            const last = Buffer.alloc(1);
+            await fh.read(last, 0, 1, st.size - 1);
+            needTrailingNewline = last[0] !== 0x0a;
+          } finally {
+            await fh.close();
+          }
+        }
+      } catch {
+        needTrailingNewline = false;
+      }
+      const rs = createReadStream(opts.stdinFile);
+      rs.on("error", () => {
+        try {
+          stdinPipe.end();
+        } catch {}
+      });
+      // Pipe without auto-ending so we can append the trailing newline ourselves.
+      rs.pipe(stdinPipe, { end: false });
+      rs.on("end", () => {
+        try {
+          if (needTrailingNewline) stdinPipe.write("\n");
+          stdinPipe.end();
+        } catch {}
+      });
+    } else if (opts.stdin && child.stdin) {
       const data = opts.stdin.endsWith("\n") ? opts.stdin : opts.stdin + "\n";
       child.stdin.write(data, "utf8", () => {
         try {

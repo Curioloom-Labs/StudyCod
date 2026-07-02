@@ -32,6 +32,8 @@ export type ContestWorkspaceProps = {
   statement: ContestProblemStatement;
   language: JudgeLanguage;
   onLanguageChange: (next: JudgeLanguage) => void;
+  compiler: string;
+  onCompilerChange: (next: string) => void;
   code: string;
   onCodeChange: (next: string) => void;
   onRun: () => void;
