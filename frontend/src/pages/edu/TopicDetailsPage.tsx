@@ -956,7 +956,7 @@ export const TopicDetailsPage: React.FC = () => {
                     setLiveTaskId(prev => (prev === task.id ? null : task.id));
                   }} className="text-xs" title={tr("Жива панель класу для цього завдання", "Live class monitor for this task")}
                   >
-                            {liveTaskId === task.id ? tr("Сховати", "Hide") : "Live"}
+                            {liveTaskId === task.id ? tr("Сховати", "Hide") : tr("Наживо", "Live")}
                           </Button>
                         </div>
                         <Button variant="ghost" onClick={e => {
