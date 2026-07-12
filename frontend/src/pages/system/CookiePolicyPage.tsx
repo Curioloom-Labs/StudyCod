@@ -6,6 +6,7 @@ import { ArrowLeft, Cookie, Mail } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
+import { LegalExperience } from "./LegalExperience";
 
 type LegalSection = {
   title: string;
@@ -104,6 +105,17 @@ export const CookiePolicyPage: React.FC = () => {
       ]
     }
   ];
+
+  return <LegalExperience
+    current="cookies"
+    title={tr("Cookies і локальне сховище", "Cookies & Local Storage")}
+    description={tr("Які браузерні технології використовує StudyCod, навіщо вони потрібні та як ними керувати.", "Which browser technologies StudyCod uses, why they are needed, and how to manage them.")}
+    updated={tr("Оновлено 31 травня 2026", "Updated May 31, 2026")}
+    sections={sections}
+    tr={tr}
+    icon={Cookie}
+    email={SUPPORT_EMAIL}
+  />;
 
   return (
     <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">

@@ -347,7 +347,14 @@ export async function updateEmailSubscription(enabled: boolean): Promise<{ enabl
 export async function getPublicProfile(username: string): Promise<PublicProfile> {
   const safe = encodeURIComponent(String(username ?? "").trim());
   const res = await api.get(`/profile/public/${safe}`);
-  return res.data as PublicProfile;
+  const profile = res.data as PublicProfile;
+  return {
+    ...profile,
+    recentSolved: (profile.recentSolved ?? []).map((item) => ({
+      ...item,
+      createdAt: item.lastCheckedAt ?? "",
+    })),
+  };
 }
 
 export async function getIadDetails(): Promise<IadDetails> {

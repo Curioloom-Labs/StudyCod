@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { listTasks, generateTask, saveDraft, submitTask, resetTopic, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
@@ -25,6 +25,48 @@ import { useMediaQuery } from "../../utils/useMediaQuery";
 interface Props {
   user: User;
 }
+
+const PERSONAL_TASK_PREVIEW_FIXTURES: Task[] = [
+  {
+    id: 91001,
+    title: "Розумний розклад автобусів",
+    subtitle: "Алгоритми · масиви та мінімум",
+    topicId: 901,
+    topicTitle: "Колекції та пошук",
+    topicIndex: 4,
+    descriptionMarkdown: "",
+    theoryMarkdown: "## Як знайти мінімум\n\nПройди масив лише один раз і зберігай індекс найменшого очікування. Не потрібно сортувати весь список — достатньо лінійного проходу.\n\n## Що робити з однаковим часом\n\nОновлюй відповідь лише тоді, коли нове значення строго менше. Тоді при однаковому часі залишиться перший автобус — саме він має менший номер.",
+    practiceText: "## Завдання\n\nНа зупинку прибувають автобуси через `t₁, t₂, …, tₙ` хвилин. Знайди номер автобуса, який прибуде першим. Якщо час однаковий — обери автобус із меншим номером.\n\n## Вхідні дані\n\nУ першому рядку число `n` (`1 ≤ n ≤ 100 000`). У другому — `n` цілих чисел від `0` до `10⁹`.\n\n## Вихідні дані\n\nВиведи номер автобуса та час очікування.\n\n## Приклад\n\n**Ввід**\n```text\n5\n12 7 7 18 9\n```\n\n**Вивід**\n```text\n2 7\n```",
+    starterCode: "n = int(input())\ntimes = list(map(int, input().split()))\n\n# Знайди найшвидший автобус\nbest_index = 0\n\nprint(best_index + 1, times[best_index])\n",
+    userCode: "n = int(input())\ntimes = list(map(int, input().split()))\n\nbest_index = 0\nfor i in range(1, n):\n    if times[i] < times[best_index]:\n        best_index = i\n\nprint(best_index + 1, times[best_index])\n",
+    status: "OPEN",
+    lessonInTopic: 2,
+    repeatAttempt: 0,
+    kind: "TOPIC",
+    createdAt: "2026-07-13T09:30:00.000Z",
+    language: "PYTHON"
+  },
+  {
+    id: 91000,
+    title: "Сума парних елементів",
+    subtitle: "Розминка · цикли",
+    topicId: 900,
+    topicTitle: "Основи Python",
+    topicIndex: 3,
+    descriptionMarkdown: "",
+    practiceText: "## Завдання\n\nЗнайди суму всіх парних чисел у послідовності.",
+    theoryMarkdown: "",
+    starterCode: "numbers = list(map(int, input().split()))\nprint(0)\n",
+    userCode: "numbers = list(map(int, input().split()))\nprint(sum(x for x in numbers if x % 2 == 0))\n",
+    finalCode: "numbers = list(map(int, input().split()))\nprint(sum(x for x in numbers if x % 2 == 0))\n",
+    status: "GRADED",
+    lessonInTopic: 4,
+    repeatAttempt: 0,
+    kind: "TOPIC",
+    createdAt: "2026-07-12T14:15:00.000Z",
+    language: "PYTHON"
+  }
+];
 
 const textEncoder = new TextEncoder();
 
@@ -159,7 +201,7 @@ function splitPracticeByHeadings(markdown: string): Record<PracticeSegment, stri
     const low = line.toLowerCase();
     if (/^#{1,4}\s+/.test(line)) {
       if (/input|output|вхід|вихід/.test(low)) current = "io";
-      else if (/constraint|обмеження/.test(low)) current = "constraints";
+      else if (/constraint|РѕР±РјРµР¶РµРЅРЅСЏ/.test(low)) current = "constraints";
       else if (/example|приклад/.test(low)) current = "examples";
       else if (/note|примітка/.test(low)) current = "notes";
       else current = "task";
@@ -194,6 +236,26 @@ function likelyPurePracticeMarkdown(content: string): boolean {
   const hits = markers.reduce((acc, marker) => acc + (low.includes(marker) ? 1 : 0), 0);
   return hits >= 2;
 }
+
+function splitTheoryIntoChapters(markdown: string, fallbackTitle: string): Array<{ title: string; markdown: string }> {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const chapters: Array<{ title: string; lines: string[] }> = [];
+  let current = { title: fallbackTitle, lines: [] as string[] };
+  for (const line of lines) {
+    const match = line.match(/^#{1,2}\s+(.+)$/);
+    if (match) {
+      if (current.lines.some((item) => item.trim())) chapters.push(current);
+      current = { title: match[1].trim(), lines: [] };
+    } else {
+      current.lines.push(line);
+    }
+  }
+  if (current.lines.some((item) => item.trim()) || chapters.length === 0) chapters.push(current);
+  return chapters.map((chapter, index) => ({
+    title: chapter.title || `${fallbackTitle} ${index + 1}`,
+    markdown: chapter.lines.join("\n").trim()
+  }));
+}
 export const TasksPage: React.FC<Props> = ({
   user
 }) => {
@@ -210,6 +272,7 @@ export const TasksPage: React.FC<Props> = ({
     isOpen: isTheoryOpen
   } = useTheoryModal();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isPreviewMode = import.meta.env.DEV && searchParams.get("preview") === "true";
   const safeServerMessage = (value: unknown) => {
     return typeof value === "string" ? value : String(value ?? "");
   };
@@ -425,9 +488,12 @@ export const TasksPage: React.FC<Props> = ({
 
   const [revealedHints, setRevealedHints] = useState(0);
   const [theoryAcknowledged, setTheoryAcknowledged] = useState(false);
+  const [theoryPanelOpen, setTheoryPanelOpen] = useState(false);
+  const [activeTheoryChapter, setActiveTheoryChapter] = useState(0);
   const [showTaskHistory, setShowTaskHistory] = useState(true);
   const [uiState, setUIState] = useState<UIState>("idle");
   const [milestone, setMilestone] = useState<{
+    id?: string | number;
     type: string;
     message: string;
     previousAverage?: number;
@@ -751,6 +817,7 @@ export const TasksPage: React.FC<Props> = ({
 
   useEffect(() => {
     setActiveSegment("task");
+    setActiveTheoryChapter(0);
   }, [active?.id]);
 
   useEffect(() => {
@@ -1168,7 +1235,7 @@ export const TasksPage: React.FC<Props> = ({
     } catch {}
   }, [editorOpen]);
   const reloadTasks = useCallback(async (selectLast = false) => {
-    const data = await listTasks(uiLanguage);
+    const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage);
     const filtered = data.filter(t => true);
     setTasks(filtered);
     const currentActiveId = active?.id;
@@ -1204,12 +1271,12 @@ export const TasksPage: React.FC<Props> = ({
         setRevealedHints(0);
       }
     }
-  }, [active?.id, aiResult?.total, uiLanguage]);
+  }, [active?.id, aiResult?.total, uiLanguage, isPreviewMode]);
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const data = await listTasks(uiLanguage);
+        const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage);
         if (mounted) {
           const filtered = data.filter(t => true);
           setTasks(filtered);
@@ -1223,8 +1290,12 @@ export const TasksPage: React.FC<Props> = ({
             setUseFiles(next.useFiles);
             setFiles(next.files);
             setCode(next.code);
-            const hasTheory = computeHasTheory(firstTask);
-            setTheoryAcknowledged(!hasTheory);
+            setTheoryAcknowledged(isPreviewMode || !computeHasTheory(firstTask));
+            if (isPreviewMode) {
+              setStdin("5\n12 7 7 18 9");
+              setPersonalNotes(tr("Перевірити випадок, коли два автобуси мають однаковий час.", "Check the case where two buses have the same arrival time."));
+              setConsoleOutput(tr("Preview готовий: зміни код і натисни «Запустити» або «Перевірити».", "Preview is ready: edit the code and click Run or Check."));
+            }
           }
         }
       } catch (err: unknown) {
@@ -1238,7 +1309,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage]);
+  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode]);
   useEffect(() => {
     if (tasks.length > 0 && !active) {
       const openTaskId = sessionStorage.getItem("openTaskId");
@@ -1277,25 +1348,20 @@ export const TasksPage: React.FC<Props> = ({
   useEffect(() => {
     if (active) {
       const hasTheory = computeHasTheory(active);
-      setTheoryAcknowledged(!hasTheory);
+      setTheoryAcknowledged(isPreviewMode || !hasTheory);
     } else {
       setTheoryAcknowledged(false);
     }
-  }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown]);
+  }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, isPreviewMode]);
   useEffect(() => {
     if (!active) return;
     const theory = getTheoryMarkdown(active);
     if (!theory) return;
     if (theoryAcknowledged) return;
-    if (isTheoryOpen) return;
-    openTheory({
-      title: tr("Теорія", "Theory"),
-      markdown: theory,
-      acknowledgeLabel: tr("Я прочитав(ла) теорію", "I have read the theory"),
-      onAcknowledge: () => setTheoryAcknowledged(true)
-    });
-  }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, theoryAcknowledged, isTheoryOpen, openTheory]);
+    setTheoryPanelOpen(true);
+  }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, theoryAcknowledged]);
   useEffect(() => {
+    if (isPreviewMode) return;
     if (!active || !theoryAcknowledged || currentCodeText.trim() === "") return;
     const isEditable = active.status !== "GRADED" || aiResult && aiResult.total < 6;
     if (!isEditable) return;
@@ -1374,6 +1440,11 @@ export const TasksPage: React.FC<Props> = ({
     persistQuizDraftAnswers(active.id, quizAnswers);
   }, [active?.id, isPersonalControlQuizTask, personalQuiz, quizAnswers, quizReview, persistQuizDraftAnswers]);
   const handleGenerate = async () => {
+    if (isPreviewMode) {
+      setConsoleOutput(tr("У preview показано готовий навчальний сценарій. Генерація нового завдання доступна після входу.", "Preview shows a complete learning scenario. New task generation is available after signing in."));
+      setUIState("idle");
+      return;
+    }
     let closeDelayMs = 0;
     if (cooldownSecondsLeft > 0) {
       setConsoleOutput(tr(`Зачекай ${cooldownSecondsLeft} с і спробуй ще раз.`, `Wait ${cooldownSecondsLeft}s and try again.`));
@@ -1419,14 +1490,7 @@ export const TasksPage: React.FC<Props> = ({
         setGenerationPhase("finishing");
         if (hasTheory) {
           const theory = getTheoryMarkdown(openedTask);
-          if (theory) {
-            openTheory({
-              title: tr("Теорія", "Theory"),
-              markdown: theory,
-              acknowledgeLabel: tr("Я прочитав(ла) теорію", "I have read the theory"),
-              onAcknowledge: () => setTheoryAcknowledged(true)
-            });
-          }
+          if (theory) setTheoryPanelOpen(true);
         }
       } else if (status === "blocked" || status === "warn") {
         setBlockState({
@@ -1485,6 +1549,28 @@ export const TasksPage: React.FC<Props> = ({
   };
   const handleSubmit = async () => {
     if (!active) return;
+    if (isPreviewMode && !isPersonalControlQuizTask) {
+      setSubmitting(true);
+      setUIState("evaluating");
+      setConsoleOutput(tr("Перевіряємо 6 тестів…", "Checking 6 tests…"));
+      window.setTimeout(() => {
+        setAiResult({
+          gradingMode: "TESTS",
+          total: 12,
+          workScore: 8,
+          optimizationScore: 2,
+          integrityScore: 2,
+          aiFeedback: tr("Рішення правильне й працює за O(n). Умова з однаковим часом також оброблена коректно.", "The solution is correct and runs in O(n). Equal arrival times are handled correctly as well."),
+          testsPassed: 6,
+          testsTotal: 6,
+          hints: []
+        });
+        setConsoleOutput(tr("Усі тести пройдено · 6/6\nЧас: 42 ms · Пам’ять: 18.4 MB", "All tests passed · 6/6\nTime: 42 ms · Memory: 18.4 MB"));
+        setUIState("success");
+        setSubmitting(false);
+      }, 550);
+      return;
+    }
     if (isPersonalControlQuizTask) {
       if (!personalQuiz || quizLoading) {
         setConsoleOutput(tr("Тест ще завантажується. Зачекай декілька секунд.", "Quiz is still loading. Please wait a few seconds."));
@@ -1724,9 +1810,10 @@ export const TasksPage: React.FC<Props> = ({
           });
         }
         if (res.milestone && typeof res.milestone === "object") {
-          const m = res.milestone as { type?: unknown; message?: unknown; previousAverage?: unknown; currentAverage?: unknown };
+          const m = res.milestone as { id?: unknown; type?: unknown; message?: unknown; previousAverage?: unknown; currentAverage?: unknown };
           if (typeof m.type === "string" && typeof m.message === "string") {
             setMilestone({
+              id: typeof m.id === "string" || typeof m.id === "number" ? m.id : m.type,
               type: m.type,
               message: m.message,
               previousAverage: typeof m.previousAverage === "number" ? m.previousAverage : undefined,
@@ -1833,6 +1920,11 @@ export const TasksPage: React.FC<Props> = ({
   };
   const handleSaveDraft = async () => {
     if (!active || (!isWebTask && !currentCodeText.trim())) return;
+    if (isPreviewMode) {
+      setConsoleOutput(tr("Чернетку локально збережено для preview.", "Draft saved locally for preview."));
+      setUIState("success");
+      return;
+    }
     try {
       if (active.taskMode === "WEB") {
         await saveWebTaskDraft(active.id, toWebTaskFiles());
@@ -1858,6 +1950,15 @@ export const TasksPage: React.FC<Props> = ({
     if (active.taskMode === "WEB") {
       setConsoleOutput(tr("Превʼю оновлено в блоці редактора.", "Preview refreshed in the editor panel."));
       setUIState("idle");
+      return;
+    }
+    if (isPreviewMode) {
+      setUIState("evaluating");
+      setConsoleOutput(tr("Запуск…", "Running…"));
+      window.setTimeout(() => {
+        setConsoleOutput("2 7\n\nProcess finished with exit code 0 · 38 ms");
+        setUIState("idle");
+      }, 350);
       return;
     }
     setUIState("evaluating");
@@ -1999,7 +2100,7 @@ export const TasksPage: React.FC<Props> = ({
         : tr("Копіювати", "Copy");
 
   const isMacPlatform = typeof navigator !== "undefined" && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
-  const modKeyLabel = isMacPlatform ? "⌘" : "Ctrl";
+  const modKeyLabel = isMacPlatform ? "вЊ" : "Ctrl";
   const saveShortcutLabel = `${modKeyLabel}+S`;
   const runShortcutLabel = `${modKeyLabel}+Enter`;
   const checkShortcutLabel = `${modKeyLabel}+Shift+Enter`;
@@ -2205,1124 +2306,621 @@ export const TasksPage: React.FC<Props> = ({
     });
   };
 
-    return <div className={`relative w-full px-2 sm:px-3 pb-3 ${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)]" : "h-[calc(100dvh-3rem)] md:min-h-[760px]"}`}>
-      <div className={`${isPersonalControlQuizTask ? "min-h-[calc(100dvh-3rem)] overflow-visible" : "h-full overflow-hidden"} rounded-3xl bg-bg-surface border border-border/60 flex ${isAurora ? "shadow-[var(--aurora-elev-2)]" : "shadow-[0_8px_24px_rgba(0,0,0,0.24)]"}`}>
-        <aside className="w-12 sm:w-[58px] border-r border-border/60 bg-bg-surface/70 flex flex-col items-center py-3 gap-2">
-          {railItems.map(item => (
-            <div key={item.id} className="group relative">
-              <button
-                onClick={() => focusWorkspaceArea(item.id)}
-                title={item.label}
-                aria-label={item.label}
-                className={`w-11 h-11 rounded-xl border transition-fast flex items-center justify-center ${isRailItemActive(item.id) ? "border-primary/50 bg-primary/10 text-primary" : "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary"}`}
-              >
-                <item.Icon className="w-4 h-4" />
-              </button>
-              <div className="absolute left-[48px] top-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary opacity-0 pointer-events-none group-hover:opacity-100 transition-fast whitespace-nowrap z-20">
-                {item.label}
-              </div>
-            </div>
-          ))}
+  const previewPractice = active ? getPracticeText(active) : "";
+  const compactHints = nonContestHints.slice(0, 4);
+  const routeTiles = sidebarSections.flatMap((section) =>
+    section.items.map((item) => ({
+      sectionTitle: section.title,
+      item,
+    }))
+  );
+  const answeredQuizCount = personalQuiz
+    ? Object.values(quizAnswers).filter((value) => String(value ?? "").trim().length > 0).length
+    : 0;
+  const theoryChapters = splitTheoryIntoChapters(getTheoryMarkdown(active), tr("Основна ідея", "Core idea"));
+  const visibleTheoryChapter = theoryChapters[Math.min(activeTheoryChapter, theoryChapters.length - 1)] ?? null;
 
-          <div className="w-8 h-px bg-border/80 my-1" />
+  const selectedRouteIndex = Math.max(0, routeTiles.findIndex(({ item }) => isSidebarItemActive(item)));
 
-          {[
-            {
-              id: "generate",
-              label: tr("Згенерувати", "Generate"),
-              Icon: Plus,
-              onClick: handleGenerate,
-              enabled: canQuickGenerate,
-              hint: !canGenerate
-                ? blockedReason ?? tr("Спочатку заверши поточне завдання", "Finish the current task first")
-                : cooldownSecondsLeft > 0
-                  ? tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)
-                  : undefined
-            },
-            {
-              id: "save",
-              label: tr("Зберегти", "Save"),
-              Icon: Save,
-              onClick: saveFromRail,
-              enabled: canQuickSave,
-              shortcut: saveShortcutLabel
-            },
-            {
-              id: "run",
-              label: tr("Запустити", "Run"),
-              Icon: PlayCircle,
-              onClick: runFromRail,
-              enabled: canQuickRun,
-              shortcut: runShortcutLabel
-            },
-            {
-              id: "check",
-              label: tr("Перевірити", "Check"),
-              Icon: CheckCircle2,
-              onClick: checkFromRail,
-              enabled: canQuickCheck,
-              shortcut: checkShortcutLabel
-            },
-            {
-              id: "theory",
-              label: tr("Теорія", "Theory"),
-              Icon: NotebookPen,
-              onClick: () => {
-                if (!active || !hasTheoryForActive) return;
-                setTheoryAcknowledged(false);
-                const theory = getTheoryMarkdown(active);
-                if (!theory) return;
-                openTheory({
-                  title: tr("Теорія", "Theory"),
-                  markdown: theory,
-                  acknowledgeLabel: tr("Я прочитав(ла) теорію", "I have read the theory"),
-                  onAcknowledge: () => setTheoryAcknowledged(true)
-                });
-              },
-              enabled: Boolean(active && hasTheoryForActive)
-            }
-          ].map(action => (
-            <div key={action.id} className="group relative">
-              <button
-                onClick={action.onClick}
-                disabled={!action.enabled}
-                 title={action.hint || (action.shortcut ? `${action.label} (${action.shortcut})` : action.label)}
-                 aria-label={action.label}
-                className={`w-11 h-11 rounded-xl border transition-fast flex items-center justify-center ${action.enabled ? "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary" : "border-transparent text-text-muted/40 cursor-not-allowed"}`}
-              >
-                <action.Icon className="w-4 h-4" />
-              </button>
-              <div className="absolute left-[48px] top-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary opacity-0 pointer-events-none group-hover:opacity-100 transition-fast whitespace-nowrap z-20">
-                 {action.shortcut ? `${action.label} · ${action.shortcut}` : action.label}
-              </div>
-            </div>
-          ))}
-        </aside>
-
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          <div className="flex-1 min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0 flex flex-col bg-bg-base">
-
+  return (
+    <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
       <TaskGenerationOverlay open={loading} phase={generationPhase} />
 
-      {}
-      <div className="flex-1 min-h-0 flex overflow-x-hidden relative">
-        {}
-        <div
-          ref={tasksColumnRef}
-          style={{ order: columnOrder.tasks }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => handleColumnDrop("tasks")}
-          className={`bg-bg-surface border-r border-border transition-slow ease-in-out flex flex-col overflow-hidden ${isCompactViewport ? `${showTaskHistory ? "w-[min(94vw,380px)] shadow-[0_16px_48px_rgba(0,0,0,0.45)]" : "w-0 border-r-0 pointer-events-none"} absolute inset-y-0 left-0 z-30` : showTaskHistory ? "w-[clamp(220px,42vw,320px)] sm:w-[clamp(240px,32vw,320px)]" : "w-12"}`}
-        >
-          <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/70 bg-bg-base/40">
-            {showTaskHistory ? <div className="min-w-0">
-                <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-text-muted">
-                  {tr("Панель прогресу", "Progress panel")}
-                </div>
-                <h2 className="text-sm font-mono text-text-primary">{tr("Завдання", "Tasks")}</h2>
-              </div> : null}
-            <div className="flex items-center gap-1 ml-auto">
-              <button
-                type="button"
-                draggable
-                onDragStart={() => setDraggingColumn("tasks")}
-                onDragEnd={() => setDraggingColumn(null)}
-                className="w-11 h-11 border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast cursor-grab"
-                title={tr("Перетягни колонку", "Drag column")}
-                aria-label={tr("Перетягни колонку", "Drag column")}
-              >
-                <GripVertical className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => {
-            const next = !showTaskHistory;
-            setShowTaskHistory(next);
-            if (isCompactViewport && next) {
-              setDockCollapsed(true);
-              setDockPopOut(false);
-            }
-          }} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" aria-label={showTaskHistory ? tr("Згорнути список завдань", "Collapse task list") : tr("Розгорнути список завдань", "Expand task list")}>
-                {showTaskHistory ? <ChevronLeft className="w-3 h-3 text-text-secondary" /> : <ChevronRight className="w-3 h-3 text-text-secondary" />}
-              </button>
+      <div className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-[1500px] flex-col overflow-hidden rounded-[28px] border border-[#152219]/10 bg-white shadow-[0_18px_45px_-38px_rgba(18,39,24,.48)] dark:border-white/10 dark:bg-[#121b15]">
+        <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-[#15231a]/10 px-4 py-3 dark:border-white/[.08] sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-[#718077] dark:text-[#93a199]">
+                <span>{tr("Особиста практика", "Personal practice")}</span>
+                <ChevronRight className="size-3" />
+                <span className="truncate">{active?.topicTitle ?? tr("Новий маршрут", "New route")}</span>
+              </div>
+              <h1 className="truncate text-sm font-black tracking-[-.02em] sm:text-base">{active?.title ?? tr("Обери завдання", "Choose a task")}</h1>
             </div>
           </div>
-          {showTaskHistory && <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-3 border-b border-border/70 bg-bg-surface/75">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono tracking-wide ${lessonStatusMeta.pillClass}`}>
-                    {lessonStatusMeta.label}
-                  </span>
-                  <span className="text-[11px] font-mono text-text-secondary">{sidebarStats.progress}%</span>
-                </div>
-                <div className="mt-2 h-1.5 rounded-full bg-bg-hover overflow-hidden">
-                  <div
-                    className={`h-full transition-slow ${sidebarStats.progress >= 100 ? "bg-accent-success" : "bg-primary"}`}
-                    style={{ width: `${sidebarStats.progress}%` }}
-                  />
-                </div>
-                <div className="mt-2 flex items-center gap-3 text-[10px] font-mono text-text-muted">
-                  <span><span className="text-text-primary">{sidebarStats.completed}</span> {tr("готово", "done")}</span>
-                  <span><span className="text-text-primary">{sidebarStats.reviewing}</span> {tr("на перевірці", "review")}</span>
-                  <span><span className="text-text-primary">{sidebarStats.inProgress}</span> {tr("активні", "active")}</span>
-                </div>
-              </div>
 
-              <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
-                {sidebarTasks.length === 0 && <div className="rounded-xl border border-border/70 bg-bg-base/40 p-4 text-center">
-                    <div className="text-xs text-text-muted font-mono">
-                      {tr("Поки що тут порожньо", "Nothing here yet")}
-                    </div>
-                    <div className="mt-1 text-[11px] text-text-secondary">
-                      {tr("Згенеруй перше завдання, щоб почати місію.", "Generate your first task to start the mission.")}
-                    </div>
-                    {cooldownSecondsLeft > 0 && <div className="mt-2 text-[10px] font-mono text-text-muted">
-                        {tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)}
-                      </div>}
-                  </div>}
-                {sidebarTasks.length > 0 && sidebarSections.map(section => (
-                  <div key={section.key} className="space-y-1.5">
-                    <div className="sticky top-0 z-10 px-2 py-1.5 rounded-lg border border-border/70 bg-bg-base/85 backdrop-blur-sm flex items-center justify-between gap-2">
-                      <div className="min-w-0 text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted truncate">
-                        {section.title}
-                      </div>
-                      <span className="text-[10px] font-mono text-text-secondary">{section.items.length}</span>
-                    </div>
-                    {section.items.map(item => {
-                      const isActive = isSidebarItemActive(item);
-                      const statusMeta = sidebarStatusMeta(item.status);
-                      const itemProgress = sidebarStatusProgressByTask(item.status);
-                      const lessonInTopic = Number(item.openTask.lessonInTopic ?? NaN);
-                      const lessonChip = Number.isFinite(lessonInTopic) && lessonInTopic > 0
-                        ? tr(`Урок ${lessonInTopic}`, `Lesson ${lessonInTopic}`)
-                        : null;
-                      const markerLabel = item.isGroupedControl
-                        ? tr("Control work", "Control work")
-                        : isPersonalControlQuizByTask(item.openTask)
-                          ? tr("Quiz step", "Quiz step")
-                          : null;
-                      return <button type="button" key={item.id} title={`${item.renderTitle} · ${statusMeta.label}${lessonChip ? ` · ${lessonChip}` : ""}`} className={`group relative w-full rounded-lg border p-2.5 text-left transition-fast ${isActive ? "border-primary/70 bg-primary/10 shadow-[0_0_0_1px_rgba(34,211,238,0.08)]" : "border-border/70 bg-bg-surface/70 hover:border-primary/45 hover:bg-bg-hover/60"}`} onClick={() => {
-                          openSidebarTask(item.openTask);
-                        }} aria-current={isActive ? "true" : undefined}>
-                          <span className={`absolute left-0 top-0 h-full w-1 rounded-l-lg transition-fast ${isActive ? "bg-primary" : "bg-transparent group-hover:bg-primary/45"}`} />
-                          <div className="pl-2">
-                            <div className="flex items-center gap-2">
-                              <span className={`flex-shrink-0 h-2 w-2 rounded-full ${statusMeta.dotClass}`} />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-xs font-mono text-text-primary truncate">
-                                  {item.renderTitle}
-                                </div>
-                                {(markerLabel || item.stageLabel) ? <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-text-muted min-w-0">
-                                    {markerLabel ? <span className="text-primary flex-shrink-0">{markerLabel}</span> : null}
-                                    {markerLabel && item.stageLabel ? <span className="text-border">·</span> : null}
-                                    {item.stageLabel ? <span className="truncate">{item.stageLabel}</span> : null}
-                                  </div> : null}
-                              </div>
-                            </div>
-                            <div className="mt-2 h-1 rounded-full bg-bg-hover overflow-hidden">
-                              <div
-                                className={`h-full transition-slow ${item.status === "GRADED" ? "bg-accent-success" : item.status === "SUBMITTED" ? "bg-secondary" : "bg-accent-warn"}`}
-                                style={{ width: `${itemProgress}%` }}
-                              />
-                            </div>
-                          </div>
-                        </button>;
-                    })}
-                  </div>
-                ))}
-              </div>
-
-              <div className="p-3 border-t border-border/70 bg-gradient-to-b from-bg-base/35 to-bg-base/60">
-                <Button
-                  variant="primary"
-                  onClick={handleGenerate}
-                  disabled={loading || !canGenerateFromSidebar || cooldownSecondsLeft > 0}
-                  className="w-full text-sm px-4 py-2 flex items-center justify-center gap-2"
-                  title={generateSidebarHint}
-                >
-                  <Plus className="w-4 h-4" />
-                  {generateSidebarLabel}
-                </Button>
-                <div className="mt-2 text-[10px] font-mono text-text-muted text-center leading-relaxed">
-                  <div className="px-1">{sidebarFooterHint}</div>
-                  {cooldownSecondsLeft > 0 ? <div className="mt-1">{tr(`Доступно через ${cooldownSecondsLeft} с`, `Available in ${cooldownSecondsLeft}s`)}</div> : null}
-                </div>
-              </div>
-            </div>}
-
-          {!showTaskHistory ? <div className="flex-1 flex items-center justify-center p-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowTaskHistory(true);
-                  if (isCompactViewport) {
-                    setDockCollapsed(true);
-                    setDockPopOut(false);
-                  }
-                }}
-                className="w-full rounded-xl border border-border/70 bg-bg-base/55 px-1.5 py-2 hover:bg-bg-hover transition-fast"
-                title={tr("Розгорнути панель задач", "Expand tasks panel")}
-                aria-label={tr("Розгорнути панель задач", "Expand tasks panel")}
-              >
-                <div className="text-[9px] font-mono text-text-secondary text-center">{sidebarStats.progress}%</div>
-                <div className="mt-1 h-1 rounded-full bg-bg-hover overflow-hidden">
-                  <div className={`h-full transition-slow ${sidebarStats.progress >= 100 ? "bg-accent-success" : "bg-primary"}`} style={{ width: `${sidebarStats.progress}%` }} />
-                </div>
-              </button>
-            </div> : null}
-      </div>
-
-        {}
-        <div
-          ref={centerColumnRef}
-          style={{ order: columnOrder.center }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => handleColumnDrop("center")}
-          className={`flex-1 min-h-0 flex flex-col ${isPersonalControlQuizTask ? "overflow-visible" : "overflow-hidden"}`}
-        >
-          <div className="h-11 border-b border-border/60 bg-gradient-to-b from-bg-surface/85 to-bg-surface/65 px-2 flex items-end justify-between gap-2 overflow-auto">
-            <div className="flex items-end gap-1 overflow-auto">
-            {centerTabItems.map(([id, label, Icon]) => (
-              <button
-                key={id}
-                onClick={() => setActiveCenterTab(id)}
-                className={`h-9 mb-1 rounded-t-xl border border-b-0 px-3 flex items-center gap-2 text-xs transition-fast ${activeCenterTab === id ? "border-border bg-bg-base text-text-primary shadow-[0_-1px_0_rgba(255,255,255,0.04)]" : "border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-hover/70"}`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </button>
-            ))}
-            </div>
-            <button
-              type="button"
-              draggable
-              onDragStart={() => setDraggingColumn("center")}
-              onDragEnd={() => setDraggingColumn(null)}
-              className="mb-1 w-11 h-11 rounded-md border border-border flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast cursor-grab flex-shrink-0"
-              title={tr("Перетягни колонку", "Drag column")}
-              aria-label={tr("Перетягни колонку", "Drag column")}
-            >
-              <GripVertical className="w-3.5 h-3.5" />
+          {isPreviewMode && (
+            <span className="rounded-full bg-[#fff2dc] px-3 py-1.5 text-[11px] font-black text-[#a45a00] dark:bg-[#ff8c00]/10 dark:text-[#ffc06e]">
+              {tr("Демо-сценарій", "Demo scenario")}
+            </span>
+          )}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={handleSaveDraft} disabled={!active || !currentCodeText.trim()} className="hidden h-9 items-center gap-2 rounded-xl px-3 text-xs font-bold text-[#56645b] transition hover:bg-[#edf1ec] disabled:opacity-40 dark:text-[#b2bdb5] dark:hover:bg-white/[.06] sm:flex">
+              <Save className="size-4" />{tr("Зберегти", "Save")}
+            </button>
+            <button type="button" onClick={handleRun} disabled={!canQuickRun || isPersonalControlQuizTask} className="flex h-9 items-center gap-2 rounded-xl border border-[#15231a]/12 bg-white px-3 text-xs font-black shadow-sm transition hover:bg-[#f4f7f3] disabled:opacity-40 dark:border-white/10 dark:bg-white/[.05] dark:hover:bg-white/[.08]">
+              <Play className="size-4" />{tr("Запустити", "Run")}
+            </button>
+            <button type="button" onClick={handleSubmit} disabled={!canQuickCheck} className="flex h-9 items-center gap-2 rounded-xl bg-[#00e980] px-4 text-xs font-black text-[#062213] transition hover:bg-[#00ff88] disabled:opacity-40">
+              <CheckCircle2 className="size-4" />{submitting ? tr("Перевіряємо", "Checking") : tr("Здати", "Submit")}
             </button>
           </div>
+        </header>
 
-        {activeCenterTab === "mission" ? (active ? <>
-              {}
-              <div className="border-b border-border/70 bg-bg-surface/70 px-4 py-3 flex-shrink-0">
-                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[270px_minmax(0,1fr)]">
+          <aside className="border-b border-[#15231a]/10 bg-[#f5f7f3] dark:border-white/[.08] dark:bg-[#0c120e] lg:border-b-0 lg:border-r">
+            <div className="flex items-center justify-between px-4 pb-3 pt-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f] dark:text-[#8e9a92]">{tr("Маршрут", "Route")}</p>
+                <p className="mt-1 text-sm font-black">{sidebarStats.completed}/{sidebarStats.total} {tr("завершено", "complete")}</p>
+              </div>
+              <span className="text-xs font-black text-[#16834d] dark:text-[#6fe5a9]">{sidebarStats.progress}%</span>
+            </div>
+            <div className="mx-4 h-1 overflow-hidden rounded-full bg-[#dfe5de] dark:bg-white/10"><div className="h-full rounded-full bg-[#00df79]" style={{ width: `${sidebarStats.progress}%` }} /></div>
+
+            <nav className="flex gap-2 overflow-x-auto p-3 lg:block lg:max-h-[calc(100dvh-180px)] lg:space-y-1 lg:overflow-y-auto">
+              {routeTiles.map(({ sectionTitle, item }, index) => {
+                const selected = isSidebarItemActive(item);
+                const done = item.status === "GRADED";
+                return (
+                  <button type="button" key={item.id} onClick={() => openSidebarTask(item.openTask)} className={`flex min-w-[230px] items-start gap-3 rounded-[14px] px-3 py-3 text-left transition lg:min-w-0 lg:w-full ${selected ? "bg-white shadow-[0_6px_20px_rgba(26,43,31,.07)] ring-1 ring-[#17251b]/[.06] dark:bg-white/[.07] dark:ring-white/10" : "hover:bg-white/70 dark:hover:bg-white/[.04]"}`}>
+                    <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${done ? "bg-[#dff8e9] text-[#147447] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : selected ? "bg-[#17251b] text-white dark:bg-[#00ff88] dark:text-[#062211]" : "border border-[#cbd4cc] text-[#7c8980] dark:border-white/15"}`}>{done ? "✓" : index + 1}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-black">{item.renderTitle}</span>
+                      <span className="mt-1 block truncate text-[10px] font-semibold text-[#7a887f] dark:text-[#8e9a92]">{sectionTitle}</span>
+                    </span>
+                  </button>
+                );
+              })}
+              {!routeTiles.length && <p className="p-4 text-sm text-[#718077]">{tr("Завдань поки немає.", "No tasks yet.")}</p>}
+            </nav>
+
+            <div className="hidden border-t border-[#15231a]/10 p-4 dark:border-white/[.08] lg:block">
+              <button type="button" onClick={handleGenerate} disabled={loading || !canGenerateFromSidebar || cooldownSecondsLeft > 0} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17251b] px-4 py-3 text-xs font-black text-white disabled:opacity-40 dark:bg-white/[.08]">
+                <Plus className="size-4" />{generateSidebarLabel}
+              </button>
+            </div>
+          </aside>
+
+          <main className="grid min-h-0 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="flex min-h-0 min-w-0 flex-col">
+              <div className="border-b border-[#15231a]/10 px-5 py-5 dark:border-white/[.08] sm:px-7">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="max-w-3xl">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">
+                      <span>{String(selectedRouteIndex + 1).padStart(2, "0")}</span><span>·</span><span>{activeTaskModeLabel}</span><span>·</span><span>{activeTaskStatusMeta?.label}</span>
+                    </div>
+                    <h2 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-black tracking-[-.045em] sm:text-3xl">{active?.title}</h2>
+                    <div className="mt-3 line-clamp-3 text-sm leading-6 text-[#5f6e64] dark:text-[#b3bfb6]">
+                      {previewPractice ? <MarkdownView content={segmentedPractice.task || previewPractice} /> : tr("Вибери завдання з маршруту, щоб почати.", "Choose a task from the route to begin.")}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setStatementModalOpen(true)} disabled={!active} className="rounded-xl bg-[#eef2ed] px-3 py-2 text-xs font-black dark:bg-white/[.06]">{tr("Повна умова", "Full brief")}</button>
+                    <button type="button" onClick={() => setTheoryPanelOpen((value) => !value)} disabled={!hasTheoryForActive} className={`rounded-xl px-3 py-2 text-xs font-black transition disabled:opacity-40 ${theoryPanelOpen ? "bg-[#17251b] text-white dark:bg-[#e9f2ec] dark:text-[#102016]" : "bg-[#eef2ed] dark:bg-white/[.06]"}`}>{theoryPanelOpen ? tr("До коду", "Back to code") : tr("Пояснення", "Explanation")}</button>
+                  </div>
+                </div>
+              </div>
+
+              {theoryPanelOpen && hasTheoryForActive ? (
+                <div className="grid min-h-0 flex-1 overflow-hidden bg-[#f8faf6] dark:bg-[#101612] lg:grid-cols-[210px_minmax(0,1fr)]">
+                  <nav className="flex gap-2 overflow-x-auto border-b border-[#152219]/10 p-4 dark:border-white/10 lg:block lg:space-y-1 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5">
+                    <p className="mb-3 hidden text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f] lg:block">{tr("Зміст", "Contents")}</p>
+                    {theoryChapters.map((chapter, index) => (
+                      <button type="button" key={`${index}-${chapter.title}`} onClick={() => setActiveTheoryChapter(index)} className={`flex min-w-[190px] items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-bold transition lg:min-w-0 lg:w-full ${index === activeTheoryChapter ? "bg-white text-[#17251b] shadow-sm dark:bg-white/[.08] dark:text-white" : "text-[#6f7d73] hover:bg-white/60 dark:text-[#98a69c] dark:hover:bg-white/[.04]"}`}>
+                        <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-[10px] font-black ${index === activeTheoryChapter ? "bg-[#e3f8eb] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#e9ede8] dark:bg-white/[.06]"}`}>{String(index + 1).padStart(2, "0")}</span>
+                        <span className="truncate">{chapter.title}</span>
+                      </button>
+                    ))}
+                  </nav>
+                  <div className="min-h-0 overflow-y-auto px-5 py-8 sm:px-10 sm:py-12">
+                  <article className="mx-auto max-w-[760px]">
+                    <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[.16em] text-[#16834d] dark:text-[#72edb0]">
+                      <span className="h-px w-8 bg-current" />
+                      {tr(`Частина ${activeTheoryChapter + 1} з ${theoryChapters.length}`, `Part ${activeTheoryChapter + 1} of ${theoryChapters.length}`)}
+                    </div>
+                    <h3 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.055em] sm:text-5xl">
+                      {visibleTheoryChapter?.title}
+                    </h3>
+                    <p className="mt-5 max-w-2xl text-base leading-7 text-[#68776d] dark:text-[#aebbb1]">
+                      {tr("Коротке пояснення підводить до рішення, але залишає реалізацію тобі.", "A short explanation guides you toward the solution while leaving the implementation to you.")}
+                    </p>
+                    <div className="mt-10 border-l-2 border-[#00d978] pl-5 text-[15px] leading-8 text-[#26342b] dark:text-[#d4dfd7] sm:pl-8">
+                      <MarkdownView content={visibleTheoryChapter?.markdown || getTheoryMarkdown(active)} />
+                    </div>
+                    <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-[#15231a]/10 pt-6 dark:border-white/10">
+                      <button type="button" onClick={() => setActiveTheoryChapter((value) => Math.max(0, value - 1))} disabled={activeTheoryChapter === 0} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-black text-[#68776d] disabled:opacity-30 dark:text-[#aebbb1]"><ChevronLeft className="size-4" />{tr("Назад", "Previous")}</button>
+                      {activeTheoryChapter < theoryChapters.length - 1 ? <button type="button" onClick={() => setActiveTheoryChapter((value) => Math.min(theoryChapters.length - 1, value + 1))} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#17251b] px-5 text-sm font-black text-white dark:bg-[#edf3ef] dark:text-[#0b120e]">{tr("Наступна частина", "Next part")}<ChevronRight className="size-4" /></button> : <button type="button" onClick={() => { setTheoryAcknowledged(true); setTheoryPanelOpen(false); }} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#00e980] px-5 text-sm font-black text-[#062213] transition hover:bg-[#00ff88]">{tr("До практики", "Start practice")}<ChevronRight className="size-4" /></button>}
+                    </div>
+                  </article>
+                  </div>
+                </div>
+              ) : isPersonalControlQuizTask ? (
+                <div ref={quizScrollRef} className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+                  <div className="mx-auto max-w-3xl">
+                    <h3 className="text-xl font-black">{tr("Теоретичний тест", "Theory quiz")}</h3>
+                    <p className="mt-2 text-sm text-[#718077]">{answeredQuizCount}/{personalQuiz?.questions.length ?? 0} {tr("відповідей", "answered")}</p>
+                    <div className="mt-6 space-y-4">{personalQuiz?.questions.map((q) => <article key={q.index} className="rounded-2xl border border-[#15231a]/10 p-5 dark:border-white/10"><p className="font-black">{q.index + 1}. {q.question}</p><div className="mt-4 grid gap-2">{Object.entries(q.options).map(([label, value]) => <button type="button" key={label} onClick={() => setQuizAnswers((old) => ({ ...old, [q.index]: label }))} className={`rounded-xl border px-4 py-3 text-left text-sm ${quizAnswers[q.index] === label ? "border-[#00d978] bg-[#e9f9ef] dark:bg-[#00ff88]/10" : "border-[#15231a]/10 dark:border-white/10"}`}><b className="mr-2">{label}</b>{value}</button>)}</div></article>)}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="min-h-[480px] flex-1 bg-[#101612]">
+                  {isWebTask ? <div className="grid h-full lg:grid-cols-2"><MultiFileEditor language="html" entryFile="index.html" files={files} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /><WebPreviewPane files={toWebTaskFiles()} title={tr("Превʼю", "Preview")} /></div> : useFiles ? <MultiFileEditor language={user.course} entryFile={entryFile} files={files} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /> : <CodeEditor language={active?.language ?? user.course} value={code} onChange={canEdit ? setCode : undefined} readOnly={!canEdit} />}
+                </div>
+              )}
+            </section>
+
+            <aside className="flex min-h-0 flex-col border-t border-[#15231a]/10 bg-[#f6f8f4] dark:border-white/[.08] dark:bg-[#0c120e] xl:border-l xl:border-t-0">
+              <div className="border-b border-[#15231a]/10 p-5 dark:border-white/[.08]">
+                <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Вхідні дані", "Input")}</p><button type="button" onClick={() => setStdin(firstExampleInput)} className="text-[10px] font-black text-[#16834d] dark:text-[#72edb0]">{tr("Взяти з прикладу", "Use example")}</button></div>
+                <textarea value={stdin} onChange={(event) => setStdin(event.target.value)} spellCheck={false} className="mt-3 min-h-24 w-full resize-y rounded-xl border border-[#15231a]/10 bg-white p-3 font-mono text-xs outline-none focus:border-[#00d978] dark:border-white/10 dark:bg-white/[.04]" />
+              </div>
+
+              <div className="min-h-[220px] flex-1 p-5">
+                <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Результат", "Result")}</p><span className={`rounded-full px-2 py-1 text-[10px] font-black ${consoleStateMeta.toneClass}`}>{consoleStateMeta.label}</span></div>
+                {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ 12</span></div>}
+                {aiResult?.aiFeedback && <p className="mt-3 text-sm leading-6 text-[#4f5f55] dark:text-[#b8c4bb]">{aiResult.aiFeedback}</p>}
+                <pre className="mt-4 max-h-52 overflow-auto whitespace-pre-wrap rounded-xl bg-[#111713] p-4 font-mono text-xs leading-6 text-[#cfe0d3]">{consoleOutput || tr("Результат запуску з’явиться тут.", "Run output will appear here.")}</pre>
+              </div>
+
+              <div className="border-t border-[#15231a]/10 p-5 dark:border-white/[.08]">
+                <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Мої нотатки", "My notes")}</p>
+                <textarea value={personalNotes} onChange={(event) => setPersonalNotes(event.target.value)} placeholder={tr("Ідея, крайовий випадок…", "Idea, edge case…")} className="mt-3 min-h-20 w-full resize-none bg-transparent text-sm leading-6 outline-none placeholder:text-[#9aa59d]" />
+              </div>
+            </aside>
+          </main>
+        </div>
+      </div>
+
+      <Modal open={statementModalOpen} onClose={() => setStatementModalOpen(false)} title={tr("Умова завдання", "Task brief")} description={active?.title}>
+        {fullPracticeText ? <MarkdownView content={fullPracticeText} /> : <p>{tr("Умова недоступна.", "Brief unavailable.")}</p>}
+      </Modal>
+    </div>
+  );
+
+  return (
+    <div className="min-h-[100dvh] bg-[#f5f6f1] text-[#111812] dark:bg-[#080d0a] dark:text-[#eef7f0]">
+      <TaskGenerationOverlay open={loading} phase={generationPhase} />
+
+      <div className="mx-auto flex min-h-[100dvh] max-w-[1800px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <header className="rounded-[34px] border border-[#132018]/10 bg-white/90 p-4 shadow-[0_20px_70px_rgba(21,35,24,.07)] backdrop-blur dark:border-white/10 dark:bg-[#101612]/92 sm:p-5">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[#101812] px-3 py-1 text-[11px] font-black uppercase tracking-[.18em] text-[#7bf0b4] dark:bg-white/[.08]">
+                  {tr("Робочий простір StudyCod", "StudyCod workbench")}
+                </span>
+                <span className={`rounded-full border px-3 py-1 text-[11px] font-bold ${lessonStatusMeta.pillClass}`}>
+                  {lessonStatusMeta.label}
+                </span>
+                <span className="rounded-full bg-[#edf2ea] px-3 py-1 text-[11px] font-bold text-[#647267] dark:bg-white/[.06] dark:text-[#b9c6bc]">
+                  {activeTaskModeLabel}
+                </span>
+              </div>
+              <div className="mt-4 flex min-w-0 flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h1 className="text-base font-mono text-text-primary truncate">{active.title}</h1>
-                      {activeTaskStatusMeta ? <span className={`inline-flex flex-shrink-0 items-center rounded-md border px-2 py-0.5 text-[10px] font-mono ${activeTaskStatusMeta.pillClass}`}>
-                          {activeTaskStatusMeta.label}
-                        </span> : null}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-text-muted">
-                      <span>{active.kind === "CONTROL" ? tr("Контроль знань", "Knowledge check") : tr("Тема", "Topic")}</span>
-                      <span className="text-border">·</span>
-                      <span>{activeTaskModeLabel}</span>
-                      <span className="text-border">·</span>
-                      <span>{tr("Difus:", "Difficulty:")} {user.difus}</span>
-                      {hasActiveLessonInTopic ? <>
-                          <span className="text-border">·</span>
-                          <span>{tr(`Урок ${activeLessonInTopic}`, `Lesson ${activeLessonInTopic}`)}</span>
-                        </> : null}
-                      {activeSectionProgress ? <>
-                          <span className="text-border">·</span>
-                          <span className="truncate max-w-[220px]">{activeSectionProgress.sectionTitle}: {activeSectionProgress.completed}/{activeSectionProgress.total}</span>
-                        </> : null}
-                    </div>
+                  <p className="text-xs font-black uppercase tracking-[.2em] text-[#6f7e72] dark:text-[#9faca3]">{tr("Особисті завдання", "Personal tasks")}</p>
+                  <h1 className="mt-1 truncate font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.07em] text-[#101812] dark:text-white sm:text-5xl">
+                    {active?.title ?? tr("Почни нову практичну сесію", "Create a clean practice session")}
+                  </h1>
+                </div>
+                <div className="w-full max-w-md">
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-[.14em] text-[#6f7e72] dark:text-[#9faca3]">
+                    <span>{tr("Прогрес маршруту", "Route progress")}</span>
+                    <span>{sidebarStats.progress}%</span>
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {(() => {
-                  const hasTheory = computeHasTheory(active);
-                  if (!hasTheory) return null;
-                  return <Button variant="ghost" onClick={() => {
-                    setTheoryAcknowledged(false);
-                    const theory = getTheoryMarkdown(active);
-                    if (theory) {
-                      openTheory({
-                        title: tr("Теорія", "Theory"),
-                        markdown: theory,
-                        acknowledgeLabel: tr("Я прочитав(ла) теорію", "I have read the theory"),
-                        onAcknowledge: () => setTheoryAcknowledged(true)
-                      });
-                    }
-                  }} className="text-sm px-3 py-2">
-                          {tr("Теорія", "Theory")}
-                        </Button>;
-                })()}
-
-                    {!aiResult ? <>
-                        {isPersonalControlQuizTask ? <>
-                            <Button variant="secondary" onClick={() => {
-                        handleSaveQuizAnswers();
-                      }} disabled={quizSubmitting || quizLoading || !theoryAcknowledged || !personalQuiz} className="text-sm px-4 py-2">
-                              <Save className="w-4 h-4 mr-2" />
-                              {tr("Зберегти відповіді", "Save answers")}
-                            </Button>
-                            <Button variant="primary" onClick={() => {
-                        handleSubmit();
-                      }} disabled={!canEdit || quizSubmitting || quizLoading || !theoryAcknowledged || !personalQuiz || Object.keys(quizAnswers).length < (personalQuiz?.questions.length ?? 0)} className="text-sm px-6 py-2">
-                              <CheckCircle2 className="w-4 h-4 mr-2" />
-                              {quizSubmitting ? tr("Відправка...", "Submitting...") : tr("Перевірити тест", "Submit quiz")}
-                            </Button>
-                          </> : <>
-                        {!canEdit ? null : <Button variant="ghost" onClick={() => {
-                    requestCreateFile();
-                  }} className="text-sm px-3 py-2" title={tr("Створити додатковий файл (multi-file)", "Create an additional file (multi-file)")}>
-                          <Plus className="w-4 h-4 mr-2" /> {tr("Створити файл", "Create file")}
-                        </Button>}
-                        <Button variant="secondary" onClick={() => {
-                    if (!editorOpen) {
-                      setEditorOpen(true);
-                      return;
-                    }
-                    handleSaveDraft();
-                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2" title={saveShortcutLabel}>
-                          <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")}
-                        </Button>
-                        <Button variant="secondary" onClick={() => {
-                    if (!editorOpen) {
-                      setEditorOpen(true);
-                      return;
-                    }
-                    handleRun();
-                  }} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="text-sm px-4 py-2" title={runShortcutLabel}>
-                          <PlayCircle className="w-4 h-4 mr-2" /> {tr("Запустити", "Run")}
-                        </Button>
-                        <Button variant="primary" onClick={() => {
-                    if (!editorOpen) {
-                      setEditorOpen(true);
-                      return;
-                    }
-                    handleSubmit();
-                  }} disabled={!canEdit || submitting || !theoryAcknowledged || !currentCodeText.trim()} className="text-sm px-6 py-2" title={checkShortcutLabel}>
-                          <CheckCircle2 className="w-4 h-4 mr-2" />{" "}
-                          {tr("Перевірити", "Check")}
-                        </Button>
-                      </>}
-                      </> : aiResult.total < 6 ? <>
-                        <Button variant="secondary" onClick={handleSaveDraft} disabled={!active || !currentCodeText.trim()} className="text-sm px-4 py-2">
-                          <Save className="w-4 h-4 mr-2" /> {tr("Зберегти", "Save")}
-                        </Button>
-                        <Button variant="primary" onClick={handleFixErrorRetryTopic} disabled={submitting} className="text-sm px-6 py-2">
-                          {tr("Виправити помилку", "Fix the error")}
-                        </Button>
-                      </> : null}
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e2e8df] dark:bg-white/10">
+                    <div className="h-full rounded-full bg-[#00ff88]" style={{ width: `${sidebarStats.progress}%` }} />
+                  </div>
+                  <div className="mt-2 text-xs font-bold text-[#6f7e72] dark:text-[#9faca3]">
+                    {tr(`${sidebarStats.completed}/${sidebarStats.total || 0} виконано`, `${sidebarStats.completed}/${sidebarStats.total || 0} completed`)}
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {showInlineFailureRecovery && <div role={uiState === "error" ? "alert" : "status"} aria-live={uiState === "error" ? "assertive" : "polite"} className={`mt-3 p-3 border ${uiState === "error" ? "border-accent-error/50 bg-bg-code" : "border-accent-logic-warning/50 bg-bg-code"}`}>
-                    <div className={`text-xs font-mono ${uiState === "error" ? "text-accent-error" : "text-accent-logic-warning"}`}>
-                      {uiState === "error" ? tr("Помилка біля цієї дії", "Error near this action") : tr("Потрібен крок перед повтором", "Action needed before retry")}
-                    </div>
-                    <div className="mt-1 text-xs font-mono text-text-secondary break-words">
-                      {inlineFailureMessage}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Button variant="ghost" onClick={openOutputRecovery} className="text-xs">
-                        {tr("Відкрити вивід", "Open output")}
-                      </Button>
-                      {canQuickCheck && <Button variant="secondary" onClick={checkFromRail} className="text-xs">
-                          {tr("Повторити перевірку", "Retry check")}
-                        </Button>}
-                      {!canQuickCheck && canQuickRun && <Button variant="secondary" onClick={runFromRail} className="text-xs">
-                          {tr("Повторити запуск", "Retry run")}
-                        </Button>}
-                      {canQuickSave && <Button variant="ghost" onClick={saveFromRail} className="text-xs">
-                          {tr("Зберегти перед повтором", "Save before retry")}
-                        </Button>}
-                    </div>
-                  </div>}
-
-                </div>
-
-              <div
-                ref={quizScrollRef}
-                onWheelCapture={handleQuizWheelCapture}
-                className={`flex-1 min-h-0 bg-bg-base p-3 ${isPersonalControlQuizTask ? "overflow-y-scroll overscroll-y-contain [scrollbar-gutter:stable]" : "overflow-hidden"}`}
+            <div className="flex flex-wrap gap-2 xl:justify-end">
+              <button
+                type="button"
+                onClick={() => setStatementModalOpen(true)}
+                disabled={!active}
+                className="rounded-2xl border border-[#132018]/10 bg-white px-4 py-3 text-sm font-bold text-[#17221a] shadow-[0_8px_20px_rgba(21,35,24,.05)] transition hover:-translate-y-0.5 disabled:opacity-45 dark:border-white/10 dark:bg-white/[.05] dark:text-white"
               >
-                {isPersonalControlQuizTask ? (
-                  <section className="min-h-full rounded-2xl border border-border/70 bg-bg-surface/80 flex flex-col">
-                    <div className="h-8 px-3 border-b border-border/60 bg-bg-surface/70 flex items-center justify-between text-[11px] text-text-secondary uppercase tracking-wider">
-                      <span>{tr("Тестовий етап", "Quiz stage")}</span>
-                      <span className="text-text-muted normal-case tracking-normal">
-                        {personalQuiz ? `${Object.values(quizAnswers).filter((v) => String(v ?? "").trim().length > 0).length}/${personalQuiz.questions.length}` : "0/0"}
+                {tr("Умова", "Brief")}
+              </button>
+              <button
+                type="button"
+                onClick={() => active && hasTheoryForActive && openTheory({
+                  title: tr("Теорія", "Theory"),
+                  markdown: getTheoryMarkdown(active),
+                  acknowledgeLabel: tr("Я прочитав/прочитала теорію", "I have read the theory"),
+                  onAcknowledge: () => setTheoryAcknowledged(true)
+                })}
+                disabled={!active || !hasTheoryForActive}
+                className="rounded-2xl border border-[#132018]/10 bg-white px-4 py-3 text-sm font-bold text-[#17221a] shadow-[0_8px_20px_rgba(21,35,24,.05)] transition hover:-translate-y-0.5 disabled:opacity-45 dark:border-white/10 dark:bg-white/[.05] dark:text-white"
+              >
+                {tr("Теорія", "Theory")}
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={loading || !canGenerateFromSidebar || cooldownSecondsLeft > 0}
+                title={generateSidebarHint}
+                className="rounded-2xl bg-[#00ff88] px-5 py-3 text-sm font-black text-[#061d10] shadow-[0_16px_36px_rgba(0,190,102,.18)] transition hover:-translate-y-0.5 disabled:opacity-45"
+              >
+                {generateSidebarLabel}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <section className="rounded-[30px] border border-[#132018]/10 bg-white/88 p-3 shadow-[0_16px_50px_rgba(21,35,24,.055)] dark:border-white/10 dark:bg-[#101612]/92">
+          {routeTiles.length ? (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {routeTiles.map(({ sectionTitle, item }, index) => {
+                const isActive = isSidebarItemActive(item);
+                const statusMeta = sidebarStatusMeta(item.status);
+                const itemSubtitle = String((item as { subtitle?: string }).subtitle ?? item.openTask?.subtitle ?? sectionTitle);
+                return (
+                  <button
+                    type="button"
+                    key={`${sectionTitle}-${item.id}`}
+                    onClick={() => openSidebarTask(item.openTask)}
+                    className={`group min-w-[250px] rounded-[22px] border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
+                      isActive
+                        ? "border-[#00ff88]/55 bg-[#ebfbf0] shadow-[0_16px_34px_rgba(0,185,99,.12)] dark:bg-[#00ff88]/10"
+                        : "border-[#132018]/10 bg-[#f8faf6] hover:bg-white dark:border-white/10 dark:bg-white/[.045] dark:hover:bg-white/[.07]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[.16em] text-[#77867a] dark:text-[#9faca3]">
+                          {String(index + 1).padStart(2, "0")} · {sectionTitle}
+                        </span>
+                        <strong className="mt-1 block truncate text-sm font-black tracking-[-.025em] text-[#101812] dark:text-white">
+                          {item.renderTitle}
+                        </strong>
+                        <span className="mt-1 block truncate text-xs font-medium text-[#6a786d] dark:text-[#adbbb1]">
+                          {itemSubtitle}
+                        </span>
+                      </span>
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${statusMeta.pillClass}`}>
+                        {statusMeta.label}
                       </span>
                     </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-dashed border-[#132018]/15 px-6 py-7 text-center dark:border-white/10">
+              <p className="text-sm font-bold text-[#627066] dark:text-[#adbbb1]">
+                {tr("Завдань ще немає. Створи перше завдання зеленою кнопкою вище.", "No generated tasks yet. Start with the green button above.")}
+              </p>
+            </div>
+          )}
+        </section>
 
-                    <div className="p-3 pb-10">
-                      {quizLoading ? (
-                        <div className="text-xs font-mono text-text-secondary">{tr("Завантаження тесту...", "Loading quiz...")}</div>
-                      ) : !personalQuiz ? (
-                        <div className="text-xs font-mono text-text-secondary">{tr("Не вдалося завантажити тест. Спробуй оновити сторінку.", "Failed to load quiz. Try refreshing the page.")}</div>
-                      ) : (
-                        <div className="space-y-3">
-                          {personalQuiz.questions.map((q) => {
-                            const selected = quizAnswers[q.index] ?? "";
-                            const review = quizReview?.find((r) => r.index === q.index) ?? null;
-                            return <Card id={`quiz-q-${q.index}`} tabIndex={-1} key={`quiz-full-${q.index}`} className={`p-3 border ${review ? (review.isCorrect ? "border-accent-success/60" : "border-accent-error/60") : "border-border"}`}>
-                                <div className="text-sm text-text-primary mb-2">{q.index + 1}. {q.question}</div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {Object.entries(q.options || {}).map(([label, text]) => {
-                                    const isSelected = selected === label;
-                                    const isCorrect = review ? review.correct === label : false;
-                                    const isWrongSelected = review ? review.student === label && !review.isCorrect : false;
-                                    const tone = review
-                                      ? (isCorrect ? "border-accent-success/70 bg-accent-success/10 text-text-primary" : isWrongSelected ? "border-accent-error/70 bg-accent-error/10 text-text-primary" : isSelected ? "border-primary/50 bg-primary/10 text-text-primary" : "border-border text-text-secondary")
-                                      : (isSelected ? "border-primary/60 bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover");
-                                    return <button key={`quiz-full-${q.index}-${label}`} onClick={() => {
-                                      setQuizAnswers((prev) => ({ ...prev, [q.index]: label }));
-                                    }} disabled={quizSubmitting || !!quizReview} className={`px-3 py-2 rounded-md border text-left text-xs transition-fast ${tone}`}>
-                                        <span className="font-mono mr-2">{label}</span>{text}
-                                      </button>;
-                                  })}
-                                </div>
-                              </Card>;
-                          })}
+        <main className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <section className="min-w-0 rounded-[34px] border border-[#132018]/10 bg-white shadow-[0_24px_80px_rgba(21,35,24,.075)] dark:border-white/10 dark:bg-[#101612]">
+            {!active ? (
+              <div className="grid min-h-[720px] place-items-center px-8 text-center">
+                <div className="max-w-md">
+                  <div className="mx-auto grid size-16 place-items-center rounded-[24px] bg-[#fff3df] text-[#ff8c00] dark:bg-[#ff8c00]/12">
+                    <Sparkles className="size-8" />
+                  </div>
+                  <h2 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em]">{tr("Нічого не вибрано", "Nothing selected")}</h2>
+                  <p className="mt-3 text-sm leading-6 text-[#647267] dark:text-[#adbbb1]">
+                    {tr("Згенеруй завдання або вибери його в маршруті. Редактор, умова, вхідні дані й перевірка зібрані в одному чистому робочому просторі.", "Generate a task or choose one from the route ribbon. The editor, brief, run input and review tools stay in one clean workspace.")}
+                  </p>
+                </div>
+              </div>
+            ) : isPersonalControlQuizTask ? (
+              <div className="min-h-[720px] space-y-4 p-4 sm:p-5">
+                <div className="rounded-[28px] border border-[#132018]/10 bg-[#f8faf6] p-5 dark:border-white/10 dark:bg-white/[.045]">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[.18em] text-[#ff8c00]">{tr("Контрольна точка", "Control checkpoint")}</p>
+                      <h2 className="mt-2 text-2xl font-black tracking-[-.055em]">{tr("Дай відповіді на питання з теорії", "Answer the theory questions")}</h2>
+                      <p className="mt-2 text-sm text-[#647267] dark:text-[#adbbb1]">
+                        {tr(`${answeredQuizCount}/${personalQuiz?.questions.length ?? 0} відповідей`, `${answeredQuizCount}/${personalQuiz?.questions.length ?? 0} answered`)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={!canEdit || quizSubmitting || quizLoading || !theoryAcknowledged || !personalQuiz || answeredQuizCount < (personalQuiz?.questions.length ?? 0)}
+                      className="rounded-2xl bg-[#00ff88] px-5 py-3 text-sm font-black text-[#061d10] disabled:opacity-45"
+                    >
+                      {tr("Надіслати тест", "Submit quiz")}
+                    </button>
+                  </div>
+                </div>
 
-                          {quizSummary ? <Card className="p-3 border border-border bg-bg-surface/80">
-                            <div className="text-xs text-text-secondary">
-                              {tr("Підсумок контрольної", "Control summary")}: {tr("фінальна", "final")} {quizSummary.finalGrade ?? "—"}/{quizSummary.maxGrade}
-                            </div>
-                          </Card> : null}
+                {quizLoading ? (
+                  <div className="rounded-[28px] border border-[#132018]/10 bg-white p-6 text-sm font-bold text-[#647267] dark:border-white/10 dark:bg-white/[.045] dark:text-[#adbbb1]">{tr("Завантаження тесту…", "Loading quiz…")}</div>
+                ) : personalQuiz ? (
+                  <div className="grid gap-3">
+                    {personalQuiz?.questions.map((q) => {
+                      const selected = quizAnswers[q.index] ?? "";
+                      const review = quizReview?.find((r) => r.index === q.index) ?? null;
+                      return (
+                        <article key={q.index} id={`quiz-q-${q.index}`} className="rounded-[28px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
+                          <h3 className="text-base font-black tracking-[-.02em]">{q.index + 1}. {q.question}</h3>
+                          <div className="mt-4 grid gap-2 md:grid-cols-2">
+                            {Object.entries(q.options || {}).map(([label, text]) => {
+                              const isSelected = selected === label;
+                              const isCorrect = review ? review.correct === label : false;
+                              const isWrongSelected = review ? review.student === label && !review.isCorrect : false;
+                              const tone = review
+                                ? (isCorrect ? "border-[#00ff88]/65 bg-[#ebfbf0] dark:bg-[#00ff88]/10" : isWrongSelected ? "border-[#ff6b9d]/65 bg-[#fff0f4] dark:bg-[#ff6b9d]/10" : "border-[#132018]/10 bg-[#f8faf6] dark:bg-white/[.045]")
+                                : (isSelected ? "border-[#00ff88]/65 bg-[#ebfbf0] dark:bg-[#00ff88]/10" : "border-[#132018]/10 bg-[#f8faf6] hover:bg-white dark:border-white/10 dark:bg-white/[.045]");
+                              return (
+                                <button
+                                  type="button"
+                                  key={label}
+                                  onClick={() => setQuizAnswers((prev) => ({ ...prev, [q.index]: label }))}
+                                  disabled={quizSubmitting || !!quizReview}
+                                  className={`rounded-2xl border px-4 py-3 text-left text-sm leading-6 transition ${tone}`}
+                                >
+                                  <strong className="mr-2">{label}</strong>{text}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-[28px] border border-[#132018]/10 bg-white p-6 text-sm font-bold text-[#647267] dark:border-white/10 dark:bg-white/[.045] dark:text-[#adbbb1]">{tr("Дані тесту недоступні.", "Quiz data is not available.")}</div>
+                )}
+
+                {quizSummary ? (
+                  <div className="rounded-[28px] bg-[#ebfbf0] p-5 text-sm font-black text-[#16623d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                    {tr("Підсумкова оцінка", "Final grade")}: {quizSummary?.finalGrade ?? "—"}/{quizSummary?.maxGrade ?? "—"}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="grid min-h-[760px] gap-0 2xl:grid-cols-[minmax(0,1fr)_390px]">
+                <div className="min-w-0 p-3 sm:p-4">
+                  <div className="overflow-hidden rounded-[30px] border border-[#0d1510]/10 bg-[#0d1510] shadow-[0_24px_70px_rgba(8,16,11,.18)] dark:border-white/10">
+                    <div className="flex flex-col gap-3 border-b border-white/10 bg-[#121b15] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#7bf0b4]">
+                          {isWebTask ? tr("Web-полотно", "Web canvas") : tr("Полотно коду", "Code canvas")}
+                        </p>
+                        <h2 className="mt-1 truncate text-lg font-black tracking-[-.035em] text-white">{active?.title}</h2>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {canEdit && !isPersonalControlQuizTask ? (
+                          <button type="button" onClick={requestCreateFile} className="rounded-xl bg-white/[.08] px-3 py-2 text-xs font-black text-[#d8e7dc] transition hover:bg-white/[.13]">
+                            {tr("Новий файл", "New file")}
+                          </button>
+                        ) : null}
+                        <button type="button" onClick={handleSaveDraft} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged} className="rounded-xl bg-white/[.08] px-3 py-2 text-xs font-black text-[#d8e7dc] transition hover:bg-white/[.13] disabled:opacity-40">
+                          {tr("Зберегти", "Save")}
+                        </button>
+                        <button type="button" onClick={handleRun} disabled={!active || !currentCodeText.trim() || !theoryAcknowledged || isPersonalControlQuizTask} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-[#0d1510] transition hover:bg-[#eef7f0] disabled:opacity-40">
+                          {tr("Запустити", "Run")}
+                        </button>
+                        <button type="button" onClick={handleSubmit} disabled={!canEdit || submitting || !theoryAcknowledged || !currentCodeText.trim()} className="rounded-xl bg-[#00ff88] px-4 py-2 text-xs font-black text-[#061d10] transition hover:brightness-105 disabled:opacity-40">
+                          {tr("Перевірити", "Check")}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="h-[680px] min-h-[680px] bg-[#0d1510]">
+                      {isWebTask ? (
+                        <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-2">
+                          <MultiFileEditor
+                            language="html"
+                            entryFile="index.html"
+                            files={files.length ? files : [{ path: "index.html", content: code }, { path: "styles.css", content: "" }, { path: "script.js", content: "" }]}
+                            onChange={(next) => {
+                              const normalized = normalizeFiles(next);
+                              setUseFiles(true);
+                              setFiles(normalized);
+                              setCode(normalized.find((file) => file.path === "index.html")?.content ?? "");
+                            }}
+                            readOnly={!canEdit}
+                            requestAddToken={mfAddToken}
+                          />
+                          <WebPreviewPane files={toWebTaskFiles()} title={tr("Превʼю", "Preview")} />
                         </div>
+                      ) : useFiles ? (
+                        <MultiFileEditor
+                          language={user.course}
+                          entryFile={entryFile}
+                          files={files.length ? files : [{ path: entryFile, content: code }]}
+                          onChange={setFiles}
+                          readOnly={!canEdit}
+                          requestAddToken={mfAddToken}
+                        />
+                      ) : (
+                        <CodeEditor language={user.course} value={code} onChange={canEdit ? setCode : undefined} readOnly={!canEdit} />
                       )}
                     </div>
-                  </section>
-                ) : (
-                <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3">
-                {missionBlockOrder.map((block) => (
-                  <section
-                    key={block}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => {
-                      if (draggingMissionBlock) moveMissionBlock(draggingMissionBlock, block);
-                      setDraggingMissionBlock(null);
-                    }}
-                    className="col-span-1 lg:col-span-6 min-h-0 h-full rounded-2xl border border-border/70 bg-bg-surface/80 overflow-hidden flex flex-col"
-                  >
-                    <div className="h-8 px-3 border-b border-border/60 bg-bg-surface/70 flex items-center justify-between text-[10px] font-mono text-text-muted uppercase tracking-[0.14em]">
-                      <span className="inline-flex items-center gap-1.5">
-                        {block === "statement" ? <FolderCode className="w-3.5 h-3.5" /> : <TerminalSquare className="w-3.5 h-3.5" />}
-                        <span>{block === "statement" ? tr("Завдання", "Task") : tr("Редактор", "Editor")}</span>
-                      </span>
-                      <span
-                        draggable
-                        onDragStart={() => setDraggingMissionBlock(block)}
-                        onDragEnd={() => setDraggingMissionBlock(null)}
-                        className="inline-flex items-center cursor-grab text-text-muted/70 hover:text-text-secondary transition-fast"
-                        title={tr("Перетягни блок", "Drag block")}
-                        aria-label={tr("Перетягни блок", "Drag block")}
-                      >
-                        <GripVertical className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-
-                    {block === "statement" ? (
-                      <div className="flex-1 min-h-0 border-t-0 border-border bg-bg-code overflow-hidden flex flex-col">
-                        <div className="px-3 py-2 border-b border-border flex-shrink-0">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {practiceTabItems.map(([id, label]) => (
-                                <button
-                                  key={id}
-                                  onClick={() => setActiveSegment(id)}
-                                  className={`px-2 py-1 rounded-md text-[10px] border ${activeSegment === id ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
-                                >
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
-                            <Button variant="ghost" size="sm" onClick={() => setStatementModalOpen(true)}>
-                              <SquareArrowOutUpRight className="w-3.5 h-3.5 mr-1" />
-                              {tr("Повна умова", "Full statement")}
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto overscroll-y-contain p-3">
-                          <div className="text-sm text-text-primary">
-                            {(() => {
-                              const hasTheory = computeHasTheory(active);
-                              const fallbackPractice = getPracticeText(active);
-                              const practice = segmentedPractice[activeSegment] || fallbackPractice;
-                              if (hasTheory && !theoryAcknowledged) {
-                                return <div className="text-xs font-mono text-text-secondary">
-                                  {tr("Прочитай теорію, щоб відкрити повну умову та приклади.", "Read the theory to unlock the full statement and examples.")}
-                                </div>;
-                              }
-                              if (isPersonalControlQuizTask) {
-                                if (quizLoading) {
-                                  return <div className="text-xs font-mono text-text-secondary">{tr("Завантаження тесту...", "Loading quiz...")}</div>;
-                                }
-                                if (!personalQuiz) {
-                                  return <div className="text-xs font-mono text-text-secondary">{tr("Не вдалося завантажити тест. Онови сторінку. Якщо не допоможе — відкрий задачу ще раз.", "We couldn't load the quiz. Refresh the page. If that doesn't help, reopen the task.")}</div>;
-                                }
-                                return <div className="space-y-3">
-                                  {personalQuiz.questions.map((q) => {
-                                    const selected = quizAnswers[q.index] ?? "";
-                                    const review = quizReview?.find((r) => r.index === q.index) ?? null;
-                                    return <Card id={`quiz-q-${q.index}`} tabIndex={-1} key={`quiz-${q.index}`} className={`p-3 border ${review ? (review.isCorrect ? "border-accent-success/60" : "border-accent-error/60") : "border-border"}`}>
-                                      <div className="text-sm text-text-primary mb-2">{q.index + 1}. {q.question}</div>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        {Object.entries(q.options || {}).map(([label, text]) => {
-                                          const isSelected = selected === label;
-                                          const isCorrect = review ? review.correct === label : false;
-                                          const isWrongSelected = review ? review.student === label && !review.isCorrect : false;
-                                          const tone = review
-                                            ? (isCorrect ? "border-accent-success/70 bg-accent-success/10 text-text-primary" : isWrongSelected ? "border-accent-error/70 bg-accent-error/10 text-text-primary" : isSelected ? "border-primary/50 bg-primary/10 text-text-primary" : "border-border text-text-secondary")
-                                            : (isSelected ? "border-primary/60 bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover");
-                                          return <button key={`${q.index}-${label}`} onClick={() => {
-                                            setQuizAnswers((prev) => ({ ...prev, [q.index]: label }));
-                                          }} disabled={quizSubmitting || !!quizReview} className={`px-3 py-2 rounded-md border text-left text-xs transition-fast ${tone}`}>
-                                            <span className="font-mono mr-2">{label}</span>{text}
-                                          </button>;
-                                        })}
-                                      </div>
-                                    </Card>;
-                                  })}
-
-                                  {quizSummary ? <Card className="p-3 border border-border bg-bg-surface/80">
-                                    <div className="text-xs text-text-secondary">
-                                      {tr("Підсумок контрольної", "Control summary")}: {tr("фінальна", "final")} {quizSummary.finalGrade ?? "—"}/{quizSummary.maxGrade}
-                                    </div>
-                                  </Card> : null}
-                                </div>;
-                              }
-
-                              return practice ? <div className="prose prose-invert max-w-none text-text-primary">
-                                <MarkdownView content={practice} />
-                              </div> : <div className="text-xs font-mono text-text-secondary">
-                                {tr("Практика знаходиться у редакторі коду нижче (дивись TODO у шаблоні).", "Practice is in the code editor below (see TODO in the template).")}
-                              </div>;
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-1 min-h-0 bg-bg-code border-t border-border">
-                        {isPersonalControlQuizTask ? (
-                          <div className="h-full min-h-0 flex flex-col">
-                            <div className="p-4 border-t border-border bg-bg-surface flex items-center justify-between">
-                              <div className="text-sm font-mono text-text-secondary">
-                                {tr("Для тестового етапу редактор коду не потрібен.", "Code editor is not used for the quiz step.")}
-                              </div>
-                            </div>
-                            <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                              <div className="text-xs font-mono text-text-secondary">
-                                {tr("Обери відповіді в блоці задачі та натисни «Перевірити тест».", "Choose answers in the task block and click “Submit quiz”.")}
-                              </div>
-                            </div>
-                          </div>
-                        ) : editorOpen ? (
-                          isWebTask ? <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-0">
-                              <div className="border-r border-border min-h-0">
-                                <MultiFileEditor language="html" entryFile="index.html" files={files.length ? files : [{
-                            path: "index.html",
-                            content: code
-                          }, {
-                            path: "styles.css",
-                            content: ""
-                          }, {
-                            path: "script.js",
-                            content: ""
-                          }]} onChange={(next) => {
-                            const normalized = normalizeFiles(next);
-                            setUseFiles(true);
-                            setFiles(normalized);
-                            setCode(normalized.find(f => f.path === "index.html")?.content ?? "");
-                          }} readOnly={!canEdit} requestAddToken={mfAddToken} />
-                              </div>
-                              <div className="min-h-0">
-                                <WebPreviewPane files={toWebTaskFiles()} title={tr("Превʼю", "Preview")} />
-                              </div>
-                            </div> : useFiles ? <MultiFileEditor language={user.course} entryFile={entryFile} files={files.length ? files : [{
-                            path: entryFile,
-                            content: code
-                          }]} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /> : <div className="h-full min-h-0 flex flex-col">
-                            <div className="p-2 border-b border-border flex items-center justify-end gap-2">
-                              {!canEdit ? null : <Button variant="ghost" size="sm" onClick={() => {
-                                requestCreateFile();
-                              }}>
-                                <Plus className="w-4 h-4 mr-1" />
-                                {tr("Додати файл", "Add file")}
-                              </Button>}
-                            </div>
-                            <div className="flex-1 min-h-0">
-                              <CodeEditor language={user.course} value={code} onChange={canEdit ? setCode : undefined} readOnly={!canEdit} />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="h-full min-h-0 flex flex-col">
-                            <div className="p-4 border-t border-border bg-bg-surface flex items-center justify-between">
-                              <div className="text-sm font-mono text-text-secondary">
-                                {tr("Редактор приховано.", "Editor is hidden.")}
-                              </div>
-                              <Button variant="primary" onClick={() => setEditorOpen(true)}>
-                                {tr("Відкрити редактор", "Open editor")}
-                              </Button>
-                            </div>
-                            <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                              <div className="text-sm text-text-primary">
-                                <div className="text-xs font-mono text-text-secondary">
-                                  {tr("Відкрий редактор для роботи з кодом.", "Open the editor to work with code.")}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </section>
-                ))}
-                </div>
-                )}
-              </div>
-            </> : <div className="flex-1 flex flex-col items-center justify-center text-text-muted font-mono text-sm gap-4">
-              <div>
-                {tasks.length === 0 ? tr("Немає завдань", "No tasks") : tr("Виберіть завдання зі списку", "Select a task from the list")}
-              </div>
-              {tasks.length === 0 && <Button variant="primary" onClick={handleGenerate} disabled={loading || !!active} className="text-sm px-6 py-2 flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  {tr("Згенерувати завдання", "Generate task")}
-                </Button>}
-            </div>) : activeCenterTab === "hints" ? <div className="flex-1 min-h-0 p-4 bg-bg-base overflow-auto">
-              <div className="max-w-5xl rounded-2xl border border-border bg-bg-surface/85 p-4">
-                <div className="text-sm text-text-primary font-semibold mb-2 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" /> {tr("Підказки", "Hints")}
-                </div>
-                <div className="text-xs text-text-secondary mb-3">
-                  {Array.isArray(aiResult?.hints) && aiResult.hints.length > 0
-                    ? tr("Підказки з останньої перевірки.", "Hints from your latest check.")
-                    : tr("Підказки для розв’язання задачі.", "Hints for solving the task.")}
-                </div>
-
-                <div className="space-y-2">
-                  {nonContestHints.map((h, idx) => (
-                    <div key={`${idx}-${h.slice(0, 16)}`} className="rounded-xl border border-border bg-bg-code/70 px-3 py-2 text-xs text-text-primary">
-                      <span className="text-primary mr-2">#{idx + 1}</span>{h}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div> : activeCenterTab === "notes" ? <div className="flex-1 min-h-0 p-4 bg-bg-base overflow-auto">
-              <div className="max-w-4xl rounded-2xl border border-border bg-bg-surface/85 p-4">
-                <div className="text-sm text-text-primary font-semibold mb-2">{tr("Персональні нотатки", "Personal notes")}</div>
-                <div className="text-xs text-text-secondary mb-3">{tr("Нотатки зберігаються локально для кожної задачі.", "Notes are saved locally per task.")}</div>
-                <textarea
-                  value={personalNotes}
-                  onChange={(e) => setPersonalNotes(e.target.value)}
-                  className="w-full min-h-[360px] rounded-xl bg-bg-code border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
-                  placeholder={tr("Записуй ідеї, крайові випадки, підводні камені...", "Write down ideas, edge cases, and pitfalls...")}
-                />
-              </div>
-            </div> : <div className="flex-1 min-h-0 p-4 bg-bg-base overflow-auto">
-              <div className="max-w-5xl rounded-2xl border border-border bg-bg-surface/85 p-4">
-                <div className="text-sm text-text-primary font-semibold mb-3">{tr("Activity Stream", "Activity Stream")}</div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-border bg-bg-code/70 p-3">
-                    <div className="text-xs text-text-secondary mb-2">{tr("Останні задачі", "Recent tasks")}</div>
-                    <div className="space-y-2">
-                      {tasks.slice(0, 8).map((t) => {
-                        const statusMeta = sidebarStatusMeta(t.status);
-                        return <div key={t.id} className="text-xs flex items-center justify-between gap-2 border border-border rounded-lg px-2 py-1.5">
-                            <span className="text-text-primary truncate">{t.title}</span>
-                            <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${statusMeta.pillClass}`}>
-                              {statusMeta.label}
-                            </span>
-                          </div>;
-                      })}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-bg-code/70 p-3">
-                    <div className="text-xs text-text-secondary mb-2">{tr("Поточний стан", "Current status")}</div>
-                    <div className="text-xs text-text-primary space-y-1">
-                      <div>{tr("Активна задача", "Active task")}: {active?.title ?? "—"}</div>
-                      <div>{tr("Статус UI", "UI status")}: <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-mono ${consoleStateMeta.toneClass}`}>{consoleStateMeta.label}</span></div>
-                      <div>{tr("Сабміт", "Submit")}: {submitting ? tr("в процесі", "in progress") : tr("очікування", "idle")}</div>
-                      <div>{tr("Режим редактора", "Editor mode")}: {useFiles ? "multi-file" : "single-file"}</div>
-                    </div>
                   </div>
                 </div>
+
+                <aside className="border-t border-[#132018]/10 bg-[#f8faf6] p-4 dark:border-white/10 dark:bg-white/[.035] 2xl:border-l 2xl:border-t-0">
+                  <div className="flex h-full min-h-[680px] flex-col gap-4">
+                    <article className="rounded-[26px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-black uppercase tracking-[.18em] text-[#16834d] dark:text-[#72edb0]">{tr("Умова", "Brief")}</p>
+                        <button type="button" onClick={() => setStatementModalOpen(true)} className="text-xs font-black text-[#16834d] dark:text-[#72edb0]">{tr("Відкрити повністю", "Open full")}</button>
+                      </div>
+                      <div className="mt-4 max-h-[310px] overflow-y-auto text-sm leading-7 text-[#354239] dark:text-[#d6e3da]">
+                        {previewPractice ? <MarkdownView content={previewPractice} /> : <p className="text-[#647267] dark:text-[#adbbb1]">{tr("Умова завдання поки недоступна.", "Task statement is not available yet.")}</p>}
+                      </div>
+                    </article>
+
+                    <article className="rounded-[26px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
+                      <label className="text-xs font-black uppercase tracking-[.18em] text-[#6f7e72] dark:text-[#9faca3]">{tr("Вхідні дані", "Input")}</label>
+                      <textarea
+                        value={stdin}
+                        onChange={(event) => setStdin(event.target.value)}
+                        className="mt-3 min-h-[105px] w-full resize-y rounded-2xl border border-[#132018]/10 bg-[#f8faf6] px-4 py-3 font-mono text-sm text-[#111812] outline-none transition focus:border-[#00ff88]/70 dark:border-white/10 dark:bg-white/[.05] dark:text-[#eef7f0]"
+                        spellCheck={false}
+                      />
+                    </article>
+
+                    <article className="rounded-[26px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
+                      <p className="text-xs font-black uppercase tracking-[.18em] text-[#6f7e72] dark:text-[#9faca3]">{tr("Нотатки", "Notes")}</p>
+                      <textarea
+                        value={personalNotes}
+                        onChange={(event) => setPersonalNotes(event.target.value)}
+                        className="mt-3 min-h-[125px] w-full resize-y rounded-2xl border border-[#132018]/10 bg-[#f8faf6] px-4 py-3 text-sm leading-6 text-[#111812] outline-none transition focus:border-[#00ff88]/70 dark:border-white/10 dark:bg-white/[.05] dark:text-[#eef7f0]"
+                        placeholder={tr("Ідеї, edge cases, наступна спроба…", "Ideas, edge cases, next attempt…")}
+                      />
+                    </article>
+                  </div>
+                </aside>
               </div>
-            </div>}
-        </div>
+            )}
+          </section>
 
-        {!isCompactViewport && !dockCollapsed && !dockPopOut ? (
-          <div
-            style={{ order: consoleResizerOrder }}
-            onMouseDown={(e) => startDockResize(e, consoleResizeEdge)}
-            className="w-1.5 cursor-col-resize bg-transparent hover:bg-secondary/30 transition-fast"
-          />
-        ) : null}
-
-        {!dockPopOut ? <div
-          ref={consoleColumnRef}
-          style={isCompactViewport ? {
-          order: columnOrder.console
-        } : {
-          width: dockCollapsed ? 46 : dockWidth,
-          order: columnOrder.console
-        }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => handleColumnDrop("console")}
-          className={`border-l border-border bg-bg-surface flex flex-col flex-shrink-0 relative overflow-hidden ${isCompactViewport ? `${dockCollapsed ? "w-0 border-l-0 pointer-events-none" : "w-[min(92vw,420px)] shadow-[0_16px_48px_rgba(0,0,0,0.45)]"} absolute inset-y-0 right-0 z-30` : ""}`}
-        >
-          <div className="p-3 border-b border-border/70 bg-gradient-to-b from-bg-surface to-bg-surface/75 flex items-center justify-between">
-            <div className="text-sm font-mono text-text-primary flex items-center gap-2 min-w-0">
-                    <Play className="w-4 h-4" /> {tr("Консоль", "Console")}
-                    <span className={`ml-1 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${consoleStateMeta.toneClass}`}>
-                      {consoleStateMeta.label}
-                    </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span
-                draggable
-                onDragStart={() => setDraggingColumn("console")}
-                onDragEnd={() => setDraggingColumn(null)}
-                className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-grab"
-                title={tr("Перетягни колонку", "Drag column")}
-              >
-                <GripVertical className="w-3.5 h-3.5" />
-              </span>
-              <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockCollapsed(v => {
-                const next = !v;
-                if (isCompactViewport && !next) {
-                  setShowTaskHistory(false);
-                  setDockPopOut(false);
-                }
-                return next;
-              })} title={dockCollapsed ? tr("Розгорнути", "Expand") : tr("Згорнути", "Collapse")}>
-                {dockCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
-              </button>
-              {!dockCollapsed && !isCompactViewport ? <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockPopOut(true)} title={tr("В окреме вікно", "Pop out")}>
-                  <SquareArrowOutUpRight className="w-3.5 h-3.5" />
-                </button> : null}
-              {aiResult && <Badge color={aiResult.total >= 85 ? "success" : aiResult.total >= 65 ? "warn" : aiResult.total >= 40 ? "warn" : "error"}>
-                {aiResult.total ?? "—"}
-                    </Badge>}
-            </div>
-                </div>
-          {!dockCollapsed ? <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-            <div className="border border-border/70 bg-bg-code/90 rounded-xl p-2">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <div className="text-[10px] font-mono text-text-secondary">
-                  {tr("Вхідні дані (stdin)", "Input (stdin)")}
-                </div>
-                <button
-                  type="button"
-                  className="text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!firstExampleInput}
-                  onClick={() => {
-                    if (!firstExampleInput) {
-                      setConsoleOutput(tr("У прикладах не знайдено Input для автозаповнення stdin.", "No Input example found for auto-fill stdin."));
-                      setUIState("logic-warning");
-                      return;
-                    }
-                    setStdin(firstExampleInput);
-                    setUIState("idle");
-                  }}
-                  title={tr("Перенести перший приклад Input в stdin", "Move first Input example to stdin")}
-                >
-                  {tr("Із прикладу", "From example")}
+          <aside className="grid min-h-[760px] grid-rows-[auto_1fr_auto] overflow-hidden rounded-[34px] border border-[#132018]/10 bg-white shadow-[0_24px_80px_rgba(21,35,24,.075)] dark:border-white/10 dark:bg-[#101612]">
+            <div className="border-b border-[#132018]/10 p-5 dark:border-white/10">
+              <p className="text-xs font-black uppercase tracking-[.18em] text-[#ff8c00]">{tr("Панель перевірки", "Review board")}</p>
+              <h2 className="mt-2 text-2xl font-black tracking-[-.055em]">{consoleStateMeta.label}</h2>
+              <p className="mt-2 text-sm leading-6 text-[#647267] dark:text-[#adbbb1]">
+                {tr("Тут зібрані результат запуску, підказки й остання перевірка. Редактор лишається чистим, а аналіз — поруч.", "Feedback, run output and hints are grouped here. The editor stays clean, while review remains close at hand.")}
+              </p>
+              {showInlineFailureRecovery ? (
+                <button type="button" onClick={openOutputRecovery} className="mt-4 rounded-2xl bg-[#fff0f4] px-4 py-2 text-sm font-black text-[#b32555] dark:bg-[#ff6b9d]/10 dark:text-[#ff9fbd]">
+                  {tr("Показати відновлення", "View recovery")}
                 </button>
-              </div>
-              <textarea value={stdin} onChange={e => setStdin(e.target.value)} placeholder={tr("Введіть дані для програми...", "Enter input for your program...")} className="w-full h-20 bg-transparent border border-border p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
+              ) : null}
             </div>
-            {consoleStatusCard}
-              <div className="border border-border/70 bg-bg-code/85 rounded-xl p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-muted">
-                    {tr("Вивід", "Output")}
+
+            <div className="min-h-0 space-y-4 overflow-y-auto bg-[#f8faf6] p-4 dark:bg-white/[.035]">
+              {aiResult ? (
+                <article className="rounded-[26px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
+                  <p className="text-xs font-black uppercase tracking-[.18em] text-[#16834d] dark:text-[#72edb0]">{tr("Останній результат", "Latest score")}</p>
+                  <div className="mt-3 flex items-end gap-2">
+                    <span className="text-5xl font-black tracking-[-.08em]">{aiResult?.total ?? 0}</span>
+                    <span className="pb-2 text-sm font-bold text-[#647267] dark:text-[#adbbb1]">{tr("балів", "points")}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-mono text-text-muted">
-                      {tr("Рядків", "Lines")}: {consoleLineCount}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={copyConsoleFromToolbar}
-                      disabled={!hasConsoleOutput}
-                      className="text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={tr("Скопіювати вивід у буфер", "Copy output to clipboard")}
-                    >
+                  {aiResult?.gradingMode === "TESTS" ? (
+                    <p className="mt-3 text-sm font-bold text-[#647267] dark:text-[#adbbb1]">
+                      {tr("Тести", "Tests")}: {aiResult?.testsPassed ?? 0}/{aiResult?.testsTotal ?? 0}
+                    </p>
+                  ) : null}
+                  {aiResult?.aiFeedback ? (
+                    <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-[#354239] dark:text-[#d6e3da]">{aiResult?.aiFeedback}</p>
+                  ) : null}
+                </article>
+              ) : null}
+
+              <article className="rounded-[26px] border border-[#132018]/10 bg-[#0d1510] p-5 text-[#dce9df] dark:border-white/10">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-black uppercase tracking-[.18em] text-[#7bf0b4]">{tr("Вивід", "Output")}</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={copyConsoleFromToolbar} disabled={!hasConsoleOutput} className="rounded-xl bg-white/[.08] px-2.5 py-1.5 text-xs font-black text-[#dce9df] disabled:opacity-40">
                       {consoleClipboardLabel}
                     </button>
-                    <button
-                      type="button"
-                      onClick={clearConsoleFromToolbar}
-                      disabled={!hasConsoleOutput}
-                      className="text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={tr("Очистити вивід", "Clear output")}
-                    >
+                    <button type="button" onClick={clearConsoleFromToolbar} disabled={!hasConsoleOutput} className="rounded-xl bg-white/[.08] px-2.5 py-1.5 text-xs font-black text-[#dce9df] disabled:opacity-40">
                       {tr("Очистити", "Clear")}
                     </button>
                   </div>
                 </div>
-                <div className="mt-2 font-mono text-xs text-text-primary whitespace-pre-wrap max-h-[260px] overflow-auto pr-1">
-                  {consoleOutput || tr("Спершу натисни «Запуск», потім «Перевірити», щоб отримати оцінку.", "Run first, then press Check to get a grade.")}
-                </div>
+                <pre className="mt-4 max-h-[360px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6">
+                  {consoleOutput || tr("Запусти код або надішли перевірку, щоб побачити результат.", "Run code or submit a check to see output here.")}
+                </pre>
+              </article>
+
+              {compactHints.length ? (
+                <article className="rounded-[26px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
+                  <p className="text-xs font-black uppercase tracking-[.18em] text-[#ff8c00]">{tr("Підказки", "Hints")}</p>
+                  <div className="mt-4 space-y-2">
+                    {compactHints.map((hint, index) => (
+                      <p key={`${index}-${hint.slice(0, 18)}`} className="rounded-2xl bg-[#f3f6f0] px-4 py-3 text-sm leading-6 text-[#354239] dark:bg-white/[.05] dark:text-[#d6e3da]">
+                        {hint}
+                      </p>
+                    ))}
+                  </div>
+                </article>
+              ) : null}
+
+              {quizSummary ? (
+                <article className="rounded-[26px] border border-[#00ff88]/25 bg-[#ebfbf0] p-5 text-[#16623d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                  <p className="text-xs font-black uppercase tracking-[.18em]">{tr("Підсумок тесту", "Quiz summary")}</p>
+                  <p className="mt-2 text-2xl font-black tracking-[-.05em]">{quizSummary?.finalGrade ?? "—"}/{quizSummary?.maxGrade ?? "—"}</p>
+                </article>
+              ) : null}
             </div>
-                  {aiResult && <div className="mt-4 pt-4 border-t border-border space-y-2">
-                {(() => {
-                  const latest = latestSubmissionBindingRef.current;
-                  const resultMeta = aiResult.submissionMeta;
-                  const isLatest = !!latest && !!resultMeta && latest.codeHash === resultMeta.codeHash && (!latest.submissionId || latest.submissionId === resultMeta.submissionId);
-                  const verdict = aiResult.learningFeedback?.verdict ?? null;
-                  const firstFailure = aiResult.learningFeedback?.firstFailure ?? null;
-                  const showFallback = isLatest && (verdict === "WA" || verdict === "PRESENTATION_ERROR" || verdict === "PARTIAL") && !firstFailure;
-                  if (!showFallback) return null;
-                  return <div className="p-2 border border-border bg-bg-code text-xs font-mono text-text-secondary">
-                      {tr("Перший збій стався на прихованому тесті — показ прев’ю недоступний. Перевірте крайові випадки та формат виводу.", "The first failure occurred on a hidden test, so preview is unavailable. Re-check edge cases and output formatting.")}
-                    </div>;
-                })()}
-                {aiResult.gradingMode !== "TESTS" && aiResult.total !== null && aiResult.total !== undefined && <>
-                    <div className="text-xs font-mono text-text-secondary">
-                      {tr("Оцінка:", "Grade:")} <span className={`font-semibold ${aiResult.total >= 85 ? "text-accent-success" : aiResult.total >= 65 ? "text-accent-warn" : aiResult.total >= 40 ? "text-accent-warning" : "text-accent-error"}`}>{aiResult.total}</span>
-                      {aiResult.previousGrade !== null && aiResult.previousGrade !== undefined && <span className="text-text-muted ml-2">
-                          ({tr(`було ${aiResult.previousGrade}`, `was ${aiResult.previousGrade}`)})
-                        </span>}
-                    </div>
-                    <div className="text-xs font-mono text-text-secondary">
-                      {tr("Працездатність:", "Correctness:")}{" "}
-                      <span className="text-text-primary">{aiResult.workScore ?? 0}</span> / 5
-                    </div>
-                    <div className="text-xs font-mono text-text-secondary">
-                      {tr("Оптимізація:", "Optimization:")}{" "}
-                      <span className="text-text-primary">{aiResult.optimizationScore ?? 0}</span> / 4
-                    </div>
-                    <div className="text-xs font-mono text-text-secondary">
-                      {tr("Доброчесність:", "Integrity:")}{" "}
-                      <span className="text-text-primary">{aiResult.integrityScore ?? 0}</span> / 3
-                      </div>
-                    {aiResult.aiUnavailableFallback && <div className="mt-2 text-[11px] font-mono text-accent-warn border border-accent-warn/30 bg-accent-warn/10 px-2 py-1">
-                        {tr("ШІ тимчасово недоступний — застосовано консервативну тимчасову оцінку.", "AI was temporarily unavailable — a conservative temporary grade was applied.")}
-                      </div>}
-                  </>}
-                {aiResult.gradingMode === "TESTS" && <div className="text-xs font-mono text-text-secondary">
-                    {tr("Тести:", "Tests:")}{" "}
-                    <span className="text-text-primary">
-                      {aiResult.testsPassed ?? 0}/{aiResult.testsTotal ?? 0}
-                    </span>{" "}
-                    · {tr("Оцінка:", "Grade:")}{" "}
-                    <span className="text-text-primary">{aiResult.total ?? 0}</span>
-                    {(() => {
-                      const passed = aiResult.testsPassed;
-                      const total = aiResult.testsTotal;
-                      if (typeof passed !== "number" || typeof total !== "number" || total <= 0) return null;
-                      const pct = Math.max(0, Math.min(100, Math.round(passed / total * 100)));
-                      return <div className="mt-2">
-                          <div className="h-2 w-full bg-border rounded overflow-hidden">
-                            <div className="h-2 bg-primary" style={{
-                              width: `${pct}%`
-                            }} />
-                          </div>
-                          <div className="mt-1 text-[10px] font-mono text-text-muted flex items-center justify-between">
-                            <span>{tr("Тести:", "Tests:")} <span className="text-text-secondary">{passed}/{total}</span></span>
-                            <span>{pct}%</span>
-                          </div>
-                        </div>;
-                    })()}
-                  </div>}
-                {aiResult.comparisonFeedback && <div className="mt-3 p-2 border border-primary/30 bg-bg-code">
-                    <div className="text-xs font-mono text-primary mb-1">
-                      {tr("Порівняння з попередньою спробою:", "Comparison with previous attempt:")}
-                    </div>
-                    <div className="text-xs font-mono text-text-primary whitespace-pre-wrap">
-                      {aiResult.comparisonFeedback}
-                      </div>
-                      </div>}
-                      {aiResult.gradingMode === "TESTS" && Array.isArray(aiResult.testResults) && aiResult.testResults.length > 0 && <div className="mt-3 space-y-3">
-                          <div className="p-2 border border-border bg-bg-code">
-                            <div className="text-[10px] font-mono text-text-secondary mb-2">
-                              {tr("Результати тестів", "Test results")}
-                            </div>
-                            <div className="space-y-1">
-                              {aiResult.testResults.map((r, idx) => {
-                                const label = errorKindLabel(r.errorKind);
-                                return <div key={`${r.testId}-${idx}`} className="flex items-start gap-2 text-xs font-mono">
-                                      <span className={r.passed ? "text-accent-success" : "text-accent-error"}>
-                                        {r.passed ? "✓" : "✗"}
-                                      </span>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-text-primary">{tr("Тест", "Test")} {idx + 1}</span>
-                                          {!r.passed && r.verdict && <span className="text-[10px] text-text-muted">{r.verdict}</span>}
-                                          {!r.passed && label && <span className="text-[10px] px-1.5 py-0.5 border border-border bg-bg-surface text-text-secondary">{label}</span>}
-                                        </div>
-                                        {!r.passed && r.error && <div className="text-text-secondary whitespace-pre-wrap break-words">
-                                            {String(r.error).slice(0, 600)}
-                                          </div>}
-                                      </div>
-                                    </div>;
-                              })}
-                            </div>
-                          </div>
 
-                          {Array.isArray(aiResult.hints) && aiResult.hints.length > 0 && <div className="p-2 border border-primary/30 bg-bg-code">
-                              <div className="text-[10px] font-mono text-primary mb-2">
-                                {tr("Підказки (крок за кроком)", "Hints (step-by-step)")}
-                              </div>
-                              <div className="space-y-2">
-                                {aiResult.hints.slice(0, revealedHints).map((h, i) => <div key={i} className="text-xs font-mono text-text-primary whitespace-pre-wrap">
-                                      {i + 1}. {h}
-                                    </div>)}
-                                <div className="flex gap-2">
-                                  {revealedHints < aiResult.hints.length && <Button variant="ghost" onClick={() => setRevealedHints(v => Math.min(aiResult.hints?.length ?? 0, v + 1))} className="text-xs">
-                                      {tr("Показати підказку", "Show hint")}
-                                    </Button>}
-                                  {revealedHints < aiResult.hints.length && aiResult.hints.length > 1 && <Button variant="ghost" onClick={() => setRevealedHints(aiResult.hints?.length ?? 0)} className="text-xs">
-                                      {tr("Показати всі", "Show all")}
-                                    </Button>}
-                                  {revealedHints > 0 && <Button variant="ghost" onClick={() => setRevealedHints(0)} className="text-xs">
-                                      {tr("Сховати", "Hide")}
-                                    </Button>}
-                                </div>
-                              </div>
-                            </div>}
-
-                          {aiResult.aiFeedback && <details className="border border-border bg-bg-code p-2">
-                              <summary className="cursor-pointer text-[10px] font-mono text-text-secondary">
-                                {tr("Повний текст (debug)", "Full text (debug)")}
-                              </summary>
-                              <div className="mt-2 text-xs font-mono text-text-secondary whitespace-pre-wrap">
-                                {aiResult.aiFeedback}
-                              </div>
-                            </details>}
-                        </div>}
-
-                      {aiResult.gradingMode !== "TESTS" && aiResult.aiFeedback && <div className="text-xs font-mono text-text-secondary mt-3 whitespace-pre-wrap">
-                          {aiResult.aiFeedback}
-                        </div>}
-
-                      {(() => {
-                    const latest = latestSubmissionBindingRef.current;
-                    const resultMeta = aiResult.submissionMeta;
-                    const isLatest = !!latest && !!resultMeta && latest.codeHash === resultMeta.codeHash && (!latest.submissionId || latest.submissionId === resultMeta.submissionId);
-                    return <FailureRecoveryCard
-                          verdict={isLatest ? aiResult.learningFeedback?.verdict : null}
-                          firstFailure={isLatest ? aiResult.learningFeedback?.firstFailure : null}
-                        />;
-                  })()}
-                    </div>}
-            {}
-          </div> : <div className="flex-1 min-h-0 p-1 flex items-start justify-center">
-              <button
-                className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center mt-2"
-                onClick={() => setDockCollapsed(false)}
-                aria-label={tr("Розгорнути консоль", "Expand console")}
-                title={tr("Розгорнути консоль", "Expand console")}
-              >
-                <FoldHorizontal className="w-4 h-4" />
-              </button>
-            </div>}
-        </div> : null}
+            <div className="border-t border-[#132018]/10 p-4 dark:border-white/10">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-2xl bg-[#f8faf6] px-3 py-3 dark:bg-white/[.045]">
+                  <div className="text-[10px] font-black uppercase tracking-[.14em] text-[#6f7e72] dark:text-[#9faca3]">{tr("Завдання", "Tasks")}</div>
+                  <div className="mt-1 text-lg font-black">{sidebarStats.total || 0}</div>
+                </div>
+                <div className="rounded-2xl bg-[#f8faf6] px-3 py-3 dark:bg-white/[.045]">
+                  <div className="text-[10px] font-black uppercase tracking-[.14em] text-[#6f7e72] dark:text-[#9faca3]">{tr("Готово", "Done")}</div>
+                  <div className="mt-1 text-lg font-black">{sidebarStats.completed}</div>
+                </div>
+                <div className="rounded-2xl bg-[#f8faf6] px-3 py-3 dark:bg-white/[.045]">
+                  <div className="text-[10px] font-black uppercase tracking-[.14em] text-[#6f7e72] dark:text-[#9faca3]">{tr("Режим", "Mode")}</div>
+                  <div className="mt-1 truncate text-lg font-black">{activeTaskModeLabel}</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </main>
       </div>
-
-      {isCompactViewport && (showTaskHistory || (!dockCollapsed && !dockPopOut)) ? <button
-          type="button"
-          aria-label={tr("Закрити бокові панелі", "Close side panels")}
-          className="absolute inset-0 z-20 bg-black/45 backdrop-blur-[1px]"
-          onClick={() => {
-            setShowTaskHistory(false);
-            setDockCollapsed(true);
-            setDockPopOut(false);
-          }}
-        /> : null}
-
-      {dockPopOut ? <div className="fixed right-2 sm:right-4 top-16 sm:top-20 w-[min(92vw,430px)] h-[min(72vh,640px)] z-40 rounded-2xl border border-border bg-bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs text-text-secondary uppercase tracking-widest">{tr("Консоль (вікно)", "Console (pop-out)")}</div>
-            <button className="p-1 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover" onClick={() => setDockPopOut(false)}>
-              <PanelRightOpen className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="h-[calc(100%-2rem)] overflow-auto border border-border rounded-xl bg-bg-code p-3 text-xs font-mono text-text-primary whitespace-pre-wrap">
-            {consoleOutput || tr("Спершу натисни «Запуск», потім «Перевірити», щоб отримати оцінку.", "Run first, then press Check to get a grade.")}
-          </div>
-        </div> : null}
 
       <Modal
         open={statementModalOpen}
         onClose={() => setStatementModalOpen(false)}
-        title={tr("Повна умова задачі", "Full task statement")}
-        description={tr("Повний текст умови задачі.", "Full task statement text.")}
+        title={tr("Повна умова завдання", "Full task statement")}
+        description={tr("Повний текст умови для вибраного завдання.", "The complete brief for the selected task.")}
       >
-        {fullPracticeText.trim() ? (
-          <div className="prose prose-invert max-w-none text-text-primary">
-            <MarkdownView content={fullPracticeText} />
-          </div>
-        ) : (
-          <div className="text-sm text-text-secondary">
-            {tr("Умова для цієї задачі поки недоступна.", "Statement is not available for this task yet.")}
-          </div>
-        )}
+        {fullPracticeText.trim() ? <MarkdownView content={fullPracticeText} /> : <div className="text-sm text-text-secondary">{tr("Умова для цього завдання поки недоступна.", "Statement is not available for this task yet.")}</div>}
       </Modal>
 
-      {}
-      <Modal open={!!blockState} title={blockState?.mode === "low" ? tr("Тему потрібно пройти повторно", "You need to retry this topic") : tr("Бажано повторити тему", "It’s recommended to review this topic")} description={blockState ? (() => {
-      const hasAvg = Number.isFinite(blockState.average);
-      const avgLineUk = hasAvg ? `\nСередній бал: ${blockState.average.toFixed(2)}` : "";
-      const avgLineEn = hasAvg ? `\nAverage grade: ${blockState.average.toFixed(2)}` : "";
-      return tr(`Тема: ${blockState.topicTitle}${avgLineUk}\n\nЩоб рухатись далі, необхідно перепройти тему.`, `Topic: ${blockState.topicTitle}${avgLineEn}\n\nTo continue, you need to retry the topic.`);
-    })() : undefined} onClose={() => {
-      setBlockState(null);
-      setUIState("idle");
-    }}>
-        {blockState && <div className="flex justify-end mt-2">
-            <Button variant="primary" onClick={async () => {
-          try {
-            await resetTopic(blockState.topicId);
-            setBlockState(null);
-            setUIState("idle");
-            await reloadTasks(true);
-          } catch (err) {
-            console.error(err);
-            setUIState("error");
-          }
-        }}>
-              {tr("Перепройти тему", "Retry topic")}
-            </Button>
-          </div>}
-      </Modal>
-
-      {}
-      <Modal open={!!milestone} title={tr("Ти покращився!", "You improved!")} description={milestone?.message} onClose={async () => {
-      if (milestone) {
-        try {
-          const base = import.meta.env.VITE_API_URL || window.location.origin;
-          await fetch(`${base}/profile/milestone-shown`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${localStorage.getItem("token")}`,
-              "Content-Type": "application/json"
+      <Modal open={!!blockState} title={blockState?.mode === "low" ? tr("Тему потрібно пройти повторно", "You need to retry this topic") : tr("Повтори цю тему", "Review this topic")} description={blockState ? tr(`Тема: ${blockState?.topicTitle ?? ""}`, `Topic: ${blockState?.topicTitle ?? ""}`) : undefined} onClose={() => { setBlockState(null); setUIState("idle"); }}>
+        {blockState && <div className="mt-2 flex justify-end">
+          <Button variant="primary" onClick={async () => {
+            const currentBlockState = blockState;
+            if (!currentBlockState) return;
+            try {
+              await resetTopic(currentBlockState.topicId);
+              setBlockState(null);
+              setUIState("idle");
+              await reloadTasks(true);
+            } catch (err) {
+              console.error(err);
+              setUIState("error");
             }
-          });
-        } catch (err) {}
-      }
-      setMilestone(null);
-    }}>
-        {milestone && <div className="flex justify-end gap-2 mt-2">
-            <Button variant="primary" onClick={async () => {
+          }}>{tr("Перепройти тему", "Retry topic")}</Button>
+        </div>}
+      </Modal>
+
+      <Modal open={!!milestone} title={tr("Ти покращився!", "You improved!")} description={milestone?.message} onClose={async () => {
+        if (milestone) {
           try {
             const base = import.meta.env.VITE_API_URL || window.location.origin;
-            await fetch(`${base}/profile/milestone-shown`, {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${localStorage.getItem("token")}`,
-                "Content-Type": "application/json"
-              }
-            });
-          } catch (err) {}
-          setMilestone(null);
-        }}>
-              {tr("Продовжити", "Continue")}
-            </Button>
-          </div>}
+            await fetch(`${base}/profile/milestone-shown`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: milestone.id }) });
+          } catch {}
+        }
+        setMilestone(null);
+      }}>
+        <div className="text-sm text-text-secondary">{tr("Прогрес збережено у профілі.", "Progress was saved to your profile.")}</div>
       </Modal>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>;
+    </div>
+  );
 };

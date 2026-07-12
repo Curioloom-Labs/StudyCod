@@ -6,6 +6,7 @@ import { ArrowLeft, Mail, ScrollText } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
+import { LegalExperience } from "./LegalExperience";
 
 type LegalSection = {
   title: string;
@@ -140,6 +141,17 @@ export const TermsOfUsePage: React.FC = () => {
       ]
     }
   ];
+
+  return <LegalExperience
+    current="terms"
+    title={tr("Умови використання", "Terms of Use")}
+    description={tr("Правила користування StudyCod, відповідальність сторін і межі роботи освітньої платформи.", "Rules for using StudyCod, responsibilities, and the boundaries of the education platform.")}
+    updated={tr("Оновлено 31 травня 2026", "Updated May 31, 2026")}
+    sections={sections}
+    tr={tr}
+    icon={ScrollText}
+    email={SUPPORT_EMAIL}
+  />;
 
   return (
     <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">

@@ -35,6 +35,7 @@ import {
   type LibraryTaskStatus,
 } from "../../lib/api/library";
 import { JUDGE_LANGUAGE_LABELS, enabledJudgeLanguages } from "../../lib/judgeLanguages";
+import { PremiumLibrary } from "../core/PremiumPersonalExperience";
 
 type TaskDetails = {
   task: LibraryTaskListItem;
@@ -100,6 +101,13 @@ const FRIENDLY_DIFFICULTY: Record<LibraryTaskDifficulty, { uk: string; en: strin
   MEDIUM: { uk: "Середня", en: "Medium", color: "warn" },
   HARD: { uk: "Складна", en: "Hard", color: "error" },
 };
+
+const PREVIEW_LIBRARY_TASKS = [
+  { id: -201, title: "Витрати за категоріями", description: "Побудуй невеликий звіт на основі списку транзакцій і зроби код читабельним.", lang: "PYTHON", difficulty: "EASY", tags: ["collections", "loops"], taskMode: "CODE", status: "APPROVED", maxAttempts: 0 },
+  { id: -202, title: "Найдовша серія", description: "Знайди найдовшу послідовність значень та поясни складність свого рішення.", lang: "PYTHON", difficulty: "MEDIUM", tags: ["arrays", "algorithm"], taskMode: "CODE", status: "APPROVED", maxAttempts: 0 },
+  { id: -203, title: "Картка події", description: "Зверстай адаптивну картку з чіткою ієрархією, станами та мікровзаємодіями.", lang: "PYTHON", difficulty: "EASY", tags: ["html", "css"], taskMode: "WEB", status: "APPROVED", maxAttempts: 0 },
+  { id: -204, title: "Валідатор розкладу", description: "Перевір конфлікти в розкладі, використовуючи чисту структуру даних.", lang: "PYTHON", difficulty: "HARD", tags: ["logic", "practice"], taskMode: "CODE", status: "APPROVED", maxAttempts: 0 },
+] as LibraryTaskListItem[];
 
 const WEB_PROFILE_OPTIONS: Array<{ id: WebTaskProfileId; label: string; hint: string }> = [
   { id: "FREE_WEB", label: "FREE_WEB", hint: "HTML + CSS + JS" },
@@ -301,6 +309,7 @@ export const TaskLibraryPage: React.FC = () => {
   const isAurora = useUIMode().mode === "aurora";
   const navigate = useNavigate();
   const location = useLocation();
+  const isDesignPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   const solvePathPrefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve" : "/library/solve";
   const libraryBasePath = location.pathname.startsWith("/edu/") ? "/edu/library" : "/library";
@@ -531,6 +540,7 @@ export const TaskLibraryPage: React.FC = () => {
     if (!hydratedFromUrlRef.current) return;
 
     const sp = new URLSearchParams();
+    if (isDesignPreview) sp.set("preview", "true");
     if (view !== "approved") sp.set("view", view);
 
     if (view === "approved" && judgeLang !== "ALL") sp.set("lang", judgeLang);
@@ -565,6 +575,11 @@ export const TaskLibraryPage: React.FC = () => {
   const reload = async () => {
     setLoading(true);
     try {
+      if (isDesignPreview) {
+        setTasks(PREVIEW_LIBRARY_TASKS);
+        setTotal(PREVIEW_LIBRARY_TASKS.length);
+        return;
+      }
       if (view === "mine" && canManage) {
         const res = await listMyLibraryTasks();
         setTasks(res.tasks);
@@ -1469,6 +1484,31 @@ export const TaskLibraryPage: React.FC = () => {
   );
 
   const allVisibleDraftsSelected = visibleDraftTasks.length > 0 && selectedVisibleDraftCount === visibleDraftTasks.length;
+  const learnerTasks = visibleTasks.length
+    ? visibleTasks
+    : isDesignPreview
+      ? PREVIEW_LIBRARY_TASKS.filter((task) => {
+        const needle = qDraft.trim().toLowerCase();
+        return !needle || `${task.title} ${task.description} ${(task.tags || []).join(" ")}`.toLowerCase().includes(needle);
+      })
+      : [];
+
+  // Learners see a new discovery-first library. Authoring/moderation remains on
+  // the specialised workspace below, where its dense controls are necessary.
+  if (!canManage && view === "approved") {
+    return <PremiumLibrary
+      tasks={learnerTasks}
+      total={total ?? (isDesignPreview ? PREVIEW_LIBRARY_TASKS.length : null)}
+      solved={solvedCount}
+      loading={loading}
+      query={qDraft}
+      onQuery={setQDraft}
+      onOpen={(task) => navigate({
+        pathname: buildSolvePath(task),
+        search: import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true" ? "?preview=true" : "",
+      })}
+    />;
+  }
 
   return (
     <div className="p-3 sm:p-4 md:p-6">

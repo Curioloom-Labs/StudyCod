@@ -41,7 +41,6 @@ import {
 } from "../../lib/api/edu";
 import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap, Mail, Link2 } from "lucide-react";
 import { api } from "../../lib/api/client";
-import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSquare, Gauge, Video, BarChart3, Sparkles, Zap } from "lucide-react";
 import { SectionHeading } from "../../components/ui/SectionHeading";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";

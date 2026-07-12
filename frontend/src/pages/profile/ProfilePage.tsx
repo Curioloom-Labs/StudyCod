@@ -39,6 +39,7 @@ import { useUIMode } from "../../components/interface/UIModeProvider";
 import { AURORA_ENABLED } from "../../lib/uiMode";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { PremiumProfileV2 } from "../core/PremiumPersonalExperience";
 
 function buildApiUrl(path: string): string {
   const base = String(import.meta.env.VITE_API_URL || window.location.origin || "")
@@ -212,6 +213,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
   const ui = useUIMode();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
+  const isDesignPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 
   const isStudent = !!user.studentId;
   const isEducational = user.userMode === "EDUCATIONAL";
@@ -351,6 +353,15 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     return { librarySolved, badgesUnlocked, totalGrades, avgGrade, excellent };
   }, [solvedLibraryTasks, validGrades]);
 
+  const weeklyActiveDays = useMemo(() => {
+    const startOfWindow = Date.now() - 6 * 24 * 60 * 60 * 1000;
+    return new Set(
+      validGrades
+        .filter((grade) => new Date(grade.createdAt).getTime() >= startOfWindow)
+        .map((grade) => new Date(grade.createdAt).toDateString())
+    ).size;
+  }, [validGrades]);
+
   const legacyIad = (user as User & { iad?: number | null }).iad;
   const currentIad = Number(legacyIad ?? user.difus ?? 0);
 
@@ -362,6 +373,11 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
 
   const switchCourse = async (next: CourseLanguage) => {
     if (next === course || isStudent || isEducational) return;
+    if (isDesignPreview) {
+      setCourse(next);
+      setMsg(null);
+      return;
+    }
     const prevCourse = course;
     setCourse(next);
     setMsg(null);
@@ -428,6 +444,24 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       setSaving(false);
     }
   };
+
+  if (!isEducational) {
+    return <PremiumProfileV2
+      user={user}
+      avatarUrl={avatarUrl}
+      course={course}
+      stats={isDesignPreview && profileStats.totalGrades === 0 && profileStats.librarySolved === 0
+        ? { librarySolved: 18, badgesUnlocked: 2, totalGrades: 11, avgGrade: 84.6, excellent: 7 }
+        : profileStats}
+      currentIad={currentIad}
+      weeklyActiveDays={isDesignPreview && weeklyActiveDays === 0 ? 4 : weeklyActiveDays}
+      saving={saving}
+      message={msg}
+      onAvatar={onSelectFile}
+      onCourse={switchCourse}
+      onSave={handleSave}
+    />;
+  }
 
   return (
     <div className="min-h-0 flex flex-col bg-bg-base overflow-y-auto">

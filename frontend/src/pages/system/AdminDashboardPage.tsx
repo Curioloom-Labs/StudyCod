@@ -3303,34 +3303,33 @@ export const AdminDashboardPage: React.FC = () => {
     );
   });
   if (loading && activeTab === "stats") {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t("loading")}
-      </div>;
+    return <div className="min-h-full bg-[#f7f8f5] px-6 py-16 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
+      <div className="mx-auto max-w-7xl animate-pulse rounded-[28px] bg-[#e7ede8] p-8 dark:bg-white/[.05]">
+        <div className="h-4 w-36 rounded bg-[#cfd9d1] dark:bg-white/10" />
+        <div className="mt-5 h-11 max-w-md rounded bg-[#cfd9d1] dark:bg-white/10" />
+      </div>
+    </div>;
   }
-  return <div className="h-full flex flex-col bg-bg-base">
-      {/* Hero header */}
-      <div className="border-b border-border px-3 sm:px-4 md:px-6 py-3 bg-bg-surface">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+  return <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
+      {/* Product header — the operational controls below keep their existing API bindings. */}
+      <div className="rounded-[28px] border border-[#152219]/10 bg-[#20232a] px-5 py-6 text-white shadow-[0_22px_55px_-35px_rgba(0,0,0,.7)] sm:px-7 sm:py-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            {isAurora ? (
-              <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">System</span>
-            ) : (
-              <span className="font-mono text-xs text-primary/70">// system admin</span>
-            )}
-            <h1 className={`mt-0.5 font-semibold tracking-tight text-text-primary flex items-center gap-2 ${isAurora ? "text-3xl" : "text-2xl"}`}>
-              <Shield className="w-5 h-5 text-primary" />
-              Admin Panel
+            <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#ffd93d]">
+              <Shield className="h-4 w-4" /> System operations
+            </span>
+            <h1 className="mt-3 flex items-center gap-3 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] sm:text-4xl">
+              Admin workspace
             </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#c1c8cf]">Users, learning materials, moderation and service operations in one controlled workspace.</p>
           </div>
-          <Button variant="secondary" onClick={() => navigate("/?app=home")}>
+          <Button variant="secondary" onClick={() => navigate("/?app=home")} className="rounded-xl border-white/10 bg-white/10 text-white hover:bg-white/15">
             {t("toHome", { defaultValue: "Exit admin panel" })}
           </Button>
         </div>
-        <div className="mt-3 h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1.5 px-3 sm:px-4 py-2 border-b border-border bg-bg-surface overflow-x-auto whitespace-nowrap">
+      <div className="mt-5 flex gap-1.5 overflow-x-auto rounded-2xl border border-[#152219]/10 bg-white p-2 dark:border-white/10 dark:bg-[#121b15]">
         {([
           { key: "stats", icon: BarChart3, label: "Statistics" },
           { key: "users", icon: Users, label: "Users" },
@@ -3347,10 +3346,10 @@ export const AdminDashboardPage: React.FC = () => {
             key={key}
             type="button"
             onClick={() => setActiveTab(key as Tab)}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-mono border transition-fast ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-fast ${
               activeTab === key
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border bg-bg-code text-text-secondary hover:border-primary/30 hover:text-text-primary"
+                ? "bg-[#17251c] text-white shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]"
+                : "text-[#6b7a70] hover:bg-[#f1f5f1] hover:text-[#142017] dark:text-[#a5b4a8] dark:hover:bg-white/[.06] dark:hover:text-[#edf3ef]"
             }`}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -3360,7 +3359,7 @@ export const AdminDashboardPage: React.FC = () => {
       </div>
 
       {}
-      <div className="flex-1 overflow-auto p-3 sm:p-4">
+      <div className="mt-5 overflow-auto">
         {}
         {activeTab === "stats" && stats && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Card className="p-4">

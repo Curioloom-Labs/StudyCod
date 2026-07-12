@@ -19,6 +19,7 @@ function ensureKatexCssLoaded(): Promise<unknown> {
 
 interface MarkdownViewProps {
   content: string;
+  variant?: "default" | "handbook";
 }
 
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
@@ -413,7 +414,8 @@ const PlainCodeBlock: React.FC<{ code: string }> = ({ code }) => {
 };
 
 export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
-  content
+  content,
+  variant = "default"
 }) => {
   const [SyntaxHighlighter, setSyntaxHighlighter] = useState<SyntaxHighlighterComponent>(null);
   const [syntaxStyle, setSyntaxStyle] = useState<SyntaxHighlighterStyle>(null);
@@ -632,12 +634,12 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     processed = processed.replace(/\\emph\{([^}]+)\}/g, "*$1*");
     return processed;
   }, [content]);
-  return <div className="prose prose-invert max-w-none font-mono
+  return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-mono prose-invert"} prose max-w-none
       prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-4 prose-pre:border-0
       prose-code:bg-bg-code prose-code:px-1.5 prose-code:py-0.5 prose-code:border prose-code:border-border prose-code:text-sm prose-code:font-mono prose-code:text-text-primary
       prose-code:before:content-[''] prose-code:after:content-['']
       prose-p:leading-relaxed prose-p:text-text-primary prose-p:text-sm
-      prose-headings:text-text-primary prose-headings:font-mono prose-headings:font-semibold
+      prose-headings:text-text-primary prose-headings:font-semibold
       prose-strong:text-text-primary prose-strong:font-semibold
       prose-ul:text-text-primary prose-ol:text-text-primary
       prose-li:text-text-primary
@@ -655,7 +657,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       [&_.katex_mathit]:!text-text-primary
       [&_.katex_main]:!text-text-primary
       [&_.katex_math]:!text-text-primary
-      [&_.katex]:!bg-transparent">
+      [&_.katex]:!bg-transparent`}>
       <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={codeComponents}>
         {processedContent}
       </ReactMarkdown>

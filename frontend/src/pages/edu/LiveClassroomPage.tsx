@@ -25,7 +25,6 @@ import { LiveCodeBoard } from "../../components/LiveCodeBoard";
 import { LivePairEditor } from "../../components/edu/LivePairEditor";
 import { RaiseHandButton, RaisedHandsBar } from "../../components/LiveRaiseHand";
 import { LessonMaterialsPanel } from "../../components/LessonMaterialsPanel";
-import { useUIMode } from "../../components/interface/UIModeProvider";
 import { BreakoutPanel } from "../../components/BreakoutPanel";
 import {
   getActiveLiveSession,
@@ -59,11 +58,10 @@ type LiveClassroomUser = { studentId?: number; userMode?: string } | null | unde
  * challenge, shared code board, raised hands), lesson materials, and breakout
  * rooms on top of the LiveKit video conference.
  */
-export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => {
+const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => {
   const { classId: classIdParam } = useParams<{ classId: string }>();
   const classId = Number(classIdParam);
   const navigate = useNavigate();
-  const isAurora = useUIMode().mode === "aurora";
 
   const isTeacher = !user?.studentId;
 
@@ -276,10 +274,10 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
   // --- Pre-join device check -------------------------------------------------
   if (phase === "prejoin" && join) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] flex-col bg-bg-base" data-lk-theme="default">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+      <div className="deep-workspace deep-workspace--live flex h-[calc(100vh-4rem)] flex-col bg-bg-base p-3 sm:p-5" data-lk-theme="default">
+        <div className="flex items-center justify-between rounded-t-[26px] border border-border px-5 py-3.5 bg-bg-surface">
           <div className="min-w-0">
-            <span className={`font-mono ${isAurora ? "text-[11px] uppercase tracking-[0.2em] text-text-muted" : "text-xs text-primary/70"}`}>{isAurora ? tr("Перевірка", "Device check") : "// device check"}</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">{tr("Перевірка", "Device check")}</span>
             <div className="mt-0.5 flex items-center gap-2">
               <Video className="h-4 w-4 shrink-0 text-primary" />
               <span className="truncate text-sm font-semibold tracking-tight text-text-primary">
@@ -290,13 +288,13 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
           <button
             type="button"
             onClick={() => void handleLeave()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-mono text-text-secondary transition-fast hover:bg-bg-hover hover:text-text-primary"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3.5 py-2 text-xs font-semibold text-text-secondary transition-fast hover:bg-bg-hover hover:text-text-primary"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             {tr("Назад", "Back")}
           </button>
         </div>
-        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-b-[26px] border-x border-b border-border bg-bg-surface/55 p-4">
           <PreJoin
             defaults={{ username: tr("Учасник", "Participant"), videoEnabled: true, audioEnabled: true }}
             onSubmit={(values) => enterRoom(values)}
@@ -313,8 +311,8 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
   // --- In room ---------------------------------------------------------------
   if (phase === "in_room" && join && choices && activeRoom) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] flex-col bg-bg-base">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+      <div className="deep-workspace deep-workspace--live flex h-[calc(100vh-4rem)] flex-col bg-bg-base p-3 sm:p-5">
+        <div className="flex items-center justify-between gap-3 rounded-t-[26px] border border-border bg-bg-surface px-5 py-3.5">
           <div className="flex min-w-0 items-center gap-2">
             <span className="relative flex h-2 w-2 shrink-0">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
@@ -323,11 +321,11 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
             <span className="truncate text-sm font-semibold tracking-tight text-text-primary">
               {join.session.title || tr("Живий урок", "Live lesson")}
             </span>
-            <span className="hidden shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.08em] text-text-muted sm:inline">
+            <span className="hidden shrink-0 rounded-full bg-bg-hover px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted sm:inline">
               {join.role === "host" ? tr("ведучий", "host") : tr("учасник", "participant")}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto">
             <button
               type="button"
               onClick={() => togglePanel("board")}
@@ -400,7 +398,7 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 overflow-hidden rounded-b-[26px] border-x border-b border-border bg-bg-surface">
           <div className="relative min-h-0 flex-1" data-lk-theme="default">
             <LiveKitRoom
               key={`${activeRoom.token}:${retryNonce}`}
@@ -534,34 +532,25 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
 
   // --- Lobby / loading / disabled / error ------------------------------------
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center bg-bg-base px-4 py-10">
+    <div className="deep-workspace deep-workspace--live flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center bg-bg-base px-4 py-10">
       <div className="w-full max-w-md">
-        {/* Terminal-style card */}
-        <div className="overflow-hidden rounded-xl border border-border bg-bg-surface shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]">
-          <div className="flex items-center gap-2 border-b border-border bg-bg-hover/40 px-4 py-2.5">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-text-muted/40" />
-              <span className="h-2.5 w-2.5 rounded-full bg-text-muted/40" />
-              <span className="h-2.5 w-2.5 rounded-full bg-text-muted/40" />
-            </span>
-            <span className="ml-2 text-[10px] font-mono uppercase tracking-[0.08em] text-text-muted">
-              {tr("живий урок", "live classroom")}
+        <div className="overflow-hidden rounded-[26px] border border-border bg-bg-surface shadow-[0_18px_55px_-32px_rgba(0,0,0,0.5)]">
+          <div className="flex items-center gap-2 border-b border-border bg-bg-hover/35 px-6 py-4">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary"><Video className="h-4 w-4" /></span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+              {tr("Живий урок", "Live classroom")}
             </span>
           </div>
 
           <div className="p-6">
-            {isAurora ? (
-              <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{tr("Урок", "Live")}</span>
-            ) : (
-              <span className="font-mono text-xs text-primary/70">// live classroom</span>
-            )}
-            <div className={`flex items-center gap-2 ${isAurora ? "mt-3" : "mt-2"}`}>
-              <Video className={`shrink-0 text-primary ${isAurora ? "h-6 w-6" : "h-5 w-5"}`} />
-              <h1 className={isAurora ? "text-2xl md:text-3xl font-semibold tracking-[-0.01em] text-text-primary" : "text-2xl font-semibold tracking-tight text-text-primary"}>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">{tr("Урок", "Live")}</span>
+            <div className="mt-3 flex items-center gap-2">
+              <Video className="h-6 w-6 shrink-0 text-primary" />
+              <h1 className="text-2xl font-semibold tracking-[-0.03em] text-text-primary md:text-3xl">
                 {tr("Живий урок", "Live classroom")}
               </h1>
             </div>
-            <div className={`mt-4 h-px bg-gradient-to-r from-primary/40 via-border to-transparent ${isAurora ? "hidden" : ""}`} />
+            <div className="mt-4 h-px bg-border" />
 
             {phase === "loading" && (
               <p className="mt-6 flex items-center gap-2 text-sm font-mono text-text-secondary">
@@ -664,5 +653,115 @@ export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user
     </div>
   );
 };
+
+const LiveClassroomPreview: React.FC = () => {
+  const navigate = useNavigate();
+  const { classId } = useParams<{ classId: string }>();
+  const [panel, setPanel] = useState<"chat" | "materials" | "code">("chat");
+  const [raised, setRaised] = useState(false);
+  const [note, setNote] = useState("");
+  const participants = ["Олена", "Марія", "Андрій", "Софія", "Данило", "Іра"];
+
+  return (
+    <div className="min-h-[calc(100dvh-72px)] bg-[#f4f6f4] px-4 py-5 text-[#17231b] dark:bg-[#09100c] dark:text-[#edf4ef] sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#65746a] hover:bg-[#e8eee9] hover:text-[#16834d] dark:text-[#a8b7ac] dark:hover:bg-white/[.06] dark:hover:text-[#72edb0]">
+            <ArrowLeft className="size-4" />
+            Python 9-Б
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#ff6b9d]/10 px-3 py-1.5 text-xs font-bold text-[#c4436b] dark:text-[#ff9abd]">
+              <span className="size-1.5 animate-pulse rounded-full bg-current" />
+              LIVE · 32:14
+            </span>
+            <button type="button" onClick={() => setRaised((value) => !value)} className={`rounded-xl px-4 py-2 text-sm font-bold ${raised ? "bg-[#ffd93d] text-[#3e3100]" : "bg-white text-[#324238] shadow-sm dark:bg-white/[.08] dark:text-white"}`}>
+              {raised ? "Руку піднято" : "Підняти руку"}
+            </button>
+          </div>
+        </header>
+
+        <section className="grid min-h-[calc(100dvh-145px)] gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <main className="flex min-h-0 flex-col overflow-hidden rounded-[28px] bg-[#101510] text-white shadow-[0_28px_70px_-45px_rgba(0,0,0,.8)]">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[.14em] text-[#7fedb2]">Live classroom</p>
+                <h1 className="truncate text-lg font-bold sm:text-xl">Цикли: від ідеї до коду</h1>
+              </div>
+              <span className="hidden rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-[#cbd8ce] sm:inline-flex">24 учні онлайн</span>
+            </div>
+
+            <div className="grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_230px]">
+              <section className="relative grid min-h-[360px] place-items-center overflow-hidden rounded-[22px] bg-[#18251c]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_15%,rgba(0,255,136,.16),transparent_36%),linear-gradient(135deg,#1d3a28,#0f1711)]" />
+                <div className="relative text-center">
+                  <span className="mx-auto grid size-24 place-items-center rounded-[30px] bg-[#f1f5f1] text-3xl font-bold text-[#147b47]">ОК</span>
+                  <h2 className="mt-5 text-3xl font-bold tracking-[-.04em]">Олена Кравець</h2>
+                  <p className="mt-2 text-sm text-[#bdd0c1]">пояснює приклад на дошці</p>
+                </div>
+                <div className="absolute bottom-4 left-4 rounded-xl bg-black/45 px-3 py-2 text-sm font-semibold backdrop-blur">Викладач</div>
+              </section>
+
+              <aside className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                {participants.slice(1).map((name, index) => (
+                  <div key={name} className="relative min-h-28 overflow-hidden rounded-2xl bg-[#202b22] p-3">
+                    <span className="grid size-11 place-items-center rounded-2xl bg-white/10 text-sm font-bold text-[#8df0bc]">{name.slice(0, 1)}</span>
+                    <div className="absolute bottom-3 left-3 right-3 truncate text-xs font-semibold text-[#dce7df]">{name}</div>
+                    {index === 1 && <span className="absolute right-3 top-3 rounded-full bg-[#ffd93d] px-2 py-0.5 text-[10px] font-bold text-[#3e3100]">рука</span>}
+                  </div>
+                ))}
+              </aside>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2 border-t border-white/10 px-4 py-3">
+              <button className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15">Мікрофон</button>
+              <button className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15"><Video className="mr-2 inline size-4" />Камера</button>
+              <button onClick={() => setPanel("materials")} className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15"><BookOpen className="mr-2 inline size-4" />Матеріали</button>
+              <button onClick={() => setPanel("code")} className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15"><Code2 className="mr-2 inline size-4" />Код</button>
+              <button className="rounded-full bg-[#d94f65] px-4 py-2 text-sm font-bold text-white"><PhoneOff className="mr-2 inline size-4" />Вийти</button>
+            </div>
+          </main>
+
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-[#19291d]/10 bg-white dark:border-white/[.09] dark:bg-[#111b14]">
+            <div className="grid grid-cols-3 gap-1 border-b border-[#19291d]/10 p-2 dark:border-white/[.08]">
+              {(["chat", "materials", "code"] as const).map((item) => <button key={item} type="button" onClick={() => setPanel(item)} className={`rounded-xl px-3 py-2 text-xs font-bold ${panel === item ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "text-[#718075] hover:bg-[#f1f4f1] dark:text-[#a6b4a9] dark:hover:bg-white/[.06]"}`}>{item === "chat" ? "Чат" : item === "materials" ? "Матеріали" : "Код"}</button>)}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto p-5">
+              {panel === "chat" && <div className="space-y-3">
+                <Message author="Олена" text="Після прикладу відкриваємо задачу «Сума парних»." />
+                <Message author="Марія" text="Можна ще раз про умову в циклі?" />
+                <Message author="Андрій" text="Я підняв руку, є питання по range()." />
+              </div>}
+              {panel === "materials" && <div>
+                <div className="flex items-center gap-2"><BookOpen className="size-5 text-[#16834d] dark:text-[#72edb0]" /><h2 className="font-bold">Контекст уроку</h2></div>
+                <p className="mt-4 text-sm leading-6 text-[#69796e] dark:text-[#a9b6ac]">Після пояснення учні самостійно розв’язують задачу й повертаються до обговорення помилок.</p>
+                <button type="button" onClick={() => navigate(`/edu/tasks/1?preview=true`)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]">Відкрити задачу <Code2 className="size-4" /></button>
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={4} placeholder="Нотатка для викладача..." className="mt-5 w-full resize-none rounded-xl bg-[#f4f7f4] p-3 text-sm outline-none ring-[#00ff88]/25 focus:ring-4 dark:bg-white/[.05]" />
+              </div>}
+              {panel === "code" && <pre className="rounded-2xl bg-[#101510] p-4 text-xs leading-6 text-[#9af2bf]">{`total = 0\nfor number in values:\n    if number % 2 == 0:\n        total += number\nprint(total)`}</pre>}
+            </div>
+
+            <div className="border-t border-[#19291d]/10 p-4 dark:border-white/[.08]">
+              <div className="flex items-center justify-between text-sm">
+                <span className="inline-flex items-center gap-2 text-[#647369] dark:text-[#a6b4a9]"><Users className="size-4" />Учасники</span>
+                <b>24</b>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+const Message: React.FC<{ author: string; text: string }> = ({ author, text }) => (
+  <div className="rounded-2xl bg-[#f5f8f5] p-3 dark:bg-white/[.045]">
+    <div className="text-xs font-bold text-[#16834d] dark:text-[#72edb0]">{author}</div>
+    <div className="mt-1 text-sm leading-6 text-[#425149] dark:text-[#dbe6de]">{text}</div>
+  </div>
+);
+
+export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true" ? <LiveClassroomPreview /> : <LiveClassroomRuntime user={user} />;
 
 export default LiveClassroomPage;

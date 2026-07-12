@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "../../components/ui/Button";
@@ -10,21 +10,25 @@ import { getDocsSections, type DocsAudience, type DocsSectionId } from "../../co
 import { ArrowLeft, BookOpen, Search, Sparkles } from "lucide-react";
 import { OnboardingOverlay } from "../../components/onboarding/OnboardingOverlay";
 import { fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { DocsExperience } from "./DocsExperience";
 
 export const DocsPage: React.FC = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const prefersReducedMotion = useReducedMotion();
   const isAurora = useUIMode().mode === "aurora";
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const { "*": docsPath = "" } = useParams();
   const [query, setQuery] = useState("");
   const [audience, setAudience] = useState<DocsAudience>("ALL");
   const [showTour, setShowTour] = useState(false);
   const isEn = i18n.language?.toLowerCase().startsWith("en");
   const tx = (uk: string, en: string) => isEn ? en : uk;
-  const selectedId = searchParams.get("id") as DocsSectionId | null || "welcome";
+  const routeId = docsPath.split("/").filter(Boolean)[0] as DocsSectionId | undefined;
+  const legacyId = searchParams.get("id") as DocsSectionId | null;
+  const selectedId = routeId || legacyId || "welcome";
   const sections = useMemo(() => getDocsSections(i18n.language), [i18n.language]);
-  const openSection = (id: DocsSectionId) => setSearchParams({ id }, { replace: true });
+  const openSection = (id: DocsSectionId) => navigate(`/docs/${id}`);
 
   const newbieTracks = useMemo(() => [
     {
@@ -67,6 +71,28 @@ export const DocsPage: React.FC = () => {
   }, [query, audience, sections]);
 
   const selected = useMemo(() => sections.find(s => s.id === selectedId) || sections[0], [selectedId, sections]);
+
+  return <>
+    <DocsExperience
+      tr={tx}
+      query={query}
+      audience={audience}
+      sections={sections}
+      filtered={filtered}
+      selected={selected}
+      isDetail={Boolean(routeId || legacyId)}
+      setQuery={setQuery}
+      setAudience={setAudience}
+      openSection={openSection}
+      onBack={() => navigate("/docs")}
+      onTour={() => setShowTour(true)}
+      onCopyLink={() => {
+        navigator.clipboard?.writeText(`${window.location.origin}/docs/${selected.id}`);
+        showToast({ type: "success", message: t("linkCopied") });
+      }}
+    />
+    <OnboardingOverlay open={showTour} onClose={() => setShowTour(false)} mode="auto" persist={false} />
+  </>;
 
   return (
     <div className="min-h-full bg-bg-base text-text-primary flex flex-col">

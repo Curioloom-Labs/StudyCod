@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
@@ -19,6 +19,7 @@ import {
   type BlogPostListItem,
   type BlogPostDetail
 } from "../../lib/api/blog";
+import { BlogFeedExperience, BlogPostExperience } from "./BlogExperience";
 
 type Tr = (uk: string, en: string) => string;
 
@@ -126,6 +127,18 @@ export const BlogPage: React.FC = () => {
       cancelled = true;
     };
   }, [category, tagParam]);
+
+  return <BlogFeedExperience
+    tr={tr}
+    locale={locale}
+    tagParam={tagParam}
+    posts={posts}
+    loading={loading}
+    error={error}
+    category={category}
+    setCategory={setCategory}
+    isAdmin={isAdmin}
+  />;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
@@ -280,85 +293,13 @@ export const BlogPostPage: React.FC = () => {
     };
   }, [slug]);
 
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <Button variant="ghost" size="sm" onClick={() => navigate("/blog")} className="mb-4">
-        <ArrowLeft className="h-4 w-4" />
-        {tr("До всіх записів", "Back to all posts")}
-      </Button>
-
-      {loading ? (
-        <p className="py-12 text-center text-sm text-text-secondary">{tr("Завантаження…", "Loading…")}</p>
-      ) : error ? (
-        <p className="py-12 text-center text-sm text-rose-500">{error}</p>
-      ) : post ? (
-        <motion.article
-          initial={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
-          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: easeOutQuint }}
-        >
-          {post.coverUrl ? (
-            <img src={post.coverUrl} alt="" className="mb-6 max-h-80 w-full rounded-xl border border-border object-cover" />
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-2">
-            <CategoryBadge category={post.category} tr={tr} />
-            {post.version ? <span className="font-mono text-xs text-text-secondary">{post.version}</span> : null}
-            {post.pinned ? <Pin className="h-4 w-4 text-primary" /> : null}
-          </div>
-          <h1 className="mt-3 text-2xl font-mono font-semibold text-text-primary">{post.title}</h1>
-
-          <div className="mt-3">
-            <AuthorRow
-              name={post.author}
-              avatar={post.authorAvatar}
-              meta={`${formatDate(post.publishedAt, locale)} · ${post.readingMinutes} ${tr("хв читання", "min read")}`}
-            />
-          </div>
-
-          {post.tags.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {post.tags.map((t) => (
-                <button
-                  key={t.slug}
-                  onClick={() => navigate(`/blog/tag/${t.slug}`)}
-                  className="rounded-full border border-border px-2 py-0.5 text-xs font-mono text-text-secondary hover:border-primary/40 hover:text-primary"
-                >
-                  #{t.name}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="mt-6 border-t border-border pt-6">
-            <MarkdownView content={post.content} />
-          </div>
-
-          <div className="mt-8 border-t border-border pt-4">
-            <ReactionBar targetType="POST" targetId={post.id} initial={post.reactions} />
-          </div>
-
-          {post.related.length > 0 ? (
-            <div className="mt-10">
-              <h2 className="text-sm font-mono font-semibold text-text-primary">{tr("Читайте також", "Read also")}</h2>
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                {post.related.map((r) => (
-                  <button
-                    key={r.slug}
-                    onClick={() => navigate(`/blog/${r.slug}`)}
-                    className="overflow-hidden rounded-lg border border-border bg-surface text-left transition hover:border-primary/40"
-                  >
-                    {r.coverUrl ? <img src={r.coverUrl} alt="" className="h-20 w-full object-cover" loading="lazy" /> : null}
-                    <span className="block p-2 text-xs font-medium text-text-primary line-clamp-2">{r.title}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <CommentsSection slug={post.slug} isAdmin={isAdmin} initialLocked={post.commentsLocked} />
-        </motion.article>
-      ) : null}
-    </div>
-  );
+  return <BlogPostExperience
+    tr={tr}
+    locale={locale}
+    slug={slug}
+    post={post}
+    loading={loading}
+    error={error}
+    isAdmin={isAdmin}
+  />;
 };

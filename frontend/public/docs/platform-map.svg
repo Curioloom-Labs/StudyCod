@@ -1,0 +1,22 @@
+<svg width="1200" height="680" viewBox="0 0 1200 680" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="680" rx="36" fill="#101713"/>
+  <rect x="44" y="40" width="1112" height="600" rx="28" fill="#151D18" stroke="#FFFFFF" stroke-opacity=".09"/>
+  <circle cx="82" cy="78" r="10" fill="#00FF88"/><text x="106" y="86" fill="#F2F7F3" font-family="Arial" font-size="24" font-weight="700">StudyCod</text>
+  <rect x="72" y="124" width="238" height="480" rx="22" fill="#0D130F"/>
+  <text x="96" y="160" fill="#7F8D84" font-family="Arial" font-size="13" font-weight="700">ОСНОВНІ ЗОНИ</text>
+  <g font-family="Arial" font-size="18" font-weight="600">
+    <rect x="88" y="184" width="206" height="56" rx="14" fill="#00FF88" fill-opacity=".13"/><circle cx="116" cy="212" r="12" fill="#00FF88"/><text x="142" y="219" fill="#EAF7EF">Навчання</text>
+    <circle cx="116" cy="278" r="12" fill="#FF8C00"/><text x="142" y="285" fill="#BCC8C0">Практика</text>
+    <circle cx="116" cy="344" r="12" fill="#FFD93D"/><text x="142" y="351" fill="#BCC8C0">Результати</text>
+    <circle cx="116" cy="410" r="12" fill="#FF6B9D"/><text x="142" y="417" fill="#BCC8C0">Клас</text>
+    <circle cx="116" cy="476" r="12" fill="#7D8B82"/><text x="142" y="483" fill="#BCC8C0">Допомога</text>
+  </g>
+  <text x="354" y="158" fill="#F2F7F3" font-family="Arial" font-size="34" font-weight="700">Ваш навчальний простір</text>
+  <text x="354" y="190" fill="#8F9D94" font-family="Arial" font-size="16">Набір розділів адаптується до ролі й активного режиму</text>
+  <g font-family="Arial">
+    <rect x="354" y="226" width="350" height="150" rx="20" fill="#1D2720" stroke="#00FF88" stroke-opacity=".18"/><rect x="378" y="250" width="44" height="44" rx="12" fill="#00FF88" fill-opacity=".14"/><text x="390" y="279" fill="#00FF88" font-size="22" font-weight="700">1</text><text x="446" y="272" fill="#F2F7F3" font-size="20" font-weight="700">Уроки й курси</text><text x="378" y="326" fill="#93A198" font-size="15">Матеріали, теми, контрольні</text><text x="378" y="349" fill="#93A198" font-size="15">та навчальна послідовність</text>
+    <rect x="728" y="226" width="380" height="150" rx="20" fill="#1D2720"/><rect x="752" y="250" width="44" height="44" rx="12" fill="#FF8C00" fill-opacity=".14"/><text x="764" y="279" fill="#FF9F2E" font-size="22" font-weight="700">2</text><text x="820" y="272" fill="#F2F7F3" font-size="20" font-weight="700">Задачі й код</text><text x="752" y="326" fill="#93A198" font-size="15">Каталог, редактор, запуск</text><text x="752" y="349" fill="#93A198" font-size="15">і результат перевірки</text>
+    <rect x="354" y="400" width="350" height="150" rx="20" fill="#1D2720"/><rect x="378" y="424" width="44" height="44" rx="12" fill="#FFD93D" fill-opacity=".14"/><text x="390" y="453" fill="#FFE36C" font-size="22" font-weight="700">3</text><text x="446" y="446" fill="#F2F7F3" font-size="20" font-weight="700">Прогрес</text><text x="378" y="500" fill="#93A198" font-size="15">Оцінки, історія, досягнення</text><text x="378" y="523" fill="#93A198" font-size="15">та сертифікати</text>
+    <rect x="728" y="400" width="380" height="150" rx="20" fill="#1D2720"/><rect x="752" y="424" width="44" height="44" rx="12" fill="#FF6B9D" fill-opacity=".14"/><text x="764" y="453" fill="#FF8AB2" font-size="22" font-weight="700">4</text><text x="820" y="446" fill="#F2F7F3" font-size="20" font-weight="700">EDU-простір</text><text x="752" y="500" fill="#93A198" font-size="15">Клас, журнал, календар</text><text x="752" y="523" fill="#93A198" font-size="15">і live classroom</text>
+  </g>
+</svg>

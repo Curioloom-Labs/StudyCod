@@ -208,7 +208,7 @@ export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenera
             <div className="min-w-0">
               <div className="text-sm font-mono text-text-primary truncate">
                 {tr("Генерую нове завдання", "Generating a new task")}
-                <span className="terminal-dots" />
+                <span aria-hidden="true" className="inline-flex gap-1"><i className="size-1 rounded-full bg-current opacity-50" /><i className="size-1 rounded-full bg-current opacity-70" /><i className="size-1 rounded-full bg-current" /></span>
               </div>
               <div className="text-[11px] font-mono text-text-muted">
                 {tr("Минає часу", "Elapsed time")}: {elapsedSeconds}{tr(" с", "s")}
@@ -234,7 +234,7 @@ export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenera
         <div className="relative px-5 py-4 space-y-4">
           <div className="text-xs font-mono text-text-secondary">
             <span className="text-text-muted">$</span> {currentStepLabel}
-            <span className="terminal-dots" />
+            <span aria-hidden="true" className="inline-flex gap-1"><i className="size-1 rounded-full bg-current opacity-50" /><i className="size-1 rounded-full bg-current opacity-70" /><i className="size-1 rounded-full bg-current" /></span>
           </div>
 
           <div className="grid grid-cols-5 gap-1">

@@ -36,12 +36,20 @@ import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezon
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import type { ResumeState } from "../../lib/resumeState";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "../../lib/resumeState";
-import { UIModeSwitch } from "../../components/ui/UIModeSwitch";
+import { PremiumDashboard } from "./PremiumPersonalExperience";
 interface Props {
   user: User;
   onNavigate: (page: "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin") => void;
   suppressFocusAutoResume?: boolean;
 }
+
+const PREVIEW_TASKS: Task[] = [
+  { id: -11, title: "Колекції та зрізи", subtitle: "Збери невеликий аналізатор витрат із list і dictionary.", topicTitle: "Python · колекції", descriptionMarkdown: "", starterCode: "", userCode: "", status: "OPEN", lessonInTopic: 3, repeatAttempt: 0, kind: "TOPIC", createdAt: "2026-07-10T09:30:00.000Z", language: "PYTHON" },
+  { id: -12, title: "Функції з характером", subtitle: "", topicTitle: "Python · функції", descriptionMarkdown: "", starterCode: "", userCode: "", status: "GRADED", lessonInTopic: 2, repeatAttempt: 0, kind: "TOPIC", createdAt: "2026-07-09T12:00:00.000Z", language: "PYTHON" },
+  { id: -13, title: "Пошук у тексті", subtitle: "", topicTitle: "Python · рядки", descriptionMarkdown: "", starterCode: "", userCode: "", status: "SUBMITTED", lessonInTopic: 4, repeatAttempt: 0, kind: "TOPIC", createdAt: "2026-07-08T16:45:00.000Z", language: "PYTHON" },
+  { id: -14, title: "Маленька система бронювання", subtitle: "", topicTitle: "Практика", descriptionMarkdown: "", starterCode: "", userCode: "", status: "OPEN", lessonInTopic: 5, repeatAttempt: 0, kind: "CONTROL", createdAt: "2026-07-07T14:10:00.000Z", language: "PYTHON" },
+];
+
 export const HomePage: React.FC<Props> = ({
   user,
   onNavigate,
@@ -57,9 +65,10 @@ export const HomePage: React.FC<Props> = ({
   const isEducational = user.userMode === "EDUCATIONAL";
   const isStudent = !!user.studentId;
   const isTeacher = isEducational && !isStudent;
+  const isDesignPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
   const [resume, setResume] = useState<ResumeState | null>(() => loadResumeState(user.id));
   const [lastTask, setLastTask] = useState<Task | null>(null);
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [allTasks, setAllTasks] = useState<Task[]>(() => isDesignPreview ? PREVIEW_TASKS : []);
   const [classes, setClasses] = useState<Class[]>([]);
   const [studentLessons, setStudentLessons] = useState<Lesson[]>([]);
   const [studentGrades, setStudentGrades] = useState<Grade[]>([]);
@@ -90,6 +99,12 @@ export const HomePage: React.FC<Props> = ({
           setAllTasks(tasks);
           if (tasks.length) setLastTask(tasks[0]);
         })
+        .catch(() => {
+          if (isDesignPreview) {
+            setAllTasks(PREVIEW_TASKS);
+            setLastTask(PREVIEW_TASKS[0]);
+          }
+        })
         .finally(() => setLoading(false));
     } else if (isTeacher) {
       setLoading(true);
@@ -102,7 +117,7 @@ export const HomePage: React.FC<Props> = ({
         setStudentSummaryGrades(gradesData.summaryGrades || []);
       }).finally(() => setLoading(false));
     }
-  }, [isEducational, isStudent, isTeacher, user.studentId]);
+  }, [isEducational, isStudent, isTeacher, user.studentId, isDesignPreview]);
   const totalStudents = classes.reduce((sum, cls) => sum + cls.studentsCount, 0);
   const activeLessons = useMemo(() => {
     if (!studentLessons.length) return 0;
@@ -305,6 +320,22 @@ export const HomePage: React.FC<Props> = ({
 
     return studentLessons.find(isActionable) ?? studentLessons[0] ?? null;
   }, [isEducational, isStudent, studentLessons]);
+
+  // Personal learning now has its own calm, product-first workspace instead of
+  // inheriting the old terminal home. Educational dashboards keep their
+  // specialised flows below.
+  if (!isEducational) {
+    return <PremiumDashboard
+      user={user}
+      tasks={allTasks}
+      loading={loading}
+      onNavigate={onNavigate}
+      onOpenTask={(task) => {
+        sessionStorage.setItem("openTaskId", String(task.id));
+        startTransition(() => onNavigate("tasks"));
+      }}
+    />;
+  }
 
   if (ui.mode === "focus") {
     if (focusResumeActive) {
@@ -559,7 +590,6 @@ export const HomePage: React.FC<Props> = ({
             ))}
           </nav>
 
-          <UIModeSwitch className="mt-6" />
 
           <div className="mt-9">
             {stream.map((it) => (
