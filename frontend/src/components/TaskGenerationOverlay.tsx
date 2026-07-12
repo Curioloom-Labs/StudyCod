@@ -193,112 +193,101 @@ export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenera
 
   return (
     <div
-      className="fixed inset-0 z-[999] flex items-center justify-center bg-bg-base/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-[#07100a]/70 p-4 backdrop-blur-xl"
       role="status"
       aria-live="polite"
       aria-label={tr("Генерація завдання", "Task generation")}
     >
-      <div className="relative w-[min(520px,calc(100vw-32px))] overflow-hidden border border-border bg-bg-surface shadow-2xl">
-        {/* Header */}
-        <div className="relative px-5 pt-5 pb-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 border border-border bg-bg-code flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-mono text-text-primary truncate">
-                {tr("Генерую нове завдання", "Generating a new task")}
-                <span aria-hidden="true" className="inline-flex gap-1"><i className="size-1 rounded-full bg-current opacity-50" /><i className="size-1 rounded-full bg-current opacity-70" /><i className="size-1 rounded-full bg-current" /></span>
+      <div className="relative w-[min(760px,calc(100vw-28px))] overflow-hidden rounded-[34px] border border-white/10 bg-[#f7f9f6] text-[#142017] shadow-[0_35px_110px_rgba(0,0,0,.38)] dark:bg-[#101812] dark:text-[#eef6ef]">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#00ff88]/16 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-64 w-64 rounded-full bg-[#ff8c00]/12 blur-3xl" />
+
+        <div className="relative grid gap-0 lg:grid-cols-[1fr_300px]">
+          <section className="p-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-5">
+              <div className="flex min-w-0 items-start gap-4">
+                <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#17251c] text-[#6ef1af] shadow-[0_18px_45px_rgba(13,42,23,.22)] dark:bg-[#edf6ef] dark:text-[#0d2115]">
+                  <Sparkles className="size-6" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[.16em] text-[#14864e] dark:text-[#72edb0]">
+                    {tr("Створюємо практику", "Preparing practice")}
+                  </p>
+                  <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em] sm:text-4xl">
+                    {tr("Підбираю нове завдання", "Crafting a new task")}
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-[#637268] dark:text-[#a9b8ad]">
+                    {tr("Синхронізую тему, рівень і формат задачі. Щойно все буде готово — відкрию робочий простір автоматично.", "Syncing topic, level and task format. Once it is ready, the workspace opens automatically.")}
+                  </p>
+                </div>
               </div>
-              <div className="text-[11px] font-mono text-text-muted">
-                {tr("Минає часу", "Elapsed time")}: {elapsedSeconds}{tr(" с", "s")}
+
+              <div className="rounded-2xl bg-white px-4 py-3 text-right shadow-sm ring-1 ring-[#142017]/10 dark:bg-white/[.06] dark:ring-white/10">
+                <div className="text-[11px] font-bold uppercase tracking-[.14em] text-[#7a887e] dark:text-[#9eaca2]">{tr("Час", "Time")}</div>
+                <div className="mt-1 text-2xl font-black tracking-[-.05em]">{elapsedSeconds}{tr(" с", "s")}</div>
               </div>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <div className="w-2 h-2 rounded-full bg-secondary animate-pulse [animation-delay:150ms]" />
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse [animation-delay:300ms]" />
-            </div>
-          </div>
 
-          {/* Shimmer bar */}
-          <div className="relative mt-4 h-2 overflow-hidden border border-border bg-bg-code">
-            <div
-              className={`absolute inset-y-0 left-0 ${activePhase === "error" ? "bg-accent-error/70" : "bg-primary/70"} transition-all duration-500`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-
-        {/* “Terminal” body */}
-        <div className="relative px-5 py-4 space-y-4">
-          <div className="text-xs font-mono text-text-secondary">
-            <span className="text-text-muted">$</span> {currentStepLabel}
-            <span aria-hidden="true" className="inline-flex gap-1"><i className="size-1 rounded-full bg-current opacity-50" /><i className="size-1 rounded-full bg-current opacity-70" /><i className="size-1 rounded-full bg-current" /></span>
-          </div>
-
-          <div className="grid grid-cols-5 gap-1">
-            {PHASE_ORDER.map((step, idx) => {
-              const done = activePhase !== "error" && idx < activePhaseIndex;
-              const current = activePhase === step;
-              return (
+            <div className="mt-8">
+              <div className="mb-3 flex items-center justify-between gap-3 text-sm">
+                <span className="font-bold text-[#25342a] dark:text-[#eaf4ed]">{currentStepLabel}</span>
+                <span className="font-black text-[#14864e] dark:text-[#72edb0]">{progressPercent}%</span>
+              </div>
+              <div className="h-3 overflow-hidden rounded-full bg-[#e2e9e3] dark:bg-white/[.08]">
                 <div
-                  key={step}
-                  className={`h-1.5 border ${current ? "border-primary/70 bg-primary/40" : done ? "border-primary/40 bg-primary/25" : "border-border bg-bg-code"}`}
-                  aria-hidden
+                  className={`h-full rounded-full ${activePhase === "error" ? "bg-[#ff6b9d]" : "bg-[#00d978]"} transition-all duration-700 ease-out`}
+                  style={{ width: `${progressPercent}%` }}
                 />
-              );
-            })}
-          </div>
+              </div>
 
-          <div className="rounded-md border border-border bg-bg-code/80 px-3 py-2">
-            <div className="mb-1 flex items-center gap-2 text-[11px] font-mono text-text-secondary">
-              <Lightbulb className="w-3.5 h-3.5 text-primary" />
-              {tr("Поки чекаємо", "While we wait")}
+              <div className="mt-4 grid gap-2 sm:grid-cols-5">
+                {PHASE_ORDER.map((step, idx) => {
+                  const done = activePhase !== "error" && idx < activePhaseIndex;
+                  const current = activePhase === step;
+                  return (
+                    <div key={step} className={`rounded-2xl px-3 py-3 transition ${current ? "bg-[#17251c] text-white shadow-[0_14px_34px_rgba(16,45,25,.18)] dark:bg-[#edf6ef] dark:text-[#0d2115]" : done ? "bg-[#e4f7ea] text-[#16623d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#7a887e] ring-1 ring-[#142017]/8 dark:bg-white/[.045] dark:text-[#9eaca2] dark:ring-white/8"}`}>
+                      <div className="text-[11px] font-black">{String(idx + 1).padStart(2, "0")}</div>
+                      <div className="mt-1 truncate text-xs font-bold">{phaseSteps[step]}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="text-xs text-text-primary leading-relaxed">{activeTip}</div>
-          </div>
+
+            <div className="mt-6 rounded-[26px] border border-[#142017]/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[.045]">
+              <div className="flex items-start gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#fff4dd] text-[#d87500] dark:bg-[#ff8c00]/12 dark:text-[#ffbd73]">
+                  <Lightbulb className="size-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[.14em] text-[#d87500] dark:text-[#ffbd73]">{tr("Поки готується", "While it loads")}</p>
+                  <p className="mt-2 text-sm leading-6 text-[#35443a] dark:text-[#d9e5dc]">{activeTip}</p>
+                </div>
+              </div>
+            </div>
+          </section>
 
           {challenge ? (
-            <div className="rounded-md border border-border bg-bg-code/80 px-3 py-2">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="text-[11px] font-mono text-text-secondary">
-                  {tr("Міні-ігри", "Mini games")}
+            <aside className="relative border-t border-[#142017]/10 bg-white/72 p-5 dark:border-white/10 dark:bg-white/[.035] lg:border-l lg:border-t-0">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[.14em] text-[#14864e] dark:text-[#72edb0]">{tr("Коротка пауза", "Quick break")}</p>
+                  <h3 className="mt-1 text-xl font-black tracking-[-.04em]">{miniGameMode === "quiz" ? tr("Перевір себе", "Check yourself") : tr("Розімни реакцію", "Warm up reflexes")}</h3>
                 </div>
-                <div className="inline-flex items-center gap-1 rounded border border-border p-1">
-                  <button
-                    type="button"
-                    className={`rounded px-2 py-1 text-[10px] font-mono transition-fast ${miniGameMode === "quiz" ? "bg-primary/20 text-text-primary border border-primary/40" : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
-                    onClick={() => setMiniGameMode("quiz")}
-                  >
+                <div className="grid grid-cols-2 rounded-2xl bg-[#edf3ed] p-1 dark:bg-white/[.06]">
+                  <button type="button" className={`rounded-xl px-3 py-2 text-xs font-black transition ${miniGameMode === "quiz" ? "bg-white text-[#142017] shadow-sm dark:bg-[#edf6ef] dark:text-[#0d2115]" : "text-[#748278] dark:text-[#a4b2a8]"}`} onClick={() => setMiniGameMode("quiz")}>
                     {tr("Квіз", "Quiz")}
                   </button>
-                  <button
-                    type="button"
-                    className={`rounded px-2 py-1 text-[10px] font-mono transition-fast ${miniGameMode === "reflex" ? "bg-primary/20 text-text-primary border border-primary/40" : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
-                    onClick={() => setMiniGameMode("reflex")}
-                  >
-                    {tr("Реакція", "Reflex")}
+                  <button type="button" className={`rounded-xl px-3 py-2 text-xs font-black transition ${miniGameMode === "reflex" ? "bg-white text-[#142017] shadow-sm dark:bg-[#edf6ef] dark:text-[#0d2115]" : "text-[#748278] dark:text-[#a4b2a8]"}`} onClick={() => setMiniGameMode("reflex")}>
+                    {tr("Ціль", "Target")}
                   </button>
                 </div>
               </div>
 
               {miniGameMode === "quiz" ? (
-                <>
-                  <div className="mb-2 flex items-center justify-end">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
-                      onClick={nextChallenge}
-                    >
-                      <RefreshCcw className="w-3 h-3" />
-                      {tr("Інше питання", "Another question")}
-                    </button>
-                  </div>
-
-                  <div className="text-xs text-text-primary mb-2">{challenge.question}</div>
-
-                  <div className="flex flex-wrap gap-2">
+                <div className="mt-6">
+                  <p className="text-sm font-bold leading-6 text-[#24342a] dark:text-[#e7f1ea]">{challenge.question}</p>
+                  <div className="mt-4 grid gap-2">
                     {challenge.options.map((option, idx) => {
                       const selected = selectedOption === idx;
                       const correct = selectedOption !== null && idx === challenge.correctIndex;
@@ -308,14 +297,14 @@ export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenera
                           key={`${challengeIndex}-${idx}-${option}`}
                           type="button"
                           onClick={() => setSelectedOption(idx)}
-                          className={`rounded border px-2 py-1 text-xs transition-fast ${
+                          className={`rounded-2xl border px-4 py-3 text-left text-sm font-bold transition ${
                             correct
-                              ? "border-accent-success/70 bg-accent-success/10 text-text-primary"
+                              ? "border-[#00d978]/50 bg-[#e5f8eb] text-[#14613b] dark:bg-[#00ff88]/10 dark:text-[#72edb0]"
                               : wrongSelected
-                                ? "border-accent-error/70 bg-accent-error/10 text-text-primary"
+                                ? "border-[#ff6b9d]/50 bg-[#fff0f5] text-[#b33261] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abc]"
                                 : selected
-                                  ? "border-primary/60 bg-primary/10 text-text-primary"
-                                  : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+                                  ? "border-[#00d978]/40 bg-[#eff8f1] text-[#142017] dark:bg-[#00ff88]/8 dark:text-[#eef6ef]"
+                                  : "border-[#142017]/10 bg-[#f7faf6] text-[#526157] hover:border-[#00d978]/30 hover:bg-white dark:border-white/10 dark:bg-white/[.045] dark:text-[#c5d3c9] dark:hover:bg-white/[.07]"
                           }`}
                         >
                           {option}
@@ -325,65 +314,52 @@ export function TaskGenerationOverlay(props: { open: boolean; phase?: TaskGenera
                   </div>
 
                   {answeredCorrectly !== null ? (
-                    <div className={`mt-2 text-[11px] font-mono ${answeredCorrectly ? "text-accent-success" : "text-accent-warn"}`}>
+                    <div className={`mt-4 rounded-2xl px-4 py-3 text-sm font-bold leading-6 ${answeredCorrectly ? "bg-[#e5f8eb] text-[#14613b] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#fff6dc] text-[#9a6100] dark:bg-[#ff8c00]/12 dark:text-[#ffc276]"}`}>
                       {answeredCorrectly ? challenge.successText : challenge.failText}
                     </div>
                   ) : null}
-                </>
+
+                  <button type="button" className="mt-4 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-black text-[#14864e] transition hover:bg-[#e8f6ed] dark:text-[#72edb0] dark:hover:bg-white/[.06]" onClick={nextChallenge}>
+                    <RefreshCcw className="size-4" />
+                    {tr("Інше питання", "Another question")}
+                  </button>
+                </div>
               ) : (
-                <>
-                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-text-secondary">
-                    <span>{tr("Час", "Time")}: {reflexTimeLeft}{tr(" с", "s")}</span>
-                    <span>{tr("Очки", "Score")}: {reflexScore}</span>
-                    <span>{tr("Рекорд", "Best")}: {Math.max(reflexBest, reflexScore)}</span>
+                <div className="mt-6">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-2xl bg-[#f1f5f1] px-3 py-3 dark:bg-white/[.05]"><div className="text-[10px] font-black uppercase tracking-[.12em] text-[#7a887e]">{tr("Час", "Time")}</div><b className="mt-1 block text-lg">{reflexTimeLeft}{tr(" с", "s")}</b></div>
+                    <div className="rounded-2xl bg-[#f1f5f1] px-3 py-3 dark:bg-white/[.05]"><div className="text-[10px] font-black uppercase tracking-[.12em] text-[#7a887e]">{tr("Очки", "Score")}</div><b className="mt-1 block text-lg">{reflexScore}</b></div>
+                    <div className="rounded-2xl bg-[#f1f5f1] px-3 py-3 dark:bg-white/[.05]"><div className="text-[10px] font-black uppercase tracking-[.12em] text-[#7a887e]">{tr("Рекорд", "Best")}</div><b className="mt-1 block text-lg">{Math.max(reflexBest, reflexScore)}</b></div>
                   </div>
 
-                  <div className="relative h-28 rounded border border-border bg-bg-base/70 overflow-hidden">
+                  <div className="relative mt-4 h-44 overflow-hidden rounded-[26px] bg-[#edf3ed] ring-1 ring-[#142017]/8 dark:bg-[#0c130f] dark:ring-white/10">
                     {reflexTimeLeft > 0 ? (
                       <button
                         type="button"
                         onClick={handleReflexHit}
-                        className="absolute w-11 h-11 rounded-full border border-primary/60 bg-primary/20 text-lg flex items-center justify-center hover:scale-110 transition-fast"
+                        className="absolute grid size-12 place-items-center rounded-full bg-[#00ff88] text-xl text-[#061d10] shadow-[0_14px_30px_rgba(0,217,120,.24)] transition hover:scale-110"
                         style={{ left: `${reflexTargetPos.x}%`, top: `${reflexTargetPos.y}%`, transform: "translate(-50%, -50%)" }}
                         aria-label={tr("Натисни ціль", "Hit the target")}
                       >
                         🎯
                       </button>
                     ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center px-3">
-                        <div className="text-xs font-mono text-text-primary">
-                          {tr("Раунд завершено", "Round complete")}: {reflexScore}
-                        </div>
-                        <div className="text-[11px] font-mono text-text-secondary">{reflexBadge}</div>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center px-5 text-center">
+                        <div className="text-lg font-black">{tr("Раунд завершено", "Round complete")}: {reflexScore}</div>
+                        <div className="mt-2 text-sm font-bold text-[#66756b] dark:text-[#aab7ad]">{reflexBadge}</div>
                       </div>
                     )}
                   </div>
 
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="text-[11px] text-text-secondary">
-                      {tr("Клікай по мішені, поки не вийшов час.", "Click the target before time runs out.")}
-                    </div>
-                    {reflexTimeLeft > 0 ? (
-                      <button
-                        type="button"
-                        onClick={moveReflexTarget}
-                        className="rounded border border-border px-2 py-1 text-[10px] font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
-                      >
-                        {tr("Перемістити", "Shuffle")}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={restartReflex}
-                        className="rounded border border-border px-2 py-1 text-[10px] font-mono text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
-                      >
-                        {tr("Ще раунд", "New round")}
-                      </button>
-                    )}
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <p className="text-xs leading-5 text-[#66756b] dark:text-[#aab7ad]">{tr("Натискай ціль, поки задача збирається.", "Hit the target while the task is being prepared.")}</p>
+                    <button type="button" onClick={reflexTimeLeft > 0 ? moveReflexTarget : restartReflex} className="shrink-0 rounded-xl bg-[#17251c] px-3 py-2 text-xs font-black text-white dark:bg-[#edf6ef] dark:text-[#0d2115]">
+                      {reflexTimeLeft > 0 ? tr("Змістити", "Shuffle") : tr("Ще раз", "Retry")}
+                    </button>
                   </div>
-                </>
+                </div>
               )}
-            </div>
+            </aside>
           ) : null}
         </div>
       </div>
