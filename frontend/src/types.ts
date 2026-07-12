@@ -77,6 +77,8 @@ export interface PublicProfile {
   recentSolved: Array<{
     id: number;
     title: string;
+    /** Normalised client timestamp; sourced from lastCheckedAt by the API client. */
+    createdAt: string;
     problemCode: string | null;
     slug: string | null;
     lang: CourseLanguage;
@@ -97,6 +99,7 @@ export interface DifusRule {
 export type IadRule = DifusRule;
 
 export interface DifusEvent {
+  id?: number;
   gradeId: number;
   taskId: number;
   taskTitle: string;

@@ -2,118 +2,39 @@ import React from "react";
 import clsx from "classnames";
 import { motion } from "framer-motion";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
-import { useUIMode } from "../interface/UIModeProvider";
 
 export type PageHeroStat = {
   value: React.ReactNode;
   label: string;
-  /** Colours the number; defaults to primary text. */
   tone?: "default" | "warn" | "error" | "success";
 };
 
 type PageHeroProps = {
-  /** Code-style eyebrow shown in classic/focus/nova, e.g. "// class". */
+  /** Kept for call-site compatibility; rendered as a single product eyebrow. */
   eyebrowClassic: string;
-  /** Calm editorial eyebrow shown in Aurora, e.g. "Class". */
-  eyebrowAurora: string;
+  eyebrowAurora?: string;
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
   stats?: PageHeroStat[];
-  /** Tailwind max-w token (without the `max-w-` prefix). */
   maxWidth?: "3xl" | "4xl" | "5xl" | "6xl" | "7xl";
   className?: string;
 };
 
-const toneClass: Record<NonNullable<PageHeroStat["tone"]>, string> = {
-  default: "text-text-primary",
-  warn: "text-accent-warning",
-  error: "text-accent-error",
-  success: "text-accent-success"
+const tone: Record<NonNullable<PageHeroStat["tone"]>, string> = {
+  default: "text-[#17231b] dark:text-[#edf4ef]",
+  warn: "text-[#c56b00] dark:text-[#ffb65c]",
+  error: "text-[#cf4e72] dark:text-[#ff9abb]",
+  success: "text-[#147b47] dark:text-[#71edaf]",
 };
 
-const toneText: Record<NonNullable<PageHeroStat["tone"]>, string> = {
-  default: "text-text-secondary",
-  warn: "text-accent-warning",
-  error: "text-accent-error",
-  success: "text-accent-success"
-};
-
-// Shared page header. Aurora is laconic by design: calm eyebrow, a moderate
-// title (no display-size), and stats rendered as one quiet prose line (not a
-// big-number grid) — matching the command-canvas language. Classic/focus/nova
-// keep the original terminal styling with big inline numbers.
-export const PageHero: React.FC<PageHeroProps> = ({
-  eyebrowClassic,
-  eyebrowAurora,
-  title,
-  subtitle,
-  actions,
-  stats,
-  maxWidth = "6xl",
-  className
-}) => {
-  const isAurora = useUIMode().mode === "aurora";
-  const maxWidthClass =
-    maxWidth === "7xl" ? "max-w-7xl"
-    : maxWidth === "6xl" ? "max-w-6xl"
-    : maxWidth === "5xl" ? "max-w-5xl"
-    : maxWidth === "4xl" ? "max-w-4xl"
-    : "max-w-3xl";
-
-  return (
-    <>
-      <div className={clsx("px-4 md:px-8 mx-auto w-full", maxWidthClass, isAurora ? "pt-10 md:pt-16 pb-8" : "pt-8 pb-6", className)}>
-        <motion.div variants={staggerContainer} initial="initial" animate="animate">
-          {isAurora ? (
-            <motion.span variants={fadeUpItem} className="block text-[11px] font-mono uppercase tracking-[0.2em] text-text-muted">{eyebrowAurora}</motion.span>
-          ) : (
-            <motion.span variants={fadeUpItem} className="block font-mono text-xs text-primary/70">{eyebrowClassic}</motion.span>
-          )}
-
-          <motion.div variants={fadeUpItem} className={clsx("flex flex-col lg:flex-row lg:items-end justify-between gap-4", isAurora ? "mt-2" : "mt-2")}>
-            <div className="min-w-0">
-              <h1 className={isAurora ? "text-2xl md:text-3xl font-semibold tracking-[-0.01em] text-text-primary" : "text-2xl md:text-3xl font-semibold tracking-tight text-text-primary"}>
-                {title}
-              </h1>
-              {subtitle ? (
-                <p className={isAurora ? "mt-2 text-[13px] text-text-secondary max-w-2xl" : "mt-1.5 text-sm text-text-secondary"}>{subtitle}</p>
-              ) : null}
-            </div>
-            {actions ? <div className="flex flex-wrap gap-2 shrink-0">{actions}</div> : null}
-          </motion.div>
-
-          {stats && stats.length ? (
-            isAurora ? (
-              // Laconic: one quiet prose line, no big-number tiles.
-              <motion.div variants={fadeUpItem} className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px] font-mono text-text-muted">
-                {stats.map((s, i) => (
-                  <span key={i} className="inline-flex items-baseline gap-1.5">
-                    {i > 0 ? <span className="text-border mr-1.5">·</span> : null}
-                    <span className={clsx("tabular-nums", toneText[s.tone ?? "default"])}>{s.value}</span>
-                    <span>{s.label}</span>
-                  </span>
-                ))}
-              </motion.div>
-            ) : (
-              <motion.div variants={fadeUpItem} className="flex flex-wrap items-baseline mt-5 gap-x-8 gap-y-3">
-                {stats.map((s, i) => (
-                  <div key={i} className="flex items-baseline gap-2">
-                    <span className={clsx("tabular-nums font-mono text-2xl md:text-3xl", toneClass[s.tone ?? "default"])}>
-                      {s.value}
-                    </span>
-                    <span className="text-xs text-text-muted uppercase tracking-[0.08em] font-mono">
-                      {s.label}
-                    </span>
-                  </div>
-                ))}
-              </motion.div>
-            )
-          ) : null}
-        </motion.div>
-      </div>
-
-      {!isAurora ? <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" /> : null}
-    </>
-  );
+export const PageHero: React.FC<PageHeroProps> = ({ eyebrowClassic, eyebrowAurora, title, subtitle, actions, stats, maxWidth = "6xl", className }) => {
+  const eyebrow = (eyebrowAurora || eyebrowClassic).replace(/^\s*\/\/\s*/, "");
+  const width = { "3xl": "max-w-3xl", "4xl": "max-w-4xl", "5xl": "max-w-5xl", "6xl": "max-w-6xl", "7xl": "max-w-7xl" }[maxWidth];
+  return <section className={clsx("mx-auto w-full px-4 pb-6 pt-8 md:px-8 md:pt-12", width, className)}>
+    <motion.div variants={staggerContainer} initial="initial" animate="animate" className="relative overflow-hidden rounded-[28px] border border-[#152219]/10 bg-[#edf4ee] p-6 shadow-[0_22px_50px_-42px_rgba(11,35,18,.55)] dark:border-white/10 dark:bg-[#121c15] sm:p-8">
+      <div className="pointer-events-none absolute -right-24 -top-28 size-72 rounded-full bg-[#00ff88]/10 blur-3xl" />
+      <div className="relative"><motion.span variants={fadeUpItem} className="block text-xs font-semibold uppercase tracking-[.14em] text-[#147b47] dark:text-[#71edaf]">{eyebrow}</motion.span><motion.div variants={fadeUpItem} className="mt-3 flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div className="min-w-0"><h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] text-[#17231b] dark:text-[#edf4ef] sm:text-4xl">{title}</h1>{subtitle && <p className="mt-3 max-w-2xl text-base leading-7 text-[#65746a] dark:text-[#a5b4a9]">{subtitle}</p>}</div>{actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}</motion.div>{stats?.length ? <motion.div variants={fadeUpItem} className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{stats.map((item, index) => <div key={`${item.label}-${index}`} className="rounded-2xl bg-white/75 p-4 dark:bg-white/[.055]"><div className={clsx("text-2xl font-semibold tracking-[-.05em]", tone[item.tone ?? "default"])}>{item.value}</div><div className="mt-1 text-sm text-[#718075] dark:text-[#9eada2]">{item.label}</div></div>)}</motion.div> : null}</div>
+    </motion.div>
+  </section>;
 };

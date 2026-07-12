@@ -10,8 +10,10 @@ import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
 import { PlatformFooter } from "./components/layout/PlatformFooter";
+import { PremiumWorkspaceShell } from "./components/layout/PremiumWorkspaceShell";
+import { PremiumModuleShell } from "./components/layout/PremiumModuleShell";
 import { StandaloneShell } from "./components/layout/StandaloneShell";
-import { PageSkeleton } from "./components/ui/Skeleton";
+import { BrandedPageLoader } from "./components/ui/BrandedPageLoader";
 import type { MaintenancePayload } from "./pages/system/MaintenancePage";
 import { UIModeProvider, useUIMode } from "./components/interface/UIModeProvider";
 import { SwitchToMomentumNudge } from "./components/interface/SwitchToMomentumNudge";
@@ -42,41 +44,38 @@ const TasksPage = React.lazy(() => import("./pages/core/TasksPage").then(mod => 
 const GradesPage = React.lazy(() => import("./pages/core/GradesPage").then(mod => ({ default: mod.GradesPage })));
 const ProfilePage = React.lazy(() => import("./pages/profile/ProfilePage").then(mod => ({ default: mod.ProfilePage })));
 const HomePage = React.lazy(() => import("./pages/core/HomePage").then(mod => ({ default: mod.HomePage })));
+const LearningPlanPage = React.lazy(() => import("./pages/core/LearningPlanPage").then(mod => ({ default: mod.LearningPlanPage })));
 const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfilePage").then(mod => ({ default: mod.PublicProfilePage })));
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
 const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
-const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherDashboardPage").then(mod => ({ default: mod.TeacherDashboardPage })));
-const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassDetailsPage").then(mod => ({ default: mod.ClassDetailsPage })));
-const TeacherOSPage = React.lazy(() => import("./pages/edu/TeacherOSPage").then(mod => ({ default: mod.TeacherOSPage })));
-const CreateLessonPage = React.lazy(() => import("./pages/edu/CreateLessonPage").then(mod => ({ default: mod.CreateLessonPage })));
-const CreateTopicPage = React.lazy(() => import("./pages/edu/CreateTopicPage").then(mod => ({ default: mod.CreateTopicPage })));
-const TopicDetailsPage = React.lazy(() => import("./pages/edu/TopicDetailsPage").then(mod => ({ default: mod.TopicDetailsPage })));
-const ControlWorkDetailsPage = React.lazy(() => import("./pages/edu/ControlWorkDetailsPage").then(mod => ({ default: mod.ControlWorkDetailsPage })));
-const StudentDashboardPage = React.lazy(() => import("./pages/edu/StudentDashboardPage").then(mod => ({ default: mod.StudentDashboardPage })));
-const StudentLessonsPage = React.lazy(() => import("./pages/edu/StudentLessonsPage").then(mod => ({ default: mod.StudentLessonsPage })));
-const LessonDetailsPage = React.lazy(() => import("./pages/edu/LessonDetailsPage").then(mod => ({ default: mod.LessonDetailsPage })));
-const StudentTaskPage = React.lazy(() => import("./pages/edu/StudentTaskPage").then(mod => ({ default: mod.StudentTaskPage })));
-const GradeDetailsPage = React.lazy(() => import("./pages/edu/GradeDetailsPage").then(mod => ({ default: mod.GradeDetailsPage })));
-const StudentAppealsPage = React.lazy(() => import("./pages/edu/StudentAppealsPage").then(mod => ({ default: mod.StudentAppealsPage })));
-const TeacherClassAppealsPage = React.lazy(() => import("./pages/edu/TeacherClassAppealsPage").then(mod => ({ default: mod.TeacherClassAppealsPage })));
-const SummaryGradesPage = React.lazy(() => import("./pages/edu/SummaryGradesPage").then(mod => ({ default: mod.SummaryGradesPage })));
-const ClassGradebookPage = React.lazy(() => import("./pages/edu/ClassGradebookPage").then(mod => ({ default: mod.ClassGradebookPage })));
-const GradebookConfigPage = React.lazy(() => import("./pages/edu/GradebookConfigPage").then(mod => ({ default: mod.GradebookConfigPage })));
-const JoinClassPage = React.lazy(() => import("./pages/edu/JoinClassPage").then(mod => ({ default: mod.JoinClassPage })));
-const CoursesPage = React.lazy(() => import("./pages/edu/CoursesPage").then(mod => ({ default: mod.CoursesPage })));
-const CalendarPage = React.lazy(() => import("./pages/edu/CalendarPage").then(mod => ({ default: mod.CalendarPage })));
-const AttendancePage = React.lazy(() => import("./pages/edu/AttendancePage").then(mod => ({ default: mod.AttendancePage })));
-const SimilarityPage = React.lazy(() => import("./pages/edu/SimilarityPage").then(mod => ({ default: mod.SimilarityPage })));
-const TutorPage = React.lazy(() => import("./pages/edu/TutorPage").then(mod => ({ default: mod.TutorPage })));
-const CourseDetailPage = React.lazy(() => import("./pages/edu/CourseDetailPage").then(mod => ({ default: mod.CourseDetailPage })));
-const LessonQuizPage = React.lazy(() => import("./pages/edu/LessonQuizPage").then(mod => ({ default: mod.LessonQuizPage })));
+const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherWorkspacePage").then(mod => ({ default: mod.TeacherWorkspacePage })));
+const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassHubPage").then(mod => ({ default: mod.ClassHubPage })));
+const CreateLessonPage = React.lazy(() => import("./pages/edu/TeacherComposerPages").then(mod => ({ default: mod.CreateLessonWorkspace })));
+const CreateTopicPage = React.lazy(() => import("./pages/edu/TeacherComposerPages").then(mod => ({ default: mod.CreateTopicWorkspace })));
+const TopicDetailsPage = React.lazy(() => import("./pages/edu/TopicStudioPage").then(mod => ({ default: mod.TopicStudioPage })));
+const ControlWorkDetailsPage = React.lazy(() => import("./pages/edu/ControlStudioPage").then(mod => ({ default: mod.ControlStudioPage })));
+const StudentDashboardPage = React.lazy(() => import("./pages/edu/StudentJournalPage").then(mod => ({ default: mod.StudentJournalPage })));
+const StudentLessonsPage = React.lazy(() => import("./pages/edu/StudentPathPages").then(mod => ({ default: mod.StudentLessonsWorkspace })));
+const LessonDetailsPage = React.lazy(() => import("./pages/edu/LessonStudioPage").then(mod => ({ default: mod.LessonStudioPage })));
+const StudentTaskPage = React.lazy(() => import("./pages/edu/PracticeCanvasPage").then(mod => ({ default: mod.PracticeCanvasPage })));
+const StudentAppealsPage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.StudentAppealsWorkspace })));
+const TeacherClassAppealsPage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.TeacherAppealsWorkspace })));
+const SummaryGradesPage = React.lazy(() => import("./pages/edu/TeacherDataPages").then(mod => ({ default: mod.SummaryGradesWorkspace })));
+const ClassGradebookPage = React.lazy(() => import("./pages/edu/TeacherDataPages").then(mod => ({ default: mod.GradebookWorkspace })));
+const JoinClassPage = React.lazy(() => import("./pages/edu/StudentPathPages").then(mod => ({ default: mod.JoinClassWorkspace })));
+const CoursesPage = React.lazy(() => import("./pages/edu/CourseStudioPages").then(mod => ({ default: mod.CourseStudioPage })));
+const CalendarPage = React.lazy(() => import("./pages/edu/AgendaWorkspacePage").then(mod => ({ default: mod.AgendaWorkspacePage })));
+const AttendancePage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.AttendanceWorkspace })));
+const TutorPage = React.lazy(() => import("./pages/edu/StudyCompanionPage").then(mod => ({ default: mod.StudyCompanionPage })));
+const CourseDetailPage = React.lazy(() => import("./pages/edu/CourseStudioPages").then(mod => ({ default: mod.CourseStudioDetailPage })));
+const LessonQuizPage = React.lazy(() => import("./pages/edu/QuizCanvasPage").then(mod => ({ default: mod.QuizCanvasPage })));
 const TeacherQuizReviewPage = React.lazy(() => import("./pages/edu/TeacherQuizReviewPage").then(mod => ({ default: mod.TeacherQuizReviewPage })));
-const ManualTaskPage = React.lazy(() => import("./pages/edu/ManualTaskPage").then(mod => ({ default: mod.ManualTaskPage })));
-const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualTaskSubmissionsPage").then(mod => ({ default: mod.ManualTaskSubmissionsPage })));
-const OrgMembersPage = React.lazy(() => import("./pages/edu/OrgMembersPage").then(mod => ({ default: mod.OrgMembersPage })));
+const ManualTaskPage = React.lazy(() => import("./pages/edu/ManualReviewPages").then(mod => ({ default: mod.ManualSubmissionCanvas })));
+const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualReviewPages").then(mod => ({ default: mod.ManualReviewCanvas })));
+const OrgMembersPage = React.lazy(() => import("./pages/edu/OrgWorkspacePage").then(mod => ({ default: mod.OrgWorkspacePage })));
 const LiveClassroomPage = React.lazy(() => import("./pages/edu/LiveClassroomPage").then(mod => ({ default: mod.LiveClassroomPage })));
 const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
-const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminDashboardPage").then(mod => ({ default: mod.AdminDashboardPage })));
+const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminWorkspacePage").then(mod => ({ default: mod.AdminWorkspacePage })));
 const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => ({ default: mod.DocsPage })));
 const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(mod => ({ default: mod.SupportPage })));
 const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
@@ -90,28 +89,43 @@ const CertificateVerifyPage = React.lazy(() => import("./pages/public/Certificat
 const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
 const TaskLibraryPage = React.lazy(() => import("./pages/library/TaskLibraryPage").then(mod => ({ default: mod.TaskLibraryPage })));
 const LibraryTaskSolvePage = React.lazy(() => import("./pages/library/LibraryTaskSolvePage").then(mod => ({ default: mod.LibraryTaskSolvePage })));
-const ContestsPage = React.lazy(() => import("./pages/contest/ContestsPage").then(mod => ({ default: mod.ContestsPage })));
-const ContestPage = React.lazy(() => import("./pages/contest/ContestPage").then(mod => ({ default: mod.ContestPage })));
-const ContestProblemSolvePage = React.lazy(() => import("./pages/contest/ContestProblemSolvePage").then(mod => ({ default: mod.ContestProblemSolvePage })));
+const ContestsPage = React.lazy(() => import("./pages/contest/ContestExperience").then(mod => ({ default: mod.ContestLobbyPage })));
+const ContestPage = React.lazy(() => import("./pages/contest/ContestExperience").then(mod => ({ default: mod.ContestDetailPage })));
+const ContestProblemSolvePage = React.lazy(() => import("./pages/contest/ContestExperience").then(mod => ({ default: mod.ContestProblemPage })));
 const DevEditorPage = React.lazy(() => import("./pages/system/DevEditorPage").then(mod => ({ default: mod.DevEditorPage })));
 const CollabDemoPage = React.lazy(() => import("./pages/system/CollabDemoPage").then(mod => ({ default: mod.CollabDemoPage })));
 const OnboardingEntry = React.lazy(() => import("./components/onboarding/OnboardingEntry").then(mod => ({ default: mod.OnboardingEntry })));
 const PlacementEntry = React.lazy(() => import("./components/placement/PlacementEntry").then(mod => ({ default: mod.PlacementEntry })));
 const PlaygroundPage = React.lazy(() => import("./pages/system/PlaygroundPage").then(mod => ({ default: mod.PlaygroundPage })));
 const ScoreboardPage = React.lazy(() => import("./pages/contest/ScoreboardPage").then(mod => ({ default: mod.ScoreboardPage })));
-const MyLearningPage = React.lazy(() => import("./pages/edu/MyLearningPage").then(mod => ({ default: mod.MyLearningPage })));
-const ParentDashboardPage = React.lazy(() => import("./pages/edu/ParentDashboardPage").then(mod => ({ default: mod.ParentDashboardPage })));
+const MyLearningPage = React.lazy(() => import("./pages/edu/StudentPathPages").then(mod => ({ default: mod.LearningProgressWorkspace })));
+const ParentDashboardPage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.ParentWorkspace })));
 const AcceptInvitePage = React.lazy(() => import("./pages/edu/AcceptInvitePage").then(mod => ({ default: mod.AcceptInvitePage })));
 const SolveReplayPage = React.lazy(() => import("./pages/core/SolveReplayPage").then(mod => ({ default: mod.SolveReplayPage })));
 const BlogPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPage })));
 const BlogPostPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPostPage })));
 const BlogAdminPage = React.lazy(() => import("./pages/system/BlogAdminPage").then(mod => ({ default: mod.BlogAdminPage })));
 const PageLoader: React.FC = () => {
-  return <div className="min-h-[100dvh] bg-bg-base text-text-primary">
-      <PageSkeleton />
-    </div>;
+  return <BrandedPageLoader />;
 };
-type Page = "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin";
+const PublicPageWithFooter: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="flex min-h-[100dvh] flex-col"><div className="flex-1">{children}</div><PlatformFooter /></div>;
+type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
+
+// A deliberately local-only product preview. It lets design review happen
+// without manufacturing a token or touching real user data.
+const DEV_PREVIEW_USER: User = {
+  id: -101,
+  username: "Oksana",
+  firstName: "Оксана",
+  lastName: "Мельник",
+  course: "PYTHON",
+  difus: 72,
+  avatarUrl: null,
+  userMode: "PERSONAL",
+  role: "USER",
+  placementDone: true,
+  placementLevel: "INTERMEDIATE",
+};
 
 function isPageAvailableForUser(page: Page, user: User): boolean {
   if (page === "admin") return user.role === "SYSTEM_ADMIN";
@@ -261,7 +275,7 @@ const getCurrentUserWithRetry = async (maxAttempts = 3): Promise<User> => {
 };
 
 function asPage(value: string): Page | null {
-  return value === "home" || value === "tasks" || value === "grades" || value === "profile" || value === "teacher" || value === "student" || value === "admin" ? value : null;
+  return value === "home" || value === "tasks" || value === "grades" || value === "plan" || value === "profile" || value === "teacher" || value === "student" || value === "admin" ? value : null;
 }
 
 function toMomentumPageTarget(value: MomentumNavTarget): Page | null {
@@ -337,6 +351,8 @@ const AppContent: React.FC = React.memo(() => {
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
   const [bootResumeHandled, setBootResumeHandled] = useState<boolean>(false);
   const requestedAppPage = useMemo(() => getRequestedAppPage(searchParams), [searchParams]);
+  const isDevPreview = import.meta.env.DEV && searchParams.get("preview") === "true";
+  const previewPersona = searchParams.get("persona");
   const resolvedPage = useMemo(() => {
     if (!user) return page;
     return resolvePageForUser(page, user);
@@ -520,6 +536,9 @@ const AppContent: React.FC = React.memo(() => {
     let cancelled = false;
     const token = localStorage.getItem("token");
     if (!token) {
+      if (isDevPreview) {
+        setUser(previewPersona === "admin" ? { ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" } : DEV_PREVIEW_USER);
+      }
       setBootResumeHandled(true);
       setLoading(false);
       return;
@@ -642,7 +661,7 @@ const AppContent: React.FC = React.memo(() => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDevPreview, previewPersona]);
   useEffect(() => {
     if (!user || user.role !== "SYSTEM_ADMIN") return;
     getAdminMaintenance().then(r => setAdminMaintenanceEnabled(!!r.state?.enabled)).catch(() => setAdminMaintenanceEnabled(false));
@@ -819,20 +838,14 @@ const AppContent: React.FC = React.memo(() => {
       </Suspense>;
   }
   if (!maintenanceChecked) {
-    return <div className="h-screen flex items-center justify-center text-text-primary font-mono">
-        {t('loading')}
-      </div>;
+    return <PageLoader />;
   }
   if (loading) {
-    return <div className="h-screen flex items-center justify-center text-text-primary font-mono">
-        {t('loading')}
-      </div>;
+    return <PageLoader />;
   }
 
   if (user && !bootResumeHandled) {
-    return <div className="h-screen flex items-center justify-center text-text-primary font-mono">
-        {t('loading')}
-      </div>;
+    return <PageLoader />;
   }
   if (!user) {
     if (maintenance && !showAdminLogin) {
@@ -892,6 +905,7 @@ const AppContent: React.FC = React.memo(() => {
       }
       if (resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       if (resolvedPage === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
+      if (resolvedPage === "plan" && user.userMode !== "EDUCATIONAL") return <LearningPlanPage />;
       // EDU teacher/student dashboards live under /edu only (the redirect guard
       // above bounces EDU users here away from the main shell).
       if (resolvedPage === "profile") return <ProfilePage user={user} onUserChange={setUser} />;
@@ -899,10 +913,28 @@ const AppContent: React.FC = React.memo(() => {
     })()}
     </Suspense>;
 
+  // The personal product no longer sits inside any legacy terminal/momentum
+  // shell. It owns a single, calm SaaS workspace chrome across every core page.
+  if (user.userMode !== "EDUCATIONAL") {
+    return <PremiumWorkspaceShell
+      user={user}
+      page={resolvedPage}
+      theme={theme}
+      onNavigate={handleSetPage}
+      onLibrary={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/library?preview=true" : "/library")}
+      onPlayground={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/playground?preview=true" : "/playground")}
+      onToggleTheme={toggleTheme}
+      onToggleLanguage={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
+      onLogout={handleLogout}
+    >
+      {content}
+    </PremiumWorkspaceShell>;
+  }
+
   if (ui.mode === "classic") {
     return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
         {}
-        <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
+        <header className="studycod-app-header sticky top-0 z-40 min-h-[72px] border-b border-[#152219]/10 bg-[#f7f8f5]/85 text-[#142017] backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/85 dark:text-[#edf3ef] flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
           <div className="flex items-center gap-4 min-w-0 flex-wrap md:flex-nowrap">
             <div className="flex items-center gap-2">
               <Logo size={24} className="text-primary" />
@@ -925,7 +957,7 @@ const AppContent: React.FC = React.memo(() => {
                 {t("maintenanceModeEnabled")}
               </div>}
             {}
-            {(!user.userMode || user.userMode === "PERSONAL") && <>
+            {user.userMode !== "EDUCATIONAL" && <>
                 <button onClick={handleGoHome} onPointerEnter={() => prefetchNavTarget("continue")} onFocus={() => prefetchNavTarget("continue")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <Home className="w-4 h-4" />
                   {t('home')}
@@ -1056,7 +1088,7 @@ const AppContent: React.FC = React.memo(() => {
       </div>;
   }
 
-        const momentumCurrent: MomentumNavTarget = resolvedPage === "home" ? "continue" : resolvedPage;
+        const momentumCurrent: MomentumNavTarget = resolvedPage === "home" || resolvedPage === "plan" ? "continue" : resolvedPage;
   const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
   return <>
       <Suspense fallback={<PageLoader />}>
@@ -1207,51 +1239,43 @@ export const App: React.FC = () => {
                   <GoogleAuthErrorPage />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/docs" element={<StandaloneShell current="support">
-                <Suspense fallback={<PageLoader />}>
+          <Route path="/docs/*" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                   <AnimatedPage>
                     <DocsPage />
                   </AnimatedPage>
-                </Suspense>
-              </StandaloneShell>} />
-          <Route path="/privacy" element={<Suspense fallback={<PageLoader />}>
+                </Suspense></PublicPageWithFooter>} />
+          <Route path="/privacy" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <PrivacyPolicyPage />
                 </AnimatedPage>
-              </Suspense>} />
-          <Route path="/terms" element={<Suspense fallback={<PageLoader />}>
+              </Suspense></PublicPageWithFooter>} />
+          <Route path="/terms" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <TermsOfUsePage />
                 </AnimatedPage>
-              </Suspense>} />
-          <Route path="/cookies" element={<Suspense fallback={<PageLoader />}>
+              </Suspense></PublicPageWithFooter>} />
+          <Route path="/cookies" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <CookiePolicyPage />
                 </AnimatedPage>
-              </Suspense>} />
+              </Suspense></PublicPageWithFooter>} />
           <Route path="/pricing" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <PricingPage />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/support" element={<RequireToken>
-                <StandaloneShell current="support">
+          <Route path="/support" element={<RequireToken><PublicPageWithFooter>
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <SupportPage />
                     </AnimatedPage>
                   </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
-          <Route path="/blog" element={<RequireToken>
-                <StandaloneShell current="blog">
-                  <Suspense fallback={<PageLoader />}>
+              </PublicPageWithFooter></RequireToken>} />
+          <Route path="/blog" element={<RequireToken><PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <BlogPage />
                     </AnimatedPage>
-                  </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
+                  </Suspense></PublicPageWithFooter></RequireToken>} />
           <Route path="/blog/admin" element={<RequireToken>
                 <StandaloneShell current="blog">
                   <Suspense fallback={<PageLoader />}>
@@ -1261,24 +1285,16 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
-          <Route path="/blog/tag/:tag" element={<RequireToken>
-                <StandaloneShell current="blog">
-                  <Suspense fallback={<PageLoader />}>
+          <Route path="/blog/tag/:tag" element={<RequireToken><PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <BlogPage />
                     </AnimatedPage>
-                  </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
-          <Route path="/blog/:slug" element={<RequireToken>
-                <StandaloneShell current="blog">
-                  <Suspense fallback={<PageLoader />}>
+                  </Suspense></PublicPageWithFooter></RequireToken>} />
+          <Route path="/blog/:slug" element={<RequireToken><PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <BlogPostPage />
                     </AnimatedPage>
-                  </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
+                  </Suspense></PublicPageWithFooter></RequireToken>} />
           <Route path="/profile/certificates" element={<RequireToken>
                 <StandaloneShell current="profile">
                   <Suspense fallback={<PageLoader />}>
@@ -1288,29 +1304,21 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
-          <Route path="/certificate/:certificateId" element={<Suspense fallback={<PageLoader />}>
+          <Route path="/certificate/:certificateId" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <CertificateVerifyPage />
                 </AnimatedPage>
-              </Suspense>} />
-          <Route path="/library" element={<RequireToken>
-                <StandaloneShell current="library">
-                  <Suspense fallback={<PageLoader />}>
-                    <AnimatedPage>
-                      <TaskLibraryPage />
-                    </AnimatedPage>
-                  </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
-          <Route path="/library/solve/:taskKey" element={<RequireToken>
-                <StandaloneShell current="library">
-                  <Suspense fallback={<PageLoader />}>
-                    <AnimatedPage>
-                      <LibraryTaskSolvePage />
-                    </AnimatedPage>
-                  </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
+              </Suspense></PublicPageWithFooter>} />
+          <Route path="/library" element={<RequireToken><StandaloneShell current="library"><Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <TaskLibraryPage />
+                </AnimatedPage>
+              </Suspense></StandaloneShell></RequireToken>} />
+          <Route path="/library/solve/:taskKey" element={<RequireToken><StandaloneShell current="library"><Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <LibraryTaskSolvePage />
+                </AnimatedPage>
+              </Suspense></StandaloneShell></RequireToken>} />
           <Route path="/playground" element={<RequireToken>
                 <StandaloneShell current="playground">
                   <Suspense fallback={<PageLoader />}>
@@ -1354,13 +1362,7 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
-          <Route path="/contests/:id/scoreboard" element={<StandaloneShell current="contests">
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <ScoreboardPage />
-                  </AnimatedPage>
-                </Suspense>
-              </StandaloneShell>} />
+          <Route path="/contests/:id/scoreboard" element={<Navigate to="/contest/contests" replace />} />
           <Route path="/profile" element={<RequireToken>
                 <Navigate to="/?app=profile" replace />
               </RequireToken>} />
@@ -1376,32 +1378,14 @@ export const App: React.FC = () => {
           <Route path="/dashboard" element={<RequireToken>
                 <Navigate to="/" replace />
               </RequireToken>} />
-          <Route path="/contests" element={<StandaloneShell current="contests">
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <ContestsPage />
-                  </AnimatedPage>
-                </Suspense>
-              </StandaloneShell>} />
-          <Route path="/contests/:id" element={<StandaloneShell current="contests">
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <ContestPage />
-                  </AnimatedPage>
-                </Suspense>
-              </StandaloneShell>} />
-          <Route path="/contests/:id/problems/:problemId" element={<StandaloneShell current="contests">
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <ContestProblemSolvePage />
-                  </AnimatedPage>
-                </Suspense>
-              </StandaloneShell>} />
-          <Route path="/u/:username" element={<Suspense fallback={<PageLoader />}>
+          <Route path="/contests" element={<Navigate to="/contest/contests" replace />} />
+          <Route path="/contests/:id" element={<Navigate to="/contest/contests" replace />} />
+          <Route path="/contests/:id/problems/:problemId" element={<Navigate to="/contest/contests" replace />} />
+          <Route path="/u/:username" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <PublicProfilePage />
                 </AnimatedPage>
-              </Suspense>} />
+              </Suspense></PublicPageWithFooter>} />
           <Route path="/iad" element={<RequireToken>
                 <StandaloneShell current="profile">
                   <Suspense fallback={<PageLoader />}>
@@ -1411,15 +1395,7 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
-          <Route path="/difus" element={<RequireToken>
-                <StandaloneShell current="profile">
-                  <Suspense fallback={<PageLoader />}>
-                    <AnimatedPage>
-                      <IadPage />
-                    </AnimatedPage>
-                  </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
+          <Route path="/difus" element={<Navigate to="/iad" replace />} />
           <Route path="/email-preferences" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <EmailPreferencesResultPage />
@@ -1444,6 +1420,8 @@ export const App: React.FC = () => {
 
 const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
+  const previewValue = new URLSearchParams(location.search).get("preview");
+  const devPreview = import.meta.env.DEV && (previewValue === "1" || previewValue === "true");
   const token = (() => {
     try {
       return localStorage.getItem("token");
@@ -1452,7 +1430,7 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     }
   })();
 
-  if (!token) {
+  if (!token && !devPreview) {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/?auth=login&next=${next}`} replace />;
   }
@@ -1487,10 +1465,24 @@ const ContestRoutes: React.FC = React.memo(() => {
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
+  const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     const payload = decodeJwtPayload(token);
+    if (!token && isDevPreview) {
+      setUser({
+        id: -301,
+        username: "contest-preview",
+        firstName: "Марко",
+        course: "PYTHON",
+        difus: 0,
+        avatarUrl: null,
+        userMode: "CONTEST",
+      });
+      setReady(true);
+      return;
+    }
     if (!token || !payload || payload.type === "STUDENT") {
       setUser(null);
       setReady(true);
@@ -1509,7 +1501,7 @@ const ContestRoutes: React.FC = React.memo(() => {
       userMode: "CONTEST",
     });
     setReady(true);
-  }, [navigate]);
+  }, [navigate, location.search]);
 
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
@@ -1538,30 +1530,12 @@ const ContestRoutes: React.FC = React.memo(() => {
       </Suspense>;
   }
 
-  return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-      <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Logo size={24} className="text-primary" />
-          <span className="text-lg font-mono text-text-primary">StudyCod Contest</span>
-        </div>
-        <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap">
-          <button onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}>
-            {i18n.language === "uk" ? "EN" : "UA"}
-          </button>
-          <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-            {theme === "dark" ? "Light" : "Dark"}
-          </button>
-          <button onClick={() => {
-          localStorage.removeItem("token");
-          navigate("/contest", { replace: true });
-          window.location.reload();
-        }} className="shrink-0 px-3 py-1 text-xs font-mono border border-border text-accent-error hover:bg-bg-hover transition-fast">
-            {t("logout")}
-          </button>
-        </div>
-      </header>
-
-      <main className="flex-1 min-h-0 overflow-y-auto">
+  return <PremiumModuleShell product="CONTEST" user={user} theme={theme} currentPath={location.pathname} onNavigate={navigate} onToggleTheme={toggleTheme} onLogout={() => {
+    localStorage.removeItem("token");
+    navigate("/contest", { replace: true });
+    window.location.reload();
+  }}>
+      <main className="min-h-0 overflow-y-auto">
         <Suspense fallback={<PageLoader />}>
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
@@ -1574,8 +1548,7 @@ const ContestRoutes: React.FC = React.memo(() => {
           </AnimatePresence>
         </Suspense>
       </main>
-      <PlatformFooter className="flex-shrink-0" />
-    </div>;
+    </PremiumModuleShell>;
 });
 ContestRoutes.displayName = "ContestRoutes";
 
@@ -1587,6 +1560,9 @@ const EduRoutes: React.FC = React.memo(() => {
   const ui = useUIMode();
   const navigate = useNavigate();
   const location = useLocation();
+  const isEduDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
+  const eduPreviewPersona = new URLSearchParams(location.search).get("persona");
+  const eduPreviewStudent = eduPreviewPersona === "student" || (/^\/edu\/(journal|lessons(?:\/|$)|tasks\/|grades\/|appeals(?:\/|$))/).test(location.pathname);
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
@@ -1676,6 +1652,20 @@ const EduRoutes: React.FC = React.memo(() => {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
+      if (isEduDevPreview) {
+        setUser({
+          id: eduPreviewStudent ? -202 : -201,
+          username: eduPreviewStudent ? "student-preview" : "teacher-preview",
+          firstName: eduPreviewPersona === "student" ? "Софія" : "Ірина",
+          course: "PYTHON",
+          difus: 74,
+          avatarUrl: null,
+          userMode: "EDUCATIONAL",
+          role: eduPreviewStudent ? "USER" : "TEACHER",
+          ...(eduPreviewStudent ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
+          ...(eduPreviewPersona === "student" ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
+        });
+      }
       setLoading(false);
       return;
     }
@@ -1713,7 +1703,7 @@ const EduRoutes: React.FC = React.memo(() => {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, isEduDevPreview, eduPreviewStudent]);
   const handleAuth = useCallback((u: User) => {
     setUser(u);
   }, []);
@@ -1800,6 +1790,7 @@ const EduRoutes: React.FC = React.memo(() => {
         <AuthPage onAuth={handleAuth} />
       </Suspense>;
   }
+  const eduUser = user;
   const eduMain = <main className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="wait">
@@ -1809,7 +1800,7 @@ const EduRoutes: React.FC = React.memo(() => {
                     <TeacherDashboardPage />
                   </AnimatedPage>} />
             <Route path="classes/:classId" element={<AnimatedPage><ClassDetailsPage /></AnimatedPage>} />
-            <Route path="classes/:classId/teacher-os" element={<AnimatedPage><TeacherOSPage /></AnimatedPage>} />
+            <Route path="classes/:classId/teacher-os" element={<Navigate to=".." relative="path" replace />} />
             <Route path="classes/:classId/lessons/new" element={<AnimatedPage><CreateLessonPage /></AnimatedPage>} />
             <Route path="classes/:classId/topics/new" element={<AnimatedPage><CreateTopicPage /></AnimatedPage>} />
             <Route path="topics/:topicId" element={<AnimatedPage><TopicDetailsPage /></AnimatedPage>} />
@@ -1819,8 +1810,8 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
             <Route path="classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
             <Route path="classes/:classId/attendance" element={<AnimatedPage><AttendancePage /></AnimatedPage>} />
-            <Route path="classes/:classId/similarity" element={<AnimatedPage><SimilarityPage /></AnimatedPage>} />
-            <Route path="classes/:classId/gradebook-config" element={<AnimatedPage><GradebookConfigPage /></AnimatedPage>} />
+            <Route path="classes/:classId/similarity" element={<Navigate to="../gradebook" relative="path" replace />} />
+            <Route path="classes/:classId/gradebook-config" element={<Navigate to="../gradebook" relative="path" replace />} />
             <Route path="join" element={<AnimatedPage><JoinClassPage /></AnimatedPage>} />
             <Route path="courses" element={<AnimatedPage><CoursesPage /></AnimatedPage>} />
             <Route path="calendar" element={<AnimatedPage><CalendarPage /></AnimatedPage>} />
@@ -1837,9 +1828,9 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="journal" element={<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>} />
             <Route path="student" element={<Navigate to="/edu/journal" replace />} />
             <Route path="lessons" element={<AnimatedPage><StudentLessonsPage /></AnimatedPage>} />
-            <Route path="lessons/:lessonId" element={<AnimatedPage><LessonDetailsPage /></AnimatedPage>} />
+            <Route path="lessons/:lessonId" element={<AnimatedPage><LessonDetailsPage student={Boolean(user.studentId)} /></AnimatedPage>} />
             <Route path="tasks/:taskId" element={<AnimatedPage><StudentTaskPage /></AnimatedPage>} />
-            <Route path="grades/:gradeId" element={<AnimatedPage><GradeDetailsPage /></AnimatedPage>} />
+            <Route path="grades/:gradeId" element={<Navigate to="/edu/journal" replace />} />
             <Route path="appeals" element={<AnimatedPage><StudentAppealsPage /></AnimatedPage>} />
             <Route path="docs" element={<AnimatedPage><DocsPage /></AnimatedPage>} />
             {}
@@ -1848,6 +1839,19 @@ const EduRoutes: React.FC = React.memo(() => {
         </AnimatePresence>
       </Suspense>
     </main>;
+
+  return <PremiumModuleShell
+      product="EDU"
+      user={user}
+      theme={theme}
+      currentPath={location.pathname}
+      navigationHidden={isControlExamActive}
+      onNavigate={navigate}
+      onToggleTheme={toggleTheme}
+      onLogout={() => { localStorage.removeItem("token"); navigate("/"); }}
+    >
+      {eduMain}
+    </PremiumModuleShell>;
 
   if (ui.mode === "classic") {
     return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
@@ -1909,13 +1913,13 @@ const EduRoutes: React.FC = React.memo(() => {
           ? "student"
           : /^\/edu\/(lessons|tasks|grades)\b/.test(location.pathname)
             ? "lessons"
-            : user.studentId
+            : eduUser.studentId
               ? "lessons"
               : "teacher";
   const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
   return <>
       <Suspense fallback={<PageLoader />}>
-      <Shell user={user} current={momentumCurrent} navigationHidden={isControlExamActive} onNavigate={target => {
+      <Shell user={eduUser} current={momentumCurrent} navigationHidden={isControlExamActive} onNavigate={target => {
       if (isControlExamActive && controlExamSession) {
         navigate(`/edu/lessons/${controlExamSession.controlWorkId}?type=CONTROL`, {
           replace: true

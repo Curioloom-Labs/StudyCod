@@ -11,6 +11,7 @@ import { PageHero } from "../../components/ui/PageHero";
 import type { Grade } from "../../types";
 import { tr } from "../../i18n";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { PremiumProgress } from "./PremiumPersonalExperience";
 
 const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
   const reduce = useReducedMotion();
@@ -69,6 +70,13 @@ interface HeatTopicItem {
   lastAt: string;
 }
 
+const PREVIEW_GRADES: Grade[] = [
+  { id: -101, total: 92, workScore: 92, optimizationScore: 0, integrityScore: 100, aiFeedback: null, createdAt: "2026-07-09T10:00:00.000Z", task: { id: -11, title: "Функції з характером", descriptionMarkdown: "", starterCode: "", userCode: "", status: "GRADED", lessonInTopic: 2, repeatAttempt: 0, kind: "TOPIC", createdAt: "2026-07-09T10:00:00.000Z", topic: { id: 101, title: "Функції", orderIndex: 2, isIntro: false } } },
+  { id: -102, total: 78, workScore: 78, optimizationScore: 0, integrityScore: 100, aiFeedback: null, createdAt: "2026-07-08T10:00:00.000Z", task: { id: -12, title: "Словник контактів", descriptionMarkdown: "", starterCode: "", userCode: "", status: "GRADED", lessonInTopic: 3, repeatAttempt: 0, kind: "TOPIC", createdAt: "2026-07-08T10:00:00.000Z", topic: { id: 102, title: "Колекції", orderIndex: 3, isIntro: false } } },
+  { id: -103, total: 58, workScore: 58, optimizationScore: 0, integrityScore: 100, aiFeedback: null, createdAt: "2026-07-07T10:00:00.000Z", task: { id: -13, title: "Текстовий лічильник", descriptionMarkdown: "", starterCode: "", userCode: "", status: "GRADED", lessonInTopic: 2, repeatAttempt: 0, kind: "TOPIC", createdAt: "2026-07-07T10:00:00.000Z", topic: { id: 103, title: "Рядки", orderIndex: 4, isIntro: false } } },
+  { id: -104, total: 85, workScore: 85, optimizationScore: 0, integrityScore: 100, aiFeedback: null, createdAt: "2026-07-06T10:00:00.000Z", task: { id: -14, title: "Фільтр даних", descriptionMarkdown: "", starterCode: "", userCode: "", status: "GRADED", lessonInTopic: 4, repeatAttempt: 0, kind: "TOPIC", createdAt: "2026-07-06T10:00:00.000Z", topic: { id: 102, title: "Колекції", orderIndex: 3, isIntro: false } } },
+];
+
 interface Props {
   onNavigate?: (page: "home" | "tasks") => void;
 }
@@ -98,17 +106,18 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
   const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
+  const isDesignPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 
-  const [grades, setGrades] = useState<Grade[]>([]);
+  const [grades, setGrades] = useState<Grade[]>(() => isDesignPreview ? PREVIEW_GRADES : []);
   const [loading, setLoading] = useState(true);
   const [retryingTopicId, setRetryingTopicId] = useState<number | null>(null);
 
   useEffect(() => {
     listGrades()
       .then((data) => setGrades(Array.isArray(data) ? data : []))
-      .catch(() => setGrades([]))
+      .catch(() => setGrades(isDesignPreview ? PREVIEW_GRADES : []))
       .finally(() => setLoading(false));
-  }, []);
+  }, [isDesignPreview]);
 
   const validGrades = useMemo(() => grades.filter((g) => Number.isFinite(Number(g.total))), [grades]);
 
@@ -273,6 +282,13 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   if (loading) {
     return <PageSkeleton variant="table" />;
   }
+
+  return <PremiumProgress
+    stats={stats}
+    topics={topicHeatmap}
+    recent={recentGrades}
+    onRetry={handleRetryTopic}
+  />;
 
   const trendTone = stats.trend > 0 ? "text-accent-success" : stats.trend < 0 ? "text-accent-error" : "text-text-muted";
 

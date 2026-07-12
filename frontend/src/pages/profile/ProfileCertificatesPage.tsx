@@ -1,151 +1,146 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
-import { Award, RefreshCw, ArrowRight } from "lucide-react";
-import { Button } from "../../components/ui/Button";
-import { PageEyebrow } from "../../components/ui/PageEyebrow";
-import { Skeleton } from "../../components/ui/Skeleton";
+import { ArrowRight, Award, CheckCircle2, RefreshCw, ShieldX } from "lucide-react";
 import { getMyCertificates, type ProfileCertificate } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { ProfileSectionNav } from "../../components/profile/ProfileSectionNav";
 
-function fmtDateTime(iso: string | null | undefined, locale: string) {
-  const raw = String(iso ?? "").trim();
-  if (!raw) return "—";
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  return d.toLocaleString(locale);
-}
+const devPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
+const previewCertificates: ProfileCertificate[] = [
+  { certificateId: "SC-2026-PY-0142", contestId: 42, contestTitle: "Python Spring Challenge", participantName: "Оксана Мельник", score: 92, maxScore: 100, place: "12", organizer: "StudyCod", status: "valid", issuedAt: "2026-04-18T10:00:00.000Z", pdfStorageKey: null, createdAt: "2026-04-18T10:00:00.000Z" },
+  { certificateId: "SC-2026-ALG-0087", contestId: 37, contestTitle: "Algorithms Week", participantName: "Оксана Мельник", score: 86, maxScore: 100, place: "28", organizer: "StudyCod", status: "valid", issuedAt: "2026-02-07T10:00:00.000Z", pdfStorageKey: null, createdAt: "2026-02-07T10:00:00.000Z" },
+];
+
+const formatDate = (value: string | null | undefined, locale: string) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" });
+};
 
 export const ProfileCertificatesPage: React.FC = () => {
-  const { i18n } = useTranslation();
-  const isEn = (i18n.language ?? "").toLowerCase().startsWith("en");
-  const tr = React.useCallback((uk: string, en: string) => (isEn ? en : uk), [isEn]);
-  const prefersReducedMotion = useReducedMotion();
-
+  const english = !navigator.language.toLowerCase().startsWith("uk");
+  const copy = (uk: string, en: string) => english ? en : uk;
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [rows, setRows] = React.useState<ProfileCertificate[]>([]);
+  const [certificates, setCertificates] = React.useState<ProfileCertificate[]>([]);
 
-  const load = React.useCallback(async () => {
+  const refresh = React.useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (devPreview()) {
+      setCertificates(previewCertificates);
+      setLoading(false);
+      return;
+    }
     try {
-      const result = await getMyCertificates();
-      setRows(Array.isArray(result.certificates) ? result.certificates : []);
-    } catch (e: unknown) {
-      setError(getErrorMessageFromUnknown(e, tr("Не вдалося завантажити сертифікати", "Failed to load certificates")));
-      setRows([]);
+      const response = await getMyCertificates();
+      setCertificates(response.certificates ?? []);
+    } catch (cause) {
+      setCertificates([]);
+      setError(getErrorMessageFromUnknown(cause, copy("Не вдалося завантажити сертифікати.", "Could not load certificates.")));
     } finally {
       setLoading(false);
     }
-  }, [tr]);
+  }, [english]);
 
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  React.useEffect(() => { void refresh(); }, [refresh]);
 
   return (
-    <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto space-y-8">
-      <motion.div
-        initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
-        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: easeOutQuint }}
-        className="space-y-2"
-      >
-        <PageEyebrow label={tr("Сертифікати", "Certificates")} />
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Award className="w-5 h-5 text-primary" />
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">{tr("Мої сертифікати", "My certificates")}</h1>
+    <div className="min-h-[100dvh] bg-[#f5f7f4] text-[#17231b] dark:bg-[#101a13] dark:text-[#edf4ef]">
+      <main className="mx-auto flex min-h-[100dvh] max-w-6xl flex-col px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
+        <ProfileSectionNav
+          active="certificates"
+          className="mb-6"
+          action={(
+            <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#173321] px-4 text-sm font-semibold text-white transition hover:bg-[#20462d] disabled:opacity-50 dark:bg-[#edf4ef] dark:text-[#0b120d]">
+              <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+              {copy("Оновити", "Refresh")}
+            </button>
+          )}
+        />
+
+        <section className="relative overflow-hidden rounded-[30px] bg-[#1a2d20] px-6 py-8 text-white shadow-[0_26px_58px_-38px_rgba(0,0,0,.85)] sm:px-9 sm:py-10">
+          <div className="absolute -right-20 -top-24 size-80 rounded-full bg-[#ffd93d]/10 blur-3xl" />
+          <div className="absolute -bottom-28 left-10 size-72 rounded-full bg-[#00ff88]/10 blur-3xl" />
+          <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+            <div>
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#8df0bc]">
+                <Award className="size-4" />
+                {copy("Досягнення", "Achievements")}
+              </span>
+              <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-5xl">
+                {copy("Твої сертифікати", "Your certificates")}
+              </h1>
+              <p className="mt-4 max-w-xl text-base leading-7 text-[#b6c6b9]">
+                {copy("Підтвердження завершених контестів і результатів зібрані тут. Звідси можна повернутися в профіль або відкрити IAD.", "Verified records of completed contests and your results live here. You can return to profile or open IAD from here.")}
+              </p>
+            </div>
           </div>
-          <Button variant="secondary" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            {tr("Оновити", "Refresh")}
-          </Button>
-        </div>
-        <p className="text-sm text-text-secondary max-w-xl">
-          {tr("Тут зібрані всі згенеровані сертифікати з контестів.", "All generated contest certificates are listed here.")}
-        </p>
-      </motion.div>
+        </section>
 
-      <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
-
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : error ? (
-        <div className="text-sm text-accent-error">{error}</div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border py-14 px-6 flex flex-col items-center text-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Award className="w-5 h-5 text-primary" />
+        <section className="mt-6 flex-1">
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-sm text-[#627166] dark:text-[#a4b3a8]">
+              {loading ? copy("Оновлюємо список…", "Updating your list…") : copy(`${certificates.length} доступно`, `${certificates.length} available`)}
+            </p>
           </div>
-          <div className="text-sm text-text-secondary max-w-sm">{tr("Поки що сертифікатів немає.", "No certificates yet.")}</div>
-        </div>
-      ) : (
-        <motion.div
-          variants={prefersReducedMotion ? undefined : staggerContainer}
-          initial={prefersReducedMotion ? undefined : "initial"}
-          animate={prefersReducedMotion ? undefined : "animate"}
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-        >
-          {rows.map((row) => {
-            const isValid = String(row.status ?? "").toLowerCase() === "valid";
-            return (
-              <motion.div
-                key={row.certificateId}
-                variants={prefersReducedMotion ? undefined : fadeUpItem}
-                className="group rounded-xl border border-primary/30 bg-bg-surface p-5 transition-fast hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Award className="w-4 h-4 text-primary shrink-0" />
-                    <div className="font-semibold text-text-primary truncate">{row.contestTitle}</div>
-                  </div>
-                  <span
-                    className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono uppercase tracking-[0.06em] ${
-                      isValid ? "text-accent-success bg-accent-success/10" : "text-accent-error bg-accent-error/10"
-                    }`}
-                  >
-                    {row.status}
-                  </span>
-                </div>
 
-                <div className="h-px bg-gradient-to-r from-primary/30 via-border to-transparent my-3" />
+          {error ? (
+            <div className="rounded-2xl border border-[#ff6b9d]/30 bg-[#fff1f5] p-4 text-sm text-[#b83259] dark:bg-[#ff6b9d]/10 dark:text-[#ffabc4]">{error}</div>
+          ) : loading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-52 animate-pulse rounded-[24px] bg-[#e6ece7] dark:bg-white/[.055]" />)}
+            </div>
+          ) : certificates.length === 0 ? (
+            <div className="grid min-h-72 place-items-center rounded-[28px] border border-dashed border-[#152219]/15 bg-white p-8 text-center dark:border-white/10 dark:bg-[#18231b]">
+              <div>
+                <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#e8f6ed] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#71edaf]">
+                  <Award className="size-6" />
+                </span>
+                <h2 className="mt-5 text-xl font-semibold">{copy("Сертифікатів ще немає", "No certificates yet")}</h2>
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#6d7c71] dark:text-[#a2b1a6]">
+                  {copy("Після успішного контесту тут з’явиться верифікований результат.", "A verified record will appear here after a successful contest.")}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {certificates.map((certificate) => {
+                const valid = String(certificate.status).toLowerCase() === "valid";
+                return (
+                  <article key={certificate.certificateId} className="group relative overflow-hidden rounded-[24px] border border-[#152219]/10 bg-white p-5 shadow-[0_20px_45px_-38px_rgba(11,31,17,.55)] transition hover:-translate-y-1 hover:border-[#00c96d]/35 dark:border-white/10 dark:bg-[#18231b]">
+                    <div className="absolute right-0 top-0 size-28 translate-x-8 -translate-y-8 rounded-full bg-[#00ff88]/[.07]" />
+                    <div className="relative flex items-start justify-between gap-4">
+                      <span className={`grid size-11 place-items-center rounded-2xl ${valid ? "bg-[#e8f6ed] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#71edaf]" : "bg-[#fff0f4] text-[#d34e72] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abb]"}`}>
+                        {valid ? <Award className="size-5" /> : <ShieldX className="size-5" />}
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${valid ? "bg-[#e9f8ee] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#71edaf]" : "bg-[#fff0f4] text-[#c84268] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abb]"}`}>
+                        {valid && <CheckCircle2 className="size-3.5" />}
+                        {certificate.status}
+                      </span>
+                    </div>
+                    <h2 className="relative mt-6 text-xl font-semibold tracking-[-.03em]">{certificate.contestTitle}</h2>
+                    <div className="relative mt-5 grid grid-cols-3 gap-3 border-y border-[#152219]/8 py-4 text-sm dark:border-white/[.08]">
+                      <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">{copy("Бали", "Score")}</div><strong className="mt-1 block">{certificate.score}/{certificate.maxScore}</strong></div>
+                      <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">{copy("Місце", "Place")}</div><strong className="mt-1 block">{certificate.place ?? "—"}</strong></div>
+                      <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">ID</div><strong className="mt-1 block truncate">{certificate.certificateId}</strong></div>
+                    </div>
+                    <div className="relative mt-4 flex items-center justify-between gap-3">
+                      <span className="text-xs text-[#78867c] dark:text-[#98a89c]">{formatDate(certificate.issuedAt ?? certificate.createdAt, english ? "en-US" : "uk-UA")}</span>
+                      <Link to={`/certificate/${encodeURIComponent(certificate.certificateId)}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#147b47] transition group-hover:gap-2.5 dark:text-[#71edaf]">
+                        {copy("Перевірити", "Verify")}
+                        <ArrowRight className="size-4" />
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-sm">
-                  <span className="text-text-secondary">
-                    {tr("Бали", "Score")}: <span className="text-text-primary font-semibold">{row.score}/{row.maxScore}</span>
-                  </span>
-                  <span className="text-text-secondary">
-                    {tr("Місце", "Place")}: <span className="text-text-primary font-semibold">{row.place ?? "—"}</span>
-                  </span>
-                </div>
-
-                <div className="mt-2 font-mono text-xs text-text-muted">
-                  {tr("Видано", "Issued")}: {fmtDateTime(row.issuedAt ?? row.createdAt, i18n.language)}
-                </div>
-
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="font-mono text-xs text-text-muted">ID: {row.certificateId}</span>
-                  <Link
-                    className="inline-flex items-center gap-1.5 text-sm font-mono text-primary opacity-70 group-hover:opacity-100 transition-fast"
-                    to={`/certificate/${encodeURIComponent(row.certificateId)}`}
-                  >
-                    {tr("Перевірити", "Verify")}
-                    <ArrowRight className="w-4 h-4 transition-fast group-hover:translate-x-0.5" />
-                  </Link>
-                </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-      )}
+        <ProfileSectionNav active="certificates" className="mt-8" />
+      </main>
     </div>
   );
 };

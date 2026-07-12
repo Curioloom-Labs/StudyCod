@@ -3,7 +3,7 @@ import { Target, Check, X, ListChecks, Info, Lightbulb, AlertTriangle, Play, Ter
 import { MarkdownView } from "../MarkdownView";
 import { Button } from "../ui/Button";
 import { tr } from "../../i18n";
-import { runPlayground, type PlaygroundRunResult } from "../../lib/api/playground";
+import { normalizePlaygroundLanguage, runPlayground, type PlaygroundRunResult } from "../../lib/api/playground";
 import type { InteractiveLesson, LessonBlock } from "../../lib/lessonBlocks";
 
 const CALLOUT: Record<string, { cls: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -20,7 +20,7 @@ const RunnableBlock: React.FC<{ block: Extract<LessonBlock, { type: "runnable" }
   const run = async () => {
     setRunning(true);
     try {
-      setOutput(await runPlayground({ language: block.language, code }));
+      setOutput(await runPlayground({ language: normalizePlaygroundLanguage(block.language), code }));
     } catch {
       setOutput({ stdout: "", stderr: tr("Не вдалося запустити код", "Failed to run code"), exitCode: 1, success: false });
     } finally {

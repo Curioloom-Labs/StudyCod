@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { LifeBuoy, MessageSquarePlus, Paperclip, Send, CheckCircle2, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, FileText, Image as ImageIcon, LifeBuoy, MessageSquarePlus, Paperclip, Plus, RefreshCw, Send, X } from "lucide-react";
 import { tr } from "../../i18n";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
@@ -20,12 +20,25 @@ import {
   type SupportChatMessage
 } from "../../lib/api/support";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { SupportExperience } from "./SupportExperience";
+
+const PREVIEW_CONVERSATIONS: SupportChatConversation[] = [
+  { id: 901, subject: "Не відкривається перевірка задачі", status: "OPEN", createdAt: new Date().toISOString(), lastMessageAt: new Date().toISOString() },
+  { id: 900, subject: "Питання щодо прогресу курсу", status: "CLOSED", createdAt: new Date(Date.now() - 86400000).toISOString(), lastMessageAt: new Date(Date.now() - 7200000).toISOString() },
+];
+
+const PREVIEW_MESSAGES: SupportChatMessage[] = [
+  { id: 1, senderType: "USER", text: "Після запуску рішення перевірка довго завантажується, але результат не з’являється.", createdAt: new Date(Date.now() - 3600000).toISOString(), attachments: [] },
+  { id: 2, senderType: "ADMIN", text: "Дякуємо за деталі. Ми перевіряємо чергу виконання. Підкажіть, будь ласка, мову та назву задачі.", createdAt: new Date(Date.now() - 3000000).toISOString(), attachments: [] },
+  { id: 3, senderType: "USER", text: "Python, задача «Унікальні слова». Додаю скріншот стану.", createdAt: new Date(Date.now() - 2400000).toISOString(), attachments: [{ id: 11, originalName: "task-state.png", mimeType: "image/png", sizeBytes: 184320 }] },
+];
 
 export const SupportPage: React.FC = () => {
   const navigate = useNavigate();
   const prefersReducedMotion = useReducedMotion();
   const isAurora = useUIMode().mode === "aurora";
   const [searchParams] = useSearchParams();
+  const isPreview = import.meta.env.DEV && searchParams.get("preview") === "1";
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<SupportChatConversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
@@ -48,7 +61,7 @@ export const SupportPage: React.FC = () => {
 
   const senderLabel = (senderType: string) => {
     if (senderType === "USER") return tr("Користувач", "User");
-    if (senderType === "SUPPORT") return tr("Підтримка", "Support");
+    if (senderType === "SUPPORT" || senderType === "ADMIN") return tr("Підтримка", "Support");
     return senderType;
   };
 
@@ -91,6 +104,11 @@ export const SupportPage: React.FC = () => {
   const loadConversations = async () => {
     setLoading(true);
     setError(null);
+    if (isPreview) {
+      setConversations(PREVIEW_CONVERSATIONS);
+      setLoading(false);
+      return;
+    }
     try {
       const data = await listSupportChatConversations();
       setConversations(data.conversations || []);
@@ -105,6 +123,11 @@ export const SupportPage: React.FC = () => {
   const loadThread = async (conversationId: number) => {
     setThreadLoading(true);
     setError(null);
+    if (isPreview) {
+      setMessages(conversationId === 901 ? PREVIEW_MESSAGES : PREVIEW_MESSAGES.slice(0, 2));
+      setThreadLoading(false);
+      return;
+    }
     try {
       const data = await getSupportChatConversation(conversationId);
       setMessages(data.messages || []);
@@ -131,8 +154,8 @@ export const SupportPage: React.FC = () => {
       return;
     }
 
-    if (!selectedConversationId || !conversations.some(c => c.id === selectedConversationId)) {
-      setSelectedConversationId(conversations[0].id);
+    if (selectedConversationId && !conversations.some(c => c.id === selectedConversationId)) {
+      setSelectedConversationId(null);
     }
   }, [conversations, requestedConversationId, selectedConversationId]);
 
@@ -150,6 +173,17 @@ export const SupportPage: React.FC = () => {
     if (!canCreate) return;
     setSending(true);
     setError(null);
+    if (isPreview) {
+      const now = new Date().toISOString();
+      const previewConversation: SupportChatConversation = { id: 902, subject: newSubject.trim(), status: "OPEN", createdAt: now, lastMessageAt: now };
+      setConversations(prev => [previewConversation, ...prev]);
+      setMessages([{ id: 20, senderType: "USER", text: newMessage.trim(), createdAt: now, attachments: [] }]);
+      setSelectedConversationId(902);
+      setNewSubject("");
+      setNewMessage("");
+      setSending(false);
+      return;
+    }
     try {
       const res = await createSupportChatConversation({
         subject: newSubject.trim(),
@@ -173,6 +207,13 @@ export const SupportPage: React.FC = () => {
     if (!canSend) return;
     setSending(true);
     setError(null);
+    if (isPreview) {
+      setMessages(prev => [...prev, { id: Date.now(), senderType: "USER", text: composerText.trim(), createdAt: new Date().toISOString(), attachments: [] }]);
+      setComposerText("");
+      setComposerFiles([]);
+      setSending(false);
+      return;
+    }
     try {
       const res = await postSupportChatMessage(selectedConversationId, {
         text: composerText,
@@ -238,6 +279,10 @@ export const SupportPage: React.FC = () => {
 
   const closeConversation = async () => {
     if (!selectedConversationId) return;
+    if (isPreview) {
+      setConversations(prev => prev.map(item => item.id === selectedConversationId ? { ...item, status: "CLOSED" } : item));
+      return;
+    }
     const reason = window.prompt(tr("Причина закриття (необов'язково)", "Close reason (optional)"), "") ?? "";
     try {
       await closeSupportChatConversation(selectedConversationId, reason);
@@ -248,6 +293,69 @@ export const SupportPage: React.FC = () => {
       setError(String(msg));
     }
   };
+
+  return <SupportExperience
+    tr={tr}
+    loading={loading}
+    sending={sending}
+    threadLoading={threadLoading}
+    error={error}
+    conversations={conversations}
+    selectedConversationId={selectedConversationId}
+    selectedConversation={selectedConversation}
+    messages={messages}
+    newSubject={newSubject}
+    newMessage={newMessage}
+    composerText={composerText}
+    composerFiles={composerFiles}
+    canCreate={canCreate}
+    canSend={canSend}
+    fileInputRef={fileInputRef}
+    setNewSubject={setNewSubject}
+    setNewMessage={setNewMessage}
+    setComposerText={setComposerText}
+    setComposerFiles={setComposerFiles}
+    selectConversation={setSelectedConversationId}
+    onCreateConversation={onCreateConversation}
+    onSendMessage={onSendMessage}
+    onRefresh={loadConversations}
+    onCloseConversation={closeConversation}
+    onHome={() => navigate("/")}
+    onDownloadAttachment={downloadAttachment}
+    statusLabel={statusLabel}
+    senderLabel={senderLabel}
+    humanSize={humanSize}
+  />;
+
+  return (
+    <div className="min-h-[100dvh] bg-[#f7f8f5] px-5 py-6 font-sans text-[#111814] [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans dark:bg-[#0b100d] dark:text-[#edf3ef] max-sm:px-3 max-sm:py-3">
+      <div className="mx-auto max-w-[1320px]">
+        <motion.header initial={prefersReducedMotion ? undefined : { opacity: 0, y: -10 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }} className="mb-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3"><button onClick={() => navigate("/")} className="grid size-10 place-items-center rounded-xl border border-[#122017]/10 bg-white text-[#667169] transition hover:border-[#00b963]/30 dark:border-white/10 dark:bg-[#171e19] dark:text-[#a4afa7]"><ArrowLeft className="size-4" /></button><div><span className="text-[10px] font-extrabold uppercase tracking-[.13em] text-[#00884a] dark:text-[#62ecaa]">StudyCod care</span><h1 className="mt-0.5 text-xl font-bold tracking-[-.035em]">{tr("Підтримка", "Support")}</h1></div></div>
+          <button onClick={loadConversations} disabled={loading} className="flex h-10 items-center gap-2 rounded-xl border border-[#122017]/10 bg-white px-3.5 text-[12px] font-bold text-[#667169] transition hover:border-[#00b963]/30 dark:border-white/10 dark:bg-[#171e19] dark:text-[#a4afa7]"><RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />{tr("Оновити", "Refresh")}</button>
+        </motion.header>
+
+        {error && <div className="mb-4 flex items-start gap-3 rounded-2xl border border-[#ff6b9d]/20 bg-[#ff6b9d]/10 px-4 py-3 text-[13px] leading-5 text-[#c94370] dark:text-[#ff91b7]"><X className="mt-0.5 size-4 shrink-0" />{error}</div>}
+
+        <motion.div initial={prefersReducedMotion ? undefined : { opacity: 0, y: 18 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .55, ease: [0.16, 1, .3, 1] }} className="grid min-h-[calc(100dvh-112px)] grid-cols-[340px_1fr] overflow-hidden rounded-[26px] border border-[#122017]/10 bg-white shadow-[0_28px_75px_rgba(18,32,23,.08)] dark:border-white/10 dark:bg-[#131a15] dark:shadow-[0_28px_75px_rgba(0,0,0,.28)] max-[850px]:grid-cols-1 max-[850px]:overflow-visible">
+          <aside className="flex min-h-0 flex-col border-r border-[#122017]/10 bg-[#f3f5f1] p-4 dark:border-white/10 dark:bg-[#101612] max-[850px]:max-h-[360px] max-[850px]:border-b max-[850px]:border-r-0">
+            <div className="flex items-center justify-between gap-3 px-1 pb-4"><div><span className="text-[11px] font-bold text-[#667169] dark:text-[#9da9a1]">{tr("Ваші звернення", "Your requests")}</span><p className="mt-1 text-[10px] text-[#8a958d]">{conversations.length} {tr("діалогів", "conversations")}</p></div><button onClick={() => setSelectedConversationId(null)} className="grid size-9 place-items-center rounded-xl bg-[#00ff88] text-[#06150d] shadow-[0_8px_20px_rgba(0,185,99,.16)]" title={tr("Нове звернення", "New request")}><Plus className="size-4" /></button></div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              {loading ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-[76px] animate-pulse rounded-2xl bg-[#e5e9e3] dark:bg-[#1c241e]" />) : conversations.length === 0 ? <div className="flex h-full min-h-[240px] flex-col items-center justify-center px-6 text-center"><span className="grid size-12 place-items-center rounded-2xl bg-[#00ff88]/10 text-[#00884a] dark:text-[#62ecaa]"><LifeBuoy className="size-5" /></span><strong className="mt-4 text-[13px]">{tr("Поки тихо", "All quiet")}</strong><p className="mt-1 text-[11px] leading-5 text-[#7b877f]">{tr("Створіть перше звернення, якщо потрібна допомога.", "Create your first request whenever you need help.")}</p></div> : conversations.map(c => <button key={c.id} onClick={() => setSelectedConversationId(c.id)} className={`w-full rounded-2xl border p-3 text-left transition ${selectedConversationId === c.id ? "border-[#00b963]/25 bg-white shadow-sm dark:border-[#00e97c]/25 dark:bg-[#1a231c]" : "border-transparent hover:border-[#122017]/10 hover:bg-white/70 dark:hover:border-white/10 dark:hover:bg-[#171e19]"}`}><div className="flex items-start justify-between gap-3"><strong className="line-clamp-1 text-[12px]">{c.subject}</strong><span className={`mt-1 size-2 shrink-0 rounded-full ${c.status === "OPEN" ? "bg-[#00b963]" : "bg-[#a0aaa3]"}`} /></div><div className="mt-2 flex items-center justify-between gap-2 text-[9px] text-[#7d8981]"><span className="flex items-center gap-1"><Clock3 className="size-3" />{new Date(c.lastMessageAt).toLocaleDateString()}</span><span>{statusLabel(c.status)}</span></div></button>)}
+            </div>
+          </aside>
+
+          <section className="flex min-h-0 flex-col bg-white dark:bg-[#131a15]">
+            {!selectedConversationId ? <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col justify-center px-8 py-12 max-sm:px-5"><span className="grid size-12 place-items-center rounded-2xl bg-[#00ff88]/10 text-[#00884a] dark:text-[#62ecaa]"><MessageSquarePlus className="size-5" /></span><h2 className="mt-6 text-[32px] font-bold tracking-[-.045em] max-sm:text-[27px]">{tr("Розкажіть, що сталося", "Tell us what happened")}</h2><p className="mt-3 max-w-[560px] text-[14px] leading-6 text-[#667169] dark:text-[#a2ada5]">{tr("Опишіть ситуацію та кроки, після яких виникла проблема. Ми побачимо звернення в єдиному потоці підтримки.", "Describe the situation and the steps that led to it. We’ll receive your request in the shared support queue.")}</p><form onSubmit={onCreateConversation} className="mt-8 space-y-4"><div><label className="mb-2 block text-[12px] font-bold text-[#556158] dark:text-[#b3bdb6]">{tr("Тема", "Subject")}</label><input value={newSubject} onChange={e => setNewSubject(e.target.value)} className="h-12 w-full rounded-[14px] border border-[#122017]/10 bg-[#f7f8f5] px-4 text-sm outline-none transition focus:border-[#00b963]/50 focus:ring-4 focus:ring-[#00ff88]/10 dark:border-white/10 dark:bg-[#0f1511]" placeholder={tr("Наприклад: не відкривається задача", "For example: a task won’t open")} required /></div><div><label className="mb-2 block text-[12px] font-bold text-[#556158] dark:text-[#b3bdb6]">{tr("Деталі", "Details")}</label><textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} className="min-h-[150px] w-full resize-y rounded-[14px] border border-[#122017]/10 bg-[#f7f8f5] p-4 text-sm leading-6 outline-none transition focus:border-[#00b963]/50 focus:ring-4 focus:ring-[#00ff88]/10 dark:border-white/10 dark:bg-[#0f1511]" placeholder={tr("Що ви очікували побачити і що відбулося натомість?", "What did you expect, and what happened instead?")} required /></div><div className="flex items-center justify-between gap-4"><p className="text-[11px] leading-5 text-[#7b877f]">{tr("Файли можна буде додати в чаті.", "Files can be added in the chat.")}</p><button type="submit" disabled={!canCreate || sending} className="inline-flex h-12 items-center gap-2 rounded-[14px] bg-[#00ff88] px-5 text-[13px] font-bold text-[#06150d] shadow-[0_10px_25px_rgba(0,185,99,.17)] disabled:opacity-50">{sending ? tr("Створюємо…", "Creating…") : tr("Створити звернення", "Create request")}<Send className="size-4" /></button></div></form></div> : <>
+              <header className="flex min-h-[78px] items-center justify-between gap-4 border-b border-[#122017]/10 px-6 py-4 dark:border-white/10 max-sm:px-4"><div><div className="flex items-center gap-2"><h2 className="text-[15px] font-bold">{selectedConversation?.subject ?? tr("Звернення", "Request")}</h2><span className="text-[10px] text-[#7b877f]">#{selectedConversationId}</span></div><span className="mt-1 block text-[10px] text-[#7b877f]">{selectedConversation ? statusLabel(selectedConversation!.status) : ""}</span></div>{selectedConversation?.status === "OPEN" ? <button onClick={closeConversation} className="h-9 rounded-xl border border-[#122017]/10 px-3 text-[11px] font-bold text-[#667169] dark:border-white/10 dark:text-[#a4afa7]">{tr("Закрити", "Close")}</button> : <span className="flex items-center gap-1.5 rounded-full bg-[#edf0eb] px-3 py-1.5 text-[10px] text-[#667169] dark:bg-[#202821] dark:text-[#a4afa7]"><CheckCircle2 className="size-3.5" />{tr("Закрито", "Closed")}</span>}</header>
+              <div className="flex-1 overflow-y-auto bg-[#f7f8f5] p-6 dark:bg-[#0e1410] max-sm:p-4">{threadLoading ? <div className="space-y-4"><div className="h-20 w-2/3 animate-pulse rounded-2xl bg-[#e5e9e3] dark:bg-[#1c241e]" /><div className="ml-auto h-20 w-3/4 animate-pulse rounded-2xl bg-[#dff8ea] dark:bg-[#153122]" /></div> : messages.length === 0 ? <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center"><LifeBuoy className="size-6 text-[#00a85c]" /><p className="mt-3 text-[12px] text-[#7b877f]">{tr("Повідомлень ще немає.", "No messages yet.")}</p></div> : <div className="space-y-4">{messages.map(m => { const isUser = m.senderType === "USER"; return <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}><div className={`max-w-[78%] rounded-[18px] px-4 py-3 ${isUser ? "bg-[#00ff88]/12 text-[#102017] dark:bg-[#00e97c]/15 dark:text-[#e8f5ed]" : "border border-[#122017]/10 bg-white dark:border-white/10 dark:bg-[#171e19]"}`}><div className="flex items-center justify-between gap-6 text-[9px] text-[#718078] dark:text-[#8f9b93]"><span>{senderLabel(m.senderType)}</span><span>{new Date(m.createdAt).toLocaleString()}</span></div>{m.text && <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-6">{m.text}</p>}{m.attachments?.length ? <div className="mt-3 space-y-2">{m.attachments.map(a => <button key={a.id} onClick={() => downloadAttachment(a.id)} className="flex w-full items-center gap-2 rounded-xl border border-[#122017]/10 bg-white/60 p-2 text-left dark:border-white/10 dark:bg-black/10"><FileText className="size-4 text-[#00a85c]" /><span className="min-w-0 flex-1 truncate text-[10px]">{a.originalName}</span><small className="text-[9px] text-[#7b877f]">{humanSize(a.sizeBytes)}</small></button>)}</div> : null}</div></div>; })}</div>}</div>
+              <form onSubmit={onSendMessage} className="border-t border-[#122017]/10 bg-white p-4 dark:border-white/10 dark:bg-[#131a15]"><textarea value={composerText} onChange={e => setComposerText(e.target.value)} disabled={selectedConversation?.status === "CLOSED"} className="min-h-[80px] w-full resize-none rounded-[14px] border border-[#122017]/10 bg-[#f7f8f5] p-3 text-[13px] leading-5 outline-none focus:border-[#00b963]/50 dark:border-white/10 dark:bg-[#0f1511]" placeholder={tr("Напишіть повідомлення…", "Write a message…")} /><div className="mt-3 flex items-center justify-between gap-3"><label className="flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-[#122017]/10 px-3 text-[11px] font-bold text-[#667169] dark:border-white/10 dark:text-[#a4afa7]"><Paperclip className="size-3.5" /><input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => setComposerFiles(Array.from(e.target.files || []))} />{composerFiles.length ? `${composerFiles.length} ${tr("файл(и)", "file(s)")}` : tr("Додати файли", "Attach files")}</label><button type="submit" disabled={!canSend} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#00ff88] px-4 text-[12px] font-bold text-[#06150d] disabled:opacity-40"><Send className="size-3.5" />{sending ? tr("Надсилаємо…", "Sending…") : tr("Надіслати", "Send")}</button></div></form>
+            </>}
+          </section>
+        </motion.div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="px-4 md:px-8 pt-8 pb-6 max-w-6xl mx-auto space-y-8">

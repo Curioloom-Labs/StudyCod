@@ -1,217 +1,122 @@
 import React from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Check, User, GraduationCap, Building2, Sparkles } from "lucide-react";
-import { Button } from "../../components/ui/Button";
-import { PageEyebrow } from "../../components/ui/PageEyebrow";
-import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
+import { ArrowLeft, ArrowRight, Building2, Check, GraduationCap, Sparkles, UserRound } from "lucide-react";
+import { PublicProductNav } from "../../components/layout/PublicProductNav";
+import { PlatformFooter } from "../../components/layout/PlatformFooter";
 
 type Plan = {
-  Icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string }>;
   audience: string;
   name: string;
   price: string;
   period: string;
-  tagline: string;
+  description: string;
   features: string[];
   cta: string;
-  ctaTo: string;
-  highlight?: boolean;
+  to: string;
+  accent: "green" | "orange" | "yellow" | "pink";
+  featured?: boolean;
+};
+
+const accentStyles = {
+  green: "bg-[#00ff88]/12 text-[#00884a] dark:text-[#63efad]",
+  orange: "bg-[#ff8c00]/12 text-[#b96300] dark:text-[#ffad4a]",
+  yellow: "bg-[#ffd93d]/20 text-[#8b6b00] dark:text-[#ffe36c]",
+  pink: "bg-[#ff6b9d]/12 text-[#c64270] dark:text-[#ff8fb6]",
 };
 
 export const PricingPage: React.FC = () => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
-  const prefersReducedMotion = useReducedMotion();
-  const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
+  const reduceMotion = useReducedMotion();
+  const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const reveal = reduceMotion ? {} : { initial: { opacity: 0, y: 22 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: .12 }, transition: { duration: .6, ease: [0.16, 1, .3, 1] as const } };
 
   const plans: Plan[] = [
     {
-      Icon: User,
-      audience: tr("Учням", "Students"),
-      name: tr("Free", "Free"),
-      price: tr("0 ₴", "$0"),
+      icon: UserRound,
+      audience: tr("Самостійне навчання", "Independent learning"),
+      name: tr("Старт", "Start"),
+      price: "0 ₴",
       period: tr("назавжди", "forever"),
-      tagline: tr("Старт практики без бар'єрів", "Start practicing with no barriers"),
-      features: [
-        tr("Бібліотека задач і автоперевірка коду", "Task library and automatic code checking"),
-        tr("Базові мови програмування", "Core programming languages"),
-        tr("Обмежені AI-підказки", "Limited AI hints"),
-        tr("Участь у відкритих контестах", "Participation in open contests"),
-      ],
-      cta: tr("Почати безкоштовно", "Start for free"),
-      ctaTo: "/?auth=register",
+      description: tr("Усе необхідне, щоб почати практикувати програмування без бар’єрів.", "Everything needed to start practicing programming without barriers."),
+      features: [tr("Бібліотека базових задач", "Core task library"), tr("Автоматична перевірка коду", "Automatic code checks"), tr("Відкриті навчальні курси", "Open learning courses"), tr("Особистий прогрес", "Personal progress")],
+      cta: tr("Почати безкоштовно", "Start for free"), to: "/?auth=register", accent: "green",
     },
     {
-      Icon: Sparkles,
-      audience: tr("Учням", "Students"),
-      name: tr("Pro", "Pro"),
-      price: tr("149 ₴", "$3.99"),
-      period: tr("/міс", "/mo"),
-      tagline: tr("Повний інструмент для швидкого прогресу", "The full toolkit for fast progress"),
-      features: [
-        tr("Усе з Free", "Everything in Free"),
-        tr("Необмежені AI-підказки та аналіз помилок", "Unlimited AI hints and error analysis"),
-        tr("Покроковий візуалізатор виконання + граф пам'яті", "Step-through execution visualizer + memory graph"),
-        tr("Усі мови та версії компіляторів", "All languages and compiler versions"),
-        tr("Сертифікати про проходження", "Completion certificates"),
-      ],
-      cta: tr("Спробувати Pro", "Try Pro"),
-      ctaTo: "/?auth=register",
-      highlight: true,
+      icon: Sparkles,
+      audience: tr("Поглиблена практика", "Advanced practice"),
+      name: "Pro",
+      price: "149 ₴",
+      period: tr("на місяць", "per month"),
+      description: tr("Більше практики, детальний фідбек і повний маршрут розвитку навичок.", "More practice, detailed feedback, and a complete skill-building path."),
+      features: [tr("Усе зі Старт", "Everything in Start"), tr("Розширені курси й задачі", "Advanced courses and tasks"), tr("Розбір помилок і розумні підказки", "Error analysis and smart hints"), tr("Візуалізація виконання коду", "Code execution visualization"), tr("Сертифікати проходження", "Completion certificates")],
+      cta: tr("Спробувати Pro", "Try Pro"), to: "/?auth=register", accent: "orange", featured: true,
     },
     {
-      Icon: GraduationCap,
-      audience: tr("Вчителям", "Teachers"),
+      icon: GraduationCap,
+      audience: tr("Для викладача", "For teachers"),
       name: tr("Клас", "Class"),
-      price: tr("799 ₴", "$19"),
-      period: tr("/міс за клас", "/mo per class"),
-      tagline: tr("EDU-режим для репетитора чи вчителя", "EDU mode for a tutor or teacher"),
-      features: [
-        tr("До 30 учнів у класі", "Up to 30 students per class"),
-        tr("Журнал оцінок (12-бальна та інші шкали)", "Gradebook (12-point and other scales)"),
-        tr("Перевірка академічної доброчесності", "Academic integrity checks"),
-        tr("Курси-шаблони й автоматичні завдання", "Course templates and automatic assignments"),
-        tr("Code-aware Live Classroom", "Code-aware Live Classroom"),
-      ],
-      cta: tr("Створити клас", "Create a class"),
-      ctaTo: "/?auth=register",
+      price: "799 ₴",
+      period: tr("за клас / місяць", "per class / month"),
+      description: tr("Цілісний робочий простір для викладання, практики й оцінювання.", "A complete workspace for teaching, practice, and assessment."),
+      features: [tr("До 30 учнів у класі", "Up to 30 students per class"), tr("Курси та автоматичні завдання", "Courses and automatic assignments"), tr("Журнал і гнучкі шкали оцінок", "Gradebook and flexible grading"), tr("Аналітика навчального прогресу", "Learning progress analytics"), tr("Live Classroom", "Live Classroom")],
+      cta: tr("Створити клас", "Create a class"), to: "/?auth=register", accent: "yellow",
     },
     {
-      Icon: Building2,
-      audience: tr("Закладам освіти", "Schools"),
+      icon: Building2,
+      audience: tr("Для закладу освіти", "For institutions"),
       name: tr("Школа", "School"),
       price: tr("Індивідуально", "Custom"),
-      period: tr("ліцензія на заклад", "per-institution license"),
-      tagline: tr("Розгортання на всю школу чи ліцей", "Roll out across a whole school"),
-      features: [
-        tr("Ліцензії за кількістю учнів (об'ємні знижки)", "Per-seat licensing with volume discounts"),
-        tr("Організація з ролями та адмінкою", "Organization with roles and admin panel"),
-        tr("Пакетне підключення класів і вчителів", "Bulk onboarding of classes and teachers"),
-        tr("Захист даних неповнолітніх", "Protection of minors' data"),
-        tr("Пріоритетна підтримка та пілот", "Priority support and a pilot"),
-      ],
-      cta: tr("Запросити пілот", "Request a pilot"),
-      ctaTo: "/support",
+      period: tr("ліцензія", "license"),
+      description: tr("Єдиний стандарт навчання програмуванню для всієї школи або ліцею.", "One programming education standard for an entire school or lyceum."),
+      features: [tr("Гнучке ліцензування учнів", "Flexible student licensing"), tr("Ролі й адміністрування організації", "Organization roles and administration"), tr("Пакетне підключення класів", "Bulk class onboarding"), tr("Захист даних неповнолітніх", "Protection of minors’ data"), tr("Пілот і пріоритетна підтримка", "Pilot and priority support")],
+      cta: tr("Обговорити пілот", "Discuss a pilot"), to: "/support", accent: "pink",
     },
   ];
 
   return (
-    <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-      <motion.header
-        initial={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
-        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: easeOutQuint }}
-        className="min-h-14 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 md:px-6 py-2 shrink-0"
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            {tr("Назад", "Back")}
-          </Button>
-          <div className="h-4 w-px bg-border hidden sm:block" />
-          <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-mono text-text-primary">{tr("Тарифи", "Pricing")}</span>
-          </div>
-        </div>
-      </motion.header>
+    <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans dark:bg-[#0b100d] dark:text-[#edf3ef]">
+      <PublicProductNav active="pricing" />
 
-      <main className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-8">
-        <motion.div
-          variants={prefersReducedMotion ? undefined : staggerContainer}
-          initial={prefersReducedMotion ? undefined : "initial"}
-          animate={prefersReducedMotion ? undefined : "animate"}
-          className="max-w-5xl mx-auto"
-        >
-          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mb-8">
-            <PageEyebrow label="pricing" />
-            <h1 className="mt-1 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-              {tr("Тарифи StudyCod", "StudyCod pricing")}
-            </h1>
-            <p className="mt-2 text-sm text-text-secondary max-w-2xl">
-              {tr(
-                "Безкоштовно для самостійних учнів, доступно для вчителів і репетиторів, масштабовано для закладів освіти. Прозора модель: учень практикує безкоштовно, школа платить за інструмент для вчителя.",
-                "Free for independent students, affordable for teachers and tutors, scalable for schools. A transparent model: students practice for free, schools pay for the teacher's toolkit."
-              )}
-            </p>
+      <main>
+        <section className="relative mx-auto w-[min(1200px,calc(100%_-_40px))] pb-16 pt-24 text-center max-md:pt-16">
+          <div className="pointer-events-none absolute left-1/2 top-5 size-[540px] -translate-x-1/2 rounded-full bg-[#00ff88]/[.055] blur-[90px]" />
+          <motion.div initial={reduceMotion ? undefined : { opacity: 0, y: 20 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .7, ease: [0.16, 1, .3, 1] }} className="relative mx-auto max-w-[820px]">
+            <button onClick={() => navigate("/")} className="mx-auto mb-6 flex w-fit items-center gap-2 text-[12px] font-bold text-[#667169] dark:text-[#99a59d]"><ArrowLeft className="size-4" />{tr("На головну", "Back home")}</button>
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#122017]/10 bg-white px-3 py-1.5 text-[11px] font-bold text-[#007f48] shadow-sm dark:border-white/10 dark:bg-[#171f19] dark:text-[#65efae]"><span className="size-1.5 rounded-full bg-[#00b963]" />{tr("Прозорі умови без прихованих платежів", "Transparent plans with no hidden fees")}</span>
+            <h1 className="mt-6 text-balance text-[clamp(44px,6vw,76px)] font-bold leading-[1] tracking-[-.055em]">{tr("План для кожного способу навчатися.", "A plan for every way of learning.")}</h1>
+            <p className="mx-auto mt-6 max-w-[680px] text-[17px] leading-8 text-[#667169] dark:text-[#a3aea6]">{tr("Починайте безкоштовно, розвивайте власну практику або організуйте навчання для цілого класу.", "Start free, deepen your own practice, or organize learning for an entire class.")}</p>
           </motion.div>
+        </section>
 
-          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
-            <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent mb-8" />
+        <section className="mx-auto grid w-[min(1200px,calc(100%_-_40px))] grid-cols-4 gap-3 pb-28 max-[1050px]:grid-cols-2 max-md:grid-cols-1">
+          {plans.map((plan, index) => <motion.article {...reveal} transition={{ duration: .55, delay: index * .06, ease: [0.16, 1, .3, 1] }} key={plan.name} className={`relative flex min-h-[610px] flex-col overflow-hidden rounded-[25px] border p-6 ${plan.featured ? "border-[#00b963]/30 bg-[linear-gradient(165deg,rgba(0,255,136,.09),#fff_35%)] shadow-[0_30px_75px_rgba(18,32,23,.1)] dark:border-[#00e97c]/25 dark:bg-[linear-gradient(165deg,rgba(0,255,136,.08),#171f19_35%)] dark:shadow-[0_30px_75px_rgba(0,0,0,.28)]" : "border-[#122017]/10 bg-white shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-[#151c17] dark:shadow-[0_18px_50px_rgba(0,0,0,.2)]"}`}>
+            {plan.featured && <span className="absolute right-4 top-4 rounded-full bg-[#00ff88] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[.1em] text-[#07140d]">{tr("Популярний", "Popular")}</span>}
+            <span className={`grid size-11 place-items-center rounded-[14px] ${accentStyles[plan.accent]}`}><plan.icon className="size-5" /></span>
+            <span className="mt-6 text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e] dark:text-[#849188]">{plan.audience}</span>
+            <h2 className="mt-2 text-[27px] font-bold tracking-[-.04em]">{plan.name}</h2>
+            <div className="mt-5 min-h-[68px]"><strong className={`font-sans font-bold tracking-[-.045em] ${plan.price.length > 9 ? "text-[30px]" : "text-[39px]"}`}>{plan.price}</strong><span className="ml-2 text-[11px] text-[#7b877f] dark:text-[#88958c]">{plan.period}</span></div>
+            <p className="mt-4 min-h-[78px] text-[13px] leading-6 text-[#667169] dark:text-[#a1aca4]">{plan.description}</p>
+            <div className="my-5 h-px bg-[#122017]/10 dark:bg-white/10" />
+            <ul className="flex-1 space-y-3.5 p-0">{plan.features.map(feature => <li key={feature} className="flex items-start gap-2.5 text-[12px] leading-5 text-[#536057] dark:text-[#b0bab3]"><Check className="mt-0.5 size-4 shrink-0 rounded-full bg-[#00ff88] p-0.5 text-[#062315]" />{feature}</li>)}</ul>
+            <button onClick={() => navigate(plan.to)} className={`mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-[14px] text-[13px] font-bold transition hover:-translate-y-0.5 ${plan.featured ? "bg-[#00ff88] text-[#07140d] shadow-[0_12px_28px_rgba(0,185,99,.18)]" : "border border-[#122017]/10 bg-[#f7f8f5] dark:border-white/10 dark:bg-[#202821]"}`}>{plan.cta}<ArrowRight className="size-4" /></button>
+          </motion.article>)}
+        </section>
+
+        <section className="bg-[#101713] text-white">
+          <motion.div {...reveal} className="mx-auto grid w-[min(1080px,calc(100%_-_40px))] grid-cols-[.8fr_1.2fr] gap-20 py-24 max-md:grid-cols-1 max-md:gap-10 max-md:py-16">
+            <div><span className="text-[11px] font-bold uppercase tracking-[.13em] text-[#6befb0]">{tr("Для команд", "For teams")}</span><h2 className="mt-4 text-[clamp(34px,4vw,50px)] font-bold leading-[1.06] tracking-[-.045em]">{tr("Потрібна інша конфігурація?", "Need a different setup?")}</h2></div>
+            <div className="flex flex-col justify-end"><p className="text-[15px] leading-7 text-[#aab5ad]">{tr("Підберемо пілот для вашої школи, ліцею або освітнього проєкту: потрібна кількість учнів, ролі, підтримка й план впровадження.", "We’ll shape a pilot for your school, lyceum, or education project: student seats, roles, support, and a rollout plan.")}</p><button onClick={() => navigate("/support")} className="mt-7 inline-flex h-12 w-fit items-center gap-2 rounded-[14px] bg-white px-5 text-[13px] font-bold text-[#111814]">{tr("Зв’язатися з нами", "Contact us")}<ArrowRight className="size-4" /></button></div>
           </motion.div>
-
-          <motion.div
-            variants={prefersReducedMotion ? undefined : fadeUpItem}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-          >
-            {plans.map((plan) => (
-              <div
-                key={plan.name + plan.audience}
-                className={`flex flex-col rounded-xl border p-5 transition-fast ${
-                  plan.highlight
-                    ? "border-primary/60 bg-bg-surface shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)]"
-                    : "border-border bg-bg-surface hover:border-primary/40"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <plan.Icon className="w-4 h-4 text-primary" />
-                  </div>
-                  <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-text-muted">{plan.audience}</span>
-                </div>
-
-                <div className="mt-4 text-sm font-semibold text-text-primary">{plan.name}</div>
-                <div className="mt-1 flex items-baseline gap-1">
-                  <span className="text-2xl font-mono font-semibold text-text-primary">{plan.price}</span>
-                  <span className="text-xs font-mono text-text-muted">{plan.period}</span>
-                </div>
-                <p className="mt-2 text-xs text-text-secondary leading-relaxed">{plan.tagline}</p>
-
-                <ul className="mt-4 space-y-2 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-xs text-text-secondary leading-relaxed">
-                      <Check className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Button
-                  className="mt-5 w-full"
-                  variant={plan.highlight ? "primary" : "secondary"}
-                  onClick={() => navigate(plan.ctaTo)}
-                >
-                  {plan.cta}
-                </Button>
-              </div>
-            ))}
-          </motion.div>
-
-          <motion.p
-            variants={prefersReducedMotion ? undefined : fadeUpItem}
-            className="mt-6 text-[11px] font-mono text-text-muted"
-          >
-            {tr(
-              "Ціни орієнтовні й можуть змінюватися. Для закладів освіти доступні пілотні впровадження та об'ємні знижки.",
-              "Prices are indicative and may change. Pilot rollouts and volume discounts are available for educational institutions."
-            )}
-          </motion.p>
-
-          <motion.div
-            variants={prefersReducedMotion ? undefined : fadeUpItem}
-            className="mt-10 pt-6 border-t border-border flex flex-wrap gap-2"
-          >
-            <Button variant="ghost" onClick={() => navigate("/")}>
-              {tr("На головну", "Home")}
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/support")}>
-              {tr("Зв'язатися з нами", "Contact us")}
-            </Button>
-          </motion.div>
-        </motion.div>
+        </section>
       </main>
+
+      <PlatformFooter />
     </div>
   );
 };
+
+export default PricingPage;

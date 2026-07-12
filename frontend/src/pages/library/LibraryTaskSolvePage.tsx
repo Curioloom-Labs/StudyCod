@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, RotateCcw, Save, CheckCircle2, LayoutDashboard, FolderCode, TerminalSquare, Sparkles } from "lucide-react";
@@ -32,6 +32,7 @@ import {
   saveLibraryTaskDraft,
   type CodeFile,
   type LibraryCheckResult,
+  type LibraryTaskListItem,
   type LibraryRunResult,
   type JudgeLanguage,
   type WebTaskFile,
@@ -39,6 +40,35 @@ import {
 import { JUDGE_LANGUAGE_LABELS, JUDGE_ENTRY_FILES, enabledJudgeLanguages, compilersForFamily, defaultCompilerForFamily } from "../../lib/judgeLanguages";
 
 const FRIENDLY_LANG = JUDGE_LANGUAGE_LABELS;
+
+const previewLibraryTask: LibraryTaskListItem = {
+  id: 901,
+  problemCode: "frequency-map",
+  slug: "frequency-map",
+  title: "Частоти без зайвих проходів",
+  description: "Порахуй, скільки разів кожне слово трапляється у вхідному рядку. Ігноруй регістр та виведи пари `слово: кількість` в алфавітному порядку.",
+  template: "from collections import Counter\n\nwords = input().lower().split()\ncounts = Counter(words)\n\nfor word in sorted(counts):\n    print(f\"{word}: {counts[word]}\")\n",
+  templatesByLanguage: null,
+  lang: "PYTHON",
+  difficulty: "MEDIUM",
+  tags: ["collections", "strings"],
+  section: "Основи Python",
+  maxAttempts: 5,
+  timeLimitMs: 1000,
+  memoryLimitMb: 64,
+  outputLimitKb: 64,
+  checkerSpec: { type: "whitespace" },
+  allowedLanguages: ["python", "java", "cpp"],
+  status: "APPROVED",
+  rejectionReason: null,
+  submittedAt: null,
+  publishedAt: "2026-01-01T00:00:00.000Z",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  author: { id: 1, username: "studycod" },
+};
+
+const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 
 // Every task accepts every supported language — no per-task language restriction.
 const getAllowedJudgeLanguages = (_task: { allowedLanguages?: JudgeLanguage[] | null }): JudgeLanguage[] => {
@@ -198,7 +228,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
     return taskKey && String(v) === taskKey ? v : null;
   }, [taskKey]);
 
-  const libraryListPath = useMemo(() => (location.pathname.startsWith("/edu/") ? "/edu/library" : "/library"), [location.pathname]);
+  const designPreview = import.meta.env.DEV && new URLSearchParams(location.search || "").get("preview") === "true";
+  const libraryListPath = useMemo(() => {
+    const path = location.pathname.startsWith("/edu/") ? "/edu/library" : "/library";
+    return designPreview ? `${path}?preview=true` : path;
+  }, [designPreview, location.pathname]);
   const safeBackPath = useMemo(() => {
     const fromRaw = new URLSearchParams(location.search || "").get("from");
     if (!fromRaw) return libraryListPath;
@@ -426,6 +460,16 @@ export const LibraryTaskSolvePage: React.FC = () => {
     load()
       .catch((e) => {
         console.error("Failed to load library task", e);
+        if (isPreview()) {
+          setTask(previewLibraryTask);
+          setTheory(null);
+          setJudgeLanguage("python");
+          setCode(previewLibraryTask.template);
+          setLastSavedCode(previewLibraryTask.template);
+          setLastSavedFiles([]);
+          setUseFiles(false);
+          return;
+        }
         setTask(null);
         setTheory(null);
       })
@@ -601,7 +645,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const doRun = async () => {
     if (!effectiveTaskId || !task) return;
-    if (!hasToken) {
+    if (!hasToken && !isPreview()) {
       redirectToLoginWithNext();
       return;
     }
@@ -609,6 +653,12 @@ export const LibraryTaskSolvePage: React.FC = () => {
     setRunResult(null);
     setActionRecovery(null);
     try {
+      if (isPreview()) {
+        setRunResult({ stdout: "code: 2\nstudycod: 1", stderr: "", exitCode: 0, success: true });
+        setResultsTab("run");
+        setResultsOpen(true);
+        return;
+      }
       if (isWebTask) {
         setRunResult({ stdout: tr("Оновлено превʼю у сусідній панелі.", "Preview refreshed in the panel."), stderr: "", exitCode: 0, success: true });
         setResultsTab("run");
@@ -646,7 +696,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const doCheck = async () => {
     if (!effectiveTaskId || !task) return;
-    if (!hasToken) {
+    if (!hasToken && !isPreview()) {
       redirectToLoginWithNext();
       return;
     }
@@ -654,6 +704,25 @@ export const LibraryTaskSolvePage: React.FC = () => {
     setCheckResult(null);
     setActionRecovery(null);
     try {
+      if (isPreview()) {
+        setCheckResult({
+          verdict: "AC",
+          testsPassed: 5,
+          testsTotal: 5,
+          score: 100,
+          maxScore: 100,
+          hidden: { passed: 3, total: 3 },
+          publicTestResults: [
+            { testId: 1, input: "Code code StudyCod", actualOutput: "code: 2\nstudycod: 1", passed: true, verdict: "AC" },
+            { testId: 2, input: "one two one", actualOutput: "one: 2\ntwo: 1", passed: true, verdict: "AC" },
+          ],
+        });
+        setShowCompactStatuses(false);
+        setCompactFailedOnly(true);
+        setResultsTab("check");
+        setResultsOpen(true);
+        return;
+      }
       if (isWebTask) {
         const r = await checkLibraryWebTask(effectiveTaskId, toWebPreviewFiles());
         setCheckResult(r);
@@ -742,13 +811,15 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const manualSave = async () => {
     if (!effectiveTaskId) return;
-    if (!hasToken) {
+    if (!hasToken && !isPreview()) {
       redirectToLoginWithNext();
       return;
     }
     try {
       setActionRecovery(null);
-      if (isWebTask) {
+      if (isPreview()) {
+        // Preview keeps the draft in local component state only.
+      } else if (isWebTask) {
         await saveLibraryWebTaskDraft(effectiveTaskId, toWebPreviewFiles());
       } else {
         const payload = useFiles ? { files } : code;
@@ -859,831 +930,68 @@ export const LibraryTaskSolvePage: React.FC = () => {
     );
   }
 
+  if (loading || !task) {
+    return <div className="min-h-full bg-[#f7f8f5] p-6 dark:bg-[#0b120e]"><div className="mx-auto h-[720px] max-w-[1500px] animate-pulse rounded-[28px] bg-[#e8ede8] dark:bg-white/[.04]" /></div>;
+  }
+
   return (
-    <div className="relative min-h-full w-full px-2 sm:px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-      <div className="min-h-[calc(100%-1.5rem)] rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex">
-        <aside className="hidden xl:flex w-[58px] border-r border-border/60 bg-bg-surface/70 flex-col items-center py-3 gap-2">
-          <div className="group relative">
-            <button
-              onClick={goBackToLibrary}
-              title={tr("Назад", "Back")}
-              aria-label={tr("Назад", "Back")}
-              className="w-11 h-11 rounded-xl border border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary transition-fast flex items-center justify-center"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div className="absolute left-[48px] top-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary opacity-0 pointer-events-none group-hover:opacity-100 transition-fast whitespace-nowrap z-20">
-              {tr("Назад", "Back")}
-            </div>
+    <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
+      <div className="mx-auto max-w-[1500px]">
+        <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <button type="button" onClick={goBackToLibrary} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#617066] transition hover:text-[#147b47] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]"><ArrowLeft className="size-4" />{tr("До бібліотеки", "Back to library")}</button>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#147b47] dark:text-[#72edb0]"><button type="button" onClick={goBackToLibrary} className="rounded-lg bg-[#e8f7ed] px-2.5 py-1 transition hover:bg-[#d8f3e2] dark:bg-[#00ff88]/10 dark:hover:bg-[#00ff88]/15">{tr("Бібліотека", "Library")}</button><span className="text-[#a5afa7]">/</span><span>{task.section || tr("Задача", "Problem")}</span><span className="text-[#a5afa7]">/</span><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span></div>
+            <h1 className="mt-3 max-w-4xl font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-4xl">{task.title}</h1>
           </div>
-
-          {[
-            { id: "mission", label: tr("Місія", "Mission"), Icon: LayoutDashboard },
-            { id: "task", label: tr("Задача", "Task"), Icon: FolderCode },
-            { id: "console", label: tr("Вивід", "Output"), Icon: TerminalSquare }
-          ].map((item) => (
-            <div key={item.id} className="group relative">
-              <button
-                onClick={() => scrollToSection(item.id as "mission" | "task" | "console")}
-                title={item.label}
-                aria-label={item.label}
-                className={`w-11 h-11 rounded-xl border transition-fast flex items-center justify-center ${activeRailItem === item.id ? "border-primary/50 bg-primary/10 text-primary" : "border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary"}`}
-              >
-                <item.Icon className="w-4 h-4" />
-              </button>
-              <div className="absolute left-[48px] top-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary opacity-0 pointer-events-none group-hover:opacity-100 transition-fast whitespace-nowrap z-20">
-                {item.label}
-              </div>
-            </div>
-          ))}
-        </aside>
-
-        <div className="flex-1 min-w-0 min-h-0 overflow-auto p-3 md:p-4">
-          <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          <Button variant="ghost" onClick={goBackToLibrary}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            {tr("Назад", "Back")}
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg sm:text-2xl font-mono text-text-primary truncate">
-              {tr("Розв'язання: ", "Solve: ")}
-              {task?.title || "..."}
-            </h1>
-            <div className="hidden lg:flex items-center gap-1 text-[10px] text-text-muted font-mono mt-1">
-              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{runShortcutLabel}</span>
-              <span>{tr("запуск", "run")}</span>
-              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{checkShortcutLabel}</span>
-              <span>{tr("перевірка", "check")}</span>
-              <span className="px-1.5 py-0.5 border border-border bg-bg-base rounded">{saveShortcutLabel}</span>
-              <span>{tr("зберегти", "save")}</span>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={resetToTemplate} className="h-11 rounded-xl px-4 text-sm font-semibold text-[#617066] transition hover:bg-[#e9efea] dark:text-[#a7b5aa] dark:hover:bg-white/[.06]"><RotateCcw className="mr-2 inline size-4" />{tr("Почати заново", "Reset")}</button>
+            <button type="button" onClick={manualSave} className="h-11 rounded-xl border border-[#152219]/10 bg-white px-4 text-sm font-semibold shadow-sm dark:border-white/10 dark:bg-white/[.05]"><Save className="mr-2 inline size-4" />{tr("Зберегти", "Save")}</button>
+            <button type="button" onClick={doRun} disabled={running || checking} className="h-11 rounded-xl bg-[#17251c] px-4 text-sm font-semibold text-white disabled:opacity-50 dark:bg-[#edf3ef] dark:text-[#0b120e]"><Play className="mr-2 inline size-4" />{running ? tr("Виконуємо…", "Running…") : tr("Запустити", "Run")}</button>
+            <button type="button" onClick={doCheck} disabled={checking || running} className="h-11 rounded-xl bg-[#00d978] px-5 text-sm font-bold text-[#062211] disabled:opacity-50"><CheckCircle2 className="mr-2 inline size-4" />{checking ? tr("Перевіряємо…", "Checking…") : tr("Перевірити", "Check")}</button>
           </div>
-          <div className="flex gap-2 ml-auto">
-            <Button variant="ghost" onClick={resetToTemplate} disabled={!task || loading} title={tr("Скинути", "Reset")} aria-label={tr("Скинути код до шаблону", "Reset code to template")} className="h-11 w-11 p-0"
-              >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={manualSave}
-              disabled={loading}
-              aria-label={tr("Зберегти чернетку", "Save draft")}
-              className="h-11 w-11 p-0"
-              title={
-                hasToken
-                  ? tr("Зберегти чернетку", "Save draft")
-                  : tr("Увійдіть, щоб зберегти чернетку", "Log in to save draft")
-              }
-              >
-              <Save className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
+        </header>
 
-        {loading ? (
-          <Card className="p-4 space-y-3">
-            <Skeleton className="h-6 w-1/3" />
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-5 w-2/3" />
-            <Skeleton className="h-5 w-1/2" />
-          </Card>
-        ) : !task ? (
-          <Card className="p-4">
-            <div className="text-sm text-text-secondary">{tr("Не вдалося завантажити завдання", "Failed to load task")}</div>
-          </Card>
-        ) : (
-          <>
-            <div className="flex flex-col xl:flex-row gap-3 items-start">
-            <div className="w-full xl:w-5/12 space-y-3">
-              <div ref={statementSectionRef}>
-              <Card className="p-4 space-y-3 border border-border/70 bg-bg-surface/80">
-                <div>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="text-sm font-mono text-text-primary">{tr("Умова", "Description")}</div>
-                  <Button variant="ghost" size="sm" onClick={() => setStatementModalOpen(true)}>
-                    {tr("Повна умова", "Full statement")}
-                  </Button>
-                </div>
-                <MarkdownView content={task.description || ""} />
-                </div>
-                <div>
-                  <div className="text-sm font-mono text-text-primary mb-2">{tr("Теорія", "Theory")}</div>
-                  {theory ? <MarkdownView content={theory} /> : <div className="text-sm text-text-secondary">{tr("(немає)", "(none)")}</div>}
-                </div>
-              </Card>
+        <div className="overflow-hidden rounded-[28px] border border-[#152219]/10 bg-white shadow-[0_22px_55px_-44px_rgba(17,43,25,.55)] dark:border-white/10 dark:bg-[#121b15]">
+          <div className="grid min-h-[720px] xl:grid-cols-[380px_minmax(0,1fr)]">
+            <aside className="border-b border-[#152219]/10 bg-[#fbfcfa] dark:border-white/10 dark:bg-[#101813] xl:border-b-0 xl:border-r">
+              <div className="border-b border-[#152219]/10 p-6 dark:border-white/10">
+                <p className="text-xs font-semibold uppercase tracking-[.15em] text-[#e87d00]">{tr("Завдання", "Brief")}</p>
+                <div className="mt-5 max-h-[360px] overflow-y-auto pr-2 text-sm leading-7 text-[#425148] dark:text-[#c1cdc4]"><MarkdownView content={task.description} /></div>
               </div>
+              {theory && <details className="group border-b border-[#152219]/10 p-6 dark:border-white/10"><summary className="flex cursor-pointer list-none items-center justify-between font-semibold"><span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-[#e87d00]" />{tr("Пояснення", "Explanation")}</span><span className="text-xs text-[#718075] group-open:hidden">{tr("Відкрити", "Open")}</span></summary><div className="mt-5 text-sm leading-7 text-[#526157] dark:text-[#b6c2b9]"><MarkdownView content={theory} /></div></details>}
+              <div className="p-6">
+                <div className="flex items-center justify-between"><label className="text-xs font-semibold uppercase tracking-[.15em] text-[#718075]">stdin</label>{firstExampleInput && <button type="button" onClick={() => setStdin(firstExampleInput)} className="text-xs font-semibold text-[#147b47] dark:text-[#72edb0]">{tr("Взяти з прикладу", "Use example")}</button>}</div>
+                <textarea value={stdin} onChange={(event) => setStdin(event.target.value)} disabled={isWebTask} spellCheck={false} placeholder={isWebTask ? tr("Для WEB-задач ввід не потрібен", "WEB tasks do not need stdin") : "5\n1 2 3 4 5"} className="mt-3 min-h-28 w-full resize-y rounded-xl border border-[#152219]/10 bg-[#f5f8f5] p-3 font-mono text-xs outline-none focus:border-[#00c96d] disabled:opacity-55 dark:border-white/10 dark:bg-white/[.04]" />
+              </div>
+            </aside>
 
-              <Card className="p-4 overflow-auto border border-border/70 bg-bg-surface/80">
-                <div className="text-sm font-mono text-text-primary mb-2 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" /> {tr("Підказки", "Hints")}
-                </div>
-                <div className="space-y-2">
-                  {libraryHints.map((h, idx) => (
-                    <div key={`${idx}-${h.slice(0, 12)}`} className="rounded-xl border border-border bg-bg-base/80 px-3 py-2 text-xs text-text-primary">
-                      <span className="text-primary mr-2">#{idx + 1}</span>{h}
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-
-            <div className="w-full xl:w-7/12 space-y-3">
-            <div ref={editorSectionRef}>
-            <Card className="p-4 flex flex-col border border-border/70 bg-bg-surface/80">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3">
-                <div className="text-sm font-mono text-text-primary">
-                  {tr("Код", "Code")} ({FRIENDLY_LANG[judgeLanguage] || judgeLanguage})
-                </div>
-                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                  {!isWebTask ? (
-                    <select
-                      value={judgeLanguage}
-                      onChange={(e) => setJudgeLanguage(e.target.value as JudgeLanguage)}
-                      className="w-full sm:w-auto px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
-                      title={tr("Мова розв'язку", "Solution language")}
-                    >
-                      {getAllowedJudgeLanguages(task).map((l) => (
-                        <option key={l} value={l}>
-                          {FRIENDLY_LANG[l] || l}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  {!isWebTask && compilerOptions.length > 1 ? (
-                    <select
-                      value={judgeCompiler}
-                      onChange={(e) => setJudgeCompiler(e.target.value)}
-                      className="w-full sm:w-auto px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
-                      title={tr("Компілятор / версія", "Compiler / version")}
-                    >
-                      {compilerOptions.map((c) => (
-                        <option key={c.id} value={c.id}>{c.label}</option>
-                      ))}
-                    </select>
-                  ) : null}
-                <div className={`flex flex-wrap gap-2 ${isCompactViewport ? "w-full" : ""}`}>
-                  {!useFiles ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const entryFile = entryFileForJudgeLanguage(judgeLanguage);
-                        setUseFiles(true);
-                        setFiles([{ path: entryFile, content: code }]);
-                      }}
-                      disabled={loading}
-                      title={tr("Додати файл (multi-file)", "Add file (multi-file)")}
-                    >
-                      {tr("Додати файл", "Add file")}
-                    </Button>
-                  ) : null}
-                  <Button onClick={doRun} disabled={running || checking} title={runShortcutLabel}>
-                    <Play className="w-4 h-4 mr-2" />
-                    {running ? tr("Виконання...", "Running...") : tr("Запустити", "Run")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{runShortcutLabel}</span>
-                  </Button>
-                  <Button onClick={doCheck} disabled={checking || running} title={checkShortcutLabel}>
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    {checking ? tr("Перевірка...", "Checking...") : tr("Перевірити", "Check")} <span className="hidden 2xl:inline text-[10px] text-text-muted ml-2">{checkShortcutLabel}</span>
-                  </Button>
-                </div>
+            <main className="flex min-h-0 min-w-0 flex-col bg-[#0f1511]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#151d17] px-4 py-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-[#dbe6de]"><span className="size-2 rounded-full bg-[#00d978]" />{isWebTask ? tr("WEB-полотно", "WEB canvas") : FRIENDLY_LANG[judgeLanguage] || judgeLanguage}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isWebTask && <select value={judgeLanguage} onChange={(event) => setJudgeLanguage(event.target.value as JudgeLanguage)} className="h-9 rounded-lg border border-white/10 bg-white/[.06] px-3 text-xs font-semibold text-white outline-none">{getAllowedJudgeLanguages(task).map((language) => <option key={language} value={language} className="text-black">{FRIENDLY_LANG[language] || language}</option>)}</select>}
+                  {!isWebTask && compilerOptions.length > 1 && <select value={judgeCompiler} onChange={(event) => setJudgeCompiler(event.target.value)} className="h-9 max-w-48 rounded-lg border border-white/10 bg-white/[.06] px-3 text-xs text-white outline-none">{compilerOptions.map((compiler) => <option key={compiler.id} value={compiler.id} className="text-black">{compiler.label}</option>)}</select>}
+                  {!useFiles && !isWebTask && <button type="button" onClick={() => { const entry = entryFileForJudgeLanguage(judgeLanguage); setUseFiles(true); setFiles([{ path: entry, content: code }]); }} className="h-9 rounded-lg bg-white/[.07] px-3 text-xs font-semibold text-[#dbe6de]">{tr("Додати файл", "Add file")}</button>}
                 </div>
               </div>
 
-              {actionRecovery ? (
-                <div
-                  role={actionRecovery.tone === "error" ? "alert" : "status"}
-                  aria-live={actionRecovery.tone === "error" ? "assertive" : "polite"}
-                  className={`mb-3 p-3 border ${actionRecovery.tone === "error" ? "border-accent-error/50 bg-bg-code" : "border-accent-warning/50 bg-bg-code"}`}
-                >
-                  <div className={`text-xs font-mono ${actionRecovery.tone === "error" ? "text-accent-error" : "text-accent-warning"}`}>
-                    {actionRecovery.tone === "error" ? tr("Проблема біля кнопок запуску", "Problem near run/check controls") : tr("Тимчасова проблема перевірки", "Temporary check issue")}
-                  </div>
-                  <div className="mt-1 text-xs font-mono text-text-secondary break-words">{actionRecovery.message}</div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {actionRecovery.retry === "run" ? (
-                      <Button variant="secondary" onClick={() => void doRun()} disabled={running || checking} className="text-xs">
-                        {tr("Повторити запуск", "Retry run")}
-                      </Button>
-                    ) : null}
-                    {actionRecovery.retry === "check" ? (
-                      <Button variant="secondary" onClick={() => void doCheck()} disabled={running || checking} className="text-xs">
-                        {tr("Повторити перевірку", "Retry check")}
-                      </Button>
-                    ) : null}
-                    {actionRecovery.retry === "save" ? (
-                      <Button variant="secondary" onClick={() => void manualSave()} disabled={loading} className="text-xs">
-                        {tr("Повторити збереження", "Retry save")}
-                      </Button>
-                    ) : null}
-                    <Button variant="ghost" onClick={() => scrollToSection("console")} className="text-xs">
-                      {tr("Перейти до виводу", "Go to output")}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-
-              {(runResult || checkResult) ? (
-                <div className="mb-3 p-3 border border-border bg-bg-base rounded flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
-                  <div className="text-xs font-mono text-text-secondary flex-1">
-                    {runResult ? (
-                      <span className="inline-flex items-center gap-2 mr-2">
-                        <span>{tr("Останній запуск", "Last run")}:</span>
-                        {(() => {
-                          const c = runStatusChip(runResult.success, tr);
-                          return <StatusChip glyph={c.glyph} label={c.label} tone={c.tone} />;
-                        })()}
-                        <span>exit={runResult.exitCode}</span>
-                      </span>
-                    ) : (
-                      <span>{tr("Запуск ще не виконували", "No run yet")}</span>
-                    )}
-                    <span className="mx-2">·</span>
-                    {checkResult ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span>{tr("Остання перевірка", "Last check")}:</span>
-                        {(() => {
-                          const v = verdictChip(checkResult.verdict, tr);
-                          return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} />;
-                        })()}
-                        <span>{checkResult.testsPassed}/{checkResult.testsTotal}</span>
-                      </span>
-                    ) : (
-                      <span>{tr("Перевірку ще не виконували", "No check yet")}</span>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {runResult ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setResultsTab("run");
-                          setResultsOpen(true);
-                        }}
-                      >
-                        {tr("Результат запуску", "Run result")}
-                      </Button>
-                    ) : null}
-                    {checkResult ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setResultsTab("check");
-                          setResultsOpen(true);
-                        }}
-                      >
-                        {tr("Результат перевірки", "Check result")}
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-
-              {(() => {
-                if (!hasToken || isWebTask) return null;
-                const verdict = checkResult?.verdict ?? null;
-                const failed = (checkResult?.publicTestResults ?? [])
-                  .filter((r) => !r.passed)
-                  .slice(0, 3)
-                  .map((r) => ({
-                    testId: r.testId,
-                    input: r.input ?? "",
-                    actual: r.actualOutput ?? "",
-                    verdict: r.verdict ?? undefined,
-                    stderr: r.error ?? null,
-                  }));
-                const stderr = (runResult && !runResult.success ? runResult.stderr : "") || checkResult?.compileError || "";
-                const hasError =
-                  (!!verdict && verdict.toUpperCase() !== "AC") ||
-                  failed.length > 0 ||
-                  (!!runResult && !runResult.success && !!stderr);
-                if (!hasError) return null;
-                const lang = String(judgeLanguage).toUpperCase();
-                return (
-                  <div className="mb-3 flex flex-col gap-2">
-                    <ErrorExplainButton
-                      language={lang}
-                      code={code}
-                      verdict={verdict}
-                      stderr={stderr}
-                      taskTitle={task?.title}
-                      taskText={task?.description}
-                      failures={failed}
-                    />
-                    <DebugMentorChat
-                      language={lang}
-                      code={code}
-                      verdict={verdict}
-                      stderr={stderr}
-                      taskTitle={task?.title}
-                      taskText={task?.description}
-                      failures={failed}
-                    />
-                    {lastReplayId ? (
-                      <button
-                        type="button"
-                        className="self-start text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover"
-                        onClick={() => navigate(`/replay/${lastReplayId}`)}
-                        title={tr("Переглянути запис свого розв'язання", "Watch your solve replay")}
-                      >
-                        {tr("⏪ Переглянути запис", "⏪ Watch replay")}
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })()}
-
-              {!hasToken ? (
-                <div className="text-xs text-text-secondary mb-3">
-                  {tr(
-                    "Перегляд умови доступний без входу. Для запуску/перевірки та збереження чернетки потрібно увійти.",
-                    "You can read the statement without logging in. To run/check and save drafts, please log in."
-                  )}
-                </div>
-              ) : null}
-
-              <div className="mb-3 rounded-xl border border-border/80 bg-bg-base/60 p-3">
-                {!isWebTask ? (
-                <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <div className="text-sm font-mono text-text-primary">{tr("Ввід для запуску (stdin)", "Run input (stdin)")}</div>
-                    <button
-                      type="button"
-                      className="text-[10px] font-mono px-2 py-1 border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!firstExampleInput}
-                      onClick={() => {
-                        if (!firstExampleInput) {
-                          showToast({
-                            type: "info",
-                            message: tr("У прикладах не знайдено Input для автозаповнення stdin.", "No Input example found for auto-fill stdin."),
-                          });
-                          return;
-                        }
-                        setStdin(firstExampleInput);
-                      }}
-                      title={tr("Перенести перший приклад Input в stdin", "Move first Input example to stdin")}
-                    >
-                      {tr("Із прикладу", "From example")}
-                    </button>
-                  </div>
-                  <div className="text-xs text-text-secondary mb-2">
-                    {tr("Вставте тестові дані сюди і натисніть «Запустити».", "Paste test data here and click Run.")}
-                  </div>
-                  <textarea
-                    value={stdin}
-                    onChange={(e) => setStdin(e.target.value)}
-                    className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none min-h-[120px]"
-                    placeholder={tr("Приклад: 5\n1 2 3 4 5", "Example: 5\n1 2 3 4 5")}
-                  />
-                </div>
-                ) : (
-                  <div className="text-xs text-text-secondary">
-                    {tr("Для WEB-завдань використовуйте «Перевірити» та живий превʼю-рендер праворуч.", "For WEB tasks use Check and the live preview on the right.")}
-                  </div>
-                )}
+              <div className={`h-[620px] min-h-[620px] overflow-hidden ${isWebTask ? "grid lg:grid-cols-2" : ""}`}>
+                <div className="h-full min-h-0 min-w-0 overflow-hidden">{useFiles ? <MultiFileEditor language={isWebTask ? "html" : judgeLanguage} entryFile={isWebTask ? "index.html" : entryFileForJudgeLanguage(judgeLanguage)} files={files} onChange={(next) => setFiles(normalizeFiles(next))} /> : <CodeEditor height="100%" language={isWebTask ? "html" : judgeLanguage} value={code} onChange={setCode} />}</div>
+                {isWebTask && <div className="h-full min-h-0 overflow-hidden border-t border-white/10 lg:border-l lg:border-t-0"><WebPreviewPane files={toWebPreviewFiles()} title={tr("Живий результат", "Live result")} /></div>}
               </div>
 
-              <div className={isWebTask ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : ""}>
-                <div className="border border-border overflow-hidden h-[420px] sm:h-[500px] min-h-[360px]">
-                  {useFiles ? (
-                    <MultiFileEditor
-                      language={isWebTask ? "html" : judgeLanguage}
-                      entryFile={isWebTask ? "index.html" : entryFileForJudgeLanguage(judgeLanguage)}
-                      files={files}
-                      onChange={(next) => setFiles(normalizeFiles(next))}
-                    />
-                  ) : (
-                    <CodeEditor language={isWebTask ? "html" : judgeLanguage} value={code} onChange={setCode} />
-                  )}
-                </div>
-                {isWebTask ? (
-                  <div className="border border-border overflow-hidden h-[420px] sm:h-[500px] min-h-[360px]">
-                    <WebPreviewPane files={toWebPreviewFiles()} title={tr("Превʼю", "Preview")} />
-                  </div>
-                ) : null}
-              </div>
-            </Card>
-            </div>
-
-            <div ref={outputSectionRef}>
-              <Card className="p-4 overflow-auto border border-border/70 bg-bg-surface/80">
-                <div className="text-sm font-mono text-text-primary mb-2">{tr("Результат запуску", "Run output")}</div>
-                {!runResult ? (
-                  <div className="text-sm text-text-secondary">{tr("Поки що немає", "Nothing yet")}</div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="text-xs text-text-secondary flex gap-3">
-                      <span>
-                        {tr("Код виходу", "Exit")}: {runResult.exitCode}
-                      </span>
-                      <span>
-                        {tr("Успіх", "Success")}: {runResult.success ? tr("так", "yes") : tr("ні", "no")}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="text-xs font-mono text-text-primary mb-1">stdout</div>
-                      <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[220px]">{runResult.stdout || ""}</pre>
-                    </div>
-                    <div>
-                      <div className="text-xs font-mono text-text-primary mb-1">stderr</div>
-                      <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[220px]">{runResult.stderr || ""}</pre>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            </div>
-
-            <Card className="p-4 overflow-auto border border-border/70 bg-bg-surface/80">
-              <div className="text-sm font-mono text-text-primary mb-2">{tr("Перевірка (тести)", "Check (tests)")}</div>
-              {!checkResult ? (
-                <div className="text-sm text-text-secondary">{tr("Натисніть 'Перевірити'", "Click 'Check'")}</div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
-                    <span className="px-2 py-0.5 border border-border">
-                      {tr("Вердикт", "Verdict")}: 
-                      {(() => {
-                        const v = verdictChip(checkResult.verdict, tr);
-                        return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} className="ml-1" />;
-                      })()}
-                    </span>
-                    <span className="px-2 py-0.5 border border-border">
-                      {tr("Тести", "Tests")}: {checkResult.testsPassed}/{checkResult.testsTotal}
-                    </span>
-                    <span className="px-2 py-0.5 border border-border">
-                      {tr("Бали", "Score")}: {checkResult.score}/{checkResult.maxScore}
-                    </span>
-                    {checkResult.hidden.total > 0 ? (
-                      <span className="px-2 py-0.5 border border-border">
-                        {tr("Приховані", "Hidden")}: {checkResult.hidden.passed}/{checkResult.hidden.total}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {checkResult.compileError ? (
-                    <div className="border border-border p-3">
-                      <div className="text-xs text-text-secondary flex flex-wrap gap-2 mb-2">
-                        <span className="text-accent-error">{tr("Помилка компіляції", "Compilation error")}</span>
-                        {checkResult.compileErrorKind ? <span>kind: {checkResult.compileErrorKind}</span> : null}
-                      </div>
-                      <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[260px]">{checkResult.compileError}</pre>
-                    </div>
-                  ) : null}
-
-                  {typeof checkResult.publicTestResultsTotal === "number" ? (
-                    <div className="text-xs text-text-secondary">
-                      {tr("Публічні тести", "Public tests")}: {checkResult.publicTestResults.length}/
-                      {checkResult.publicTestResultsTotal}
-                      {checkResult.publicTestResultsTruncated ? (
-                        <span className="ml-2 text-accent-warning">
-                          {tr("(обрізано для стабільності)", "(truncated for stability)")}
-                        </span>
-                      ) : null}
-                      <div className="mt-1 text-[11px] opacity-80">
-                        {tr(
-                          "Показано лише статуси тестів (без input/output).",
-                          "Only test statuses are shown (no input/output)."
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {checkResult.publicTestResultsCompact?.length ? (
-                    <div className="border border-border p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-xs text-text-secondary">
-                          {tr("Статуси всіх публічних тестів (компактно)", "Statuses of all public tests (compact)")}: {checkResult.publicTestResultsCompact.length}
-                          {checkResult.publicTestResultsCompactTruncated ? (
-                            <span className="ml-2 text-accent-warning">
-                              {tr("(обрізано)", "(truncated)")}
-                              {typeof checkResult.publicTestResultsCompactLimit === "number" ? (
-                                <span className="ml-1">limit={checkResult.publicTestResultsCompactLimit}</span>
-                              ) : null}
-                            </span>
-                          ) : null}
-                        </div>
-                        <Button variant="ghost" onClick={() => setShowCompactStatuses(v => !v)}>
-                          {showCompactStatuses ? tr("Сховати", "Hide") : tr("Показати", "Show")}
-                        </Button>
-                      </div>
-
-                      {showCompactStatuses ? (
-                        <div className="mt-2 space-y-2">
-                          <label className="flex items-center gap-2 text-xs text-text-secondary select-none">
-                            <input
-                              type="checkbox"
-                              checked={compactFailedOnly}
-                              onChange={(e) => setCompactFailedOnly(e.target.checked)}
-                            />
-                            {tr("Показувати тільки помилки", "Show failed only")}
-                          </label>
-
-                          <div className="max-h-[220px] overflow-auto border border-border p-2">
-                            <div className="flex flex-wrap gap-1">
-                              {(compactFailedOnly
-                                ? checkResult.publicTestResultsCompact.filter(t => !t.passed)
-                                : checkResult.publicTestResultsCompact
-                              ).map((t) => (
-                                <span
-                                  key={t.testId}
-                                  className={
-                                    "px-2 py-0.5 border text-[11px] font-mono " +
-                                    (t.passed ? "border-accent-success text-accent-success" : "border-accent-error text-accent-error")
-                                  }
-                                  title={(t.verdict ? `verdict: ${t.verdict}` : "") + (t.errorKind ? ` kind: ${t.errorKind}` : "")}
-                                >
-                                  #{t.testId}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="text-[11px] text-text-secondary opacity-80">
-                            {tr(
-                              "Компактний список статусів тестів.",
-                              "Compact list of test statuses."
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {checkResult.publicTestResults.length === 0 ? (
-                    <div className="text-sm text-text-secondary">{tr("Немає публічних тестів для показу", "No public tests to show")}</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {checkResult.publicTestResults.map((r) => (
-                        <div key={r.testId} className="p-3 border border-border">
-                          <div className="text-xs text-text-secondary flex flex-wrap gap-2 mb-2">
-                            <span className={r.passed ? "text-accent-success" : "text-accent-error"}>
-                              {r.passed ? tr("пройдено", "passed") : tr("не пройдено", "failed")}
-                            </span>
-                            <span>{tr("тест", "test")}: {r.testId}</span>
-                            {r.verdict ? <span>verdict: {r.verdict}</span> : null}
-                            {r.errorKind ? <span>kind: {r.errorKind}</span> : null}
-                          </div>
-                          {r.error ? (
-                            <div className="mt-2">
-                              <div className="text-xs font-mono text-text-primary mb-1">stderr</div>
-                              <pre className="text-xs bg-bg-base border border-border p-2 overflow-auto max-h-[160px]">{r.error}</pre>
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
-            </div>
-            </div>
-
-            {resultsOpen ? (
-              <Modal
-                open={resultsOpen}
-                onClose={() => setResultsOpen(false)}
-                title={tr("Результати", "Results")}
-                description={tr("Результати запуску та перевірки.", "Run and check results.")}
-              >
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <Button
-                      variant={resultsTab === "run" ? "primary" : "ghost"}
-                      size="sm"
-                      onClick={() => setResultsTab("run")}
-                      disabled={!runResult}
-                      title={!runResult ? tr("Спочатку запустіть код", "Run code first") : undefined}
-                    >
-                      {tr("Запуск", "Run")}
-                    </Button>
-                    <Button
-                      variant={resultsTab === "check" ? "primary" : "ghost"}
-                      size="sm"
-                      onClick={() => setResultsTab("check")}
-                      disabled={!checkResult}
-                      title={!checkResult ? tr("Спочатку перевірте код", "Check code first") : undefined}
-                    >
-                      {tr("Перевірка", "Check")}
-                    </Button>
-                  </div>
-
-                  {resultsTab === "run" ? (
-                    !runResult ? (
-                      <div className="text-sm text-text-secondary">{tr("Немає результату запуску", "No run result")}</div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="text-xs text-text-secondary flex flex-wrap gap-3">
-                          <span>
-                            {tr("Код виходу", "Exit")}: {runResult.exitCode}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            {(() => {
-                              const c = runStatusChip(runResult.success, tr);
-                              return <StatusChip glyph={c.glyph} label={c.label} tone={c.tone} />;
-                            })()}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="text-xs font-mono text-text-primary mb-1">stdout</div>
-                          <pre className="text-xs bg-bg-base border border-border p-3 overflow-auto max-h-[320px]">{runResult.stdout || ""}</pre>
-                        </div>
-                        <div>
-                          <div className="text-xs font-mono text-text-primary mb-1">stderr</div>
-                          <pre className="text-xs bg-bg-base border border-border p-3 overflow-auto max-h-[320px]">{runResult.stderr || ""}</pre>
-                        </div>
-                      </div>
-                    )
-                  ) : null}
-
-                  {resultsTab === "check" ? (
-                    !checkResult ? (
-                      <div className="text-sm text-text-secondary">{tr("Немає результату перевірки", "No check result")}</div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
-                          <span className="px-2 py-0.5 border border-border">
-                            {tr("Вердикт", "Verdict")}: 
-                            {(() => {
-                              const v = verdictChip(checkResult.verdict, tr);
-                              return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} className="ml-1" />;
-                            })()}
-                          </span>
-                          <span className="px-2 py-0.5 border border-border">
-                            {tr("Тести", "Tests")}: {checkResult.testsPassed}/{checkResult.testsTotal}
-                          </span>
-                          <span className="px-2 py-0.5 border border-border">
-                            {tr("Бали", "Score")}: {checkResult.score}/{checkResult.maxScore}
-                          </span>
-                          {checkResult.hidden.total > 0 ? (
-                            <span className="px-2 py-0.5 border border-border">
-                              {tr("Приховані", "Hidden")}: {checkResult.hidden.passed}/{checkResult.hidden.total}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        {checkResult.compileError ? (
-                          <div className="border border-border p-3">
-                            <div className="text-xs text-text-secondary flex flex-wrap gap-2 mb-2">
-                              <span className="text-accent-error">{tr("Помилка компіляції", "Compilation error")}</span>
-                              {checkResult.compileErrorKind ? <span>kind: {checkResult.compileErrorKind}</span> : null}
-                            </div>
-                            <pre className="text-xs bg-bg-base border border-border p-3 overflow-auto max-h-[360px]">{checkResult.compileError}</pre>
-                          </div>
-                        ) : null}
-
-                        {typeof checkResult.publicTestResultsTotal === "number" ? (
-                          <div className="text-xs text-text-secondary">
-                            {tr("Публічні тести", "Public tests")}: {checkResult.publicTestResults.length}/
-                            {checkResult.publicTestResultsTotal}
-                            {checkResult.publicTestResultsTruncated ? (
-                              <span className="ml-2 text-accent-warning">
-                                {tr("(обрізано для стабільності)", "(truncated for stability)")}
-                              </span>
-                            ) : null}
-                            <div className="mt-1 text-[11px] opacity-80">
-                              {tr(
-                                "Показано лише статуси тестів (без input/output).",
-                                "Only test statuses are shown (no input/output)."
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {checkResult.publicTestResultsCompact?.length ? (
-                          <div className="border border-border p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-xs text-text-secondary">
-                                {tr("Статуси всіх публічних тестів (компактно)", "Statuses of all public tests (compact)")}: {checkResult.publicTestResultsCompact.length}
-                                {checkResult.publicTestResultsCompactTruncated ? (
-                                  <span className="ml-2 text-accent-warning">
-                                    {tr("(обрізано)", "(truncated)")}
-                                    {typeof checkResult.publicTestResultsCompactLimit === "number" ? (
-                                      <span className="ml-1">limit={checkResult.publicTestResultsCompactLimit}</span>
-                                    ) : null}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <Button variant="ghost" onClick={() => setShowCompactStatuses((v) => !v)}>
-                                {showCompactStatuses ? tr("Сховати", "Hide") : tr("Показати", "Show")}
-                              </Button>
-                            </div>
-
-                            {showCompactStatuses ? (
-                              <div className="mt-2 space-y-2">
-                                <label className="flex items-center gap-2 text-xs text-text-secondary select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={compactFailedOnly}
-                                    onChange={(e) => setCompactFailedOnly(e.target.checked)}
-                                  />
-                                  {tr("Показувати тільки помилки", "Show failed only")}
-                                </label>
-
-                                <div className="max-h-[320px] overflow-auto border border-border p-2">
-                                  <div className="flex flex-wrap gap-1">
-                                    {(compactFailedOnly
-                                      ? checkResult.publicTestResultsCompact.filter((t) => !t.passed)
-                                      : checkResult.publicTestResultsCompact
-                                    ).map((t) => (
-                                      <span
-                                        key={t.testId}
-                                        className={
-                                          "px-2 py-0.5 border text-[11px] font-mono " +
-                                          (t.passed ? "border-accent-success text-accent-success" : "border-accent-error text-accent-error")
-                                        }
-                                        title={(t.verdict ? `verdict: ${t.verdict}` : "") + (t.errorKind ? ` kind: ${t.errorKind}` : "")}
-                                      >
-                                        #{t.testId}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="text-[11px] text-text-secondary opacity-80">
-                                  {tr(
-                                    "Компактний список статусів тестів.",
-                                    "Compact list of test statuses."
-                                  )}
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {checkResult.publicTestResults.length === 0 ? (
-                          <div className="text-sm text-text-secondary">{tr("Немає публічних тестів для показу", "No public tests to show")}</div>
-                        ) : (
-                          <div className="space-y-2">
-                            {checkResult.publicTestResults.map((r) => (
-                              <div key={r.testId} className="p-3 border border-border">
-                                <div className="text-xs text-text-secondary flex flex-wrap gap-2 mb-2">
-                                  <span className={r.passed ? "text-accent-success" : "text-accent-error"}>
-                                    {r.passed ? tr("пройдено", "passed") : tr("не пройдено", "failed")}
-                                  </span>
-                                  <span>{tr("тест", "test")}: {r.testId}</span>
-                                  {r.verdict ? <span>verdict: {r.verdict}</span> : null}
-                                  {r.errorKind ? <span>kind: {r.errorKind}</span> : null}
-                                </div>
-                                {r.error ? (
-                                  <div className="mt-2">
-                                    <div className="text-xs font-mono text-text-primary mb-1">stderr</div>
-                                    <pre className="text-xs bg-bg-base border border-border p-3 overflow-auto max-h-[240px]">{r.error}</pre>
-                                  </div>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  ) : null}
-
-                  <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                    <Button variant="ghost" onClick={() => setResultsOpen(false)}>
-                      {tr("Закрити", "Close")}
-                    </Button>
-                  </div>
-                </div>
-              </Modal>
-            ) : null}
-
-            <Modal
-              open={statementModalOpen}
-              onClose={() => setStatementModalOpen(false)}
-              title={tr("Повна умова задачі", "Full task statement")}
-              description={tr("Умова та теорія задачі.", "Task statement and theory.")}
-            >
-              <div className="space-y-5 p-4 sm:p-6">
-                <div>
-                  <div className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2">{tr("Умова", "Description")}</div>
-                  {task?.description?.trim() ? (
-                    <div className="prose prose-invert max-w-none text-text-primary">
-                      <MarkdownView content={task.description} />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-text-secondary">{tr("Умова відсутня", "Description is empty")}</div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2">{tr("Теорія", "Theory")}</div>
-                  {theory?.trim() ? (
-                    <div className="prose prose-invert max-w-none text-text-primary">
-                      <MarkdownView content={theory} />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-text-secondary">{tr("Теорія відсутня", "Theory is empty")}</div>
-                  )}
-                </div>
-              </div>
-            </Modal>
-          </>
-        )}
+              <section className="border-t border-white/10 bg-[#131a15] p-4 text-[#dce7df]">
+                <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-[.14em] text-[#83a18d]">{checkResult ? tr("Результат перевірки", "Check result") : tr("Останній запуск", "Latest run")}</p>{checkResult && <span className={`rounded-full px-3 py-1 text-xs font-bold ${String(checkResult.verdict).toUpperCase() === "AC" ? "bg-[#00ff88]/10 text-[#72edb0]" : "bg-[#ff6b9d]/10 text-[#ff9aba]"}`}>{checkResult.verdict} · {checkResult.testsPassed}/{checkResult.testsTotal}</span>}</div>
+                {checkResult?.compileError ? <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-[#ff9aba]">{checkResult.compileError}</pre> : <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-[#c8d6cc]">{runResult ? (runResult.stdout || runResult.stderr || tr("Програма завершилася без виводу.", "Program finished without output.")) : tr("Запусти код або перевір рішення — результат з’явиться тут.", "Run or check the solution — results appear here.")}</pre>}
+                {checkResult && <div className="mt-3 flex gap-4 text-xs text-[#91a097]"><span>{tr("Бали", "Score")}: {checkResult.score}/{checkResult.maxScore}</span><span>{tr("Тести", "Tests")}: {checkResult.testsPassed}/{checkResult.testsTotal}</span></div>}
+              </section>
+            </main>
           </div>
         </div>
       </div>
     </div>
   );
+
 };
 
 export default LibraryTaskSolvePage;

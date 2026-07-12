@@ -52,6 +52,9 @@ const emptyForm: FormState = {
   commentsLocked: false,
   tags: []
 };
+const isDevPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
+const previewPosts: AdminBlogPost[] = [{ id: 1, slug: "summer-learning-path", title: "Літній навчальний маршрут", excerpt: "Нові добірки практики та зручніший план.", content: "# Літній навчальний маршрут\n\nОновили план навчання та практику.", category: "FEATURE", version: "v2.8", pinned: true, status: "PUBLISHED", coverImageKey: null, coverUrl: null, commentsLocked: false, tags: ["product", "learning"], author: "StudyCod", publishedAt: "2026-07-08T10:00:00.000Z", createdAt: "2026-07-08T10:00:00.000Z", updatedAt: "2026-07-08T10:00:00.000Z" }];
+const previewReports: AdminCommentReport[] = [{ id: 1, commentId: 10, commentContent: "Посилання в коментарі не працює.", reason: "Потребує перевірки", reporter: "mentor-anna", postSlug: "summer-learning-path", postTitle: "Літній навчальний маршрут", createdAt: "2026-07-09T11:00:00.000Z" }];
 
 const inputCls =
   "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-primary";
@@ -79,6 +82,10 @@ export const BlogAdminPage: React.FC = () => {
 
   React.useEffect(() => {
     let cancelled = false;
+    if (isDevPreview()) {
+      setAllowed(true);
+      return () => { cancelled = true; };
+    }
     getMe()
       .then((u) => {
         if (!cancelled) setAllowed(u.role === "SYSTEM_ADMIN");
@@ -93,6 +100,12 @@ export const BlogAdminPage: React.FC = () => {
 
   const reload = React.useCallback(() => {
     setLoading(true);
+    if (isDevPreview()) {
+      setPosts(previewPosts);
+      setReports(previewReports);
+      setLoading(false);
+      return;
+    }
     // Load posts and reports independently — a failure in one must not blank the
     // other (e.g. the reports endpoint erroring should never hide the post list).
     const postsP = adminListBlogPosts()
@@ -187,6 +200,14 @@ export const BlogAdminPage: React.FC = () => {
       return;
     }
     setSaving(true);
+    if (isDevPreview()) {
+      const next: AdminBlogPost = { id: editingId ?? Date.now(), slug: form.slug?.trim() || `draft-${Date.now()}`, title: form.title, excerpt: form.excerpt ?? null, content: form.content, category: form.category, version: form.version ?? null, pinned: !!form.pinned, status: form.status, coverImageKey: null, coverUrl: null, commentsLocked: !!form.commentsLocked, tags: form.tags ?? [], author: "Admin preview", publishedAt: form.status === "PUBLISHED" ? new Date().toISOString() : null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      setPosts((current) => editingId == null ? [next, ...current] : current.map((item) => item.id === editingId ? next : item));
+      showToast({ type: "success", message: tr("Збережено локально для review", "Saved locally for review") });
+      startCreate();
+      setSaving(false);
+      return;
+    }
     try {
       const payload: BlogUpsertInput = {
         title: form.title,
@@ -230,6 +251,11 @@ export const BlogAdminPage: React.FC = () => {
   };
 
   const resolveReport = async (report: AdminCommentReport, del: boolean) => {
+    if (isDevPreview()) {
+      setReports((current) => current.filter((item) => item.id !== report.id));
+      showToast({ type: "success", message: del ? tr("Коментар приховано для review", "Comment hidden for review") : tr("Скаргу закрито", "Report resolved") });
+      return;
+    }
     try {
       await adminResolveReport(report.id, del);
       showToast({ type: "success", message: del ? tr("Коментар видалено", "Comment deleted") : tr("Закрито", "Resolved") });

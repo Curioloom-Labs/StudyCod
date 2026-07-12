@@ -11,8 +11,8 @@ export const Card: React.FC<React.HTMLAttributes<HTMLDivElement> & {
   variant = "default",
   ...rest
 }) => {
-  const base = "rounded-[var(--ui-card-radius)] border border-border transition-fast ease-out";
-  const chrome = "shadow-[var(--ui-card-shadow)]";
-  const surface = variant === "inset" ? "bg-bg-base" : variant === "panel" ? "bg-bg-surface/80" : "bg-bg-surface";
+  const base = "rounded-2xl border border-border/80 transition-fast ease-out";
+  const chrome = "shadow-[0_18px_42px_-34px_rgba(3,20,10,.6)]";
+  const surface = variant === "inset" ? "bg-bg-code/70" : variant === "panel" ? "bg-bg-surface/82 backdrop-blur-sm" : "bg-bg-surface";
   return <div {...rest} className={clsx(base, chrome, surface, className)}>{children}</div>;
 };

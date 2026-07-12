@@ -6,6 +6,7 @@ import { ArrowLeft, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
+import { LegalExperience } from "./LegalExperience";
 
 type LegalSection = {
   title: string;
@@ -153,6 +154,17 @@ export const PrivacyPolicyPage: React.FC = () => {
       ]
     }
   ];
+
+  return <LegalExperience
+    current="privacy"
+    title={tr("Політика конфіденційності", "Privacy Policy")}
+    description={tr("Як StudyCod обробляє й захищає дані учнів, викладачів, організаторів та користувачів Personal.", "How StudyCod processes and protects data for students, teachers, organizers, and Personal users.")}
+    updated={tr("Оновлено 31 травня 2026", "Updated May 31, 2026")}
+    sections={sections}
+    tr={tr}
+    icon={ShieldCheck}
+    email={SUPPORT_EMAIL}
+  />;
 
   return (
     <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
