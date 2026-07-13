@@ -74,7 +74,7 @@ function normalizeCertificateApiError(error: any, fallbackMessage: string): Erro
   return new Error(fallbackMessage);
 }
 
-function assertTemplateTextSize(payload: { htmlTemplate?: string; cssTemplate?: string }): void {
+function assertTemplateTextSize(payload: { htmlTemplate?: string | null; cssTemplate?: string | null }): void {
   const htmlLen = String(payload.htmlTemplate ?? "").length;
   const cssLen = String(payload.cssTemplate ?? "").length;
   if (htmlLen > CERTIFICATE_TEMPLATE_TEXT_LIMIT || cssLen > CERTIFICATE_TEMPLATE_TEXT_LIMIT) {
@@ -159,6 +159,41 @@ export async function createCertificateTemplate(payload: {
     return res.data as { templateId: number };
   } catch (e: any) {
     throw normalizeCertificateApiError(e, "Failed to create certificate template");
+  }
+}
+
+export async function updateCertificateTemplate(
+  templateId: number,
+  payload: {
+    name?: string;
+    type?: "studycod" | "custom";
+    htmlTemplate?: string | null;
+    cssTemplate?: string | null;
+    isActive?: boolean;
+    fields?: Array<{
+      fieldKey:
+        | "contest_name"
+        | "name"
+        | "full_name"
+        | "place"
+        | "score"
+        | "max_score"
+        | "date"
+        | "organizer"
+        | "signature"
+        | "certificate_id"
+        | "qr_code";
+      isEnabled?: boolean;
+      isRequired?: boolean;
+    }>;
+  }
+): Promise<{ ok: boolean; templateId: number; version: number }> {
+  assertTemplateTextSize(payload);
+  try {
+    const res = await api.put(`/certificate/template/${Number(templateId)}`, payload);
+    return res.data as { ok: boolean; templateId: number; version: number };
+  } catch (e: any) {
+    throw normalizeCertificateApiError(e, "Failed to update certificate template");
   }
 }
 

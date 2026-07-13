@@ -148,6 +148,94 @@ export class CertificateService {
     return { templateId };
   }
 
+  async updateTemplate(params: {
+    templateId: number;
+    name?: string;
+    type?: "studycod" | "custom";
+    htmlTemplate?: string | null;
+    cssTemplate?: string | null;
+    isActive?: boolean;
+    fields?: Array<{ fieldKey: string; isEnabled?: boolean; isRequired?: boolean }>;
+  }): Promise<{ templateId: number; version: number }> {
+    const templateId = Number(params.templateId);
+    if (!Number.isFinite(templateId) || templateId <= 0) {
+      throw new Error("INVALID_TEMPLATE_ID");
+    }
+
+    const currentRows = (await AppDataSource.query(
+      `SELECT id, version FROM certificate_templates WHERE id = ? LIMIT 1`,
+      [templateId]
+    )) as Array<any>;
+    if (!currentRows[0]) {
+      throw new Error("TEMPLATE_NOT_FOUND");
+    }
+
+    const setParts: string[] = [];
+    const args: unknown[] = [];
+
+    if (params.name !== undefined) {
+      setParts.push("name = ?");
+      args.push(params.name.trim().slice(0, 180));
+    }
+    if (params.type !== undefined) {
+      setParts.push("type = ?");
+      args.push(params.type);
+    }
+    if (params.htmlTemplate !== undefined) {
+      setParts.push("html_template = ?");
+      args.push(params.htmlTemplate);
+    }
+    if (params.cssTemplate !== undefined) {
+      setParts.push("css_template = ?");
+      args.push(params.cssTemplate);
+    }
+    if (params.isActive !== undefined) {
+      setParts.push("is_active = ?");
+      args.push(params.isActive ? 1 : 0);
+    }
+
+    if (setParts.length > 0) {
+      await AppDataSource.query(
+        `
+        UPDATE certificate_templates
+        SET ${setParts.join(", ")},
+            version = version + 1,
+            updated_at = NOW()
+        WHERE id = ?
+        `,
+        [...args, templateId]
+      );
+    }
+
+    if (Array.isArray(params.fields)) {
+      await AppDataSource.query(`DELETE FROM certificate_fields WHERE template_id = ?`, [templateId]);
+      for (const f of params.fields) {
+        const key = String(f.fieldKey ?? "").trim();
+        if (!key) continue;
+        await AppDataSource.query(
+          `
+          INSERT INTO certificate_fields (template_id, field_key, is_enabled, is_required, created_at, updated_at)
+          VALUES (?, ?, ?, ?, NOW(), NOW())
+          `,
+          [templateId, key, f.isEnabled === false ? 0 : 1, f.isRequired === true ? 1 : 0]
+        );
+      }
+
+      if (setParts.length === 0) {
+        await AppDataSource.query(
+          `UPDATE certificate_templates SET version = version + 1, updated_at = NOW() WHERE id = ?`,
+          [templateId]
+        );
+      }
+    }
+
+    const nextRows = (await AppDataSource.query(
+      `SELECT version FROM certificate_templates WHERE id = ? LIMIT 1`,
+      [templateId]
+    )) as Array<any>;
+    return { templateId, version: Number(nextRows[0]?.version ?? currentRows[0]?.version ?? 1) || 1 };
+  }
+
   async upsertContestSettings(params: {
     contestId: number;
     mode: CertificateMode;

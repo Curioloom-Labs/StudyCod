@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import { Card } from "../../components/ui/Card";
-import { createCertificateTemplate, getCertificateTemplateById, listCertificateTemplates } from "../../lib/api/certificates";
+import { createCertificateTemplate, getCertificateTemplateById, listCertificateTemplates, updateCertificateTemplate } from "../../lib/api/certificates";
 import { AdminMailWorkspace } from "../../components/admin/AdminMailWorkspace";
 import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
@@ -3153,6 +3153,53 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const updateLoadedGlobalStudyCodTemplate = async () => {
+    const templateId = Number(globalCertTemplateId);
+    const name = String(globalCertPublishName ?? "").trim();
+    if (!Number.isFinite(templateId) || templateId <= 0) {
+      setGlobalCertMessage("Load a template from the library before updating it.");
+      return;
+    }
+    if (!name) {
+      setGlobalCertMessage("Please provide template name.");
+      return;
+    }
+    if (globalCertUnknownPlaceholders.length > 0) {
+      setGlobalCertMessage(`Unknown placeholders: ${globalCertUnknownPlaceholders.join(", ")}`);
+      return;
+    }
+    if (globalCertMissingRequiredPlaceholders.length > 0) {
+      setGlobalCertMessage(`Template is missing required placeholders: ${globalCertMissingRequiredPlaceholders.join(", ")}`);
+      return;
+    }
+
+    setGlobalCertPublishBusy(true);
+    setGlobalCertMessage(null);
+    try {
+      const result = await updateCertificateTemplate(templateId, {
+        name,
+        type: "custom",
+        htmlTemplate: buildGlobalCertFinalHtml(),
+        cssTemplate: buildGlobalCertFinalCss() || null,
+        fields: GLOBAL_CERT_TEMPLATE_FIELD_KEYS.map((fieldKey) => ({
+          fieldKey,
+          isEnabled: Boolean(globalCertFields[fieldKey]?.isEnabled),
+          isRequired: Boolean(globalCertFields[fieldKey]?.isRequired),
+        })),
+      });
+      setGlobalCertTemplateId(String(result.templateId));
+      setGlobalCertMessage(`Template #${result.templateId} updated to v${result.version}.`);
+      showToast({ type: "success", message: `Template #${result.templateId} updated` });
+      void loadCertificateTemplateLibrary();
+    } catch (error: unknown) {
+      const msg = getErrorMessage(error, "Failed to update template");
+      setGlobalCertMessage(msg);
+      showToast({ type: "error", message: msg });
+    } finally {
+      setGlobalCertPublishBusy(false);
+    }
+  };
+
   const loadGlobalTemplateFromLibrary = async (templateId: number) => {
     setGlobalCertMessage(null);
     try {
@@ -4827,6 +4874,9 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button variant="secondary" onClick={() => void loadCertificateTemplateLibrary()} disabled={certificateTemplateLibraryLoading}>
                   {certificateTemplateLibraryLoading ? "Refreshing template library..." : "Refresh templates"}
+                </Button>
+                <Button variant="secondary" onClick={updateLoadedGlobalStudyCodTemplate} disabled={globalCertPublishBusy || !Number(globalCertTemplateId)}>
+                  {globalCertPublishBusy ? "Saving template..." : "Update loaded template"}
                 </Button>
                 <Button onClick={publishGlobalStudyCodTemplate} disabled={globalCertPublishBusy}>
                   {globalCertPublishBusy ? "Publishing template..." : "Publish as active template"}
