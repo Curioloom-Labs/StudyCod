@@ -47,7 +47,7 @@ export function toCssUrlValue(input: string): string {
 // ---------------------------------------------------------------------------
 // Canonical certificate layout → HTML/CSS engine.
 // This is the single source of truth shared by BOTH the contest editor
-// (ContestPage) and the admin global-template editor (AdminDashboardPage) so
+// (ContestPage) and the admin global-template editor (AdminWorkspacePage) so
 // that what is designed on the canvas renders identically in the generated PDF
 // no matter where it was authored. The backend renders this HTML/CSS verbatim.
 // ---------------------------------------------------------------------------

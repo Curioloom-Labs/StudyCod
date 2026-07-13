@@ -75,8 +75,7 @@ const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualRev
 const OrgMembersPage = React.lazy(() => import("./pages/edu/OrgWorkspacePage").then(mod => ({ default: mod.OrgWorkspacePage })));
 const LiveClassroomPage = React.lazy(() => import("./pages/edu/LiveClassroomPage").then(mod => ({ default: mod.LiveClassroomPage })));
 const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
-const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminWorkspacePage").then(mod => ({ default: mod.AdminWorkspacePage })));
-const FullAdminDashboardPage = React.lazy(() => import("./pages/system/AdminDashboardPage").then(mod => ({ default: mod.AdminDashboardPage })));
+const AdminWorkspacePage = React.lazy(() => import("./pages/system/AdminWorkspacePage").then(mod => ({ default: mod.AdminWorkspacePage })));
 const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => ({ default: mod.DocsPage })));
 const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(mod => ({ default: mod.SupportPage })));
 const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
@@ -900,7 +899,7 @@ const AppContent: React.FC = React.memo(() => {
   }
   const content = <Suspense fallback={<PageLoader />}>
       {(() => {
-      if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
+      if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminWorkspacePage />;
       if (resolvedPage === "home") {
         return <HomePage user={user} onNavigate={handleSetPage} suppressFocusAutoResume={ui.mode !== "classic"} />;
       }
@@ -1372,13 +1371,6 @@ export const App: React.FC = () => {
               </RequireToken>} />
           <Route path="/grades" element={<RequireToken>
                 <Navigate to="/?app=grades" replace />
-              </RequireToken>} />
-          <Route path="/admin/full" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <FullAdminDashboardPage />
-                  </AnimatedPage>
-                </Suspense>
               </RequireToken>} />
           <Route path="/admin" element={<RequireToken>
                 <Navigate to="/?app=admin" replace />

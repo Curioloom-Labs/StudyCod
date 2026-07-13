@@ -27,7 +27,7 @@ const NAV_IMPORTS: Record<MomentumNavTarget, () => Promise<unknown>> = {
   courses: () => import("../pages/edu/CoursesPage"),
   calendar: () => import("../pages/edu/CalendarPage"),
   tutor: () => import("../pages/edu/TutorPage"),
-  admin: () => import("../pages/system/AdminDashboardPage"),
+  admin: () => import("../pages/system/AdminWorkspacePage"),
   profile: () => import("../pages/profile/ProfilePage"),
   library: () => import("../pages/library/TaskLibraryPage"),
   contests: () => import("../pages/contest/ContestsPage"),
