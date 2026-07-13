@@ -29,7 +29,7 @@ class EmailService {
       process.env.EMAIL_FROM_NOTIFICATIONS || this.fromEmail;
 
     this.supportFromEmail =
-      "StudyCod Support <support@studycod.space>";
+      "StudyCod <studycod@studycod.space>";
 
     this.initializeTransporter();
   }
