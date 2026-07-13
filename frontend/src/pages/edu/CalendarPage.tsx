@@ -166,67 +166,71 @@ export const CalendarPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Weekday header */}
-        <div className="grid grid-cols-7 gap-2 lg:gap-3">
-          {weekdays.map((w, i) => (
-            <div key={i} className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-muted text-center py-1">
-              {w}
-            </div>
-          ))}
-        </div>
-
-        {/* Month grid */}
-        <div className="grid grid-cols-7 gap-2 lg:gap-3">
-          {cells.map((date, i) => {
-            const key = dayKey(date);
-            const dayItems = itemsByDay.get(key) ?? [];
-            const inMonth = date.getMonth() === cursor.getMonth();
-            const today = isToday(date);
-            const selected = key === selectedKey;
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setSelectedKey(key)}
-                className={[
-                  "min-h-[96px] rounded-xl border p-2 text-left flex flex-col gap-1.5 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 sm:min-h-[116px] lg:min-h-[132px] lg:p-3",
-                  inMonth ? "bg-bg-surface" : "bg-bg-surface/30",
-                  today
-                    ? "border-primary/60 ring-1 ring-primary/30"
-                    : selected
-                    ? "border-primary/50"
-                    : "border-border hover:border-primary/30"
-                ].join(" ")}
-              >
-                <span
-                  className={[
-                    "text-xs font-mono tabular-nums",
-                    today ? "text-primary font-semibold" : inMonth ? "text-text-secondary" : "text-text-muted/60"
-                  ].join(" ")}
-                >
-                  {date.getDate()}
-                </span>
-                <div className="flex flex-col gap-0.5 overflow-hidden">
-                  {dayItems.slice(0, 3).map(it => {
-                    const KindIcon = it.kind === "CONTROL" ? FileText : FileCode;
-                    return (
-                      <div
-                        key={`${it.kind}-${it.id}`}
-                        title={it.title}
-                        className={`flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-mono border ${BUCKET_CHIP[it.bucket]}`}
-                      >
-                        <KindIcon className="w-2.5 h-2.5 shrink-0" />
-                        <span className="truncate">{it.title}</span>
-                      </div>
-                    );
-                  })}
-                  {dayItems.length > 3 && (
-                    <span className="text-[10px] font-mono text-text-muted pl-1">+{dayItems.length - 3}</span>
-                  )}
+        <div className="overflow-x-auto rounded-[var(--ui-card-radius)] border border-border bg-bg-surface/35 p-2">
+          <div className="min-w-[760px]">
+            {/* Weekday header */}
+            <div className="grid grid-cols-7 gap-2 lg:gap-3">
+              {weekdays.map((w, i) => (
+                <div key={i} className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-muted text-center py-1">
+                  {w}
                 </div>
-              </button>
-            );
-          })}
+              ))}
+            </div>
+
+            {/* Month grid */}
+            <div className="mt-2 grid grid-cols-7 gap-2 lg:gap-3">
+              {cells.map((date, i) => {
+                const key = dayKey(date);
+                const dayItems = itemsByDay.get(key) ?? [];
+                const inMonth = date.getMonth() === cursor.getMonth();
+                const today = isToday(date);
+                const selected = key === selectedKey;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedKey(key)}
+                    className={[
+                      "min-h-[118px] rounded-xl border p-2 text-left flex flex-col gap-1.5 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 lg:min-h-[138px] lg:p-3",
+                      inMonth ? "bg-bg-surface" : "bg-bg-surface/30",
+                      today
+                        ? "border-primary/60 ring-1 ring-primary/30"
+                        : selected
+                        ? "border-primary/50"
+                        : "border-border hover:border-primary/30"
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "text-xs font-mono tabular-nums",
+                        today ? "text-primary font-semibold" : inMonth ? "text-text-secondary" : "text-text-muted/60"
+                      ].join(" ")}
+                    >
+                      {date.getDate()}
+                    </span>
+                    <div className="flex flex-col gap-0.5 overflow-hidden">
+                      {dayItems.slice(0, 3).map(it => {
+                        const KindIcon = it.kind === "CONTROL" ? FileText : FileCode;
+                        return (
+                          <div
+                            key={`${it.kind}-${it.id}`}
+                            title={it.title}
+                            className={`flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-mono border ${BUCKET_CHIP[it.bucket]}`}
+                          >
+                            <KindIcon className="w-2.5 h-2.5 shrink-0" />
+                            <span className="truncate">{it.title}</span>
+                          </div>
+                        );
+                      })}
+                      {dayItems.length > 3 && (
+                        <span className="text-[10px] font-mono text-text-muted pl-1">+{dayItems.length - 3}</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Selected day detail */}

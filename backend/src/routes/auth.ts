@@ -16,6 +16,7 @@ import { getUserIadForLang } from "../utils/iad";
 import { env } from "../env";
 import { generateJti } from "../services/auth/jwtRevocation";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
+import { setSharedAuthCookie } from "../utils/authCookie";
 export const authRouter = Router();
 
 // Pre-computed bcrypt hash used when the user does not exist, so bcrypt.compare
@@ -553,6 +554,7 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
     }
 
     const token = signUserToken(user);
+    setSharedAuthCookie(res, token);
     return res.json({
       token,
       user: buildUserDto(user)
@@ -623,6 +625,7 @@ authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Re
     }
 
     const token = signUserToken(user);
+    setSharedAuthCookie(res, token);
     return res.json({ token, user: buildUserDto(user) });
   } catch (err) {
     logger.error("[auth] Contest login error", { requestId: req.requestId, err });
@@ -757,6 +760,7 @@ authRouter.post("/google/exchange-code", async (req: AuthRequest, res: Response)
       return res.status(400).json({ message: "INVALID_CODE_FLOW" });
     }
     await consumeGoogleExchangeCode(code);
+    if (pending.flow === "success") setSharedAuthCookie(res, pending.token);
     return res.json({ token: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-code error", { requestId: req.requestId, err });
@@ -787,6 +791,7 @@ authRouter.post("/google/exchange-cookie", async (req: AuthRequest, res: Respons
     }
     clearGoogleExchangeCookie(res);
     await consumeGoogleExchangeCode(code);
+    if (pending.flow === "success") setSharedAuthCookie(res, pending.token);
     return res.json({ token: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-cookie error", { requestId: req.requestId, err });
@@ -900,6 +905,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     });
     if (existingByGoogle) {
       const jwtToken = signUserToken(existingByGoogle);
+      setSharedAuthCookie(res, jwtToken);
       return res.json({
         token: jwtToken,
         user: buildUserDto(existingByGoogle)
@@ -948,6 +954,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     });
     await userRepo().save(user);
     const jwtToken = signUserToken(user);
+    setSharedAuthCookie(res, jwtToken);
     return res.json({
       token: jwtToken,
       user: buildUserDto(user)
@@ -990,6 +997,7 @@ authRouter.get("/verify-email", async (req: AuthRequest, res: Response) => {
     user.emailVerificationExpires = null;
     await userRepo().save(user);
     const jwtToken = signUserToken(user);
+    setSharedAuthCookie(res, jwtToken);
     return res.json({
       token: jwtToken,
       user: buildUserDto(user)

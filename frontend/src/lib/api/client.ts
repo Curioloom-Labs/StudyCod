@@ -93,6 +93,15 @@ function buildLoginRedirectTarget(): string {
   return `/?auth=login${nextParam}`;
 }
 
+function shouldSkipAuthRedirect(config: InternalAxiosRequestConfig | undefined): boolean {
+  const headers = config?.headers;
+  if (!headers) return false;
+  if (typeof headers.get === "function") {
+    return String(headers.get("X-Skip-Auth-Redirect") ?? "") === "1";
+  }
+  return String((headers as Record<string, unknown>)["X-Skip-Auth-Redirect"] ?? "") === "1";
+}
+
 export const api = axios.create({
   baseURL: joinApiBase(import.meta.env.VITE_API_URL || getDefaultBaseUrl()),
   withCredentials: true
@@ -144,7 +153,7 @@ api.interceptors.response.use((response: AxiosResponse) => {
   }
   return response;
 }, (error: AxiosError<MaintenanceErrorData>) => {
-  if (error.response?.status === 401) {
+  if (error.response?.status === 401 && !shouldSkipAuthRedirect(error.config as InternalAxiosRequestConfig | undefined)) {
     localStorage.removeItem("token");
     if (typeof window !== "undefined") {
       window.location.href = buildLoginRedirectTarget();

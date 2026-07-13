@@ -1422,6 +1422,7 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const location = useLocation();
   const previewValue = new URLSearchParams(location.search).get("preview");
   const devPreview = import.meta.env.DEV && (previewValue === "1" || previewValue === "true");
+  const [cookieSessionStatus, setCookieSessionStatus] = React.useState<"checking" | "valid" | "missing">("checking");
   const token = (() => {
     try {
       return localStorage.getItem("token");
@@ -1430,7 +1431,31 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     }
   })();
 
+  React.useEffect(() => {
+    let cancelled = false;
+    if (token || devPreview) {
+      setCookieSessionStatus("valid");
+      return;
+    }
+    setCookieSessionStatus("checking");
+    getMe({ force: true, suppressAuthRedirect: true })
+      .then(() => {
+        if (!cancelled) setCookieSessionStatus("valid");
+      })
+      .catch(() => {
+        if (!cancelled) setCookieSessionStatus("missing");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, devPreview, location.pathname, location.search]);
+
+  if (!token && !devPreview && cookieSessionStatus === "checking") {
+    return <PageLoader />;
+  }
+
   if (!token && !devPreview) {
+    if (cookieSessionStatus === "valid") return <>{children}</>;
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/?auth=login&next=${next}`} replace />;
   }

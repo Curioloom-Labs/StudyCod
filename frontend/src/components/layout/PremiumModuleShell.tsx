@@ -32,6 +32,8 @@ export const PremiumModuleShell: React.FC<Props> = ({
   const { i18n } = useTranslation();
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const isTeacher = product === "EDU" && !user.studentId;
+  const [accountOpen, setAccountOpen] = React.useState(false);
+  const accountRef = React.useRef<HTMLDivElement | null>(null);
 
   const nav = product === "EDU"
     ? isTeacher
@@ -39,6 +41,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
           { label: uk ? "Класи" : "Classes", path: "/edu", Icon: GraduationCap },
           { label: uk ? "Календар" : "Calendar", path: "/edu/calendar", Icon: CalendarDays },
           { label: uk ? "Курси" : "Courses", path: "/edu/courses", Icon: BookOpen },
+          { label: uk ? "Бібліотека" : "Library", path: "/edu/library", Icon: BookOpen },
           { label: uk ? "Команда" : "Team", path: "/edu/organization", Icon: Users },
           { label: uk ? "Профіль" : "Profile", path: "/edu/profile", Icon: UserRound },
         ]
@@ -57,6 +60,23 @@ export const PremiumModuleShell: React.FC<Props> = ({
   const productHome = product === "EDU" ? "/edu" : "/contest/contests";
   const displayName = user.firstName || user.username;
   const isActive = (path: string) => path === "/edu" ? currentPath === "/edu" : currentPath === path || currentPath.startsWith(`${path}/`);
+
+  React.useEffect(() => {
+    if (!accountOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (accountRef.current?.contains(event.target as Node)) return;
+      setAccountOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [accountOpen]);
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
@@ -88,26 +108,33 @@ export const PremiumModuleShell: React.FC<Props> = ({
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </button>
             {!navigationHidden && (
-              <div className="group relative">
-                <button type="button" className="flex h-10 max-w-[230px] items-center gap-2 rounded-xl bg-[#e7f6ec] px-2 text-sm font-semibold text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#62ecaa]">
+              <div className="relative" ref={accountRef}>
+                <button
+                  type="button"
+                  onClick={() => setAccountOpen((open) => !open)}
+                  className="flex h-10 max-w-[320px] items-center gap-2 rounded-xl bg-[#e7f6ec] px-2 text-sm font-semibold text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#62ecaa]"
+                  aria-haspopup="menu"
+                  aria-expanded={accountOpen}
+                  title={`${displayName} · @${user.username}`}
+                >
                   <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17251c] text-xs text-[#72edb0]">{user.username.slice(0, 1).toUpperCase()}</span>
-                  <span className="hidden min-w-0 truncate sm:block">{displayName}</span>
-                  <ChevronDown className="size-3.5 shrink-0" />
+                  <span className="hidden min-w-0 max-w-[220px] truncate sm:block lg:max-w-[260px]">{displayName}</span>
+                  <ChevronDown className={`size-3.5 shrink-0 transition ${accountOpen ? "rotate-180" : ""}`} />
                 </button>
-                <div className="invisible absolute right-0 top-[calc(100%+8px)] w-56 rounded-xl border border-[#152219]/10 bg-white p-1 opacity-0 shadow-xl transition group-focus-within:visible group-focus-within:opacity-100 dark:border-white/10 dark:bg-[#172018]">
+                {accountOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-[#152219]/10 bg-white p-1 opacity-100 shadow-xl transition dark:border-white/10 dark:bg-[#172018]" role="menu">
                   <div className="px-3 py-2">
-                    <div className="truncate text-sm font-semibold text-[#142017] dark:text-[#edf3ef]">{displayName}</div>
-                    <div className="truncate text-xs text-[#6b7a70] dark:text-[#a4b2a7]">@{user.username}</div>
+                    <div className="break-words text-sm font-semibold text-[#142017] dark:text-[#edf3ef]">{displayName}</div>
+                    <div className="mt-0.5 break-all text-xs text-[#6b7a70] dark:text-[#a4b2a7]">@{user.username}</div>
                   </div>
-                  <button type="button" onClick={() => onNavigate(product === "EDU" ? "/edu/profile" : "/profile")} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]">
+                  <button type="button" onClick={() => { setAccountOpen(false); onNavigate(product === "EDU" ? "/edu/profile" : "/profile"); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]" role="menuitem">
                     <UserRound className="size-4" />
                     {uk ? "Профіль" : "Profile"}
                   </button>
-                  <button type="button" onClick={onLogout} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#d84d71] hover:bg-[#fff1f4] dark:text-[#ff94b7] dark:hover:bg-[#ff6b9d]/10">
+                  <button type="button" onClick={() => { setAccountOpen(false); onLogout(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#d84d71] hover:bg-[#fff1f4] dark:text-[#ff94b7] dark:hover:bg-[#ff6b9d]/10" role="menuitem">
                     <LogOut className="size-4" />
                     {uk ? "Вийти" : "Sign out"}
                   </button>
-                </div>
+                </div>}
               </div>
             )}
           </div>

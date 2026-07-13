@@ -9,6 +9,7 @@ import { JWT_SECRET } from "../../config";
 import { logger } from "../../utils/logger";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 import { generateJti } from "../../services/auth/jwtRevocation";
+import { setSharedAuthCookie } from "../../utils/authCookie";
 
 const router = Router();
 
@@ -57,6 +58,7 @@ router.post("/student-login", async (req: Request, res: Response) => {
       JWT_SECRET,
       { expiresIn: "30d" }
     );
+    setSharedAuthCookie(res, token);
 
     return res.json({
       token,
