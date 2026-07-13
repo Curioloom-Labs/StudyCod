@@ -14,7 +14,7 @@ type LegalSection = {
   bullets?: string[];
 };
 
-const SUPPORT_EMAIL = "support@studycod.space";
+const SUPPORT_EMAIL = "studycod@studycod.space";
 
 const LegalSectionBlock: React.FC<{ section: LegalSection }> = ({ section }) => (
   <section className="space-y-2.5">

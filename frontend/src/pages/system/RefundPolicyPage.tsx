@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
 import { LegalExperience, type LegalSection } from "./LegalExperience";
 
-const SUPPORT_EMAIL = "support@studycod.space";
+const SUPPORT_EMAIL = "studycod@studycod.space";
 
 export const RefundPolicyPage: React.FC = () => {
   const { i18n } = useTranslation();
