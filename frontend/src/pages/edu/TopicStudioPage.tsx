@@ -11,6 +11,7 @@ import {
   Plus,
   Settings,
   ShieldCheck,
+  Sparkles,
   TerminalSquare,
   Trash2,
   X,
@@ -124,6 +125,7 @@ export const TopicStudioPage: React.FC = () => {
   const [selectedTask, setSelectedTask] = React.useState<TopicTask | null>(null);
   const [tests, setTests] = React.useState<TestData[]>([]);
   const [busy, setBusy] = React.useState(false);
+  const [aiBusy, setAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
   const [taskForm, setTaskForm] = React.useState({
     title: "",
     description: "",
@@ -175,6 +177,83 @@ export const TopicStudioPage: React.FC = () => {
       title: old.title || `Контрольна · ${topic?.title || "тема"}`,
     }));
     setMode("control");
+  };
+
+  const generateCondition = async () => {
+    if (!taskForm.title.trim() || !topic) return;
+    setAiBusy("condition");
+    try {
+      if (preview()) {
+        setTaskForm((old) => ({
+          ...old,
+          description: `## Завдання\n\nСтворіть програму для теми **${topic.title}**: ${old.title.trim()}.\n\n### Вхідні дані\nОдин або кілька рядків з даними задачі.\n\n### Вихідні дані\nРезультат обробки у зрозумілому форматі.\n\n### Приклад\n\n\`\`\`\ninput: 5\noutput: 15\n\`\`\``
+        }));
+        return;
+      }
+      const response = await api.post(`/topics/${id}/tasks/generate-condition`, {
+        taskTitle: taskForm.title.trim(),
+        taskType: "PRACTICE",
+        difficulty: 3,
+        language: "uk",
+      });
+      setTaskForm((old) => ({ ...old, description: String(response.data?.description ?? old.description) }));
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося згенерувати умову."));
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const generateTemplate = async () => {
+    if (!taskForm.title.trim() || !topic) return;
+    setAiBusy("template");
+    try {
+      if (preview()) {
+        setTaskForm((old) => ({
+          ...old,
+          template: topic.language === "JAVA"
+            ? "import java.util.*;\n\npublic class Main {\n  public static void main(String[] args) {\n    Scanner sc = new Scanner(System.in);\n    // TODO: прочитайте дані й реалізуйте рішення\n  }\n}\n"
+            : "def solve():\n    # TODO: прочитайте дані й реалізуйте рішення\n    pass\n\nif __name__ == \"__main__\":\n    solve()\n"
+        }));
+        return;
+      }
+      const response = await api.post(`/topics/${id}/tasks/generate-template`, {
+        taskTitle: taskForm.title.trim(),
+        description: taskForm.description,
+        language: "uk",
+      });
+      setTaskForm((old) => ({ ...old, template: String(response.data?.template ?? old.template) }));
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося згенерувати стартовий код."));
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const generateTheory = async () => {
+    if (!taskForm.description.trim() || !topic) return;
+    setAiBusy("theory");
+    try {
+      if (preview()) {
+        setTaskForm((old) => ({
+          ...old,
+          theory: `### Як думати про задачу\n\n1. Визначте, які дані треба зібрати.\n2. Оберіть структуру даних для теми **${topic.title}**.\n3. Перевірте крайні випадки: порожній ввід, одне значення, повтори.\n\n> Пояснення показується учню перед практикою, якщо ви його залишили.`
+        }));
+        return;
+      }
+      const response = await api.post(`/topics/${id}/tasks/generate-theory`, {
+        taskTitle: taskForm.title.trim(),
+        taskDescription: taskForm.description,
+        taskType: "PRACTICE",
+        difficulty: 3,
+        language: "uk",
+      });
+      setTaskForm((old) => ({ ...old, theory: String(response.data?.theory ?? old.theory) }));
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося згенерувати теорію."));
+    } finally {
+      setAiBusy(null);
+    }
   };
 
   const openTests = async (task: TopicTask) => {
@@ -535,6 +614,16 @@ export const TopicStudioPage: React.FC = () => {
                   <h3 className="font-black">Практичне завдання</h3>
                 </div>
                 <input value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} placeholder="Назва завдання" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void generateCondition()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#fff3df] px-3 py-2 text-xs font-black text-[#9b5300] disabled:opacity-45 dark:bg-[#ff8c00]/12 dark:text-[#ffbc6a]">
+                    <Sparkles className="size-3.5" />
+                    {aiBusy === "condition" ? "Генерую…" : "Згенерувати умову"}
+                  </button>
+                  <button type="button" onClick={() => void generateTemplate()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#e9f8ef] px-3 py-2 text-xs font-black text-[#147b47] disabled:opacity-45 dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                    <Sparkles className="size-3.5" />
+                    {aiBusy === "template" ? "Генерую…" : "Стартовий код"}
+                  </button>
+                </div>
                 <textarea value={taskForm.description} onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })} placeholder="Умова, контекст, обмеження" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
                 <textarea value={taskForm.template} onChange={(event) => setTaskForm({ ...taskForm, template: event.target.value })} placeholder="Стартовий код (необовʼязково)" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10" />
               </section>
@@ -547,6 +636,10 @@ export const TopicStudioPage: React.FC = () => {
                   <span className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">Спроб</span>
                   <input value={taskForm.maxAttempts} onChange={(event) => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} type="number" min="1" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
                 </label>
+                <button type="button" onClick={() => void generateTheory()} disabled={!!aiBusy || !taskForm.description.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#fff3df] px-3 py-2 text-xs font-black text-[#9b5300] disabled:opacity-45 dark:bg-[#ff8c00]/12 dark:text-[#ffbc6a]">
+                  <Sparkles className="size-3.5" />
+                  {aiBusy === "theory" ? "Генерую…" : "Згенерувати теорію"}
+                </button>
                 <textarea value={taskForm.theory} onChange={(event) => setTaskForm({ ...taskForm, theory: event.target.value })} placeholder="Коротке пояснення перед практикою: поняття, приклад, пастки" rows={9} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
                 <button disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   <ArrowRight className="size-4" />

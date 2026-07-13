@@ -22,7 +22,11 @@ async function main() {
   // Public crawlable routes for SPA shell.
   const urls = [
     { path: "/", changefreq: "daily", priority: "1.0" },
-    { path: "/docs", changefreq: "weekly", priority: "0.8" }
+    { path: "/docs", changefreq: "weekly", priority: "0.8" },
+    { path: "/privacy", changefreq: "monthly", priority: "0.5" },
+    { path: "/terms", changefreq: "monthly", priority: "0.5" },
+    { path: "/refunds", changefreq: "monthly", priority: "0.5" },
+    { path: "/cookies", changefreq: "monthly", priority: "0.5" }
   ];
   const now = new Date().toISOString();
 

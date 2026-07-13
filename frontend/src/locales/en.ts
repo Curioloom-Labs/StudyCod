@@ -349,6 +349,7 @@ export default {
   footerPrivacyPolicy: 'Privacy Policy',
   footerTermsOfUse: 'Terms of Use',
   footerCookiePolicy: 'Cookie Policy',
+  footerRefundPolicy: 'Refund Policy',
   maintenanceTitle: 'Technical maintenance',
   maintenanceModeEnabled: 'MAINTENANCE MODE ENABLED'
 };

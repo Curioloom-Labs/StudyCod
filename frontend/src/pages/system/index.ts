@@ -1,4 +1,4 @@
-export * from "./AdminDashboardPage";
+export * from "./AdminWorkspacePage";
 export * from "./BlogPage";
 export * from "./BlogAdminPage";
 export * from "./CookiePolicyPage";

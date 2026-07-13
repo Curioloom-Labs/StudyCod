@@ -75,13 +75,13 @@ const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualRev
 const OrgMembersPage = React.lazy(() => import("./pages/edu/OrgWorkspacePage").then(mod => ({ default: mod.OrgWorkspacePage })));
 const LiveClassroomPage = React.lazy(() => import("./pages/edu/LiveClassroomPage").then(mod => ({ default: mod.LiveClassroomPage })));
 const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
-const AdminDashboardPage = React.lazy(() => import("./pages/system/AdminWorkspacePage").then(mod => ({ default: mod.AdminWorkspacePage })));
-const FullAdminDashboardPage = React.lazy(() => import("./pages/system/AdminDashboardPage").then(mod => ({ default: mod.AdminDashboardPage })));
+const AdminWorkspacePage = React.lazy(() => import("./pages/system/AdminWorkspacePage").then(mod => ({ default: mod.AdminWorkspacePage })));
 const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => ({ default: mod.DocsPage })));
 const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(mod => ({ default: mod.SupportPage })));
 const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
 const TermsOfUsePage = React.lazy(() => import("./pages/system/TermsOfUsePage").then(mod => ({ default: mod.TermsOfUsePage })));
 const CookiePolicyPage = React.lazy(() => import("./pages/system/CookiePolicyPage").then(mod => ({ default: mod.CookiePolicyPage })));
+const RefundPolicyPage = React.lazy(() => import("./pages/system/RefundPolicyPage").then(mod => ({ default: mod.RefundPolicyPage })));
 const PricingPage = React.lazy(() => import("./pages/system/PricingPage").then(mod => ({ default: mod.PricingPage })));
 const MaintenancePage = React.lazy(() => import("./pages/system/MaintenancePage").then(mod => ({ default: mod.MaintenancePage })));
 const GeoBlockedPage = React.lazy(() => import("./pages/system/GeoBlockedPage").then(mod => ({ default: mod.GeoBlockedPage })));
@@ -900,7 +900,7 @@ const AppContent: React.FC = React.memo(() => {
   }
   const content = <Suspense fallback={<PageLoader />}>
       {(() => {
-      if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminDashboardPage />;
+      if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminWorkspacePage />;
       if (resolvedPage === "home") {
         return <HomePage user={user} onNavigate={handleSetPage} suppressFocusAutoResume={ui.mode !== "classic"} />;
       }
@@ -1260,6 +1260,11 @@ export const App: React.FC = () => {
                   <CookiePolicyPage />
                 </AnimatedPage>
               </Suspense></PublicPageWithFooter>} />
+          <Route path="/refunds" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <RefundPolicyPage />
+                </AnimatedPage>
+              </Suspense></PublicPageWithFooter>} />
           <Route path="/pricing" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <PricingPage />
@@ -1373,13 +1378,6 @@ export const App: React.FC = () => {
           <Route path="/grades" element={<RequireToken>
                 <Navigate to="/?app=grades" replace />
               </RequireToken>} />
-          <Route path="/admin/full" element={<RequireToken>
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <FullAdminDashboardPage />
-                  </AnimatedPage>
-                </Suspense>
-              </RequireToken>} />
           <Route path="/admin" element={<RequireToken>
                 <Navigate to="/?app=admin" replace />
               </RequireToken>} />
@@ -1430,6 +1428,7 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const location = useLocation();
   const previewValue = new URLSearchParams(location.search).get("preview");
   const devPreview = import.meta.env.DEV && (previewValue === "1" || previewValue === "true");
+  const [cookieSessionStatus, setCookieSessionStatus] = React.useState<"checking" | "valid" | "missing">("checking");
   const token = (() => {
     try {
       return localStorage.getItem("token");
@@ -1438,7 +1437,31 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     }
   })();
 
+  React.useEffect(() => {
+    let cancelled = false;
+    if (token || devPreview) {
+      setCookieSessionStatus("valid");
+      return;
+    }
+    setCookieSessionStatus("checking");
+    getMe({ force: true, suppressAuthRedirect: true })
+      .then(() => {
+        if (!cancelled) setCookieSessionStatus("valid");
+      })
+      .catch(() => {
+        if (!cancelled) setCookieSessionStatus("missing");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, devPreview, location.pathname, location.search]);
+
+  if (!token && !devPreview && cookieSessionStatus === "checking") {
+    return <PageLoader />;
+  }
+
   if (!token && !devPreview) {
+    if (cookieSessionStatus === "valid") return <>{children}</>;
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/?auth=login&next=${next}`} replace />;
   }

@@ -11,6 +11,7 @@ import { isJtiRevoked, wasTokenIssuedBeforeRevocation } from '../services/auth/j
 import { getCachedUser, setCachedUser, type CachedUser } from '../services/auth/userCache';
 import { getStudentUiLangMarker, setStudentUiLangMarker } from '../services/auth/studentUiLangCache';
 import { setRequestContextFields } from '../utils/requestContextStore';
+import { AUTH_COOKIE_NAME } from '../utils/authCookie';
 
 /**
  * Carries the authenticated principal. EDU runs a deliberate dual identity model
@@ -49,6 +50,30 @@ type JwtPayload = {
   jti?: string;
   iat?: number;
 };
+
+function getCookieValue(req: Request, name: string): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  const prefix = `${name}=`;
+  for (const part of header.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith(prefix)) continue;
+    try {
+      return decodeURIComponent(trimmed.slice(prefix.length));
+    } catch {
+      return trimmed.slice(prefix.length);
+    }
+  }
+  return null;
+}
+
+function getTokenFromRequest(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return authHeader.slice("Bearer ".length);
+  }
+  return getCookieValue(req, AUTH_COOKIE_NAME);
+}
 
 async function syncStudentUiLanguage(studentId: number, uiLanguage: UiLocale, requestId?: string): Promise<void> {
   try {
@@ -141,13 +166,12 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
 }
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const token = getTokenFromRequest(req);
+  if (!token) {
     return res.status(401).json({
       message: 'No token provided'
     });
   }
-  const token = authHeader.slice('Bearer '.length);
   try {
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
     
@@ -195,11 +219,10 @@ export const authRequired = authMiddleware;
 // Optional auth: if a Bearer token is provided and valid, populates AuthRequest.
 // If missing (or invalid), continues as anonymous.
 export const authOptional = async (req: AuthRequest, _res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = getTokenFromRequest(req);
+  if (!token) {
     return next();
   }
-  const token = authHeader.slice("Bearer ".length);
   try {
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
     

@@ -14,6 +14,7 @@ type CachedUser = {
 type GetMeOptions = {
   force?: boolean;
   cacheTtlMs?: number;
+  suppressAuthRedirect?: boolean;
 };
 
 let cachedGetMeUser: CachedUser | null = null;
@@ -154,7 +155,7 @@ export async function getMe(options?: GetMeOptions): Promise<User> {
     return inFlightGetMeRequest;
   }
 
-  const request = api.get("/profile/me")
+  const request = api.get("/profile/me", options?.suppressAuthRedirect ? { headers: { "X-Skip-Auth-Redirect": "1" } } : undefined)
     .then((res) => rememberUser(res.data as User))
     .catch((error: unknown) => {
       const status = getErrorStatus(error);
