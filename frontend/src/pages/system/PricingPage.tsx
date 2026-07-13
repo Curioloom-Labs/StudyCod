@@ -41,15 +41,15 @@ export const PricingPage: React.FC = () => {
       name: tr("Старт", "Start"),
       price: "0 ₴",
       period: tr("назавжди", "forever"),
-      description: tr("Усе необхідне, щоб почати практикувати програмування без бар’єрів.", "Everything needed to start practicing programming without barriers."),
-      features: [tr("Бібліотека базових задач", "Core task library"), tr("Автоматична перевірка коду", "Automatic code checks"), tr("Відкриті навчальні курси", "Open learning courses"), tr("Особистий прогрес", "Personal progress")],
+      description: tr("Усе необхідне, щоб почати практикувати програмування або спробувати клас без оплати.", "Everything needed to start practicing programming or try a class at no cost."),
+      features: [tr("Бібліотека базових задач", "Core task library"), tr("Автоматична перевірка коду", "Automatic code checks"), tr("Відкриті навчальні курси", "Open learning courses"), tr("1 безкоштовний клас для старту", "1 free class to get started"), tr("Особистий прогрес", "Personal progress")],
       cta: tr("Почати безкоштовно", "Start for free"), to: "/?auth=register", accent: "green",
     },
     {
       icon: Sparkles,
       audience: tr("Поглиблена практика", "Advanced practice"),
-      name: "Pro",
-      price: "149 ₴",
+      name: "StudyCod Pro",
+      price: "75 ₴",
       period: tr("на місяць", "per month"),
       description: tr("Більше практики, детальний фідбек і повний маршрут розвитку навичок.", "More practice, detailed feedback, and a complete skill-building path."),
       features: [tr("Усе зі Старт", "Everything in Start"), tr("Розширені курси й задачі", "Advanced courses and tasks"), tr("Розбір помилок і розумні підказки", "Error analysis and smart hints"), tr("Візуалізація виконання коду", "Code execution visualization"), tr("Сертифікати проходження", "Completion certificates")],
@@ -58,11 +58,11 @@ export const PricingPage: React.FC = () => {
     {
       icon: GraduationCap,
       audience: tr("Для викладача", "For teachers"),
-      name: tr("Клас", "Class"),
-      price: "799 ₴",
-      period: tr("за клас / місяць", "per class / month"),
-      description: tr("Цілісний робочий простір для викладання, практики й оцінювання.", "A complete workspace for teaching, practice, and assessment."),
-      features: [tr("До 30 учнів у класі", "Up to 30 students per class"), tr("Курси та автоматичні завдання", "Courses and automatic assignments"), tr("Журнал і гнучкі шкали оцінок", "Gradebook and flexible grading"), tr("Аналітика навчального прогресу", "Learning progress analytics"), tr("Live Classroom", "Live Classroom")],
+      name: "StudyCod Class",
+      price: "400 ₴",
+      period: tr("на місяць", "per month"),
+      description: tr("Цілісний робочий простір для викладання, практики й оцінювання з необмеженими класами.", "A complete workspace for teaching, practice, and assessment with unlimited classes."),
+      features: [tr("Необмежена кількість класів", "Unlimited classes"), tr("До 30 учнів у кожному класі", "Up to 30 students per class"), tr("Курси та автоматичні завдання", "Courses and automatic assignments"), tr("Журнал і гнучкі шкали оцінок", "Gradebook and flexible grading"), tr("Аналітика навчального прогресу", "Learning progress analytics"), tr("Live Classroom", "Live Classroom")],
       cta: tr("Створити клас", "Create a class"), to: "/?auth=register", accent: "yellow",
     },
     {
@@ -89,10 +89,13 @@ export const PricingPage: React.FC = () => {
             <span className="inline-flex items-center gap-2 rounded-full border border-[#122017]/10 bg-white px-3 py-1.5 text-[11px] font-bold text-[#007f48] shadow-sm dark:border-white/10 dark:bg-[#171f19] dark:text-[#65efae]"><span className="size-1.5 rounded-full bg-[#00b963]" />{tr("Прозорі умови без прихованих платежів", "Transparent plans with no hidden fees")}</span>
             <h1 className="mt-6 text-balance text-[clamp(44px,6vw,76px)] font-bold leading-[1] tracking-[-.055em]">{tr("План для кожного способу навчатися.", "A plan for every way of learning.")}</h1>
             <p className="mx-auto mt-6 max-w-[680px] text-[17px] leading-8 text-[#667169] dark:text-[#a3aea6]">{tr("Починайте безкоштовно, розвивайте власну практику або організуйте навчання для цілого класу.", "Start free, deepen your own practice, or organize learning for an entire class.")}</p>
+            <p className="mx-auto mt-4 max-w-[760px] rounded-2xl border border-[#122017]/10 bg-white/80 px-4 py-3 text-[13px] leading-6 text-[#667169] shadow-sm dark:border-white/10 dark:bg-white/[.055] dark:text-[#aab5ad]">
+              {tr("Ціни нижче — публічні ціни StudyCod, які мають збігатися з Paddle Checkout. Податки можуть застосовуватись і будуть розраховані під час оплати. Наразі немає trial або intro-знижки: після оформлення застосовується вказана щомісячна ціна.", "The prices below are StudyCod public prices and should match Paddle Checkout. Taxes may apply and will be calculated at checkout. There is currently no trial or intro discount: the listed monthly price applies after checkout.")}
+            </p>
           </motion.div>
         </section>
 
-        <section className="mx-auto grid w-[min(1200px,calc(100%_-_40px))] grid-cols-4 gap-3 pb-28 max-[1050px]:grid-cols-2 max-md:grid-cols-1">
+        <section className="mx-auto grid w-[min(1200px,calc(100%_-_40px))] grid-cols-4 gap-3 pb-14 max-[1050px]:grid-cols-2 max-md:grid-cols-1">
           {plans.map((plan, index) => <motion.article {...reveal} transition={{ duration: .55, delay: index * .06, ease: [0.16, 1, .3, 1] }} key={plan.name} className={`relative flex min-h-[610px] flex-col overflow-hidden rounded-[25px] border p-6 ${plan.featured ? "border-[#00b963]/30 bg-[linear-gradient(165deg,rgba(0,255,136,.09),#fff_35%)] shadow-[0_30px_75px_rgba(18,32,23,.1)] dark:border-[#00e97c]/25 dark:bg-[linear-gradient(165deg,rgba(0,255,136,.08),#171f19_35%)] dark:shadow-[0_30px_75px_rgba(0,0,0,.28)]" : "border-[#122017]/10 bg-white shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-[#151c17] dark:shadow-[0_18px_50px_rgba(0,0,0,.2)]"}`}>
             {plan.featured && <span className="absolute right-4 top-4 rounded-full bg-[#00ff88] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[.1em] text-[#07140d]">{tr("Популярний", "Popular")}</span>}
             <span className={`grid size-11 place-items-center rounded-[14px] ${accentStyles[plan.accent]}`}><plan.icon className="size-5" /></span>
@@ -104,6 +107,26 @@ export const PricingPage: React.FC = () => {
             <ul className="flex-1 space-y-3.5 p-0">{plan.features.map(feature => <li key={feature} className="flex items-start gap-2.5 text-[12px] leading-5 text-[#536057] dark:text-[#b0bab3]"><Check className="mt-0.5 size-4 shrink-0 rounded-full bg-[#00ff88] p-0.5 text-[#062315]" />{feature}</li>)}</ul>
             <button onClick={() => navigate(plan.to)} className={`mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-[14px] text-[13px] font-bold transition hover:-translate-y-0.5 ${plan.featured ? "bg-[#00ff88] text-[#07140d] shadow-[0_12px_28px_rgba(0,185,99,.18)]" : "border border-[#122017]/10 bg-[#f7f8f5] dark:border-white/10 dark:bg-[#202821]"}`}>{plan.cta}<ArrowRight className="size-4" /></button>
           </motion.article>)}
+        </section>
+
+        <section className="mx-auto w-[min(1200px,calc(100%_-_40px))] pb-28">
+          <motion.div {...reveal} className="grid gap-3 rounded-[28px] border border-[#122017]/10 bg-white p-5 shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-[#151c17] md:grid-cols-3">
+            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]">
+              <p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Безкоштовно", "Free")}</p>
+              <h3 className="mt-2 text-lg font-bold">{tr("StudyCod Start — 0 ₴", "StudyCod Start — ₴0")}</h3>
+              <p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Особиста практика, базова бібліотека, перевірка коду та 1 клас для старту.", "Personal practice, core library, code checks, and 1 class to get started.")}</p>
+            </div>
+            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]">
+              <p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Підписка", "Subscription")}</p>
+              <h3 className="mt-2 text-lg font-bold">{tr("StudyCod Pro — 75 ₴/місяць", "StudyCod Pro — ₴75/month")}</h3>
+              <p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Розширені курси, задачі, підказки, візуалізація виконання коду та сертифікати.", "Advanced courses, tasks, hints, code execution visualization, and certificates.")}</p>
+            </div>
+            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]">
+              <p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Для викладача", "For teachers")}</p>
+              <h3 className="mt-2 text-lg font-bold">{tr("StudyCod Class — 400 ₴/місяць", "StudyCod Class — ₴400/month")}</h3>
+              <p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Необмежена кількість класів, до 30 учнів у класі, журнал, аналітика та Live Classroom.", "Unlimited classes, up to 30 students per class, gradebook, analytics, and Live Classroom.")}</p>
+            </div>
+          </motion.div>
         </section>
 
         <section className="bg-[#101713] text-white">
