@@ -133,7 +133,7 @@ export const AuthPage: React.FC<Props> = ({
     return parseBoolEnv(import.meta.env.VITE_ENABLE_AUTH_TURNSTILE) && turnstileSiteKey.length > 0;
   }, [turnstileSiteKey]);
   const shouldRenderAuthTurnstile = React.useMemo(() => {
-    return authTurnstileEnabled && (mode === "login" || mode === "register" && userMode === "PERSONAL");
+    return authTurnstileEnabled && (mode === "login" || (mode === "register" && userMode !== "CONTEST"));
   }, [authTurnstileEnabled, mode, userMode]);
   const turnstileContainerRef = React.useRef<HTMLDivElement | null>(null);
   const turnstileWidgetIdRef = React.useRef<TurnstileWidgetId | null>(null);
@@ -240,7 +240,7 @@ export const AuthPage: React.FC<Props> = ({
               return;
             } catch (teacherErr: unknown) {
               try {
-                const studentResult = await studentLogin(username.trim(), password);
+                const studentResult = await studentLogin(username.trim(), password, currentTurnstileToken || undefined);
                 const studentUser: User = {
                   id: studentResult.student.id,
                   username: studentResult.student.username,
@@ -300,7 +300,7 @@ export const AuthPage: React.FC<Props> = ({
             return;
           }
           const eduLang: "JAVA" | "PYTHON" | "CPP" = course === "PYTHON" ? "PYTHON" : course === "CPP" ? "CPP" : "JAVA";
-          const result = await registerTeacher(username.trim(), email.trim(), password, eduLang);
+          const result = await registerTeacher(username.trim(), email.trim(), password, eduLang, currentTurnstileToken || undefined);
           if (result.requiresEmailVerification) {
             setEmailSent(true);
             setSuccess(tr("Реєстрація вчителя успішна! Перевірте вашу пошту для підтвердження email. Після підтвердження ви зможете увійти.", "Teacher registration successful! Check your email to verify it. After verification you can log in."));

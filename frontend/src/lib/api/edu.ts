@@ -56,10 +56,11 @@ export interface StudentLoginResponse {
     language: "JAVA" | "PYTHON" | "CPP";
   };
 }
-export async function studentLogin(username: string, password: string): Promise<StudentLoginResponse> {
+export async function studentLogin(username: string, password: string, turnstileToken?: string): Promise<StudentLoginResponse> {
   const res = await api.post("/edu/student-login", {
     username,
-    password
+    password,
+    ...(turnstileToken ? { turnstileToken } : {}),
   });
   if (res.data.token) {
     localStorage.setItem("token", res.data.token);
@@ -337,7 +338,7 @@ export interface LearningFeedback {
   firstFailure?: LearningFirstFailure | null;
   analysis?: LearningFailureAnalysis | null;
 }
-export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
+export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP", turnstileToken?: string): Promise<{
   token?: string;
   user?: EduUserPayload;
   requiresEmailVerification?: boolean;
@@ -346,7 +347,8 @@ export async function registerTeacher(username: string, email: string, password:
     username,
     email,
     password,
-    language
+    language,
+    ...(turnstileToken ? { turnstileToken } : {}),
   });
   if (res.data.token) {
     localStorage.setItem("token", res.data.token);

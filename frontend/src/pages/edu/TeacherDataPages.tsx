@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BarChart3, Calculator, Check, ChevronRight, GraduationCap, Plus, RefreshCw, Save, Trash2, UsersRound, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Calculator, ChevronRight, GraduationCap, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
 import {
   createManualGrade,
   createSummaryGrade,
@@ -23,34 +23,14 @@ import {
   DEFAULT_GRADING_SYSTEM,
   formatGradeForSystem,
   gradingSystemInputHint,
+  gradingSystemLabel,
   normalizeGradingSystem,
   normalizeScaleMode,
   parseGradeInputToRaw100,
 } from "../../lib/gradingSystems";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
-const root = "mx-auto max-w-[1380px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
-
-const demoTopics: Topic[] = [
-  { id: 1, title: "Основи Python", order: 1, language: "PYTHON" },
-  { id: 2, title: "Колекції", order: 2, language: "PYTHON" },
-];
-
-const demoGradebook: GradebookResponse = {
-  gradingSystem: DEFAULT_GRADING_SYSTEM,
-  gradeScaleMode: "LINEAR",
-  lessons: [
-    { id: 101, title: "Рядки", type: "TOPIC", tasks: [{ id: 1001, title: "Частотний словник" }] },
-    { id: 102, title: "Цикли", type: "TOPIC", tasks: [{ id: 1002, title: "Сума парних" }] },
-    { id: 201, title: "Тематична: основи", type: "SUMMARY", tasks: [] },
-    { id: 301, title: "I семестр", type: "SEMESTER", tasks: [] },
-  ],
-  students: [
-    { studentId: 1, studentName: "Марія Коваль", grades: [{ taskId: 1001, taskTitle: "Частотний словник", lessonId: 101, lessonTitle: "Рядки", grade: 96, gradeId: 1, createdAt: "", lessonType: "TOPIC" }, { taskId: 201, taskTitle: "Тематична: основи", lessonId: 201, lessonTitle: "Тематична", grade: 92, gradeId: 11, createdAt: "", lessonType: "SUMMARY", isSummaryGrade: true }] },
-    { studentId: 2, studentName: "Андрій Левченко", grades: [{ taskId: 1001, taskTitle: "Частотний словник", lessonId: 101, lessonTitle: "Рядки", grade: 78, gradeId: 2, createdAt: "", lessonType: "TOPIC" }, { taskId: 1002, taskTitle: "Сума парних", lessonId: 102, lessonTitle: "Цикли", grade: 89, gradeId: 3, createdAt: "", lessonType: "TOPIC" }] },
-    { studentId: 3, studentName: "Софія Данилюк", grades: [{ taskId: 1001, taskTitle: "Частотний словник", lessonId: 101, lessonTitle: "Рядки", grade: 92, gradeId: 4, createdAt: "", lessonType: "TOPIC" }, { taskId: 1002, taskTitle: "Сума парних", lessonId: 102, lessonTitle: "Цикли", grade: 98, gradeId: 5, createdAt: "", lessonType: "TOPIC" }, { taskId: 301, taskTitle: "I семестр", lessonId: 301, lessonTitle: "I семестр", grade: 95, gradeId: 31, createdAt: "", lessonType: "SEMESTER", isSemesterGrade: true }] },
-  ] as GradebookStudent[],
-};
+const root = "mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
 
 type Column = {
   id: string;
@@ -69,31 +49,26 @@ type EditingCell = {
   grade: GradebookStudent["grades"][number] | null;
 };
 
-const gradeTone = (value: number | null | undefined) => {
-  if (value == null) return "bg-[#f0f3f0] text-[#87958c] dark:bg-white/[.05] dark:text-[#a6b4a9]";
-  if (value >= 90) return "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]";
-  if (value >= 70) return "bg-[#fff0d7] text-[#a55e00] dark:bg-[#ff8c00]/14 dark:text-[#ffbb6a]";
-  return "bg-[#fff0f4] text-[#c4436b] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
-};
+const demoTopics: Topic[] = [
+  { id: 101, title: "Рядки", order: 1, language: "PYTHON" },
+  { id: 102, title: "Цикли", order: 2, language: "PYTHON" },
+];
 
-const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode }> = ({ title, text, classId, actions }) => {
-  const navigate = useNavigate();
-  return (
-    <header className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">EDU / журнал</p>
-        <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] sm:text-5xl">{title}</h1>
-        <p className="mt-3 max-w-2xl text-base leading-7 text-[#69796e] dark:text-[#a9b6ac]">{text}</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {actions}
-        <button type="button" onClick={() => navigate(`/edu/classes/${classId}${preview() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold dark:border-white/10">
-          <ArrowLeft className="size-4" />
-          Клас
-        </button>
-      </div>
-    </header>
-  );
+const demoGradebook: GradebookResponse = {
+  gradingSystem: "POINTS_12",
+  gradeScaleMode: "LINEAR",
+  lessons: [
+    { id: 101, title: "Рядки", type: "TOPIC", tasks: [{ id: 1001, title: "Частотний словник" }] },
+    { id: 102, title: "Цикли", type: "TOPIC", tasks: [{ id: 1002, title: "Сума парних" }] },
+    { id: 201, title: "Тематична · Рядки", type: "SUMMARY", tasks: [], parentId: 101, parentTitle: "Рядки" },
+    { id: 202, title: "Тематична · Цикли", type: "SUMMARY", tasks: [], parentId: 102, parentTitle: "Цикли" },
+    { id: 301, title: "I семестр", type: "SEMESTER", tasks: [] },
+  ],
+  students: [
+    { studentId: 1, studentName: "Марія Коваль", grades: [{ taskId: 1001, taskTitle: "Частотний словник", lessonId: 101, lessonTitle: "Рядки", grade: 96, gradeId: 1, createdAt: "", lessonType: "TOPIC" }, { taskId: 1002, taskTitle: "Сума парних", lessonId: 102, lessonTitle: "Цикли", grade: 84, gradeId: 2, createdAt: "", lessonType: "TOPIC" }, { taskId: 201, taskTitle: "Тематична · Рядки", lessonId: 201, lessonTitle: "Тематична", grade: 92, gradeId: 11, createdAt: "", lessonType: "SUMMARY", isSummaryGrade: true }] },
+    { studentId: 2, studentName: "Андрій Левченко", grades: [{ taskId: 1001, taskTitle: "Частотний словник", lessonId: 101, lessonTitle: "Рядки", grade: 78, gradeId: 3, createdAt: "", lessonType: "TOPIC" }, { taskId: 1002, taskTitle: "Сума парних", lessonId: 102, lessonTitle: "Цикли", grade: 89, gradeId: 4, createdAt: "", lessonType: "TOPIC" }] },
+    { studentId: 3, studentName: "Софія Данилюк", grades: [{ taskId: 1001, taskTitle: "Частотний словник", lessonId: 101, lessonTitle: "Рядки", grade: 92, gradeId: 5, createdAt: "", lessonType: "TOPIC" }, { taskId: 1002, taskTitle: "Сума парних", lessonId: 102, lessonTitle: "Цикли", grade: 98, gradeId: 6, createdAt: "", lessonType: "TOPIC" }, { taskId: 301, taskTitle: "I семестр", lessonId: 301, lessonTitle: "I семестр", grade: 95, gradeId: 31, createdAt: "", lessonType: "SEMESTER", isSemesterGrade: true }] },
+  ] as GradebookStudent[],
 };
 
 function buildColumns(data: GradebookResponse | null): Column[] {
@@ -101,7 +76,7 @@ function buildColumns(data: GradebookResponse | null): Column[] {
   return data.lessons.flatMap((lesson) => {
     const isSummary = lesson.type === "SUMMARY";
     const isSemester = lesson.type === "SEMESTER";
-    if (!lesson.tasks?.length || isSummary || isSemester) {
+    if (isSummary || isSemester || !lesson.tasks?.length) {
       return [{
         id: `${lesson.type}-${lesson.id}`,
         title: lesson.title,
@@ -145,8 +120,36 @@ function missingThematicTopics(data: GradebookResponse | null, topics: Topic[]) 
   }));
 }
 
+const gradeTone = (value: number | null | undefined) => {
+  if (value == null) return "bg-[#f0f3f0] text-[#87958c] dark:bg-white/[.05] dark:text-[#a6b4a9]";
+  if (value >= 90) return "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]";
+  if (value >= 70) return "bg-[#fff0d7] text-[#a55e00] dark:bg-[#ff8c00]/14 dark:text-[#ffbb6a]";
+  return "bg-[#fff0f4] text-[#c4436b] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
+};
+
+const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode }> = ({ title, text, classId, actions }) => {
+  const navigate = useNavigate();
+  return (
+    <header className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">EDU / журнал</p>
+        <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] sm:text-5xl">{title}</h1>
+        <p className="mt-3 max-w-2xl text-base leading-7 text-[#69796e] dark:text-[#a9b6ac]">{text}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {actions}
+        <button type="button" onClick={() => navigate(`/edu/classes/${classId}${preview() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold dark:border-white/10">
+          <ArrowLeft className="size-4" />
+          Клас
+        </button>
+      </div>
+    </header>
+  );
+};
+
 export const GradebookWorkspace: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
+  const navigate = useNavigate();
   const [data, setData] = React.useState<GradebookResponse | null>(null);
   const [topics, setTopics] = React.useState<Topic[]>([]);
   const [error, setError] = React.useState<string | null>(null);
@@ -181,9 +184,7 @@ export const GradebookWorkspace: React.FC = () => {
       if (missing.length && !autoThematicGuardRef.current) {
         autoThematicGuardRef.current = true;
         try {
-          for (const topic of missing) {
-            await createSummaryGrade(Number(classId), { name: "THEMATIC", topicId: topic.id });
-          }
+          for (const topic of missing) await createSummaryGrade(Number(classId), { name: "THEMATIC", topicId: topic.id });
           nextBook = await getClassGradebook(Number(classId));
           showToast({ type: "success", message: `Тематичні колонки синхронізовано: ${missing.length}.` });
         } catch (syncError) {
@@ -274,7 +275,7 @@ export const GradebookWorkspace: React.FC = () => {
     try {
       if (preview()) {
         const topic = topics.find((item) => item.id === Number(thematicTopicId));
-        setData((old) => old ? { ...old, lessons: [...old.lessons, { id: Date.now(), title: `Тематична: ${topic?.title || "тема"}`, type: "SUMMARY", tasks: [] }] } : old);
+        setData((old) => old ? { ...old, lessons: [...old.lessons, { id: Date.now(), title: `Тематична · ${topic?.title || "тема"}`, type: "SUMMARY", tasks: [], parentId: topic?.id, parentTitle: topic?.title }] } : old);
       } else {
         await createSummaryGrade(Number(classId), { name: "THEMATIC", topicId: Number(thematicTopicId) });
         await load();
@@ -313,9 +314,10 @@ export const GradebookWorkspace: React.FC = () => {
       <Header
         classId={classId}
         title="Журнал класу"
-        text="Оцінки ставляться прямо в таблиці. Тематичні й семестрові колонки тепер керуються тут, поруч із поточними роботами."
+        text="Строгий журнал без хаосу: практики, тематичні й семестрові в одній таблиці та в системі оцінювання класу."
         actions={
           <>
+            <button type="button" onClick={() => navigate(`/edu/classes/${classId}`)} className="inline-flex items-center gap-2 rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />Налаштування класу</button>
             <button type="button" onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"><Plus className="size-4" />Тематична</button>
             <button type="button" disabled={busyAction || !canUseSemesterGrades} onClick={() => void recomputeSemester()} className="inline-flex items-center gap-2 rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold text-[#304138] disabled:opacity-55 dark:border-white/10 dark:text-[#dce7df]"><Calculator className="size-4" />Семестрові</button>
           </>
@@ -327,11 +329,19 @@ export const GradebookWorkspace: React.FC = () => {
         <div className="h-80 animate-pulse rounded-[28px] bg-[#e8eeea] dark:bg-white/[.05]" />
       ) : (
         <>
-          <div className={`mb-4 rounded-[24px] border px-5 py-4 text-sm font-bold ${canUseSemesterGrades ? "border-[#00d978]/20 bg-[#e8f8ee] text-[#16623d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "border-[#ff8c00]/25 bg-[#fff1dc] text-[#8b5300] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"}`}>
-            {canUseSemesterGrades
-              ? "Журнал строгий: тематичні колонки готові, семестрові можна перераховувати."
-              : `Семестрові заблоковано: бракує тематичних колонок для ${missingThematics.length} тем.`}
+          <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_.8fr]">
+            <div className={`rounded-[24px] border px-5 py-4 text-sm font-bold ${canUseSemesterGrades ? "border-[#00d978]/20 bg-[#e8f8ee] text-[#16623d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "border-[#ff8c00]/25 bg-[#fff1dc] text-[#8b5300] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"}`}>
+              {canUseSemesterGrades
+                ? "Журнал строгий: тематичні колонки готові, семестрові можна перераховувати."
+                : `Семестрові заблоковано: бракує тематичних колонок для ${missingThematics.length} тем.`}
+            </div>
+            <div className="rounded-[24px] border border-[#19291d]/10 bg-white px-5 py-4 text-sm dark:border-white/10 dark:bg-[#111b14]">
+              <div className="text-xs font-bold uppercase tracking-[.14em] text-[#718075] dark:text-[#a6b4a9]">Система оцінювання класу</div>
+              <div className="mt-1 text-lg font-bold">{gradingSystemLabel(gradingSystem, false)}</div>
+              <div className="mt-1 text-xs text-[#718075] dark:text-[#a6b4a9]">Введення: {gradingSystemInputHint(gradingSystem, false)}</div>
+            </div>
           </div>
+
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <Metric icon={UsersRound} value={students.length} label="учнів" tone="green" />
             <Metric icon={BarChart3} value={columns.length} label="колонок у журналі" tone="orange" />
@@ -343,12 +353,7 @@ export const GradebookWorkspace: React.FC = () => {
               <thead>
                 <tr className="border-b border-[#19291d]/10 dark:border-white/[.08]">
                   <th className="sticky left-0 z-20 min-w-56 bg-white px-5 py-4 text-left text-xs font-bold uppercase tracking-[.13em] text-[#718075] dark:bg-[#111b14]">Учень</th>
-                  {columns.map((column) => (
-                    <th key={column.id} className="min-w-40 px-3 py-4 text-left align-bottom">
-                      <div className="text-xs font-bold text-[#26362c] dark:text-[#e4ede7]">{column.title}</div>
-                      <div className="mt-1 text-[11px] font-medium text-[#718075] dark:text-[#a6b4a9]">{column.subtitle}</div>
-                    </th>
-                  ))}
+                  {columns.map((column) => <th key={column.id} className="min-w-40 px-3 py-4 text-left align-bottom"><div className="text-xs font-bold text-[#26362c] dark:text-[#e4ede7]">{column.title}</div><div className="mt-1 text-[11px] font-medium text-[#718075] dark:text-[#a6b4a9]">{column.subtitle}</div></th>)}
                 </tr>
               </thead>
               <tbody>
@@ -357,13 +362,7 @@ export const GradebookWorkspace: React.FC = () => {
                     <td className="sticky left-0 z-10 bg-white px-5 py-4 text-sm font-bold dark:bg-[#111b14]">{student.studentName}</td>
                     {columns.map((column) => {
                       const grade = findGrade(student, column);
-                      return (
-                        <td key={column.id} className="px-3 py-3">
-                          <button type="button" onClick={() => openEditor(student, column)} className={`inline-flex min-h-11 min-w-12 items-center justify-center rounded-xl px-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:ring-4 hover:ring-[#00ff88]/15 ${gradeTone(grade?.grade)}`}>
-                            {grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}
-                          </button>
-                        </td>
-                      );
+                      return <td key={column.id} className="px-3 py-3"><button type="button" onClick={() => openEditor(student, column)} className={`inline-flex min-h-11 min-w-12 items-center justify-center rounded-xl px-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:ring-4 hover:ring-[#00ff88]/15 ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
                     })}
                   </tr>
                 ))}
@@ -377,21 +376,12 @@ export const GradebookWorkspace: React.FC = () => {
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#071009]/45 p-4 backdrop-blur-sm sm:items-center">
           <section className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Оцінка</p>
-                <h2 className="mt-2 text-2xl font-bold tracking-[-.04em]">{editing.student.studentName}</h2>
-                <p className="mt-1 text-sm text-[#718075] dark:text-[#a6b4a9]">{editing.column.title}</p>
-              </div>
+              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Оцінка</p><h2 className="mt-2 text-2xl font-bold tracking-[-.04em]">{editing.student.studentName}</h2><p className="mt-1 text-sm text-[#718075] dark:text-[#a6b4a9]">{editing.column.title}</p></div>
               <button type="button" onClick={() => setEditing(null)} className="rounded-xl bg-[#edf1ed] p-2 text-[#526157] dark:bg-white/[.08] dark:text-[#c0cdc2]"><X className="size-4" /></button>
             </div>
             <input autoFocus value={gradeValue} onChange={(event) => setGradeValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveGrade(); }} className="mt-6 w-full rounded-2xl border border-[#19291d]/12 bg-[#f8fbf8] px-4 py-4 text-center text-3xl font-bold outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1510]" placeholder={gradingSystemInputHint(gradingSystem, false)} />
-            <div className="mt-4 grid grid-cols-5 gap-2">
-              {quickGrades.map((value) => <button key={value} type="button" onClick={() => setGradeValue(value)} className="rounded-xl bg-[#f0f4f0] px-3 py-2 text-sm font-bold dark:bg-white/[.06]">{value}</button>)}
-            </div>
-            <div className="mt-6 flex gap-2">
-              <button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button>
-              <button type="button" disabled={saving || !gradeValue.trim()} onClick={() => void saveGrade()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55"><Save className="size-4" />Зберегти</button>
-            </div>
+            <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" onClick={() => setGradeValue(value)} className="rounded-xl bg-[#f0f4f0] px-3 py-2 text-sm font-bold dark:bg-white/[.06]">{value}</button>)}</div>
+            <div className="mt-6 flex gap-2"><button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button type="button" disabled={saving || !gradeValue.trim()} onClick={() => void saveGrade()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55"><Save className="size-4" />Зберегти</button></div>
           </section>
         </div>
       )}
@@ -401,14 +391,8 @@ export const GradebookWorkspace: React.FC = () => {
           <form onSubmit={addThematic} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
             <h2 className="text-2xl font-bold tracking-[-.04em]">Додати тематичну в журнал</h2>
             <p className="mt-2 text-sm leading-6 text-[#6d7c71] dark:text-[#a2b1a6]">Оберіть тему, і колонка зʼявиться в цьому журналі поруч з іншими оцінками.</p>
-            <select required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-5 w-full rounded-xl border border-[#19291d]/12 px-4 py-3 dark:border-white/10 dark:bg-[#0d1510]">
-              <option value="">Оберіть тему</option>
-              {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
-            </select>
-            <div className="mt-5 flex gap-2">
-              <button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button>
-              <button disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55">Додати</button>
-            </div>
+            <select required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-5 w-full rounded-xl border border-[#19291d]/12 px-4 py-3 dark:border-white/10 dark:bg-[#0d1510]"><option value="">Оберіть тему</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55">Додати</button></div>
           </form>
         </div>
       )}
@@ -420,18 +404,25 @@ export const SummaryGradesWorkspace: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
   const [groups, setGroups] = React.useState<SummaryGradeGroup[]>([]);
+  const [gradebook, setGradebook] = React.useState<GradebookResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const gradingSystem = normalizeGradingSystem(gradebook?.gradingSystem || DEFAULT_GRADING_SYSTEM);
+  const scaleMode = normalizeScaleMode(gradebook?.gradeScaleMode);
 
   React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
         if (preview()) {
-          setGroups([{ name: "Основи Python", grades: [{ id: 1, studentId: 1, studentName: "Марія Коваль", grade: 92, createdAt: new Date().toISOString() }] }]);
+          setGradebook(demoGradebook);
+          setGroups([{ name: "Рядки", grades: [{ id: 1, studentId: 1, studentName: "Марія Коваль", grade: 92, createdAt: new Date().toISOString() }] }]);
           return;
         }
-        const grades = await getSummaryGrades(Number(classId));
-        if (alive) setGroups(grades);
+        const [grades, book] = await Promise.all([getSummaryGrades(Number(classId)), getClassGradebook(Number(classId))]);
+        if (alive) {
+          setGroups(grades);
+          setGradebook(book);
+        }
       } catch (caught) {
         if (alive) setError(getErrorMessageFromUnknown(caught, "Не вдалося завантажити підсумки."));
       }
@@ -442,12 +433,12 @@ export const SummaryGradesWorkspace: React.FC = () => {
   const remove = async (id: number) => {
     if (!window.confirm("Видалити цей підсумок?")) return;
     if (preview()) {
-      setGroups((old) => old.filter((item) => !item.grades.some((grade) => grade.id === id)));
+      setGroups((old) => old.map((item) => ({ ...item, grades: item.grades.filter((grade) => grade.id !== id) })));
       return;
     }
     try {
       await deleteSummaryGrade(Number(classId), id);
-      setGroups((old) => old.filter((item) => !item.grades.some((grade) => grade.id === id)));
+      setGroups((old) => old.map((item) => ({ ...item, grades: item.grades.filter((grade) => grade.id !== id) })));
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, "Не вдалося видалити підсумок."));
     }
@@ -458,22 +449,23 @@ export const SummaryGradesWorkspace: React.FC = () => {
       <Header
         classId={classId}
         title="Підсумкові оцінки"
-        text="Цей розділ залишено як перегляд історії. Створення тематичних і семестрових перенесено в журнал класу."
+        text="Це архів і перегляд. Створення тематичних та семестрових перенесено в журнал класу, щоб оцінювання не дублювалось."
         actions={<button type="button" onClick={() => navigate(`/edu/classes/${classId}/gradebook${preview() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]">Відкрити журнал <ChevronRight className="size-4" /></button>}
       />
       {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]">{error}</div>}
+      <div className="mb-5 rounded-[24px] border border-[#19291d]/10 bg-white px-5 py-4 text-sm dark:border-white/10 dark:bg-[#111b14]">
+        <div className="text-xs font-bold uppercase tracking-[.14em] text-[#718075] dark:text-[#a6b4a9]">Система оцінювання класу</div>
+        <div className="mt-1 text-lg font-bold">{gradingSystemLabel(gradingSystem, false)}</div>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         {groups.map((group) => (
           <section key={group.name} className="rounded-[26px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14]">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[.13em] text-[#ff8c00]">тематичний зріз</p>
-                <h2 className="mt-2 text-xl font-bold">{group.name}</h2>
-              </div>
+              <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#ff8c00]">тематичний зріз</p><h2 className="mt-2 text-xl font-bold">{group.name}</h2></div>
               <button type="button" disabled={!group.grades[0]} onClick={() => group.grades[0] && void remove(group.grades[0].id)} className="rounded-xl bg-[#fff0f4] p-2 text-[#c4436b] disabled:opacity-40 dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]"><Trash2 className="size-4" /></button>
             </div>
             <div className="mt-5 space-y-2">
-              {(group.grades || []).map((grade) => <div key={grade.id} className="flex items-center justify-between rounded-xl bg-[#f5f8f5] px-3 py-2.5 text-sm dark:bg-white/[.045]"><span>{grade.studentName || `Учень #${grade.studentId}`}</span><b className="text-[#16834d] dark:text-[#72edb0]">{grade.grade}</b></div>)}
+              {(group.grades || []).map((grade) => <div key={grade.id} className="flex items-center justify-between rounded-xl bg-[#f5f8f5] px-3 py-2.5 text-sm dark:bg-white/[.045]"><span>{grade.studentName || `Учень #${grade.studentId}`}</span><b className="text-[#16834d] dark:text-[#72edb0]">{formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</b></div>)}
               {!group.grades?.length && <p className="rounded-xl bg-[#f5f8f5] p-3 text-sm text-[#718075] dark:bg-white/[.045] dark:text-[#a6b4a9]">Оцінки ще не додані.</p>}
             </div>
           </section>

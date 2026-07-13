@@ -1823,6 +1823,7 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="manual-tasks/:taskId" element={<AnimatedPage><ManualTaskPage /></AnimatedPage>} />
             <Route path="manual-tasks/:taskId/submissions" element={<AnimatedPage><ManualTaskSubmissionsPage /></AnimatedPage>} />
             <Route path="organization" element={<AnimatedPage><OrgMembersPage /></AnimatedPage>} />
+            <Route path="profile" element={<Navigate to="/profile" replace />} />
             <Route path="classes/:classId/live" element={<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>} />
             <Route path="classes/:classId/appeals" element={<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>} />
             <Route path="journal" element={<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>} />
