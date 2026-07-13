@@ -131,7 +131,7 @@ export const CalendarPage: React.FC = () => {
         maxWidth="4xl"
       />
 
-      <div className="px-4 md:px-8 py-8 max-w-4xl mx-auto space-y-5">
+      <div className="mx-auto max-w-[1480px] space-y-6 px-4 py-8 md:px-8">
         {overdue.length > 0 && (
           <button
             type="button"
@@ -167,7 +167,7 @@ export const CalendarPage: React.FC = () => {
         </div>
 
         {/* Weekday header */}
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-2 lg:gap-3">
           {weekdays.map((w, i) => (
             <div key={i} className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-muted text-center py-1">
               {w}
@@ -176,7 +176,7 @@ export const CalendarPage: React.FC = () => {
         </div>
 
         {/* Month grid */}
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-2 lg:gap-3">
           {cells.map((date, i) => {
             const key = dayKey(date);
             const dayItems = itemsByDay.get(key) ?? [];
@@ -189,7 +189,7 @@ export const CalendarPage: React.FC = () => {
                 type="button"
                 onClick={() => setSelectedKey(key)}
                 className={[
-                  "min-h-[84px] rounded-lg border p-1.5 text-left flex flex-col gap-1 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                  "min-h-[96px] rounded-xl border p-2 text-left flex flex-col gap-1.5 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 sm:min-h-[116px] lg:min-h-[132px] lg:p-3",
                   inMonth ? "bg-bg-surface" : "bg-bg-surface/30",
                   today
                     ? "border-primary/60 ring-1 ring-primary/30"

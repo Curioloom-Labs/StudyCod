@@ -26,6 +26,7 @@ import {
   type TestData,
 } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { MarkdownView } from "../../components/MarkdownView";
 
 type TopicTask = {
   id: number;
@@ -445,7 +446,9 @@ export const TopicStudioPage: React.FC = () => {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <h3 className="text-xl font-black tracking-[-.04em]">{task.title}</h3>
-                          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6b7a70] dark:text-[#aebbb2]">{task.description || "Умова ще готується."}</p>
+                          <div className="mt-2 max-h-48 max-w-2xl overflow-hidden text-sm leading-6 text-[#6b7a70] [mask-image:linear-gradient(to_bottom,black_72%,transparent)] dark:text-[#aebbb2]">
+                            {task.description ? <MarkdownView content={task.description} /> : "Умова ще готується."}
+                          </div>
                         </div>
                         <span className={`rounded-full px-3 py-1.5 text-xs font-black ${task.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#edf2ed] text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
                           {task.isAssigned ? "відкрито" : "чернетка"}

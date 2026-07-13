@@ -247,7 +247,9 @@ export const ClassHubPage: React.FC = () => {
                   </span>
                   <span className="min-w-0 flex-1">
                     <strong className="block truncate text-sm font-black">{lesson.title}</strong>
-                    <span className="mt-1 block text-xs text-[#6b7a70] dark:text-[#aebbb2]">{lesson.tasksCount ?? 0} задач</span>
+                    <span className="mt-1 block text-xs text-[#6b7a70] dark:text-[#aebbb2]">
+                      {lesson.type === "CONTROL" ? `контрольна · ${lesson.tasksCount ?? 0} практик` : `${lesson.tasksCount ?? 0} задач`}
+                    </span>
                   </span>
                   <ArrowRight className="size-4 text-[#91a095]" />
                 </button>
