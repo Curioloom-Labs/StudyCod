@@ -1511,99 +1511,178 @@ export const TaskLibraryPage: React.FC = () => {
   }
 
   return (
-    <div className="p-3 sm:p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        <motion.div variants={staggerContainer} initial="initial" animate="animate">
-          <motion.div variants={fadeUpItem}>
-            <Button variant="ghost" onClick={leaveLibrary} className="-ml-2 mb-3">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              {tr("Назад", "Back")}
-            </Button>
-          </motion.div>
-
-          <motion.div variants={fadeUpItem} className="flex items-center gap-2 font-mono text-xs text-primary/70">
-            <Library className="w-3.5 h-3.5" />
-            <span>// library</span>
-          </motion.div>
-          <motion.h1 variants={fadeUpItem} className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-            {tr("Бібліотека завдань", "Task library")}
-          </motion.h1>
-          <motion.p variants={fadeUpItem} className="mt-1.5 text-sm text-text-secondary max-w-2xl">
-            {tr(
-              "Каталог завдань (із модерацією) + ваші чернетки та відправлені на перевірку.",
-              "Task catalog (moderated) + your drafts and submissions."
-            )}
-          </motion.p>
-
-          <motion.div variants={fadeUpItem} className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
-            <div>
-              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Показано", "Shown")}</div>
-              <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={visibleTasks.length} /></div>
-            </div>
-            <div>
-              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Виконано", "Solved")}</div>
-              <div className={`mt-1 text-3xl font-mono font-semibold ${solvedCount ? "text-accent-success" : "text-text-primary"}`}><CountUp value={solvedCount} /></div>
-            </div>
-            <div>
-              <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Обрані", "Favorites")}</div>
-              <div className={`mt-1 text-3xl font-mono font-semibold ${favoritesCount ? "text-accent-warn" : "text-text-primary"}`}><CountUp value={favoritesCount} /></div>
-            </div>
-            {typeof total === "number" && view === "approved" ? (
-              <div>
-                <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Всього", "Total")}</div>
-                <div className="mt-1 text-3xl font-mono font-semibold text-text-primary"><CountUp value={total} /></div>
-              </div>
-            ) : null}
-          </motion.div>
-
-          <motion.div variants={fadeUpItem} className="mt-5 inline-flex items-center gap-1 rounded-xl border border-border bg-bg-surface p-1">
-            <button
-              type="button"
-              onClick={() => setView("approved")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-mono transition-fast ${view === "approved" ? "bg-primary/15 text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
-            >
-              {tr("Каталог", "Catalog")}
-            </button>
-            {canManage ? (
-              <button
-                type="button"
-                onClick={() => setView("mine")}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono transition-fast ${view === "mine" ? "bg-primary/15 text-primary" : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
-              >
-                {tr("Мої", "Mine")}
-              </button>
-            ) : null}
-          </motion.div>
-        </motion.div>
-
-        <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Filters */}
-          <div className="lg:col-span-3 lg:sticky lg:top-4 lg:self-start rounded-xl border border-border bg-bg-surface p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted flex items-center gap-2 leading-none">
-                {tr("Фільтри", "Filters")}
+    <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#152018] dark:bg-[#0b120e] dark:text-[#eef4ef] sm:px-6 lg:px-10 lg:py-9">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <motion.section
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="overflow-hidden rounded-[32px] border border-[#142018]/10 bg-white shadow-[0_24px_70px_-48px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-[#121b15]"
+        >
+          <div className="relative p-5 sm:p-7 lg:p-8">
+            <div className="pointer-events-none absolute right-0 top-0 h-full w-2/3 bg-[radial-gradient(circle_at_top_right,rgba(0,255,136,.14),transparent_58%)]" />
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <motion.div variants={fadeUpItem} className="max-w-3xl">
                 <button
                   type="button"
-                  className="md:hidden inline-flex items-center gap-1 text-xs font-mono text-text-secondary hover:text-text-primary"
-                  onClick={() => setFiltersOpen((v) => !v)}
-                  aria-expanded={filtersOpen}
+                  onClick={leaveLibrary}
+                  className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#142018]/10 bg-[#f4f7f3] px-4 py-2 text-sm font-semibold text-[#526258] transition hover:bg-[#e9efe9] dark:border-white/10 dark:bg-white/[.04] dark:text-[#b4c0b8] dark:hover:bg-white/[.08]"
                 >
-                  {filtersOpen ? (
-                    <>
-                      {tr("згорнути", "collapse")} <ChevronUp className="w-4 h-4" />
-                    </>
-                  ) : (
-                    <>
-                      {tr("показати", "show")} <ChevronDown className="w-4 h-4" />
-                    </>
-                  )}
+                  <ArrowLeft className="h-4 w-4" />
+                  {tr("Назад", "Back")}
                 </button>
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#eaf5ee] px-3 py-1 text-sm font-semibold text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#73efb0]">
+                  <Library className="h-4 w-4" />
+                  {tr("Бібліотека StudyCod", "StudyCod library")}
+                </div>
+                <h1 className="mt-4 max-w-2xl text-3xl font-semibold tracking-[-0.05em] text-[#121b15] dark:text-white sm:text-4xl lg:text-5xl">
+                  {view === "mine"
+                    ? tr("Керуйте задачами без старого робочого хаосу.", "Manage tasks without the old workspace clutter.")
+                    : tr("Обирайте задачу за навичкою, рівнем і контекстом.", "Pick a task by skill, level, and context.")}
+                </h1>
+                <p className="mt-4 max-w-2xl text-base leading-7 text-[#637267] dark:text-[#a8b5aa]">
+                  {view === "mine"
+                    ? tr(
+                      "Тут зібрані чернетки, задачі на модерації та опубліковані матеріали. Пошук, масові дії й preview лишаються під рукою.",
+                      "Drafts, moderation submissions, and published materials live here. Search, bulk actions, and preview stay close."
+                    )
+                    : tr(
+                      "Швидкий каталог практики з живими фільтрами, прогресом і preview перед переходом у розв’язання.",
+                      "A fast practice catalog with live filters, progress, and preview before opening the solver."
+                    )}
+                </p>
+              </motion.div>
+
+              <motion.div variants={fadeUpItem} className="grid min-w-[280px] grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
+                {[
+                  [tr("Показано", "Shown"), visibleTasks.length, "text-[#121b15] dark:text-white"],
+                  [tr("Виконано", "Solved"), solvedCount, "text-[#00a75a] dark:text-[#72edb0]"],
+                  [tr("Обрані", "Favorites"), favoritesCount, "text-[#d97706] dark:text-[#ffb85e]"],
+                  [tr("Всього", "Total"), typeof total === "number" && view === "approved" ? total : tasks.length, "text-[#121b15] dark:text-white"],
+                ].map(([label, value, tone]) => (
+                  <div key={String(label)} className="rounded-2xl border border-[#142018]/10 bg-[#f6f8f5]/85 p-4 dark:border-white/10 dark:bg-white/[.04]">
+                    <div className="text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">{label}</div>
+                    <div className={`mt-2 text-3xl font-semibold tracking-[-0.05em] ${tone}`}>
+                      <CountUp value={Number(value)} />
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            </div>
+          </div>
+        </motion.section>
+
+        <section className="rounded-[28px] border border-[#142018]/10 bg-white p-4 shadow-[0_18px_55px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-[#121b15] sm:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="inline-flex w-fit rounded-2xl bg-[#edf2ed] p-1 dark:bg-white/[.05]">
+              <button
+                type="button"
+                onClick={() => setView("approved")}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${view === "approved" ? "bg-white text-[#142018] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#69776d] hover:text-[#142018] dark:text-[#a7b4a9] dark:hover:text-white"}`}
+              >
+                {tr("Каталог", "Catalog")}
+              </button>
+              {canManage ? (
+                <button
+                  type="button"
+                  onClick={() => setView("mine")}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${view === "mine" ? "bg-white text-[#142018] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#69776d] hover:text-[#142018] dark:text-[#a7b4a9] dark:hover:text-white"}`}
+                >
+                  {tr("Мої задачі", "My tasks")}
+                </button>
+              ) : null}
+            </div>
+
+            <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center xl:max-w-4xl">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7b897e]" />
+                <input
+                  value={qDraft}
+                  onChange={(e) => setQDraft(e.target.value)}
+                  className="h-12 w-full rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] pl-12 pr-12 text-sm font-medium text-[#152018] outline-none transition placeholder:font-normal placeholder:text-[#98a39b] focus:border-[#00c96d] focus:ring-4 focus:ring-[#00ff88]/10 dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                  placeholder={tr("Пошук за назвою, тегом, кодом або темою", "Search by title, tag, code, or topic")}
+                />
+                {qDraft.trim() ? (
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#7b897e] transition hover:bg-[#e7eee7] hover:text-[#142018] dark:hover:bg-white/[.08] dark:hover:text-white"
+                    onClick={() => setQDraft("")}
+                    aria-label={tr("Очистити пошук", "Clear search")}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
+
+              <select
+                value={sort}
+                onChange={(e) => {
+                  const parsed = parseSort(e.target.value);
+                  if (parsed) setSort(parsed);
+                }}
+                className="h-12 rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] px-4 text-sm font-semibold text-[#26352b] outline-none dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+              >
+                <option value="UPDATED_DESC">{tr("Спочатку нові", "Newest first")}</option>
+                <option value="TITLE_ASC">{tr("Назва A–Z", "Title A–Z")}</option>
+                <option value="DIFFICULTY_ASC">{tr("Рівень: від легких", "Level: easiest first")}</option>
+              </select>
+
+              {view === "approved" ? (
+                <select
+                  value={judgeLang}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === "ALL") {
+                      setJudgeLang("ALL");
+                      return;
+                    }
+                    const parsed = parseJudgeLanguage(next);
+                    if (parsed) setJudgeLang(parsed);
+                  }}
+                  className="h-12 rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] px-4 text-sm font-semibold text-[#26352b] outline-none dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                >
+                  <option value="ALL">{tr("Усі мови", "All languages")}</option>
+                  {ALL_JUDGE_LANGS.map((l) => (
+                    <option key={l} value={l}>{FRIENDLY_JUDGE_LANG[l]}</option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  value={mineStatus}
+                  onChange={(e) => {
+                    const parsed = parseMineStatus(e.target.value);
+                    if (parsed) setMineStatus(parsed);
+                  }}
+                  className="h-12 rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] px-4 text-sm font-semibold text-[#26352b] outline-none dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                >
+                  <option value="ALL">{tr("Усі статуси", "All statuses")}</option>
+                  <option value="DRAFT">Draft</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                </select>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-[#142018]/8 pt-4 dark:border-white/[.08] lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setOnlySolved((value) => !value)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlySolved ? "bg-[#e8f8ed] text-[#147b47] ring-1 ring-[#00c96d]/25 dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#f3f6f3] text-[#637267] dark:bg-white/[.045] dark:text-[#a8b5aa]"}`}
+              >
+                {tr("Лише виконані", "Solved only")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOnlyFavorites((value) => !value)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlyFavorites ? "bg-[#fff4df] text-[#b96300] ring-1 ring-[#ff8c00]/20 dark:bg-[#ff8c00]/10 dark:text-[#ffbf72]" : "bg-[#f3f6f3] text-[#637267] dark:bg-white/[.045] dark:text-[#a8b5aa]"}`}
+              >
+                {tr("Обрані", "Favorites")}
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setOnlySolved(false);
                   setOnlyFavorites(false);
@@ -1614,272 +1693,103 @@ export const TaskLibraryPage: React.FC = () => {
                   setQ("");
                   if (view === "approved") setPage(1);
                 }}
-                title={tr("Скинути", "Reset")}
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-[#637267] transition hover:bg-[#f0f4ef] hover:text-[#142018] dark:text-[#a8b5aa] dark:hover:bg-white/[.06] dark:hover:text-white"
               >
                 <RotateCcwIcon />
-              </Button>
+                {tr("Скинути", "Reset")}
+              </button>
             </div>
 
-            <div className={(filtersOpen ? "block" : "hidden") + " md:block space-y-3"}>
-              <div>
-                <div className="text-xs font-mono text-text-secondary mb-2">{tr("Пошук", "Search")}</div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-                  <input
-                    value={qDraft}
-                    onChange={(e) => setQDraft(e.target.value)}
-                    className="w-full pl-10 pr-10 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    placeholder={tr("Назва, код, теги...", "Title, code, tags...")}
-                  />
-                  {qDraft.trim() ? (
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary"
-                      onClick={() => setQDraft("")}
-                      aria-label={tr("Очистити пошук", "Clear search")}
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  ) : null}
-                </div>
-                {view === "approved" ? (
-                  <div className="mt-2 text-[11px] text-text-secondary opacity-80">
-                    {tr("Пошук у каталозі виконується із затримкою ~300мс.", "Catalog search is debounced (~300ms).")}
-                  </div>
-                ) : null}
-              </div>
-
-              {view === "approved" ? (
-                <div>
-                  <div className="text-xs font-mono text-text-secondary mb-2">{tr("Мова розв'язку", "Solution language")}</div>
-                  <select
-                    value={judgeLang}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      if (next === "ALL") {
-                        setJudgeLang("ALL");
-                        return;
-                      }
-                      const parsed = parseJudgeLanguage(next);
-                      if (parsed) setJudgeLang(parsed);
-                    }}
-                    className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
-                  >
-                    <option value="ALL">{tr("Усі мови", "All languages")}</option>
-                    {ALL_JUDGE_LANGS.map((l) => (
-                      <option key={l} value={l}>
-                        {FRIENDLY_JUDGE_LANG[l]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-
-              {view === "mine" ? (
-                <div>
-                  <div className="text-xs font-mono text-text-secondary mb-2">{tr("Статус", "Status")}</div>
-                  <select
-                    value={mineStatus}
-                    onChange={(e) => {
-                      const parsed = parseMineStatus(e.target.value);
-                      if (parsed) setMineStatus(parsed);
-                    }}
-                    className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
-                  >
-                    <option value="ALL">{tr("Усі", "All")}</option>
-                    <option value="DRAFT">DRAFT</option>
-                    <option value="PENDING">PENDING</option>
-                    <option value="APPROVED">APPROVED</option>
-                    <option value="REJECTED">REJECTED</option>
-                  </select>
-                </div>
-              ) : null}
-
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex items-center gap-2 text-xs font-mono text-text-secondary select-none">
-                  <input type="checkbox" checked={onlySolved} onChange={(e) => setOnlySolved(e.target.checked)} />
-                  {tr("Лише виконані", "Solved only")}
-                </label>
-                <label className="flex items-center gap-2 text-xs font-mono text-text-secondary select-none">
-                  <input type="checkbox" checked={onlyFavorites} onChange={(e) => setOnlyFavorites(e.target.checked)} />
-                  {tr("Лише обрані", "Favorites only")}
-                </label>
-              </div>
-
-              <div>
-                <div className="text-xs font-mono text-text-secondary mb-2">{tr("Сортування", "Sort")}</div>
-                <select
-                  value={sort}
-                  onChange={(e) => {
-                    const parsed = parseSort(e.target.value);
-                    if (parsed) setSort(parsed);
-                  }}
-                  className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none"
+            {view === "mine" && canManage ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  key={importKey}
+                  id="library-import"
+                  type="file"
+                  accept=".zip"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleImportArchive(Array.from(e.target.files || []))}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => (document.getElementById("library-import") as HTMLInputElement | null)?.click()}
+                  disabled={importing}
                 >
-                  <option value="UPDATED_DESC">{tr("Оновлено (спочатку нові)", "Updated (newest first)")}</option>
-                  <option value="TITLE_ASC">{tr("Назва (A→Z)", "Title (A→Z)")}</option>
-                  <option value="DIFFICULTY_ASC">{tr("Складність (легка→складна)", "Difficulty (easy→hard)")}</option>
-                </select>
-                {view === "approved" ? (
-                  <div className="mt-2 text-[11px] text-text-secondary opacity-80">
-                    {tr("Сортування застосовується до поточної сторінки.", "Sorting applies to the current page.")}
-                  </div>
+                  <Upload className="mr-2 h-4 w-4" />
+                  {tr("Імпорт", "Import")}
+                </Button>
+                {importReport && importReport.failedCount > 0 ? (
+                  <Button variant="ghost" size="sm" onClick={() => setShowImportReport(true)}>
+                    {tr("Звіт імпорту", "Import report")}
+                  </Button>
                 ) : null}
+                <Button size="sm" onClick={openCreate}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {tr("Створити", "Create")}
+                </Button>
               </div>
-
-              {view === "mine" && canManage ? (
-                <div className="pt-2 border-t border-border">
-                  <div className="text-xs font-mono text-text-secondary mb-2">{tr("Дії", "Actions")}</div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      key={importKey}
-                      id="library-import"
-                      type="file"
-                      accept=".zip"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => handleImportArchive(Array.from(e.target.files || []))}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => (document.getElementById("library-import") as HTMLInputElement | null)?.click()}
-                      disabled={importing}
-                      title={tr("Імпортувати архів(и) (.zip)", "Import archive(s) (.zip)")}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      {tr("Імпорт", "Import")}
-                    </Button>
-                    {importReport && importReport.failedCount > 0 ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowImportReport(true)}
-                        title={tr("Показати останній звіт імпорту", "Show latest import report")}
-                      >
-                        {tr("Звіт імпорту", "Import report")}
-                      </Button>
-                    ) : null}
-                    <Button size="sm" onClick={openCreate} title={tr("Нове завдання", "New task")} aria-label={tr("Створити нове завдання", "Create new task")}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      {tr("Створити", "Create")}
-                    </Button>
-
-                    <div className="w-full h-px bg-border my-1" />
-
-                    <label className="flex items-center gap-2 text-xs font-mono text-text-secondary select-none">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleDraftsSelected}
-                        disabled={bulkActionPending || visibleDraftTasks.length === 0}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setSelectedDraftIds((prev) => {
-                            const next = new Set<number>(prev);
-                            for (const task of visibleDraftTasks) {
-                              if (checked) next.add(task.id);
-                              else next.delete(task.id);
-                            }
-                            return next;
-                          });
-                        }}
-                      />
-                      {tr(
-                        `Чернетки на сторінці: ${selectedVisibleDraftCount}/${visibleDraftTasks.length}`,
-                        `Drafts on page: ${selectedVisibleDraftCount}/${visibleDraftTasks.length}`
-                      )}
-                    </label>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={bulkActionPending || selectedDraftIds.size === 0}
-                      onClick={handleBulkSubmitDrafts}
-                      aria-label={tr("Відправити вибрані чернетки на модерацію", "Submit selected drafts for moderation")}
-                      title={tr("Відправити вибрані чернетки на модерацію", "Submit selected drafts for moderation")}
-                    >
-                      <Send className="w-4 h-4 mr-2" />
-                      {tr("Вибрані → модерація", "Selected → moderation")}
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={bulkActionPending || selectedDraftIds.size === 0}
-                      onClick={handleBulkDeleteDrafts}
-                      aria-label={tr("Видалити вибрані чернетки", "Delete selected drafts")}
-                      title={tr("Видалити вибрані чернетки", "Delete selected drafts")}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      {tr("Видалити вибрані", "Delete selected")}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="pt-2 border-t border-border">
-                <div className="text-xs font-mono text-text-secondary mb-2">{tr("Швидкий перехід", "Quick navigation")}</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => listSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    title={tr("До списку задач", "Jump to task list")}
-                  >
-                    {tr("Список", "List")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    title={tr("До перегляду задачі", "Jump to task preview")}
-                  >
-                    {tr("Перегляд", "Preview")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setOnlySolved(false);
-                      setOnlyFavorites(true);
-                      if (view === "approved") setPage(1);
-                    }}
-                    title={tr("Показати лише обрані", "Show favorites only")}
-                  >
-                    {tr("Обрані", "Favorites")}
-                  </Button>
-                </div>
-              </div>
-            </div>
+            ) : null}
           </div>
 
-          {/* List */}
-          <div ref={listSectionRef} className="lg:col-span-5">
-          <div className="rounded-xl border border-border bg-bg-surface p-4">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">
-                {view === "mine" ? tr("Мої завдання", "My tasks") : tr("Каталог", "Catalog")}
+          {view === "mine" && canManage ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-[#f6f8f5] p-3 text-sm text-[#637267] dark:bg-white/[.035] dark:text-[#a8b5aa]">
+              <label className="inline-flex items-center gap-2 font-semibold">
+                <input
+                  type="checkbox"
+                  checked={allVisibleDraftsSelected}
+                  disabled={bulkActionPending || visibleDraftTasks.length === 0}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSelectedDraftIds((prev) => {
+                      const next = new Set<number>(prev);
+                      for (const task of visibleDraftTasks) {
+                        if (checked) next.add(task.id);
+                        else next.delete(task.id);
+                      }
+                      return next;
+                    });
+                  }}
+                />
+                {tr(
+                  `Чернетки: ${selectedVisibleDraftCount}/${visibleDraftTasks.length}`,
+                  `Drafts: ${selectedVisibleDraftCount}/${visibleDraftTasks.length}`
+                )}
+              </label>
+              <Button variant="ghost" size="sm" disabled={bulkActionPending || selectedDraftIds.size === 0} onClick={handleBulkSubmitDrafts}>
+                <Send className="mr-2 h-4 w-4" />
+                {tr("Відправити вибрані", "Submit selected")}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={bulkActionPending || selectedDraftIds.size === 0} onClick={handleBulkDeleteDrafts}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                {tr("Видалити вибрані", "Delete selected")}
+              </Button>
+            </div>
+          ) : null}
+        </section>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          <section ref={listSectionRef} className="lg:col-span-8">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold tracking-[-0.03em] text-[#142018] dark:text-white">
+                  {view === "mine" ? tr("Мої задачі", "My tasks") : tr("Каталог задач", "Task catalog")}
+                </h2>
+                <p className="mt-1 text-sm text-[#6a786d] dark:text-[#9fac9f]">
+                  {tr("Натисніть на картку, щоб відкрити preview праворуч.", "Select a card to open preview on the right.")}
+                </p>
               </div>
 
               {view === "approved" && typeof total === "number" ? (
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={page <= 1 || loading}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
+                  <Button variant="ghost" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
                     {tr("Назад", "Prev")}
                   </Button>
-                  <div className="text-xs font-mono text-text-secondary">
+                  <div className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-[#637267] ring-1 ring-[#142018]/10 dark:bg-white/[.05] dark:text-[#a8b5aa] dark:ring-white/10">
                     {page} / {totalPages}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={page >= totalPages || loading}
-                    onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}
-                  >
+                  <Button variant="ghost" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}>
                     {tr("Далі", "Next")}
                   </Button>
                 </div>
@@ -1887,34 +1797,28 @@ export const TaskLibraryPage: React.FC = () => {
             </div>
 
             {loading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <Skeleton key={i} className="h-[78px] rounded-lg" />
+              <div className="grid gap-4 md:grid-cols-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[220px] rounded-[26px]" />
                 ))}
               </div>
             ) : visibleTasks.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border bg-bg-base px-4 py-10 text-center">
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
-                  <Search className="w-5 h-5 text-primary" />
+              <div className="rounded-[28px] border border-dashed border-[#142018]/15 bg-white px-5 py-16 text-center dark:border-white/10 dark:bg-[#121b15]">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-[#00ff88]/10">
+                  <Search className="h-6 w-6 text-[#147b47] dark:text-[#72edb0]" />
                 </div>
-                <div className="text-sm font-medium text-text-primary">{tr("Нічого не знайдено", "No results")}</div>
-                <div className="text-xs text-text-secondary mt-1">
-                  {tr("Спробуй змінити фільтри або пошук.", "Try adjusting filters or search.")}
+                <div className="text-base font-semibold text-[#142018] dark:text-white">{tr("Нічого не знайдено", "No results")}</div>
+                <div className="mt-2 text-sm text-[#6a786d] dark:text-[#9fac9f]">
+                  {tr("Змініть пошук, фільтри або відкрийте інший розділ.", "Adjust search, filters, or open another section.")}
                 </div>
               </div>
             ) : (
-              <motion.div
-                variants={staggerContainer}
-                initial="initial"
-                animate="animate"
-                className={isAurora ? "rounded-[var(--aurora-radius)] border border-border bg-bg-surface/40 overflow-hidden divide-y divide-border" : "space-y-2"}
-              >
+              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid gap-4 md:grid-cols-2">
                 {visibleTasks.map((task) => {
                   const isSelected = selectedId === task.id;
                   const isFav = favoriteIds.has(task.id);
                   const diff = (task.difficulty ?? null) as LibraryTaskDifficulty | null;
                   const diffMeta = diff ? FRIENDLY_DIFFICULTY[diff] : null;
-
                   const testsPassed = task.attempt?.lastTestsPassed;
                   const testsTotal = task.attempt?.lastTestsTotal;
                   const progress = typeof testsPassed === "number" && typeof testsTotal === "number" && testsTotal > 0
@@ -1922,24 +1826,12 @@ export const TaskLibraryPage: React.FC = () => {
                     : null;
 
                   return (
-                    <motion.div
+                    <motion.article
                       key={task.id}
                       variants={fadeUpItem}
                       role="button"
                       tabIndex={0}
                       aria-current={isSelected ? "true" : undefined}
-                      className={
-                        isAurora
-                          ? ("w-full text-left p-4 transition-fast focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 " +
-                              (isSelected ? "bg-primary/8" : "hover:bg-bg-hover") +
-                              (task.attempt?.solved ? " shadow-[inset_3px_0_0_0_var(--accent-success)]" : isSelected ? " shadow-[inset_3px_0_0_0_var(--primary)]" : ""))
-                          : ("w-full text-left p-3 rounded-xl border transition-fast focus:outline-none focus:ring-1 focus:ring-primary hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] " +
-                              (isSelected
-                                ? "border-primary bg-primary/5"
-                                : task.attempt?.solved
-                                  ? "border-accent-success/40 bg-bg-base hover:border-accent-success/60"
-                                  : "border-border bg-bg-base hover:border-primary/40"))
-                      }
                       onClick={() => setSelectedId(task.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -1947,354 +1839,265 @@ export const TaskLibraryPage: React.FC = () => {
                           setSelectedId(task.id);
                         }
                       }}
+                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[#00ff88]/15 dark:bg-[#121b15] ${isSelected ? "border-[#00c96d]/55 ring-4 ring-[#00ff88]/10 dark:border-[#00ff88]/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-[#00c96d]/30 dark:border-white/10 dark:hover:border-[#00ff88]/25"}`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                {view === "mine" && canManage && task.status === "DRAFT" ? (
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedDraftIds.has(task.id)}
-                                    disabled={bulkActionPending}
-                                    onClick={(e) => e.stopPropagation()}
-                                    onChange={(e) => toggleDraftSelection(task.id, e.target.checked)}
-                                    aria-label={tr("Вибрати чернетку", "Select draft")}
-                                  />
-                                ) : null}
-                                <div className="text-sm font-mono text-text-primary truncate">{task.title}</div>
-                                {task.attempt?.solved ? <Badge color="success">{tr("OK", "OK")}</Badge> : null}
-                                {view === "mine" && canManage ? (
-                                  <Badge
-                                    color={task.status === "APPROVED" ? "success" : task.status === "REJECTED" ? "error" : task.status === "PENDING" ? "warn" : "info"}
-                                  >
-                                    {statusLabel(task.status)}
-                                  </Badge>
-                                ) : null}
-                              </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
-                                <span className="font-mono opacity-90">#{task.id}</span>
-                                {(task.problemCode || task.slug) ? (
-                                  <span className="px-2 py-0.5 border border-border rounded">
-                                    {task.problemCode || task.slug}
-                                  </span>
-                                ) : null}
-                                {diffMeta ? (
-                                  <Badge color={diffMeta.color}>{tr(diffMeta.uk, diffMeta.en)}</Badge>
-                                ) : null}
-                                {task.section ? (
-                                  <span className="px-2 py-0.5 border border-border rounded" title={tr("Розділ", "Section")}>
-                                    {task.section}
-                                  </span>
-                                ) : null}
-                                <span className="opacity-80">{tr("Оновлено", "Updated")}: {formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
-                                {task.quality ? (
-                                  <span
-                                    className="px-2 py-0.5 border border-border rounded"
-                                    title={tr("Якість за історією розв'язань у бібліотеці", "Quality from historical solves in the library")}
-                                  >
-                                    {tr("Якість", "Quality")}: {task.quality.score}
-                                  </span>
-                                ) : null}
-                              </div>
-
-                              {Array.isArray(task.tags) && task.tags.length ? (
-                                <div className="mt-2 flex flex-wrap gap-1">
-                                  {task.tags.slice(0, 4).map((tag) => (
-                                    <span key={tag} className="text-[10px] px-2 py-0.5 rounded border border-border text-text-secondary">
-                                      #{tag}
-                                    </span>
-                                  ))}
-                                  {task.tags.length > 4 ? (
-                                    <span className="text-[10px] px-2 py-0.5 rounded border border-border text-text-secondary">+{task.tags.length - 4}</span>
-                                  ) : null}
-                                </div>
-                              ) : null}
-
-                              {view === "mine" && canManage && task.status === "REJECTED" && task.rejectionReason ? (
-                                <div className="mt-2 text-xs text-accent-warning">
-                                  {tr("Причина:", "Reason:")} {task.rejectionReason}
-                                </div>
-                              ) : null}
-                            </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {view === "mine" && canManage && task.status === "DRAFT" ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedDraftIds.has(task.id)}
+                                disabled={bulkActionPending}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => toggleDraftSelection(task.id, e.target.checked)}
+                                aria-label={tr("Вибрати чернетку", "Select draft")}
+                              />
+                            ) : null}
+                            {diffMeta ? <Badge color={diffMeta.color}>{tr(diffMeta.uk, diffMeta.en)}</Badge> : null}
+                            {task.attempt?.solved ? <Badge color="success">{tr("Виконано", "Solved")}</Badge> : null}
+                            {view === "mine" && canManage ? (
+                              <Badge color={task.status === "APPROVED" ? "success" : task.status === "REJECTED" ? "error" : task.status === "PENDING" ? "warn" : "info"}>
+                                {statusLabel(task.status)}
+                              </Badge>
+                            ) : null}
                           </div>
+                          <h3 className="mt-4 line-clamp-2 text-lg font-semibold tracking-[-0.03em] text-[#142018] dark:text-white">
+                            {task.title}
+                          </h3>
                         </div>
-
-                        <div className="flex flex-col items-end gap-2 shrink-0">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFavorite(task.id);
-                              }}
-                              title={isFav ? tr("Прибрати з обраного", "Remove from favorites") : tr("Додати в обране", "Add to favorites")}
-                              aria-pressed={isFav}
-                              aria-label={isFav ? tr("Прибрати з обраного", "Remove from favorites") : tr("Додати в обране", "Add to favorites")}
-                            >
-                              <Star className={"w-4 h-4 " + (isFav ? "text-accent-warn" : "text-text-secondary")} fill={isFav ? "currentColor" : "none"} />
-                            </Button>
-
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownload(task.id);
-                              }}
-                              title={tr("Експортувати архів", "Export archive")}
-                              aria-label={tr("Експортувати архів", "Export archive")}
-                            >
-                              <Download className="w-4 h-4" />
-                            </Button>
-                          </div>
-
-                          {progress != null ? (
-                            <div className="w-[120px]">
-                              <div className="h-1.5 w-full bg-bg-base border border-border rounded overflow-hidden">
-                                <div className="h-full bg-primary" style={{ width: `${Math.round(progress * 100)}%` }} />
-                              </div>
-                              <div className="mt-1 text-[10px] font-mono text-text-secondary text-right">
-                                {testsPassed}/{testsTotal}
-                              </div>
-                            </div>
-                          ) : task.attempt?.submissionsCount ? (
-                            <div className="text-[10px] font-mono text-text-secondary">
-                              {tr("Спроб", "Submissions")}: {task.attempt.submissionsCount}
-                            </div>
-                          ) : null}
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(task.id);
+                            }}
+                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-[#d97706] dark:hover:bg-white/[.07]"
+                            aria-pressed={isFav}
+                            aria-label={isFav ? tr("Прибрати з обраного", "Remove from favorites") : tr("Додати в обране", "Add to favorites")}
+                          >
+                            <Star className={`h-4 w-4 ${isFav ? "text-[#d97706]" : ""}`} fill={isFav ? "currentColor" : "none"} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(task.id);
+                            }}
+                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-[#142018] dark:hover:bg-white/[.07] dark:hover:text-white"
+                            aria-label={tr("Експортувати архів", "Export archive")}
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
 
-                      {view === "mine" ? (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {(task.status === "DRAFT" || task.status === "REJECTED") && canManage ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEdit(task.id);
-                              }}
-                            >
-                              <Edit2 className="w-3 h-3 mr-2" />
-                              {tr("Редагувати", "Edit")}
-                            </Button>
-                          ) : null}
-                          {(task.status === "DRAFT" || task.status === "REJECTED") && canManage ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSubmit(task.id);
-                              }}
-                            >
-                              <Send className="w-3 h-3 mr-2" />
-                              {tr("На модерацію", "Submit")}
-                            </Button>
-                          ) : null}
-                          {task.status === "DRAFT" && canManage ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteDraft(task.id);
-                              }}
-                              title={tr("Видалити чернетку", "Delete draft")}
-                            >
-                              <Trash2 className="w-3 h-3 mr-2" />
-                              {tr("Видалити", "Delete")}
-                            </Button>
-                          ) : null}
-                          {task.status === "APPROVED" ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(buildSolvePath(task));
-                              }}
-                            >
-                              <Play className="w-3 h-3 mr-2" />
-                              {tr("Відкрити", "Open")}
-                            </Button>
-                          ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#748177] dark:text-[#9fac9f]">
+                        {(task.problemCode || task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.problemCode || task.slug}</span> : null}
+                        {task.section ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.section}</span> : null}
+                        <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
+                      </div>
+
+                      {Array.isArray(task.tags) && task.tags.length ? (
+                        <div className="mt-4 flex flex-wrap gap-1.5">
+                          {task.tags.slice(0, 4).map((tag) => (
+                            <span key={tag} className="rounded-lg bg-[#eef3ee] px-2 py-1 text-xs font-medium text-[#637267] dark:bg-white/[.055] dark:text-[#a8b5aa]">
+                              {tag}
+                            </span>
+                          ))}
+                          {task.tags.length > 4 ? <span className="rounded-lg bg-[#eef3ee] px-2 py-1 text-xs font-medium text-[#637267] dark:bg-white/[.055] dark:text-[#a8b5aa]">+{task.tags.length - 4}</span> : null}
                         </div>
                       ) : null}
-                    </motion.div>
+
+                      <div className="mt-auto pt-5">
+                        {progress != null ? (
+                          <div>
+                            <div className="flex items-center justify-between text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">
+                              <span>{tr("Прогрес тестів", "Test progress")}</span>
+                              <span>{testsPassed}/{testsTotal}</span>
+                            </div>
+                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e7eee7] dark:bg-white/[.07]">
+                              <div className="h-full rounded-full bg-[#00c96d]" style={{ width: `${Math.round(progress * 100)}%` }} />
+                            </div>
+                          </div>
+                        ) : task.attempt?.submissionsCount ? (
+                          <div className="text-sm font-semibold text-[#748177] dark:text-[#9fac9f]">
+                            {tr("Спроб", "Submissions")}: {task.attempt.submissionsCount}
+                          </div>
+                        ) : null}
+
+                        {view === "mine" ? (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {(task.status === "DRAFT" || task.status === "REJECTED") && canManage ? (
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(task.id); }}>
+                                <Edit2 className="mr-2 h-3 w-3" />
+                                {tr("Редагувати", "Edit")}
+                              </Button>
+                            ) : null}
+                            {(task.status === "DRAFT" || task.status === "REJECTED") && canManage ? (
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleSubmit(task.id); }}>
+                                <Send className="mr-2 h-3 w-3" />
+                                {tr("На модерацію", "Submit")}
+                              </Button>
+                            ) : null}
+                            {task.status === "DRAFT" && canManage ? (
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleDeleteDraft(task.id); }}>
+                                <Trash2 className="mr-2 h-3 w-3" />
+                                {tr("Видалити", "Delete")}
+                              </Button>
+                            ) : null}
+                            {task.status === "APPROVED" ? (
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(buildSolvePath(task)); }}>
+                                <Play className="mr-2 h-3 w-3" />
+                                {tr("Відкрити", "Open")}
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </motion.article>
                   );
                 })}
               </motion.div>
             )}
-          </div>
-          </div>
+          </section>
 
-          {/* Preview */}
-          <div ref={previewSectionRef} className="lg:col-span-4">
-          <div className="rounded-xl border border-border bg-bg-surface p-4 lg:sticky lg:top-4 lg:self-start">
-            {!selectedId ? (
-              <div className="rounded-xl border border-dashed border-border bg-bg-base px-4 py-10 text-center">
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
-                  <Play className="w-5 h-5 text-primary" />
+          <aside ref={previewSectionRef} className="lg:col-span-4">
+            <div className="sticky top-6 rounded-[28px] border border-[#142018]/10 bg-white p-5 shadow-[0_22px_60px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-[#121b15]">
+              {!selectedId ? (
+                <div className="rounded-[24px] bg-[#f6f8f5] px-5 py-12 text-center dark:bg-white/[.035]">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-[#00ff88]/10">
+                    <Play className="h-6 w-6 text-[#147b47] dark:text-[#72edb0]" />
+                  </div>
+                  <div className="text-base font-semibold text-[#142018] dark:text-white">{tr("Оберіть задачу", "Pick a task")}</div>
+                  <div className="mt-2 text-sm leading-6 text-[#6a786d] dark:text-[#9fac9f]">
+                    {tr("Тут з’явиться умова, теорія, тести й швидкий перехід до розв’язання.", "Statement, theory, tests, and a quick solve action will appear here.")}
+                  </div>
                 </div>
-                <div className="text-sm font-medium text-text-primary">{tr("Вибери задачу", "Pick a task")}</div>
-                <div className="text-xs text-text-secondary mt-1">
-                  {tr("Праворуч з'явиться швидкий перегляд умови, теорії та тестів.", "You’ll get a quick preview of statement, theory and tests.")}
+              ) : loadingDetails ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-8 rounded-2xl" />
+                  <Skeleton className="h-4 rounded-2xl" />
+                  <Skeleton className="h-4 rounded-2xl" />
+                  <Skeleton className="h-[220px] rounded-3xl" />
                 </div>
-              </div>
-            ) : loadingDetails ? (
-              <div className="space-y-2">
-                <Skeleton className="h-7 rounded" />
-                <Skeleton className="h-4 rounded" />
-                <Skeleton className="h-4 rounded" />
-                <Skeleton className="h-[180px] rounded" />
-              </div>
-            ) : !details ? (
-              <div className="text-text-secondary text-sm">{tr("Не вдалося завантажити", "Failed to load")}</div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-lg font-mono text-text-primary truncate">{details.task.title}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-                      <span className="font-mono">#{details.task.id}</span>
-                      {(details.task.problemCode || details.task.slug) ? (
-                        <span className="px-2 py-0.5 border border-border rounded">
-                          {details.task.problemCode || details.task.slug}
-                        </span>
-                      ) : null}
+              ) : !details ? (
+                <div className="rounded-2xl bg-[#f6f8f5] p-5 text-sm text-[#6a786d] dark:bg-white/[.035] dark:text-[#9fac9f]">
+                  {tr("Не вдалося завантажити preview.", "Failed to load preview.")}
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
                       {details.task.difficulty ? (
                         <Badge color={FRIENDLY_DIFFICULTY[details.task.difficulty].color}>
                           {tr(FRIENDLY_DIFFICULTY[details.task.difficulty].uk, FRIENDLY_DIFFICULTY[details.task.difficulty].en)}
                         </Badge>
                       ) : null}
                       {view === "mine" && canManage ? (
-                        <Badge
-                          color={details.task.status === "APPROVED" ? "success" : details.task.status === "REJECTED" ? "error" : details.task.status === "PENDING" ? "warn" : "info"}
-                        >
+                        <Badge color={details.task.status === "APPROVED" ? "success" : details.task.status === "REJECTED" ? "error" : details.task.status === "PENDING" ? "warn" : "info"}>
                           {statusLabel(details.task.status)}
                         </Badge>
                       ) : null}
                     </div>
-                    <div className="mt-2 text-[11px] text-text-secondary">
-                      {tr("Мови:", "Languages:")} {getAllowedJudgeLanguages(details.task).map((l) => FRIENDLY_JUDGE_LANG[l]).join(", ")}
-                      <span className="mx-2">·</span>
-                      {tr("Спроб:", "Attempts:")} {details.task.maxAttempts}
-                      {details.task.quality ? (
-                        <>
-                          <span className="mx-2">·</span>
-                          {tr("Якість:", "Quality:")} {details.task.quality.score}
-                        </>
-                      ) : null}
+                    <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-[#142018] dark:text-white">
+                      {details.task.title}
+                    </h2>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#748177] dark:text-[#9fac9f]">
+                      {(details.task.problemCode || details.task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{details.task.problemCode || details.task.slug}</span> : null}
+                      <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">
+                        {tr("Мови", "Languages")}: {getAllowedJudgeLanguages(details.task).map((l) => FRIENDLY_JUDGE_LANG[l]).join(", ")}
+                      </span>
+                      <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">
+                        {tr("Спроб", "Attempts")}: {details.task.maxAttempts}
+                      </span>
                     </div>
                     {view === "mine" && canManage && details.task.status === "REJECTED" && details.task.rejectionReason ? (
-                      <div className="mt-2 text-sm text-accent-warning">
+                      <div className="mt-3 rounded-2xl bg-[#fff4df] p-3 text-sm font-medium text-[#a65600] dark:bg-[#ff8c00]/10 dark:text-[#ffbf72]">
                         {tr("Причина:", "Reason:")} {details.task.rejectionReason}
                       </div>
                     ) : null}
                   </div>
-                  <div className="flex flex-col items-end gap-2 shrink-0">
+
+                  <div className="flex flex-wrap gap-2">
                     {details.task.status === "APPROVED" ? (
                       <Button variant="primary" size="sm" onClick={() => navigate(buildSolvePath(details.task))}>
-                        <Play className="w-4 h-4 mr-2" />
-                        {tr("Розв'язати", "Solve")}
+                        <Play className="mr-2 h-4 w-4" />
+                        {tr("Розв’язати", "Solve")}
                       </Button>
                     ) : null}
                     <Button variant="ghost" size="sm" onClick={() => handleDownload(details.task.id)}>
-                      <Download className="w-4 h-4 mr-2" />
+                      <Download className="mr-2 h-4 w-4" />
                       {tr("Архів", "Archive")}
                     </Button>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2 border-b border-border pb-2">
-                  <Button
-                    variant={detailsTab === "description" ? "primary" : "ghost"}
-                    size="sm"
-                    onClick={() => setDetailsTab("description")}
-                  >
-                    {tr("Умова", "Statement")}
-                  </Button>
-                  <Button
-                    variant={detailsTab === "theory" ? "primary" : "ghost"}
-                    size="sm"
-                    onClick={() => setDetailsTab("theory")}
-                  >
-                    {tr("Теорія", "Theory")}
-                  </Button>
-                  <Button
-                    variant={detailsTab === "tests" ? "primary" : "ghost"}
-                    size="sm"
-                    onClick={() => setDetailsTab("tests")}
-                  >
-                    {tr("Тести", "Tests")} ({details.tests.length})
-                  </Button>
-                </div>
-
-                {detailsTab === "description" ? (
-                  <div>
-                    <MarkdownView content={details.task.description || ""} />
+                  <div className="flex rounded-2xl bg-[#f2f5f2] p-1 dark:bg-white/[.045]">
+                    {[
+                      ["description", tr("Умова", "Statement")],
+                      ["theory", tr("Теорія", "Theory")],
+                      ["tests", `${tr("Тести", "Tests")} (${details.tests.length})`],
+                    ].map(([tab, label]) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setDetailsTab(tab as typeof detailsTab)}
+                        className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${detailsTab === tab ? "bg-white text-[#142018] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#6a786d] hover:text-[#142018] dark:text-[#a8b5aa] dark:hover:text-white"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
-                ) : null}
 
-                {detailsTab === "theory" ? (
-                  <div>
-                    {details.theory ? (
-                      <MarkdownView content={details.theory} />
-                    ) : (
-                      <div className="text-sm text-text-secondary">{tr("(немає)", "(none)")}</div>
-                    )}
-                  </div>
-                ) : null}
-
-                {detailsTab === "tests" ? (
-                  <div>
-                    {details.tests.length === 0 ? (
-                      <div className="text-sm text-text-secondary">{tr("(немає)", "(none)")}</div>
-                    ) : (
-                      <div className="space-y-2">
-                        {details.tests.slice(0, 12).map((test) => {
-                          const hiddenForCatalog = test.isHidden && view === "approved";
-                          return (
-                            <div key={test.id} className="p-3 border border-border rounded-lg bg-bg-base">
-                              <div className="text-xs text-text-secondary flex gap-2 mb-2">
-                                {test.isHidden ? <Badge color="warn">{tr("прихований", "hidden")}</Badge> : <Badge color="info">{tr("публічний", "public")}</Badge>}
-                                <span>{tr("бали", "points")}: {test.points}</span>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <div>
-                                  <div className="text-xs font-mono text-text-primary mb-1">{tr("Ввід", "Input")}</div>
-                                  <pre className="text-xs bg-bg-surface border border-border p-2 rounded overflow-auto">
-                                    {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.input || ""}
-                                  </pre>
+                  <div className="max-h-[520px] overflow-auto pr-1">
+                    {detailsTab === "description" ? <MarkdownView content={details.task.description || ""} /> : null}
+                    {detailsTab === "theory" ? (
+                      details.theory ? <MarkdownView content={details.theory} /> : <div className="rounded-2xl bg-[#f6f8f5] p-4 text-sm text-[#6a786d] dark:bg-white/[.035] dark:text-[#9fac9f]">{tr("Теорію для цієї задачі не додано.", "No theory has been added for this task.")}</div>
+                    ) : null}
+                    {detailsTab === "tests" ? (
+                      details.tests.length === 0 ? (
+                        <div className="rounded-2xl bg-[#f6f8f5] p-4 text-sm text-[#6a786d] dark:bg-white/[.035] dark:text-[#9fac9f]">{tr("Тести не додано.", "No tests added.")}</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {details.tests.slice(0, 12).map((test) => {
+                            const hiddenForCatalog = test.isHidden && view === "approved";
+                            return (
+                              <div key={test.id} className="rounded-2xl border border-[#142018]/10 bg-[#f8faf7] p-3 dark:border-white/10 dark:bg-white/[.035]">
+                                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">
+                                  {test.isHidden ? <Badge color="warn">{tr("прихований", "hidden")}</Badge> : <Badge color="info">{tr("публічний", "public")}</Badge>}
+                                  <span>{tr("бали", "points")}: {test.points}</span>
                                 </div>
-                                <div>
-                                  <div className="text-xs font-mono text-text-primary mb-1">{tr("Очікувано", "Expected")}</div>
-                                  <pre className="text-xs bg-bg-surface border border-border p-2 rounded overflow-auto">
-                                    {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.expectedOutput || ""}
-                                  </pre>
+                                <div className="grid gap-2">
+                                  <div>
+                                    <div className="mb-1 text-xs font-semibold text-[#4f5f54] dark:text-[#c1cbc4]">{tr("Ввід", "Input")}</div>
+                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-[#0b120e] dark:text-[#dce7df] dark:ring-white/10">
+                                      {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.input || ""}
+                                    </pre>
+                                  </div>
+                                  <div>
+                                    <div className="mb-1 text-xs font-semibold text-[#4f5f54] dark:text-[#c1cbc4]">{tr("Очікувано", "Expected")}</div>
+                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-[#0b120e] dark:text-[#dce7df] dark:ring-white/10">
+                                      {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.expectedOutput || ""}
+                                    </pre>
+                                  </div>
                                 </div>
                               </div>
+                            );
+                          })}
+                          {details.tests.length > 12 ? (
+                            <div className="text-sm text-[#6a786d] dark:text-[#9fac9f]">
+                              {tr("Показано перші 12 тестів.", "Showing the first 12 tests.")}
                             </div>
-                          );
-                        })}
-                        {details.tests.length > 12 ? (
-                          <div className="text-xs text-text-secondary opacity-80">
-                            {tr("Показано перші 12 тестів", "Showing first 12 tests")}
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
+                          ) : null}
+                        </div>
+                      )
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-          </div>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
       </div>
 
