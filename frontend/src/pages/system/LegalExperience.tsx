@@ -11,7 +11,7 @@ export type LegalSection = {
 };
 
 type Props = {
-  current: "privacy" | "terms" | "cookies";
+  current: "privacy" | "terms" | "cookies" | "refunds";
   title: string;
   description: string;
   updated: string;
@@ -24,6 +24,7 @@ type Props = {
 const NAV_ITEMS = [
   { id: "privacy" as const, uk: "Конфіденційність", en: "Privacy", path: "/privacy" },
   { id: "terms" as const, uk: "Умови використання", en: "Terms of Use", path: "/terms" },
+  { id: "refunds" as const, uk: "Повернення коштів", en: "Refunds", path: "/refunds" },
   { id: "cookies" as const, uk: "Cookies і сховище", en: "Cookies & Storage", path: "/cookies" },
 ];
 

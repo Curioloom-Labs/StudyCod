@@ -349,6 +349,7 @@ export default {
   footerPrivacyPolicy: 'Політика конфіденційності',
   footerTermsOfUse: 'Умови використання',
   footerCookiePolicy: 'Політика cookies',
+  footerRefundPolicy: 'Повернення коштів',
   maintenanceTitle: 'Технічне обслуговування',
   maintenanceModeEnabled: 'УВІМКНЕНО РЕЖИМ ОБСЛУГОВУВАННЯ'
 };

@@ -327,7 +327,7 @@ export const PublicLandingPage: React.FC = () => {
           <div className="grid grid-cols-3 gap-10 max-md:gap-5">{[
             [tr("Продукт","Product"),[[tr("Платформа","Platform"),()=>scrollTo("platform")],[tr("Практика","Practice"),()=>scrollTo("practice")],[tr("Тарифи","Pricing"),()=>navigate("/pricing")]]],
             [tr("Ресурси","Resources"),[[tr("Документація","Documentation"),()=>navigate("/docs")],[tr("Підтримка","Support"),()=>navigate("/support")],[tr("Блог","Blog"),()=>navigate("/blog")]]],
-            [tr("Правове","Legal"),[[tr("Приватність","Privacy"),()=>navigate("/privacy")],[tr("Умови","Terms"),()=>navigate("/terms")],["Cookies",()=>navigate("/cookies")]]],
+            [tr("Правове","Legal"),[[tr("Приватність","Privacy"),()=>navigate("/privacy")],[tr("Умови","Terms"),()=>navigate("/terms")],[tr("Повернення","Refunds"),()=>navigate("/refunds")],["Cookies",()=>navigate("/cookies")]]],
           ].map(([heading,links]) => <div key={String(heading)} className="flex flex-col items-start gap-3"><strong className="mb-1 text-sm">{String(heading)}</strong>{(links as Array<[string,()=>void]>).map(([label,action]) => <button key={label} onClick={action} className="text-left text-[13px] leading-5 text-[#667169] transition hover:text-[#111814]">{label}</button>)}</div>)}</div>
         </div>
         <div className="flex justify-between gap-4 border-t border-[#122017]/10 pt-6 text-xs leading-5 text-[#667169] max-md:flex-col"><span>© {new Date().getFullYear()} StudyCod</span><span>{tr("Створено для тих, хто вчиться створювати.", "Made for people learning to build.")}</span></div>

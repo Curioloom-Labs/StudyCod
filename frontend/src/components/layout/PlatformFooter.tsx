@@ -12,6 +12,7 @@ export const PlatformFooter: React.FC<PlatformFooterProps> = ({ className = "", 
   const year = new Date().getFullYear();
   const links = [
     ["footerPrivacyPolicy", "/privacy"], ["footerTermsOfUse", "/terms"], ["footerCookiePolicy", "/cookies"],
+    ["footerRefundPolicy", "/refunds"],
     ["blog", "/blog"], ["help", "/docs"], ["support", "/support"],
   ] as const;
 

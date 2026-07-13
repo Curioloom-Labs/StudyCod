@@ -81,6 +81,7 @@ const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(m
 const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
 const TermsOfUsePage = React.lazy(() => import("./pages/system/TermsOfUsePage").then(mod => ({ default: mod.TermsOfUsePage })));
 const CookiePolicyPage = React.lazy(() => import("./pages/system/CookiePolicyPage").then(mod => ({ default: mod.CookiePolicyPage })));
+const RefundPolicyPage = React.lazy(() => import("./pages/system/RefundPolicyPage").then(mod => ({ default: mod.RefundPolicyPage })));
 const PricingPage = React.lazy(() => import("./pages/system/PricingPage").then(mod => ({ default: mod.PricingPage })));
 const MaintenancePage = React.lazy(() => import("./pages/system/MaintenancePage").then(mod => ({ default: mod.MaintenancePage })));
 const GeoBlockedPage = React.lazy(() => import("./pages/system/GeoBlockedPage").then(mod => ({ default: mod.GeoBlockedPage })));
@@ -1257,6 +1258,11 @@ export const App: React.FC = () => {
           <Route path="/cookies" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <CookiePolicyPage />
+                </AnimatedPage>
+              </Suspense></PublicPageWithFooter>} />
+          <Route path="/refunds" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
+                <AnimatedPage>
+                  <RefundPolicyPage />
                 </AnimatedPage>
               </Suspense></PublicPageWithFooter>} />
           <Route path="/pricing" element={<Suspense fallback={<PageLoader />}>
