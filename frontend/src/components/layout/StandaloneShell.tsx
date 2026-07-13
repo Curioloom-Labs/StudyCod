@@ -34,6 +34,8 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const [loading, setLoading] = React.useState(Boolean(token) && !user);
   const [theme, setTheme] = React.useState<AppTheme>(getCurrentTheme);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [accountOpen, setAccountOpen] = React.useState(false);
+  const accountRef = React.useRef<HTMLDivElement | null>(null);
   const devPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
   const shellUser: User | null = user ?? (devPreview ? {
     id: -1,
@@ -58,6 +60,23 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     return () => { active = false; };
   }, [token, user]);
 
+  React.useEffect(() => {
+    if (!accountOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (accountRef.current?.contains(event.target as Node)) return;
+      setAccountOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [accountOpen]);
+
   const toggleTheme = () => setTheme((previous) => {
     const next = previous === "dark" ? "light" : "dark";
     applyTheme(next);
@@ -71,8 +90,10 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const education = shellUser.userMode === "EDUCATIONAL";
   const nav = education
     ? [
-        { key: "learn", label: ukrainian ? "Навчання" : "Learning", icon: GraduationCap, path: shellUser.studentId ? "/edu/lessons" : "/edu" },
-        { key: "blog", label: ukrainian ? "Спільнота" : "Community", icon: BookOpen, path: "/blog" },
+        { key: "learn", label: shellUser.studentId ? (ukrainian ? "Уроки" : "Lessons") : (ukrainian ? "Класи" : "Classes"), icon: GraduationCap, path: shellUser.studentId ? "/edu/lessons" : "/edu" },
+        { key: "grades", label: ukrainian ? "Журнал" : "Journal", icon: Trophy, path: shellUser.studentId ? "/edu/journal" : "/edu/gradebook" },
+        { key: "tasks", label: ukrainian ? "Календар" : "Calendar", icon: Compass, path: "/edu/calendar" },
+        { key: "library", label: ukrainian ? "Бібліотека" : "Library", icon: BookOpen, path: "/edu/library" },
         { key: "profile", label: ukrainian ? "Профіль" : "Profile", icon: UserRound, path: "/?app=profile" }
       ]
     : [
@@ -87,6 +108,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
 
   const navigateTo = (path: string) => {
     setMobileOpen(false);
+    setAccountOpen(false);
     const destination = devPreview
       ? `${path}${path.includes("?") ? "&" : "?"}preview=true`
       : path;
@@ -106,7 +128,22 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={() => navigateTo("/support")} className="hidden size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] dark:hover:text-white sm:grid" aria-label={ukrainian ? "Підтримка" : "Support"}><HelpCircle className="size-[18px]" /></button>
           <button type="button" onClick={toggleTheme} className="grid size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] dark:hover:text-white" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>{theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</button>
-          <button type="button" onClick={() => navigateTo("/?app=profile")} className="hidden items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold transition hover:bg-[#e9efea] dark:hover:bg-white/[.07] sm:flex"><span className="grid size-7 place-items-center overflow-hidden rounded-lg bg-[#dff2e5] text-xs font-bold text-[#147645] dark:bg-[#00ff88]/12 dark:text-[#6eecad]">{shellUser.avatarUrl ? <img src={shellUser.avatarUrl} alt="" className="size-full object-cover" /> : (shellUser.firstName || shellUser.username).slice(0, 1).toUpperCase()}</span><span className="max-w-28 truncate">{shellUser.firstName || shellUser.username}</span></button>
+          <div className="relative hidden sm:block" ref={accountRef}>
+            <button type="button" onClick={() => setAccountOpen((open) => !open)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold transition hover:bg-[#e9efea] dark:hover:bg-white/[.07]" aria-haspopup="menu" aria-expanded={accountOpen}>
+              <span className="grid size-7 place-items-center overflow-hidden rounded-lg bg-[#dff2e5] text-xs font-bold text-[#147645] dark:bg-[#00ff88]/12 dark:text-[#6eecad]">{shellUser.avatarUrl ? <img src={shellUser.avatarUrl} alt="" className="size-full object-cover" /> : (shellUser.firstName || shellUser.username).slice(0, 1).toUpperCase()}</span>
+              <span className="max-w-[180px] truncate">{shellUser.firstName || shellUser.username}</span>
+              <span className={`text-xs text-[#748177] transition ${accountOpen ? "rotate-180" : ""}`}>⌄</span>
+            </button>
+            {accountOpen ? <div className="absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-[#152219]/10 bg-white p-2 shadow-[0_24px_70px_-38px_rgba(15,35,21,.55)] dark:border-white/10 dark:bg-[#121b15]" role="menu">
+              <div className="px-3 py-3">
+                <div className="truncate text-sm font-semibold text-[#17231b] dark:text-white">{shellUser.username}</div>
+                <div className="mt-1 truncate text-xs text-[#718075] dark:text-[#a4b3a8]">{shellUser.userMode || "PERSONAL"}</div>
+              </div>
+              <button type="button" onClick={() => navigateTo("/?app=profile")} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#314037] transition hover:bg-[#f1f5f1] dark:text-[#dce8de] dark:hover:bg-white/[.06]" role="menuitem"><UserRound className="size-4" />{ukrainian ? "Профіль" : "Profile"}</button>
+              <button type="button" onClick={() => navigateTo("/support")} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#5d6b62] transition hover:bg-[#f1f5f1] dark:text-[#aab7ae] dark:hover:bg-white/[.06]" role="menuitem"><HelpCircle className="size-4" />{ukrainian ? "Підтримка" : "Support"}</button>
+              <button type="button" onClick={() => { localStorage.removeItem("token"); cachedSession = null; navigateTo("/"); }} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#d34e72] transition hover:bg-[#fff0f4] dark:text-[#ff9aba] dark:hover:bg-[#ff6b9d]/10" role="menuitem"><LogOut className="size-4" />{ukrainian ? "Вийти" : "Sign out"}</button>
+            </div> : null}
+          </div>
           <button type="button" onClick={() => setMobileOpen(true)} className="grid size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] lg:hidden" aria-label="Open navigation"><Menu className="size-5" /></button>
         </div>
       </div>

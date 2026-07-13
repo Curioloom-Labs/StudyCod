@@ -1236,8 +1236,8 @@ export const LessonDetailsPage: React.FC = () => {
                           {tr("Очікує черги", "Waiting")}
                         </span>}
                     </div>
-                    <div className="text-sm text-text-secondary mb-2 line-clamp-2">
-                      {task.description}
+                    <div className="mb-2 max-h-44 overflow-hidden text-sm text-text-secondary [mask-image:linear-gradient(to_bottom,black_70%,transparent)]">
+                      <MarkdownView content={task.description || ""} />
                     </div>
                     <div className="text-xs text-text-muted space-y-1">
                       <div>{t("tests")}: {task.testDataCount || 0}</div>

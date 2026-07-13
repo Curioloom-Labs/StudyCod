@@ -825,10 +825,10 @@ export const ClassDetailsPage: React.FC = () => {
               {topics.map(topic => {
                 const practiceCount = (topic.tasks || []).filter((taskItem) => (taskItem as { type?: unknown } | null | undefined)?.type === "PRACTICE").length;
                 const controlWorksCount = (topic.controlWorks || []).length;
-                const totalCount = practiceCount + controlWorksCount;
                 const lang = topic.language === "JAVA" ? "Java" : topic.language === "PYTHON" ? "Python" : "C++";
                 const metaParts = [lang];
-                if (totalCount > 0) metaParts.push(`${t('tasksCount')}: ${totalCount}`);
+                if (practiceCount > 0) metaParts.push(`${practiceCount} ${tr("практик", "practice")}`);
+                if (controlWorksCount > 0) metaParts.push(`${controlWorksCount} ${tr("контрольних", "controls")}`);
                 if (topic.description) metaParts.push(topic.description);
                 return (
                   <AuroraRow
@@ -855,10 +855,11 @@ export const ClassDetailsPage: React.FC = () => {
                   {(() => {
                 const practiceCount = (topic.tasks || []).filter((taskItem) => (taskItem as { type?: unknown } | null | undefined)?.type === "PRACTICE").length;
                 const controlWorksCount = (topic.controlWorks || []).length;
-                const totalCount = practiceCount + controlWorksCount;
-                if (totalCount <= 0) return null;
+                if (practiceCount <= 0 && controlWorksCount <= 0) return null;
                 return <div className="text-xs text-text-muted font-mono mt-3 tabular-nums">
-                        {t('tasksCount')}: {totalCount}
+                        {practiceCount > 0 ? `${tr("Практик", "Practice")}: ${practiceCount}` : null}
+                        {practiceCount > 0 && controlWorksCount > 0 ? <span className="mx-1">·</span> : null}
+                        {controlWorksCount > 0 ? `${tr("Контрольних", "Controls")}: ${controlWorksCount}` : null}
                       </div>;
               })()}
                 </motion.button>)}
