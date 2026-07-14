@@ -534,6 +534,18 @@ export const TasksPage: React.FC<Props> = ({
   const canGenerateFirst = lessonStatus === "NOT_STARTED";
   const canGenerate = canGenerateFirst || canGenerateNew;
   const cooldownSecondsLeft = Math.max(0, Math.ceil((generateCooldownUntilMs - clockMs) / 1000));
+  const personalPlacementRequired =
+    !isPreviewMode &&
+    !user.studentId &&
+    user.role !== "SYSTEM_ADMIN" &&
+    (!user.userMode || user.userMode === "PERSONAL") &&
+    !user.placementDone;
+
+  const showPlacementRequiredPrompt = useCallback(() => {
+    requestPlacementOpen();
+    setConsoleOutput(tr("Перед першою персональною практикою потрібно пройти коротку оцінку рівня. Вона відкрилась поверх сторінки.", "Before your first personal practice, please complete the short placement assessment. It opened above this page."));
+    setUIState("logic-warning");
+  }, []);
 
   const requestedTaskIdFromUrl = useMemo(() => {
     const raw = searchParams.get("task");
@@ -1246,6 +1258,10 @@ export const TasksPage: React.FC<Props> = ({
     } catch {}
   }, [editorOpen]);
   const reloadTasks = useCallback(async (selectLast = false) => {
+    if (personalPlacementRequired) {
+      showPlacementRequiredPrompt();
+      return;
+    }
     const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage);
     const filtered = data.filter(t => true);
     setTasks(filtered);
@@ -1282,11 +1298,15 @@ export const TasksPage: React.FC<Props> = ({
         setRevealedHints(0);
       }
     }
-  }, [active?.id, aiResult?.total, uiLanguage, isPreviewMode]);
+  }, [active?.id, aiResult?.total, uiLanguage, isPreviewMode, personalPlacementRequired, showPlacementRequiredPrompt]);
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
+        if (personalPlacementRequired) {
+          if (mounted) showPlacementRequiredPrompt();
+          return;
+        }
         const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage);
         if (mounted) {
           const filtered = data.filter(t => true);
@@ -1326,7 +1346,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode]);
+  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode, personalPlacementRequired, showPlacementRequiredPrompt]);
   useEffect(() => {
     if (tasks.length > 0 && !active) {
       const openTaskId = sessionStorage.getItem("openTaskId");
@@ -1460,6 +1480,10 @@ export const TasksPage: React.FC<Props> = ({
     if (isPreviewMode) {
       setConsoleOutput(tr("У preview показано готовий навчальний сценарій. Генерація нового завдання доступна після входу.", "Preview shows a complete learning scenario. New task generation is available after signing in."));
       setUIState("idle");
+      return;
+    }
+    if (personalPlacementRequired) {
+      showPlacementRequiredPrompt();
       return;
     }
     let closeDelayMs = 0;
