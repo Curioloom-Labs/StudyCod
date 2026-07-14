@@ -13,6 +13,11 @@ export async function placementGate(req: AuthRequest, res: Response, next: NextF
     // Students & educational flows should not be blocked by placement.
     if (req.userType && req.userType !== "USER") return next();
 
+    // Personal practice must remain usable even when placement is not completed.
+    // Placement is a recommendation/onboarding layer, not a hard blocker for task generation.
+    const pathname = String(req.originalUrl || "").split("?")[0] || "";
+    if (/^\/(?:api\/)?tasks(?:\/|$)/.test(pathname)) return next();
+
     const user = await userRepo().findOne({
       where: { id: req.userId }
     });
