@@ -358,10 +358,6 @@ function clearGoogleAuthModeSession(req: Request): void {
   }
 }
 
-function userModeMatchesRequested(user: User, requestedMode: GoogleAuthUserMode): boolean {
-  return (user.userMode ?? "PERSONAL") === requestedMode;
-}
-
 function redirectToGoogleError(res: Response, reason?: string): void {
   const suffix = reason ? `?reason=${encodeURIComponent(reason)}` : "";
   res.redirect(`${FRONTEND_URL}/auth/google/error${suffix}`);
@@ -553,11 +549,6 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
         message: "INVALID_CREDENTIALS"
       });
     }
-    if (user.userMode === "CONTEST") {
-      return res.status(403).json({
-        message: "USE_CONTEST_LOGIN"
-      });
-    }
     if (!user.emailVerified) {
       return res.status(403).json({
         message: "EMAIL_NOT_VERIFIED",
@@ -666,10 +657,6 @@ authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Re
       return res.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
 
-    if (user.userMode !== "CONTEST") {
-      return res.status(403).json({ message: "ONLY_CONTEST_ACCOUNTS_ALLOWED" });
-    }
-
     const token = signUserToken(user);
     setSharedAuthCookie(res, token);
     return res.json({ token, user: buildUserDto(user) });
@@ -773,9 +760,9 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
       setGoogleExchangeCookie(res, code);
       return res.redirect(`${FRONTEND_URL}/auth/google/complete?code=${encodeURIComponent(code)}`);
     }
-    if (!userModeMatchesRequested(user, requestedGoogleMode)) {
-      return redirectToGoogleError(res, "GOOGLE_ACCOUNT_MODE_MISMATCH");
-    }
+    // One Google identity is valid across Personal, EDU and Contest. The
+    // selected mode controls the destination UI; it must not reject an
+    // already-linked account or force duplicate credentials.
     const token = signUserToken(user);
     const code = await issueGoogleExchangeCode("success", token);
     setGoogleExchangeCookie(res, code);
@@ -958,11 +945,6 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       }
     });
     if (existingByGoogle) {
-      if (!userModeMatchesRequested(existingByGoogle, requestedUserMode)) {
-        return res.status(403).json({
-          message: "GOOGLE_ACCOUNT_MODE_MISMATCH"
-        });
-      }
       const jwtToken = signUserToken(existingByGoogle);
       setSharedAuthCookie(res, jwtToken);
       return res.json({
@@ -976,9 +958,14 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       }
     });
     if (existingByEmail) {
-      return res.status(400).json({
-        message: "EMAIL_ALREADY_EXISTS"
-      });
+      // Google has already verified this email. Link it to the existing
+      // StudyCod identity instead of failing when the selected mode differs.
+      existingByEmail.googleId = googleId;
+      if (!existingByEmail.avatarUrl && avatarUrl) existingByEmail.avatarUrl = avatarUrl;
+      await userRepo().save(existingByEmail);
+      const jwtToken = signUserToken(existingByEmail);
+      setSharedAuthCookie(res, jwtToken);
+      return res.json({ token: jwtToken, user: buildUserDto(existingByEmail) });
     }
     const existingByUsername = await userRepo().findOne({
       where: {

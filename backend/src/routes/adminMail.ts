@@ -90,6 +90,8 @@ router.get("/status", authRequired, systemAdminGuard, async (req: AuthRequest, r
   const cfg = studyCodMailService.isConfigured();
   return res.json({
     ok: cfg.ok,
+    canRead: cfg.canRead,
+    canSend: cfg.canSend,
     issues: cfg.issues,
   });
 });

@@ -130,7 +130,7 @@ export const IadPage: React.FC = () => {
           <div className="mt-6 rounded-2xl border border-[#ff6b9d]/30 bg-[#fff1f5] p-5 text-sm text-[#b83259] dark:bg-[#ff6b9d]/10 dark:text-[#ffabc4]">{error}</div>
         ) : details ? (
           <>
-            <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <section className="mt-6 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Metric label={tr("позитивні зміни", "positive changes")} value={metrics.positive} tone="green" />
               <Metric label={tr("просідання", "drops")} value={metrics.negative} tone="red" />
               <Metric label={tr("загальний рух", "net movement")} value={signed(metrics.net)} tone={metrics.net >= 0 ? "green" : "red"} />
@@ -189,7 +189,7 @@ export const IadPage: React.FC = () => {
 };
 
 const Metric: React.FC<{ label: string; value: React.ReactNode; tone: "green" | "red" | "neutral" }> = ({ label, value, tone }) => (
-  <div className="rounded-2xl border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15]">
+  <div className="flex h-full min-h-[126px] flex-col justify-between rounded-2xl border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15]">
     <div className="text-sm text-[#6d7c71] dark:text-[#a2b1a6]">{label}</div>
     <div className={`mt-3 text-3xl font-semibold tracking-[-.05em] ${tone === "green" ? "text-[#147b47] dark:text-[#71edaf]" : tone === "red" ? "text-[#d34e72]" : ""}`}>{value}</div>
   </div>

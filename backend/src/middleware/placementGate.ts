@@ -16,7 +16,10 @@ export async function placementGate(req: AuthRequest, res: Response, next: NextF
     // Personal practice must remain usable even when placement is not completed.
     // Placement is a recommendation/onboarding layer, not a hard blocker for task generation.
     const pathname = String(req.originalUrl || "").split("?")[0] || "";
-    if (/^\/(?:api\/)?tasks(?:\/|$)/.test(pathname)) return next();
+    // Progress and profile analytics are useful before placement as well.
+    // Blocking /grades made the personal journal look empty even though the
+    // grades were already present in the database.
+    if (/^\/(?:api\/)?(?:tasks|grades|profile\/iad)(?:\/|$)/.test(pathname)) return next();
 
     const user = await userRepo().findOne({
       where: { id: req.userId }

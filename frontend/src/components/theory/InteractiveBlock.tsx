@@ -155,11 +155,11 @@ export function parseInteractiveSpec(raw: string): InteractiveSpec | null {
 }
 
 const shellClass =
-  "my-5 rounded-xl border border-border bg-bg-surface p-4 not-prose text-text-primary";
+  "my-5 min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-bg-surface p-4 not-prose text-text-primary";
 const labelClass =
   "mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-text-secondary";
 const codeClass =
-  "mb-3 overflow-x-auto rounded-lg border border-border bg-bg-code p-3 font-mono text-[13px] leading-relaxed text-text-primary";
+  "mb-3 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-bg-code p-3 font-mono text-[13px] leading-relaxed text-text-primary";
 
 const PredictionBlock: React.FC<{ spec: PredictionSpec }> = ({ spec }) => {
   const [choice, setChoice] = useState<number | null>(null);
@@ -168,7 +168,7 @@ const PredictionBlock: React.FC<{ spec: PredictionSpec }> = ({ spec }) => {
   return (
     <div className={shellClass}>
       <div className={labelClass}>{"// перевір себе"}</div>
-      <p className="mb-3 text-sm font-semibold">{spec.question}</p>
+      <p className="mb-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-sm font-semibold">{spec.question}</p>
       {spec.code ? (
         <pre className={codeClass}>
           <code>{spec.code}</code>
@@ -188,18 +188,18 @@ const PredictionBlock: React.FC<{ spec: PredictionSpec }> = ({ spec }) => {
               type="button"
               disabled={revealed}
               onClick={() => setChoice(i)}
-              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${state}`}
+              className={`flex min-w-0 items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${state}`}
             >
               <span aria-hidden className="w-4 shrink-0 text-center">
                 {revealed && isAnswer ? "✓" : revealed && isChosen ? "✗" : "•"}
               </span>
-              <span className="font-mono">{option}</span>
+              <span className="min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap font-mono">{option}</span>
             </button>
           );
         })}
       </div>
       {revealed && spec.explanation ? (
-        <p className="mt-3 border-t border-current/10 pt-3 text-sm opacity-90">
+        <p className="mt-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap border-t border-current/10 pt-3 text-sm opacity-90">
           {choice === spec.answer ? "Правильно! " : "Не зовсім. "}
           {spec.explanation}
         </p>
@@ -215,7 +215,7 @@ const SpotTheBugBlock: React.FC<{ spec: SpotTheBugSpec }> = ({ spec }) => {
   return (
     <div className={shellClass}>
       <div className={labelClass}>{"// знайди помилку"}</div>
-      <p className="mb-3 text-sm font-semibold">
+      <p className="mb-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-sm font-semibold">
         {spec.question || "Натисни на рядок, у якому помилка:"}
       </p>
       <div className="overflow-hidden rounded-lg border border-border bg-bg-code font-mono text-[13px] leading-relaxed">
@@ -232,12 +232,12 @@ const SpotTheBugBlock: React.FC<{ spec: SpotTheBugSpec }> = ({ spec }) => {
               type="button"
               disabled={revealed}
               onClick={() => setChoice(lineNo)}
-              className={`flex w-full items-start gap-3 px-3 py-1 text-left transition-colors ${state}`}
+              className={`flex min-w-0 w-full items-start gap-3 px-3 py-1 text-left transition-colors ${state}`}
             >
               <span aria-hidden className="w-5 shrink-0 select-none text-right opacity-40">
                 {lineNo}
               </span>
-              <span className="whitespace-pre">{line || " "}</span>
+              <span className="min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap">{line || " "}</span>
               {revealed && isBug ? (
                 <span aria-hidden className="ml-auto pl-2 text-emerald-500">
                   ← помилка
@@ -486,9 +486,9 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
         </span>
       </div>
       {spec.caption && index === 0 ? (
-        <p className="mb-3 text-sm text-text-secondary">{spec.caption}</p>
+        <p className="mb-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-sm text-text-secondary">{spec.caption}</p>
       ) : null}
-      <p className="mb-3 text-sm font-semibold">{q.question}</p>
+      <p className="mb-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-sm font-semibold">{q.question}</p>
       {q.code ? (
         <pre className={codeClass}>
           <code>{q.code}</code>
@@ -508,18 +508,18 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
               type="button"
               disabled={answered}
               onClick={() => setChoices((c) => ({ ...c, [index]: i }))}
-              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${state}`}
+              className={`flex min-w-0 items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${state}`}
             >
               <span aria-hidden className="w-4 shrink-0 text-center">
                 {answered && isAnswer ? "✓" : answered && isChosen ? "✗" : "•"}
               </span>
-              <span className="font-mono">{option}</span>
+              <span className="min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap font-mono">{option}</span>
             </button>
           );
         })}
       </div>
       {answered && q.explanation ? (
-        <p className="mt-3 border-t border-border pt-3 text-sm opacity-90">
+        <p className="mt-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap border-t border-border pt-3 text-sm opacity-90">
           {chosen === q.answer ? "Правильно! " : "Не зовсім. "}
           {q.explanation}
         </p>
