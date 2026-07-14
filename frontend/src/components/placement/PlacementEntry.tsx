@@ -37,6 +37,17 @@ export const PlacementEntry: React.FC<{
     }
   }, [user?.id, user?.userMode, user?.studentId, user?.placementDone]);
 
+  useEffect(() => {
+    if (!user) return;
+    if (user.userMode && user.userMode !== "PERSONAL") return;
+    if (user.studentId) return;
+    if (user.placementDone) return;
+
+    const openPlacement = () => setOpen(true);
+    window.addEventListener("studycod:open-placement", openPlacement);
+    return () => window.removeEventListener("studycod:open-placement", openPlacement);
+  }, [user?.id, user?.userMode, user?.studentId, user?.placementDone]);
+
   if (!user) return null;
   if (user.userMode && user.userMode !== "PERSONAL") return null;
   if (user.studentId) return null;
