@@ -28,6 +28,7 @@ import { isResumableSession, loadResumeState, resolveResumeRoute } from "./lib/r
 import { applyTheme, getCurrentTheme, type AppTheme } from "./theme";
 import { getMaintenanceStatus } from "./lib/api/maintenance";
 import { getGeoStatus } from "./lib/api/geo";
+import { getStoredLanguagePreference, isUkraineCountry, setDetectedCountry } from "./lib/localization";
 import type { GeoBlockedPayload } from "./pages/system/GeoBlockedPage";
 import { getAdminMaintenance } from "./lib/api/admin";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
@@ -447,6 +448,10 @@ const AppContent: React.FC = React.memo(() => {
     getGeoStatus()
       .then(s => {
         if (cancelled) return;
+        const country = setDetectedCountry(s.country);
+        if (!getStoredLanguagePreference() && isUkraineCountry(country) && !i18n.language?.toLowerCase().startsWith("uk")) {
+          void i18n.changeLanguage("uk");
+        }
         if (s.geoBlocked) {
           setGeoBlock({ country: s.country });
         } else {
