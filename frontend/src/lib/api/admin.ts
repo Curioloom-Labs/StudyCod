@@ -621,7 +621,7 @@ export type AdminMailMessageDetails = {
   }>;
 };
 
-export async function getAdminMailStatus(): Promise<{ ok: boolean; issues: string[] }> {
+export async function getAdminMailStatus(): Promise<{ ok: boolean; canRead?: boolean; canSend?: boolean; issues: string[] }> {
   const res = await api.get("/admin/mail/status");
   return res.data;
 }

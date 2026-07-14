@@ -96,6 +96,13 @@ export type PersonalControlQuizPayload = {
   title: string;
   count: number;
   questions: PersonalControlQuizQuestion[];
+  submitted?: boolean;
+  submittedGrade?: {
+    total: number;
+    correctAnswers: number;
+    totalQuestions: number;
+  } | null;
+  submittedReview?: PersonalControlQuizSubmitResponse["review"] | null;
 };
 
 export type PersonalControlQuizSubmitResponse = {

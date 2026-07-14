@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Button } from "../../components/ui/Button";
 import { Logo } from "../../components/Logo";
-import { register, login, contestLogin, resendVerificationEmail, requestPasswordReset } from "../../lib/api/auth";
+import { register, login, resendVerificationEmail, requestPasswordReset } from "../../lib/api/auth";
 import { registerTeacher, studentLogin } from "../../lib/api/edu";
 import type { User, CourseLanguage } from "../../types";
 import { applyTheme, getCurrentTheme } from "../../theme";
@@ -66,16 +66,21 @@ function parseBoolEnv(value: unknown): boolean {
 }
 
 const SecurityCheckPanel = React.forwardRef<HTMLDivElement, {
+  enabled: boolean;
   failed: boolean;
   scriptReady: boolean;
   tr: (uk: string, en: string) => string;
-}>(({ failed, scriptReady, tr }, ref) => (
+}>(({ enabled, failed, scriptReady, tr }, ref) => (
   <div className="overflow-hidden rounded-[18px] border border-[#122017]/10 bg-white shadow-[0_10px_28px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-[#121814] dark:shadow-[0_10px_28px_rgba(0,0,0,.2)]">
     <div className="flex items-center justify-between border-b border-[#122017]/10 px-4 py-3 dark:border-white/10">
       <div className="flex items-center gap-2.5"><span className="grid size-8 place-items-center rounded-[10px] bg-[#00ff88]/12 text-[#00884a]"><ShieldCheck className="size-4" /></span><div><strong className="block text-[12px]">{tr("Перевірка безпеки", "Security check")}</strong><span className="text-[10px] text-[#7b877f] dark:text-[#7f8c84]">{tr("Захист від автоматичних запитів", "Protection from automated requests")}</span></div></div>
       <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[#7b877f] dark:text-[#87948b]"><span className={`size-1.5 rounded-full ${failed ? "bg-[#ff6b9d]" : "bg-[#00b963]"}`} />Cloudflare</span>
     </div>
-    {failed ? (
+    {!enabled ? (
+      <div className="px-4 py-4 text-[11px] leading-5 text-[#7b877f] dark:text-[#8f9c93]">
+        {tr("Захист Cloudflare буде активним на робочому домені.", "Cloudflare protection is enabled on the production domain.")}
+      </div>
+    ) : failed ? (
       <div className="flex items-start gap-3 px-4 py-4"><AlertCircle className="mt-0.5 size-4 shrink-0 text-[#ff6b9d]" /><div><strong className="text-[12px]">{tr("Перевірка зараз недоступна", "Verification is currently unavailable")}</strong><p className="mt-1 text-[11px] leading-5 text-[#7b877f] dark:text-[#8f9c93]">{tr("На робочому домені модуль відкриється тут автоматично. Локальне середовище може блокувати з’єднання з Cloudflare.", "On the production domain the check will appear here automatically. Local environments may block Cloudflare connections.")}</p></div></div>
     ) : (
       <div className="relative min-h-[88px] px-3 py-3">
@@ -138,8 +143,8 @@ export const AuthPage: React.FC<Props> = ({
     return parseBoolEnv(import.meta.env.VITE_ENABLE_AUTH_TURNSTILE) && turnstileSiteKey.length > 0;
   }, [turnstileSiteKey]);
   const shouldRenderAuthTurnstile = React.useMemo(() => {
-    return authTurnstileEnabled && (mode === "login" || (mode === "register" && userMode !== "CONTEST"));
-  }, [authTurnstileEnabled, mode, userMode]);
+    return mode === "login" || mode === "register";
+  }, [mode]);
   const turnstileMountKey = `${userMode}:${mode}`;
   const turnstileContainerRef = React.useRef<HTMLDivElement | null>(null);
   const turnstileWidgetIdRef = React.useRef<TurnstileWidgetId | null>(null);
@@ -231,7 +236,7 @@ export const AuthPage: React.FC<Props> = ({
     setError(null);
     setSuccess(null);
 
-    const requiresTurnstile = shouldRenderAuthTurnstile && !import.meta.env.DEV;
+    const requiresTurnstile = authTurnstileEnabled && shouldRenderAuthTurnstile && !import.meta.env.DEV;
     const currentTurnstileToken = String(turnstileToken ?? "").trim();
     if (requiresTurnstile) {
       if (turnstileLoadFailed) {
@@ -251,10 +256,6 @@ export const AuthPage: React.FC<Props> = ({
           if (userMode === "EDUCATIONAL") {
             try {
               const user = await login(username.trim(), password, currentTurnstileToken || undefined);
-              if (user.userMode !== "EDUCATIONAL") {
-                setError(tr("Цей акаунт не призначений для освітнього режиму", "This account is not intended for EDU mode"));
-                return;
-              }
               onAuth(user);
               return;
             } catch (teacherErr: unknown) {
@@ -283,18 +284,10 @@ export const AuthPage: React.FC<Props> = ({
               }
             }
           } else if (userMode === "CONTEST") {
-            const user = await contestLogin(username.trim(), password, currentTurnstileToken || undefined);
-            if (user.userMode !== "CONTEST") {
-              setError(tr("Цей акаунт не призначений для контест-режиму", "This account is not intended for contest mode"));
-              return;
-            }
+            const user = await login(username.trim(), password, currentTurnstileToken || undefined);
             onAuth(user);
           } else {
             const user = await login(username.trim(), password, currentTurnstileToken || undefined);
-            if (userMode === "PERSONAL" && user.userMode === "EDUCATIONAL") {
-              setError(tr("Цей акаунт призначений для EDU режиму. Оберіть вкладку 'EDU'.", "This account is for EDU mode. Please select the 'EDU' tab."));
-              return;
-            }
             onAuth(user);
           }
         } catch (loginErr: unknown) {
@@ -477,9 +470,9 @@ export const AuthPage: React.FC<Props> = ({
                   {mode === "register" && userMode === "PERSONAL" && <div><label className={fieldLabelClass}>{t("programmingLanguage")}</label><div className="grid grid-cols-3 gap-2">{(["JAVA", "PYTHON", "CPP"] as CourseLanguage[]).map(lang => <button key={lang} type="button" onClick={() => setCourse(lang)} className={`h-11 rounded-xl border text-[12px] font-bold transition ${course === lang ? "border-[#00b963]/35 bg-[#00ff88]/10 text-[#007f48] dark:text-[#64eead]" : "border-[#122017]/10 bg-white text-[#667169] dark:border-white/10 dark:bg-[#151d17] dark:text-[#9eaaa2]"}`}>{lang === "CPP" ? "C++" : lang === "JAVA" ? "Java" : "Python"}</button>)}</div></div>}
                   {error && <div className="flex items-start gap-2.5 rounded-[14px] border border-[#ff6b9d]/20 bg-[#ff6b9d]/10 p-3.5 text-[13px] leading-5 text-[#d33d70] dark:text-[#ff91b7]"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div>}
                   {success && <div className="flex items-start gap-2.5 rounded-[14px] border border-[#00b963]/20 bg-[#00ff88]/10 p-3.5 text-[13px] leading-5 text-[#007f48] dark:text-[#72f2b4]"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div>}
-                  {shouldRenderAuthTurnstile && <SecurityCheckPanel key={turnstileMountKey} ref={turnstileContainerRef} failed={turnstileLoadFailed} scriptReady={turnstileScriptReady} tr={tr} />}
+                  {shouldRenderAuthTurnstile && <SecurityCheckPanel ref={turnstileContainerRef} enabled={authTurnstileEnabled} failed={turnstileLoadFailed} scriptReady={authTurnstileEnabled ? turnstileScriptReady : true} tr={tr} />}
                   <button type="submit" className={primaryButtonClass} disabled={loading}>{loading ? tr("Обробка…", "Processing…") : mode === "login" ? t("login") : t("register")}<ArrowRight className="size-4" /></button>
-                  {mode === "login" && <><div className="relative py-1 text-center before:absolute before:left-0 before:right-0 before:top-1/2 before:h-px before:bg-[#122017]/10 dark:before:bg-white/10"><span className="relative bg-[#f7f8f5] px-3 text-[12px] text-[#7c8880] dark:bg-[#0c110e]">{tr("або", "or")}</span></div><button type="button" onClick={() => { window.location.href = buildGoogleAuthUrl(userMode); }} className="flex h-12 w-full items-center justify-center gap-3 rounded-[14px] border border-[#122017]/10 bg-white text-[13px] font-bold transition hover:border-[#00b963]/25 hover:bg-[#fbfcfa] dark:border-white/10 dark:bg-[#171e19] dark:hover:bg-[#1b241d]"><svg className="size-[18px]" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>{tr("Продовжити через Google", "Continue with Google")}</button></>}
+                  {mode === "login" && userMode !== "CONTEST" && <><div className="relative py-1 text-center before:absolute before:left-0 before:right-0 before:top-1/2 before:h-px before:bg-[#122017]/10 dark:before:bg-white/10"><span className="relative bg-[#f7f8f5] px-3 text-[12px] text-[#7c8880] dark:bg-[#0c110e]">{tr("або", "or")}</span></div><button type="button" onClick={() => { window.location.href = buildGoogleAuthUrl(userMode); }} className="flex h-12 w-full items-center justify-center gap-3 rounded-[14px] border border-[#122017]/10 bg-white text-[13px] font-bold transition hover:border-[#00b963]/25 hover:bg-[#fbfcfa] dark:border-white/10 dark:bg-[#171e19] dark:hover:bg-[#1b241d]"><svg className="size-[18px]" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>{tr("Продовжити через Google", "Continue with Google")}</button></>}
                 </form>
               )}
             </motion.div>
@@ -779,7 +772,7 @@ export const AuthPage: React.FC<Props> = ({
                   )}
 
                   {shouldRenderAuthTurnstile && (
-                    <motion.div key={turnstileMountKey} variants={prefersReducedMotion ? undefined : fadeUpItem} className="rounded-lg border border-border bg-bg-code px-3 py-3">
+                    <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="rounded-lg border border-border bg-bg-code px-3 py-3">
                       <div ref={turnstileContainerRef} className="min-h-[65px]" />
                       {turnstileLoadFailed && (
                         <div className="mt-2 text-[11px] font-mono text-accent-error">
@@ -798,7 +791,7 @@ export const AuthPage: React.FC<Props> = ({
                   </motion.div>
 
                   {/* Google button */}
-                  {mode === "login" && (
+                  {mode === "login" && userMode !== "CONTEST" && (
                     <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
                       <div className="relative my-1">
                         <div className="absolute inset-0 flex items-center">

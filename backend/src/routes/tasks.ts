@@ -1895,11 +1895,32 @@ tasksRouter.get("/:id/quiz", authMiddleware, async (req: AuthRequest, res: Respo
       };
     });
 
+    const submittedGrade = await gradeRepo().findOne({
+      where: { user: { id: req.userId }, task: { id: task.id } },
+      order: { createdAt: "DESC" }
+    });
+    let submittedReview: any = null;
+    if (submittedGrade?.comparisonFeedback) {
+      try {
+        const parsed = JSON.parse(String(submittedGrade.comparisonFeedback));
+        if (parsed && Array.isArray(parsed.questions)) submittedReview = parsed;
+      } catch {
+        submittedReview = null;
+      }
+    }
+
     return res.json({
       taskId: task.id,
       title: task.title,
       count: questions.length,
-      questions
+      questions,
+      submitted: Boolean(submittedGrade),
+      submittedGrade: submittedGrade ? {
+        total: Number(submittedGrade.total ?? 0),
+        correctAnswers: Number(submittedReview?.correctAnswers ?? 0),
+        totalQuestions: Number(submittedReview?.totalQuestions ?? questions.length)
+      } : null,
+      submittedReview
     });
   } catch (error: any) {
     logger.error("[tasks] GET /:id/quiz error", { requestId: req.requestId, userId: req.userId, error });

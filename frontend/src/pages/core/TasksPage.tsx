@@ -505,6 +505,7 @@ export const TasksPage: React.FC<Props> = ({
   } | null>(null);
 
   const latestSubmitRequestSeq = useRef(0);
+  const generateRequestRef = useRef(false);
   const latestSubmissionBindingRef = useRef<{
     submissionId?: string;
     codeHash: string;
@@ -1446,9 +1447,30 @@ export const TasksPage: React.FC<Props> = ({
       .then((data) => {
         if (cancelled) return;
         setPersonalQuiz(data);
+        if (data.submitted) {
+          const grade = data.submittedGrade;
+          const review = data.submittedReview;
+          setQuizReview(review?.questions ?? null);
+          setAiResult({
+            gradingMode: "TESTS",
+            total: Number(grade?.total ?? 0),
+            workScore: 0,
+            optimizationScore: 0,
+            integrityScore: 0,
+            aiFeedback: tr(
+              `Тест уже здано: ${grade?.correctAnswers ?? 0}/${grade?.totalQuestions ?? data.questions.length}. Повторна відправка заблокована.`,
+              `This quiz was already submitted: ${grade?.correctAnswers ?? 0}/${grade?.totalQuestions ?? data.questions.length}. Resubmission is locked.`
+            ),
+            testsPassed: grade?.correctAnswers,
+            testsTotal: grade?.totalQuestions ?? data.questions.length,
+          });
+          setConsoleOutput(tr("Тест уже перевірено. Переглянь пояснення до відповідей нижче.", "Quiz already checked. Review the answer explanations below."));
+          setUIState("success");
+          clearQuizDraftAnswers(active.id);
+        }
         const restored = loadQuizDraftAnswers(active.id, data);
-        setQuizAnswers(restored);
-        requestAnimationFrame(() => focusFirstUnansweredQuizQuestion(data, restored));
+        setQuizAnswers(data.submitted ? {} : restored);
+        if (!data.submitted) requestAnimationFrame(() => focusFirstUnansweredQuizQuestion(data, restored));
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -1474,6 +1496,11 @@ export const TasksPage: React.FC<Props> = ({
   }, [active?.id, isPersonalControlQuizTask, personalQuiz, quizAnswers, quizReview, persistQuizDraftAnswers]);
   const handleGenerate = async (options?: { forceControl?: boolean }) => {
     const wantsControl = Boolean(options?.forceControl);
+    if (generateRequestRef.current) {
+      setConsoleOutput(tr("Генерація вже триває — дочекайся результату.", "Generation is already running — wait for the result."));
+      setUIState("logic-warning");
+      return;
+    }
     if (isPreviewMode) {
       setConsoleOutput(tr("У preview показано готовий навчальний сценарій. Генерація нового завдання доступна після входу.", "Preview shows a complete learning scenario. New task generation is available after signing in."));
       setUIState("idle");
@@ -1495,6 +1522,7 @@ export const TasksPage: React.FC<Props> = ({
       setUIState("logic-warning");
       return;
     }
+    generateRequestRef.current = true;
     setLoading(true);
     setGenerationPhase("requesting");
     setAiResult(null);
@@ -1509,7 +1537,10 @@ export const TasksPage: React.FC<Props> = ({
         const generatedTask = payload.task as Task;
         const generatedTaskId = Number((generatedTask as { id?: unknown }).id ?? 0);
         setGenerationPhase("syncing");
-        const newTasks = await listTasks(uiLanguage);
+        // The generation endpoint already returns the complete task DTO. Avoid
+        // a second list request here; it made the workspace feel stalled after
+        // the AI response had already arrived.
+        const newTasks = [...tasks.filter((task) => task.id !== generatedTask.id), generatedTask];
         setTasks(newTasks);
 
         const openedTask = Number.isFinite(generatedTaskId) && generatedTaskId > 0
@@ -1592,6 +1623,7 @@ export const TasksPage: React.FC<Props> = ({
       }
       setGenerationPhase(null);
       setLoading(false);
+      generateRequestRef.current = false;
     }
   };
   const handleSubmit = async () => {
@@ -1622,6 +1654,10 @@ export const TasksPage: React.FC<Props> = ({
       if (!personalQuiz || quizLoading) {
         setConsoleOutput(tr("Тест ще завантажується. Зачекай декілька секунд.", "Quiz is still loading. Please wait a few seconds."));
         setUIState("logic-warning");
+        return;
+      }
+      if (personalQuiz.submitted || quizReview) {
+        setConsoleOutput(tr("Цей тест уже здано. Повторна відправка недоступна.", "This quiz has already been submitted. Resubmission is unavailable."));
         return;
       }
       const orderedAnswers = personalQuiz.questions
@@ -1707,6 +1743,13 @@ export const TasksPage: React.FC<Props> = ({
           if (updated) setActive(updated);
         }
       } catch (err: unknown) {
+        const apiErr = toApiErrorLike(err);
+        if (Number(apiErr?.response?.status ?? 0) === 409 || String(asRecord(apiErr?.response?.data)?.message ?? "") === "QUIZ_ALREADY_SUBMITTED") {
+          setQuizReview((current) => current ?? []);
+          setConsoleOutput(tr("Тест уже здано. Онови сторінку, щоб переглянути результат.", "This quiz was already submitted. Refresh to review the result."));
+          setUIState("success");
+          return;
+        }
         const text = formatApiError(err);
         setConsoleOutput(`${tr("Помилка відправлення тесту:", "Quiz submit error:")} ${text}`);
         setUIState("error");
@@ -2429,13 +2472,18 @@ export const TasksPage: React.FC<Props> = ({
                 const selected = isSidebarItemActive(item);
                 const done = item.status === "GRADED";
                 return (
-                  <button type="button" key={item.id} onClick={() => openSidebarTask(item.openTask)} className={`flex min-w-[230px] items-start gap-3 rounded-[14px] px-3 py-3 text-left transition lg:min-w-0 lg:w-full ${selected ? "bg-white shadow-[0_6px_20px_rgba(26,43,31,.07)] ring-1 ring-[#17251b]/[.06] dark:bg-white/[.07] dark:ring-white/10" : "hover:bg-white/70 dark:hover:bg-white/[.04]"}`}>
-                    <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${done ? "bg-[#dff8e9] text-[#147447] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : selected ? "bg-[#17251b] text-white dark:bg-[#00ff88] dark:text-[#062211]" : "border border-[#cbd4cc] text-[#7c8980] dark:border-white/15"}`}>{done ? "✓" : index + 1}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-black">{item.renderTitle}</span>
-                      <span className="mt-1 block truncate text-[10px] font-semibold text-[#7a887f] dark:text-[#8e9a92]">{blockTitle} · {sectionTitle}</span>
-                    </span>
-                  </button>
+                  <React.Fragment key={item.id}>
+                    {(index === 0 || routeTiles[index - 1].blockTitle !== blockTitle) && (
+                      <div className="px-2 pb-1 pt-3 text-[10px] font-black uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">{blockTitle}</div>
+                    )}
+                    <button type="button" onClick={() => openSidebarTask(item.openTask)} className={`flex min-w-[230px] items-start gap-3 rounded-[14px] px-3 py-3 text-left transition lg:min-w-0 lg:w-full ${selected ? "bg-white shadow-[0_6px_20px_rgba(26,43,31,.07)] ring-1 ring-[#17251b]/[.06] dark:bg-white/[.07] dark:ring-white/10" : "hover:bg-white/70 dark:hover:bg-white/[.04]"}`}>
+                      <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${done ? "bg-[#dff8e9] text-[#147447] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : selected ? "bg-[#17251b] text-white dark:bg-[#00ff88] dark:text-[#062211]" : "border border-[#cbd4cc] text-[#7c8980] dark:border-white/15"}`}>{done ? "✓" : index + 1}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-black">{item.renderTitle}</span>
+                        <span className="mt-1 block truncate text-[10px] font-semibold text-[#7a887f] dark:text-[#8e9a92]">{sectionTitle}</span>
+                      </span>
+                    </button>
+                  </React.Fragment>
                 );
               })}
               {!routeTiles.length && <p className="p-4 text-sm text-[#718077]">{tr("Завдань поки немає.", "No tasks yet.")}</p>}
@@ -2527,7 +2575,7 @@ export const TasksPage: React.FC<Props> = ({
 
               <div className="min-h-[220px] flex-1 p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Результат", "Result")}</p><span className={`rounded-full px-2 py-1 text-[10px] font-black ${consoleStateMeta.toneClass}`}>{consoleStateMeta.label}</span></div>
-                {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ 12</span></div>}
+                {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ {isPersonalControlQuizTask ? 100 : 12}</span></div>}
                 {aiResult?.aiFeedback && <p className="mt-3 text-sm leading-6 text-[#4f5f55] dark:text-[#b8c4bb]">{aiResult.aiFeedback}</p>}
                 <pre className="mt-4 max-h-52 overflow-auto whitespace-pre-wrap rounded-xl bg-[#111713] p-4 font-mono text-xs leading-6 text-[#cfe0d3]">{consoleOutput || tr("Результат запуску з’явиться тут.", "Run output will appear here.")}</pre>
               </div>
@@ -2706,7 +2754,7 @@ export const TasksPage: React.FC<Props> = ({
                     <button
                       type="button"
                       onClick={handleSubmit}
-                      disabled={!canEdit || quizSubmitting || quizLoading || !theoryAcknowledged || !personalQuiz || answeredQuizCount < (personalQuiz?.questions.length ?? 0)}
+                      disabled={!canEdit || quizSubmitting || quizLoading || !!quizReview || !theoryAcknowledged || !personalQuiz || answeredQuizCount < (personalQuiz?.questions.length ?? 0)}
                       className="rounded-2xl bg-[#00ff88] px-5 py-3 text-sm font-black text-[#061d10] disabled:opacity-45"
                     >
                       {tr("Надіслати тест", "Submit quiz")}

@@ -88,7 +88,7 @@ function fmtDateShort(iso: string | null): string {
 }
 
 export const AdminMailWorkspace: React.FC = () => {
-  const [status, setStatus] = React.useState<{ ok: boolean; issues: string[] } | null>(null);
+  const [status, setStatus] = React.useState<{ ok: boolean; canRead?: boolean; canSend?: boolean; issues: string[] } | null>(null);
   const [loading, setLoading] = React.useState(false);
 
   const [folders, setFolders] = React.useState<AdminMailFolder[]>([]);
@@ -186,7 +186,7 @@ export const AdminMailWorkspace: React.FC = () => {
     setLoading(true);
     try {
       const cfg = await loadStatus().catch(() => null);
-      if (!cfg?.ok) {
+      if (!cfg?.canRead && !cfg?.ok) {
         // Mailbox isn't configured (missing IMAP/SMTP env on the host). Show the
         // status panel instead of firing — and crashing on — folder/message
         // requests that can only 400. Prevents the uncaught AxiosError.
@@ -196,8 +196,10 @@ export const AdminMailWorkspace: React.FC = () => {
         setSelected(null);
         return;
       }
-      await loadFolders();
-      await loadMessages(activeFolder);
+      if (cfg?.canRead ?? cfg?.ok) {
+        await loadFolders();
+        await loadMessages(activeFolder);
+      }
     } catch {
       // A mail backend hiccup must never become an uncaught promise rejection.
     } finally {
@@ -313,7 +315,7 @@ export const AdminMailWorkspace: React.FC = () => {
       setComposeInReplyTo("");
       setComposeReferences("");
       setComposeAttachments([]);
-      await loadMessages(activeFolder);
+      if (status?.canRead ?? status?.ok) await loadMessages(activeFolder);
       toast.success("Message sent");
     } catch (e: unknown) {
       toast.error(getApiErrorMessage(e) || "Failed to send");
@@ -440,7 +442,7 @@ export const AdminMailWorkspace: React.FC = () => {
             <Button variant="secondary" onClick={reloadAll} disabled={loading}>
               <RefreshCcw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Refresh
             </Button>
-            <Button onClick={startCompose}>
+            <Button onClick={startCompose} disabled={status != null && status.canSend === false}>
               <Send className="w-4 h-4 mr-2" /> Compose
             </Button>
           </div>
@@ -448,7 +450,9 @@ export const AdminMailWorkspace: React.FC = () => {
 
         {status && !status.ok ? (
           <div className="mt-3 border border-accent-error/55 bg-accent-error/12 p-3 text-xs font-mono text-accent-error whitespace-pre-wrap">
-            Mail is not configured:{"\n"}{status.issues.join("\n")}
+            {!status.canRead && !status.canSend ? "Mail is not configured:" : "Mail partially configured:"}{"\n"}{status.issues.join("\n")}
+            {status.canSend ? "\nSMTP sending is available." : "\nSMTP sending is unavailable."}
+            {status.canRead ? "\nIMAP mailbox reading is available." : "\nIMAP mailbox reading is unavailable."}
           </div>
         ) : null}
       </Card>

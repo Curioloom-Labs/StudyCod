@@ -78,15 +78,20 @@ class StudyCodMailService {
   private smtpPass = String(process.env.STUDYCOD_MAIL_SMTP_PASS || process.env.EMAIL_SMTP_PASS || this.imapPass || "").trim();
   private smtpFrom = String(process.env.STUDYCOD_MAIL_SMTP_FROM || "").trim();
 
-  isConfigured(): { ok: boolean; issues: string[] } {
+  isConfigured(): { ok: boolean; canRead: boolean; canSend: boolean; issues: string[] } {
     const issues: string[] = [];
-    if (!this.imapHost) issues.push("STUDYCOD_MAIL_IMAP_HOST is missing");
-    if (!this.imapUser) issues.push("STUDYCOD_MAIL_IMAP_USER is missing");
-    if (!this.imapPass) issues.push("STUDYCOD_MAIL_IMAP_PASS is missing");
-    if (!this.smtpHost) issues.push("STUDYCOD_MAIL_SMTP_HOST or EMAIL_SMTP_HOST is missing");
-    if (!this.smtpUser) issues.push("STUDYCOD_MAIL_SMTP_USER/EMAIL_SMTP_USER is missing");
-    if (!this.smtpPass) issues.push("STUDYCOD_MAIL_SMTP_PASS/EMAIL_SMTP_PASS is missing");
-    return { ok: issues.length === 0, issues };
+    const imapIssues: string[] = [];
+    const smtpIssues: string[] = [];
+    if (!this.imapHost) imapIssues.push("STUDYCOD_MAIL_IMAP_HOST is missing");
+    if (!this.imapUser) imapIssues.push("STUDYCOD_MAIL_IMAP_USER is missing");
+    if (!this.imapPass) imapIssues.push("STUDYCOD_MAIL_IMAP_PASS is missing");
+    if (!this.smtpHost) smtpIssues.push("STUDYCOD_MAIL_SMTP_HOST or EMAIL_SMTP_HOST is missing");
+    if (!this.smtpUser) smtpIssues.push("STUDYCOD_MAIL_SMTP_USER/EMAIL_SMTP_USER is missing");
+    if (!this.smtpPass) smtpIssues.push("STUDYCOD_MAIL_SMTP_PASS/EMAIL_SMTP_PASS is missing");
+    const canRead = imapIssues.length === 0;
+    const canSend = smtpIssues.length === 0;
+    issues.push(...imapIssues, ...smtpIssues);
+    return { ok: canRead && canSend, canRead, canSend, issues };
   }
 
   private formatAddresses(value: any): string {
@@ -133,7 +138,7 @@ class StudyCodMailService {
 
   private async withImap<T>(fn: (client: ImapFlow) => Promise<T>): Promise<T> {
     const cfg = this.isConfigured();
-    if (!cfg.ok) throw new Error(`MAIL_NOT_CONFIGURED: ${cfg.issues.join("; ")}`);
+    if (!cfg.canRead) throw new Error(`MAIL_IMAP_NOT_CONFIGURED: ${cfg.issues.filter((issue) => issue.includes("IMAP")).join("; ")}`);
 
     const client = new ImapFlow({
       host: this.imapHost,
@@ -390,7 +395,7 @@ class StudyCodMailService {
 
   async sendMessage(data: SendMessageParams): Promise<{ messageId: string | null }> {
     const cfg = this.isConfigured();
-    if (!cfg.ok) throw new Error(`MAIL_NOT_CONFIGURED: ${cfg.issues.join("; ")}`);
+    if (!cfg.canSend) throw new Error(`MAIL_SMTP_NOT_CONFIGURED: ${cfg.issues.filter((issue) => !issue.includes("IMAP")).join("; ")}`);
 
     const transporter = nodemailer.createTransport({
       host: this.smtpHost,
@@ -439,7 +444,7 @@ class StudyCodMailService {
 
   async saveDraft(data: SendMessageParams): Promise<void> {
     const cfg = this.isConfigured();
-    if (!cfg.ok) throw new Error(`MAIL_NOT_CONFIGURED: ${cfg.issues.join("; ")}`);
+    if (!cfg.canRead) throw new Error(`MAIL_IMAP_NOT_CONFIGURED: ${cfg.issues.filter((issue) => issue.includes("IMAP")).join("; ")}`);
     const from = String(data.from || this.smtpFrom || this.smtpUser).trim();
 
     const raw: Buffer = await new Promise((resolve, reject) => {

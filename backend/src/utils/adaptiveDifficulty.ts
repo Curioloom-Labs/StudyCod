@@ -29,6 +29,32 @@ export async function getStableIad(
   let currentIad = getUserIadForLang(user, lang);
   let lastProcessedGradeId = getLastProcessedGradeIdForLang(user, lang);
 
+  // Older accounts can have a zero IAD with a populated grade history and no
+  // processing cursor. Rebuild that value once so the headline value and the
+  // journal events cannot disagree.
+  if (currentIad <= 0 && lastProcessedGradeId == null) {
+    const historicGrades = await gradeRepo()
+      .createQueryBuilder("grade")
+      .leftJoin("grade.task", "task")
+      .where("grade.user_id = :userId", { userId })
+      .andWhere("task.lang = :lang", { lang })
+      .andWhere("grade.total IS NOT NULL")
+      .orderBy("grade.id", "ASC")
+      .getMany();
+
+    if (historicGrades.length > 0) {
+      for (const grade of historicGrades) {
+        currentIad = calculateAdaptiveIad(currentIad, Number((grade as any)?.total ?? 0));
+      }
+      setUserIadForLang(user, lang, currentIad);
+      setLastProcessedGradeIdForLang(user, lang, Number(historicGrades[historicGrades.length - 1]?.id ?? 0));
+      (user as any).lastIadChange = new Date();
+      (user as any).lastDifusChange = new Date();
+      await userRepo().save(user);
+      return currentIad;
+    }
+  }
+
   // Compatibility bootstrap: do not replay all historic grades on first run.
   // Start from the current IAD and begin applying deltas only for new grades.
   if (lastProcessedGradeId == null) {

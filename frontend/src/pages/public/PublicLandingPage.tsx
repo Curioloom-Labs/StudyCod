@@ -222,7 +222,7 @@ const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
         ))}
       </div>
     </div>
-    <div className="grid min-h-[520px] grid-cols-[300px_1fr_330px] gap-0 max-lg:grid-cols-1">
+    <div className="grid min-h-[520px] grid-cols-[300px_minmax(0,1fr)_330px] gap-0 max-lg:grid-cols-1">
       <aside className="border-r border-[#142017]/10 bg-white/76 p-4 dark:border-white/10 dark:bg-white/[.035] max-lg:hidden">
         <div className="mb-3 text-[10px] font-bold uppercase tracking-[.14em] text-[#7a887e]">{tr("Список задач", "Task list")}</div>
         {[tr("Словник частот", "Frequency map"), tr("Маршрут доставки", "Delivery route"), tr("Контрольний крок", "Control step")].map((title, index) => (
@@ -235,7 +235,7 @@ const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
           </div>
         ))}
       </aside>
-      <main className="grid grid-rows-[auto_1fr] bg-[#f8faf7] dark:bg-[#101814]">
+      <main className="min-w-0 grid grid-rows-[auto_1fr] bg-[#f8faf7] dark:bg-[#101814]">
         <div className="flex items-center gap-2 border-b border-[#142017]/10 bg-white/70 px-4 py-3 text-[11px] font-bold dark:border-white/10 dark:bg-white/[.035]">
           {[tr("Місія", "Mission"), tr("Підказки", "Hints"), tr("Нотатки", "Notes")].map((item, index) => <span key={item} className={`rounded-xl px-3 py-2 ${index === 0 ? "bg-[#173321] text-white dark:bg-[#edf4ef] dark:text-[#0b120d]" : "text-[#65746a]"}`}>{item}</span>)}
         </div>
@@ -248,7 +248,7 @@ const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
           </section>
           <section className="overflow-hidden rounded-2xl border border-[#142017]/10 bg-[#101713] dark:border-white/10">
             <div className="border-b border-white/10 px-4 py-3 text-[10px] text-[#aab7ad]">main.py</div>
-            <pre className="m-0 p-4 font-mono text-[10px] leading-6 text-[#dbe7df]"><span className={codeColors.keyword}>from</span> collections <span className={codeColors.keyword}>import</span> Counter{"\n\n"}words = text.split(){"\n"}top = Counter(words).most_common(3)</pre>
+            <pre className="m-0 max-w-full overflow-x-auto whitespace-pre-wrap break-words p-4 font-mono text-[clamp(10px,0.8vw,12px)] leading-6 text-[#dbe7df]"><span className={codeColors.keyword}>from</span> collections <span className={codeColors.keyword}>import</span> Counter{"\n\n"}words = text.split(){"\n"}top = Counter(words).most_common(3)</pre>
           </section>
         </div>
       </main>
@@ -265,23 +265,23 @@ const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
 
 const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   <div className={`${card} overflow-hidden bg-[#f8faf7] dark:bg-[#101814]`}>
-    <div className="grid min-h-[520px] grid-cols-[320px_1fr_360px] max-lg:grid-cols-1">
+    <div className="grid min-h-[520px] grid-cols-[320px_minmax(0,1fr)_360px] max-lg:grid-cols-1">
       <aside className="border-r border-[#142017]/10 bg-white/86 p-6 dark:border-white/10 dark:bg-white/[.04]">
         <span className="inline-flex items-center gap-2 rounded-full bg-[#00ff88]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-[#007f48]">
           <FlaskConical className="size-3.5" />
-          Playground
+          Personal practice
         </span>
-        <h3 className="mt-4 text-2xl font-bold tracking-[-.045em]">{tr("Лабораторія коду", "Code laboratory")}</h3>
-        <p className="mt-2 text-sm leading-6 text-[#65746a] dark:text-[#aab7ad]">{tr("Мова, stdin і дії зліва; код у центрі; output і трасування справа.", "Language, stdin and actions on the left; code in the center; output and trace on the right.")}</p>
+        <h3 className="mt-4 text-2xl font-bold tracking-[-.045em]">{tr("Тренувальна студія", "Practice studio")}</h3>
+        <p className="mt-2 text-sm leading-6 text-[#65746a] dark:text-[#aab7ad]">{tr("Умова, редактор і результат зібрані в одному робочому полотні.", "Statement, editor and results stay together in one focused workspace.")}</p>
         <div className="mt-6 rounded-2xl border border-[#142017]/10 bg-[#f1f6f2] p-3 dark:border-white/10 dark:bg-white/[.045]">
           <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[#7a887e]">stdin</div>
           <div className="mt-2 rounded-xl bg-white p-3 font-mono text-xs dark:bg-[#101713]">5</div>
         </div>
         <button className="mt-4 w-full rounded-2xl bg-[#173321] px-4 py-3 text-xs font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"><Play className="mr-1.5 inline size-3.5" />Run</button>
       </aside>
-      <main className="overflow-hidden bg-[#101713]">
+      <main className="min-w-0 overflow-hidden bg-[#101713]">
         <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3"><span className="size-2.5 rounded-full bg-[#ff6b9d]" /><span className="size-2.5 rounded-full bg-[#ffd93d]" /><span className="size-2.5 rounded-full bg-[#00ff88]" /><span className="ml-2 text-[10px] text-[#aab7ad]">main.py</span></div>
-        <pre className="m-0 min-h-[470px] p-8 font-mono text-xs leading-8 text-[#dbe7df] max-md:min-h-[320px]"><span className={codeColors.keyword}>n</span> = int(input()){"\n"}total = 0{"\n"}<span className={codeColors.keyword}>for</span> i <span className={codeColors.keyword}>in</span> range(1, n + 1):{"\n"}    total += i{"\n"}print(total)</pre>
+        <pre className="m-0 min-h-[470px] max-w-full overflow-x-auto whitespace-pre-wrap break-words p-8 font-mono text-[clamp(11px,1vw,13px)] leading-8 text-[#dbe7df] max-md:min-h-[320px] max-md:p-6"><span className={codeColors.keyword}>n</span> = int(input()){"\n"}total = 0{"\n"}<span className={codeColors.keyword}>for</span> i <span className={codeColors.keyword}>in</span> range(1, n + 1):{"\n"}    total += i{"\n"}print(total)</pre>
       </main>
       <aside className="border-l border-[#142017]/10 bg-white/86 p-6 dark:border-white/10 dark:bg-white/[.04]">
         <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[#7a887e]">Output</div>
