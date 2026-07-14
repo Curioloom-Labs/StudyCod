@@ -322,18 +322,24 @@ export const StudentTaskPage: React.FC = () => {
   const entryFile = useMemo(() => (task?.language === "JAVA" ? "Main.java" : task?.language === "CPP" ? "main.cpp" : "main.py"), [task?.language]);
   const isWebTask = task?.taskMode === "WEB";
   const normalizeFiles = useCallback((raw: CodeFile[]): CodeFile[] => {
-    const safe = (p: string) => {
-      if (!p) return false;
-      if (p.length > 128) return false;
-      if (p.includes("/") || p.includes("\\")) return false;
-      if (p.includes("..")) return false;
-      if (p.startsWith(".")) return false;
-      return true;
+    const normalizePath = (rawPath: string): string | null => {
+      const p = rawPath.trim().replace(/\\/g, "/");
+      if (!p || p.length > 180) return null;
+      if (p.startsWith("/") || /^[A-Za-z]:/.test(p)) return null;
+      const parts = p.split("/");
+      if (parts.length > 8) return null;
+      for (const part of parts) {
+        if (!part || part === "." || part === "..") return null;
+        if (part.startsWith(".")) return null;
+        if (part.length > 80) return null;
+        if (!/^[A-Za-z0-9._-]+$/.test(part)) return null;
+      }
+      return p;
     };
     const m = new Map<string, string>();
     for (const f of raw || []) {
-      const path = String(f.path ?? "").trim();
-      if (!safe(path)) continue;
+      const path = normalizePath(String(f.path ?? ""));
+      if (!path) continue;
       m.set(path, String(f.content ?? ""));
     }
     return Array.from(m.entries())

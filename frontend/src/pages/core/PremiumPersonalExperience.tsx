@@ -137,10 +137,21 @@ export const PremiumDashboard: React.FC<{
   onOpenTask: (task: Task) => void;
 }> = ({ user, tasks, loading, onNavigate, onOpenTask }) => {
   const c = useCopy();
+  const { i18n } = useTranslation();
+  const en = i18n.language?.toLowerCase().startsWith("en");
   const complete = tasks.filter((task) => task.status === "GRADED").length;
   const active = tasks.find((task) => task.status !== "GRADED") ?? tasks[0];
   const completion = tasks.length ? Math.round((complete / tasks.length) * 100) : 0;
   const shortQueue = tasks.filter((task) => task.id !== active?.id).slice(0, 3);
+  const dashboardLead = tasks.length
+    ? complete > 0
+      ? en
+        ? `You have ${complete} completed task${complete === 1 ? "" : "s"}. Open the next practice when you're ready.`
+        : `У тебе вже ${complete} завершено. Наступна практика готова, коли захочеш продовжити.`
+      : en
+        ? "Your first practice is ready. Start with a small step and the route will adapt."
+        : "Перша практика готова. Почни з короткого кроку — маршрут підлаштується під результат."
+    : c.empty;
 
   return (
     <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
@@ -158,7 +169,7 @@ export const PremiumDashboard: React.FC<{
                 {c.welcome}, {user.firstName || user.username}.
               </h1>
               <p className="mt-4 max-w-xl text-base leading-7 text-[#5d6d62] dark:text-[#aab7ad] sm:text-lg">
-                {tasks.length ? `${c.ready} ${complete ? `${complete} ${c.completed}.` : ""}` : c.empty}
+                {dashboardLead}
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <button onClick={() => active ? onOpenTask(active) : onNavigate("tasks")} className="inline-flex items-center gap-2 rounded-xl bg-[#142017] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_-14px_rgba(0,0,0,.55)] transition hover:-translate-y-0.5 hover:bg-[#223129] dark:bg-[#edf3ef] dark:text-[#0b120e]">

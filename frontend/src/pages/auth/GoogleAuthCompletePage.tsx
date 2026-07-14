@@ -17,6 +17,7 @@ type GoogleTokenPayload = {
   birthDay?: number | string;
   birthMonth?: number | string;
   email?: string;
+  userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
 };
 
 interface Props {
@@ -43,6 +44,7 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleData, setGoogleData] = useState<GoogleTokenPayload | null>(null);
+  const [userMode, setUserMode] = useState<"PERSONAL" | "EDUCATIONAL" | "CONTEST">("PERSONAL");
   const exchangeAttemptKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -89,6 +91,9 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
       if (payload.birthDay) setBirthDay(Number(payload.birthDay));
       if (payload.birthMonth) setBirthMonth(Number(payload.birthMonth));
       if (payload.email) { setUsername(payload.email.split("@")[0]); }
+      if (payload.userMode === "EDUCATIONAL" || payload.userMode === "CONTEST" || payload.userMode === "PERSONAL") {
+        setUserMode(payload.userMode);
+      }
       setGoogleData(payload);
     } catch (err) {
       setGoogleData(null);
@@ -109,7 +114,7 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
     setLoading(true);
     try {
       const res = await api.post("/auth/google/complete", {
-        token, username: username.trim(), password, course,
+        token, username: username.trim(), password, course, userMode,
         firstName: firstName.trim(), lastName: lastName.trim(),
         birthDay: Number(birthDay), birthMonth: Number(birthMonth)
       });

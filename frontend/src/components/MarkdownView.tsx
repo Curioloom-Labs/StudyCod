@@ -408,8 +408,8 @@ type MathPluginBundle = {
 };
 
 const PlainCodeBlock: React.FC<{ code: string }> = ({ code }) => {
-  return <pre className="my-4 overflow-x-auto border border-border bg-bg-code p-4 text-sm leading-relaxed">
-      <code className="font-mono text-text-primary">{code}</code>
+  return <pre className="my-4 max-w-full overflow-x-auto whitespace-pre-wrap rounded-2xl border border-border/80 bg-bg-code/80 p-4 text-sm leading-relaxed shadow-sm">
+      <code className="whitespace-pre-wrap break-words font-mono text-text-primary">{code}</code>
     </pre>;
 };
 
@@ -554,10 +554,14 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
               </SyntaxHighlighter>
             </div>;
       }
+      if (!inline) {
+        const code = decodeEscapedInputText(String(children).replace(/\n$/, ""));
+        return <PlainCodeBlock code={code} />;
+      }
       const inlineCode = decodeEscapedInputText(String(children ?? ""));
       const hasMultilineInline = inlineCode.includes("\n");
       return <code
-        className={`bg-bg-code border border-border px-1.5 py-0.5 text-sm font-mono text-text-primary ${hasMultilineInline ? "whitespace-pre-wrap inline-block align-top" : ""}`}
+        className={`max-w-full rounded-md bg-bg-code border border-border px-1.5 py-0.5 text-sm font-mono text-text-primary ${hasMultilineInline ? "whitespace-pre-wrap inline-block align-top break-words" : "break-words"}`}
         {...props}
       >
         {inlineCode}

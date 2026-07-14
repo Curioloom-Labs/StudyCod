@@ -51,6 +51,52 @@ const GreenButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ 
   </button>
 );
 
+const RotatingTypedHeadline: React.FC<{ tr: Translate }> = ({ tr }) => {
+  const phrases = React.useMemo(() => [
+    tr("Програмування стає зрозумілим, коли практика має систему.", "Programming clicks when practice has a system."),
+    tr("Код легше вчити, коли кожна помилка веде до наступного кроку.", "Code is easier to learn when each mistake points to the next step."),
+    tr("Теорія працює краще, коли одразу переходить у дію.", "Theory works better when it immediately turns into action."),
+    tr("Навчання тримається не на шумі, а на послідовності.", "Learning sticks through sequence, not noise."),
+  ], [tr]);
+  const [phraseIndex, setPhraseIndex] = React.useState(0);
+  const [visibleChars, setVisibleChars] = React.useState(0);
+  const reduceMotion = useReducedMotion();
+  const currentPhrase = phrases[phraseIndex] ?? phrases[0];
+
+  React.useEffect(() => {
+    if (reduceMotion) {
+      setVisibleChars(currentPhrase.length);
+      return;
+    }
+    setVisibleChars(0);
+    let frame = 0;
+    const timer = window.setInterval(() => {
+      frame += 1;
+      setVisibleChars((previous) => {
+        if (previous >= currentPhrase.length) return previous;
+        return Math.min(currentPhrase.length, previous + (frame % 3 === 0 ? 2 : 1));
+      });
+    }, 38);
+    return () => window.clearInterval(timer);
+  }, [currentPhrase, reduceMotion]);
+
+  React.useEffect(() => {
+    if (reduceMotion) return;
+    if (visibleChars < currentPhrase.length) return;
+    const timer = window.setTimeout(() => {
+      setPhraseIndex((previous) => (previous + 1) % phrases.length);
+    }, 2600);
+    return () => window.clearTimeout(timer);
+  }, [currentPhrase.length, phrases.length, reduceMotion, visibleChars]);
+
+  return (
+    <span>
+      {currentPhrase.slice(0, visibleChars)}
+      {!reduceMotion ? <span className="ml-1 inline-block w-[0.08em] animate-pulse rounded-full bg-current align-[-0.05em]">&nbsp;</span> : null}
+    </span>
+  );
+};
+
 const LegacyDashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   <div className="relative overflow-hidden rounded-[26px] border border-[#132319]/15 bg-white text-left shadow-[0_48px_110px_rgba(21,40,27,0.15),0_9px_28px_rgba(21,40,27,0.07)]">
     <div className="grid h-[60px] grid-cols-[1fr_1.25fr_1fr] items-center border-b border-[#122017]/10 bg-[#fcfdfb] px-5 max-md:grid-cols-[1fr_auto]">
@@ -271,7 +317,7 @@ export const PublicLandingPage: React.FC = () => {
           <div className="pointer-events-none absolute left-1/2 top-20 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(0,255,136,.1),rgba(255,140,0,.025)_43%,transparent_70%)] blur-2xl" />
           <motion.div className="relative z-10 mx-auto max-w-[900px]" initial={reduceMotion ? undefined : { opacity: 0, y: 24 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.75, ease: easing }}>
             <div className="mx-auto mb-6 flex w-fit items-center gap-2.5 rounded-full border border-[#122017]/10 bg-white/85 py-1 pl-1 pr-3.5 text-xs font-semibold text-[#667169] shadow-sm dark:border-white/10 dark:bg-[#182019]/90 dark:text-[#aab5ad]"><span className="grid size-7 place-items-center rounded-full bg-[#00ff88] text-[#082015]"><Sparkles className="size-3.5" /></span>{tr("Навчання, яке переходить у навичку", "Learning that becomes a skill")}</div>
-            <h1 className="m-0 text-balance text-[clamp(46px,6.2vw,82px)] font-bold leading-[0.99] tracking-[-0.055em] max-md:text-[clamp(40px,12.4vw,59px)]">{tr("Програмування стає зрозумілим, коли практика має систему.", "Programming clicks when practice has a system.")}</h1>
+            <h1 className="m-0 min-h-[2em] text-balance text-[clamp(46px,6.2vw,82px)] font-bold leading-[0.99] tracking-[-0.055em] max-md:text-[clamp(40px,12.4vw,59px)]"><RotatingTypedHeadline tr={tr} /></h1>
             <p className="mx-auto mt-7 max-w-[730px] text-balance text-lg leading-8 text-[#667169] max-md:mt-5 max-md:text-base max-md:leading-7">{tr("StudyCod об’єднує курси, задачі, перевірку коду й прогрес в одному спокійному просторі — для учнів, викладачів і тих, хто навчається самостійно.", "StudyCod brings courses, coding tasks, feedback, and progress into one focused space—for students, teachers, and independent learners.")}</p>
             <div className="mt-8 flex justify-center gap-3 max-md:flex-col"><GreenButton onClick={() => goToAuth("register")} className="max-md:w-full">{tr("Почати навчання", "Start learning")}<ArrowRight className="size-4" /></GreenButton><button onClick={() => scrollTo("platform")} className="inline-flex h-[52px] items-center justify-center gap-2.5 rounded-2xl border border-[#122017]/10 bg-white px-6 text-sm font-bold shadow-[0_12px_30px_rgba(18,32,23,0.05)] transition hover:-translate-y-0.5 hover:border-[#00b963]/30 dark:border-white/10 dark:bg-[#182019] dark:shadow-[0_12px_30px_rgba(0,0,0,.18)] max-md:w-full"><CirclePlay className="size-[18px] text-[#00a85c]" />{tr("Подивитися платформу", "Explore the platform")}</button></div>
             <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2.5 text-[13px] text-[#667169] max-md:text-xs">{[tr("Безкоштовний старт", "Free to start"), tr("Задачі з автоперевіркою", "Auto-checked tasks"), tr("Для класу й самонавчання", "For class and self-study")].map((item) => <span key={item} className="flex items-center gap-1.5"><CheckCircle2 className="size-4 text-[#00a85c]" />{item}</span>)}</div>

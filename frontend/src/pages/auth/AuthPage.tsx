@@ -49,6 +49,11 @@ function buildApiUrl(path: string): string {
   return `${base}/api${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+function buildGoogleAuthUrl(userMode: UserMode): string {
+  const mode = userMode === "EDUCATIONAL" ? "edu" : userMode.toLowerCase();
+  return buildApiUrl(`/auth/google?mode=${encodeURIComponent(mode)}`);
+}
+
 declare global {
   interface Window {
     turnstile?: TurnstileApi;
@@ -135,6 +140,7 @@ export const AuthPage: React.FC<Props> = ({
   const shouldRenderAuthTurnstile = React.useMemo(() => {
     return authTurnstileEnabled && (mode === "login" || (mode === "register" && userMode !== "CONTEST"));
   }, [authTurnstileEnabled, mode, userMode]);
+  const turnstileMountKey = `${userMode}:${mode}`;
   const turnstileContainerRef = React.useRef<HTMLDivElement | null>(null);
   const turnstileWidgetIdRef = React.useRef<TurnstileWidgetId | null>(null);
   const [turnstileScriptReady, setTurnstileScriptReady] = React.useState(false);
@@ -167,6 +173,19 @@ export const AuthPage: React.FC<Props> = ({
   }, [authTurnstileEnabled]);
 
   React.useEffect(() => {
+    setTurnstileToken(null);
+    setTurnstileLoadFailed(false);
+    if (window.turnstile && turnstileWidgetIdRef.current != null && typeof window.turnstile.remove === "function") {
+      try {
+        window.turnstile.remove(turnstileWidgetIdRef.current);
+      } catch {
+        // Turnstile may already have removed the widget after tab/content remount.
+      }
+    }
+    turnstileWidgetIdRef.current = null;
+  }, [turnstileMountKey]);
+
+  React.useEffect(() => {
     if (!shouldRenderAuthTurnstile || !turnstileScriptReady) return;
     const container = turnstileContainerRef.current;
     if (!container || !window.turnstile) return;
@@ -190,7 +209,7 @@ export const AuthPage: React.FC<Props> = ({
       turnstileWidgetIdRef.current = null;
       setTurnstileToken(null);
     };
-  }, [shouldRenderAuthTurnstile, turnstileScriptReady, turnstileSiteKey]);
+  }, [shouldRenderAuthTurnstile, turnstileScriptReady, turnstileSiteKey, turnstileMountKey]);
 
   function formatApiError(err: unknown, fallback: string): string {
     const response = err && typeof err === "object" ? Reflect.get(err, "response") : null;
@@ -458,9 +477,9 @@ export const AuthPage: React.FC<Props> = ({
                   {mode === "register" && userMode === "PERSONAL" && <div><label className={fieldLabelClass}>{t("programmingLanguage")}</label><div className="grid grid-cols-3 gap-2">{(["JAVA", "PYTHON", "CPP"] as CourseLanguage[]).map(lang => <button key={lang} type="button" onClick={() => setCourse(lang)} className={`h-11 rounded-xl border text-[12px] font-bold transition ${course === lang ? "border-[#00b963]/35 bg-[#00ff88]/10 text-[#007f48] dark:text-[#64eead]" : "border-[#122017]/10 bg-white text-[#667169] dark:border-white/10 dark:bg-[#151d17] dark:text-[#9eaaa2]"}`}>{lang === "CPP" ? "C++" : lang === "JAVA" ? "Java" : "Python"}</button>)}</div></div>}
                   {error && <div className="flex items-start gap-2.5 rounded-[14px] border border-[#ff6b9d]/20 bg-[#ff6b9d]/10 p-3.5 text-[13px] leading-5 text-[#d33d70] dark:text-[#ff91b7]"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div>}
                   {success && <div className="flex items-start gap-2.5 rounded-[14px] border border-[#00b963]/20 bg-[#00ff88]/10 p-3.5 text-[13px] leading-5 text-[#007f48] dark:text-[#72f2b4]"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div>}
-                  {shouldRenderAuthTurnstile && <SecurityCheckPanel ref={turnstileContainerRef} failed={Boolean(turnstileLoadFailed || import.meta.env.DEV)} scriptReady={turnstileScriptReady} tr={tr} />}
+                  {shouldRenderAuthTurnstile && <SecurityCheckPanel key={turnstileMountKey} ref={turnstileContainerRef} failed={turnstileLoadFailed} scriptReady={turnstileScriptReady} tr={tr} />}
                   <button type="submit" className={primaryButtonClass} disabled={loading}>{loading ? tr("Обробка…", "Processing…") : mode === "login" ? t("login") : t("register")}<ArrowRight className="size-4" /></button>
-                  {mode === "login" && userMode !== "CONTEST" && <><div className="relative py-1 text-center before:absolute before:left-0 before:right-0 before:top-1/2 before:h-px before:bg-[#122017]/10 dark:before:bg-white/10"><span className="relative bg-[#f7f8f5] px-3 text-[12px] text-[#7c8880] dark:bg-[#0c110e]">{tr("або", "or")}</span></div><button type="button" onClick={() => { window.location.href = buildApiUrl("/auth/google"); }} className="flex h-12 w-full items-center justify-center gap-3 rounded-[14px] border border-[#122017]/10 bg-white text-[13px] font-bold transition hover:border-[#00b963]/25 hover:bg-[#fbfcfa] dark:border-white/10 dark:bg-[#171e19] dark:hover:bg-[#1b241d]"><svg className="size-[18px]" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>{tr("Продовжити через Google", "Continue with Google")}</button></>}
+                  {mode === "login" && <><div className="relative py-1 text-center before:absolute before:left-0 before:right-0 before:top-1/2 before:h-px before:bg-[#122017]/10 dark:before:bg-white/10"><span className="relative bg-[#f7f8f5] px-3 text-[12px] text-[#7c8880] dark:bg-[#0c110e]">{tr("або", "or")}</span></div><button type="button" onClick={() => { window.location.href = buildGoogleAuthUrl(userMode); }} className="flex h-12 w-full items-center justify-center gap-3 rounded-[14px] border border-[#122017]/10 bg-white text-[13px] font-bold transition hover:border-[#00b963]/25 hover:bg-[#fbfcfa] dark:border-white/10 dark:bg-[#171e19] dark:hover:bg-[#1b241d]"><svg className="size-[18px]" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>{tr("Продовжити через Google", "Continue with Google")}</button></>}
                 </form>
               )}
             </motion.div>
@@ -760,7 +779,7 @@ export const AuthPage: React.FC<Props> = ({
                   )}
 
                   {shouldRenderAuthTurnstile && (
-                    <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="rounded-lg border border-border bg-bg-code px-3 py-3">
+                    <motion.div key={turnstileMountKey} variants={prefersReducedMotion ? undefined : fadeUpItem} className="rounded-lg border border-border bg-bg-code px-3 py-3">
                       <div ref={turnstileContainerRef} className="min-h-[65px]" />
                       {turnstileLoadFailed && (
                         <div className="mt-2 text-[11px] font-mono text-accent-error">
@@ -779,7 +798,7 @@ export const AuthPage: React.FC<Props> = ({
                   </motion.div>
 
                   {/* Google button */}
-                  {mode === "login" && userMode !== "CONTEST" && (
+                  {mode === "login" && (
                     <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
                       <div className="relative my-1">
                         <div className="absolute inset-0 flex items-center">
@@ -791,7 +810,7 @@ export const AuthPage: React.FC<Props> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => { window.location.href = buildApiUrl("/auth/google"); }}
+                        onClick={() => { window.location.href = buildGoogleAuthUrl(userMode); }}
                         className="mt-3 w-full flex items-center justify-center gap-2.5 rounded-lg border border-border bg-bg-code hover:bg-bg-hover hover:border-primary/30 px-4 py-2.5 text-sm font-mono text-text-primary transition-fast"
                       >
                         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">

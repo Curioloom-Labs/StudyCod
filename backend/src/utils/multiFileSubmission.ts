@@ -6,6 +6,22 @@ export type MultiFileSubmissionV1 = {
 
 const PREFIX = "__STUDYCOD_MULTI_FILE_V1__\n";
 
+export function normalizeSafeCodeFilePath(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const path = raw.trim().replace(/\\/g, "/");
+  if (!path || path.length > 180) return null;
+  if (path.startsWith("/") || /^[A-Za-z]:/.test(path)) return null;
+  const parts = path.split("/");
+  if (parts.length > 8) return null;
+  for (const part of parts) {
+    if (!part || part === "." || part === "..") return null;
+    if (part.startsWith(".")) return null;
+    if (part.length > 80) return null;
+    if (!/^[A-Za-z0-9._-]+$/.test(part)) return null;
+  }
+  return path;
+}
+
 export function isEncodedMultiFileSubmission(s: unknown): s is string {
   return typeof s === "string" && s.startsWith(PREFIX);
 }
@@ -16,7 +32,7 @@ export function encodeMultiFileSubmissionV1(payload: Omit<MultiFileSubmissionV1,
     entry: String(payload.entry || "").trim(),
     files: Array.isArray(payload.files)
       ? payload.files.map(f => ({
-          path: String((f as any)?.path ?? "").trim(),
+          path: normalizeSafeCodeFilePath((f as any)?.path) ?? "",
           content: String((f as any)?.content ?? "")
         }))
       : []
@@ -54,12 +70,12 @@ export function decodeMultiFileSubmissionV1(s: unknown): MultiFileSubmissionV1 |
     const parsed = JSON.parse(raw) as any;
     if (!parsed || typeof parsed !== "object") return null;
     if (parsed.version !== 1) return null;
-    const entry = typeof parsed.entry === "string" ? parsed.entry.trim() : "";
+    const entry = normalizeSafeCodeFilePath(parsed.entry) ?? "";
     const filesRaw = Array.isArray(parsed.files) ? parsed.files : [];
     if (filesRaw.length > MULTI_FILE_MAX_FILES) return null;
     const files = filesRaw
       .map((f: any) => ({
-        path: typeof f?.path === "string" ? f.path.trim() : "",
+        path: normalizeSafeCodeFilePath(f?.path) ?? "",
         content: typeof f?.content === "string" ? f.content : ""
       }))
       .filter((f: { path: string; content: string }) => f.path.length > 0);

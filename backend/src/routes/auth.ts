@@ -39,6 +39,8 @@ const userRepo = () => AppDataSource.getRepository(User);
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const GOOGLE_LINK_SESSION_KEY = "googleLinkUserId";
+const GOOGLE_AUTH_MODE_SESSION_KEY = "googleAuthUserMode";
+type GoogleAuthUserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
 
 function parseBool(raw: unknown, fallback: boolean): boolean {
   const s = String(raw ?? "").trim().toLowerCase();
@@ -339,6 +341,27 @@ function clearGoogleLinkSession(req: Request): void {
   }
 }
 
+function normalizeGoogleAuthMode(raw: unknown): GoogleAuthUserMode {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "edu" || value === "school" || value === "educational") return "EDUCATIONAL";
+  if (value === "contest" || value === "contests") return "CONTEST";
+  return "PERSONAL";
+}
+
+function getGoogleAuthModeFromSession(req: Request): GoogleAuthUserMode {
+  return normalizeGoogleAuthMode((req.session as any)?.[GOOGLE_AUTH_MODE_SESSION_KEY]);
+}
+
+function clearGoogleAuthModeSession(req: Request): void {
+  if (req.session) {
+    delete (req.session as any)[GOOGLE_AUTH_MODE_SESSION_KEY];
+  }
+}
+
+function userModeMatchesRequested(user: User, requestedMode: GoogleAuthUserMode): boolean {
+  return (user.userMode ?? "PERSONAL") === requestedMode;
+}
+
 function redirectToGoogleError(res: Response, reason?: string): void {
   const suffix = reason ? `?reason=${encodeURIComponent(reason)}` : "";
   res.redirect(`${FRONTEND_URL}/auth/google/error${suffix}`);
@@ -407,6 +430,7 @@ const googleCompleteSchema = z.object({
   password: z.string().min(8),
   course: z.string().optional(),
   lang: z.string().optional(),
+  userMode: z.enum(["PERSONAL", "EDUCATIONAL", "CONTEST"]).optional(),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   birthDay: z.number().int().min(1).max(31),
@@ -588,7 +612,7 @@ authRouter.post("/google/link-session", authRequired, async (req: AuthRequest, r
   }
 });
 
-authRouter.get("/google", (req: Request, res: Response, next) => {
+authRouter.get("/google", async (req: Request, res: Response, next) => {
   if (!isGoogleOAuthEnabled()) {
     return redirectToGoogleError(res, "GOOGLE_OAUTH_DISABLED");
   }
@@ -596,6 +620,28 @@ authRouter.get("/google", (req: Request, res: Response, next) => {
   const isLinkFlow = String(req.query.link ?? "").trim().toLowerCase() === "true";
   if (isLinkFlow && !getGoogleLinkUserIdFromSession(req)) {
     return redirectToGoogleError(res, "GOOGLE_LINK_SESSION_REQUIRED");
+  }
+
+  if (req.session) {
+    if (isLinkFlow) {
+      clearGoogleAuthModeSession(req);
+    } else {
+      (req.session as any)[GOOGLE_AUTH_MODE_SESSION_KEY] = normalizeGoogleAuthMode(
+        req.query.mode ?? req.query.userMode ?? req.query.surface
+      );
+    }
+
+    await new Promise<void>((resolve) => {
+      req.session.save((err) => {
+        if (err) {
+          logger.warn("[auth] Google auth mode session save failed (continuing)", {
+            requestId: (req as any).requestId,
+            error: err?.message
+          });
+        }
+        resolve();
+      });
+    });
   }
 
   return passport.authenticate("google", {
@@ -643,7 +689,9 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
 }, async (req: Request, res: Response) => {
   try {
     const googleLinkUserId = getGoogleLinkUserIdFromSession(req);
+    const requestedGoogleMode = getGoogleAuthModeFromSession(req);
     clearGoogleLinkSession(req);
+    clearGoogleAuthModeSession(req);
 
     // Session fixation defence: anonymous session id may have been chosen by
     // the attacker before login. Rotate it now that we are about to attach
@@ -715,6 +763,7 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
         googleId: user.googleId ?? null,
         email: user.email ?? null,
         avatarUrl: user.avatarUrl ?? null,
+        userMode: requestedGoogleMode,
         temp: true,
         jti: generateJti()
       }, JWT_SECRET, {
@@ -723,6 +772,9 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
       const code = await issueGoogleExchangeCode("complete", tempToken);
       setGoogleExchangeCookie(res, code);
       return res.redirect(`${FRONTEND_URL}/auth/google/complete?code=${encodeURIComponent(code)}`);
+    }
+    if (!userModeMatchesRequested(user, requestedGoogleMode)) {
+      return redirectToGoogleError(res, "GOOGLE_ACCOUNT_MODE_MISMATCH");
     }
     const token = signUserToken(user);
     const code = await issueGoogleExchangeCode("success", token);
@@ -867,6 +919,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       password,
       course,
       lang,
+      userMode,
       firstName,
       lastName,
       birthDay,
@@ -888,6 +941,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     const googleId: string | null = payload.googleId || null;
     const email: string | null = payload.email ? String(payload.email).trim().toLowerCase() : null;
     const avatarUrl: string | null = payload.avatarUrl || null;
+    const requestedUserMode = normalizeGoogleAuthMode(userMode ?? payload.userMode);
     if (!googleId) {
       return res.status(400).json({
         message: "GOOGLE_ID_REQUIRED"
@@ -904,6 +958,11 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       }
     });
     if (existingByGoogle) {
+      if (!userModeMatchesRequested(existingByGoogle, requestedUserMode)) {
+        return res.status(403).json({
+          message: "GOOGLE_ACCOUNT_MODE_MISMATCH"
+        });
+      }
       const jwtToken = signUserToken(existingByGoogle);
       setSharedAuthCookie(res, jwtToken);
       return res.json({
@@ -950,7 +1009,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       birthDay,
       birthMonth,
       role: "USER",
-      userMode: "PERSONAL"
+      userMode: requestedUserMode
     });
     await userRepo().save(user);
     const jwtToken = signUserToken(user);

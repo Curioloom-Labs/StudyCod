@@ -92,6 +92,19 @@ function createClientSubmissionId(): string {
   return `cs_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function getPersonalCurriculumBlock(topicIndex: number | null | undefined, title: string): string {
+  const normalizedTitle = String(title || "").toLowerCase();
+  if (normalizedTitle.includes("вступ") || normalizedTitle.includes("intro")) return tr("Вступ", "Intro");
+  const idx = Number(topicIndex);
+  if (!Number.isFinite(idx)) return tr("Окремі теми", "Standalone topics");
+  if (idx <= 2) return tr("Вступ", "Intro");
+  if (idx <= 5) return tr("База мови", "Language basics");
+  if (idx <= 9) return tr("Керування потоком", "Control flow");
+  if (idx <= 13) return tr("Дані та колекції", "Data and collections");
+  if (idx <= 17) return tr("Функції та структура", "Functions and structure");
+  return tr("Практичні модулі", "Practice modules");
+}
+
 type BlockState = null | {
   mode: "low" | "weak";
   topicId: number;
@@ -1085,6 +1098,7 @@ export const TasksPage: React.FC<Props> = ({
       return {
         key,
         title: section.title,
+        blockTitle: getPersonalCurriculumBlock(section.topicIndex, section.title),
         items: sortedItems,
         topicId: section.topicId,
         topicIndex: section.topicIndex,
@@ -1115,20 +1129,22 @@ export const TasksPage: React.FC<Props> = ({
   }, [active, getControlBatchKey]);
 
   const openSidebarTask = useCallback((task: Task) => {
-    setActive(task);
-    const next = deriveEditorFromTask(task);
-    setUseFiles(next.useFiles);
-    setFiles(next.files);
-    setCode(next.code);
-    setAiResult(null);
-    setConsoleOutput("");
-    setUIState("idle");
-    const hasTheory = computeHasTheory(task);
-    setTheoryAcknowledged(!hasTheory);
     syncTaskSelectionToUrl(task.id);
     if (isCompactViewport) {
       setShowTaskHistory(false);
     }
+    window.requestAnimationFrame(() => {
+      setActive(task);
+      const next = deriveEditorFromTask(task);
+      setUseFiles(next.useFiles);
+      setFiles(next.files);
+      setCode(next.code);
+      setAiResult(null);
+      setConsoleOutput("");
+      setUIState("idle");
+      const hasTheory = computeHasTheory(task);
+      setTheoryAcknowledged(!hasTheory);
+    });
   }, [deriveEditorFromTask, isCompactViewport, syncTaskSelectionToUrl]);
 
   useEffect(() => {
@@ -1456,7 +1472,8 @@ export const TasksPage: React.FC<Props> = ({
     if (quizReview) return;
     persistQuizDraftAnswers(active.id, quizAnswers);
   }, [active?.id, isPersonalControlQuizTask, personalQuiz, quizAnswers, quizReview, persistQuizDraftAnswers]);
-  const handleGenerate = async () => {
+  const handleGenerate = async (options?: { forceControl?: boolean }) => {
+    const wantsControl = Boolean(options?.forceControl);
     if (isPreviewMode) {
       setConsoleOutput(tr("У preview показано готовий навчальний сценарій. Генерація нового завдання доступна після входу.", "Preview shows a complete learning scenario. New task generation is available after signing in."));
       setUIState("idle");
@@ -1468,7 +1485,12 @@ export const TasksPage: React.FC<Props> = ({
       setUIState("logic-warning");
       return;
     }
-    if (!canGenerate) {
+    if (wantsControl && sidebarStats.completed <= 0) {
+      setConsoleOutput(tr("Самоконтроль відкриється після першої завершеної теми.", "Self-check unlocks after the first completed topic."));
+      setUIState("logic-warning");
+      return;
+    }
+    if (wantsControl ? !canGenerateNew : !canGenerate) {
       setConsoleOutput(blockedReason ?? tr("Спочатку заверши поточне завдання.", "Finish the current task first."));
       setUIState("logic-warning");
       return;
@@ -1480,7 +1502,7 @@ export const TasksPage: React.FC<Props> = ({
     setUIState("idle");
     try {
       setGenerationPhase("generating");
-      const res = await generateTask(uiLanguage);
+      const res = await generateTask(uiLanguage, wantsControl ? { forceControl: true } : undefined);
       const payload = asRecord(res);
       const status = String(payload?.status ?? "");
       if (status === "ok" && payload?.task && typeof payload.task === "object") {
@@ -2344,6 +2366,7 @@ export const TasksPage: React.FC<Props> = ({
   const routeTiles = sidebarSections.flatMap((section) =>
     section.items.map((item) => ({
       sectionTitle: section.title,
+      blockTitle: section.blockTitle,
       item,
     }))
   );
@@ -2402,7 +2425,7 @@ export const TasksPage: React.FC<Props> = ({
             <div className="mx-4 h-1 overflow-hidden rounded-full bg-[#dfe5de] dark:bg-white/10"><div className="h-full rounded-full bg-[#00df79]" style={{ width: `${sidebarStats.progress}%` }} /></div>
 
             <nav className="flex gap-2 overflow-x-auto p-3 lg:block lg:max-h-[calc(100dvh-180px)] lg:space-y-1 lg:overflow-y-auto">
-              {routeTiles.map(({ sectionTitle, item }, index) => {
+              {routeTiles.map(({ sectionTitle, blockTitle, item }, index) => {
                 const selected = isSidebarItemActive(item);
                 const done = item.status === "GRADED";
                 return (
@@ -2410,7 +2433,7 @@ export const TasksPage: React.FC<Props> = ({
                     <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${done ? "bg-[#dff8e9] text-[#147447] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : selected ? "bg-[#17251b] text-white dark:bg-[#00ff88] dark:text-[#062211]" : "border border-[#cbd4cc] text-[#7c8980] dark:border-white/15"}`}>{done ? "✓" : index + 1}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-black">{item.renderTitle}</span>
-                      <span className="mt-1 block truncate text-[10px] font-semibold text-[#7a887f] dark:text-[#8e9a92]">{sectionTitle}</span>
+                      <span className="mt-1 block truncate text-[10px] font-semibold text-[#7a887f] dark:text-[#8e9a92]">{blockTitle} · {sectionTitle}</span>
                     </span>
                   </button>
                 );
@@ -2419,8 +2442,11 @@ export const TasksPage: React.FC<Props> = ({
             </nav>
 
             <div className="hidden border-t border-[#15231a]/10 p-4 dark:border-white/[.08] lg:block">
-              <button type="button" onClick={handleGenerate} disabled={loading || !canGenerateFromSidebar || cooldownSecondsLeft > 0} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17251b] px-4 py-3 text-xs font-black text-white disabled:opacity-40 dark:bg-white/[.08]">
+              <button type="button" onClick={() => void handleGenerate()} disabled={loading || !canGenerateFromSidebar || cooldownSecondsLeft > 0} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17251b] px-4 py-3 text-xs font-black text-white disabled:opacity-40 dark:bg-white/[.08]">
                 <Plus className="size-4" />{generateSidebarLabel}
+              </button>
+              <button type="button" onClick={() => void handleGenerate({ forceControl: true })} disabled={loading || sidebarStats.completed <= 0 || !canGenerateNew || cooldownSecondsLeft > 0} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[#17251b]/10 bg-white px-4 py-3 text-xs font-black text-[#17251b] disabled:opacity-40 dark:border-white/10 dark:bg-white/[.045] dark:text-[#eaf5ee]">
+                <NotebookPen className="size-4" />{tr("Самоконтроль", "Self-check")}
               </button>
             </div>
           </aside>
@@ -2586,12 +2612,20 @@ export const TasksPage: React.FC<Props> = ({
               </button>
               <button
                 type="button"
-                onClick={handleGenerate}
+                onClick={() => void handleGenerate()}
                 disabled={loading || !canGenerateFromSidebar || cooldownSecondsLeft > 0}
                 title={generateSidebarHint}
                 className="rounded-2xl bg-[#00ff88] px-5 py-3 text-sm font-black text-[#061d10] shadow-[0_16px_36px_rgba(0,190,102,.18)] transition hover:-translate-y-0.5 disabled:opacity-45"
               >
                 {generateSidebarLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleGenerate({ forceControl: true })}
+                disabled={loading || sidebarStats.completed <= 0 || !canGenerateNew || cooldownSecondsLeft > 0}
+                className="rounded-2xl border border-[#132018]/10 bg-white px-4 py-3 text-sm font-black text-[#17221a] shadow-[0_8px_20px_rgba(21,35,24,.05)] transition hover:-translate-y-0.5 disabled:opacity-45 dark:border-white/10 dark:bg-white/[.05] dark:text-white"
+              >
+                {tr("Самоконтроль", "Self-check")}
               </button>
             </div>
           </div>
@@ -2688,9 +2722,9 @@ export const TasksPage: React.FC<Props> = ({
                       const selected = quizAnswers[q.index] ?? "";
                       const review = quizReview?.find((r) => r.index === q.index) ?? null;
                       return (
-                        <article key={q.index} id={`quiz-q-${q.index}`} className="rounded-[28px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
-                          <h3 className="text-base font-black tracking-[-.02em]">{q.index + 1}. {q.question}</h3>
-                          <div className="mt-4 grid gap-2 md:grid-cols-2">
+                        <article key={q.index} id={`quiz-q-${q.index}`} className="min-w-0 overflow-hidden rounded-[28px] border border-[#132018]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121914]">
+                          <h3 className="min-w-0 break-words text-base font-black tracking-[-.02em]">{q.index + 1}. {q.question}</h3>
+                          <div className="mt-4 grid min-w-0 gap-2">
                             {Object.entries(q.options || {}).map(([label, text]) => {
                               const isSelected = selected === label;
                               const isCorrect = review ? review.correct === label : false;
@@ -2704,9 +2738,9 @@ export const TasksPage: React.FC<Props> = ({
                                   key={label}
                                   onClick={() => setQuizAnswers((prev) => ({ ...prev, [q.index]: label }))}
                                   disabled={quizSubmitting || !!quizReview}
-                                  className={`rounded-2xl border px-4 py-3 text-left text-sm leading-6 transition ${tone}`}
+                                  className={`min-w-0 whitespace-normal break-words rounded-2xl border px-4 py-3 text-left text-sm leading-6 transition ${tone}`}
                                 >
-                                  <strong className="mr-2">{label}</strong>{text}
+                                  <strong className="mr-2">{label}</strong><span className="break-words">{text}</span>
                                 </button>
                               );
                             })}
