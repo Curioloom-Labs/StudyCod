@@ -155,10 +155,13 @@ export async function getTask(id: number, uiLang?: UiLanguage): Promise<Task> {
   });
   return res.data as Task;
 }
-export async function generateTask(language?: UiLanguage): Promise<unknown> {
+export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean }): Promise<unknown> {
   requireToken();
   try {
-    const res = await api.post("/tasks/generate", language ? { language } : {});
+    const res = await api.post("/tasks/generate", {
+      ...(language ? { language } : {}),
+      ...(options?.forceControl ? { forceControl: true } : {})
+    });
     return res.data;
   } catch (error: unknown) {
     const response = error && typeof error === "object" ? Reflect.get(error, "response") : null;

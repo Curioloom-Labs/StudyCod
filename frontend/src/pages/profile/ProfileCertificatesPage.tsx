@@ -138,8 +138,6 @@ export const ProfileCertificatesPage: React.FC = () => {
             </div>
           )}
         </section>
-
-        <ProfileSectionNav active="certificates" className="mt-8" />
       </main>
     </div>
   );

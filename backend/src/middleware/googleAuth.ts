@@ -5,6 +5,16 @@ import { User } from "../entities/User";
 import { getGoogleClientId, getGoogleClientSecret, getGoogleCallbackUrl, isGoogleOAuthEnabled } from "../config/googleOAuth";
 import { logger } from "../utils/logger";
 const getUserRepository = () => AppDataSource.getRepository(User);
+const GOOGLE_AUTH_MODE_SESSION_KEY = "googleAuthUserMode";
+type GoogleAuthUserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
+
+function normalizeGoogleAuthMode(raw: unknown): GoogleAuthUserMode {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "edu" || value === "school" || value === "educational") return "EDUCATIONAL";
+  if (value === "contest" || value === "contests") return "CONTEST";
+  return "PERSONAL";
+}
+
 export function setupGoogleStrategy() {
   if (!isGoogleOAuthEnabled()) {
     return;
@@ -35,6 +45,7 @@ export function setupGoogleStrategy() {
         }
       }
       const linkUserId = Number((req?.session as any)?.googleLinkUserId ?? 0);
+      const requestedMode = normalizeGoogleAuthMode((req?.session as any)?.[GOOGLE_AUTH_MODE_SESSION_KEY]);
       if (Number.isFinite(linkUserId) && linkUserId > 0) {
         return done(null, {
           googleId,
@@ -66,6 +77,19 @@ export function setupGoogleStrategy() {
           }
         });
         if (user) {
+          if ((user.userMode ?? "PERSONAL") !== requestedMode) {
+            return done(null, {
+              googleId,
+              email,
+              firstName,
+              lastName,
+              avatarUrl,
+              birthDay,
+              birthMonth,
+              requestedUserMode: requestedMode,
+              isNewUser: true
+            });
+          }
           user.googleId = googleId;
           if (avatarUrl && !user.avatarUrl) user.avatarUrl = avatarUrl;
           await getUserRepository().save(user);

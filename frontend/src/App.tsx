@@ -931,6 +931,7 @@ const AppContent: React.FC = React.memo(() => {
       onPlayground={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/playground?preview=true" : "/playground")}
       onToggleTheme={toggleTheme}
       onToggleLanguage={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
+      onSupport={() => navigate("/support")}
       onLogout={handleLogout}
     >
       {content}

@@ -142,8 +142,8 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
     for (const grade of validGrades) {
       const total = Number(grade.total);
       if (!Number.isFinite(total)) continue;
-      const topicId = grade.task.topic?.id ?? null;
-      const topicTitle = grade.task.topic?.title ?? grade.task.title;
+      const topicId = grade.task?.topic?.id ?? null;
+      const topicTitle = grade.task?.topic?.title ?? grade.task?.title ?? tr("Без теми", "No topic");
       const createdAt = String(grade.createdAt ?? "");
 
       if (!topicMap.has(topicId)) {
@@ -181,8 +181,8 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   const recentGradesByTopic = useMemo(() => {
     const byTopic = new Map<string, { topicTitle: string; rows: Grade[] }>();
     for (const grade of recentGrades) {
-      const topicId = grade.task.topic?.id ?? null;
-      const topicTitle = grade.task.topic?.title ?? tr("Без теми", "No topic");
+      const topicId = grade.task?.topic?.id ?? null;
+      const topicTitle = grade.task?.topic?.title ?? tr("Без теми", "No topic");
       const key = topicId != null ? `topic:${topicId}` : `topic-title:${topicTitle.toLowerCase()}`;
       if (!byTopic.has(key)) byTopic.set(key, { topicTitle, rows: [] });
       byTopic.get(key)!.rows.push(grade);
@@ -207,8 +207,8 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
     const byTopic = new Map<string, { topicId: number | null; topicTitle: string; rows: Grade[] }>();
 
     for (const grade of validGrades) {
-      const topicId = grade.task.topic?.id ?? null;
-      const topicTitle = grade.task.topic?.title ?? tr("Без теми", "No topic");
+      const topicId = grade.task?.topic?.id ?? null;
+      const topicTitle = grade.task?.topic?.title ?? tr("Без теми", "No topic");
       const key = topicId != null ? `topic:${topicId}` : `topic-title:${topicTitle.toLowerCase()}`;
       if (!byTopic.has(key)) byTopic.set(key, { topicId, topicTitle, rows: [] });
       byTopic.get(key)!.rows.push(grade);

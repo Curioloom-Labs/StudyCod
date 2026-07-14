@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { User, UserLang } from "../entities/User";
+import { Grade } from "../entities/Grade";
 import { Student } from "../entities/Student";
 import { LibraryTaskAttempt } from "../entities/LibraryTaskAttempt";
 import { ContestParticipant } from "../entities/ContestParticipant";
@@ -23,8 +24,10 @@ import {
   getLastProcessedGradeIdForLang,
   getUserIadForLang,
 } from "../utils/iad";
+import { getStableIad } from "../utils/adaptiveDifficulty";
 const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
+const gradeRepo = () => AppDataSource.getRepository(Grade);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const libraryAttemptRepo = () => AppDataSource.getRepository(LibraryTaskAttempt);
 const contestParticipantRepo = () => AppDataSource.getRepository(ContestParticipant);
@@ -414,8 +417,10 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
     }
 
     const lang = user.lang;
-    const currentIad = getUserIadForLang(user, lang);
-    const lastAppliedGradeId = getLastProcessedGradeIdForLang(user, lang);
+    const currentIad = await getStableIad(user.id, lang, 0, userRepo, gradeRepo);
+    const refreshedUser = await userRepo().findOne({ where: { id: req.userId } });
+    const iadUser = refreshedUser ?? user;
+    const lastAppliedGradeId = getLastProcessedGradeIdForLang(iadUser, lang);
     const minIad = 0;
     const maxIad = 1;
     const limitEpsilon = 0.0005;
@@ -481,19 +486,19 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
       currentIad,
       currentDifus: currentIad,
       iadByLang: {
-        JAVA: getUserIadForLang(user, "JAVA"),
-        PYTHON: getUserIadForLang(user, "PYTHON"),
-        CPP: getUserIadForLang(user, "CPP"),
+        JAVA: getUserIadForLang(iadUser, "JAVA"),
+        PYTHON: getUserIadForLang(iadUser, "PYTHON"),
+        CPP: getUserIadForLang(iadUser, "CPP"),
       },
       difusByLang: {
-        JAVA: getUserIadForLang(user, "JAVA"),
-        PYTHON: getUserIadForLang(user, "PYTHON"),
-        CPP: getUserIadForLang(user, "CPP"),
+        JAVA: getUserIadForLang(iadUser, "JAVA"),
+        PYTHON: getUserIadForLang(iadUser, "PYTHON"),
+        CPP: getUserIadForLang(iadUser, "CPP"),
       },
       limits: { min: minIad, max: maxIad },
       limitState,
       lastAppliedGradeId,
-      updatedAt: user.lastIadChange ?? user.lastDifusChange ?? null,
+      updatedAt: iadUser.lastIadChange ?? iadUser.lastDifusChange ?? null,
       rules: [
         { minGrade: 0, maxGrade: 30, delta: -0.045, reasonKey: "very_low_score" },
         { minGrade: 31, maxGrade: 55, delta: -0.02, reasonKey: "low_score" },

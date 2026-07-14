@@ -225,9 +225,23 @@ function explainJava(stderr: string): ExplainedError | null {
   return null;
 }
 
-function explainCpp(stderr: string): ExplainedError | null {
+function languageLabel(language: LanguageId): string {
+  switch (language) {
+    case "cpp": return "C++";
+    case "c": return "C";
+    case "rust": return "Rust";
+    case "pascal": return "Pascal";
+    case "d": return "D";
+    case "swift": return "Swift";
+    case "haskell": return "Haskell";
+    default: return language;
+  }
+}
+
+function explainCppLike(language: LanguageId, stderr: string): ExplainedError | null {
   const s = String(stderr ?? "");
   const lower = s.toLowerCase();
+  const label = languageLabel(language);
 
   if (lower.includes("segmentation fault") || lower.includes("sigsegv")) {
     return {
@@ -261,7 +275,7 @@ function explainCpp(stderr: string): ExplainedError | null {
     const what = s.match(/what\(\):\s*(.*)/);
     return {
       kind: "runtime",
-      title: "Невпійманий виняток (C++)",
+      title: `Невпійманий виняток (${label})`,
       tips: [what?.[1] ? `what(): ${what[1]}` : "Перевірте місце, де кидається exception, або додайте try/catch (якщо доречно)"]
     };
   }
@@ -270,7 +284,7 @@ function explainCpp(stderr: string): ExplainedError | null {
   if (mErr) {
     return {
       kind: "compile",
-      title: "Помилка компіляції C++",
+      title: `Помилка компіляції ${label}`,
       tips: [`Компілятор каже: ${mErr[4]}`],
       location: {
         line: parseIntSafe(mErr[2]),
@@ -301,7 +315,7 @@ export function explainStderr(language: LanguageId, stderr: string): ExplainedEr
     case "d":
     case "swift":
     case "haskell":
-      return explainCpp(s);
+      return explainCppLike(language, s);
     default:
       // csharp, js, go, dart, lisp, lua, perl, php, ruby — no bespoke explainer yet.
       return null;

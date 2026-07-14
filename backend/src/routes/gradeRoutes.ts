@@ -52,11 +52,6 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
         id: req.userId
       }
     };
-    if (req.lang) {
-      where.task = {
-        lang: req.lang
-      };
-    }
     const grades = await gradeRepo().find({
       where,
       order: {

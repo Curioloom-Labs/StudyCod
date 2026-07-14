@@ -17,7 +17,7 @@ import { TestData } from "../entities/TestData";
 import { judgeWithSemaphore } from "../services/judgeWorker";
 import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
-import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1 } from "../utils/multiFileSubmission";
+import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath } from "../utils/multiFileSubmission";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
@@ -141,10 +141,9 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
     if (!f || typeof f !== "object") continue;
-    const p = typeof (f as any).path === "string" ? (f as any).path.trim() : "";
+    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
     const c = typeof (f as any).content === "string" ? (f as any).content : "";
     if (!p) continue;
-    if (p.includes("/") || p.includes("\\") || p.includes("..") || p.startsWith(".")) continue;
     out.push({ path: p, content: c });
   }
   const byPath = new Map<string, ApiCodeFile>();
@@ -2663,7 +2662,7 @@ contestsRouter.post(
 
       const schema = z.object({
         code: z.string().min(1).max(200_000).optional(),
-        files: z.array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) })).max(64).optional(),
+        files: z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) })).max(64).optional(),
         language: z.string().optional(),
         compiler: z.string().max(32).optional(),
         input: z.string().max(200_000).optional(),
@@ -2824,7 +2823,7 @@ contestsRouter.post(
       const schema = z
         .object({
           code: z.string().min(1).max(200_000).optional(),
-          files: z.array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) })).max(64).optional(),
+          files: z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) })).max(64).optional(),
           language: z.string().optional(),
           compiler: z.string().max(32).optional(),
           turnstileToken: z.string().min(1).max(4096).optional(),

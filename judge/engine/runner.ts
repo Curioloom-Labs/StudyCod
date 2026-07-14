@@ -222,14 +222,18 @@ async function validateTestRefs(req: JudgeRequest): Promise<void> {
 
 function isSafeRootRelativeFilePath(p: unknown): p is string {
   if (typeof p !== "string") return false;
-  const s = p.trim();
+  const s = p.trim().replace(/\\/g, "/");
   if (!s) return false;
-  // No directories for now (keeps sandbox + compile plans simple and predictable).
-  if (s.includes("/") || s.includes("\\")) return false;
-  if (s.startsWith(".")) return false;
-  if (s.includes("..")) return false;
-  // Keep filenames reasonably short.
-  if (s.length > 120) return false;
+  if (path.posix.isAbsolute(s) || path.win32.isAbsolute(s)) return false;
+  if (s.length > 180) return false;
+  const parts = s.split("/");
+  if (parts.length > 8) return false;
+  for (const part of parts) {
+    if (!part || part === "." || part === "..") return false;
+    if (part.startsWith(".")) return false;
+    if (part.length > 80) return false;
+    if (!/^[A-Za-z0-9._-]+$/.test(part)) return false;
+  }
   return true;
 }
 
@@ -242,7 +246,7 @@ function normalizeMultiFiles(input: unknown): JudgeFile[] {
     const contentRaw = (f as any).content;
     if (!isSafeRootRelativeFilePath(pathRaw)) continue;
     if (typeof contentRaw !== "string") continue;
-    out.push({ path: pathRaw.trim(), content: contentRaw });
+    out.push({ path: pathRaw.trim().replace(/\\/g, "/"), content: contentRaw });
   }
   // Deduplicate by path (last wins).
   const byPath = new Map<string, JudgeFile>();
@@ -252,19 +256,32 @@ function normalizeMultiFiles(input: unknown): JudgeFile[] {
 
 async function writeFilesToWorkDir(workDir: string, files: JudgeFile[]): Promise<void> {
   for (const f of files) {
-    // Extra safety: even though we disallow separators, join defensively.
-    const filePath = path.join(workDir, f.path);
+    const filePath = path.join(workDir, ...f.path.split("/"));
+    const parent = path.dirname(filePath);
+    if (parent !== workDir) {
+      await fs.mkdir(parent, { recursive: true });
+    }
     await fs.writeFile(filePath, f.content, { encoding: "utf8" });
   }
+}
+
+function displayArg(arg: string): string {
+  return /^[A-Za-z0-9_./:=+-]+$/.test(arg) ? arg : JSON.stringify(arg);
+}
+
+function displayCommand(argv: string[]): string {
+  return argv.map(displayArg).join(" ");
 }
 
 function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { argv: string[]; display: string } | null {
   const paths = files.map(f => f.path);
   if (language === "python") {
-    // Python: compile only entry file (imports will fail at runtime if broken).
+    const pyFiles = paths.filter(p => /\.py$/i.test(p));
+    if (pyFiles.length === 0) return null;
+    const argv = ["/usr/bin/python3", "-B", "-m", "py_compile", ...pyFiles];
     return {
-      display: "python3 -m py_compile main.py",
-      argv: ["/usr/bin/python3", "-B", "-m", "py_compile", "main.py"]
+      display: displayCommand(["python3", "-m", "py_compile", ...pyFiles]),
+      argv
     };
   }
   if (language === "java") {
@@ -279,7 +296,7 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
     const ktFiles = paths.filter(p => p.toLowerCase().endsWith(".kt"));
     if (ktFiles.length === 0) return null;
     return {
-      display: `kotlinc ${ktFiles.join(" ")} -include-runtime -d app.jar`,
+      display: displayCommand(["kotlinc", ...ktFiles, "-include-runtime", "-d", "app.jar"]),
       argv: ["/usr/bin/kotlinc", ...ktFiles, "-include-runtime", "-d", "app.jar"]
     };
   }
@@ -287,7 +304,7 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
     const cppFiles = paths.filter(p => /\.(cpp|cc|cxx)$/i.test(p));
     if (cppFiles.length === 0) return null;
     return {
-      display: `g++ -B/usr/bin ${cppFiles.join(" ")} -o app`,
+      display: displayCommand(["g++", "-B/usr/bin", ...cppFiles, "-o", "app"]),
       argv: ["/usr/bin/g++", "-B/usr/bin", "-O2", "-pipe", "-std=gnu++17", "-fno-omit-frame-pointer", ...cppFiles, "-o", "app"]
     };
   }
@@ -295,7 +312,7 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
     const cFiles = paths.filter(p => /\.(c)$/i.test(p));
     if (cFiles.length === 0) return null;
     return {
-      display: `gcc -B/usr/bin ${cFiles.join(" ")} -o app`,
+      display: displayCommand(["gcc", "-B/usr/bin", ...cFiles, "-o", "app"]),
       argv: ["/usr/bin/gcc", "-B/usr/bin", "-O2", "-pipe", "-std=gnu11", "-fno-omit-frame-pointer", ...cFiles, "-o", "app"]
     };
   }
@@ -303,7 +320,7 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
     const goFiles = paths.filter(p => /\.go$/i.test(p));
     if (goFiles.length === 0) return null;
     return {
-      display: `go build -o app ${goFiles.join(" ")}`,
+      display: displayCommand(["go", "build", "-o", "app", ...goFiles]),
       argv: [
         "/usr/bin/env",
         "HOME=/work",
@@ -321,8 +338,43 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
       ]
     };
   }
-  // JS (node --check on entry), Rust and Pascal compile from the single entry file;
-  // multi-file builds fall back to the adapter/profile plan.
+  if (language === "swift") {
+    const swiftFiles = paths.filter(p => /\.swift$/i.test(p));
+    if (swiftFiles.length === 0) return null;
+    return {
+      display: displayCommand(["swiftc", "-O", ...swiftFiles, "-o", "app"]),
+      argv: [
+        "/usr/bin/env",
+        "HOME=/work",
+        "/usr/bin/swiftc",
+        "-O",
+        "-module-cache-path",
+        "/work/.swift-cache",
+        ...swiftFiles,
+        "-o",
+        "app"
+      ]
+    };
+  }
+  if (language === "d") {
+    const dFiles = paths.filter(p => /\.d$/i.test(p));
+    if (dFiles.length === 0) return null;
+    return {
+      display: displayCommand(["dmd", "-O", "-release", ...dFiles, "-of=app"]),
+      argv: ["/usr/bin/dmd", "-O", "-release", "-inline", ...dFiles, "-of=app"]
+    };
+  }
+  if (language === "haskell") {
+    const hsFiles = paths.filter(p => /\.(hs|lhs)$/i.test(p));
+    if (hsFiles.length === 0) return null;
+    const entryFirst = ["main.hs", ...hsFiles.filter(p => p !== "main.hs")];
+    return {
+      display: displayCommand(["ghc", "-O", ...entryFirst, "-o", "app"]),
+      argv: ["/usr/bin/ghc", "-O", "-outputdir", ".ghc", ...entryFirst, "-o", "app"]
+    };
+  }
+  // JS, Rust, Pascal and interpreted languages can resolve sibling files from the
+  // workdir through their normal import/include mechanisms. Keep their adapter plan.
   if (language === "js" || language === "rust" || language === "pascal") return null;
   // C# compilation handled by dotnet build (project-based). Adding extra files is fine.
   if (language === "csharp") return null;

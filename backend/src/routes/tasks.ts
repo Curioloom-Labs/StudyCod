@@ -4,7 +4,7 @@ import { body, validationResult } from "express-validator";
 import { createHash } from "crypto";
 import { AppDataSource } from "../data-source";
 import { Task, TaskType } from "../entities/Task";
-import type { TaskIoType } from "../entities/Task";
+import type { TaskIoType, TaskLang } from "../entities/Task";
 import { Topic } from "../entities/Topic";
 import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
@@ -35,7 +35,7 @@ import { inferNeedsInput } from "../utils/inferNeedsInput";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
-import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
+import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath, pickEntryContent } from "../utils/multiFileSubmission";
 import { buildLearningFirstFailure } from "../services/learning/firstFailure";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
@@ -102,11 +102,10 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
     if (!f || typeof f !== "object") continue;
-    const p = typeof (f as any).path === "string" ? (f as any).path.trim() : "";
+    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
     const c = typeof (f as any).content === "string" ? (f as any).content : "";
     if (!p) continue;
-    // Keep it simple (no folders) – matches judge validation.
-    if (p.includes("/") || p.includes("\\") || p.includes("..") || p.startsWith(".")) continue;
+    // Keep paths constrained to the same safe relative subset as the judge.
     out.push({ path: p, content: c });
   }
   const byPath = new Map<string, ApiCodeFile>();
@@ -920,6 +919,64 @@ function composeTaskStatementMarkdown(params: {
   return sections.join("\n\n").trim();
 }
 
+function stripCodeCommentsForVariableCheck(source: string, lang: TaskLang): string {
+  let text = String(source || "");
+  if (lang === "PYTHON") {
+    text = text.replace(/#.*$/gm, "");
+  } else {
+    text = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  }
+  return text;
+}
+
+function shouldRequireVariableDeclarations(task: Task): boolean {
+  if (task.taskMode === "WEB") return false;
+  const haystack = [
+    task.title,
+    task.subtitle,
+    task.description,
+    (task as any)?.topic?.title,
+  ].map(v => String(v || "")).join(" ").toLowerCase();
+
+  return (
+    /типи\s+даних|змінн|оголосити|створити\s+змінн|variables?|data\s+types?|declare|assignment/.test(haystack)
+    && !/масив|array|цикл|loop|function|функц/.test(haystack)
+  );
+}
+
+function countVariableDeclarations(source: string, lang: TaskLang): number {
+  const clean = stripCodeCommentsForVariableCheck(source, lang);
+  if (lang === "PYTHON") {
+    return clean
+      .split(/\r?\n/)
+      .filter(line => /^\s*[A-Za-z_]\w*\s*=\s*(?!=)/.test(line) && !/^\s*(print|return)\b/.test(line.trim()))
+      .length;
+  }
+
+  if (lang === "CPP") {
+    const matches = clean.match(/\b(?:int|long|long\s+long|double|float|bool|char|string|std::string|auto)\s+[A-Za-z_]\w*(?:\s*=\s*[^;]+)?\s*;/g);
+    return matches?.length ?? 0;
+  }
+
+  const matches = clean.match(/\b(?:byte|short|int|long|float|double|boolean|char|String|var)\s+[A-Za-z_]\w*(?:\s*=\s*[^;]+)?\s*;/g);
+  return matches?.length ?? 0;
+}
+
+function validateVariableDeclarationTaskSubmission(task: Task, source: string, uiLanguage: UiLanguage): string | null {
+  if (!shouldRequireVariableDeclarations(task)) return null;
+
+  const oneVariableOnly = /одн(у|а|ієї)\s+змінн|one\s+variable|single\s+variable/.test(String(task.description || "").toLowerCase());
+  const required = oneVariableOnly ? 1 : 2;
+  const found = countVariableDeclarations(source, task.lang);
+  if (found >= required) return null;
+
+  return i18nText(
+    uiLanguage,
+    `Ця задача перевіряє створення змінних. Зараз у коді знайдено ${found} оголошень/присвоєнь, потрібно щонайменше ${required}. Не друкуй готовий текст напряму — створи змінні й виведи їх значення.`,
+    `This task checks variable creation. Your code has ${found} declaration/assignment(s), but at least ${required} are required. Do not print hardcoded text directly — create variables and output their values.`
+  );
+}
+
 function pickNoInputFixedExpectedOutput(params: {
   examples?: Array<{ input?: unknown; output?: unknown }>;
   outputFormat?: unknown;
@@ -1307,7 +1364,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     difus: params.difus,
     userId: params.userId,
     topicId: params.topic?.id,
-    semanticRetries: 1,
+    semanticRetries: params.type === "CONTROL" ? 1 : 0,
     allowedIoTypes: generationAllowedIoTypes,
     previousTasks: previousTasksBrief,
     previousTaskPractices: previousTaskPracticesForUniq,
@@ -1316,7 +1373,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   } as any, {
     language: params.userLanguage,
     requestId: params.requestId,
-    maxAttempts: 2,
+    maxAttempts: params.type === "CONTROL" ? 2 : 1,
     ...(disableDeadlines ? {} : { totalTimeoutMs: taskBudgetMs })
   });
   if (!aiTaskResult.success) {
@@ -2485,6 +2542,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const userId = req.userId!;
     const rawLang = String(req.lang ?? "").toUpperCase().trim();
     const lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
+    const forcePersonalControl = req.body && typeof req.body === "object" && (req.body as any).forceControl === true;
     throttleKey = makeGenerateThrottleKey(userId, lang);
 
     const now = Date.now();
@@ -2608,10 +2666,15 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       baseStartTopicIndex
     });
     const controlDue = sequentialCompletedTopics > 0 && sequentialCompletedTopics % PERSONAL_CONTROL_BATCH_SIZE === 0;
-    if (controlDue) {
-      const segmentIndex = Math.floor(sequentialCompletedTopics / PERSONAL_CONTROL_BATCH_SIZE) - 1;
+    const forceControlDue = forcePersonalControl && sequentialCompletedTopics > 0;
+    if (controlDue || forceControlDue) {
+      const segmentIndex = controlDue
+        ? Math.floor(sequentialCompletedTopics / PERSONAL_CONTROL_BATCH_SIZE) - 1
+        : Math.max(0, Math.ceil(sequentialCompletedTopics / PERSONAL_CONTROL_BATCH_SIZE) - 1);
       const startTopicIndex = baseStartTopicIndex + segmentIndex * PERSONAL_CONTROL_BATCH_SIZE;
-      const endTopicIndex = startTopicIndex + PERSONAL_CONTROL_BATCH_SIZE - 1;
+      const endTopicIndex = controlDue
+        ? startTopicIndex + PERSONAL_CONTROL_BATCH_SIZE - 1
+        : Math.min(startTopicIndex + PERSONAL_CONTROL_BATCH_SIZE - 1, baseStartTopicIndex + sequentialCompletedTopics - 1);
       const batchPrefix = buildPersonalControlBatchPrefix({ lang, startTopicIndex, endTopicIndex });
       const batchTasks = await taskRepo()
         .createQueryBuilder("task")
@@ -2891,7 +2954,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       difus,
       userId,
       topicId: topic.id,
-      semanticRetries: 1,
+      semanticRetries: 0,
       allowedIoTypes: generationAllowedIoTypes,
       ...(prevTopicsForReinforcement ? { prevTopics: prevTopicsForReinforcement } : {}),
       previousTasks: previousTasksBrief,
@@ -2900,7 +2963,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }, {
       language: userLanguage,
       requestId: req.requestId,
-      maxAttempts: 2,
+      maxAttempts: 1,
       ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: taskBudgetMs })
     });
     if (!aiTaskResult.success) {
@@ -3607,7 +3670,7 @@ tasksRouter.post(
         id: req.userId
       }
     },
-    relations: ["testData"]
+    relations: ["testData", "topic"]
   });
   if (!task) {
     throw new HttpError(404, "Task not found", {
@@ -3632,6 +3695,13 @@ tasksRouter.post(
   const persistedSubmission = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : String(code ?? "");
   const normalizedClientSubmissionId = normalizeClientSubmissionId(clientSubmissionId);
   const serverCodeHash = sha256Hex(persistedSubmission);
+  const variableDeclarationError = validateVariableDeclarationTaskSubmission(task, sourceText, resolveUiLanguage(req));
+  if (variableDeclarationError) {
+    throw new HttpError(400, variableDeclarationError, {
+      code: "VARIABLE_DECLARATION_REQUIRED",
+      expose: true
+    });
+  }
 
   // For AI grading, concatenate all files for better context.
   const aiCodeText = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;

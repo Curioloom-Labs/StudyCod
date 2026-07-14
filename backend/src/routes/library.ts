@@ -27,7 +27,7 @@ import { In, Not } from "typeorm";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
-import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../utils/multiFileSubmission";
+import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath, pickEntryContent } from "../utils/multiFileSubmission";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
 import { hasLibraryTaskEnTranslationColumns } from "../services/translation/translationSchema";
 import { env } from "../env";
@@ -50,10 +50,9 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
     if (!f || typeof f !== "object") continue;
-    const p = typeof (f as any).path === "string" ? (f as any).path.trim() : "";
+    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
     const c = typeof (f as any).content === "string" ? (f as any).content : "";
     if (!p) continue;
-    if (p.includes("/") || p.includes("\\") || p.includes("..") || p.startsWith(".")) continue;
     out.push({ path: p, content: c });
   }
   const byPath = new Map<string, ApiCodeFile>();
@@ -1024,7 +1023,7 @@ libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
       .object({
         draftCode: z.string().max(200_000).optional(),
         files: z
-          .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+          .array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) }))
           .max(64)
           .optional(),
         language: z.string().optional(),
@@ -1310,7 +1309,7 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
       .object({
         code: z.string().min(1).max(200_000).optional(),
         files: z
-          .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+          .array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) }))
           .max(64)
           .optional(),
         input: z.string().optional(),
@@ -1453,7 +1452,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
       .object({
         code: z.string().min(1).max(200_000).optional(),
         files: z
-          .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+          .array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) }))
           .max(64)
           .optional(),
         language: z.string().optional(),

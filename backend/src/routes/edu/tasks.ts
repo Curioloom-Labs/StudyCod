@@ -26,7 +26,7 @@ import { HttpError } from "../../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../../utils/checkerSpec";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { submissionRateLimitMiddleware } from "../../middleware/submissionRateLimit";
-import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, pickEntryContent } from "../../utils/multiFileSubmission";
+import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath, pickEntryContent } from "../../utils/multiFileSubmission";
 import { TopicNew } from "../../entities/TopicNew";
 import { IsNull } from "typeorm";
 import { buildLearningFirstFailure } from "../../services/learning/firstFailure";
@@ -163,10 +163,9 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
     if (!f || typeof f !== "object") continue;
-    const p = typeof (f as any).path === "string" ? (f as any).path.trim() : "";
+    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
     const c = typeof (f as any).content === "string" ? (f as any).content : "";
     if (!p) continue;
-    if (p.includes("/") || p.includes("\\") || p.includes("..") || p.startsWith(".")) continue;
     out.push({ path: p, content: c });
   }
   const byPath = new Map<string, ApiCodeFile>();
@@ -193,7 +192,7 @@ const runBodySchema = z
   .object({
     code: z.string().min(1).max(200_000).optional(),
     files: z
-      .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+      .array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) }))
       .max(64)
       .optional(),
     input: z.string().max(64 * 1024).optional(),
@@ -206,7 +205,7 @@ const submitBodySchema = z
   .object({
     code: z.string().min(1).max(200_000).optional(),
     files: z
-      .array(z.object({ path: z.string().min(1).max(120), content: z.string().max(200_000) }))
+      .array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) }))
       .max(64)
       .optional(),
     clientSubmissionId: z.string().min(1).max(128).optional(),

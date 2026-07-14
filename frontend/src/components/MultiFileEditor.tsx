@@ -7,22 +7,28 @@ import { tr } from "../i18n";
 
 export type CodeFile = { path: string; content: string };
 
-function isSafeSimpleFilename(name: string): boolean {
-  const p = name.trim();
-  if (!p) return false;
-  if (p.includes("/") || p.includes("\\")) return false;
-  if (p.includes("..")) return false;
-  if (p.startsWith(".")) return false;
-  if (p.length > 120) return false;
-  return true;
+function normalizeSafeCodeFilePath(name: string): string | null {
+  const p = name.trim().replace(/\\/g, "/");
+  if (!p) return null;
+  if (p.startsWith("/") || /^[A-Za-z]:/.test(p)) return null;
+  if (p.length > 180) return null;
+  const parts = p.split("/");
+  if (parts.length > 8) return null;
+  for (const part of parts) {
+    if (!part || part === "." || part === "..") return null;
+    if (part.startsWith(".")) return null;
+    if (part.length > 80) return null;
+    if (!/^[A-Za-z0-9._-]+$/.test(part)) return null;
+  }
+  return p;
 }
 
 function normalizeFiles(input: CodeFile[]): CodeFile[] {
   const byPath = new Map<string, CodeFile>();
   for (const f of input) {
-    const path = String(f?.path ?? "").trim();
+    const path = normalizeSafeCodeFilePath(String(f?.path ?? ""));
     const content = typeof f?.content === "string" ? f.content : "";
-    if (!isSafeSimpleFilename(path)) continue;
+    if (!path) continue;
     byPath.set(path, { path, content });
   }
   return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
@@ -107,17 +113,18 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
 
   const doAdd = () => {
     const p = newName.trim();
-    if (!isSafeSimpleFilename(p)) {
+    const safePath = normalizeSafeCodeFilePath(p);
+    if (!safePath) {
       setNameError(tr("Некоректна назва файлу", "Invalid filename"));
       return;
     }
-    if (normalized.some(f => f.path === p)) {
+    if (normalized.some(f => f.path === safePath)) {
       setNameError(tr("Файл вже існує", "File already exists"));
       return;
     }
-    const next = normalizeFiles([...normalized, { path: p, content: "" }]);
+    const next = normalizeFiles([...normalized, { path: safePath, content: "" }]);
     onChange(next);
-    setActivePath(p);
+    setActivePath(safePath);
     setAddOpen(false);
   };
 
@@ -188,8 +195,8 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
         <div className="space-y-3">
           <div className="text-xs text-text-secondary font-mono">
             {tr(
-              "Назва має бути простою: без папок, без .., без прихованих (dot) файлів. Розширення може бути будь-яке (наприклад: data.txt, input.json).",
-              "Filename must be simple: no folders, no .., no dotfiles. Extension can be anything (e.g. data.txt, input.json)."
+              "Назва має бути відносним шляхом: без .. і без прихованих (dot) файлів. Папки дозволені (наприклад: utils/Solver.swift).",
+              "Filename must be a relative path: no .. and no dotfiles. Folders are allowed (e.g. utils/Solver.swift)."
             )}
           </div>
           <input
