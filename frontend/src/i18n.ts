@@ -2,12 +2,9 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import ukTranslations from './locales/uk';
 import enTranslations from './locales/en';
-const STORAGE_KEY = 'studycod_language';
-const savedLanguage = (() => {
-  if (typeof window === 'undefined') return 'en';
-  const saved = localStorage.getItem(STORAGE_KEY);
-  return saved === 'en' || saved === 'uk' ? saved : 'en';
-})();
+import { getInitialLanguage, LANGUAGE_STORAGE_KEY } from './lib/localization';
+
+const savedLanguage = getInitialLanguage();
 i18n.use(initReactI18next).init({
   resources: {
     uk: {
@@ -29,7 +26,7 @@ i18n.use(initReactI18next).init({
 });
 i18n.on('languageChanged', lng => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, lng);
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, lng);
     document.documentElement.lang = lng === 'en' ? 'en' : 'uk';
   }
 });

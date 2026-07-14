@@ -5,6 +5,9 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_AUTH_TURNSTILE?: string;
   readonly VITE_ENABLE_CONTEST_WS?: string;
   readonly VITE_ENABLE_CONTEST_SUBMIT_TURNSTILE?: string;
+  readonly VITE_PADDLE_CLIENT_TOKEN?: string;
+  readonly VITE_PADDLE_PRO_PRICE_ID?: string;
+  readonly VITE_PADDLE_CLASS_PRICE_ID?: string;
   readonly DEV?: boolean;
   readonly PROD?: boolean;
   readonly MODE?: string;
