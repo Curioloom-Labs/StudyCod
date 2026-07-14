@@ -121,6 +121,17 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
+const isPlacementRequiredError = (error: unknown): boolean => {
+  const apiErr = toApiErrorLike(error);
+  const data = asRecord(apiErr?.response?.data);
+  return apiErr?.response?.status === 403 && String(data?.message ?? "").toUpperCase() === "PLACEMENT_REQUIRED";
+};
+
+const requestPlacementOpen = (): void => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("studycod:open-placement"));
+};
+
 const isCodeFile = (value: unknown): value is CodeFile => {
   if (!value || typeof value !== "object") return false;
   const path = Reflect.get(value, "path");
@@ -1300,6 +1311,12 @@ export const TasksPage: React.FC<Props> = ({
         }
       } catch (err: unknown) {
         if (!mounted) return;
+        if (isPlacementRequiredError(err)) {
+          requestPlacementOpen();
+          setConsoleOutput(tr("Перед першою персональною практикою потрібно пройти коротку оцінку рівня. Вона відкрилась поверх сторінки.", "Before your first personal practice, please complete the short placement assessment. It opened above this page."));
+          setUIState("logic-warning");
+          return;
+        }
         const text = formatApiError(err);
         setConsoleOutput(`${tr("Помилка завантаження завдань:", "Failed to load tasks:")} ${text}\n` + tr("Якщо бачиш HTML замість JSON — перевір Nginx проксі для /api/* і чи працює backend.", "If you see HTML instead of JSON — check Nginx proxy for /api/* and that the backend is running."));
         setUIState("error");
@@ -1522,6 +1539,14 @@ export const TasksPage: React.FC<Props> = ({
         setUIState("logic-warning");
         return;
       }
+      if (isPlacementRequiredError(error)) {
+        setGenerationPhase("error");
+        closeDelayMs = 500;
+        requestPlacementOpen();
+        setConsoleOutput(tr("Щоб згенерувати перше персональне завдання, спочатку пройди коротку оцінку рівня. Це потрібно, щоб StudyCod підібрав правильну складність.", "To generate your first personal task, complete the short placement assessment first. StudyCod uses it to choose the right difficulty."));
+        setUIState("logic-warning");
+        return;
+      }
       if (String(errorResponse?.status ?? "") === "blocked") {
         const er = errorResponse ?? {};
         setBlockState({
@@ -1631,6 +1656,9 @@ export const TasksPage: React.FC<Props> = ({
           const apiErr = toApiErrorLike(genErr);
           if (Number(apiErr?.response?.status ?? 0) === 429) {
             autoGenerateHint = tr(" Наступна практика стане доступною через декілька секунд (cooldown).", " Next practice will be available in a few seconds (cooldown).");
+          } else if (isPlacementRequiredError(genErr)) {
+            requestPlacementOpen();
+            autoGenerateHint = tr(" Для наступної практики потрібно завершити оцінку рівня.", " Complete the placement assessment to unlock the next practice.");
           } else {
             autoGenerateHint = tr(" Не вдалося автоматично згенерувати практику — натисни «Згенерувати».", " Could not auto-generate practice — click Generate.");
           }
@@ -1841,7 +1869,12 @@ export const TasksPage: React.FC<Props> = ({
               const refreshed = await listTasks(uiLanguage);
               effectiveTasks = refreshed.filter(t => true);
             }
-          } catch {
+          } catch (genErr: unknown) {
+            if (isPlacementRequiredError(genErr)) {
+              requestPlacementOpen();
+              setConsoleOutput(tr("Для наступної персональної практики потрібно завершити коротку оцінку рівня.", "Complete the short placement assessment to unlock the next personal practice."));
+              setUIState("logic-warning");
+            }
             // no-op: user can always click Generate manually
           }
         }
