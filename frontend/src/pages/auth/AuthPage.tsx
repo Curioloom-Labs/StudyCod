@@ -146,7 +146,14 @@ export const AuthPage: React.FC<Props> = ({
     return mode === "login" || mode === "register";
   }, [mode]);
   const turnstileMountKey = `${userMode}:${mode}`;
-  const turnstileContainerRef = React.useRef<HTMLDivElement | null>(null);
+  // The auth form is animated/remounted when switching Personal/EDU/Contest.
+  // Keep the actual mounted node in state so Turnstile renders into the new
+  // panel after AnimatePresence finishes the transition (an object ref can
+  // otherwise point at the outgoing panel and leave the new one blank).
+  const [turnstileContainer, setTurnstileContainer] = React.useState<HTMLDivElement | null>(null);
+  const turnstileContainerRef = React.useCallback((node: HTMLDivElement | null) => {
+    setTurnstileContainer(node);
+  }, []);
   const turnstileWidgetIdRef = React.useRef<TurnstileWidgetId | null>(null);
   const [turnstileScriptReady, setTurnstileScriptReady] = React.useState(false);
   const [turnstileLoadFailed, setTurnstileLoadFailed] = React.useState(false);
@@ -180,19 +187,11 @@ export const AuthPage: React.FC<Props> = ({
   React.useEffect(() => {
     setTurnstileToken(null);
     setTurnstileLoadFailed(false);
-    if (window.turnstile && turnstileWidgetIdRef.current != null && typeof window.turnstile.remove === "function") {
-      try {
-        window.turnstile.remove(turnstileWidgetIdRef.current);
-      } catch {
-        // Turnstile may already have removed the widget after tab/content remount.
-      }
-    }
-    turnstileWidgetIdRef.current = null;
   }, [turnstileMountKey]);
 
   React.useEffect(() => {
     if (!shouldRenderAuthTurnstile || !turnstileScriptReady) return;
-    const container = turnstileContainerRef.current;
+    const container = turnstileContainer;
     if (!container || !window.turnstile) return;
     if (turnstileWidgetIdRef.current == null) {
       try {
@@ -214,7 +213,7 @@ export const AuthPage: React.FC<Props> = ({
       turnstileWidgetIdRef.current = null;
       setTurnstileToken(null);
     };
-  }, [shouldRenderAuthTurnstile, turnstileScriptReady, turnstileSiteKey, turnstileMountKey]);
+  }, [shouldRenderAuthTurnstile, turnstileScriptReady, turnstileSiteKey, turnstileContainer]);
 
   function formatApiError(err: unknown, fallback: string): string {
     const response = err && typeof err === "object" ? Reflect.get(err, "response") : null;

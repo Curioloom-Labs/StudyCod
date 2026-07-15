@@ -11,56 +11,56 @@ export const RefundPolicyPage: React.FC = () => {
 
   const sections: LegalSection[] = [
     {
-      title: tr("1. Загальний принцип", "1. General principle"),
+      title: tr("1. Мінімальне 14-денне вікно повернення", "1. Minimum 14-day refund window"),
       paragraphs: [
         tr(
-          "StudyCod продає доступ до цифрової навчальної платформи, курсів, освітніх інструментів, змагань або організаційних робочих просторів. Ми хочемо, щоб оплата була прозорою: якщо сервіс не працює як очікувалось або оплата сталася помилково, напишіть нам — ми розглянемо запит по суті.",
-          "StudyCod sells access to a digital learning platform, courses, education tools, contests, or organization workspaces. We want billing to be transparent: if the service does not work as expected or a payment happened by mistake, contact us and we will review the request on its merits."
-        )
-      ]
-    },
-    {
-      title: tr("2. Коли можливе повернення", "2. When refunds may be available"),
-      bullets: [
-        tr("Випадкова або дубльована оплата за той самий період чи продукт.", "Accidental or duplicate payment for the same period or product."),
-        tr("Технічна помилка з нашого боку, через яку оплачений доступ фактично не був наданий.", "A technical issue on our side that prevented the paid access from being provided."),
-        tr("Скасування платного доступу до початку оплаченого періоду або до фактичного використання цифрового продукту, якщо це застосовно до конкретного тарифу.", "Cancellation before the paid period starts or before the digital product is actually used, where applicable to the specific plan."),
-        tr("Інші випадки, коли законодавство або правила платіжного провайдера вимагають повернення коштів.", "Other cases where applicable law or payment provider rules require a refund.")
-      ]
-    },
-    {
-      title: tr("3. Коли повернення може бути недоступним", "3. When refunds may not be available"),
-      paragraphs: [
-        tr(
-          "Повернення може бути недоступним, якщо оплачений цифровий доступ уже був активований і суттєво використаний, якщо завершився період доступу, якщо порушено правила платформи або якщо продукт був наданий відповідно до опису тарифу.",
-          "A refund may not be available if paid digital access has already been activated and substantially used, if the access period has ended, if platform rules were violated, or if the product was delivered according to the plan description."
+          "Для покупок, здійснених через Paddle Checkout, StudyCod надає мінімальне 14-денне вікно повернення коштів. Якщо ви надішлете запит на повернення протягом 14 днів з дати покупки, ми оформимо повернення без винятків і без додаткових умов з боку StudyCod.",
+          "For purchases made through Paddle Checkout, StudyCod provides a minimum 14-day refund window. If you submit a refund request within 14 days of purchase, we will issue the refund with no exceptions and no additional conditions imposed by StudyCod."
         ),
         tr(
-          "Для організаційних, шкільних або конкурсних оплат можуть діяти окремі умови договору, інвойсу або письмової домовленості.",
-          "Organization, school, or contest payments may be subject to separate terms in a contract, invoice, or written agreement."
+          "Це мінімальне правило застосовується до платних планів, цифрового доступу, підписок та організаційних або custom/enterprise оплат, якщо вони оплачуються через Paddle Checkout.",
+          "This minimum rule applies to paid plans, digital access, subscriptions, and organization or custom/enterprise purchases when they are paid through Paddle Checkout."
         )
       ]
     },
     {
-      title: tr("4. Як подати запит", "4. How to request a refund"),
+      title: tr("2. Ваші законні права", "2. Your legal rights"),
       paragraphs: [
         tr(
-          `Надішліть запит на ${SUPPORT_EMAIL} або зверніться через підтримку в акаунті. Щоб ми швидше перевірили оплату, додайте email акаунта, дату платежу, суму, назву тарифу або продукту та короткий опис причини.`,
-          `Send a request to ${SUPPORT_EMAIL} or contact support from your account. To help us verify the payment faster, include the account email, payment date, amount, plan or product name, and a short reason.`
+          "Ця політика не обмежує обов'язкові права споживача, які можуть надавати довше право на скасування або повернення відповідно до застосовного законодавства чи умов Paddle Buyer Terms.",
+          "This policy does not limit mandatory consumer rights that may provide a longer cancellation or refund right under applicable law or the Paddle Buyer Terms."
+        )
+      ]
+    },
+    {
+      title: tr("3. Як подати запит", "3. How to request a refund"),
+      paragraphs: [
+        tr(
+          `Надішліть запит на ${SUPPORT_EMAIL} або зверніться через підтримку в акаунті. Щоб ми швидше знайшли платіж, додайте email акаунта, дату платежу, суму, назву тарифу або продукту та ID транзакції Paddle, якщо він у вас є.`,
+          `Send a request to ${SUPPORT_EMAIL} or contact support from your account. To help us find the payment faster, include the account email, payment date, amount, plan or product name, and the Paddle transaction ID if you have it.`
         )
       ],
       bullets: [
         tr("Не надсилайте повний номер банківської картки або CVV.", "Do not send a full card number or CVV."),
-        tr("Якщо платіж зроблено через стороннього провайдера, ми можемо попросити ID транзакції або квитанцію.", "If payment was made through a third-party provider, we may ask for a transaction ID or receipt."),
-        tr("Якщо оплату робила організація, запит має подати уповноважена особа або власник інвойсу.", "If an organization made the payment, the request should come from an authorized person or invoice owner.")
+        tr("Запит у межах 14 днів з дати покупки не потребує пояснення причини.", "A request made within 14 days of purchase does not require you to explain the reason."),
+        tr("Якщо оплату робила організація, запит може подати платник, власник інвойсу або уповноважена контактна особа.", "If an organization made the payment, the request may be submitted by the payer, invoice owner, or authorized contact person.")
       ]
     },
     {
-      title: tr("5. Строки розгляду й зарахування", "5. Review and processing time"),
+      title: tr("4. Обробка повернення", "4. Refund processing"),
       paragraphs: [
         tr(
-          "Ми зазвичай розглядаємо запити протягом 5 робочих днів після отримання достатньої інформації. Якщо повернення схвалено, фактичне зарахування коштів залежить від банку або платіжного провайдера і може тривати додатково кілька робочих днів.",
-          "We usually review requests within 5 business days after receiving enough information. If a refund is approved, the actual posting of funds depends on the bank or payment provider and may take additional business days."
+          "Після отримання запиту, що підпадає під 14-денне вікно, ми передаємо повернення на обробку через Paddle або відповідний платіжний метод. Фактичне зарахування коштів залежить від банку, карткової мережі або платіжного провайдера.",
+          "After receiving a request that falls within the 14-day window, we submit the refund for processing through Paddle or the relevant payment method. The actual posting of funds depends on the bank, card network, or payment provider."
+        )
+      ],
+    },
+    {
+      title: tr("5. Запити після 14 днів", "5. Requests after 14 days"),
+      paragraphs: [
+        tr(
+          "Після мінімального 14-денного періоду ви все одно можете звернутися до нас щодо помилкової, дубльованої або технічно проблемної оплати. Такі запити розглядаються окремо, але це не змінює вашого права на повернення протягом перших 14 днів.",
+          "After the minimum 14-day period, you can still contact us about an accidental, duplicate, or technically problematic payment. These requests are reviewed separately, but this does not change your right to a refund during the first 14 days."
         )
       ]
     },
@@ -68,8 +68,8 @@ export const RefundPolicyPage: React.FC = () => {
       title: tr("6. Скасування підписок або доступу", "6. Subscription or access cancellation"),
       paragraphs: [
         tr(
-          "Якщо для вашого тарифу доступне автоматичне поновлення, його можна скасувати до наступного списання через акаунт або через підтримку. Скасування зупиняє майбутні списання, але не завжди означає повернення за вже оплачений період.",
-          "If automatic renewal is available for your plan, it can be cancelled before the next charge through your account or support. Cancellation stops future charges but does not always mean a refund for an already paid period."
+          "Скасування підписки зупиняє майбутні поновлення або списання. Якщо скасування або запит на повернення подано протягом 14 днів з дати покупки, 14-денне правило повернення застосовується незалежно від скасування.",
+          "Cancelling a subscription stops future renewals or charges. If the cancellation or refund request is submitted within 14 days of purchase, the 14-day refund rule applies regardless of the cancellation."
         )
       ]
     },
@@ -93,8 +93,8 @@ export const RefundPolicyPage: React.FC = () => {
   return <LegalExperience
     current="refunds"
     title={tr("Політика повернення коштів", "Refund Policy")}
-    description={tr("Як StudyCod розглядає повернення, скасування оплат і запити щодо помилкових транзакцій.", "How StudyCod handles refunds, cancellations, and requests related to mistaken transactions.")}
-    updated={tr("Оновлено 13 липня 2026", "Updated July 13, 2026")}
+    description={tr("Мінімальне 14-денне повернення коштів, скасування оплат і порядок подання запиту.", "Minimum 14-day refunds, payment cancellations, and how to submit a request.")}
+    updated={tr("Оновлено 15 липня 2026", "Updated July 15, 2026")}
     sections={sections}
     tr={tr}
     icon={RotateCcw}

@@ -23,8 +23,8 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
-  Terminal,
   Trophy,
+  Terminal,
   Users,
 } from "lucide-react";
 import { Logo } from "../../components/Logo";
@@ -197,69 +197,16 @@ const LegacyPracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
 );
 
 const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
-  <div className="relative overflow-hidden rounded-[30px] border border-[#142017]/10 bg-[#f8faf7] text-left shadow-[0_48px_110px_rgba(21,40,27,0.15),0_9px_28px_rgba(21,40,27,0.07)] dark:border-white/10 dark:bg-[#101814]">
-    <div className="border-b border-[#142017]/10 bg-white/86 px-5 py-4 backdrop-blur dark:border-white/10 dark:bg-white/[.04]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <span className="inline-flex items-center gap-2 rounded-full bg-[#00ff88]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-[#007f48]">
-            <LayoutDashboard className="size-3.5" />
-            Personal tasks
-          </span>
-          <h3 className="mt-3 text-2xl font-bold tracking-[-.045em]">{tr("Тренувальна студія", "Practice studio")}</h3>
-          <p className="mt-1 text-xs leading-5 text-[#65746a] dark:text-[#aab7ad]">{tr("Маршрут, умова, редактор і результат зібрані в одному робочому полотні.", "Route, statement, editor and results live in one workspace canvas.")}</p>
-        </div>
-        <button className="rounded-2xl bg-[#173321] px-4 py-3 text-xs font-bold text-white dark:bg-[#00d978] dark:text-[#062211]">
-          <Plus className="mr-1.5 inline size-3.5" />
-          {tr("Нове завдання", "New task")}
-        </button>
-      </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        {[[tr("Прогрес", "Progress"), "68%"], [tr("Задачі", "Tasks"), "7/10"], [tr("Стан", "Status"), tr("Готово", "Ready")]].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-[#142017]/10 bg-[#f1f6f2] p-3 dark:border-white/10 dark:bg-white/[.045]">
-            <div className="text-[9px] uppercase tracking-[.14em] text-[#7a887e]">{label}</div>
-            <div className="mt-1 text-xl font-bold">{value}</div>
-          </div>
-        ))}
-      </div>
+  <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[#0e1712] p-4 text-left text-[#edf7ef] shadow-[0_48px_110px_rgba(5,25,13,.28)] sm:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
+      <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-2xl bg-[#00ff88]/15 text-[#62ecaa]"><Sparkles className="size-5" /></div><div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#62ecaa]">{tr("Сьогодні", "Today")} · Java</div><h3 className="mt-1 text-xl font-black tracking-[-.04em]">{tr("Твій наступний крок", "Your next step")}</h3></div></div>
+      <button className="rounded-xl border border-white/15 px-3 py-2 text-xs font-bold text-[#c9d9cd]">{tr("Змінити тему", "Change topic")}</button>
     </div>
-    <div className="grid min-h-[520px] grid-cols-[300px_minmax(0,1fr)_330px] gap-0 max-lg:grid-cols-1">
-      <aside className="border-r border-[#142017]/10 bg-white/76 p-4 dark:border-white/10 dark:bg-white/[.035] max-lg:hidden">
-        <div className="mb-3 text-[10px] font-bold uppercase tracking-[.14em] text-[#7a887e]">{tr("Список задач", "Task list")}</div>
-        {[tr("Словник частот", "Frequency map"), tr("Маршрут доставки", "Delivery route"), tr("Контрольний крок", "Control step")].map((title, index) => (
-          <div key={title} className={`mb-2 rounded-2xl border p-3 ${index === 0 ? "border-[#00c96d]/35 bg-[#00ff88]/10" : "border-[#142017]/10 bg-[#f6f8f5] dark:border-white/10 dark:bg-white/[.035]"}`}>
-            <div className="flex items-center justify-between gap-3">
-              <strong className="truncate text-xs">{title}</strong>
-              <span className="size-2 rounded-full bg-[#00c96d]" />
-            </div>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#dfe8e1]"><span className="block h-full rounded-full bg-[#00c96d]" style={{ width: `${index === 0 ? 72 : 35}%` }} /></div>
-          </div>
-        ))}
-      </aside>
-      <main className="min-w-0 grid grid-rows-[auto_1fr] bg-[#f8faf7] dark:bg-[#101814]">
-        <div className="flex items-center gap-2 border-b border-[#142017]/10 bg-white/70 px-4 py-3 text-[11px] font-bold dark:border-white/10 dark:bg-white/[.035]">
-          {[tr("Місія", "Mission"), tr("Підказки", "Hints"), tr("Нотатки", "Notes")].map((item, index) => <span key={item} className={`rounded-xl px-3 py-2 ${index === 0 ? "bg-[#173321] text-white dark:bg-[#edf4ef] dark:text-[#0b120d]" : "text-[#65746a]"}`}>{item}</span>)}
-        </div>
-        <div className="grid grid-cols-2 gap-3 p-4 max-md:grid-cols-1">
-          <section className="rounded-2xl border border-[#142017]/10 bg-white p-4 dark:border-white/10 dark:bg-white/[.04]">
-            <div className="mb-3 text-[10px] font-bold uppercase tracking-[.14em] text-[#7a887e]">{tr("Умова", "Statement")}</div>
-            <h4 className="text-lg font-bold">{tr("Обчисли частоти слів", "Count word frequencies")}</h4>
-            <p className="mt-2 text-xs leading-5 text-[#65746a] dark:text-[#aab7ad]">{tr("Є текст. Поверни три найуживаніші слова у правильному порядку.", "Given text, return the three most frequent words in order.")}</p>
-            <div className="mt-4 rounded-xl bg-[#f1f6f2] p-3 font-mono text-[10px] dark:bg-white/[.045]">input → "to be or not to be"</div>
-          </section>
-          <section className="overflow-hidden rounded-2xl border border-[#142017]/10 bg-[#101713] dark:border-white/10">
-            <div className="border-b border-white/10 px-4 py-3 text-[10px] text-[#aab7ad]">main.py</div>
-            <pre className="m-0 max-w-full overflow-x-auto whitespace-pre-wrap break-words p-4 font-mono text-[clamp(10px,0.8vw,12px)] leading-6 text-[#dbe7df]"><span className={codeColors.keyword}>from</span> collections <span className={codeColors.keyword}>import</span> Counter{"\n\n"}words = text.split(){"\n"}top = Counter(words).most_common(3)</pre>
-          </section>
-        </div>
-      </main>
-      <aside className="border-l border-[#142017]/10 bg-white/82 p-4 dark:border-white/10 dark:bg-white/[.035] max-lg:hidden">
-        <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.14em] text-[#7a887e]"><Terminal className="size-3.5" />Output</div>
-        <div className="rounded-2xl bg-[#101713] p-4 font-mono text-[10px] leading-6 text-[#dbe7df]">✓ tests 8/8{"\n"}grade: 96{"\n"}time: 23 ms</div>
-        <div className="mt-3 rounded-2xl bg-[#00ff88]/10 p-4 text-xs leading-5 text-[#315341] dark:text-[#bde9cd]">
-          {tr("Система показує результат без окремого старого rail-меню.", "The result is visible without the old separate rail menu.")}
-        </div>
-      </aside>
+    <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,.65fr)]">
+      <section className="rounded-[26px] border border-white/10 bg-[#142219] p-5 sm:p-7"><div className="flex items-center justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-[.18em] text-[#ffb454]">{tr("Поточний фокус", "Current focus")}</span><span className="rounded-full bg-[#00ff88]/12 px-3 py-1 text-[10px] font-bold text-[#62ecaa]">{tr("У процесі", "In progress")}</span></div><h4 className="mt-5 max-w-xl text-3xl font-black tracking-[-.065em] sm:text-4xl">{tr("Вступ до Java: типи, які мають сенс", "Java foundations: types that make sense")}</h4><p className="mt-3 max-w-xl text-sm leading-6 text-[#b7c8bb]">{tr("Коротка теорія, одна практика і зрозумілий результат. Платформа веде тебе до наступної дії, а не до ще одного меню.", "A short concept, one practice and a clear result. The platform guides your next action instead of adding another menu.")}</p><div className="mt-6 flex flex-wrap items-center gap-3"><button className="rounded-xl bg-[#00ff88] px-4 py-3 text-xs font-black text-[#062211]"><Play className="mr-1.5 inline size-3.5 fill-current" />{tr("Продовжити", "Continue")}</button><span className="text-xs text-[#9eb2a3]">{tr("12 хв залишилось", "12 min left")}</span></div><div className="mt-7 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full w-[68%] rounded-full bg-[#00ff88]" /></div><div className="mt-2 flex justify-between text-[10px] font-bold text-[#8ea392]"><span>{tr("Прогрес теми", "Topic progress")}</span><span>68%</span></div></section>
+      <aside className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1"><div className="rounded-[26px] border border-white/10 bg-[#17271d] p-5"><div className="flex items-center justify-between text-xs text-[#b7c8bb]"><span>{tr("Результат", "Result")}</span><BarChart3 className="size-4 text-[#62ecaa]" /></div><div className="mt-3 text-4xl font-black tracking-[-.07em]">86<span className="ml-1 text-base text-[#8fa598]">/100</span></div><div className="mt-3 text-xs text-[#9eb2a3]">{tr("+8 за останню практику", "+8 from the last practice")}</div></div><div className="rounded-[26px] border border-[#ff8c00]/25 bg-[#241d11] p-5"><div className="flex items-center gap-2 text-xs font-bold text-[#ffb454]"><Flame className="size-4" />{tr("Ритм навчання", "Learning rhythm")}</div><div className="mt-3 text-2xl font-black">4 {tr("дні", "days")}</div><div className="mt-1 text-xs text-[#c8b38c]">{tr("Ще одна коротка практика сьогодні", "One more short practice today")}</div></div></aside>
     </div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-white/10 bg-[#121e16] p-4"><BookOpen className="size-4 text-[#62ecaa]" /><div className="mt-4 text-sm font-black">{tr("Теорія", "Theory")}</div><div className="mt-1 text-xs text-[#8fa598]">{tr("3 поняття · 8 хв", "3 concepts · 8 min")}</div></div><div className="rounded-2xl border border-white/10 bg-[#121e16] p-4"><Code2 className="size-4 text-[#ffb454]" /><div className="mt-4 text-sm font-black">{tr("Практика", "Practice")}</div><div className="mt-1 text-xs text-[#8fa598]">{tr("1 задача · автоперевірка", "1 task · auto-check")}</div></div><div className="rounded-2xl border border-white/10 bg-[#121e16] p-4"><Trophy className="size-4 text-[#ffd93d]" /><div className="mt-4 text-sm font-black">{tr("Наступна ціль", "Next milestone")}</div><div className="mt-1 text-xs text-[#8fa598]">{tr("Закрий тему на 80%", "Reach 80% in this topic")}</div></div></div>
   </div>
 );
 
