@@ -320,6 +320,7 @@ export interface TestResult {
 
 export interface LearningFirstFailure {
   testPublicIndex: number;
+  testId?: number;
   inputPreview: string;
   expectedPreview: string;
   actualPreview: string;
@@ -337,6 +338,15 @@ export interface LearningFeedback {
   verdict?: string | null;
   firstFailure?: LearningFirstFailure | null;
   analysis?: LearningFailureAnalysis | null;
+}
+
+export interface LearningAttemptSummary {
+  id: number;
+  outcome: "failed" | "solved";
+  failureCategory?: string | null;
+  firstFailedTestId?: number | null;
+  highestHintLevelShown?: number;
+  solvedAfterFailure?: boolean;
 }
 export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP", turnstileToken?: string): Promise<{
   token?: string;
@@ -701,6 +711,7 @@ export interface SubmitCodeResponse {
     }> | null;
   };
   learningFeedback?: LearningFeedback;
+  learningAttempt?: LearningAttemptSummary | null;
   submissionMeta?: SubmissionMeta;
 }
 export async function submitCode(taskId: number, code: string, binding?: SubmissionBinding): Promise<SubmitCodeResponse> {
@@ -738,6 +749,7 @@ export interface CompleteTaskResponse {
     }> | null;
   };
   learningFeedback?: LearningFeedback;
+  learningAttempt?: LearningAttemptSummary | null;
   submissionMeta?: SubmissionMeta;
 }
 export async function completeTask(taskId: number, code: string, binding?: SubmissionBinding): Promise<CompleteTaskResponse> {

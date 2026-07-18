@@ -37,6 +37,7 @@ import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath, pickEntryContent } from "../utils/multiFileSubmission";
 import { buildLearningFirstFailure } from "../services/learning/firstFailure";
+import { recordLearningOutcome } from "../services/learning/failureToSkillEngine";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
 import { env } from "../env";
@@ -3832,6 +3833,7 @@ tasksRouter.post(
   let passedTests = 0;
   let hintsForUser: string[] = [];
   const learningFeedbackCandidates: Array<{
+    testId?: number;
     passed: boolean;
     isPublic: boolean;
     input?: string;
@@ -3904,6 +3906,7 @@ tasksRouter.post(
       const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
       for (const t of judgedTests) {
         learningFeedbackCandidates.push({
+          testId: t.id,
           passed: false,
           isPublic: true,
           input: t.input || "",
@@ -3940,6 +3943,7 @@ tasksRouter.post(
           total += effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (t.points || 1);
         }
         learningFeedbackCandidates.push({
+          testId: t.id,
           passed,
           isPublic: true,
           input: t.input || "",
@@ -4071,6 +4075,23 @@ tasksRouter.post(
     verdict: workerRes?.verdict ?? null,
     tests: learningFeedbackCandidates
   });
+  let learningAttempt: Awaited<ReturnType<typeof recordLearningOutcome>> | null = null;
+  try {
+    learningAttempt = await recordLearningOutcome({
+      principalType: "USER",
+      principalId: req.userId,
+      taskKind: "PERSONAL",
+      taskId: task.id,
+      topicId: task.topic?.id ?? null,
+      topicLabel: task.topic?.title ?? null,
+      submissionId: String(savedGrade.id),
+      outcome: passedTests >= judgedTests.length ? "SOLVED" : "FAILED",
+      failureCategory: learningFirstFailure?.errorKind ?? (workerRes?.verdict === "CE" ? "compile" : null),
+      firstFailedTestId: learningFirstFailure?.testId ?? null,
+    });
+  } catch (error: any) {
+    logger.warn("[learning] personal outcome persistence failed", { requestId: req.requestId, error: error?.message });
+  }
   return res.json({
     grade: {
       id: savedGrade.id,
@@ -4094,7 +4115,17 @@ tasksRouter.post(
     learningFeedback: {
       verdict: workerRes?.verdict ?? null,
       firstFailure: learningFirstFailure
-    }
+    },
+    learningAttempt: learningAttempt
+      ? {
+          id: learningAttempt.attempt.id,
+          outcome: learningAttempt.attempt.outcome,
+          failureCategory: learningAttempt.attempt.failureCategory ?? null,
+          firstFailedTestId: learningAttempt.attempt.firstFailedTestId ?? null,
+          highestHintLevelShown: learningAttempt.attempt.highestHintLevelShown ?? 0,
+          solvedAfterFailure: learningAttempt.solvedAfterFailure,
+        }
+      : null,
   });
 }
 );

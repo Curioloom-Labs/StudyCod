@@ -41,6 +41,7 @@ import {
 } from "../services/webTaskValidationService";
 import { normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
+import { getSkillEvidence, recordLearningEvent, recordLearningOutcome } from "../services/learning/failureToSkillEngine";
 
 const libraryRouter = Router();
 
@@ -179,6 +180,122 @@ const theoryRepo = () => AppDataSource.getRepository(TaskTheory);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
+
+function learningPrincipal(req: AuthRequest): { principalType: "USER" | "STUDENT"; principalId: number } | null {
+  if (req.userType === "STUDENT" && req.studentId) return { principalType: "STUDENT", principalId: req.studentId };
+  if (req.userId) return { principalType: "USER", principalId: req.userId };
+  return null;
+}
+
+async function persistLibraryLearningOutcome(params: {
+  req: AuthRequest;
+  task: LibraryTask;
+  outcome: "FAILED" | "SOLVED";
+  submissionId?: string | null;
+  sourceAttemptId?: number | null;
+  failureCategory?: string | null;
+  firstFailedTestId?: number | null;
+}) {
+  const principal = learningPrincipal(params.req);
+  if (!principal) return null;
+  try {
+    return await recordLearningOutcome({
+      ...principal,
+      taskKind: "LIBRARY",
+      taskId: params.task.id,
+      topicLabel: String((params.task as any).section ?? (Array.isArray((params.task as any).tags) ? (params.task as any).tags[0] : "") ?? "").trim() || null,
+      submissionId: params.submissionId ?? null,
+      sourceAttemptId: params.sourceAttemptId ?? null,
+      outcome: params.outcome,
+      failureCategory: params.failureCategory ?? null,
+      firstFailedTestId: params.firstFailedTestId ?? null,
+    });
+  } catch (error: any) {
+    // Learning history is additive and must never make a judge result fail.
+    logger.warn("[learning] library outcome persistence failed", { requestId: params.req.requestId, error: error?.message });
+    return null;
+  }
+}
+
+function buildLibraryFirstFailure(params: {
+  verdict?: string | null;
+  compileErrorKind?: string | null;
+  compileError?: string | null;
+  publicResults: Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null; error?: string | null }>;
+}) {
+  const first = params.publicResults.find((result) => !result.passed);
+  if (first) {
+    const publicIndex = params.publicResults.indexOf(first) + 1;
+    return {
+      testPublicIndex: publicIndex,
+      inputPreview: "",
+      expectedPreview: "",
+      actualPreview: "",
+      testId: first.testId,
+      errorKind: first.errorKind ?? null,
+      verdict: first.verdict ?? params.verdict ?? null,
+    };
+  }
+  if (params.compileError || String(params.verdict ?? "").toUpperCase() === "CE") {
+    return {
+      testPublicIndex: 0,
+      inputPreview: "",
+      expectedPreview: "",
+      actualPreview: "",
+      errorKind: params.compileErrorKind || "compile",
+      verdict: "CE",
+    };
+  }
+  return null;
+}
+
+libraryRouter.get("/learning/evidence", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const principal = learningPrincipal(req);
+    if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const evidence = await getSkillEvidence(principal.principalType, principal.principalId);
+    return res.json(evidence);
+  } catch (error: any) {
+    logger.warn("[learning] evidence read failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+libraryRouter.post("/learning/events", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const principal = learningPrincipal(req);
+    if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const schema = z.object({
+      eventType: z.enum(["coding_attempt_failed", "hint_viewed", "retry_started", "solved_after_failure", "recommended_task_opened"]),
+      taskKind: z.enum(["LIBRARY", "PERSONAL", "EDU", "UNKNOWN"]).default("LIBRARY"),
+      taskId: z.coerce.number().int().positive().nullable().optional(),
+      learningAttemptId: z.coerce.number().int().positive().nullable().optional(),
+      failureCategory: z.string().max(64).nullable().optional(),
+      hintLevel: z.coerce.number().int().min(1).max(3).nullable().optional(),
+      clientEventId: z.string().max(128).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    const value = parsed.data;
+    const dedupeKey = value.clientEventId
+      ? `client:${principal.principalType}:${principal.principalId}:${value.clientEventId}`
+      : `${value.eventType}:${principal.principalType}:${principal.principalId}:${value.taskKind}:${value.taskId ?? "none"}:${value.learningAttemptId ?? "none"}:${value.hintLevel ?? "none"}`;
+    const event = await recordLearningEvent({
+      ...principal,
+      eventType: value.eventType,
+      taskKind: value.taskKind,
+      taskId: value.taskId ?? null,
+      learningAttemptId: value.learningAttemptId ?? null,
+      failureCategory: value.failureCategory ?? null,
+      hintLevel: value.hintLevel ?? null,
+      dedupeKey,
+    });
+    return res.status(event ? 201 : 202).json({ ok: true, eventId: event?.id ?? null, deduped: event == null });
+  } catch (error: any) {
+    logger.warn("[learning] event write failed", { requestId: req.requestId, error: error?.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
 
 type LibraryTaskQuality = {
   attempts: number;
@@ -1251,6 +1368,7 @@ libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMid
     const rawMaxScore = check.maxScore > 0 ? check.maxScore : check.totalRules;
     const normalizedScore = normalizeScoreTo100(check.score, rawMaxScore);
 
+    let sourceAttemptId: number | null = null;
     if (req.userId) {
       let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
       const serialized = JSON.stringify({ mode: "WEB", version: 1, files });
@@ -1272,8 +1390,20 @@ libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMid
       attempt.lastTestsTotal = check.totalRules;
       attempt.submissionsCount = (attempt.submissionsCount ?? 0) + 1;
       attempt.lastCheckedAt = new Date();
-      await attemptRepo().save(attempt);
+      const savedAttempt = await attemptRepo().save(attempt);
+      sourceAttemptId = savedAttempt.id;
     }
+
+    const firstFailed = check.results.findIndex((result) => !result.passed);
+    const learningOutcome = await persistLibraryLearningOutcome({
+      req,
+      task,
+      outcome: check.passed ? "SOLVED" : "FAILED",
+      submissionId: `library_web_${task.id}_${Date.now()}`,
+      sourceAttemptId,
+      failureCategory: check.passed ? null : "web_rule",
+      firstFailedTestId: firstFailed >= 0 ? firstFailed + 1 : null,
+    });
 
     return res.json({
       taskMode: "WEB",
@@ -1287,7 +1417,17 @@ libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMid
         passed: r.passed,
         verdict: r.passed ? "AC" : "WA",
         errorKind: r.passed ? null : "web_rule"
-      }))
+      })),
+      learningAttempt: learningOutcome
+        ? {
+            id: learningOutcome.attempt.id,
+            outcome: learningOutcome.attempt.outcome,
+            failureCategory: learningOutcome.attempt.failureCategory ?? null,
+            firstFailedTestId: learningOutcome.attempt.firstFailedTestId ?? null,
+            highestHintLevelShown: learningOutcome.attempt.highestHintLevelShown ?? 0,
+            solvedAfterFailure: learningOutcome.solvedAfterFailure,
+          }
+        : null,
     });
   } catch (error: any) {
     if (error instanceof HttpError) {
@@ -1640,6 +1780,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const normalizedScore = normalizeScoreTo100(scoringScore, scoringMaxScore);
 
     // Upsert attempt (draft + last check summary).
+    let sourceAttemptId: number | null = null;
     if (req.userId) {
       try {
         let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
@@ -1669,9 +1810,27 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         attempt.lastTestsTotal = tests.length;
         attempt.submissionsCount = (attempt.submissionsCount ?? 0) + 1;
         attempt.lastCheckedAt = new Date();
-        await attemptRepo().save(attempt);
+        const savedAttempt = await attemptRepo().save(attempt);
+        sourceAttemptId = savedAttempt.id;
       } catch {}
     }
+
+    const firstFailure = buildLibraryFirstFailure({
+      verdict: workerRes?.verdict ?? null,
+      compileErrorKind,
+      compileError,
+      publicResults,
+    });
+    const solved = String(workerRes?.verdict ?? "").toUpperCase() === "AC";
+    const learningOutcome = await persistLibraryLearningOutcome({
+      req,
+      task,
+      outcome: solved ? "SOLVED" : "FAILED",
+      submissionId: workerReq.submission_id,
+      sourceAttemptId,
+      failureCategory: firstFailure?.errorKind ?? (compileError ? (compileErrorKind || "compile") : null),
+      firstFailedTestId: firstFailure?.testId ?? null,
+    });
 
     return res.json({
       verdict: workerRes?.verdict ?? null,
@@ -1691,7 +1850,21 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         passed: hiddenPassed,
         total: tests.filter(isJudge).length
       },
-      publicTestResults: publicResults
+      publicTestResults: publicResults,
+      learningFeedback: {
+        verdict: workerRes?.verdict ?? null,
+        firstFailure,
+      },
+      learningAttempt: learningOutcome
+        ? {
+            id: learningOutcome.attempt.id,
+            outcome: learningOutcome.attempt.outcome,
+            failureCategory: learningOutcome.attempt.failureCategory ?? null,
+            firstFailedTestId: learningOutcome.attempt.firstFailedTestId ?? null,
+            highestHintLevelShown: learningOutcome.attempt.highestHintLevelShown ?? 0,
+            solvedAfterFailure: learningOutcome.solvedAfterFailure,
+          }
+        : null,
     });
   } catch (error: any) {
     logger.error("[library] POST /tasks/:id/check error", { requestId: req.requestId, err: error });

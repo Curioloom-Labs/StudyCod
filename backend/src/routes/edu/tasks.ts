@@ -31,6 +31,7 @@ import { TopicNew } from "../../entities/TopicNew";
 import { IsNull } from "typeorm";
 import { buildLearningFirstFailure } from "../../services/learning/firstFailure";
 import { buildLearningFailureAnalysis } from "../../services/learning/failureAnalysis";
+import { recordLearningOutcome } from "../../services/learning/failureToSkillEngine";
 import { EduHintFeedback, EDU_HINT_FEEDBACK_REASON_CODES, type EduHintFeedbackReasonCode } from "../../entities/EduHintFeedback";
 import { env } from "../../env";
 import {
@@ -1309,6 +1310,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     let maxScore = 0;
     let hintsForUser: string[] = [];
     const learningFeedbackCandidates: Array<{
+      testId?: number;
       passed: boolean;
       isPublic: boolean;
       input?: string;
@@ -1380,6 +1382,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
         const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
         for (const t of tests) {
           learningFeedbackCandidates.push({
+            testId: t.id,
             passed: false,
             isPublic: t.isHidden !== true,
             input: t.input || "",
@@ -1409,6 +1412,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
             passedScore += t.points || 1;
           }
           learningFeedbackCandidates.push({
+            testId: t.id,
             passed: !!isPassed,
             isPublic: t.isHidden !== true,
             input: t.input || "",
@@ -1555,6 +1559,24 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       tests: learningFeedbackCandidates
     });
 
+    let learningAttempt: Awaited<ReturnType<typeof recordLearningOutcome>> | null = null;
+    try {
+      learningAttempt = await recordLearningOutcome({
+        principalType: "STUDENT",
+        principalId: studentId,
+        taskKind: "EDU",
+        taskId,
+        topicId: topicTask.topic?.id ?? null,
+        topicLabel: topicTask.topic?.title ?? null,
+        submissionId: String(savedGrade.id),
+        outcome: passed >= tests.length ? "SOLVED" : "FAILED",
+        failureCategory: learningFirstFailure?.errorKind ?? (workerRes?.verdict === "CE" ? "compile" : null),
+        firstFailedTestId: learningFirstFailure?.testId ?? null,
+      });
+    } catch (error: any) {
+      logger.warn("[learning] edu outcome persistence failed", { requestId: req.requestId, error: error?.message });
+    }
+
     const learningFailureAnalysis = buildLearningFailureAnalysis({
       verdict: workerRes?.verdict ?? null,
       firstFailure: learningFirstFailure,
@@ -1594,7 +1616,17 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
         verdict: workerRes?.verdict ?? null,
         firstFailure: learningFirstFailure,
         analysis: learningFailureAnalysis
-      }
+      },
+      learningAttempt: learningAttempt
+        ? {
+            id: learningAttempt.attempt.id,
+            outcome: learningAttempt.attempt.outcome,
+            failureCategory: learningAttempt.attempt.failureCategory ?? null,
+            firstFailedTestId: learningAttempt.attempt.firstFailedTestId ?? null,
+            highestHintLevelShown: learningAttempt.attempt.highestHintLevelShown ?? 0,
+            solvedAfterFailure: learningAttempt.solvedAfterFailure,
+          }
+        : null,
     });
   } catch (error: any) {
     const telemetryErrorCode = typeof error?.message === "string" && error.message.trim()
@@ -1853,6 +1885,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     let maxScore = 0;
     let hintsForUser: string[] = [];
     const learningFeedbackCandidates: Array<{
+      testId?: number;
       passed: boolean;
       isPublic: boolean;
       input?: string;
@@ -1924,6 +1957,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         const compileErr = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
         for (const t of tests) {
           learningFeedbackCandidates.push({
+            testId: t.id,
             passed: false,
             isPublic: t.isHidden !== true,
             input: t.input || "",
@@ -1953,6 +1987,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
             passedScore += t.points || 1;
           }
           learningFeedbackCandidates.push({
+            testId: t.id,
             passed: !!isPassed,
             isPublic: t.isHidden !== true,
             input: t.input || "",
@@ -2183,6 +2218,24 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       tests: learningFeedbackCandidates
     });
 
+    let learningAttempt: Awaited<ReturnType<typeof recordLearningOutcome>> | null = null;
+    try {
+      learningAttempt = await recordLearningOutcome({
+        principalType: "STUDENT",
+        principalId: studentId,
+        taskKind: "EDU",
+        taskId,
+        topicId: topicTask.topic?.id ?? null,
+        topicLabel: topicTask.topic?.title ?? null,
+        submissionId: String(saved.id),
+        outcome: passed >= tests.length ? "SOLVED" : "FAILED",
+        failureCategory: learningFirstFailure?.errorKind ?? (workerRes?.verdict === "CE" ? "compile" : null),
+        firstFailedTestId: learningFirstFailure?.testId ?? null,
+      });
+    } catch (error: any) {
+      logger.warn("[learning] edu completion persistence failed", { requestId: req.requestId, error: error?.message });
+    }
+
     const learningFailureAnalysis = buildLearningFailureAnalysis({
       verdict: workerRes?.verdict ?? null,
       firstFailure: learningFirstFailure,
@@ -2231,7 +2284,17 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         verdict: workerRes?.verdict ?? null,
         firstFailure: learningFirstFailure,
         analysis: learningFailureAnalysis
-      }
+      },
+      learningAttempt: learningAttempt
+        ? {
+            id: learningAttempt.attempt.id,
+            outcome: learningAttempt.attempt.outcome,
+            failureCategory: learningAttempt.attempt.failureCategory ?? null,
+            firstFailedTestId: learningAttempt.attempt.firstFailedTestId ?? null,
+            highestHintLevelShown: learningAttempt.attempt.highestHintLevelShown ?? 0,
+            solvedAfterFailure: learningAttempt.solvedAfterFailure,
+          }
+        : null,
     });
   } catch (error: any) {
     const telemetryErrorCode = typeof error?.message === "string" && error.message.trim()

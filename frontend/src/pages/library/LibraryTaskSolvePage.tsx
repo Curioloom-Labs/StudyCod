@@ -16,6 +16,7 @@ import { useProctoring } from "../../hooks/useProctoring";
 import { scoreProctoring, recordConceptReview } from "../../lib/api/tasks";
 import { saveSolveReplay, type ReplaySnapshot } from "../../lib/api/learning";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
+import { FailureRecoveryCard } from "../../components/FailureRecoveryCard";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
@@ -23,6 +24,7 @@ import { useMediaQuery } from "../../utils/useMediaQuery";
 import {
   checkLibraryWebTask,
   checkLibraryTask,
+  listApprovedLibraryTasks,
   getLibraryTask,
   getLibraryTaskByKey,
   getLibraryTaskAttempt,
@@ -30,6 +32,7 @@ import {
   runLibraryTask,
   saveLibraryWebTaskDraft,
   saveLibraryTaskDraft,
+  recordLearningEvent,
   type CodeFile,
   type LibraryCheckResult,
   type LibraryTaskListItem,
@@ -87,6 +90,24 @@ const getTemplateForLanguage = (
 function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
   return JUDGE_ENTRY_FILES[lang] ?? "Main.java";
 }
+
+const LearningSuccessCard: React.FC<{
+  topic: string;
+  testsPassed: number;
+  testsTotal: number;
+  solvedAfterFailure: boolean;
+  failureCategory?: string | null;
+  nextTask?: LibraryTaskListItem | null;
+  onNextTask: () => void;
+}> = ({ topic, testsPassed, testsTotal, solvedAfterFailure, failureCategory, nextTask, onNextTask }) => {
+  const { i18n } = useTranslation();
+  const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  return <div className="mt-4 rounded-2xl border border-[#00d978]/25 bg-[#00d978]/[.07] p-4 text-[#e7f7eb]">
+    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#72edb0]" /><div><div className="text-sm font-bold text-[#72edb0]">{tr(solvedAfterFailure ? "Навичку закріплено" : "Рішення перевірено", solvedAfterFailure ? "Skill reinforced" : "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-[#b9cfbe]">{tr(solvedAfterFailure ? "Ти виправив рішення після невдалої спроби й пройшов усі перевірки." : "Рішення пройшло всі доступні перевірки; це ще не claim про mastery.", solvedAfterFailure ? "You fixed the solution after a failed attempt and passed every check." : "The solution passed all available checks; this is not a mastery claim.")} {testsPassed}/{testsTotal}</p></div></div>
+    <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr(solvedAfterFailure ? "Закріплена тема" : "Поточна тема", solvedAfterFailure ? "Topic reinforced" : "Current topic")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Доказ", "Evidence")}</span><strong className="mt-1 block text-sm">{solvedAfterFailure ? tr(`Подолано: ${failureCategory || "помилка"}`, `Overcame: ${failureCategory || "failure"}`) : tr("Evidence collected", "Evidence collected")}</strong></div></div>
+    {nextTask ? <button type="button" onClick={onNextTask} className="mt-4 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] p-3 text-left transition hover:bg-white/[.09]"><span><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Наступна рекомендована задача", "Next recommended task")}</span><strong className="mt-1 block text-sm">{nextTask.title}</strong></span><ArrowLeft className="size-4 rotate-180 text-[#72edb0]" /></button> : <p className="mt-4 text-xs text-[#9fb5a5]">{tr("Відкрий бібліотеку, щоб обрати наступну задачу з цієї теми.", "Open the library to choose the next task from this topic.")}</p>}
+  </div>;
+};
 
 function normalizeFiles(fs: CodeFile[]): CodeFile[] {
   const m = new Map<string, string>();
@@ -316,6 +337,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<LibraryCheckResult | null>(null);
+  const [nextTask, setNextTask] = useState<LibraryTaskListItem | null>(null);
   const [lastReplayId, setLastReplayId] = useState<number | null>(null);
   const [actionRecovery, setActionRecovery] = useState<{
     tone: "error" | "warning";
@@ -324,6 +346,34 @@ export const LibraryTaskSolvePage: React.FC = () => {
   } | null>(null);
   const [showCompactStatuses, setShowCompactStatuses] = useState(false);
   const [compactFailedOnly, setCompactFailedOnly] = useState(true);
+
+  const firstFailedTest = useMemo(() => {
+    if (!checkResult) return null;
+    const stored = checkResult.learningFeedback?.firstFailure;
+    if (stored) return { testId: stored.testId, errorKind: stored.errorKind, verdict: stored.verdict };
+    const detailed = (checkResult.publicTestResults || []).find((item) => !item.passed);
+    if (detailed) return { testId: detailed.testId, errorKind: detailed.errorKind, verdict: detailed.verdict };
+    const compact = (checkResult.publicTestResultsCompact || []).find((item) => !item.passed);
+    if (compact) return { testId: compact.testId, errorKind: compact.errorKind, verdict: compact.verdict };
+    if (checkResult.compileError || checkResult.verdict === "CE") return { errorKind: checkResult.compileErrorKind || "compile", verdict: "CE" };
+    return null;
+  }, [checkResult]);
+
+  const loadNextRecommendedTask = async () => {
+    if (!task) return;
+    try {
+      const result = await listApprovedLibraryTasks({ judgeLanguage, page: 1, pageSize: 50 });
+      const currentTags = new Set([String(task.section ?? "").toLowerCase(), ...(task.tags ?? []).map((tag) => String(tag).toLowerCase())].filter(Boolean));
+      const candidates = (result.tasks || []).filter((candidate) => candidate.id !== task.id && !candidate.attempt?.solved);
+      const match = candidates.find((candidate) => {
+        const candidateTags = [String(candidate.section ?? "").toLowerCase(), ...(candidate.tags ?? []).map((tag) => String(tag).toLowerCase())];
+        return candidateTags.some((tag) => currentTags.has(tag));
+      });
+      setNextTask(match ?? candidates[0] ?? null);
+    } catch {
+      setNextTask(null);
+    }
+  };
 
   const isWebTask = task?.taskMode === "WEB";
   const toWebPreviewFiles = (): WebTaskFile[] => {
@@ -702,6 +752,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
     }
     setChecking(true);
     setCheckResult(null);
+    setNextTask(null);
     setActionRecovery(null);
     try {
       if (isPreview()) {
@@ -737,6 +788,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
         : { code, language: judgeLanguage, compiler: judgeCompiler };
       const r = await checkLibraryTask(effectiveTaskId, payload);
       setCheckResult(r);
+      if (String(r.verdict ?? "").toUpperCase() === "AC") void loadNextRecommendedTask();
       setShowCompactStatuses(false);
       setCompactFailedOnly(true);
       setResultsTab("check");
@@ -984,6 +1036,36 @@ export const LibraryTaskSolvePage: React.FC = () => {
                 <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-[.14em] text-[#83a18d]">{checkResult ? tr("Результат перевірки", "Check result") : tr("Останній запуск", "Latest run")}</p>{checkResult && <span className={`rounded-full px-3 py-1 text-xs font-bold ${String(checkResult.verdict).toUpperCase() === "AC" ? "bg-[#00ff88]/10 text-[#72edb0]" : "bg-[#ff6b9d]/10 text-[#ff9aba]"}`}>{checkResult.verdict} · {checkResult.testsPassed}/{checkResult.testsTotal}</span>}</div>
                 {checkResult?.compileError ? <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-[#ff9aba]">{checkResult.compileError}</pre> : <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-[#c8d6cc]">{runResult ? (runResult.stdout || runResult.stderr || tr("Програма завершилася без виводу.", "Program finished without output.")) : tr("Запусти код або перевір рішення — результат з’явиться тут.", "Run or check the solution — results appear here.")}</pre>}
                 {checkResult && <div className="mt-3 flex gap-4 text-xs text-[#91a097]"><span>{tr("Бали", "Score")}: {checkResult.score}/{checkResult.maxScore}</span><span>{tr("Тести", "Tests")}: {checkResult.testsPassed}/{checkResult.testsTotal}</span></div>}
+                {checkResult && String(checkResult.verdict ?? "").toUpperCase() === "AC" ? <LearningSuccessCard
+                  topic={task.section || task.tags?.[0] || tr("практична тема", "the practice topic")}
+                  testsPassed={checkResult.testsPassed}
+                  testsTotal={checkResult.testsTotal}
+                  solvedAfterFailure={Boolean(checkResult.learningAttempt?.solvedAfterFailure)}
+                  failureCategory={checkResult.learningAttempt?.failureCategory}
+                  nextTask={nextTask}
+                  onNextTask={() => {
+                    if (!nextTask) return;
+                    void recordLearningEvent({ eventType: "recommended_task_opened", taskId: nextTask.id, taskKind: "LIBRARY" }).catch(() => undefined);
+                    const prefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve/" : "/library/solve/";
+                    navigate(`${prefix}${nextTask.id}`);
+                  }}
+                /> : checkResult ? <FailureRecoveryCard
+                  verdict={checkResult.verdict}
+                  testsPassed={checkResult.testsPassed}
+                  testsTotal={checkResult.testsTotal}
+                  firstFailure={firstFailedTest}
+                  compileError={checkResult.compileError}
+                  compileErrorKind={checkResult.compileErrorKind}
+                  taskId={task.id}
+                  taskKind="LIBRARY"
+                  learningAttemptId={checkResult.learningAttempt?.id ?? null}
+                  failureCategory={checkResult.learningAttempt?.failureCategory ?? firstFailedTest?.errorKind ?? null}
+                  highestHintLevelShown={checkResult.learningAttempt?.highestHintLevelShown ?? 0}
+                  onTryAgain={() => {
+                    setCheckResult(null);
+                    scrollToSection("task");
+                  }}
+                /> : null}
               </section>
             </main>
           </div>

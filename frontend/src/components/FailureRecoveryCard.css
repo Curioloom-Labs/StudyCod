@@ -1,6 +1,6 @@
 .failure-recovery-card {
   border: 1px solid var(--border);
-  background: var(--bg-code);
+  background: #151d17;
   padding: 12px;
 }
 
