@@ -89,6 +89,25 @@ export type LibraryTaskAttemptSummary = {
   lastCheckedAt: string | null;
 };
 
+export type LearningAttemptSummary = {
+  id: number;
+  outcome: "FAILED" | "SOLVED";
+  failureCategory: string | null;
+  firstFailedTestId: number | null;
+  highestHintLevelShown: number;
+  solvedAfterFailure: boolean;
+};
+
+export type LearningSkillEvidence = {
+  practicedTasks: number;
+  solvedTasks: number;
+  solvedAfterFailure: number;
+  revisitedSolved: number;
+  overcomeCategories: Array<{ name: string; tasks: number }>;
+  topics: Array<{ name: string; practiced: number; solved: number; improving: boolean }>;
+  recentSkills: Array<{ taskId: number; topic: string | null; category: string | null; outcome: "Evidence collected"; createdAt: string }>;
+};
+
 export type LibraryTaskListItem = {
   id: number;
   problemCode?: string | null;
@@ -283,7 +302,41 @@ export type LibraryCheckResult = {
     error?: string | null;
     errorKind?: string | null;
   }>;
+  learningFeedback?: {
+    verdict?: string | null;
+    firstFailure?: {
+      testId?: number;
+      errorKind?: string | null;
+      verdict?: string | null;
+    } | null;
+  };
+  learningAttempt?: LearningAttemptSummary | null;
 };
+
+export type LearningEventType =
+  | "coding_attempt_failed"
+  | "hint_viewed"
+  | "retry_started"
+  | "solved_after_failure"
+  | "recommended_task_opened";
+
+export async function getMyLearningEvidence(): Promise<LearningSkillEvidence> {
+  const res = await api.get("/library/learning/evidence");
+  return res.data as LearningSkillEvidence;
+}
+
+export async function recordLearningEvent(payload: {
+  eventType: LearningEventType;
+  taskId?: number | null;
+  taskKind?: "LIBRARY" | "PERSONAL" | "EDU" | "UNKNOWN";
+  learningAttemptId?: number | null;
+  failureCategory?: string | null;
+  hintLevel?: number | null;
+  clientEventId?: string;
+}): Promise<{ ok: boolean; eventId: number | null; deduped?: boolean }> {
+  const res = await api.post("/library/learning/events", payload);
+  return res.data as { ok: boolean; eventId: number | null; deduped?: boolean };
+}
 
 export async function listApprovedLibraryTasks(params?: {
   lang?: LibraryTaskLang;

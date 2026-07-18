@@ -34,12 +34,12 @@ const CountUp: React.FC<{ value: number; decimals?: number; className?: string }
 import { getEmailSubscription, updateEmailSubscription, updateProfile } from "../../lib/api/profile";
 import { prepareGoogleLinkSession } from "../../lib/api/auth";
 import { listGrades } from "../../lib/api/grades";
-import { listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem } from "../../lib/api/library";
+import { getMyLearningEvidence, listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem, type LearningSkillEvidence } from "../../lib/api/library";
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import { AURORA_ENABLED } from "../../lib/uiMode";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { PremiumProfileV2 } from "../core/PremiumPersonalExperience";
+import { PremiumProfileV2, SkillEvidenceDetails, type SkillEvidence } from "../core/PremiumPersonalExperience";
 
 function buildApiUrl(path: string): string {
   const base = String(import.meta.env.VITE_API_URL || window.location.origin || "")
@@ -229,6 +229,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryTasks, setLibraryTasks] = useState<LibraryTaskListItem[]>([]);
+  const [learningEvidence, setLearningEvidence] = useState<LearningSkillEvidence | null>(null);
 
   const [emailPrefLoading, setEmailPrefLoading] = useState(false);
   const [emailPrefEnabled, setEmailPrefEnabled] = useState<boolean>(user.marketingEmailsEnabled ?? true);
@@ -321,17 +322,25 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     }
   }, []);
 
+  const loadLearningEvidence = useCallback(async () => {
+    try {
+      setLearningEvidence(await getMyLearningEvidence());
+    } catch {
+      setLearningEvidence(null);
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
-      await Promise.all([loadGrades(), loadLibraryTasks(course)]);
+      await Promise.all([loadGrades(), loadLibraryTasks(course), loadLearningEvidence()]);
       if (!mounted) return;
     })();
 
     return () => {
       mounted = false;
     };
-  }, [course, loadGrades, loadLibraryTasks]);
+  }, [course, loadGrades, loadLibraryTasks, loadLearningEvidence]);
 
   const validGrades = useMemo(() => grades.filter((g) => Number.isFinite(Number(g.total))), [grades]);
 
@@ -352,6 +361,42 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
 
     return { librarySolved, badgesUnlocked, totalGrades, avgGrade, excellent };
   }, [solvedLibraryTasks, validGrades]);
+
+  const skillEvidence = useMemo<SkillEvidence>(() => {
+    const hasLegacyAttempts = libraryTasks.some((task) => (task.attempt?.submissionsCount ?? 0) > 0 || Boolean(task.attempt?.solved));
+    if (learningEvidence && (!hasLegacyAttempts || learningEvidence.practicedTasks > 0)) {
+      return {
+        practicedTasks: learningEvidence.practicedTasks,
+        solvedTasks: learningEvidence.solvedTasks,
+        solvedAfterFailure: learningEvidence.solvedAfterFailure,
+        revisitedSolved: learningEvidence.revisitedSolved,
+        topics: learningEvidence.topics.map(({ name, practiced, solved }) => ({ name, practiced, solved })),
+        overcomeCategories: learningEvidence.overcomeCategories,
+        recentSkills: learningEvidence.recentSkills,
+      };
+    }
+    const practiced = libraryTasks.filter((task) => (task.attempt?.submissionsCount ?? 0) > 0 || Boolean(task.attempt?.solved));
+    const topicMap = new Map<string, { practiced: number; solved: number }>();
+    practiced.forEach((task) => {
+      const topics = Array.from(new Set([task.section, ...(task.tags ?? [])].map((value) => String(value ?? "").trim()).filter(Boolean)));
+      topics.forEach((topic) => {
+        const current = topicMap.get(topic) ?? { practiced: 0, solved: 0 };
+        current.practiced += 1;
+        if (task.attempt?.solved) current.solved += 1;
+        topicMap.set(topic, current);
+      });
+    });
+    return {
+      practicedTasks: practiced.length,
+      solvedTasks: solvedLibraryTasks.length,
+      solvedAfterFailure: 0,
+      revisitedSolved: solvedLibraryTasks.filter((task) => (task.attempt?.submissionsCount ?? 0) > 1).length,
+      topics: Array.from(topicMap.entries())
+        .map(([name, values]) => ({ name, ...values }))
+        .sort((a, b) => b.solved - a.solved || b.practiced - a.practiced || a.name.localeCompare(b.name))
+        .slice(0, 8),
+    };
+  }, [learningEvidence, libraryTasks, solvedLibraryTasks]);
 
   const weeklyActiveDays = useMemo(() => {
     const startOfWindow = Date.now() - 6 * 24 * 60 * 60 * 1000;
@@ -446,21 +491,27 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   };
 
   if (!isEducational) {
-    return <PremiumProfileV2
-      user={user}
-      avatarUrl={avatarUrl}
-      course={course}
-      stats={isDesignPreview && profileStats.totalGrades === 0 && profileStats.librarySolved === 0
-        ? { librarySolved: 18, badgesUnlocked: 2, totalGrades: 11, avgGrade: 84.6, excellent: 7 }
-        : profileStats}
-      currentIad={currentIad}
-      weeklyActiveDays={isDesignPreview && weeklyActiveDays === 0 ? 4 : weeklyActiveDays}
-      saving={saving}
-      message={msg}
-      onAvatar={onSelectFile}
-      onCourse={switchCourse}
-      onSave={handleSave}
-    />;
+    return <>
+      <PremiumProfileV2
+        user={user}
+        avatarUrl={avatarUrl}
+        course={course}
+        stats={isDesignPreview && profileStats.totalGrades === 0 && profileStats.librarySolved === 0
+          ? { librarySolved: 18, badgesUnlocked: 2, totalGrades: 11, avgGrade: 84.6, excellent: 7 }
+          : profileStats}
+        currentIad={currentIad}
+        weeklyActiveDays={isDesignPreview && weeklyActiveDays === 0 ? 4 : weeklyActiveDays}
+        skillEvidence={skillEvidence}
+        saving={saving}
+        message={msg}
+        onAvatar={onSelectFile}
+        onCourse={switchCourse}
+        onSave={handleSave}
+      />
+      <div className="mx-auto w-full max-w-6xl px-4 pb-8 sm:px-6 lg:px-10">
+        <SkillEvidenceDetails evidence={skillEvidence} label={tr} />
+      </div>
+    </>;
   }
 
   return (
@@ -621,6 +672,8 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
             )}
           </div>
         </section>
+
+        {isEducational ? <SkillEvidenceDetails evidence={skillEvidence} label={tr} /> : null}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-6 md:p-7 border border-border/70 bg-bg-surface/80 space-y-7">

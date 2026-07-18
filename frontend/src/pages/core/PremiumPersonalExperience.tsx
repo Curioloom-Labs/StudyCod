@@ -29,6 +29,16 @@ import type { LibraryTaskListItem } from "../../lib/api/library";
 
 type PageTarget = "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin";
 
+export type SkillEvidence = {
+  practicedTasks: number;
+  solvedTasks: number;
+  solvedAfterFailure?: number;
+  revisitedSolved: number;
+  topics: Array<{ name: string; practiced: number; solved: number }>;
+  overcomeCategories?: Array<{ name: string; tasks: number }>;
+  recentSkills?: Array<{ taskId: number; topic: string | null; category: string | null; outcome: "Evidence collected"; createdAt: string }>;
+};
+
 const text = {
   uk: {
     welcome: "Добрий день",
@@ -267,6 +277,14 @@ export const PremiumProfile: React.FC<{
 
 const Stat: React.FC<{ value: React.ReactNode; label: string }> = ({ value, label }) => <div className="rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold tracking-[-.045em]">{value}</div><div className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#9eada1]">{label}</div></div>;
 
+export const SkillEvidenceDetails: React.FC<{ evidence: SkillEvidence; label: (uk: string, en: string) => string }> = ({ evidence, label }) => {
+  if (!evidence.overcomeCategories?.length && !evidence.recentSkills?.length) return null;
+  return <section className="mt-4 rounded-[22px] border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15]">
+    {evidence.overcomeCategories?.length ? <div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#147b47] dark:text-[#62ecaa]">{label("Подолані категорії помилок", "Overcome categories")}</div><div className="mt-3 flex flex-wrap gap-2">{evidence.overcomeCategories.map((item) => <span key={item.name} className="rounded-full bg-[#eaf9ef] px-3 py-1.5 text-xs font-semibold text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{item.name} · {item.tasks}</span>)}</div></div> : null}
+    {evidence.recentSkills?.length ? <div className={evidence.overcomeCategories?.length ? "mt-5" : ""}><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#9eada1]">{label("Останні закріплені навички", "Recent evidence")}</div><div className="mt-3 space-y-2">{evidence.recentSkills.map((item) => <div key={`${item.taskId}-${item.createdAt}`} className="flex items-center justify-between gap-3 rounded-xl bg-[#f5f8f5] px-3 py-2 text-xs dark:bg-white/[.04]"><span>{item.topic || item.category || label("практика", "practice")}</span><span className="font-semibold text-[#147b47] dark:text-[#72edb0]">{item.outcome}</span></div>)}</div></div> : null}
+  </section>;
+};
+
 export const PremiumProfileV2: React.FC<{
   user: User;
   avatarUrl: string;
@@ -274,12 +292,13 @@ export const PremiumProfileV2: React.FC<{
   stats: { librarySolved: number; badgesUnlocked: number; totalGrades: number; avgGrade: number | null; excellent: number };
   currentIad: number;
   weeklyActiveDays: number;
+  skillEvidence?: SkillEvidence;
   saving: boolean;
   message: string | null;
   onAvatar: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onCourse: (course: User["course"]) => void;
   onSave: () => void;
-}> = ({ user, avatarUrl, course, stats, currentIad, weeklyActiveDays, saving, message, onAvatar, onCourse, onSave }) => {
+}> = ({ user, avatarUrl, course, stats, currentIad, weeklyActiveDays, skillEvidence, saving, message, onAvatar, onCourse, onSave }) => {
   const { i18n } = useTranslation();
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const label = (ukText: string, enText: string) => uk ? ukText : enText;
@@ -308,6 +327,7 @@ export const PremiumProfileV2: React.FC<{
             <div className="flex items-center justify-between"><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#d97706]">{label("Досягнення", "Achievements")}</div><Trophy className="h-5 w-5 text-[#d97706] transition-transform group-hover:scale-110" /></div><div className="mt-3 text-4xl font-semibold tracking-[-.06em] text-[#17251c] dark:text-[#f1f7f2]">{stats.badgesUnlocked}</div><p className="mt-2 text-sm leading-6 text-[#796b52] dark:text-[#c0af90]">{label("відкритих бейджів. Натисни, щоб подивитися всю колекцію.", "badges unlocked. Click to view your collection.")}</p><span className="mt-5 inline-flex text-sm font-semibold text-[#b96600] dark:text-[#ffb85e]">{label("Переглянути бейджі", "View badges")} <ArrowRight className="ml-1 h-4 w-4" /></span>
           </button>
         </section>
+        {skillEvidence ? <section className="mt-6 rounded-[26px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15] sm:p-7"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#147b47] dark:text-[#62ecaa]">skill evidence</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{label("Що ти вже вмієш", "What you can do")}</h2><p className="mt-2 text-sm leading-6 text-[#68776d] dark:text-[#a4b2a7]">{label("Це докази практики з твоїх реальних спроб і розв’язаних задач.", "Evidence from your real attempts and solved tasks.")}</p></div><Sparkles className="h-5 w-5 text-[#e87d00]" /></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{skillEvidence.topics.length}</div><div className="mt-1 text-xs text-[#718075] dark:text-[#9eada1]">{label("тем практикував", "topics practiced")}</div></div><div className="rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{skillEvidence.solvedTasks}</div><div className="mt-1 text-xs text-[#718075] dark:text-[#9eada1]">{label("задач вирішено", "tasks solved")}</div></div><div className="rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{skillEvidence.revisitedSolved}</div><div className="mt-1 text-xs text-[#718075] dark:text-[#9eada1]">{label("задач подолано після повторної спроби", "tasks solved after revisiting")}</div></div></div>{skillEvidence.topics.length ? <div className="mt-6 space-y-4">{skillEvidence.topics.map((topic) => { const progress = topic.practiced ? Math.round((topic.solved / topic.practiced) * 100) : 0; return <div key={topic.name}><div className="flex items-center justify-between gap-3 text-sm"><span className="font-semibold">{topic.name}</span><span className="text-xs text-[#718075] dark:text-[#9eada1]">{topic.solved}/{topic.practiced}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e3ebe4] dark:bg-white/10"><div className="h-full rounded-full bg-[#00c96d]" style={{ width: `${Math.min(100, progress)}%` }} /></div></div>; })}</div> : <div className="mt-5 rounded-2xl border border-dashed border-[#152219]/15 p-4 text-sm text-[#718075] dark:border-white/10 dark:text-[#9eada1]">{label("Перші теми з’являться після перевірки задачі.", "Your first topics will appear after you check a task.")}</div>}</section> : null}
       </div>
     </div>
     {badgesOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#081009]/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-label={label("Колекція бейджів", "Badge collection")}><div className="w-full max-w-2xl rounded-[28px] border border-[#152219]/10 bg-[#f8faf7] p-5 shadow-2xl dark:border-white/10 dark:bg-[#121b15] sm:p-7"><div className="flex items-start justify-between gap-4"><div><div className="text-sm font-semibold text-[#d97706]">{label("Досягнення", "Achievements")}</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{label("Твоя колекція бейджів", "Your badge collection")}</h2><p className="mt-2 text-sm leading-6 text-[#6b7a70] dark:text-[#a4b2a7]">{label("Бейджі відкриваються за кількість успішно завершених задач у бібліотеці.", "Badges unlock from successfully completed library problems.")}</p></div><button type="button" onClick={() => setBadgesOpen(false)} className="rounded-xl bg-[#edf1ed] px-3 py-2 text-sm font-semibold text-[#526157] hover:bg-[#e1e8e2] dark:bg-white/[.08] dark:text-[#c0cdc2]">{label("Закрити", "Close")}</button></div><div className="mt-6 grid gap-3 sm:grid-cols-2">{badges.map((badge) => { const unlocked = stats.librarySolved >= badge.threshold; return <div key={badge.threshold} className={`rounded-2xl border p-4 ${unlocked ? "border-[#00c96d]/35 bg-[#eaf9ef] dark:bg-[#00ff88]/[.07]" : "border-[#152219]/10 bg-white/55 dark:border-white/10 dark:bg-white/[.025]"}`}><div className="flex items-center gap-3"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${unlocked ? "bg-[#00c96d] text-[#062112]" : "bg-[#e8ede8] text-[#94a097] dark:bg-white/[.08] dark:text-[#708074]"}`}><Trophy className="h-5 w-5" /></span><div><div className="font-semibold">{badge.name}</div><div className="mt-0.5 text-xs text-[#718075] dark:text-[#a4b2a7]">{badge.detail}</div></div></div><div className="mt-3 text-xs font-semibold"><span className={unlocked ? "text-[#147b47] dark:text-[#62ecaa]" : "text-[#8a988d]"}>{unlocked ? label("Відкрито", "Unlocked") : `${stats.librarySolved}/${badge.threshold}`}</span></div></div>; })}</div></div></div>}

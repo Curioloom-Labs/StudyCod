@@ -1,0 +1,122 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">From Wrong Answer to Real Skill</title>
+  <desc id="desc">A three-step StudyCod storyboard: failed test, guided hint, and skill evidence after fixing the code.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#10251A" flood-opacity="0.12"/>
+    </filter>
+    <linearGradient id="bg" x1="800" y1="0" x2="800" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBF8"/>
+      <stop offset="1" stop-color="#EEF5EF"/>
+    </linearGradient>
+    <linearGradient id="greenGlow" x1="1230" y1="280" x2="1430" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00D978" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#00D978" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <circle cx="1450" cy="90" r="260" fill="#00D978" fill-opacity="0.06"/>
+  <circle cx="90" cy="820" r="230" fill="#FFB454" fill-opacity="0.05"/>
+
+  <text x="80" y="75" fill="#147B47" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="20" font-weight="800" letter-spacing="3">STUDYCOD</text>
+  <text x="80" y="145" fill="#142017" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="56" font-weight="800" letter-spacing="-2">From Wrong Answer to Real Skill</text>
+  <text x="82" y="184" fill="#607065" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="20">Write code → understand the failure → get a guided hint → fix it yourself</text>
+
+  <!-- Frame 1 -->
+  <g filter="url(#shadow)">
+    <rect x="80" y="235" width="400" height="505" rx="26" fill="#FFFFFF"/>
+    <rect x="80" y="235" width="400" height="12" rx="6" fill="#FF6B9D"/>
+    <rect x="80" y="247" width="400" height="58" fill="#17251C"/>
+    <circle cx="108" cy="276" r="6" fill="#FF6B9D"/>
+    <text x="128" y="282" fill="#E7F3EA" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">challenge.py</text>
+    <text x="431" y="282" fill="#FF9ABA" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" text-anchor="end">WA</text>
+    <rect x="103" y="328" width="354" height="207" rx="14" fill="#101713"/>
+    <text x="122" y="360" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">1</text>
+    <text x="122" y="389" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">2</text>
+    <text x="122" y="418" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">3</text>
+    <text x="122" y="447" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">4</text>
+    <text x="122" y="476" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">5</text>
+    <text x="151" y="360" fill="#FF6B9D" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">def</text>
+    <text x="187" y="360" fill="#FFAD4A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14"> total(values):</text>
+    <text x="151" y="389" fill="#C9D8CD" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">result = 0</text>
+    <text x="151" y="418" fill="#FF6B9D" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">for</text>
+    <text x="180" y="418" fill="#C9D8CD" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14"> i in range(len(values) - 1):</text>
+    <rect x="148" y="429" width="282" height="24" rx="5" fill="#FF6B9D" fill-opacity="0.18"/>
+    <text x="180" y="447" fill="#FF9ABA" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">result += values[i]</text>
+    <text x="151" y="476" fill="#FF6B9D" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">return</text>
+    <text x="205" y="476" fill="#C9D8CD" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14"> result</text>
+    <rect x="103" y="557" width="354" height="82" rx="14" fill="#FFF0F4" stroke="#FF6B9D" stroke-opacity="0.38"/>
+    <text x="123" y="584" fill="#B52C5D" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="800">FAILED TEST</text>
+    <text x="123" y="610" fill="#5F3343" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="13">Expected 15 · got 10</text>
+    <text x="123" y="630" fill="#8B5365" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="12">The last value was not included.</text>
+    <text x="80" y="786" fill="#B52C5D" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="800">Failed test</text>
+    <text x="80" y="817" fill="#607065" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16">Код не працює. Видно конкретну помилку.</text>
+  </g>
+
+  <!-- Arrow 1 -->
+  <g>
+    <path d="M505 490H565" stroke="#FFB454" stroke-width="7" stroke-linecap="round"/>
+    <path d="M549 468L574 490L549 512" stroke="#FFB454" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Frame 2 -->
+  <g filter="url(#shadow)">
+    <rect x="600" y="235" width="400" height="505" rx="26" fill="#FFFFFF"/>
+    <rect x="600" y="235" width="400" height="12" rx="6" fill="#FFB454"/>
+    <rect x="600" y="247" width="400" height="58" fill="#17251C"/>
+    <circle cx="628" cy="276" r="6" fill="#FFB454"/>
+    <text x="648" y="282" fill="#E7F3EA" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">StudyCod feedback</text>
+    <text x="951" y="282" fill="#FFCA78" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" text-anchor="end">HINT 1 / 3</text>
+    <rect x="623" y="328" width="354" height="150" rx="14" fill="#101713"/>
+    <text x="643" y="362" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">3</text>
+    <text x="672" y="362" fill="#FF6B9D" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">for</text>
+    <text x="701" y="362" fill="#C9D8CD" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14"> i in range(len(values) - 1):</text>
+    <rect x="669" y="373" width="282" height="27" rx="5" fill="#FFB454" fill-opacity="0.2" stroke="#FFB454" stroke-opacity="0.55"/>
+    <text x="701" y="393" fill="#FFCA78" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">Check the loop boundary</text>
+    <text x="643" y="432" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">4</text>
+    <text x="672" y="432" fill="#C9D8CD" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">result += values[i]</text>
+    <text x="643" y="462" fill="#8DA497" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="12">The final index may be skipped.</text>
+    <rect x="623" y="500" width="354" height="139" rx="14" fill="#FFF7E9" stroke="#FFB454" stroke-opacity="0.45"/>
+    <text x="643" y="529" fill="#9A5D00" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="800">GUIDED HINT</text>
+    <text x="643" y="559" fill="#684A18" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">Зверни увагу на межу циклу.</text>
+    <text x="643" y="587" fill="#80652E" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">Не готове рішення — лише</text>
+    <text x="643" y="608" fill="#80652E" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">напрям для самостійної перевірки.</text>
+    <text x="600" y="786" fill="#9A5D00" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="800">Guided hint</text>
+    <text x="600" y="817" fill="#607065" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16">Платформа не показує готову відповідь.</text>
+  </g>
+
+  <!-- Arrow 2 -->
+  <g>
+    <path d="M1025 490H1085" stroke="#FFB454" stroke-width="7" stroke-linecap="round"/>
+    <path d="M1069 468L1094 490L1069 512" stroke="#FFB454" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Frame 3 -->
+  <g filter="url(#shadow)">
+    <rect x="1120" y="235" width="400" height="505" rx="26" fill="#FFFFFF"/>
+    <rect x="1120" y="235" width="400" height="12" rx="6" fill="#00D978"/>
+    <rect x="1120" y="247" width="400" height="58" fill="#17251C"/>
+    <circle cx="1148" cy="276" r="6" fill="#00D978"/>
+    <text x="1168" y="282" fill="#E7F3EA" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">challenge.py</text>
+    <text x="1491" y="282" fill="#72EDB0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" text-anchor="end">AC</text>
+    <rect x="1143" y="328" width="354" height="150" rx="14" fill="#101713"/>
+    <text x="1163" y="362" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">3</text>
+    <text x="1192" y="362" fill="#FF6B9D" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">for</text>
+    <text x="1221" y="362" fill="#C9D8CD" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14"> value in values:</text>
+    <rect x="1189" y="373" width="263" height="27" rx="5" fill="#00D978" fill-opacity="0.18"/>
+    <text x="1221" y="393" fill="#72EDB0" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">result += value</text>
+    <text x="1163" y="432" fill="#64766A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">4</text>
+    <text x="1192" y="432" fill="#FF6B9D" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">return</text>
+    <text x="1246" y="432" fill="#C9D8CD" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14"> result</text>
+    <rect x="1143" y="500" width="354" height="139" rx="14" fill="#EAF9EF" stroke="#00D978" stroke-opacity="0.42"/>
+    <text x="1163" y="529" fill="#147B47" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="800">SKILL EVIDENCE</text>
+    <text x="1163" y="559" fill="#174A30" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">Loops · complete iteration</text>
+    <text x="1163" y="587" fill="#397054" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">3 / 3 tests passed</text>
+    <text x="1163" y="608" fill="#397054" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">Зрозумів, що саме змінило результат.</text>
+    <text x="1120" y="786" fill="#147B47" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="800">Skill evidence</text>
+    <text x="1120" y="817" fill="#607065" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16">Рішення пройшло перевірку. Навичку видно.</text>
+  </g>
+
+  <text x="800" y="870" fill="#607065" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" text-anchor="middle">A failed attempt is not the end. It is the next step.</text>
+</svg>

@@ -28,6 +28,7 @@ import {
   type CodeFile,
   type HintFeedbackReasonCode,
   type LearningFeedback,
+  type LearningAttemptSummary,
   type WebTaskFile,
   type SubmissionMeta,
   type TaskWithGrade,
@@ -171,6 +172,7 @@ export const StudentTaskPage: React.FC = () => {
   }>(null);
   const [hints, setHints] = useState<string[]>([]);
   const [learningFeedback, setLearningFeedback] = useState<LearningFeedback | null>(null);
+  const [learningAttempt, setLearningAttempt] = useState<LearningAttemptSummary | null>(null);
   const [learningFeedbackMeta, setLearningFeedbackMeta] = useState<SubmissionMeta | null>(null);
   const [hintFeedbackSignal, setHintFeedbackSignal] = useState<"up" | "down" | null>(null);
   const [hintFeedbackReasonCode, setHintFeedbackReasonCode] = useState<HintFeedbackReasonCode>("NOT_SPECIFIC");
@@ -754,6 +756,7 @@ export const StudentTaskPage: React.FC = () => {
       const data = await getTask(parseInt(taskId, 10));
       setTask(data);
       setLearningFeedback(null);
+      setLearningAttempt(null);
       setLearningFeedbackMeta(null);
       const serverMeta = data.grade?.submissionMeta;
       latestSubmissionBindingRef.current = serverMeta
@@ -1021,6 +1024,7 @@ export const StudentTaskPage: React.FC = () => {
     setIsRunningTests(true);
     setTestResults([]);
     setLearningFeedback(null);
+    setLearningAttempt(null);
     setLearningFeedbackMeta(null);
     setShowResults(false);
     setConsoleOutput(t("checkingCode"));
@@ -1035,6 +1039,7 @@ export const StudentTaskPage: React.FC = () => {
         setTestResults([]);
         setHints([]);
         setLearningFeedback(null);
+        setLearningAttempt(null);
         setLearningFeedbackMeta(null);
         setLastScoring(hideControlResults ? null : submit.scoring ?? {
           score: check.score,
@@ -1074,6 +1079,7 @@ export const StudentTaskPage: React.FC = () => {
       setTestResults(hideControlResults ? [] : finalTestResults);
       setHints(hideControlResults ? [] : Array.isArray(result.hints) ? result.hints : []);
       setLearningFeedback(hideControlResults ? null : result.learningFeedback ?? null);
+      setLearningAttempt(hideControlResults ? null : result.learningAttempt ?? null);
       setLearningFeedbackMeta(hideControlResults ? null : submissionMeta ?? null);
       setLastScoring(hideControlResults ? null : result.scoring ?? null);
       setRevealedHints(0);
@@ -1167,6 +1173,7 @@ export const StudentTaskPage: React.FC = () => {
     setIsRunningTests(true);
     setTestResults([]);
     setLearningFeedback(null);
+    setLearningAttempt(null);
     setLearningFeedbackMeta(null);
     setShowResults(false);
     setConsoleOutput(t("completingTaskRunningFinalTest"));
@@ -1195,6 +1202,7 @@ export const StudentTaskPage: React.FC = () => {
       setTestResults(hideControlResults ? [] : finalTestResults);
       setHints(hideControlResults ? [] : Array.isArray(result.hints) ? result.hints : []);
       setLearningFeedback(hideControlResults ? null : result.learningFeedback ?? null);
+      setLearningAttempt(hideControlResults ? null : result.learningAttempt ?? null);
       setLearningFeedbackMeta(hideControlResults ? null : submissionMeta ?? null);
       setLastScoring(hideControlResults ? null : result.scoring ?? null);
       setRevealedHints(0);
@@ -2056,6 +2064,11 @@ export const StudentTaskPage: React.FC = () => {
                 const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
                 return sameHash && sameId ? (learningFeedback?.firstFailure ?? null) : null;
               })()}
+              taskId={Number(taskId)}
+              taskKind="EDU"
+              learningAttemptId={learningAttempt?.id}
+              failureCategory={learningAttempt?.failureCategory ?? learningFeedback?.firstFailure?.errorKind ?? null}
+              highestHintLevelShown={learningAttempt?.highestHintLevelShown ?? 0}
             />
 
             {(() => {

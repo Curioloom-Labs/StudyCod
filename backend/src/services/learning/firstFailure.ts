@@ -1,6 +1,7 @@
 export type LearningFailureInput = {
   verdict?: string | null;
   tests: Array<{
+    testId?: number;
     passed?: boolean;
     isPublic?: boolean;
     input?: unknown;
@@ -12,6 +13,7 @@ export type LearningFailureInput = {
 
 export type LearningFirstFailure = {
   testPublicIndex: number;
+  testId?: number;
   inputPreview: string;
   expectedPreview: string;
   actualPreview: string;
@@ -110,6 +112,7 @@ export function buildLearningFirstFailure(input: LearningFailureInput): Learning
 
   return {
     testPublicIndex: publicPrefix,
+    ...(typeof failed.testId === "number" ? { testId: failed.testId } : {}),
     inputPreview: sanitizePreviewText(failed.input),
     expectedPreview,
     actualPreview,
