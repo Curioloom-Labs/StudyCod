@@ -6,6 +6,45 @@ import { getGoogleClientId, getGoogleClientSecret, getGoogleCallbackUrl, isGoogl
 import { logger } from "../utils/logger";
 const getUserRepository = () => AppDataSource.getRepository(User);
 
+type GoogleBirthday = {
+  date?: {
+    day?: number;
+    month?: number;
+  };
+  metadata?: {
+    primary?: boolean;
+  };
+};
+
+async function readGoogleBirthday(accessToken: string): Promise<{ birthDay: number; birthMonth: number } | null> {
+  try {
+    const response = await fetch("https://people.googleapis.com/v1/people/me?personFields=birthdays", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+    if (!response.ok) return null;
+
+    const payload = await response.json() as { birthdays?: GoogleBirthday[] };
+    const birthdays = Array.isArray(payload.birthdays) ? payload.birthdays : [];
+    const birthday = [...birthdays].sort((a, b) => Number(Boolean(b.metadata?.primary)) - Number(Boolean(a.metadata?.primary)))
+      .find(item => {
+        const day = Number(item.date?.day);
+        const month = Number(item.date?.month);
+        return Number.isInteger(day) && day >= 1 && day <= 31 && Number.isInteger(month) && month >= 1 && month <= 12;
+      });
+    if (!birthday?.date) return null;
+
+    return {
+      birthDay: Number(birthday.date.day),
+      birthMonth: Number(birthday.date.month)
+    };
+  } catch (error: any) {
+    logger.warn("[auth] Google birthday lookup failed", { message: error?.message });
+    return null;
+  }
+}
+
 export function setupGoogleStrategy() {
   if (!isGoogleOAuthEnabled()) {
     return;
@@ -18,7 +57,7 @@ export function setupGoogleStrategy() {
     clientSecret: clientSecret,
     callbackURL: callbackUrl,
     passReqToCallback: true
-  }, async (req: any, _accessToken, _refreshToken, profile, done) => {
+  }, async (req: any, accessToken, _refreshToken, profile, done) => {
     try {
       const googleId = profile.id;
       const email = profile.emails?.[0]?.value || null;
@@ -34,6 +73,11 @@ export function setupGoogleStrategy() {
           birthDay = birthday.getDate();
           birthMonth = birthday.getMonth() + 1;
         }
+      }
+      if ((!birthDay || !birthMonth) && accessToken) {
+        const birthday = await readGoogleBirthday(String(accessToken));
+        birthDay = birthday?.birthDay ?? null;
+        birthMonth = birthday?.birthMonth ?? null;
       }
       const linkUserId = Number((req?.session as any)?.googleLinkUserId ?? 0);
       if (Number.isFinite(linkUserId) && linkUserId > 0) {

@@ -636,7 +636,7 @@ authRouter.get("/google", async (req: Request, res: Response, next) => {
   }
 
   return passport.authenticate("google", {
-    scope: ["profile", "email"]
+    scope: ["profile", "email", "https://www.googleapis.com/auth/user.birthday.read"]
   })(req, res, next);
 });
 
@@ -750,6 +750,10 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
         googleId: user.googleId ?? null,
         email: user.email ?? null,
         avatarUrl: user.avatarUrl ?? null,
+        firstName: user.firstName ?? null,
+        lastName: user.lastName ?? null,
+        birthDay: user.birthDay ?? null,
+        birthMonth: user.birthMonth ?? null,
         userMode: requestedGoogleMode,
         temp: true,
         jti: generateJti()

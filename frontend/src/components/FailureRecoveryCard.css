@@ -4,6 +4,78 @@
   padding: 12px;
 }
 
+.failure-recovery-steps {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.failure-recovery-step {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #83988a;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.failure-recovery-step-dot {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #83988a;
+  font-size: 11px;
+}
+
+.failure-recovery-step.is-complete,
+.failure-recovery-step.is-current {
+  color: #dce9df;
+}
+
+.failure-recovery-step.is-complete .failure-recovery-step-dot {
+  border-color: rgba(0, 217, 120, 0.35);
+  background: rgba(0, 217, 120, 0.16);
+  color: #72edb0;
+}
+
+.failure-recovery-step.is-current .failure-recovery-step-dot {
+  border-color: rgba(255, 180, 84, 0.45);
+  background: rgba(255, 180, 84, 0.14);
+  color: #ffca78;
+  box-shadow: 0 0 0 3px rgba(255, 180, 84, 0.08);
+}
+
+.failure-recovery-step-line {
+  flex: 0 1 32px;
+  height: 1px;
+  margin-top: 13px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.failure-recovery-step-line.is-complete {
+  background: rgba(0, 217, 120, 0.42);
+}
+
+@media (max-width: 560px) {
+  .failure-recovery-step {
+    font-size: 9px;
+  }
+
+  .failure-recovery-step-line {
+    flex-basis: 12px;
+  }
+}
+
 .failure-recovery-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -2069,7 +2069,26 @@ export const StudentTaskPage: React.FC = () => {
               learningAttemptId={learningAttempt?.id}
               failureCategory={learningAttempt?.failureCategory ?? learningFeedback?.firstFailure?.errorKind ?? null}
               highestHintLevelShown={learningAttempt?.highestHintLevelShown ?? 0}
+              onTryAgain={() => setShowResults(false)}
             />
+
+            {(() => {
+              const latest = latestSubmissionBindingRef.current;
+              if (!latest || !learningFeedbackMeta?.codeHash) return null;
+              const sameHash = String(latest.codeHash) === String(learningFeedbackMeta.codeHash);
+              const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
+              if (!sameHash || !sameId || String(learningFeedback?.verdict ?? "").toUpperCase() !== "AC") return null;
+              const reinforced = Boolean(learningAttempt?.solvedAfterFailure);
+              return <div className="mt-3 rounded-xl border border-accent-success/30 bg-accent-success/10 p-3">
+                <div className="flex items-start gap-2.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-accent-success" />
+                  <div>
+                    <div className="text-xs font-semibold text-accent-success">{tr(reinforced ? "Навичку закріплено" : "Рішення перевірено", reinforced ? "Skill reinforced" : "Solution verified")}</div>
+                    <p className="mt-1 text-xs leading-5 text-text-secondary">{tr(reinforced ? "Ти виправив рішення після невдалої спроби й пройшов перевірку. Це доказ прогресу в поточній темі." : "Рішення пройшло перевірку. Продовжуй практикувати тему, щоб перетворити результат на стійку навичку.", reinforced ? "You fixed the solution after a failed attempt. This is evidence of progress in the current topic." : "The solution passed the check. Keep practicing the topic to turn this result into a durable skill.")}</p>
+                  </div>
+                </div>
+              </div>;
+            })()}
 
             {(() => {
               const latest = latestSubmissionBindingRef.current;
