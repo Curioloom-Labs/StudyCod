@@ -87,6 +87,13 @@ function hintLevels(kind: string | null | undefined, compileError: string | null
   ];
 }
 
+function hintStageLabel(level: number, isEnglish: boolean): string {
+  const labels = isEnglish
+    ? ["Observe", "Narrow", "Act"]
+    : ["Спостерігай", "Звузь пошук", "Дій"];
+  return labels[Math.max(0, Math.min(labels.length - 1, level))];
+}
+
 export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, onTryAgain }) => {
   const { i18n } = useTranslation();
   const isEnglish = i18n.language?.toLowerCase().startsWith("en");
@@ -119,6 +126,10 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
 
   if (upperVerdict === "AC") return null;
 
+  const workflowSteps = isEnglish
+    ? ["Failed", "Diagnosed", "Hint", "Retry", "Skill"]
+    : ["Збій", "Діагноз", "Підказка", "Повтор", "Навичка"];
+
   return (
     <div className="failure-recovery-card mt-4 rounded-2xl">
       <div className="flex items-start justify-between gap-3">
@@ -134,6 +145,22 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         <span className="rounded-full bg-[#ff6b9d]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff9aba]">{upperVerdict || "—"}</span>
       </div>
 
+      <div className="failure-recovery-steps" aria-label={languageCopy(isEnglish, "Шлях від помилки до навички", "Path from failure to skill")}>
+        {workflowSteps.map((step, index) => {
+          const completed = index < 2;
+          const current = index === 2;
+          return (
+            <React.Fragment key={step}>
+              <div className={`failure-recovery-step ${completed ? "is-complete" : ""} ${current ? "is-current" : ""}`}>
+                <span className="failure-recovery-step-dot">{completed ? "✓" : index + 1}</span>
+                <span>{step}</span>
+              </div>
+              {index < workflowSteps.length - 1 && <span className={`failure-recovery-step-line ${completed ? "is-complete" : ""}`} aria-hidden="true" />}
+            </React.Fragment>
+          );
+        })}
+      </div>
+
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <div className="rounded-xl bg-white/[.05] p-3 text-xs text-[#cbd9ce]">
           <span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{languageCopy(isEnglish, "Що не пройшло", "What failed")}</span>
@@ -145,9 +172,28 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         </div>
       </div>
 
+      {(firstFailure?.expectedPreview || firstFailure?.actualPreview || firstFailure?.inputPreview) && (
+        <details className="mt-4 rounded-xl border border-white/10 bg-white/[.035] p-3 text-xs text-[#cbd9ce]">
+          <summary className="cursor-pointer list-none font-semibold text-[#dce9df]">
+            {languageCopy(isEnglish, "Подивитися доказ невдалого тесту", "Inspect the failing-test evidence")}
+          </summary>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {[
+              [languageCopy(isEnglish, "Ввід", "Input"), firstFailure?.inputPreview],
+              [languageCopy(isEnglish, "Очікувано", "Expected"), firstFailure?.expectedPreview],
+              [languageCopy(isEnglish, "Отримано", "Actual"), firstFailure?.actualPreview],
+            ].map(([label, value]) => value ? <div key={label} className="min-w-0"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{label}</span><code className="mt-1 block max-h-20 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/20 p-2 text-[11px] text-[#e1eee4]">{value}</code></div> : null)}
+          </div>
+        </details>
+      )}
+
       <div className="mt-4 rounded-xl border border-[#00d978]/20 bg-[#00d978]/[.06] p-4">
-        <div className="text-[10px] font-bold uppercase tracking-[.12em] text-[#72edb0]">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[10px] font-bold uppercase tracking-[.12em] text-[#72edb0]">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
+          <span className="rounded-full bg-white/[.07] px-2 py-1 text-[10px] font-semibold text-[#a7b9ac]">{hintStageLabel(hintLevel, isEnglish)}</span>
+        </div>
         <p className="mt-2 text-sm leading-6 text-[#e1eee4]">{hints[hintLevel]}</p>
+        <p className="mt-2 text-[11px] leading-5 text-[#9fb5a5]">{languageCopy(isEnglish, "Підказка спрямовує до власного рішення й не показує готовий код.", "This hint points toward your own solution and does not reveal the finished code.")}</p>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
