@@ -1,0 +1,183 @@
+@import "tailwindcss" source(none);
+
+@source "./pages/public/PublicLandingPage.tsx";
+@source "./components/layout/PublicProductNav.tsx";
+@source "./components/Logo.tsx";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: "Segoe UI", "Noto Sans", Arial, sans-serif;
+  --font-display: "Fixel Display", "Segoe UI", "Noto Sans", Arial, sans-serif;
+}
+
+/* The public page needs only the display face for its hero/headings. Body copy
+   intentionally uses a system stack so text fonts cannot delay first paint. */
+@font-face {
+  font-family: "Fixel Display";
+  src: url("/fonts/fixel/FixelDisplay-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --bg-base: #0b100d;
+  --text-primary: #edf3ef;
+  --primary: #00d978;
+  --border: rgba(255, 255, 255, 0.12);
+  --font-sans: "Segoe UI", "Noto Sans", Arial, sans-serif;
+  --font-display: "Fixel Display", "Segoe UI", "Noto Sans", Arial, sans-serif;
+  --motion-fast: 100ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-base: #f7f8f5;
+  --text-primary: #111814;
+  --primary: #00b963;
+  --border: rgba(18, 32, 23, 0.12);
+}
+
+/* Landing dark surfaces need deterministic overrides for editorial gradients. */
+:root[data-theme="dark"] #studycod-landing #platform article.row-span-2 {
+  background: linear-gradient(145deg, rgba(0, 255, 136, 0.055), #151c17 43%) !important;
+}
+
+:root[data-theme="dark"] #studycod-landing #platform article.row-span-2 > div,
+:root[data-theme="dark"] #studycod-landing #roles article > div:last-child {
+  background: #101713 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.24) !important;
+}
+
+:root[data-theme="dark"] #studycod-landing #roles article {
+  background: linear-gradient(160deg, #171f19, #121814) !important;
+}
+
+:root[data-theme="dark"] #studycod-landing #platform article p,
+:root[data-theme="dark"] #studycod-landing #roles article p,
+:root[data-theme="dark"] #studycod-landing #roles article li {
+  color: #a7b2aa !important;
+}
+
+:root[data-theme="dark"] #studycod-landing footer .bg-white {
+  background-color: #182019 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="bg-white"] {
+  background-color: #151c17 !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="bg-white/85"] {
+  background-color: rgba(21, 28, 23, 0.88) !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="bg-[#fcfdfb"]] {
+  background-color: #171f19 !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="bg-[#f7f8f5]"],
+:root[data-theme="dark"] #studycod-landing [class~="bg-[#f7f8f5]/85"] {
+  background-color: #0f1511 !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="bg-[#f4f6f2]"] {
+  background-color: #111713 !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="bg-[#edf0eb]"] {
+  background-color: #202821 !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="text-[#111814]"] {
+  color: #edf3ef !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="text-[#667169]"] {
+  color: #a4afa7 !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="text-[#007f48]"],
+:root[data-theme="dark"] #studycod-landing [class~="text-[#00834a]"] {
+  color: #62ecaa !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="border-[#122017]/10"],
+:root[data-theme="dark"] #studycod-landing [class~="border-[#132319]/15"],
+:root[data-theme="dark"] #studycod-landing [class~="border-[#122017]/[0.07]"] {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:root[data-theme="dark"] #studycod-landing [class~="before:bg-[#122017]/10"]::before,
+:root[data-theme="dark"] #studycod-landing [class~="after:bg-[#122017]/10"]::after {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+@layer base {
+  html {
+    font-size: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.68;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.28;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  :is(code, pre, kbd, samp, .font-mono) {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
+  :where(a, button, input, textarea, select, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: #07140d;
+  }
+}

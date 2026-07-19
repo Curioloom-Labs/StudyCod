@@ -1,5 +1,4 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Languages, Menu, Moon, Sun, X } from "lucide-react";
 import { Logo } from "../Logo";
@@ -13,7 +12,6 @@ type Props = {
 };
 
 export const PublicProductNav: React.FC<Props> = ({ active = "none", homeMode = false }) => {
-  const navigate = useNavigate();
   const { i18n } = useTranslation();
   const [theme, setTheme] = React.useState<"dark" | "light">(() => getCurrentTheme());
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -45,12 +43,12 @@ export const PublicProductNav: React.FC<Props> = ({ active = "none", homeMode = 
 
   const go = (path: string) => {
     setMobileOpen(false);
-    navigate(path);
+    window.location.assign(path);
   };
   const goHomeItem = (id: string) => {
     setMobileOpen(false);
     if (id === "pricing") {
-      navigate("/pricing");
+      window.location.assign("/pricing");
       return;
     }
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });

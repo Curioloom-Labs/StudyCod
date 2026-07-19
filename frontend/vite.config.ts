@@ -44,9 +44,14 @@ export default defineConfig({
 
           const norm = id.replace(/\\/g, "/");
 
-          // React core + router
-          if (norm.includes("/node_modules/react/") || norm.includes("/node_modules/react-dom/") || norm.includes("/node_modules/react-router/") || norm.includes("/node_modules/react-router-dom/") || norm.includes("/node_modules/scheduler/")) {
+          // React core is needed by the public entry. Keep the router in a
+          // separate async vendor chunk because the landing page does not use it.
+          if (norm.includes("/node_modules/react/") || norm.includes("/node_modules/react-dom/") || norm.includes("/node_modules/scheduler/")) {
             return "react-vendor";
+          }
+
+          if (norm.includes("/node_modules/react-router/") || norm.includes("/node_modules/react-router-dom/")) {
+            return "router-vendor";
           }
 
           // Animations

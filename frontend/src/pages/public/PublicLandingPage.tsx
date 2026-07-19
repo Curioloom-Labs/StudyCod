@@ -1,7 +1,7 @@
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import "../../i18n";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   BarChart3,
@@ -130,7 +130,7 @@ const LegacyDashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
 
       <div className="min-w-0 bg-[#f7f8f5] p-7 max-md:p-4">
         <div className="mb-5 flex items-end justify-between">
-          <div><span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#667169]">{tr("Вівторок, 10 липня", "Tuesday, July 10")}</span><h3 className="mt-1.5 text-xl font-bold tracking-[-0.03em] max-md:text-base">{tr("Продовжуй у своєму темпі", "Keep learning at your pace")}</h3></div>
+          <div><span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#667169]">{tr("Вівторок, 10 липня", "Tuesday, July 10")}</span><div className="mt-1.5 text-xl font-bold tracking-[-0.03em] max-md:text-base">{tr("Продовжуй у своєму темпі", "Keep learning at your pace")}</div></div>
           <span className="flex h-8 items-center gap-1.5 rounded-[10px] border border-[#ff8c00]/20 bg-[#ff8c00]/10 px-3 text-[10px] font-bold text-[#a85a00]"><Flame className="size-3 fill-current" />12 {tr("днів", "days")}</span>
         </div>
 
@@ -142,7 +142,7 @@ const LegacyDashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
           </div>
           <div className="min-w-0">
             <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#007f48]">Python · {tr("Основи", "Foundations")}</span>
-            <h4 className="mt-2 text-base font-bold max-md:text-[13px]">{tr("Функції та чистий код", "Functions and clean code")}</h4>
+            <div className="mt-2 text-base font-bold max-md:text-[13px]">{tr("Функції та чистий код", "Functions and clean code")}</div>
             <p className="mt-1 text-[10px] text-[#667169]">{tr("Урок 8 із 12", "Lesson 8 of 12")} · 24 {tr("хв", "min")}</p>
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#edf0eb]"><span className="block h-full w-[68%] rounded-full bg-[#00b963]" /></div>
           </div>
@@ -177,7 +177,7 @@ const LegacyDashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
 const LegacyPracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   <div className={`${card} overflow-hidden`}>
     <div className="flex items-center justify-between px-8 pb-5 pt-7 max-md:px-5 max-md:pt-5">
-      <div><span className="text-[10px] font-extrabold uppercase tracking-[0.11em] text-[#007f48]">{tr("Практика · Python", "Practice · Python")}</span><h3 className="mt-1.5 text-[21px] font-bold max-md:text-lg">{tr("Знайди найдовше слово", "Find the longest word")}</h3></div>
+      <div><span className="text-[10px] font-extrabold uppercase tracking-[0.11em] text-[#007f48]">{tr("Практика · Python", "Practice · Python")}</span><div className="mt-1.5 text-[21px] font-bold max-md:text-lg">{tr("Знайди найдовше слово", "Find the longest word")}</div></div>
       <span className="flex h-9 items-center gap-2 rounded-[10px] bg-[#edf0eb] px-3 text-[10px] text-[#667169]"><Clock3 className="size-3.5" />18:42</span>
     </div>
     <p className="max-w-[760px] px-8 pb-7 text-sm leading-6 text-[#667169] max-md:px-5">{tr("Напиши функцію, що повертає найдовше слово у реченні. Якщо таких слів кілька — поверни перше.", "Write a function that returns the longest word in a sentence. If several match, return the first one.")}</p>
@@ -199,7 +199,7 @@ const LegacyPracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
 const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[#0e1712] p-4 text-left text-[#edf7ef] shadow-[0_48px_110px_rgba(5,25,13,.28)] sm:p-6">
     <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-      <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-2xl bg-[#00ff88]/15 text-[#62ecaa]"><Sparkles className="size-5" /></div><div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#62ecaa]">{tr("Сьогодні", "Today")} · Java</div><h3 className="mt-1 text-xl font-black tracking-[-.04em]">{tr("Твій наступний крок", "Your next step")}</h3></div></div>
+      <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-2xl bg-[#00ff88]/15 text-[#62ecaa]"><Sparkles className="size-5" /></div><div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#62ecaa]">{tr("Сьогодні", "Today")} · Java</div><div className="mt-1 text-xl font-black tracking-[-.04em]">{tr("Твій наступний крок", "Your next step")}</div></div></div>
       <button className="rounded-xl border border-white/15 px-3 py-2 text-xs font-bold text-[#c9d9cd]">{tr("Змінити тему", "Change topic")}</button>
     </div>
     <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,.65fr)]">
@@ -218,7 +218,7 @@ const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
           <FlaskConical className="size-3.5" />
           Personal practice
         </span>
-        <h3 className="mt-4 text-2xl font-bold tracking-[-.045em]">{tr("Тренувальна студія", "Practice studio")}</h3>
+        <div className="mt-4 text-2xl font-bold tracking-[-.045em]">{tr("Тренувальна студія", "Practice studio")}</div>
         <p className="mt-2 text-sm leading-6 text-[#65746a] dark:text-[#aab7ad]">{tr("Умова, редактор і результат зібрані в одному робочому полотні.", "Statement, editor and results stay together in one focused workspace.")}</p>
         <div className="mt-6 rounded-2xl border border-[#142017]/10 bg-[#f1f6f2] p-3 dark:border-white/10 dark:bg-white/[.045]">
           <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[#7a887e]">stdin</div>
@@ -258,7 +258,7 @@ const FailureLoopPreview: React.FC<{ tr: Translate }> = ({ tr }) => {
     <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#101713] p-5 text-left text-[#edf7ef] shadow-[0_48px_110px_rgba(5,25,13,.28)] sm:p-7">
       <div className="absolute -right-24 -top-28 size-72 rounded-full bg-[#00ff88]/10 blur-3xl" />
       <div className="relative flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-5">
-        <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#62ecaa]">Failure → Skill</div><h3 className="mt-2 text-2xl font-black tracking-[-.05em] sm:text-3xl">{tr("Кожна спроба веде далі", "Every attempt moves you forward")}</h3></div>
+        <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#62ecaa]">Failure → Skill</div><div className="mt-2 text-2xl font-black tracking-[-.05em] sm:text-3xl">{tr("Кожна спроба веде далі", "Every attempt moves you forward")}</div></div>
         <span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-bold text-[#b8cbbb]">Python · loops</span>
       </div>
       <div className="relative mt-6 grid gap-3 sm:grid-cols-5">
@@ -296,8 +296,8 @@ const TeacherRadarPreview: React.FC<{ tr: Translate }> = ({ tr }) => {
 
 export const PublicLandingPage: React.FC = () => {
   const { i18n } = useTranslation();
-  const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
+  const navigate = (path: string) => window.location.assign(path);
   const tr: Translate = (uk, en) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const goToAuth = (mode: "login" | "register") => navigate(`/?auth=${mode}`);
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });

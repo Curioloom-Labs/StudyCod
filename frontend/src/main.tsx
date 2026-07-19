@@ -1,28 +1,50 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, useLocation } from "react-router-dom";
-import "./index.css";
-import "./i18n";
+import "./public.css";
 import { initTheme } from "./theme";
 
-const App = React.lazy(() => import("./App").then(mod => ({ default: mod.App })));
 const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
+let appStylesPromise: Promise<unknown> | null = null;
 
-/**
- * Keep the public homepage on a small route-level entry. The authenticated
- * workspace is intentionally not imported until the URL needs it.
- */
-const RouteBootstrap: React.FC = () => {
-  const location = useLocation();
+function ensureAppStyles() {
+  appStylesPromise ??= import("./index.css");
+  return appStylesPromise;
+}
+
+const AppShell = React.lazy(async () => {
+  await ensureAppStyles();
+  const [{ BrowserRouter }, { App }] = await Promise.all([
+    import("react-router-dom"),
+    import("./App"),
+    import("./i18n"),
+  ]);
+
+  const RoutedApp: React.FC = () => (
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  );
+
+  return { default: RoutedApp };
+});
+
+function shouldRenderPublicLanding() {
   let hasStoredToken = false;
   try {
     hasStoredToken = Boolean(localStorage.getItem("token"));
   } catch {
     // Browsers with blocked storage should still receive the public shell.
   }
-  const isPublicLanding = location.pathname === "/" && !new URLSearchParams(location.search).has("auth") && !hasStoredToken;
 
-  return isPublicLanding ? <PublicLandingPage /> : <App />;
+  return window.location.pathname === "/" && !new URLSearchParams(window.location.search).has("auth") && !hasStoredToken;
+}
+
+/**
+ * Keep the public homepage on a small route-level entry. The authenticated
+ * workspace is intentionally not imported until the URL needs it.
+ */
+const RouteBootstrap: React.FC = () => {
+  return shouldRenderPublicLanding() ? <PublicLandingPage /> : <AppShell />;
 };
 
 const CHUNK_RELOAD_KEY = "studycod.chunkReloadAttempted";
@@ -197,11 +219,9 @@ try {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<React.StrictMode>
       <ErrorBoundary>
-        <BrowserRouter>
-          <React.Suspense fallback={null}>
-            <RouteBootstrap />
-          </React.Suspense>
-        </BrowserRouter>
+        <React.Suspense fallback={null}>
+          <RouteBootstrap />
+        </React.Suspense>
       </ErrorBoundary>
     </React.StrictMode>);
 } catch (error) {
