@@ -248,11 +248,11 @@ const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
 
 const FailureLoopPreview: React.FC<{ tr: Translate }> = ({ tr }) => {
   const steps = [
-    { label: tr("Невдала спроба", "Failed attempt"), tone: "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#b52c5d] dark:text-[#ff9aba]", icon: "!" },
-    { label: tr("Знайдена проблема", "Problem found"), tone: "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#9a5d00] dark:text-[#ffca78]", icon: "?" },
-    { label: tr("Поступова підказка", "Guided hint"), tone: "border-[#60e5aa]/30 bg-[#60e5aa]/10 text-[#007f48] dark:text-[#72edb0]", icon: "→" },
-    { label: tr("Виправлений код", "Fixed code"), tone: "border-[#60e5aa]/30 bg-[#60e5aa]/10 text-[#007f48] dark:text-[#72edb0]", icon: "✓" },
-    { label: tr("Навичку закріплено", "Skill reinforced"), tone: "border-[#ffd93d]/30 bg-[#ffd93d]/10 text-[#8f7000] dark:text-[#ffe47a]", icon: "★" },
+    { label: tr("Невдала спроба", "Failed attempt"), tone: "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]", icon: "!" },
+    { label: tr("Знайдена проблема", "Problem found"), tone: "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca78]", icon: "?" },
+    { label: tr("Поступова підказка", "Guided hint"), tone: "border-[#60e5aa]/30 bg-[#60e5aa]/10 text-[#72edb0]", icon: "→" },
+    { label: tr("Виправлений код", "Fixed code"), tone: "border-[#60e5aa]/30 bg-[#60e5aa]/10 text-[#72edb0]", icon: "✓" },
+    { label: tr("Навичку закріплено", "Skill reinforced"), tone: "border-[#ffd93d]/30 bg-[#ffd93d]/10 text-[#ffe47a]", icon: "★" },
   ];
   return (
     <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#101713] p-5 text-left text-[#edf7ef] shadow-[0_48px_110px_rgba(5,25,13,.28)] sm:p-7">

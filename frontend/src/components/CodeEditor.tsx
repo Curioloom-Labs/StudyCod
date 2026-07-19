@@ -424,7 +424,7 @@ const toMonacoLanguage = (language: Props["language"]) => {
 };
 const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false) => ({
   fontSize,
-  fontFamily: "JetBrains Mono, Fira Code, Consolas, Monaco, 'Courier New', monospace",
+  fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Consolas, Monaco, 'Courier New', monospace",
   fontLigatures: true,
   minimap: {
     enabled: false

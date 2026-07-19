@@ -83,7 +83,7 @@
 }
 
 .failure-diff-line {
-  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, "Cascadia Code", "Fira Code", Consolas, monospace;
   font-size: 12px;
   line-height: 1.4;
   white-space: pre-wrap;

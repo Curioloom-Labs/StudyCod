@@ -7,4 +7,4 @@ Disallow: /verify-email
 Disallow: /__dev/
 Disallow: /edu/
 
-Sitemap: /sitemap.xml
+Sitemap: https://studycod.space/sitemap.xml

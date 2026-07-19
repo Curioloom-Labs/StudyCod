@@ -1867,7 +1867,7 @@ export const StudentTaskPage: React.FC = () => {
                                   </>}
                               </div>)}
                         </div> : consoleOutput ? <pre className="text-xs text-text-secondary whitespace-pre-wrap m-0" style={{
-                  fontFamily: '"JetBrains Mono", "Fira Code", "Consolas", "Courier New", monospace'
+                  fontFamily: 'ui-monospace, SFMono-Regular, "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace'
                 }}>
                           {consoleOutput}
                         </pre> : <span className="text-text-muted italic">
