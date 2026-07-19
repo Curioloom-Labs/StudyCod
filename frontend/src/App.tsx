@@ -38,6 +38,7 @@ import { NotificationsBell } from "./components/blog/NotificationsBell";
 import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
 import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
+import { applySeo } from "./lib/seo";
 const AuthPage = React.lazy(() => import("./pages/auth/AuthPage").then(mod => ({ default: mod.AuthPage })));
 const VerifyEmailPage = React.lazy(() => import("./pages/auth/VerifyEmailPage").then(mod => ({ default: mod.VerifyEmailPage })));
 const ResetPasswordPage = React.lazy(() => import("./pages/auth/ResetPasswordPage").then(mod => ({ default: mod.ResetPasswordPage })));
@@ -1182,6 +1183,7 @@ const AppContent: React.FC = React.memo(() => {
 AppContent.displayName = "AppContent";
 export const App: React.FC = () => {
   const location = useLocation();
+  const { i18n } = useTranslation();
   const topLevelRouteKey = useMemo(() => {
     const path = location.pathname || "/";
     if (/^\/edu(?:\/|$)/.test(path)) return "/edu";
@@ -1190,6 +1192,9 @@ export const App: React.FC = () => {
   }, [location.pathname]);
   const subdomainNavigate = useNavigate();
   const didSubdomainLand = useRef(false);
+  useEffect(() => {
+    applySeo(location.pathname, i18n.language?.toLowerCase().startsWith("uk") ? "uk" : "en", location.search);
+  }, [i18n.language, location.pathname, location.search]);
   useEffect(() => {
     // Keep EDU on school.* and contests on contest.* (separate entry points).
     enforceSubdomain(location.pathname);
