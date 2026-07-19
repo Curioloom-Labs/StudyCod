@@ -12,6 +12,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect deploy scope
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "backend=1" >> "$GITHUB_OUTPUT"
+            echo "judge=1" >> "$GITHUB_OUTPUT"
+            echo "ai_service=1" >> "$GITHUB_OUTPUT"
+            echo "frontend=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA")"
+          if [[ -z "$changed" ]]; then
+            echo "backend=1" >> "$GITHUB_OUTPUT"
+            echo "judge=1" >> "$GITHUB_OUTPUT"
+            echo "ai_service=1" >> "$GITHUB_OUTPUT"
+            echo "frontend=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          has_path() {
+            grep -Eq "$1" <<< "$changed"
+          }
+
+          backend=0
+          judge=0
+          ai_service=0
+          frontend=0
+
+          has_path '^(backend/|package-lock.json$)' && backend=1
+          has_path '^(judge/|package-lock.json$)' && judge=1
+          has_path '^(ai-service/|package-lock.json$)' && ai_service=1
+          has_path '^(frontend/|\.github/workflows/deploy\.yml$)' && frontend=1
+
+          # A commit outside a known package is treated as a full deploy so
+          # shared infrastructure changes cannot silently be skipped.
+          if [[ "$backend$judge$ai_service$frontend" == "0000" ]]; then
+            backend=1
+            judge=1
+            ai_service=1
+            frontend=1
+          fi
+
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "judge=$judge" >> "$GITHUB_OUTPUT"
+          echo "ai_service=$ai_service" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -21,4 +79,4 @@ jobs:
 
       - name: Run deploy script
         run: |
-          ssh ${{ secrets.USER }}@${{ secrets.HOST }} "/var/www/studycod/restart-all.sh"
+          ssh ${{ secrets.USER }}@${{ secrets.HOST }} "BUILD_BACKEND=${{ steps.scope.outputs.backend }} BUILD_JUDGE=${{ steps.scope.outputs.judge }} BUILD_AI_SERVICE=${{ steps.scope.outputs.ai_service }} BUILD_FRONTEND=${{ steps.scope.outputs.frontend }} /var/www/studycod/restart-all.sh"
