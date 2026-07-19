@@ -76,10 +76,6 @@
   background-color: rgba(21, 28, 23, 0.88) !important;
 }
 
-:root[data-theme="dark"] #studycod-landing [class~="bg-[#fcfdfb"]] {
-  background-color: #171f19 !important;
-}
-
 :root[data-theme="dark"] #studycod-landing [class~="bg-[#f7f8f5]"],
 :root[data-theme="dark"] #studycod-landing [class~="bg-[#f7f8f5]/85"] {
   background-color: #0f1511 !important;
