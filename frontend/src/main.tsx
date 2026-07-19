@@ -1,10 +1,29 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, useLocation } from "react-router-dom";
 import "./index.css";
 import "./i18n";
-import { App } from "./App";
 import { initTheme } from "./theme";
+
+const App = React.lazy(() => import("./App").then(mod => ({ default: mod.App })));
+const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
+
+/**
+ * Keep the public homepage on a small route-level entry. The authenticated
+ * workspace is intentionally not imported until the URL needs it.
+ */
+const RouteBootstrap: React.FC = () => {
+  const location = useLocation();
+  let hasStoredToken = false;
+  try {
+    hasStoredToken = Boolean(localStorage.getItem("token"));
+  } catch {
+    // Browsers with blocked storage should still receive the public shell.
+  }
+  const isPublicLanding = location.pathname === "/" && !new URLSearchParams(location.search).has("auth") && !hasStoredToken;
+
+  return isPublicLanding ? <PublicLandingPage /> : <App />;
+};
 
 const CHUNK_RELOAD_KEY = "studycod.chunkReloadAttempted";
 const CHUNK_LOAD_ERROR_RE = /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk [\w-]+ failed/i;
@@ -179,7 +198,9 @@ try {
   root.render(<React.StrictMode>
       <ErrorBoundary>
         <BrowserRouter>
-          <App />
+          <React.Suspense fallback={null}>
+            <RouteBootstrap />
+          </React.Suspense>
         </BrowserRouter>
       </ErrorBoundary>
     </React.StrictMode>);

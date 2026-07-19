@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { TheoryModalPortal } from "./TheoryModalPortal";
+
+const TheoryModalPortal = React.lazy(() => import("./TheoryModalPortal").then(mod => ({ default: mod.TheoryModalPortal })));
 export type OpenTheoryParams = {
   title?: string;
   markdown: string;
@@ -46,13 +47,15 @@ export function TheoryModalProvider({
   }), [openTheory, closeTheory, state?.open]);
   return <TheoryModalContext.Provider value={value}>
       {children}
-      <TheoryModalPortal open={!!state?.open} title={state?.title ?? "Теорія"} markdown={state?.markdown ?? ""} acknowledgeLabel={state?.acknowledgeLabel ?? "Я прочитав(ла) теорію"} onAcknowledge={() => {
-      try {
-        state?.onAcknowledge?.();
-      } finally {
-        closeTheory();
-      }
-    }} />
+      {state?.open ? <React.Suspense fallback={null}>
+        <TheoryModalPortal open title={state.title} markdown={state.markdown} acknowledgeLabel={state.acknowledgeLabel} onAcknowledge={() => {
+          try {
+            state.onAcknowledge?.();
+          } finally {
+            closeTheory();
+          }
+        }} />
+      </React.Suspense> : null}
     </TheoryModalContext.Provider>;
 }
 export function useTheoryModal(): TheoryModalContextValue {
