@@ -482,6 +482,8 @@ export const TasksPage: React.FC<Props> = ({
     previousGrade?: number | null;
     testsPassed?: number;
     testsTotal?: number;
+    score?: number;
+    maxScore?: number;
     hints?: string[];
     testResults?: Array<{
       testId: number;
@@ -497,6 +499,14 @@ export const TasksPage: React.FC<Props> = ({
       verdict?: string | null;
       firstFailure?: FailureRecoveryData | null;
     };
+    learningAttempt?: {
+      id: number;
+      outcome: string;
+      failureCategory?: string | null;
+      firstFailedTestId?: number | null;
+      highestHintLevelShown?: number;
+      solvedAfterFailure?: boolean;
+    } | null;
     submissionMeta?: {
       submissionId: string;
       clientSubmissionId?: string | null;
@@ -1854,6 +1864,14 @@ export const TasksPage: React.FC<Props> = ({
           verdict?: string | null;
           firstFailure?: FailureRecoveryData | null;
         };
+        learningAttempt?: {
+          id: number;
+          outcome: string;
+          failureCategory?: string | null;
+          firstFailedTestId?: number | null;
+          highestHintLevelShown?: number;
+          solvedAfterFailure?: boolean;
+        } | null;
         submissionMeta?: {
           submissionId: string;
           clientSubmissionId?: string | null;
@@ -1887,6 +1905,7 @@ export const TasksPage: React.FC<Props> = ({
           hints: Array.isArray(grade.hints) ? grade.hints : undefined,
           testResults: grade.testResults ?? undefined,
           learningFeedback: res.learningFeedback,
+          learningAttempt: res.learningAttempt,
           submissionMeta: responseSubmissionMeta
         };
         const outputText = result.gradingMode === "TESTS" ? tr(`Перевірка завершена: ${result.testsPassed ?? 0}/${result.testsTotal ?? 0}. Оцінка: ${result.total}`, `Check completed: ${result.testsPassed ?? 0}/${result.testsTotal ?? 0}. Grade: ${result.total}`) : tr(`Перевірка завершена. Оцінка: ${result.total}`, `Check completed. Grade: ${result.total}`);
@@ -2406,6 +2425,25 @@ export const TasksPage: React.FC<Props> = ({
 
   const previewPractice = active ? getPracticeText(active) : "";
   const compactHints = nonContestHints.slice(0, 4);
+  const personalTestResults = aiResult?.testResults ?? [];
+  const personalTestsPassed = aiResult?.testsPassed ?? personalTestResults.filter((test) => test.passed).length;
+  const personalTestsTotal = aiResult?.testsTotal ?? personalTestResults.length;
+  const personalTestFailure = personalTestResults.find((test) => !test.passed);
+  const personalFirstFailure: FailureRecoveryData | null = aiResult?.learningFeedback?.firstFailure ?? (personalTestFailure ? {
+    testId: personalTestFailure.testId,
+    inputPreview: personalTestFailure.input,
+    expectedPreview: personalTestFailure.expectedOutput,
+    actualPreview: personalTestFailure.actualOutput,
+    errorKind: personalTestFailure.errorKind,
+    verdict: personalTestFailure.verdict
+  } : null);
+  const hasPersonalFailure = Boolean(aiResult && (
+    aiResult.total < 50 ||
+    (personalTestsTotal > 0 && personalTestsPassed < personalTestsTotal)
+  ));
+  const personalRecoveryVerdict = hasPersonalFailure
+    ? (String(aiResult?.learningFeedback?.verdict ?? "WA").toUpperCase() === "AC" ? "WA" : aiResult?.learningFeedback?.verdict ?? "WA")
+    : "AC";
   const routeTiles = sidebarSections.flatMap((section) =>
     section.items.map((item) => ({
       sectionTitle: section.title,
@@ -2456,7 +2494,8 @@ export const TasksPage: React.FC<Props> = ({
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <div className={`grid min-h-0 flex-1 ${theoryPanelOpen && hasTheoryForActive ? "lg:grid-cols-1" : "lg:grid-cols-[270px_minmax(0,1fr)]"}`}>
+          {!theoryPanelOpen || !hasTheoryForActive ? <>
           <aside className="border-b border-[#15231a]/10 bg-[#f5f7f3] dark:border-white/[.08] dark:bg-[#0c120e] lg:border-b-0 lg:border-r">
             <div className="flex items-center justify-between px-4 pb-3 pt-4">
               <div>
@@ -2498,8 +2537,9 @@ export const TasksPage: React.FC<Props> = ({
               </button>
             </div>
           </aside>
+          </> : null}
 
-          <main className="grid min-h-0 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <main className={`grid min-h-0 ${theoryPanelOpen && hasTheoryForActive ? "grid-cols-1" : "xl:grid-cols-[minmax(0,1fr)_360px]"}`}>
             <section className="flex min-h-0 min-w-0 flex-col">
               <div className="border-b border-[#15231a]/10 px-5 py-5 dark:border-white/[.08] sm:px-7">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -2567,7 +2607,7 @@ export const TasksPage: React.FC<Props> = ({
               )}
             </section>
 
-            <aside className="flex min-h-0 flex-col border-t border-[#15231a]/10 bg-[#f6f8f4] dark:border-white/[.08] dark:bg-[#0c120e] xl:border-l xl:border-t-0">
+            {!theoryPanelOpen || !hasTheoryForActive ? <aside className="flex min-h-0 flex-col border-t border-[#15231a]/10 bg-[#f6f8f4] dark:border-white/[.08] dark:bg-[#0c120e] xl:border-l xl:border-t-0">
               <div className="border-b border-[#15231a]/10 p-5 dark:border-white/[.08]">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Вхідні дані", "Input")}</p><button type="button" onClick={() => setStdin(firstExampleInput)} className="text-[10px] font-black text-[#16834d] dark:text-[#72edb0]">{tr("Взяти з прикладу", "Use example")}</button></div>
                 <textarea value={stdin} onChange={(event) => setStdin(event.target.value)} spellCheck={false} className="mt-3 min-h-24 w-full resize-y rounded-xl border border-[#15231a]/10 bg-white p-3 font-mono text-xs outline-none focus:border-[#00d978] dark:border-white/10 dark:bg-white/[.04]" />
@@ -2584,7 +2624,7 @@ export const TasksPage: React.FC<Props> = ({
                 <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Мої нотатки", "My notes")}</p>
                 <textarea value={personalNotes} onChange={(event) => setPersonalNotes(event.target.value)} placeholder={tr("Ідея, крайовий випадок…", "Idea, edge case…")} className="mt-3 min-h-20 w-full resize-none bg-transparent text-sm leading-6 outline-none placeholder:text-[#9aa59d]" />
               </div>
-            </aside>
+            </aside> : null}
           </main>
         </div>
       </div>
@@ -2937,6 +2977,36 @@ export const TasksPage: React.FC<Props> = ({
                   {aiResult?.aiFeedback ? (
                     <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-[#354239] dark:text-[#d6e3da]">{aiResult?.aiFeedback}</p>
                   ) : null}
+                </article>
+              ) : null}
+
+              {aiResult && hasPersonalFailure ? (
+                <FailureRecoveryCard
+                  verdict={personalRecoveryVerdict}
+                  testsPassed={personalTestsPassed}
+                  testsTotal={personalTestsTotal}
+                  score={aiResult.total}
+                  maxScore={100}
+                  firstFailure={personalFirstFailure}
+                  taskId={active?.id}
+                  taskKind="PERSONAL"
+                  learningAttemptId={aiResult.learningAttempt?.id ?? null}
+                  failureCategory={aiResult.learningAttempt?.failureCategory ?? personalFirstFailure?.errorKind ?? null}
+                  highestHintLevelShown={aiResult.learningAttempt?.highestHintLevelShown ?? 0}
+                  onTryAgain={() => {
+                    setAiResult(null);
+                    setRevealedHints(0);
+                    setConsoleOutput("");
+                    setUIState("idle");
+                    setEditorOpen(true);
+                  }}
+                />
+              ) : null}
+
+              {aiResult?.learningAttempt?.solvedAfterFailure && !hasPersonalFailure ? (
+                <article className="rounded-[26px] border border-[#00d978]/30 bg-[#ebfbf0] p-5 text-[#16623d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                  <p className="text-xs font-black uppercase tracking-[.18em]">{tr("Навичку закріплено", "Skill reinforced")}</p>
+                  <p className="mt-2 text-sm leading-6">{tr("Ти виправив попередню помилку й успішно пройшов перевірку. Це і є прогрес.", "You fixed the previous mistake and passed the check. That is real progress.")}</p>
                 </article>
               ) : null}
 

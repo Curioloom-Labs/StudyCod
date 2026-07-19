@@ -8,6 +8,8 @@ type Props = {
   verdict?: string | null;
   testsPassed?: number;
   testsTotal?: number;
+  score?: number | null;
+  maxScore?: number | null;
   firstFailure?: FailureRecoveryData | null;
   compileError?: string | null;
   compileErrorKind?: string | null;
@@ -94,7 +96,7 @@ function hintStageLabel(level: number, isEnglish: boolean): string {
   return labels[Math.max(0, Math.min(labels.length - 1, level))];
 }
 
-export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, onTryAgain }) => {
+export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, score, maxScore, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, onTryAgain }) => {
   const { i18n } = useTranslation();
   const isEnglish = i18n.language?.toLowerCase().startsWith("en");
   const upperVerdict = String(verdict ?? "").toUpperCase();
@@ -103,6 +105,10 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
   const reportedHintKey = useRef<string | null>(null);
   const hints = hintLevels(persistedCategory, compileError, isEnglish);
   const category = categoryLabel(persistedCategory, isEnglish);
+  const hasTestCount = testsTotal > 0;
+  const resultLabel = hasTestCount
+    ? `${testsPassed}/${testsTotal} ${languageCopy(isEnglish, "тестів", "tests")}`
+    : `${score ?? "—"}/${maxScore ?? 100}`;
 
   useEffect(() => {
     setHintLevel(Math.max(0, Math.min(2, Number(highestHintLevelShown) || 0)));
@@ -163,8 +169,8 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <div className="rounded-xl bg-white/[.05] p-3 text-xs text-[#cbd9ce]">
-          <span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{languageCopy(isEnglish, "Що не пройшло", "What failed")}</span>
-          <strong className="mt-1 block">{testsPassed}/{testsTotal} {languageCopy(isEnglish, "тестів", "tests")}{(firstFailure?.testId ?? firstFailure?.testPublicIndex) ? ` · #${firstFailure.testId ?? firstFailure.testPublicIndex}` : ""}</strong>
+          <span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{languageCopy(isEnglish, hasTestCount ? "Що не пройшло" : "Результат", hasTestCount ? "What failed" : "Result")}</span>
+          <strong className="mt-1 block">{resultLabel}{hasTestCount && (firstFailure?.testId ?? firstFailure?.testPublicIndex) ? ` · #${firstFailure.testId ?? firstFailure.testPublicIndex}` : ""}</strong>
         </div>
         <div className="rounded-xl bg-white/[.05] p-3 text-xs text-[#cbd9ce]">
           <span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{languageCopy(isEnglish, "Категорія", "Category")}</span>

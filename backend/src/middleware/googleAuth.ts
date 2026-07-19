@@ -23,7 +23,10 @@ async function readGoogleBirthday(accessToken: string): Promise<{ birthDay: numb
         Authorization: `Bearer ${accessToken}`
       }
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logger.warn("[auth] Google birthday lookup returned non-OK", { status: response.status });
+      return null;
+    }
 
     const payload = await response.json() as { birthdays?: GoogleBirthday[] };
     const birthdays = Array.isArray(payload.birthdays) ? payload.birthdays : [];
