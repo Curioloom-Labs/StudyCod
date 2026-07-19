@@ -194,8 +194,8 @@
   /* Typography */
   --font-sans: "Fixel Text", "Segoe UI", "Noto Sans", Arial, sans-serif;
   --font-display: "Fixel Display", "Fixel Text", "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", "Monaco",
-    "Courier New", monospace;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", "Fira Code",
+    Consolas, Monaco, "Courier New", monospace;
   --font-xs: 0.75rem;
   --font-sm: 0.875rem;
   --font-base: 1rem;

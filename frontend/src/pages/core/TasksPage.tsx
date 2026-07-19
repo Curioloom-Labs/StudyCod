@@ -2441,6 +2441,7 @@ export const TasksPage: React.FC<Props> = ({
     aiResult.total < 50 ||
     (personalTestsTotal > 0 && personalTestsPassed < personalTestsTotal)
   ));
+  const personalAiResult = aiResult;
   const personalRecoveryVerdict = hasPersonalFailure
     ? (String(aiResult?.learningFeedback?.verdict ?? "WA").toUpperCase() === "AC" ? "WA" : aiResult?.learningFeedback?.verdict ?? "WA")
     : "AC";
@@ -2980,19 +2981,19 @@ export const TasksPage: React.FC<Props> = ({
                 </article>
               ) : null}
 
-              {aiResult && hasPersonalFailure ? (
+              {personalAiResult && hasPersonalFailure ? (
                 <FailureRecoveryCard
                   verdict={personalRecoveryVerdict}
                   testsPassed={personalTestsPassed}
                   testsTotal={personalTestsTotal}
-                  score={aiResult.total}
+                  score={personalAiResult!.total}
                   maxScore={100}
                   firstFailure={personalFirstFailure}
                   taskId={active?.id}
                   taskKind="PERSONAL"
-                  learningAttemptId={aiResult.learningAttempt?.id ?? null}
-                  failureCategory={aiResult.learningAttempt?.failureCategory ?? personalFirstFailure?.errorKind ?? null}
-                  highestHintLevelShown={aiResult.learningAttempt?.highestHintLevelShown ?? 0}
+                  learningAttemptId={personalAiResult!.learningAttempt?.id ?? null}
+                  failureCategory={personalAiResult!.learningAttempt?.failureCategory ?? personalFirstFailure?.errorKind ?? null}
+                  highestHintLevelShown={personalAiResult!.learningAttempt?.highestHintLevelShown ?? 0}
                   onTryAgain={() => {
                     setAiResult(null);
                     setRevealedHints(0);
