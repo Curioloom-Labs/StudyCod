@@ -70,9 +70,19 @@ export type LearningFeedback = {
   firstFailure?: LearningFirstFailure | null;
 };
 
+export type LearningAttemptSummary = {
+  id: number;
+  outcome: "SOLVED" | "FAILED" | string;
+  failureCategory?: string | null;
+  firstFailedTestId?: number | null;
+  highestHintLevelShown?: number;
+  solvedAfterFailure?: boolean;
+};
+
 export type SubmitTaskResponse = {
   grade?: PersonalTaskGrade;
   learningFeedback?: LearningFeedback;
+  learningAttempt?: LearningAttemptSummary | null;
   submissionMeta?: {
     submissionId: string;
     clientSubmissionId?: string | null;

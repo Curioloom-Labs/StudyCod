@@ -518,7 +518,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     return [mathPlugins.rehypeKatex];
   }, [mathPlugins.rehypeKatex]);
 
-  const codeComponents = useMemo<Pick<Components, "code" | "a" | "img" | "p">>(() => ({
+  const codeComponents = useMemo<Pick<Components, "code" | "a" | "img" | "p" | "pre">>(() => ({
     code({
       node,
       inline,
@@ -531,13 +531,18 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     }) {
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : "";
-      if (!inline && language === "interactive") {
+      // react-markdown 10 no longer reliably provides the old `inline` prop.
+      // Fenced blocks are normalized to a language below, so an unclassified
+      // code node is an inline snippet when the prop is absent.
+      const isInlineCode = inline !== false && !match;
+
+      if (!isInlineCode && language === "interactive") {
         const raw = String(children).replace(/\n$/, "");
         const spec = parseInteractiveSpec(raw);
         if (spec) return <InteractiveBlock spec={spec} />;
         return <PlainCodeBlock code={raw} />;
       }
-      if (!inline && match) {
+      if (!isInlineCode && match && language !== "text") {
         const code = decodeEscapedInputText(String(children).replace(/\n$/, ""));
         if (!SyntaxHighlighter || !syntaxStyle) {
           return <PlainCodeBlock code={code} />;
@@ -554,7 +559,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
               </SyntaxHighlighter>
             </div>;
       }
-      if (!inline) {
+      if (!isInlineCode) {
         const code = decodeEscapedInputText(String(children).replace(/\n$/, ""));
         return <PlainCodeBlock code={code} />;
       }
@@ -566,6 +571,11 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       >
         {inlineCode}
       </code>;
+    },
+    // Custom code blocks already include their own container. Removing the
+    // default wrapper prevents invalid <pre><pre> nesting and excess spacing.
+    pre({ children }: React.ComponentPropsWithoutRef<"pre">) {
+      return <>{children}</>;
     },
     a({
       href,
@@ -636,9 +646,13 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     processed = processed.replace(/\\textbf\{([^}]+)\}/g, "**$1**");
     processed = processed.replace(/\\textit\{([^}]+)\}/g, "*$1*");
     processed = processed.replace(/\\emph\{([^}]+)\}/g, "*$1*");
+    // react-markdown 10 does not expose the parent <pre> to the `code`
+    // renderer. Give language-less fenced blocks an explicit marker so they
+    // remain blocks while backtick snippets inside prose stay inline.
+    processed = processed.replace(/(^|\n)([ \t]*)```[ \t]*(?=\n)/g, "$1$2```text");
     return processed;
   }, [content]);
-  return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-mono prose-invert"} prose max-w-none
+  return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-sans prose-invert"} prose max-w-none
       prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-4 prose-pre:border-0
       prose-code:bg-bg-code prose-code:px-1.5 prose-code:py-0.5 prose-code:border prose-code:border-border prose-code:text-sm prose-code:font-mono prose-code:text-text-primary
       prose-code:before:content-[''] prose-code:after:content-['']

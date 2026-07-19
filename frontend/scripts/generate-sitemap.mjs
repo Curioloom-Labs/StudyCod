@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 function normalizeBaseUrl(raw) {
-  const base = String(raw || "").trim() || "http://localhost";
+  const base = String(raw || "").trim() || "https://studycod.space";
   return base.endsWith("/") ? base.slice(0, -1) : base;
 }
 
@@ -23,10 +23,40 @@ async function main() {
   const urls = [
     { path: "/", changefreq: "daily", priority: "1.0" },
     { path: "/docs", changefreq: "weekly", priority: "0.8" },
+    { path: "/pricing", changefreq: "weekly", priority: "0.8" },
     { path: "/privacy", changefreq: "monthly", priority: "0.5" },
     { path: "/terms", changefreq: "monthly", priority: "0.5" },
     { path: "/refunds", changefreq: "monthly", priority: "0.5" },
-    { path: "/cookies", changefreq: "monthly", priority: "0.5" }
+    { path: "/cookies", changefreq: "monthly", priority: "0.5" },
+    ...[
+      "welcome",
+      "getting-started",
+      "navigation",
+      "ux-acceptance",
+      "profile-progress-model",
+      "personal",
+      "personal-tasks",
+      "playground",
+      "edu-student",
+      "edu-teacher",
+      "edu-classes",
+      "edu-courses",
+      "edu-topics",
+      "edu-tasks",
+      "edu-controlworks",
+      "edu-quizzes",
+      "edu-gradebook",
+      "edu-thematic",
+      "edu-calendar",
+      "edu-live",
+      "edu-appeals",
+      "edu-import-export",
+      "edu-announcements",
+      "grading",
+      "faq",
+      "troubleshooting",
+      "privacy"
+    ].map(path => ({ path: `/docs/${path}`, changefreq: "monthly", priority: "0.6" }))
   ];
   const now = new Date().toISOString();
 

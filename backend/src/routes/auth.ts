@@ -635,8 +635,13 @@ authRouter.get("/google", async (req: Request, res: Response, next) => {
     });
   }
 
+  const isRegistrationFlow = String(req.query.signup ?? "").trim() === "1";
   return passport.authenticate("google", {
-    scope: ["profile", "email", "https://www.googleapis.com/auth/user.birthday.read"]
+    scope: ["profile", "email", "https://www.googleapis.com/auth/user.birthday.read"],
+    // Birthday is an additional, sensitive scope. Ask for it again only when
+    // the user explicitly chose Google registration, not on every login.
+    includeGrantedScopes: true,
+    ...(isRegistrationFlow ? { prompt: "consent" } : {})
   })(req, res, next);
 });
 
