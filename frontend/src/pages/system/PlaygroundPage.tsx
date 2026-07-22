@@ -299,7 +299,7 @@ export const PlaygroundPage: React.FC = () => {
         </section>
 
         <div className="grid min-h-[720px] grid-cols-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)_460px]">
-          <aside className="flex flex-col gap-4 rounded-[30px] border border-[#132019]/10 bg-white p-4 shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14]">
+          <aside className="order-2 flex flex-col gap-4 rounded-[30px] border border-[#132019]/10 bg-white p-4 shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14] xl:order-1">
             <div>
               <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">{tr("Мова", "Language")}</div>
               <select value={language} onChange={(event) => onLanguageChange(event.target.value as PlaygroundLanguage)} className={selectCls}>
@@ -362,20 +362,24 @@ export const PlaygroundPage: React.FC = () => {
             </div>
           </aside>
 
-          <main className="overflow-hidden rounded-[30px] border border-[#132019]/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14]">
+          <main className="order-1 overflow-hidden rounded-[30px] border border-[#132019]/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14] xl:order-2">
             <div className="flex items-center gap-2 border-b border-border/70 bg-bg-hover/35 px-4 py-3">
               <span className="h-2.5 w-2.5 rounded-full bg-accent-error/60" />
               <span className="h-2.5 w-2.5 rounded-full bg-accent-warn/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-accent-success/70" />
               <span className="ml-2 truncate text-xs font-mono text-text-secondary">{JUDGE_ENTRY_FILES[language]}</span>
-              <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">{tr("Редактор", "Editor")}</span>
+              <Button variant="primary" onClick={doRun} disabled={running || tracing} className="ml-auto h-9 shrink-0 px-3 text-xs md:hidden">
+                <Play className="mr-1.5 h-3.5 w-3.5" />
+                {running ? tr("Запуск…", "Running…") : tr("Запустити", "Run")}
+              </Button>
+              <span className="ml-auto hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted md:inline">{tr("Редактор", "Editor")}</span>
             </div>
-            <div className="h-[calc(100%-49px)] min-h-[620px]">
+            <div className="h-[calc(100%-49px)] min-h-[520px] sm:min-h-[620px]">
               <CodeEditor language={language} value={code} onChange={setCode} />
             </div>
           </main>
 
-          <aside className="flex min-h-[720px] flex-col gap-4">
+          <aside className="order-3 flex min-h-0 flex-col gap-4 xl:min-h-[720px] xl:order-3">
             <section className="overflow-hidden rounded-[30px] border border-[#132019]/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14]">
               <div className="flex items-center gap-2 border-b border-border/70 bg-bg-hover/35 px-4 py-3">
                 <Terminal className="h-4 w-4 text-primary" />

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles, LayoutGrid, Zap, Compass } from "lucide-react";
+import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles } from "lucide-react";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import type { User, CourseLanguage, Grade, PublicProfilePrivacy } from "../../types";
@@ -35,8 +35,6 @@ import { getEmailSubscription, updateEmailSubscription, updateProfile } from "..
 import { prepareGoogleLinkSession } from "../../lib/api/auth";
 import { listGrades } from "../../lib/api/grades";
 import { getMyLearningEvidence, listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem, type LearningSkillEvidence } from "../../lib/api/library";
-import { useUIMode } from "../../components/interface/UIModeProvider";
-import { AURORA_ENABLED } from "../../lib/uiMode";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { PremiumProfileV2, SkillEvidenceDetails, type SkillEvidence } from "../core/PremiumPersonalExperience";
@@ -211,7 +209,6 @@ const ProgressBadge: React.FC<{ milestone: BadgeMilestone; solvedCount: number; 
 export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   const { t, i18n } = useTranslation();
   const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
-  const ui = useUIMode();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
   const isDesignPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 
@@ -808,89 +805,18 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
               <div className="space-y-3">
                 <h3 className="text-sm font-mono text-text-primary">{tr("Інтерфейс", "Interface")}</h3>
                 <div className="border border-border bg-bg-code p-4 rounded-md space-y-3">
-                  <div>
-                    <div className="text-xs font-mono text-text-primary">{tr("Режим інтерфейсу", "UI mode")}</div>
-                    <div className="text-[11px] font-mono text-text-secondary mt-1">
-                      {AURORA_ENABLED
-                        ? tr(
-                            "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K). Aurora — редакторський простір без постійного меню: навігація через зони та палітру (Ctrl+K).",
-                            "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K). Aurora — an editorial workspace without a fixed menu: navigation via zones and the palette (Ctrl+K)."
-                          )
-                        : tr(
-                            "Momentum UI — компактний робочий простір для щоденного розвʼязування. Classic — ширша класична навігація та звичний вигляд. Nova — сучасний мінімалістичний інтерфейс зі швидкою навігацією (Ctrl+K).",
-                            "Momentum UI — compact workspace for daily solving. Classic — broader classic navigation with familiar layout. Nova — modern minimal interface with fast navigation (Ctrl+K)."
-                          )}
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <div>
+                      <div className="text-xs font-mono text-text-primary">{tr("Єдиний інтерфейс StudyCod", "One StudyCod interface")}</div>
+                      <div className="mt-1 text-[11px] font-mono leading-relaxed text-text-secondary">
+                        {tr(
+                          "Один узгоджений досвід на ПК, планшеті й телефоні. Навігація, прогрес та робочі інструменти синхронні на всіх екранах.",
+                          "One consistent experience across desktop, tablet, and phone. Navigation, progress, and workspace tools stay in sync across screens."
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  <div className={`grid grid-cols-2 gap-2.5 ${AURORA_ENABLED ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-                    <button
-                      onClick={() => ui.setMode("classic")}
-                      className={
-                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
-                        (ui.mode === "classic" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
-                      }
-                    >
-                      <LayoutGrid className={`w-4 h-4 ${ui.mode === "classic" ? "text-primary" : "text-text-muted"}`} />
-                      <div className={`mt-2 text-xs font-mono ${ui.mode === "classic" ? "text-primary" : "text-text-primary"}`}>Classic</div>
-                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Класична навігація", "Classic navigation")}</div>
-                    </button>
-                    <button
-                      onClick={() => ui.setMode("focus")}
-                      className={
-                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
-                        (ui.mode === "focus" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
-                      }
-                    >
-                      <Zap className={`w-4 h-4 ${ui.mode === "focus" ? "text-primary" : "text-text-muted"}`} />
-                      <div className={`mt-2 text-xs font-mono ${ui.mode === "focus" ? "text-primary" : "text-text-primary"}`}>Momentum UI</div>
-                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Компактний простір", "Compact workspace")}</div>
-                    </button>
-                    <button
-                      onClick={() => ui.setMode("nova")}
-                      className={
-                        "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
-                        (ui.mode === "nova" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
-                      }
-                    >
-                      <Compass className={`w-4 h-4 ${ui.mode === "nova" ? "text-primary" : "text-text-muted"}`} />
-                      <div className={`mt-2 text-xs font-mono ${ui.mode === "nova" ? "text-primary" : "text-text-primary"}`}>Nova</div>
-                      <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Швидка навігація (Ctrl+K)", "Fast nav (Ctrl+K)")}</div>
-                    </button>
-                    {AURORA_ENABLED ? (
-                      <button
-                        onClick={() => ui.setMode("aurora")}
-                        className={
-                          "group text-left rounded-xl border p-3 transition-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 hover:-translate-y-0.5 " +
-                          (ui.mode === "aurora" ? "border-primary/60 bg-primary/10" : "border-border bg-bg-surface hover:border-primary/40")
-                        }
-                      >
-                        <Sparkles className={`w-4 h-4 ${ui.mode === "aurora" ? "text-primary" : "text-text-muted"}`} />
-                        <div className={`mt-2 text-xs font-mono ${ui.mode === "aurora" ? "text-primary" : "text-text-primary"}`}>Aurora</div>
-                        <div className="mt-0.5 text-[10px] font-mono text-text-secondary">{tr("Редакторський простір", "Editorial workspace")}</div>
-                      </button>
-                    ) : null}
-                  </div>
-                  <button
-                    onClick={() => ui.setClassicForToday()}
-                    className="mt-2.5 inline-flex px-3 py-2 rounded-lg border border-border font-mono text-xs text-text-secondary hover:text-text-primary hover:border-primary/40 hover:bg-bg-hover transition-fast"
-                  >
-                    {tr("Classic до кінця дня", "Classic for today")}
-                  </button>
-
-                  {ui.override ? (
-                    <div className="text-[11px] font-mono text-text-secondary border border-border bg-bg-surface px-3 py-2 flex items-center justify-between gap-3">
-                      <span>
-                        {tr("Тимчасовий режим", "Temporary mode")}: <span className="text-text-primary">{ui.override.mode === "classic" ? "Classic" : ui.override.mode === "nova" ? "Nova" : ui.override.mode === "aurora" ? "Aurora" : "Momentum UI"}</span>
-                      </span>
-                      <button
-                        onClick={() => ui.clearOverride()}
-                        className="px-2 py-1 border border-border text-text-secondary hover:bg-bg-hover transition-fast"
-                      >
-                        {tr("Скасувати", "Clear")}
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
               </div>
 

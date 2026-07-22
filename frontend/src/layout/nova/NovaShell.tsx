@@ -604,7 +604,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
 
   if (navigationHidden) {
     return (
-      <div data-ui-mode="nova" className="min-h-[100dvh] bg-bg-base text-text-primary flex">
+      <div data-ui-mode="nova" className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex">
         <div className="flex-1 min-w-0 flex flex-col">
           <WorkspaceViewportProvider element={workspaceViewportEl}>
             <div ref={setWorkspaceViewportEl} className="flex-1 min-h-0 overflow-y-auto">
@@ -617,7 +617,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
   }
 
   return (
-    <div data-ui-mode="nova" className="min-h-[100dvh] bg-bg-base text-text-primary flex">
+    <div data-ui-mode="nova" className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex">
       <aside
         ref={asideRef}
         className={
@@ -858,7 +858,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
               </button>
             ) : null}
 
-            {topRight}
+            {!isCompactViewport ? topRight : null}
 
             <button
               type="button"
@@ -886,12 +886,15 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                 </button>
 
                 {mobileMenuOpen ? (
+                  <>
+                  <button type="button" aria-label={t("close")} className="fixed inset-0 z-40 cursor-default bg-black/25" onClick={() => setMobileMenuOpen(false)} />
                   <div
                     ref={mobileSheetRef}
-                    className="absolute right-0 top-12 z-40 w-[min(280px,calc(100vw-1rem))] rounded-lg border border-border bg-bg-surface shadow-lg overflow-hidden"
+                    className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] z-50 max-h-[min(70dvh,560px)] overflow-y-auto rounded-3xl border border-border bg-bg-surface shadow-2xl"
                     role="menu"
                     aria-label={t("accountMenu")}
                   >
+                    {topRight ? <div className="border-b border-border px-3 py-3">{topRight}</div> : null}
                     {mobileOverflowItems.length ? (
                       <>
                         <div className="px-3 py-2 text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-text-muted border-b border-border">
@@ -905,7 +908,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                               type="button"
                               onClick={() => handleNavigate(it.id)}
                               {...prefetchProps(it.id)}
-                              className="w-full min-h-11 px-3 py-2 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-primary"
+                              className="w-full min-h-12 px-3 py-3 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-primary"
                               role="menuitem"
                             >
                               <Icon className="w-4 h-4" />
@@ -922,7 +925,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                     <button
                       type="button"
                       onClick={() => handleNavigate("profile")}
-                      className="w-full min-h-11 px-3 py-2 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-primary"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-primary"
                       role="menuitem"
                     >
                       <UserIcon className="w-4 h-4" />
@@ -934,7 +937,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                         setMobileMenuOpen(false);
                         navigate("/docs");
                       }}
-                      className="w-full min-h-11 px-3 py-2 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-secondary"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-secondary"
                       role="menuitem"
                     >
                       <HelpCircle className="w-4 h-4" />
@@ -946,7 +949,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                         setMobileMenuOpen(false);
                         cycleUIMode();
                       }}
-                      className="w-full min-h-11 px-3 py-2 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-secondary"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-text-secondary"
                       role="menuitem"
                     >
                       <SwatchBook className="w-4 h-4" />
@@ -958,13 +961,14 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                         setMobileMenuOpen(false);
                         onLogout();
                       }}
-                      className="w-full min-h-11 px-3 py-2 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-accent-error"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-medium hover:bg-bg-hover transition-colors duration-150 flex items-center gap-2 text-accent-error"
                       role="menuitem"
                     >
                       <LogOut className="w-4 h-4" />
                       {t("logout")}
                     </button>
                   </div>
+                  </>
                 ) : null}
               </div>
             ) : null}
@@ -974,7 +978,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
         <WorkspaceViewportProvider element={workspaceViewportEl}>
           <div
             ref={setWorkspaceViewportEl}
-            className={`flex-1 min-h-0 overflow-y-auto flex flex-col ${isCompactViewport ? "pb-[calc(4.75rem+env(safe-area-inset-bottom))]" : ""}`}
+            className={`mobile-app-viewport flex-1 min-h-0 overflow-y-auto flex flex-col ${isCompactViewport ? "pb-[calc(4.75rem+env(safe-area-inset-bottom))]" : ""}`}
           >
             <div className="flex-1 min-h-0 flex flex-col">{children}</div>
             <PlatformFooter compact={isCompactViewport} className="mt-auto" />
@@ -995,7 +999,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                   onClick={() => handleNavigate(it.id)}
                   {...prefetchProps(it.id)}
                   className={
-                    "min-h-11 rounded-lg px-1 py-1.5 flex flex-col items-center justify-center gap-1 transition-colors duration-150 " +
+                    "min-h-12 rounded-lg px-1 py-1.5 flex flex-col items-center justify-center gap-1 transition-colors duration-150 " +
                     (active
                       ? "bg-primary/10 text-primary"
                       : "text-text-secondary hover:text-text-primary hover:bg-bg-hover")

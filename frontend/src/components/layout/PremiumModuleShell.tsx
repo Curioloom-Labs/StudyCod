@@ -79,7 +79,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
   }, [accountOpen]);
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
+    <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
       <header className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/85 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/85">
         <div className="mx-auto flex h-[72px] w-full max-w-[1480px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
           <button type="button" onClick={() => !navigationHidden && onNavigate(productHome)} className="flex items-center gap-2.5">
@@ -121,7 +121,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                   <span className="hidden min-w-0 max-w-[220px] truncate sm:block lg:max-w-[260px]">{displayName}</span>
                   <ChevronDown className={`size-3.5 shrink-0 transition ${accountOpen ? "rotate-180" : ""}`} />
                 </button>
-                {accountOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-[#152219]/10 bg-white p-1 opacity-100 shadow-xl transition dark:border-white/10 dark:bg-[#172018]" role="menu">
+                {accountOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-[#152219]/10 bg-white p-1 opacity-100 shadow-xl transition dark:border-white/10 dark:bg-[#172018] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3" role="menu">
                   <div className="px-3 py-2">
                     <div className="break-words text-sm font-semibold text-[#142017] dark:text-[#edf3ef]">{displayName}</div>
                     <div className="mt-0.5 break-all text-xs text-[#6b7a70] dark:text-[#a4b2a7]">@{user.username}</div>
@@ -140,17 +140,18 @@ export const PremiumModuleShell: React.FC<Props> = ({
           </div>
         </div>
 
-        {!navigationHidden && (
-          <nav className="flex gap-1 overflow-x-auto border-t border-[#152219]/8 px-4 py-2 md:hidden dark:border-white/8">
-            {nav.map(({ label, path }) => (
-              <button type="button" key={path} onClick={() => onNavigate(path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${isActive(path) ? "bg-[#17251c] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#6b7a70] dark:text-[#a4b2a7]"}`}>
-                {label}
-              </button>
-            ))}
-          </nav>
-        )}
       </header>
-      <main className="flex-1">{children}</main>
+      {!navigationHidden && <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 md:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
+        <div className="grid grid-cols-5 gap-1">
+          {nav.slice(0, 5).map(({ label, path, Icon }) => (
+            <button key={path} type="button" onClick={() => onNavigate(path)} className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${isActive(path) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
+              <Icon className="size-4" />
+              <span className="max-w-full truncate leading-none">{label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>}
+      <main className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
       {!navigationHidden && <PlatformFooter />}
     </div>
   );

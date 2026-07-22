@@ -111,7 +111,7 @@ const BlogAdminPage = React.lazy(() => import("./pages/system/BlogAdminPage").th
 const PageLoader: React.FC = () => {
   return <BrandedPageLoader />;
 };
-const PublicPageWithFooter: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="flex min-h-[100dvh] flex-col"><div className="flex-1">{children}</div><PlatformFooter /></div>;
+const PublicPageWithFooter: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="mobile-app-shell flex min-h-[100dvh] flex-col"><div className="mobile-app-viewport flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div><PlatformFooter /></div>;
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
 
 // A deliberately local-only product preview. It lets design review happen
@@ -940,7 +940,7 @@ const AppContent: React.FC = React.memo(() => {
   }
 
   if (ui.mode === "classic") {
-    return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
+    return <div className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
         {}
         <header className="studycod-app-header sticky top-0 z-40 min-h-[72px] border-b border-[#152219]/10 bg-[#f7f8f5]/85 text-[#142017] backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/85 dark:text-[#edf3ef] flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
           <div className="flex items-center gap-4 min-w-0 flex-wrap md:flex-nowrap">
@@ -1078,10 +1078,30 @@ const AppContent: React.FC = React.memo(() => {
           </div>
         </header>
 
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-bg-surface/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden" aria-label={i18n.language === "uk" ? "Мобільна навігація" : "Mobile navigation"}>
+          <div className="grid grid-cols-5 gap-1">
+            <button type="button" onClick={() => user.studentId ? navigate("/edu/lessons") : handleSetPage("teacher")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+              <Home className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("lessons") : t("myClasses")}</span>
+            </button>
+            <button type="button" onClick={() => user.studentId ? handleSetPage("student") : navigate("/edu/courses")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+              <BookOpen className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("myJournal") : t("eduNavCourses", { defaultValue: "Courses" })}</span>
+            </button>
+            <button type="button" onClick={() => navigate(user.studentId ? "/edu/library" : "/edu/calendar")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+              <Library className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("library") : t("eduNavCalendar", { defaultValue: "Calendar" })}</span>
+            </button>
+            <button type="button" onClick={() => setPaletteOpen(true)} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary" aria-label={t("searchOrJump", { defaultValue: "Search" })}>
+              <Search className="h-4 w-4" /><span className="text-[10px] font-semibold">{t("search", { defaultValue: "Search" })}</span>
+            </button>
+            <button type="button" onClick={() => handleSetPage("profile")} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl hover:bg-bg-hover hover:text-text-primary ${resolvedPage === "profile" ? "bg-primary/10 text-primary" : "text-text-secondary"}`}>
+              <UserIcon className="h-4 w-4" /><span className="text-[10px] font-semibold">{t("profile")}</span>
+            </button>
+          </div>
+        </nav>
+
         <SwitchToMomentumNudge />
 
         <WorkspaceViewportProvider element={workspaceViewportEl}>
-          <main ref={setWorkspaceViewportRef} className={`flex-1 min-h-0 flex flex-col ${resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+          <main ref={setWorkspaceViewportRef} className={`mobile-app-viewport flex-1 min-h-0 flex flex-col pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 ${resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
             {content}
           </main>
         </WorkspaceViewportProvider>

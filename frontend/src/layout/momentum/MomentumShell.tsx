@@ -301,7 +301,7 @@ export const MomentumShell: React.FC<Props> = ({
 
   if (navigationHidden) {
     return (
-      <div data-ui-mode={ui.mode} className="min-h-[100dvh] bg-bg-base text-text-primary flex">
+      <div data-ui-mode={ui.mode} className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex">
         <div className="flex-1 min-w-0 flex flex-col">
           <WorkspaceViewportProvider element={workspaceViewportEl}>
             <div ref={setWorkspaceViewportEl} className="flex-1 min-h-0 overflow-y-auto">
@@ -314,7 +314,7 @@ export const MomentumShell: React.FC<Props> = ({
   }
 
   return (
-    <div data-ui-mode={ui.mode} className="min-h-[100dvh] bg-bg-base text-text-primary flex">
+    <div data-ui-mode={ui.mode} className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex">
       <aside className="hidden lg:flex w-[64px] xl:w-[76px] border-r border-border bg-bg-surface flex-col items-stretch">
         <div className="h-[72px] flex items-center justify-center border-b border-border">
           <button
@@ -455,7 +455,7 @@ export const MomentumShell: React.FC<Props> = ({
             ) : null}
           </div>
           <div className="flex items-center gap-2 sm:gap-3 pl-2">
-            {topRight}
+            {!isCompactViewport ? topRight : null}
             {isCompactViewport ? (
               <button
                 onClick={() => setPaletteOpen(true)}
@@ -491,7 +491,10 @@ export const MomentumShell: React.FC<Props> = ({
                 </button>
 
                 {menuOpen ? (
-                  <div className="absolute right-0 top-12 z-40 bg-bg-surface border border-border w-[min(280px,calc(100vw-1rem))]" role="menu" aria-label={t("accountMenu")}>
+                  <>
+                  <button type="button" aria-label={t("close")} className="fixed inset-0 z-40 cursor-default bg-black/25" onClick={() => setMenuOpen(false)} />
+                  <div className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] z-50 max-h-[min(70dvh,560px)] overflow-y-auto rounded-3xl border border-border bg-bg-surface shadow-2xl" role="menu" aria-label={t("accountMenu")}>
+                    {topRight ? <div className="border-b border-border px-3 py-3">{topRight}</div> : null}
                     {mobileOverflowItems.length ? (
                       <>
                         <div className="px-3 py-2 text-xs font-mono font-medium tracking-[0.03em] text-text-secondary border-b border-border">
@@ -507,7 +510,7 @@ export const MomentumShell: React.FC<Props> = ({
                                 onNavigate(it.id);
                               }}
                               {...prefetchProps(it.id)}
-                              className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast flex items-center gap-2"
+                              className="w-full min-h-12 px-3 py-3 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast flex items-center gap-2"
                             >
                               <Icon className="w-4 h-4" />
                               {it.label}
@@ -525,7 +528,7 @@ export const MomentumShell: React.FC<Props> = ({
                         setMenuOpen(false);
                         onNavigate("profile");
                       }}
-                      className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast"
                     >
                       {t("profile")}
                     </button>
@@ -534,7 +537,7 @@ export const MomentumShell: React.FC<Props> = ({
                         setMenuOpen(false);
                         navigate("/docs");
                       }}
-                      className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-text-secondary"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-text-secondary"
                     >
                       {t("help")}
                     </button>
@@ -543,7 +546,7 @@ export const MomentumShell: React.FC<Props> = ({
                         setMenuOpen(false);
                         cycleUIMode();
                       }}
-                      className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-text-secondary"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-text-secondary"
                     >
                       {t("interfaceLabel")}: {currentUIModeName}
                     </button>
@@ -552,12 +555,13 @@ export const MomentumShell: React.FC<Props> = ({
                         setMenuOpen(false);
                         onLogout();
                       }}
-                      className="w-full px-3 py-2 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-accent-error flex items-center gap-2"
+                      className="w-full min-h-12 px-3 py-3 text-left text-sm font-mono font-medium hover:bg-bg-hover transition-fast text-accent-error flex items-center gap-2"
                     >
                       <LogOut className="w-4 h-4" />
                       {t("logout")}
                     </button>
                   </div>
+                  </>
                 ) : null}
               </div>
             ) : null}
@@ -567,7 +571,7 @@ export const MomentumShell: React.FC<Props> = ({
         <WorkspaceViewportProvider element={workspaceViewportEl}>
           <div
             ref={setWorkspaceViewportEl}
-            className={`flex-1 min-h-0 overflow-y-auto flex flex-col ${isCompactViewport ? "pb-[calc(4.75rem+env(safe-area-inset-bottom))]" : ""}`}
+            className={`mobile-app-viewport flex-1 min-h-0 overflow-y-auto flex flex-col ${isCompactViewport ? "pb-[calc(4.75rem+env(safe-area-inset-bottom))]" : ""}`}
           >
             <div className="flex-1 min-h-0 flex flex-col">{children}</div>
             <PlatformFooter compact={isCompactViewport} className="mt-auto" />
@@ -586,7 +590,7 @@ export const MomentumShell: React.FC<Props> = ({
                   key={`bottom-${it.id}`}
                   onClick={() => onNavigate(it.id)}
                   {...prefetchProps(it.id)}
-                  className={`min-h-11 rounded-xl border px-1 py-1.5 flex flex-col items-center justify-center gap-1 transition-fast ${active ? "border-primary bg-primary/12 text-primary" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
+                  className={`min-h-12 rounded-xl border px-1 py-1.5 flex flex-col items-center justify-center gap-1 transition-fast ${active ? "border-primary bg-primary/12 text-primary" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
                   aria-label={it.label}
                   aria-pressed={active}
                 >

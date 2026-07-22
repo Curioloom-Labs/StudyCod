@@ -2630,6 +2630,23 @@ export const TasksPage: React.FC<Props> = ({
         </div>
       </div>
 
+      {isCompactViewport && active ? (
+        <div className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-[#132018]/10 bg-white/95 p-1.5 shadow-[0_18px_48px_rgba(18,39,24,.18)] backdrop-blur dark:border-white/10 dark:bg-[#121b15]/95 lg:hidden">
+          <button type="button" onClick={() => setStatementModalOpen(true)} className="min-h-11 rounded-xl px-2 text-[11px] font-black text-[#536359] hover:bg-[#eef3ed] dark:text-[#b7c5ba] dark:hover:bg-white/[.06]">
+            {tr("Умова", "Brief")}
+          </button>
+          <button type="button" onClick={() => focusWorkspaceArea("mission")} className="min-h-11 rounded-xl px-2 text-[11px] font-black text-[#536359] hover:bg-[#eef3ed] dark:text-[#b7c5ba] dark:hover:bg-white/[.06]">
+            {tr("Код", "Code")}
+          </button>
+          <button type="button" onClick={runFromRail} disabled={!canQuickRun} className="min-h-11 rounded-xl bg-[#edf5ee] px-2 text-[11px] font-black text-[#17653e] disabled:opacity-40 dark:bg-white/[.07] dark:text-[#72edb0]">
+            {tr("Запуск", "Run")}
+          </button>
+          <button type="button" onClick={checkFromRail} disabled={!canQuickCheck} className="min-h-11 rounded-xl bg-[#00e980] px-2 text-[11px] font-black text-[#062213] disabled:opacity-40">
+            {tr("Здати", "Submit")}
+          </button>
+        </div>
+      ) : null}
+
       <Modal open={statementModalOpen} onClose={() => setStatementModalOpen(false)} title={tr("Умова завдання", "Task brief")} description={active?.title}>
         {fullPracticeText ? <MarkdownView content={fullPracticeText} /> : <p>{tr("Умова недоступна.", "Brief unavailable.")}</p>}
       </Modal>

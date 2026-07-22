@@ -767,6 +767,38 @@
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28);
 }
 
+/* Mobile is a first-class surface: keep controls reachable, prevent iOS zoom,
+   and make horizontal tool strips feel intentional rather than accidental. */
+@media (max-width: 767.98px) {
+  .mobile-app-shell {
+    min-width: 0;
+  }
+
+  .mobile-app-viewport {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-app-shell :where(button, a, [role="button"]) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS Safari zooms controls below 16px, which makes forms jump while typing. */
+  .mobile-app-shell :where(input:not(.inputarea), select, textarea:not(.inputarea)) {
+    font-size: 16px;
+  }
+
+  .mobile-app-shell :where(.overflow-x-auto) {
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-app-shell :where(.overflow-x-auto)::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Deep workspaces are deliberately product canvases rather than a collection
    of terminal panes. The interactive code itself keeps its editor font; the
    surrounding navigation, hierarchy and feedback use the product voice. */

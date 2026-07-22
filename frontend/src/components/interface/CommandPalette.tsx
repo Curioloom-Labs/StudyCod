@@ -180,7 +180,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   return (
     <AnimatePresence>
       {open ? (
-        <div className="fixed inset-0 z-50" onKeyDown={onKeyDown}>
+        <div className="fixed inset-0 z-50 flex items-end sm:block" onKeyDown={onKeyDown}>
           <motion.div
             className="absolute inset-0 bg-black/50"
             aria-hidden="true"
@@ -194,7 +194,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label={searchLabel}
-            className="relative mx-auto mt-[15vh] w-[calc(100vw-2rem)] max-w-lg rounded-xl border border-border bg-bg-surface shadow-2xl overflow-hidden"
+            className="relative mx-2 mb-2 w-[calc(100vw-1rem)] max-w-lg rounded-[24px] border border-border bg-bg-surface shadow-2xl overflow-hidden sm:mx-auto sm:mt-[15vh] sm:mb-0 sm:w-[calc(100vw-2rem)] sm:rounded-xl"
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.97 }}

@@ -96,7 +96,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
+    <div className="mobile-app-shell min-h-[100dvh] bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
       <header className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/82 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/82">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
           <button type="button" onClick={() => onNavigate("home")} className="flex shrink-0 items-center gap-2.5 text-left">
@@ -161,7 +161,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               </button>
 
               {accountOpen ? (
-                <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-72 overflow-hidden rounded-2xl border border-[#152219]/10 bg-white p-2 shadow-[0_24px_70px_-38px_rgba(15,35,21,.55)] dark:border-white/10 dark:bg-[#121b15]" role="menu">
+                <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-72 overflow-hidden rounded-2xl border border-[#152219]/10 bg-white p-2 shadow-[0_24px_70px_-38px_rgba(15,35,21,.55)] dark:border-white/10 dark:bg-[#121b15] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3" role="menu">
                   <div className="px-3 py-3">
                     <div className="truncate text-sm font-semibold text-[#17231b] dark:text-white">{user.username}</div>
                     <div className="mt-1 truncate text-xs uppercase tracking-[.08em] text-[#718075] dark:text-[#a4b3a8]">{modeLabel}</div>
@@ -201,7 +201,23 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           </button>
         </nav>
       </header>
-      <main className="flex-1">{children}</main>
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
+        <div className="grid grid-cols-5 gap-1">
+          {[
+            { id: "home" as const, label: nav.find((item) => item.id === "home")?.label ?? "Home", Icon: Home, onClick: () => onNavigate("home") },
+            { id: "tasks" as const, label: nav.find((item) => item.id === "tasks")?.label ?? "Practice", Icon: Code2, onClick: () => onNavigate("tasks") },
+            { id: "grades" as const, label: nav.find((item) => item.id === "grades")?.label ?? "Progress", Icon: Trophy, onClick: () => onNavigate("grades") },
+            { id: "library" as const, label: uk ? "Бібліотека" : "Library", Icon: BookOpen, onClick: onLibrary },
+            { id: "playground" as const, label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
+          ].map(({ id, label, Icon, onClick }) => (
+            <button key={id} type="button" onClick={onClick} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${active(id as Page) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
+              <Icon className="size-4" />
+              <span className="max-w-full truncate leading-none">{label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+      <main className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
       <PlatformFooter />
     </div>
   );

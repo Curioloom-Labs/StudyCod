@@ -357,6 +357,8 @@ interface Props {
   height?: string | number;
   fontSize?: number;
   wordWrap?: boolean;
+  /** Shows a touch-friendly symbol row on phones. */
+  showMobileToolbar?: boolean;
   /**
    * Exposes the underlying Monaco editor + api once mounted, so callers can
    * attach cursor listeners or decorations (e.g. the live code board's shared
@@ -483,7 +485,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   height,
   fontSize,
   wordWrap,
-  onEditorMount
+  onEditorMount,
+  showMobileToolbar = true
 }) => {
   const {
     i18n
@@ -625,9 +628,54 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   const handleChange = useMemo(() => (v: string | undefined) => {
     onChange?.(v ?? "");
   }, [onChange]);
-  return <div ref={containerRef} className={`${height != null ? "" : "h-full "}min-h-0 w-full relative`} style={height != null ? {
+  const insertFromMobileToolbar = (text: string, cursorInside = false) => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    const selection = editor?.getSelection();
+    if (!editor || !model || !selection) return;
+
+    const startOffset = model.getOffsetAt(selection.getStartPosition());
+    editor.executeEdits("studycod.mobile-toolbar", [{
+      range: selection,
+      text,
+      forceMoveMarkers: true,
+    }]);
+
+    const cursorOffset = cursorInside ? Math.max(0, text.length - 1) : text.length;
+    editor.setPosition(model.getPositionAt(startOffset + cursorOffset));
+    editor.focus();
+  };
+
+  return <div className={`${height != null ? "" : "h-full "}min-h-0 w-full relative flex flex-col`} style={height != null ? {
     height
   } : undefined}>
+      {showMobileToolbar && !readOnly && <div className="md:hidden shrink-0 flex items-center gap-1 overflow-x-auto border-b border-border/70 bg-bg-hover/60 px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={tr("Швидкі символи", "Quick coding symbols")}>
+          <span className="mr-1 shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">{tr("Код", "Code")}</span>
+          {[
+            { label: "{ }", value: "{}", inside: true },
+            { label: "( )", value: "()", inside: true },
+            { label: "[ ]", value: "[]", inside: true },
+            { label: "\" \"", value: "\"\"", inside: true },
+            { label: "=", value: "=" },
+            { label: "=>", value: " => " },
+            { label: ":", value: ":" },
+            { label: ";", value: ";" },
+            { label: "#", value: "#" },
+            { label: "Tab", value: "\t" },
+          ].map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              className="h-9 min-w-9 shrink-0 rounded-lg border border-border bg-bg-base px-2 font-mono text-sm text-text-primary active:bg-primary/15"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => insertFromMobileToolbar(item.value, item.inside)}
+              aria-label={`${tr("Вставити", "Insert")} ${item.label}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>}
+      <div ref={containerRef} className="relative min-h-0 flex-1">
       {import.meta.env.DEV && mountTimedOut && !didMount && <div className="absolute inset-0 z-10 flex items-start justify-end p-2 pointer-events-none">
           <div className="pointer-events-none rounded border border-accent-warn/50 bg-bg-surface/80 px-3 py-2 text-xs font-mono text-text-secondary">
             Monaco did not mount (5s). Check console/network for <span className="text-text-primary">/monaco-editor/min/vs/</span>
@@ -718,6 +766,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
               <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора...", "Loading editor...")}</div>
             </div>} />
       </Suspense>
+      </div>
     </div>;
 });
 CodeEditor.displayName = "CodeEditor";

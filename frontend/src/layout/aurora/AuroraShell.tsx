@@ -155,7 +155,7 @@ export const AuroraShell: React.FC<AuroraShellProps> = ({
 
   if (navigationHidden) {
     return (
-      <div data-ui-mode="aurora" className="min-h-[100dvh] bg-bg-base text-text-primary flex">
+      <div data-ui-mode="aurora" className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex">
         <div className="flex-1 min-w-0 flex flex-col">
           <WorkspaceViewportProvider element={workspaceViewportEl}>
             <div ref={setWorkspaceViewportEl} className="flex-1 min-h-0 overflow-y-auto">{children}</div>
@@ -166,11 +166,11 @@ export const AuroraShell: React.FC<AuroraShellProps> = ({
   }
 
   return (
-    <div data-ui-mode="aurora" className="relative min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
+    <div data-ui-mode="aurora" className="mobile-app-shell relative min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
       <WorkspaceViewportProvider element={workspaceViewportEl}>
         <div
           ref={setWorkspaceViewportEl}
-          className="flex-1 min-h-0 overflow-y-auto flex flex-col pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+          className="mobile-app-viewport flex-1 min-h-0 overflow-y-auto flex flex-col pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
         >
           <div className="flex-1 min-h-0 flex flex-col">{children}</div>
         </div>

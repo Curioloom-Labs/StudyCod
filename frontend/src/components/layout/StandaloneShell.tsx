@@ -132,7 +132,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const displayName = shellUser.firstName || shellUser.username;
 
   return (
-    <div className="min-h-[100dvh] bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
+    <div className="mobile-app-shell min-h-[100dvh] bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
       <header className="sticky top-0 z-50 border-b border-[#16281b]/10 bg-[#f5f7f4]/86 backdrop-blur-xl dark:border-white/[.08] dark:bg-[#09100c]/84">
         <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-9">
           <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex shrink-0 items-center gap-2.5 text-left">
@@ -200,8 +200,8 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       </header>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-[70] bg-[#07100a]/38 p-3 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true">
-          <div className="ml-auto flex h-full w-full max-w-sm flex-col rounded-[28px] bg-[#fbfcfa] p-5 shadow-2xl dark:bg-[#101b13]">
+        <div className="fixed inset-0 z-[70] flex items-end bg-[#07100a]/38 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true">
+          <div className="flex max-h-[85dvh] w-full flex-col overflow-y-auto rounded-[28px] bg-[#fbfcfa] p-5 shadow-2xl dark:bg-[#101b13]">
             <div className="flex items-center justify-between">
               <span className="font-[family-name:var(--font-display)] text-xl font-bold tracking-[-.05em]">StudyCod</span>
               <button type="button" onClick={() => setMobileOpen(false)} className="grid size-10 place-items-center rounded-xl bg-[#eef3ee] dark:bg-white/[.06]">
@@ -226,7 +226,26 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         </div>
       ) : null}
 
-      <main className="flex-1">{children}</main>
+      <main className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f5f7f4]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#09100c]/95 lg:hidden" aria-label={ukrainian ? "Мобільна навігація" : "Mobile navigation"}>
+        <div className="grid grid-cols-5 gap-1">
+          {[
+            ...(!education ? [nav.find((item) => item.key === "home")] : [nav[0]]),
+            ...(!education ? [nav.find((item) => item.key === "tasks")] : [nav[1]]),
+            ...(!education ? [nav.find((item) => item.key === "library")] : [nav[3]]),
+            ...(!education ? [nav.find((item) => item.key === "playground")] : [nav[2]]),
+          ].filter((item): item is (typeof nav)[number] => Boolean(item)).map(({ key, label, icon: Icon, path }) => (
+            <button key={`mobile-primary-${key}`} type="button" onClick={() => navigateTo(path)} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 transition ${current === key ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
+              <Icon className="size-4" />
+              <span className="max-w-full truncate text-[10px] font-semibold leading-none">{label}</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => setMobileOpen(true)} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[#637267] transition hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white" aria-label={ukrainian ? "Ще" : "More"}>
+            <Menu className="size-4" />
+            <span className="text-[10px] font-semibold leading-none">{ukrainian ? "Ще" : "More"}</span>
+          </button>
+        </div>
+      </nav>
       <PlatformFooter />
     </div>
   );
