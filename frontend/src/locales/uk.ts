@@ -344,7 +344,7 @@ export default {
   landingCardLibraryTitle: 'Бібліотека',
   landingCardLibraryBody: 'Каталог задач доступний після входу — щоб зберігати історію та прогрес.',
   landingSupport: 'Підтримка',
-  footerTagline: 'Навчальна платформа з практикою, журналом та підтримкою.',
+  footerTagline: 'StudyCod — learn by building.',
   footerCopyright: '© {{year}} StudyCod. Усі права захищено.',
   footerPrivacyPolicy: 'Політика конфіденційності',
   footerTermsOfUse: 'Умови використання',

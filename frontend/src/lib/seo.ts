@@ -1,5 +1,5 @@
 const SITE_URL = "https://studycod.space";
-const DEFAULT_DESCRIPTION = "StudyCod — платформа для навчання програмуванню через практику: уроки, задачі, код, перевірка рішень і прогрес.";
+const DEFAULT_DESCRIPTION = "StudyCod — learn by building. Навчайся програмуванню через коротку теорію, практику, підказки та зрозумілий прогрес.";
 
 type SeoLanguage = "uk" | "en";
 
@@ -11,7 +11,7 @@ type SeoData = {
 
 const PUBLIC_SEO: Record<string, SeoData> = {
   "/": {
-    title: "StudyCod — навчання програмуванню через практику",
+    title: "StudyCod — learn by building",
     description: DEFAULT_DESCRIPTION,
     indexable: true
   },
@@ -103,7 +103,7 @@ function isPrivatePath(path: string): boolean {
 function getSeoData(path: string, language: SeoLanguage): SeoData {
   if (isPrivatePath(path)) {
     return {
-      title: "StudyCod",
+      title: "StudyCod — learn by building",
       description: DEFAULT_DESCRIPTION,
       indexable: false
     };
@@ -138,7 +138,7 @@ function getSeoData(path: string, language: SeoLanguage): SeoData {
   }
 
   return {
-    title: "StudyCod",
+    title: "StudyCod — learn by building",
     description: DEFAULT_DESCRIPTION,
     indexable: false
   };
@@ -160,6 +160,7 @@ function updateStructuredData(path: string, indexable: boolean): void {
       name: "StudyCod",
       url: SITE_URL,
       logo: `${SITE_URL}/favicon.svg`,
+      slogan: "learn by building",
       description: DEFAULT_DESCRIPTION
     },
     {
@@ -167,6 +168,7 @@ function updateStructuredData(path: string, indexable: boolean): void {
       "@type": "WebSite",
       name: "StudyCod",
       url: SITE_URL,
+      slogan: "learn by building",
       description: DEFAULT_DESCRIPTION,
       inLanguage: ["uk", "en"]
     }

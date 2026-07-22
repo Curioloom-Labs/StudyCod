@@ -1,5 +1,7 @@
 # StudyCod
 
+Tagline: learn by building.
+
 StudyCod is a programming-learning platform built around practice, debugging, guided hints, and measurable progress.
 
 - [Home](https://studycod.space/): StudyCod programming practice platform.

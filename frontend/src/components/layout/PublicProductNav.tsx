@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Languages, Menu, Moon, Sun, X } from "lucide-react";
-import { Logo } from "../Logo";
+import { BrandLockup } from "../BrandLockup";
 import { applyTheme, getCurrentTheme } from "../../theme";
 
 type ActivePage = "home" | "pricing" | "docs" | "support" | "blog" | "none";
@@ -61,9 +61,8 @@ export const PublicProductNav: React.FC<Props> = ({ active = "none", homeMode = 
 
   return <header className={(homeMode ? "fixed" : "sticky") + " inset-x-0 top-0 z-50 h-[74px] border-b border-[#122017]/[.07] bg-[#f7f8f5]/85 backdrop-blur-xl dark:border-white/10 dark:bg-[#0d120f]/85 max-md:h-16"}>
     <div className="mx-auto flex h-full w-[min(1240px,calc(100%_-_48px))] items-center justify-between gap-7 max-md:w-[calc(100%_-_28px)] max-md:gap-2">
-      <button onClick={() => homeMode ? window.scrollTo({ top: 0, behavior: "smooth" }) : go("/")} className="flex items-center gap-2.5 bg-transparent text-[19px] font-bold tracking-[-.04em] max-md:text-base" aria-label="StudyCod">
-        <span className="grid size-9 place-items-center rounded-xl border border-[#122017]/10 bg-white shadow-sm dark:border-white/10 dark:bg-[#182019] max-md:size-[34px]"><Logo size={25} /></span>
-        StudyCod
+      <button onClick={() => homeMode ? window.scrollTo({ top: 0, behavior: "smooth" }) : go("/")} className="bg-transparent text-left max-md:[&>span>span:last-child]:hidden" aria-label="StudyCod — learn by building">
+        <BrandLockup />
       </button>
 
       <nav className="flex items-center gap-7 max-[980px]:hidden" aria-label={tr("Головна навігація", "Main navigation")}>

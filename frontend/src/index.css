@@ -141,6 +141,12 @@
    ========================= */
 :root {
   color-scheme: dark;
+  /* StudyCod brand system: green = build/progress, orange = signal/next step. */
+  --brand-green: #00ff88;
+  --brand-green-deep: #007f48;
+  --brand-orange: #ffb454;
+  --brand-forest: #101713;
+  --brand-mint: #68efb0;
   /* Backgrounds */
   --bg-base: oklch(12% 0.012 155);
   --bg-surface: oklch(16% 0.014 155);

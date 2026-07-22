@@ -16,7 +16,7 @@ export const BrandedPageLoader: React.FC<{ label?: string }> = ({ label }) => {
         <div className="mt-7 flex items-center gap-1.5">
           {[0, 1, 2].map((index) => <motion.i key={index} className="size-1.5 rounded-full bg-[#00b963] not-italic" animate={reduceMotion ? undefined : { opacity: [.25, 1, .25], y: [0, -3, 0] }} transition={{ duration: 1.05, repeat: Infinity, delay: index * .14 }} />)}
         </div>
-        <p className="mt-4 text-center text-[13px] font-medium tracking-[-.01em] text-[#667169] dark:text-[#93a097]">{label ?? "StudyCod"}</p>
+        <p className="mt-4 text-center text-[13px] font-medium tracking-[-.01em] text-[#667169] dark:text-[#93a097]">{label ?? "StudyCod — learn by building"}</p>
         <span className="sr-only">Loading…</span>
       </motion.div>
     </div>

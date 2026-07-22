@@ -344,7 +344,7 @@ export default {
   landingCardLibraryTitle: 'Library',
   landingCardLibraryBody: 'A catalog of tasks available after sign-in, so your history and progress are saved.',
   landingSupport: 'Support',
-  footerTagline: 'Learning platform with practice, gradebook, and support.',
+  footerTagline: 'StudyCod — learn by building.',
   footerCopyright: '© {{year}} StudyCod. All rights reserved.',
   footerPrivacyPolicy: 'Privacy Policy',
   footerTermsOfUse: 'Terms of Use',

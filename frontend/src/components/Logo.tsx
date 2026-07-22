@@ -7,11 +7,11 @@ export const Logo = ({
   className = ""
 }: LogoProps) => {
   return <svg width={size} height={size} viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M 20 20 Q 15 30 15 40 Q 15 50 20 60 Q 25 70 20 80" stroke="#00ff88" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M 35 20 C 27 20 24 25 24 34 V 41 C 24 47 21 50 17 50 C 21 50 24 53 24 59 V 66 C 24 75 27 80 35 80" stroke="#68efb0" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
 
-        <path d="M 80 20 Q 85 30 85 40 Q 85 50 80 60 Q 75 70 80 80" stroke="#00ff88" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M 65 20 C 73 20 76 25 76 34 V 41 C 76 47 79 50 83 50 C 79 50 76 53 76 59 V 66 C 76 75 73 80 65 80" stroke="#68efb0" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
 
-        <line x1="55" y1="25" x2="45" y2="75" stroke="#ff8c00" strokeWidth="4" strokeLinecap="round" />
+        <path d="M 45 73 L 55 27 M 55 27 L 50 32 M 55 27 L 58 34" stroke="#ffb454" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>;
 };
 export default Logo;
