@@ -872,7 +872,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
     editor.focus();
   };
 
-  return <div className={`${height != null ? "" : "h-full "}min-h-0 w-full relative flex flex-col`} style={height != null ? {
+  return <div className="relative flex h-full min-h-0 w-full flex-col" style={height != null ? {
     height
   } : undefined}>
       {showMobileToolbar && !readOnly && <div className="md:hidden shrink-0 flex items-center gap-1 overflow-x-auto border-b border-border/70 bg-bg-hover/60 px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={tr("Швидкі символи", "Quick coding symbols")}>

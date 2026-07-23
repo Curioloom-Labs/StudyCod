@@ -2204,9 +2204,9 @@ export const TasksPage: React.FC<Props> = ({
     };
   }, [sidebarSections, isSidebarItemActive]);
 
-  if (active && !theoryPanelOpen && !isPersonalControlQuizTask) {
-    const ideLanguage = (active.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
-    const ideEntryFile = active.userEntryFile || active.starterEntryFile || entryFile;
+  if (!theoryPanelOpen && !isPersonalControlQuizTask) {
+    const ideLanguage = (active?.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
+    const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
     const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
       verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
       testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
@@ -2217,8 +2217,8 @@ export const TasksPage: React.FC<Props> = ({
       exitCode: uiState === "error" ? 1 : 0, success: uiState !== "error",
     } : null;
     return <StudyCodIDEWorkspace
-      task={{ id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode }}
-      theory={hasTheoryForActive ? getTheoryMarkdown(active) : null}
+      task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
+      theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
       language={ideLanguage}
       onLanguageChange={() => undefined}
       compiler={user.course}
@@ -2234,13 +2234,13 @@ export const TasksPage: React.FC<Props> = ({
       onStdinChange={setStdin}
       firstExampleInput={undefined}
       onUseExampleInput={() => undefined}
-      running={uiState === "evaluating" && !submitting}
-      checking={submitting}
-      onRun={() => void handleRun()}
-      onCheck={() => void handleSubmit()}
-      onSave={() => void handleSaveDraft()}
-      onReset={() => setCode(active.starterCode)}
-      readOnly={!canEdit}
+      running={Boolean(active) && uiState === "evaluating" && !submitting}
+      checking={Boolean(active) && submitting}
+      onRun={() => { if (active) void handleRun(); }}
+      onCheck={() => { if (active) void handleSubmit(); }}
+      onSave={() => { if (active) void handleSaveDraft(); }}
+      onReset={() => setCode(active?.starterCode ?? "")}
+      readOnly={!active || !canEdit}
       runResult={ideRunResult}
       checkResult={ideCheckResult}
       isWebTask={isWebTask}

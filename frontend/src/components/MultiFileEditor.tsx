@@ -44,6 +44,9 @@ export interface MultiFileEditorProps {
   fontSize?: number;
   wordWrap?: boolean;
   enableSemanticLsp?: boolean;
+  activePath?: string;
+  onActivePathChange?: (path: string) => void;
+  hideTabsOnDesktop?: boolean;
   /**
    * Increment this number to request opening the “Add file” modal.
    * Useful when the parent triggers file creation from outside the editor.
@@ -61,6 +64,9 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   fontSize,
   wordWrap,
   enableSemanticLsp = true,
+  activePath: controlledActivePath,
+  onActivePathChange,
+  hideTabsOnDesktop = false,
   requestAddToken,
 }) => {
   const normalized = useMemo(() => {
@@ -72,7 +78,12 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   }, [files, entryFile]);
 
   // Keep local active path, but reconcile with external changes.
-  const [activePath, setActivePath] = useState<string>(entryFile);
+  const [internalActivePath, setInternalActivePath] = useState<string>(entryFile);
+  const activePath = controlledActivePath ?? internalActivePath;
+  const setActivePath = useCallback((path: string) => {
+    setInternalActivePath(path);
+    onActivePathChange?.(path);
+  }, [onActivePathChange]);
   useEffect(() => {
     if (normalized.some(f => f.path === activePath)) return;
     setActivePath(entryFile);
@@ -142,7 +153,8 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className={`studycod-multi-file-editor flex h-full min-h-0 flex-col ${hideTabsOnDesktop ? "studycod-hide-tabs-desktop" : ""}`}>
+      {hideTabsOnDesktop ? <style>{`@media (min-width: 1024px) { .studycod-hide-tabs-desktop > [role="tablist"] { display: none; } }`}</style> : null}
       <div className="flex min-h-12 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 bg-[#151d17] px-3 py-1.5" role="tablist" aria-label={tr("Файли редактора", "Editor files")}>
         {normalized
           .slice()
@@ -191,8 +203,8 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
         ) : null}
       </div>
 
-      <div className="flex-1 min-h-0" id={`${panelAriaId}-panel`} role="tabpanel" aria-labelledby={active ? tabIdForPath(active.path) : undefined}>
-        <div className={height ? "h-full" : "h-full"} style={height ? { height } : undefined}>
+      <div className="flex h-full min-h-0 flex-1" id={`${panelAriaId}-panel`} role="tabpanel" aria-labelledby={active ? tabIdForPath(active.path) : undefined}>
+        <div className="h-full min-h-0 w-full" style={height ? { height } : undefined}>
           <CodeEditor key={active?.path || entryFile} language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} fontSize={fontSize} wordWrap={wordWrap} enableSemanticLsp={enableSemanticLsp} filePath={active?.path || entryFile} />
         </div>
       </div>

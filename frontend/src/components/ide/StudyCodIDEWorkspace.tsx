@@ -795,7 +795,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
         </button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex h-full min-h-0 flex-1">
         {showLeft ? (
           <aside
             style={{ width: layout.left }}
@@ -858,7 +858,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
           />
         ) : null}
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex min-h-10 items-center gap-2 border-b border-white/10 bg-[#0f1511] px-3">
             <span className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
               stdin
@@ -926,9 +926,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             </div>
           </div>
           <div
-            className={`min-h-[360px] flex-1 overflow-hidden ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
+            className={`h-full min-h-[360px] flex-1 overflow-hidden ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
           >
-            <div className="min-h-0 min-w-0 overflow-hidden">
+            <div className="h-full min-h-0 min-w-0 overflow-hidden">
               {props.useFiles ? (
                 <MultiFileEditor
                   language={props.isWebTask ? "html" : props.language}
@@ -938,6 +938,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                   readOnly={props.readOnly}
                   fontSize={fontSize}
                   wordWrap={wordWrap}
+                  activePath={activeFile}
+                  onActivePathChange={setActiveFile}
+                  hideTabsOnDesktop
                 />
               ) : (
                 <CodeEditor
