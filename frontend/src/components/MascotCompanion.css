@@ -12,8 +12,8 @@
 
 .mascot-companion-trigger {
   display: grid;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 4.5rem;
+  height: 4.5rem;
   place-items: center;
   padding: 0;
   border: 1px solid color-mix(in oklch, var(--primary) 38%, var(--border));
@@ -40,8 +40,8 @@
 }
 
 .mascot-companion-trigger img {
-  width: 2.7rem;
-  height: 2.7rem;
+  width: 3.8rem;
+  height: 3.8rem;
   transition: transform var(--motion-base) var(--ease-out);
 }
 
@@ -52,8 +52,8 @@
 .mascot-companion-popover {
   position: absolute;
   right: 0;
-  bottom: 4.1rem;
-  width: min(19rem, calc(100vw - 2rem));
+  bottom: 5.35rem;
+  width: min(21rem, calc(100vw - 2rem));
   padding: 0.9rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
@@ -141,6 +141,16 @@
   .mascot-companion {
     right: 0.75rem;
     bottom: max(5.4rem, calc(4.75rem + env(safe-area-inset-bottom)));
+  }
+
+  .mascot-companion-trigger {
+    width: 4.15rem;
+    height: 4.15rem;
+  }
+
+  .mascot-companion-trigger img {
+    width: 3.5rem;
+    height: 3.5rem;
   }
 }
 

@@ -1561,7 +1561,6 @@ export const StudentTaskPage: React.FC = () => {
           onBack={handleBack}
           runResult={ideRunResult}
           checkResult={ideCheckResult}
-          hints={hints}
           trace={ideTrace}
           tracing={ideTracing}
           onTrace={isWebTask ? undefined : handleTrace}

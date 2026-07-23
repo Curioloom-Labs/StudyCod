@@ -4,7 +4,8 @@ import { X } from "lucide-react";
 import Mascot, { type MascotVariant } from "./Mascot";
 import "./MascotCompanion.css";
 
-const DISMISSED_STORAGE_KEY = "studycod.mascot.dismissed";
+const DISMISSED_STORAGE_PREFIX = "studycod.mascot.dismissed.v2";
+const LEGACY_DISMISSED_STORAGE_KEY = "studycod.mascot.dismissed";
 
 type MascotMessage = {
   variant: MascotVariant;
@@ -18,6 +19,47 @@ type MascotSignalDetail = {
   en?: string;
   open?: boolean;
 };
+
+type MascotTokenPayload = {
+  userId?: unknown;
+  studentId?: unknown;
+  sub?: unknown;
+};
+
+function shortHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function getMascotAccountKey(search: string): string {
+  try {
+    const token = localStorage.getItem("token");
+    if (token) {
+      const payloadPart = token.split(".")[1];
+      if (payloadPart) {
+        const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+        const payload = JSON.parse(atob(padded)) as MascotTokenPayload;
+        const identity = payload.userId ?? payload.studentId ?? payload.sub;
+        if (typeof identity === "string" || typeof identity === "number") {
+          return `account-${String(identity)}`;
+        }
+      }
+
+      // Keep opaque-token sessions separate too, without storing the token itself.
+      return `session-${shortHash(token)}`;
+    }
+
+    const previewPersona = new URLSearchParams(search).get("persona") ?? "default";
+    return `preview-${previewPersona}`;
+  } catch {
+    return "anonymous";
+  }
+}
 
 const defaultMessage: MascotMessage = {
   variant: "happy",
@@ -97,6 +139,10 @@ export const MascotCompanion: React.FC = () => {
   const [signal, setSignal] = useState<MascotMessage | null>(null);
 
   const app = searchParams.get("app");
+  const dismissedStorageKey = useMemo(
+    () => `${DISMISSED_STORAGE_PREFIX}.${getMascotAccountKey(location.search)}`,
+    [location.search],
+  );
   const visible = isAuthenticatedSurface(location.pathname, app, location.search);
   const routeMessage = useMemo(
     () => messageForSurface(location.pathname, app),
@@ -108,11 +154,14 @@ export const MascotCompanion: React.FC = () => {
 
   useEffect(() => {
     try {
-      setDismissed(localStorage.getItem(DISMISSED_STORAGE_KEY) === "1");
+      // Migrate away from the old global flag. It incorrectly hid the mascot
+      // for every account using the same browser.
+      localStorage.removeItem(LEGACY_DISMISSED_STORAGE_KEY);
+      setDismissed(localStorage.getItem(dismissedStorageKey) === "1");
     } catch {
       setDismissed(false);
     }
-  }, []);
+  }, [dismissedStorageKey]);
 
   useEffect(() => {
     setOpen(false);
@@ -148,11 +197,11 @@ export const MascotCompanion: React.FC = () => {
     setDismissed(true);
     setOpen(false);
     try {
-      localStorage.setItem(DISMISSED_STORAGE_KEY, "1");
+      localStorage.setItem(dismissedStorageKey, "1");
     } catch {
       // The control still works for the current session if storage is blocked.
     }
-  }, []);
+  }, [dismissedStorageKey]);
 
   if (!visible || dismissed) return null;
 
@@ -161,7 +210,7 @@ export const MascotCompanion: React.FC = () => {
       {open && (
         <div className="mascot-companion-popover" role="dialog" aria-modal="false" aria-label={isEnglish ? "Study tip" : "Порада для навчання"}>
           <div className="flex items-start gap-3">
-            <Mascot variant={message.variant} size={54} className="mascot-companion-popover-image" alt="" />
+            <Mascot variant={message.variant} size={68} className="mascot-companion-popover-image" alt="" />
             <div className="min-w-0 flex-1">
               <p className="mascot-companion-eyebrow">{isEnglish ? "A small nudge" : "Маленький поштовх"}</p>
               <p className="mascot-companion-copy">{isEnglish ? message.en : message.uk}</p>

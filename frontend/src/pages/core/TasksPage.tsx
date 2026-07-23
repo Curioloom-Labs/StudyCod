@@ -22,6 +22,7 @@ import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/re
 import { FailureRecoveryCard, type FailureRecoveryData } from "../../components/FailureRecoveryCard";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
 import { useMediaQuery } from "../../utils/useMediaQuery";
+import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 interface Props {
   user: User;
 }
@@ -2202,6 +2203,50 @@ export const TasksPage: React.FC<Props> = ({
       progress
     };
   }, [sidebarSections, isSidebarItemActive]);
+
+  if (active && !theoryPanelOpen && !isPersonalControlQuizTask) {
+    const ideLanguage = (active.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
+    const ideEntryFile = active.userEntryFile || active.starterEntryFile || entryFile;
+    const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
+      verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
+      testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
+      score: Number(aiResult.total || 0), maxScore: 12,
+    } : null;
+    const ideRunResult: StudyCodIdeRunResult | null = consoleOutput.trim() ? {
+      stdout: uiState === "error" ? "" : consoleOutput, stderr: uiState === "error" ? consoleOutput : "",
+      exitCode: uiState === "error" ? 1 : 0, success: uiState !== "error",
+    } : null;
+    return <StudyCodIDEWorkspace
+      task={{ id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode }}
+      theory={hasTheoryForActive ? getTheoryMarkdown(active) : null}
+      language={ideLanguage}
+      onLanguageChange={() => undefined}
+      compiler={user.course}
+      onCompilerChange={() => undefined}
+      code={code}
+      onCodeChange={setCode}
+      files={files.length ? files : [{ path: ideEntryFile, content: code }]}
+      onFilesChange={setFiles}
+      useFiles={useFiles}
+      onEnableFiles={() => { setUseFiles(true); setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]); setMfAddToken((value) => value + 1); }}
+      entryFile={ideEntryFile}
+      stdin={stdin}
+      onStdinChange={setStdin}
+      firstExampleInput={undefined}
+      onUseExampleInput={() => undefined}
+      running={uiState === "evaluating" && !submitting}
+      checking={submitting}
+      onRun={() => void handleRun()}
+      onCheck={() => void handleSubmit()}
+      onSave={() => void handleSaveDraft()}
+      onReset={() => setCode(active.starterCode)}
+      readOnly={!canEdit}
+      runResult={ideRunResult}
+      checkResult={ideCheckResult}
+      isWebTask={isWebTask}
+      webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
+    />;
+  }
 
   const hasConsoleOutput = consoleOutput.trim().length > 0;
   const consoleLineCount = useMemo(() => {

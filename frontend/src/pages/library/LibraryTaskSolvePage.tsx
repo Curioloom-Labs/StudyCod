@@ -1077,7 +1077,6 @@ export const LibraryTaskSolvePage: React.FC = () => {
           runResult={runResult}
           checkResult={checkResult}
           resultCards={ideResultCards}
-          hints={libraryHints}
           trace={trace}
           tracing={tracing}
           onTrace={isWebTask ? undefined : runTrace}
