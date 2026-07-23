@@ -7,6 +7,7 @@ import type {
   JudgeLanguage,
   ScoreboardRow,
 } from "../../lib/api/contests";
+import type { TraceResult } from "../../lib/api/playground";
 
 export type WorkspaceTabKind = "contest-overview" | "problem" | "submissions" | "leaderboard" | "discussion";
 
@@ -59,4 +60,7 @@ export type ContestWorkspaceProps = {
   onAskOrganizer?: (question: string) => Promise<void> | void;
   announcements?: ContestCommunityAnnouncement[];
   focusLostCount?: number;
+  trace?: TraceResult | null;
+  tracing?: boolean;
+  onTrace?: () => void;
 };

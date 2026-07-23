@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, RotateCcw, Sparkles } from "lucide-react";
 import { recordLearningEvent } from "../lib/api/library";
+import { announceMascot } from "./MascotCompanion";
 import "./FailureRecoveryCard.css";
 
 type Props = {
@@ -129,6 +130,15 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
       hintLevel: hintLevel + 1,
     }).catch(() => undefined);
   }, [upperVerdict, taskId, taskKind, learningAttemptId, persistedCategory, hintLevel]);
+
+  useEffect(() => {
+    if (upperVerdict === "AC") return;
+    announceMascot({
+      variant: "encourage",
+      uk: "Це не глухий кут. Подивись на першу невдачу й виправ одну річ за раз.",
+      en: "This is not a dead end. Inspect the first failure and change one thing at a time.",
+    });
+  }, [upperVerdict, taskId, learningAttemptId]);
 
   if (upperVerdict === "AC") return null;
 

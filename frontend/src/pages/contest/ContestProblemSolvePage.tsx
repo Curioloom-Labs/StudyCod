@@ -25,6 +25,7 @@ import { Skeleton } from "../../components/ui/Skeleton";
 import { Workspace } from "../../components/contest-workspace/Workspace";
 import { createSupportChatConversation } from "../../lib/api/support";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 
 type TurnstileRenderOptions = {
   sitekey: string;
@@ -200,6 +201,8 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [checking, setChecking] = React.useState(false);
   const [runResult, setRunResult] = React.useState<ContestRunResult | null>(null);
   const [checkResult, setCheckResult] = React.useState<ContestCheckResult | null>(null);
+  const [trace, setTrace] = React.useState<TraceResult | null>(null);
+  const [tracing, setTracing] = React.useState(false);
 
   const [subsLoading, setSubsLoading] = React.useState(false);
   const [submissions, setSubmissions] = React.useState<ContestSubmissionListItem[]>([]);
@@ -565,6 +568,19 @@ export const ContestProblemSolvePage: React.FC = () => {
     }
   };
 
+  const doTrace = async () => {
+    if (!statement || tracing || !code.trim()) return;
+    setTracing(true);
+    try {
+      const result = await tracePlayground({ language: judgeLanguage, code, stdin: runInput || undefined });
+      setTrace(result);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || "Trace failed");
+    } finally {
+      setTracing(false);
+    }
+  };
+
   const doSubmit = async () => {
     if (!contestId || !problemId || !statement) return;
     if (!hasToken) {
@@ -714,6 +730,9 @@ export const ContestProblemSolvePage: React.FC = () => {
         onAskOrganizer={askOrganizer}
         announcements={announcements}
         focusLostCount={focusLostCount}
+        trace={trace}
+        tracing={tracing}
+        onTrace={doTrace}
       />
     </div>
   );

@@ -5,15 +5,12 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Building2, Check, GraduationCap, Sparkles, UserRound } from "lucide-react";
 import { PublicProductNav } from "../../components/layout/PublicProductNav";
 import { PlatformFooter } from "../../components/layout/PlatformFooter";
-import { getMe } from "../../lib/api/profile";
-import { getPaddle, hasPaddleConfig, PADDLE_CLASS_PRICE_ID, PADDLE_PRO_PRICE_ID } from "../../lib/paddleClient";
 
 type Plan = {
   icon: React.ComponentType<{ className?: string }>;
   audience: string;
   name: string;
-  fallbackPrice: string;
-  priceId?: string;
+  price: string;
   period: string;
   description: string;
   features: string[];
@@ -23,11 +20,6 @@ type Plan = {
   featured?: boolean;
 };
 
-type PreviewPrice = {
-  formattedTotal: string;
-  currencyCode: string;
-};
-
 const accentStyles = {
   green: "bg-[#00ff88]/12 text-[#00884a] dark:text-[#63efad]",
   orange: "bg-[#ff8c00]/12 text-[#b96300] dark:text-[#ffad4a]",
@@ -35,99 +27,19 @@ const accentStyles = {
   pink: "bg-[#ff6b9d]/12 text-[#c64270] dark:text-[#ff8fb6]",
 };
 
-const fallbackPrices: Record<string, string> = {
-  [PADDLE_PRO_PRICE_ID]: "$2",
-  [PADDLE_CLASS_PRICE_ID]: "$10",
-};
-
-const hasToken = () => {
-  try {
-    return Boolean(localStorage.getItem("token"));
-  } catch {
-    return false;
-  }
-};
-
 export const PricingPage: React.FC = () => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
-  const [previewPrices, setPreviewPrices] = React.useState<Record<string, PreviewPrice>>({});
-  const [previewLoading, setPreviewLoading] = React.useState(false);
-  const [checkoutPriceId, setCheckoutPriceId] = React.useState<string | null>(null);
-  const [paddleError, setPaddleError] = React.useState<string | null>(null);
-  const [customerEmail, setCustomerEmail] = React.useState<string | null>(null);
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const reveal = reduceMotion ? {} : { initial: { opacity: 0, y: 22 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: .12 }, transition: { duration: .6, ease: [0.16, 1, .3, 1] as const } };
-
-  React.useEffect(() => {
-    if (!hasToken()) return;
-    let cancelled = false;
-    getMe({ suppressAuthRedirect: true })
-      .then((user) => {
-        if (!cancelled && user.email) setCustomerEmail(user.email);
-      })
-      .catch(() => {
-        if (!cancelled) setCustomerEmail(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (!hasPaddleConfig()) {
-      setPaddleError(tr("Paddle checkout ще не налаштований.", "Paddle checkout is not configured yet."));
-      return;
-    }
-
-    let cancelled = false;
-    const priceIds = [PADDLE_PRO_PRICE_ID, PADDLE_CLASS_PRICE_ID].filter(Boolean);
-    setPreviewLoading(true);
-    setPaddleError(null);
-
-    getPaddle((event) => {
-      if (event.name === "checkout.error" || event.name === "checkout.payment.error") {
-        setPaddleError(tr("Paddle повідомив про помилку checkout. Перевірте налаштування checkout у Dashboard.", "Paddle reported a checkout error. Check checkout settings in the Dashboard."));
-      }
-    })
-      .then((paddle) => {
-        if (!paddle) throw new Error("Paddle is unavailable");
-        return paddle.PricePreview({
-          items: priceIds.map((priceId) => ({ priceId, quantity: 1 })),
-        });
-      })
-      .then((preview) => {
-        if (cancelled) return;
-        const next: Record<string, PreviewPrice> = {};
-        preview.data.details.lineItems.forEach((lineItem) => {
-          next[lineItem.price.id] = {
-            formattedTotal: lineItem.formattedTotals.total || lineItem.formattedUnitTotals.total,
-            currencyCode: preview.data.currencyCode,
-          };
-        });
-        setPreviewPrices(next);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPaddleError(tr("Не вдалося отримати локалізовані ціни з Paddle. Показуємо базові ціни.", "Couldn't load localized prices from Paddle. Showing base prices."));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPreviewLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [i18n.language]);
 
   const plans: Plan[] = [
     {
       icon: UserRound,
       audience: tr("Самостійне навчання", "Independent learning"),
       name: tr("Старт", "Start"),
-      fallbackPrice: "$0",
+      price: "$0",
       period: tr("назавжди", "forever"),
       description: tr("Усе необхідне, щоб почати практикувати програмування або спробувати клас без оплати.", "Everything needed to start practicing programming or try a class at no cost."),
       features: [tr("Бібліотека базових задач", "Core task library"), tr("Автоматична перевірка коду", "Automatic code checks"), tr("Відкриті навчальні курси", "Open learning courses"), tr("1 безкоштовний клас для старту", "1 free class to get started"), tr("Особистий прогрес", "Personal progress")],
@@ -139,12 +51,11 @@ export const PricingPage: React.FC = () => {
       icon: Sparkles,
       audience: tr("Поглиблена практика", "Advanced practice"),
       name: "StudyCod Pro",
-      fallbackPrice: fallbackPrices[PADDLE_PRO_PRICE_ID] || "$2",
-      priceId: PADDLE_PRO_PRICE_ID,
+      price: "$2",
       period: tr("на місяць", "per month"),
       description: tr("Більше практики, детальний фідбек і повний маршрут розвитку навичок.", "More practice, detailed feedback, and a complete skill-building path."),
       features: [tr("Усе зі Старт", "Everything in Start"), tr("Розширені курси й задачі", "Advanced courses and tasks"), tr("Розбір помилок і розумні підказки", "Error analysis and smart hints"), tr("Візуалізація виконання коду", "Code execution visualization"), tr("Сертифікати проходження", "Completion certificates")],
-      cta: tr("Оформити Pro", "Buy Pro"),
+      cta: tr("Незабаром", "Coming soon"),
       accent: "orange",
       featured: true,
     },
@@ -152,19 +63,18 @@ export const PricingPage: React.FC = () => {
       icon: GraduationCap,
       audience: tr("Для викладача", "For teachers"),
       name: "StudyCod Class",
-      fallbackPrice: fallbackPrices[PADDLE_CLASS_PRICE_ID] || "$10",
-      priceId: PADDLE_CLASS_PRICE_ID,
+      price: "$10",
       period: tr("на місяць", "per month"),
       description: tr("Цілісний робочий простір для викладання, практики й оцінювання з необмеженими класами.", "A complete workspace for teaching, practice, and assessment with unlimited classes."),
       features: [tr("Необмежена кількість класів", "Unlimited classes"), tr("До 30 учнів у кожному класі", "Up to 30 students per class"), tr("Курси та автоматичні завдання", "Courses and automatic assignments"), tr("Журнал і гнучкі шкали оцінок", "Gradebook and flexible grading"), tr("Аналітика навчального прогресу", "Learning progress analytics"), tr("Live Classroom", "Live Classroom")],
-      cta: tr("Оформити Class", "Buy Class"),
+      cta: tr("Незабаром", "Coming soon"),
       accent: "yellow",
     },
     {
       icon: Building2,
       audience: tr("Для закладу освіти", "For institutions"),
       name: tr("Школа", "School"),
-      fallbackPrice: tr("Індивідуально", "Custom"),
+      price: tr("Індивідуально", "Custom"),
       period: tr("ліцензія", "license"),
       description: tr("Єдиний стандарт навчання програмуванню для всієї школи або ліцею.", "One programming education standard for an entire school or lyceum."),
       features: [tr("Гнучке ліцензування учнів", "Flexible student licensing"), tr("Ролі й адміністрування організації", "Organization roles and administration"), tr("Пакетне підключення класів", "Bulk class onboarding"), tr("Захист даних неповнолітніх", "Protection of minors' data"), tr("Пілот і пріоритетна підтримка", "Pilot and priority support")],
@@ -173,40 +83,6 @@ export const PricingPage: React.FC = () => {
       accent: "pink",
     },
   ];
-
-  const resolvePrice = (plan: Plan) => {
-    if (!plan.priceId) return plan.fallbackPrice;
-    return previewPrices[plan.priceId]?.formattedTotal || plan.fallbackPrice;
-  };
-
-  const openCheckout = async (plan: Plan) => {
-    if (!plan.priceId) {
-      if (plan.to) navigate(plan.to);
-      return;
-    }
-    setCheckoutPriceId(plan.priceId);
-    setPaddleError(null);
-    try {
-      const paddle = await getPaddle();
-      if (!paddle) throw new Error("Paddle is unavailable");
-      paddle.Checkout.open({
-        items: [{ priceId: plan.priceId, quantity: 1 }],
-        customer: customerEmail ? { email: customerEmail } : undefined,
-        customData: {
-          plan: plan.name,
-          source: "pricing_page",
-        },
-        settings: {
-          displayMode: "overlay",
-          theme: "light",
-        },
-      });
-    } catch {
-      setPaddleError(tr("Не вдалося відкрити Paddle Checkout. Перевірте live token, default payment link і approved domain.", "Couldn't open Paddle Checkout. Check the live token, default payment link, and approved domain."));
-    } finally {
-      setCheckoutPriceId(null);
-    }
-  };
 
   return (
     <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans dark:bg-[#0b100d] dark:text-[#edf3ef]">
@@ -217,51 +93,33 @@ export const PricingPage: React.FC = () => {
           <div className="pointer-events-none absolute left-1/2 top-5 size-[540px] -translate-x-1/2 rounded-full bg-[#00ff88]/[.055] blur-[90px]" />
           <motion.div initial={reduceMotion ? undefined : { opacity: 0, y: 20 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .7, ease: [0.16, 1, .3, 1] }} className="relative mx-auto max-w-[820px]">
             <button onClick={() => navigate("/")} className="mx-auto mb-6 flex w-fit items-center gap-2 text-[12px] font-bold text-[#667169] dark:text-[#99a59d]"><ArrowLeft className="size-4" />{tr("На головну", "Back home")}</button>
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#122017]/10 bg-white px-3 py-1.5 text-[11px] font-bold text-[#007f48] shadow-sm dark:border-white/10 dark:bg-[#171f19] dark:text-[#65efae]"><span className="size-1.5 rounded-full bg-[#00b963]" />{tr("Ціни локалізовані через Paddle Checkout", "Prices localized by Paddle Checkout")}</span>
             <h1 className="mt-6 text-balance text-[clamp(44px,6vw,76px)] font-bold leading-[1] tracking-[-.055em]">{tr("План для кожного способу навчатися.", "A plan for every way of learning.")}</h1>
             <p className="mx-auto mt-6 max-w-[680px] text-[17px] leading-8 text-[#667169] dark:text-[#a3aea6]">{tr("Починайте безкоштовно, розвивайте власну практику або організуйте навчання для цілого класу.", "Start free, deepen your own practice, or organize learning for an entire class.")}</p>
-            <p className="mx-auto mt-4 max-w-[760px] rounded-2xl border border-[#122017]/10 bg-white/80 px-4 py-3 text-[13px] leading-6 text-[#667169] shadow-sm dark:border-white/10 dark:bg-white/[.055] dark:text-[#aab5ad]">
-              {tr("Paddle автоматично визначає країну покупця та показує локалізовану валюту. Податки можуть застосовуватись і будуть розраховані під час оплати. Наразі немає trial або intro-знижки: після оформлення застосовується вказана регулярна ціна.", "Paddle automatically detects the buyer's country and shows localized currency. Taxes may apply and will be calculated at checkout. There is currently no trial or intro discount: the listed recurring price applies after checkout.")}
-            </p>
-            {paddleError && <p className="mx-auto mt-4 max-w-[760px] rounded-2xl border border-[#ff8c00]/25 bg-[#fff4e5] px-4 py-3 text-[13px] leading-6 text-[#835000] dark:border-[#ffb45c]/25 dark:bg-[#ff8c00]/10 dark:text-[#ffc783]">{paddleError}</p>}
           </motion.div>
         </section>
 
         <section className="mx-auto grid w-[min(1200px,calc(100%_-_40px))] grid-cols-4 gap-3 pb-14 max-[1050px]:grid-cols-2 max-md:grid-cols-1">
           {plans.map((plan, index) => {
-            const price = resolvePrice(plan);
-            const isCheckoutLoading = checkoutPriceId === plan.priceId;
+            const isAvailable = Boolean(plan.to);
             return <motion.article {...reveal} transition={{ duration: .55, delay: index * .06, ease: [0.16, 1, .3, 1] }} key={plan.name} className={`relative flex min-h-[610px] flex-col overflow-hidden rounded-[25px] border p-6 ${plan.featured ? "border-[#00b963]/30 bg-[linear-gradient(165deg,rgba(0,255,136,.09),#fff_35%)] shadow-[0_30px_75px_rgba(18,32,23,.1)] dark:border-[#00e97c]/25 dark:bg-[linear-gradient(165deg,rgba(0,255,136,.08),#171f19_35%)] dark:shadow-[0_30px_75px_rgba(0,0,0,.28)]" : "border-[#122017]/10 bg-white shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-[#151c17] dark:shadow-[0_18px_50px_rgba(0,0,0,.2)]"}`}>
               {plan.featured && <span className="absolute right-4 top-4 rounded-full bg-[#00ff88] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[.1em] text-[#07140d]">{tr("Популярний", "Popular")}</span>}
               <span className={`grid size-11 place-items-center rounded-[14px] ${accentStyles[plan.accent]}`}><plan.icon className="size-5" /></span>
               <span className="mt-6 text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e] dark:text-[#849188]">{plan.audience}</span>
               <h2 className="mt-2 text-[27px] font-bold tracking-[-.04em]">{plan.name}</h2>
-              <div className="mt-5 min-h-[68px]"><strong className={`font-sans font-bold tracking-[-.045em] ${price.length > 9 ? "text-[30px]" : "text-[39px]"}`}>{previewLoading && plan.priceId ? tr("Завантаження", "Loading") : price}</strong><span className="ml-2 text-[11px] text-[#7b877f] dark:text-[#88958c]">{plan.period}</span></div>
+              <div className="mt-5 min-h-[68px]"><strong className={`font-sans font-bold tracking-[-.045em] ${plan.price.length > 9 ? "text-[30px]" : "text-[39px]"}`}>{plan.price}</strong><span className="ml-2 text-[11px] text-[#7b877f] dark:text-[#88958c]">{plan.period}</span></div>
               <p className="mt-4 min-h-[78px] text-[13px] leading-6 text-[#667169] dark:text-[#a1aca4]">{plan.description}</p>
               <div className="my-5 h-px bg-[#122017]/10 dark:bg-white/10" />
               <ul className="flex-1 space-y-3.5 p-0">{plan.features.map(feature => <li key={feature} className="flex items-start gap-2.5 text-[12px] leading-5 text-[#536057] dark:text-[#b0bab3]"><Check className="mt-0.5 size-4 shrink-0 rounded-full bg-[#00ff88] p-0.5 text-[#062315]" />{feature}</li>)}</ul>
-              <button type="button" disabled={isCheckoutLoading} onClick={() => void openCheckout(plan)} className={`mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-[14px] text-[13px] font-bold transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70 ${plan.featured ? "bg-[#00ff88] text-[#07140d] shadow-[0_12px_28px_rgba(0,185,99,.18)]" : "border border-[#122017]/10 bg-[#f7f8f5] dark:border-white/10 dark:bg-[#202821]"}`}>{isCheckoutLoading ? tr("Відкриваємо...", "Opening...") : plan.cta}<ArrowRight className="size-4" /></button>
+              <button type="button" disabled={!isAvailable} onClick={() => isAvailable && plan.to && navigate(plan.to)} className={`mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-[14px] text-[13px] font-bold transition ${isAvailable ? "hover:-translate-y-0.5" : "cursor-not-allowed opacity-60"} ${plan.featured ? "bg-[#00ff88] text-[#07140d] shadow-[0_12px_28px_rgba(0,185,99,.18)]" : "border border-[#122017]/10 bg-[#f7f8f5] dark:border-white/10 dark:bg-[#202821]"}`}>{plan.cta}{isAvailable && <ArrowRight className="size-4" />}</button>
             </motion.article>;
           })}
         </section>
 
         <section className="mx-auto w-[min(1200px,calc(100%_-_40px))] pb-28">
           <motion.div {...reveal} className="grid gap-3 rounded-[28px] border border-[#122017]/10 bg-white p-5 shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-[#151c17] md:grid-cols-3">
-            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]">
-              <p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Безкоштовно", "Free")}</p>
-              <h3 className="mt-2 text-lg font-bold">StudyCod Start - $0</h3>
-              <p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Особиста практика, базова бібліотека, перевірка коду та 1 клас для старту.", "Personal practice, core library, code checks, and 1 class to get started.")}</p>
-            </div>
-            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]">
-              <p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Підписка", "Subscription")}</p>
-              <h3 className="mt-2 text-lg font-bold">StudyCod Pro - {resolvePrice(plans[1])}/{tr("місяць", "month")}</h3>
-              <p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Розширені курси, задачі, підказки, візуалізація виконання коду та сертифікати.", "Advanced courses, tasks, hints, code execution visualization, and certificates.")}</p>
-            </div>
-            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]">
-              <p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Для викладача", "For teachers")}</p>
-              <h3 className="mt-2 text-lg font-bold">StudyCod Class - {resolvePrice(plans[2])}/{tr("місяць", "month")}</h3>
-              <p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Необмежена кількість класів, до 30 учнів у класі, журнал, аналітика та Live Classroom.", "Unlimited classes, up to 30 students per class, gradebook, analytics, and Live Classroom.")}</p>
-            </div>
+            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Безкоштовно", "Free")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Start - $0</h3><p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Особиста практика, базова бібліотека, перевірка коду та 1 клас для старту.", "Personal practice, core library, code checks, and 1 class to get started.")}</p></div>
+            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Підписка", "Subscription")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Pro - $2/{tr("місяць", "month")}</h3><p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Розширені курси, задачі, підказки, візуалізація виконання коду та сертифікати.", "Advanced courses, tasks, hints, code execution visualization, and certificates.")}</p></div>
+            <div className="rounded-2xl bg-[#f7f8f5] p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Для викладача", "For teachers")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Class - $10/{tr("місяць", "month")}</h3><p className="mt-2 text-sm leading-6 text-[#667169] dark:text-[#a3aea6]">{tr("Необмежена кількість класів, до 30 учнів у класі, журнал, аналітика та Live Classroom.", "Unlimited classes, up to 30 students per class, gradebook, analytics, and Live Classroom.")}</p></div>
           </motion.div>
         </section>
 

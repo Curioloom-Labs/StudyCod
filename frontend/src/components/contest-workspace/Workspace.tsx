@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Activity,
+  Gauge,
   LayoutDashboard,
   MessageSquareText,
   Trophy,
@@ -13,6 +14,7 @@ import {
   RefreshCw,
   GripVertical,
   Megaphone,
+  Bot,
   X,
   Eye,
   type LucideIcon,
@@ -24,6 +26,7 @@ import { ContestDashboard } from "./ContestDashboard";
 import type { ContestWorkspaceProps, WorkspaceTab, WorkspaceTabKind } from "./types";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { useMediaQuery } from "../../utils/useMediaQuery";
+import { DebugMentorChat } from "../DebugMentorChat";
 
 type NavItem = { id: string; icon: LucideIcon; label: string };
 
@@ -100,6 +103,9 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   onAskOrganizer,
   announcements,
   focusLostCount,
+  trace,
+  tracing,
+  onTrace,
 }) => {
   const [tabs, setTabs] = React.useState<WorkspaceTab[]>([tabTemplate("contest-overview"), tabTemplate("problem")]);
   const [activeTabId, setActiveTabId] = React.useState<string>("problem");
@@ -110,6 +116,8 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   const [dockPopOut, setDockPopOut] = React.useState(false);
   const [dockWidth, setDockWidth] = React.useState(370);
   const [dockAttention, setDockAttention] = React.useState(false);
+  const [rightPanelTab, setRightPanelTab] = React.useState<"output" | "mentor" | "debugger">("output");
+  const [traceStep, setTraceStep] = React.useState(0);
   const [mobileDockOpen, setMobileDockOpen] = React.useState(false);
   const [dismissedAnnId, setDismissedAnnId] = React.useState<number | null>(null);
 
@@ -195,6 +203,41 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
     if (!el) return;
     scrollMemory.current[activeTabId] = el.scrollTop;
   }, [activeTabId]);
+
+  const renderRightPanel = () => rightPanelTab === "debugger" ? (
+    trace?.steps?.length ? (
+      <div className="h-full overflow-auto rounded-xl border border-border bg-bg-base/60 p-3 text-xs text-text-secondary">
+        <div className="flex items-center justify-between gap-2"><span className="font-semibold text-text-primary">Step debugger</span><span className="text-primary">{Math.min(traceStep + 1, trace.steps.length)}/{trace.steps.length}</span></div>
+        <input type="range" min={0} max={Math.max(0, trace.steps.length - 1)} value={Math.min(traceStep, Math.max(0, trace.steps.length - 1))} onChange={(event) => setTraceStep(Number(event.target.value))} className="mt-3 w-full accent-primary" />
+        <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-2"><div className="text-[10px] uppercase tracking-[.1em] text-text-muted">Current line</div><div className="mt-1 font-mono text-primary">Line {trace.steps[Math.min(traceStep, trace.steps.length - 1)].line}</div></div>
+        <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-code p-2 font-mono text-[11px] text-text-primary">{JSON.stringify(trace.steps[Math.min(traceStep, trace.steps.length - 1)].locals || {}, null, 2)}</pre>
+        <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-code p-2 font-mono text-[11px]">{trace.programOutput || trace.stderr || ""}</pre>
+      </div>
+    ) : (
+      <div className="rounded-xl border border-border bg-bg-base/60 p-3 text-xs text-text-secondary"><div className="font-semibold text-text-primary">Step debugger</div><p className="mt-2">Run Trace to inspect variables, current line and program output.</p><button type="button" onClick={onTrace} disabled={tracing || !onTrace} className="mt-3 rounded-lg bg-primary px-3 py-2 font-semibold text-primary-foreground disabled:opacity-50">{tracing ? "Tracing…" : "Trace"}</button></div>
+    )
+  ) : rightPanelTab === "mentor" ? (
+    <DebugMentorChat
+      language={language}
+      code={code}
+      verdict={latestVerdict}
+      stderr={runResult?.stderr || checkResult?.compileError}
+      taskTitle={statement.task.title}
+      taskText={statement.task.description}
+      className="h-full overflow-auto"
+    />
+  ) : (
+    <OutputDock
+      examples={examples}
+      onPickExample={onRunInputChange}
+      runResult={runResult}
+      checkResult={checkResult}
+      submissions={submissions}
+      wsStatus={wsStatus}
+      latestVerdict={latestVerdict}
+      attention={dockAttention}
+    />
+  );
 
   const openTab = (kind: WorkspaceTabKind) => {
     const existing = tabs.find((t) => t.kind === kind);
@@ -635,16 +678,14 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                           <FoldHorizontal className="w-4 h-4" />
                         </button>
                       ) : (
-                        <OutputDock
-                          examples={examples}
-                          onPickExample={onRunInputChange}
-                          runResult={runResult}
-                          checkResult={checkResult}
-                          submissions={submissions}
-                          wsStatus={wsStatus}
-                          latestVerdict={latestVerdict}
-                          attention={dockAttention}
-                        />
+                        <div className="flex h-full min-h-0 flex-col gap-2">
+                          <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-bg-base/60 p-1">
+                            <button type="button" onClick={() => setRightPanelTab("output")} className={`inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold ${rightPanelTab === "output" ? "bg-bg-hover text-text-primary" : "text-text-secondary hover:text-text-primary"}`}><Activity className="size-3.5" />Output</button>
+                            <button type="button" onClick={() => setRightPanelTab("mentor")} className={`inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold ${rightPanelTab === "mentor" ? "bg-primary/10 text-primary" : "text-text-secondary hover:text-text-primary"}`}><Bot className="size-3.5" />AI Mentor</button>
+                            <button type="button" onClick={() => { setRightPanelTab("debugger"); onTrace?.(); }} className={`inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold ${rightPanelTab === "debugger" ? "bg-accent-warn/10 text-accent-warn" : "text-text-secondary hover:text-text-primary"}`}><Gauge className="size-3.5" />Debug</button>
+                          </div>
+                          <div className="min-h-0 flex-1">{renderRightPanel()}</div>
+                        </div>
                       )}
                     </div>
                   </aside>

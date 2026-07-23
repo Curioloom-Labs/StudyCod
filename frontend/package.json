@@ -16,7 +16,6 @@
     "@livekit/components-react": "^2.9.21",
     "@livekit/components-styles": "^1.2.0",
     "@monaco-editor/react": "^4.7.0",
-    "@paddle/paddle-js": "^1.6.4",
     "@types/react-syntax-highlighter": "^15.5.13",
     "axios": "^1.13.5",
     "classnames": "^2.5.1",

@@ -41,6 +41,8 @@ import {
   type WebTaskFile,
 } from "../../lib/api/library";
 import { JUDGE_LANGUAGE_LABELS, JUDGE_ENTRY_FILES, enabledJudgeLanguages, compilersForFamily, defaultCompilerForFamily } from "../../lib/judgeLanguages";
+import { StudyCodIDEWorkspace } from "../../components/ide/StudyCodIDEWorkspace";
+import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 
 const FRIENDLY_LANG = JUDGE_LANGUAGE_LABELS;
 
@@ -337,6 +339,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<LibraryCheckResult | null>(null);
+  const [trace, setTrace] = useState<TraceResult | null>(null);
+  const [tracing, setTracing] = useState(false);
   const [nextTask, setNextTask] = useState<LibraryTaskListItem | null>(null);
   const [lastReplayId, setLastReplayId] = useState<number | null>(null);
   const [actionRecovery, setActionRecovery] = useState<{
@@ -910,6 +914,20 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setCode(next);
     }
   };
+
+  const runTrace = async () => {
+    if (isWebTask || tracing || !code.trim()) return;
+    setTracing(true);
+    try {
+      const result = await tracePlayground({ language: judgeLanguage, code, stdin });
+      setTrace(result);
+    } catch (error) {
+      const message = getErrorMessageFromUnknown(error, tr("Не вдалося запустити debug trace", "Couldn't start debug trace"));
+      showToast({ type: "error", message });
+    } finally {
+      setTracing(false);
+    }
+  };
   const isMacPlatform = typeof navigator !== "undefined" && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
   const modKeyLabel = isMacPlatform ? "⌘" : "Ctrl";
   const saveShortcutLabel = `${modKeyLabel}+S`;
@@ -986,93 +1004,90 @@ export const LibraryTaskSolvePage: React.FC = () => {
     return <div className="min-h-full bg-[#f7f8f5] p-6 dark:bg-[#0b120e]"><div className="mx-auto h-[720px] max-w-[1500px] animate-pulse rounded-[28px] bg-[#e8ede8] dark:bg-white/[.04]" /></div>;
   }
 
+  const ideResultCards = checkResult && String(checkResult.verdict ?? "").toUpperCase() === "AC" ? (
+    <LearningSuccessCard
+      topic={task.section || task.tags?.[0] || tr("практична тема", "the practice topic")}
+      testsPassed={checkResult.testsPassed}
+      testsTotal={checkResult.testsTotal}
+      solvedAfterFailure={Boolean(checkResult.learningAttempt?.solvedAfterFailure)}
+      failureCategory={checkResult.learningAttempt?.failureCategory}
+      nextTask={nextTask}
+      onNextTask={() => {
+        if (!nextTask) return;
+        void recordLearningEvent({ eventType: "recommended_task_opened", taskId: nextTask.id, taskKind: "LIBRARY" }).catch(() => undefined);
+        const prefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve/" : "/library/solve/";
+        navigate(`${prefix}${nextTask.id}`);
+      }}
+    />
+  ) : checkResult ? (
+    <FailureRecoveryCard
+      verdict={checkResult.verdict}
+      testsPassed={checkResult.testsPassed}
+      testsTotal={checkResult.testsTotal}
+      firstFailure={firstFailedTest}
+      compileError={checkResult.compileError}
+      compileErrorKind={checkResult.compileErrorKind}
+      taskId={task.id}
+      taskKind="LIBRARY"
+      learningAttemptId={checkResult.learningAttempt?.id ?? null}
+      failureCategory={checkResult.learningAttempt?.failureCategory ?? firstFailedTest?.errorKind ?? null}
+      highestHintLevelShown={checkResult.learningAttempt?.highestHintLevelShown ?? 0}
+      onTryAgain={() => {
+        setCheckResult(null);
+        scrollToSection("task");
+      }}
+    />
+  ) : null;
+
   return (
     <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
-      <div className="mx-auto max-w-[1500px]">
-        <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <button type="button" onClick={goBackToLibrary} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#617066] transition hover:text-[#147b47] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]"><ArrowLeft className="size-4" />{tr("До бібліотеки", "Back to library")}</button>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#147b47] dark:text-[#72edb0]"><button type="button" onClick={goBackToLibrary} className="rounded-lg bg-[#e8f7ed] px-2.5 py-1 transition hover:bg-[#d8f3e2] dark:bg-[#00ff88]/10 dark:hover:bg-[#00ff88]/15">{tr("Бібліотека", "Library")}</button><span className="text-[#a5afa7]">/</span><span>{task.section || tr("Задача", "Problem")}</span><span className="text-[#a5afa7]">/</span><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span></div>
-            <h1 className="mt-3 max-w-4xl font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-4xl">{task.title}</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={resetToTemplate} className="h-11 rounded-xl px-4 text-sm font-semibold text-[#617066] transition hover:bg-[#e9efea] dark:text-[#a7b5aa] dark:hover:bg-white/[.06]"><RotateCcw className="mr-2 inline size-4" />{tr("Почати заново", "Reset")}</button>
-            <button type="button" onClick={manualSave} className="h-11 rounded-xl border border-[#152219]/10 bg-white px-4 text-sm font-semibold shadow-sm dark:border-white/10 dark:bg-white/[.05]"><Save className="mr-2 inline size-4" />{tr("Зберегти", "Save")}</button>
-            <button type="button" onClick={doRun} disabled={running || checking} className="h-11 rounded-xl bg-[#17251c] px-4 text-sm font-semibold text-white disabled:opacity-50 dark:bg-[#edf3ef] dark:text-[#0b120e]"><Play className="mr-2 inline size-4" />{running ? tr("Виконуємо…", "Running…") : tr("Запустити", "Run")}</button>
-            <button type="button" onClick={doCheck} disabled={checking || running} className="h-11 rounded-xl bg-[#00d978] px-5 text-sm font-bold text-[#062211] disabled:opacity-50"><CheckCircle2 className="mr-2 inline size-4" />{checking ? tr("Перевіряємо…", "Checking…") : tr("Перевірити", "Check")}</button>
-          </div>
-        </header>
-
-        <div className="overflow-hidden rounded-[28px] border border-[#152219]/10 bg-white shadow-[0_22px_55px_-44px_rgba(17,43,25,.55)] dark:border-white/10 dark:bg-[#121b15]">
-          <div className="grid min-h-[720px] xl:grid-cols-[380px_minmax(0,1fr)]">
-            <aside className="border-b border-[#152219]/10 bg-[#fbfcfa] dark:border-white/10 dark:bg-[#101813] xl:border-b-0 xl:border-r">
-              <div className="border-b border-[#152219]/10 p-6 dark:border-white/10">
-                <p className="text-xs font-semibold uppercase tracking-[.15em] text-[#e87d00]">{tr("Завдання", "Brief")}</p>
-                <div className="mt-5 max-h-[360px] overflow-y-auto pr-2 text-sm leading-7 text-[#425148] dark:text-[#c1cdc4]"><MarkdownView content={task.description} /></div>
-              </div>
-              {theory && <details className="group border-b border-[#152219]/10 p-6 dark:border-white/10"><summary className="flex cursor-pointer list-none items-center justify-between font-semibold"><span className="inline-flex items-center gap-2"><Sparkles className="size-4 text-[#e87d00]" />{tr("Пояснення", "Explanation")}</span><span className="text-xs text-[#718075] group-open:hidden">{tr("Відкрити", "Open")}</span></summary><div className="mt-5 text-sm leading-7 text-[#526157] dark:text-[#b6c2b9]"><MarkdownView content={theory} /></div></details>}
-              <div className="p-6">
-                <div className="flex items-center justify-between"><label className="text-xs font-semibold uppercase tracking-[.15em] text-[#718075]">stdin</label>{firstExampleInput && <button type="button" onClick={() => setStdin(firstExampleInput)} className="text-xs font-semibold text-[#147b47] dark:text-[#72edb0]">{tr("Взяти з прикладу", "Use example")}</button>}</div>
-                <textarea value={stdin} onChange={(event) => setStdin(event.target.value)} disabled={isWebTask} spellCheck={false} placeholder={isWebTask ? tr("Для WEB-задач ввід не потрібен", "WEB tasks do not need stdin") : "5\n1 2 3 4 5"} className="mt-3 min-h-28 w-full resize-y rounded-xl border border-[#152219]/10 bg-[#f5f8f5] p-3 font-mono text-xs outline-none focus:border-[#00c96d] disabled:opacity-55 dark:border-white/10 dark:bg-white/[.04]" />
-              </div>
-            </aside>
-
-            <main className="flex min-h-0 min-w-0 flex-col bg-[#0f1511]">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#151d17] px-4 py-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-[#dbe6de]"><span className="size-2 rounded-full bg-[#00d978]" />{isWebTask ? tr("WEB-полотно", "WEB canvas") : FRIENDLY_LANG[judgeLanguage] || judgeLanguage}</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {!isWebTask && <select value={judgeLanguage} onChange={(event) => setJudgeLanguage(event.target.value as JudgeLanguage)} className="h-9 rounded-lg border border-white/10 bg-white/[.06] px-3 text-xs font-semibold text-white outline-none">{getAllowedJudgeLanguages(task).map((language) => <option key={language} value={language} className="text-black">{FRIENDLY_LANG[language] || language}</option>)}</select>}
-                  {!isWebTask && compilerOptions.length > 1 && <select value={judgeCompiler} onChange={(event) => setJudgeCompiler(event.target.value)} className="h-9 max-w-48 rounded-lg border border-white/10 bg-white/[.06] px-3 text-xs text-white outline-none">{compilerOptions.map((compiler) => <option key={compiler.id} value={compiler.id} className="text-black">{compiler.label}</option>)}</select>}
-                  {!useFiles && !isWebTask && <button type="button" onClick={() => { const entry = entryFileForJudgeLanguage(judgeLanguage); setUseFiles(true); setFiles([{ path: entry, content: code }]); }} className="h-9 rounded-lg bg-white/[.07] px-3 text-xs font-semibold text-[#dbe6de]">{tr("Додати файл", "Add file")}</button>}
-                </div>
-              </div>
-
-              <div className={`h-[620px] min-h-[620px] overflow-hidden ${isWebTask ? "grid lg:grid-cols-2" : ""}`}>
-                <div className="h-full min-h-0 min-w-0 overflow-hidden">{useFiles ? <MultiFileEditor language={isWebTask ? "html" : judgeLanguage} entryFile={isWebTask ? "index.html" : entryFileForJudgeLanguage(judgeLanguage)} files={files} onChange={(next) => setFiles(normalizeFiles(next))} /> : <CodeEditor height="100%" language={isWebTask ? "html" : judgeLanguage} value={code} onChange={setCode} />}</div>
-                {isWebTask && <div className="h-full min-h-0 overflow-hidden border-t border-white/10 lg:border-l lg:border-t-0"><WebPreviewPane files={toWebPreviewFiles()} title={tr("Живий результат", "Live result")} /></div>}
-              </div>
-
-              <section className="border-t border-white/10 bg-[#131a15] p-4 text-[#dce7df]">
-                <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-[.14em] text-[#83a18d]">{checkResult ? tr("Результат перевірки", "Check result") : tr("Останній запуск", "Latest run")}</p>{checkResult && <span className={`rounded-full px-3 py-1 text-xs font-bold ${String(checkResult.verdict).toUpperCase() === "AC" ? "bg-[#00ff88]/10 text-[#72edb0]" : "bg-[#ff6b9d]/10 text-[#ff9aba]"}`}>{checkResult.verdict} · {checkResult.testsPassed}/{checkResult.testsTotal}</span>}</div>
-                {checkResult?.compileError ? <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-[#ff9aba]">{checkResult.compileError}</pre> : <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-[#c8d6cc]">{runResult ? (runResult.stdout || runResult.stderr || tr("Програма завершилася без виводу.", "Program finished without output.")) : tr("Запусти код або перевір рішення — результат з’явиться тут.", "Run or check the solution — results appear here.")}</pre>}
-                {checkResult && <div className="mt-3 flex gap-4 text-xs text-[#91a097]"><span>{tr("Бали", "Score")}: {checkResult.score}/{checkResult.maxScore}</span><span>{tr("Тести", "Tests")}: {checkResult.testsPassed}/{checkResult.testsTotal}</span></div>}
-                {checkResult && String(checkResult.verdict ?? "").toUpperCase() === "AC" ? <LearningSuccessCard
-                  topic={task.section || task.tags?.[0] || tr("практична тема", "the practice topic")}
-                  testsPassed={checkResult.testsPassed}
-                  testsTotal={checkResult.testsTotal}
-                  solvedAfterFailure={Boolean(checkResult.learningAttempt?.solvedAfterFailure)}
-                  failureCategory={checkResult.learningAttempt?.failureCategory}
-                  nextTask={nextTask}
-                  onNextTask={() => {
-                    if (!nextTask) return;
-                    void recordLearningEvent({ eventType: "recommended_task_opened", taskId: nextTask.id, taskKind: "LIBRARY" }).catch(() => undefined);
-                    const prefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve/" : "/library/solve/";
-                    navigate(`${prefix}${nextTask.id}`);
-                  }}
-                /> : checkResult ? <FailureRecoveryCard
-                  verdict={checkResult.verdict}
-                  testsPassed={checkResult.testsPassed}
-                  testsTotal={checkResult.testsTotal}
-                  firstFailure={firstFailedTest}
-                  compileError={checkResult.compileError}
-                  compileErrorKind={checkResult.compileErrorKind}
-                  taskId={task.id}
-                  taskKind="LIBRARY"
-                  learningAttemptId={checkResult.learningAttempt?.id ?? null}
-                  failureCategory={checkResult.learningAttempt?.failureCategory ?? firstFailedTest?.errorKind ?? null}
-                  highestHintLevelShown={checkResult.learningAttempt?.highestHintLevelShown ?? 0}
-                  onTryAgain={() => {
-                    setCheckResult(null);
-                    scrollToSection("task");
-                  }}
-                /> : null}
-              </section>
-            </main>
-          </div>
+      <div className="mx-auto max-w-[1680px]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <button type="button" onClick={goBackToLibrary} className="inline-flex items-center gap-2 text-sm font-semibold text-[#617066] transition hover:text-[#147b47] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]"><ArrowLeft className="size-4" />{tr("До бібліотеки", "Back to library")}</button>
+          <div className="hidden items-center gap-2 text-xs text-[#718075] sm:flex"><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span><span>·</span><span>{task.tags?.slice(0, 3).join(" · ")}</span></div>
         </div>
+        <StudyCodIDEWorkspace
+          task={task}
+          theory={theory}
+          language={judgeLanguage}
+          onLanguageChange={setJudgeLanguage}
+          compiler={judgeCompiler}
+          onCompilerChange={setJudgeCompiler}
+          code={code}
+          onCodeChange={setCode}
+          files={files}
+          onFilesChange={(next) => setFiles(normalizeFiles(next))}
+          useFiles={useFiles}
+          onEnableFiles={() => {
+            const entry = entryFileForJudgeLanguage(judgeLanguage);
+            setUseFiles(true);
+            setFiles([{ path: entry, content: code }]);
+          }}
+          entryFile={isWebTask ? "index.html" : entryFileForJudgeLanguage(judgeLanguage)}
+          stdin={stdin}
+          onStdinChange={setStdin}
+          firstExampleInput={firstExampleInput}
+          onUseExampleInput={() => setStdin(firstExampleInput)}
+          running={running}
+          checking={checking}
+          onRun={doRun}
+          onCheck={doCheck}
+          onSave={manualSave}
+          onReset={resetToTemplate}
+          runResult={runResult}
+          checkResult={checkResult}
+          resultCards={ideResultCards}
+          hints={libraryHints}
+          trace={trace}
+          tracing={tracing}
+          onTrace={isWebTask ? undefined : runTrace}
+          webPreviewFiles={isWebTask ? toWebPreviewFiles() : undefined}
+          isWebTask={isWebTask}
+        />
       </div>
     </div>
   );
+
 
 };
 

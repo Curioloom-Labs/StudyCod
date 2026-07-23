@@ -48,6 +48,9 @@ import { FailureRecoveryCard, type FailureRecoveryData } from "../../components/
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { useMediaQuery } from "../../utils/useMediaQuery";
+import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeTrace } from "../../components/ide/StudyCodIDEWorkspace";
+import { tracePlayground } from "../../lib/api/playground";
+import type { JudgeLanguage } from "../../lib/judgeLanguages";
 
 const textEncoder = new TextEncoder();
 type QuizOption = "А" | "Б" | "В" | "Г" | "Д";
@@ -161,6 +164,8 @@ export const StudentTaskPage: React.FC = () => {
   const [consoleOutput, setConsoleOutput] = useState("");
   const [testInput, setTestInput] = useState("");
   const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [ideTrace, setIdeTrace] = useState<StudyCodIdeTrace | null>(null);
+  const [ideTracing, setIdeTracing] = useState(false);
   const [lastScoring, setLastScoring] = useState<null | {
     score: number;
     maxScore: number;
@@ -955,6 +960,23 @@ export const StudentTaskPage: React.FC = () => {
       setRunning(false);
     }
   };
+
+  const handleTrace = async () => {
+    if (!taskId || isWebTask || ideTracing || !currentCodeText.trim()) return;
+    setIdeTracing(true);
+    try {
+      const result = await tracePlayground({
+        language: String(task?.language ?? "python").toLowerCase() as JudgeLanguage,
+        code: currentCodeText,
+        stdin: testInput || undefined,
+      });
+      setIdeTrace(result);
+    } catch (error) {
+      showToast({ type: "error", message: getErrorMessage(error, tr("Не вдалося запустити trace", "Couldn't start trace")) });
+    } finally {
+      setIdeTracing(false);
+    }
+  };
   const handleSubmitQuiz = async () => {
     if (!taskId || !task) return;
     if (submitting) return; // guard against double-submit (e.g. a fast double-click)
@@ -1476,6 +1498,79 @@ export const StudentTaskPage: React.FC = () => {
     });
   })();
   const showScoringLegend = Array.isArray(scoringSegments) && scoringSegments.some(s => s.key === "public" || s.key === "hidden");
+  if (String(task.lesson.type) !== "CONTROL") {
+    const ideLanguage = String(task.language).toLowerCase() as JudgeLanguage;
+    const ideTestsPassed = testResults.filter((result) => result.passed).length || task.grade?.testsPassed || 0;
+    const ideTestsTotal = testResults.length || task.grade?.testsTotal || task.testDataCount || 0;
+    const ideCheckResult: StudyCodIdeCheckResult | null = ideTestsTotal > 0 || lastScoring || learningFeedback
+      ? {
+          verdict: learningFeedback?.verdict ?? (ideTestsTotal > 0 ? (ideTestsPassed >= ideTestsTotal ? "AC" : "WA") : null),
+          testsPassed: ideTestsPassed,
+          testsTotal: ideTestsTotal,
+          score: lastScoring?.score ?? task.grade?.score ?? task.grade?.total,
+          maxScore: lastScoring?.maxScore ?? task.grade?.maxScore ?? 100,
+          publicTestResults: testResults.map((result, index) => ({
+            testId: result.testId ?? index + 1,
+            input: result.input,
+            expectedOutput: result.expected,
+            actualOutput: result.actual,
+            stderr: result.stderr,
+            passed: result.passed,
+            verdict: result.verdict,
+            error: result.errorKind,
+          })),
+        }
+      : null;
+    const ideRunResult = consoleOutput
+      ? { stdout: consoleOutput, stderr: "", exitCode: 0, success: true }
+      : null;
+    const ideTask = {
+      id: task.id,
+      title: task.title,
+      description: getPracticeText() || task.description,
+      section: task.lesson.title,
+      taskMode: task.taskMode,
+    };
+    return <div className="min-h-full bg-[#f7f8f5] px-3 py-4 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-5 lg:px-8">
+      <div className="mx-auto max-w-[1800px]">
+        <StudyCodIDEWorkspace
+          task={ideTask}
+          theory={hasTheory ? task.lesson.theory || null : null}
+          language={ideLanguage}
+          onLanguageChange={() => undefined}
+          disableLanguageChange
+          compiler=""
+          onCompilerChange={() => undefined}
+          code={code}
+          onCodeChange={setCode}
+          files={files}
+          onFilesChange={(next) => setFiles(ensureEntryFile(entryFile, next, currentCodeText))}
+          useFiles={useFiles}
+          onEnableFiles={() => { setUseFiles(true); setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: currentCodeText }], currentCodeText)); }}
+          entryFile={isWebTask ? "index.html" : entryFile}
+          stdin={testInput}
+          onStdinChange={setTestInput}
+          onUseExampleInput={() => undefined}
+          running={running}
+          checking={submitting}
+          onRun={handleRun}
+          onCheck={handleSubmit}
+          onSave={() => showToast({ type: "success", message: tr("Автозбереження активне", "Autosave is active") })}
+          onReset={() => { setCode(task.template); setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: task.template }], task.template)); }}
+          readOnly={!canEdit}
+          onBack={handleBack}
+          runResult={ideRunResult}
+          checkResult={ideCheckResult}
+          hints={hints}
+          trace={ideTrace}
+          tracing={ideTracing}
+          onTrace={isWebTask ? undefined : handleTrace}
+          webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
+          isWebTask={isWebTask}
+        />
+      </div>
+    </div>;
+  }
   return <div className="h-full min-h-0 flex flex-col bg-bg-base">
       {}
       {!showTheory && <div className={`border-b flex-shrink-0 ${task.lesson.type === "CONTROL" ? "border-accent-warn/30 bg-accent-warn/[0.04]" : "border-border bg-bg-surface"}`}>

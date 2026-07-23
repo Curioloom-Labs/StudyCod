@@ -3,6 +3,7 @@ import loader from "@monaco-editor/loader";
 import { useTranslation } from "react-i18next";
 import type * as Monaco from "monaco-editor";
 import { getCurrentTheme, type AppTheme } from "../theme";
+import { connectStudyCodLsp } from "../lib/lspClient";
 
 // Monaco's base CSS is required to correctly position/hide internal elements
 // like the hidden input <textarea>. Without it, the editor can render with a
@@ -12,6 +13,8 @@ import "monaco-editor/min/vs/editor/editor.main.css";
 let javaStdlibCompletionRegistered = false;
 let studycodMonacoThemesRegistered = false;
 let kotlinLanguageRegistered = false;
+const snippetLanguagesRegistered = new Set<string>();
+const languageServicesRegistered = new Set<string>();
 
 type MonacoApi = typeof Monaco;
 type MonacoDebugWindow = Window & {
@@ -159,6 +162,194 @@ const registerJavaStdlibCompletions = (monaco: MonacoApi) => {
     });
   } catch {
     // ignore
+  }
+};
+
+const registerStudyCodSnippets = (monaco: MonacoApi, language: string) => {
+  if (!monaco || snippetLanguagesRegistered.has(language)) return;
+  snippetLanguagesRegistered.add(language);
+  try {
+    const snippetsByLanguage: Record<string, Array<Omit<Monaco.languages.CompletionItem, "range">>> = {
+      java: [
+        { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "public static void main(String[] args) {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "StudyCod main method" },
+        { label: "fori", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "for (int ${1:i} = 0; ${1:i} < ${2:count}; ${1:i}++) {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Indexed for loop" },
+        { label: "sout", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "System.out.println(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Print a value" },
+      ],
+      python: [
+        { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "if __name__ == \"__main__\":\n\t$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Python entry point" },
+        { label: "fori", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "for ${1:item} in ${2:items}:\n\t$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Python for loop" },
+      ],
+      cpp: [
+        { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "int main() {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "C++ main function" },
+        { label: "fori", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Indexed for loop" },
+      ],
+    };
+    const snippets = snippetsByLanguage[language];
+    if (!snippets?.length) return;
+    monaco.languages.registerCompletionItemProvider(language, {
+      provideCompletionItems: (model, position) => {
+        const word = model.getWordUntilPosition(position);
+        const range = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
+        return { suggestions: snippets.map((snippet) => ({ ...snippet, range })) };
+      },
+    });
+  } catch {
+    // Monaco may already have a provider for this language.
+  }
+};
+
+type StudyCodSymbol = {
+  name: string;
+  kind: "class" | "function" | "variable";
+  line: number;
+  startColumn: number;
+  endColumn: number;
+  signature: string;
+};
+
+function collectStudyCodSymbols(text: string, language: string): StudyCodSymbol[] {
+  const symbols: StudyCodSymbol[] = [];
+  const patterns: Array<{ regex: RegExp; kind: StudyCodSymbol["kind"] }> = language === "python"
+    ? [
+        { regex: /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\([^\n]*\)/gm, kind: "function" },
+        { regex: /^\s*class\s+([A-Za-z_]\w*)/gm, kind: "class" },
+        { regex: /^\s*([A-Za-z_]\w*)\s*=\s*[^=]/gm, kind: "variable" },
+      ]
+    : [
+        { regex: /^\s*(?:public\s+|private\s+|protected\s+|static\s+|final\s+|abstract\s+)*(?:class|interface|enum|struct)\s+([A-Za-z_]\w*)/gm, kind: "class" },
+        { regex: /^\s*(?:public\s+|private\s+|protected\s+|static\s+|async\s+|inline\s+|virtual\s+|const\s+)*[\w:<>,\[\]]+\s+([A-Za-z_]\w*)\s*\([^\n]*\)\s*(?:\{|=>)/gm, kind: "function" },
+        { regex: /^\s*(?:const\s+|static\s+|final\s+|unsigned\s+|mutable\s+)*(?:[A-Za-z_]\w*(?:<[^\n>]+>)?|auto|var|let|val)\s+([A-Za-z_]\w*)\s*(?:=|;)/gm, kind: "variable" },
+      ];
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern.regex)) {
+      const name = String(match[1] ?? "");
+      if (!name) continue;
+      const before = text.slice(0, match.index ?? 0);
+      const line = before.split("\n").length;
+      const lineStart = before.lastIndexOf("\n") + 1;
+      const nameStart = (match.index ?? 0) + String(match[0]).indexOf(name);
+      const startColumn = nameStart - lineStart + 1;
+      symbols.push({
+        name,
+        kind: pattern.kind,
+        line,
+        startColumn,
+        endColumn: startColumn + name.length,
+        signature: String(match[0]).trim(),
+      });
+    }
+  }
+
+  const seen = new Set<string>();
+  return symbols.filter((symbol) => {
+    const key = `${symbol.name}:${symbol.line}:${symbol.startColumn}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function studyCodWordAt(model: Monaco.editor.ITextModel, position: Monaco.Position): string | null {
+  return model.getWordAtPosition(position)?.word || null;
+}
+
+function studyCodWordRanges(monaco: MonacoApi, model: Monaco.editor.ITextModel, word: string) {
+  const ranges: Monaco.IRange[] = [];
+  const expression = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "g");
+  const lines = model.getLinesContent();
+  lines.forEach((line, lineIndex) => {
+    for (const match of line.matchAll(expression)) {
+      const start = Number(match.index ?? 0) + 1;
+      ranges.push({ startLineNumber: lineIndex + 1, endLineNumber: lineIndex + 1, startColumn: start, endColumn: start + word.length });
+    }
+  });
+  return ranges;
+}
+
+function maskStudyCodStringsAndComments(text: string): string {
+  return text
+    .replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g, (value) => value.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\//g, (value) => value.replace(/[^\n]/g, " "));
+}
+
+function refreshStudyCodMarkers(monaco: MonacoApi, model: Monaco.editor.ITextModel, language: string) {
+  const source = model.getValue();
+  const masked = maskStudyCodStringsAndComments(source);
+  const markers: Monaco.editor.IMarkerData[] = [];
+  const stack: Array<{ char: string; line: number; column: number }> = [];
+  const opening: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
+  const closing = new Set(Object.values(opening));
+  let line = 1;
+  let column = 1;
+  for (let index = 0; index < masked.length; index += 1) {
+    const char = masked[index];
+    if (opening[char]) stack.push({ char, line, column });
+    else if (closing.has(char)) {
+      const expected = opening[stack[stack.length - 1]?.char || ""];
+      if (!stack.length || expected !== char) {
+        markers.push({ severity: monaco.MarkerSeverity.Error, message: `Unexpected '${char}'.`, startLineNumber: line, startColumn: column, endLineNumber: line, endColumn: column + 1 });
+      } else stack.pop();
+    }
+    if (char === "\n") {
+      line += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+  }
+  for (const item of stack.slice(-8)) {
+    markers.push({ severity: monaco.MarkerSeverity.Error, message: `Unclosed '${item.char}'.`, startLineNumber: item.line, startColumn: item.column, endLineNumber: item.line, endColumn: item.column + 1 });
+  }
+
+  if (language === "python") {
+    const lines = masked.split("\n");
+    lines.forEach((line, index) => {
+      if (/^\s*(?:if|elif|else|for|while|def|class|try|except|finally|with)\b/.test(line) && !/:\s*$/.test(line)) {
+        markers.push({ severity: monaco.MarkerSeverity.Warning, message: "This Python statement usually needs a trailing ':'.", startLineNumber: index + 1, startColumn: Math.max(1, line.trimEnd().length), endLineNumber: index + 1, endColumn: Math.max(2, line.trimEnd().length + 1) });
+      }
+    });
+  }
+  monaco.editor.setModelMarkers(model, "studycod-language-service", markers);
+}
+
+const registerStudyCodLanguageService = (monaco: MonacoApi, language: string) => {
+  if (!monaco || languageServicesRegistered.has(language) || ["plaintext", "html", "css", "scheme"].includes(language)) return;
+  languageServicesRegistered.add(language);
+  try {
+    monaco.languages.registerHoverProvider(language, {
+      provideHover: (model, position) => {
+        const word = studyCodWordAt(model, position);
+        if (!word) return null;
+        const symbol = collectStudyCodSymbols(model.getValue(), language).find((item) => item.name === word);
+        if (!symbol) return null;
+        return { range: { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: position.column - word.length, endColumn: position.column }, contents: [{ value: `**${symbol.kind}** \`${word}\`` }, { value: `\`${symbol.signature}\` · line ${symbol.line}` }] };
+      },
+    });
+    monaco.languages.registerDefinitionProvider(language, {
+      provideDefinition: (model, position) => {
+        const word = studyCodWordAt(model, position);
+        if (!word) return null;
+        const symbol = collectStudyCodSymbols(model.getValue(), language).find((item) => item.name === word);
+        if (!symbol) return null;
+        return { uri: model.uri, range: { startLineNumber: symbol.line, endLineNumber: symbol.line, startColumn: symbol.startColumn, endColumn: symbol.endColumn } };
+      },
+    });
+    monaco.languages.registerReferenceProvider(language, {
+      provideReferences: (model, position) => {
+        const word = studyCodWordAt(model, position);
+        return word ? studyCodWordRanges(monaco, model, word).map((range) => ({ uri: model.uri, range })) : [];
+      },
+    });
+    monaco.languages.registerRenameProvider(language, {
+      provideRenameEdits: (model, position, newName) => {
+        const word = studyCodWordAt(model, position);
+        if (!word || !/^[A-Za-z_$][\w$]*$/.test(newName)) return { edits: [] };
+        return { edits: studyCodWordRanges(monaco, model, word).map((range) => ({ resource: model.uri, versionId: model.getVersionId(), textEdit: { range, text: newName } })) };
+      },
+    });
+  } catch {
+    // Providers are best-effort and must not prevent Monaco from mounting.
   }
 };
 
@@ -357,6 +548,10 @@ interface Props {
   height?: string | number;
   fontSize?: number;
   wordWrap?: boolean;
+  /** Connect this model to the server-side semantic language server. */
+  enableSemanticLsp?: boolean;
+  /** Workspace-relative file name used by the language server. */
+  filePath?: string;
   /** Shows a touch-friendly symbol row on phones. */
   showMobileToolbar?: boolean;
   /**
@@ -429,13 +624,47 @@ const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false)
   fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Consolas, Monaco, 'Courier New', monospace",
   fontLigatures: true,
   minimap: {
-    enabled: false
+    enabled: true,
+    renderCharacters: false,
+    maxColumn: 120,
+    showSlider: "mouseover" as const
   },
   readOnly,
   automaticLayout: true,
   lineNumbers: "on" as const,
   renderLineHighlight: "all" as const,
   renderLineHighlightOnlyWhenFocus: true,
+  renderWhitespace: "selection" as const,
+  cursorBlinking: "smooth" as const,
+  folding: true,
+  foldingHighlight: true,
+  showFoldingControls: "mouseover" as const,
+  stickyScroll: {
+    enabled: true,
+    maxLineCount: 3
+  },
+  hover: {
+    enabled: true,
+    delay: 250,
+    above: false
+  },
+  parameterHints: {
+    enabled: true,
+    cycle: true
+  },
+  suggest: {
+    showMethods: true,
+    showFunctions: true,
+    showClasses: true,
+    showVariables: true,
+    showSnippets: true,
+    preview: true
+  },
+  quickSuggestions: {
+    other: true,
+    comments: false,
+    strings: false
+  },
   scrollBeyondLastLine: false,
   smoothScrolling: true,
   cursorSmoothCaretAnimation: "on" as const,
@@ -452,14 +681,6 @@ const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false)
   guides: {
     indentation: true
   },
-  quickSuggestions: {
-    other: true,
-    comments: false,
-    strings: false
-  },
-  parameterHints: {
-    enabled: false
-  },
   suggestOnTriggerCharacters: true,
   acceptSuggestionOnEnter: "off" as const,
   tabCompletion: "off" as const,
@@ -474,7 +695,9 @@ const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false)
   autoIndent: "advanced" as const,
   formatOnPaste: true,
   formatOnType: true,
-  validate: false,
+  // Let Monaco surface built-in syntax diagnostics. Type-aware diagnostics
+  // still require an LSP; the judge remains the source of truth for those.
+  validate: true,
   workers: 1
 });
 export const CodeEditor: React.FC<Props> = React.memo(({
@@ -485,6 +708,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   height,
   fontSize,
   wordWrap,
+  enableSemanticLsp = true,
+  filePath,
   onEditorMount,
   showMobileToolbar = true
 }) => {
@@ -541,6 +766,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         ensureStudyCodMonacoThemes(monaco);
         registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
+        registerStudyCodSnippets(monaco, monacoLang);
       })
       .catch(err => {
         if (cancelled) return;
@@ -707,6 +933,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         if (monacoLang === "java") {
           registerJavaStdlibCompletions(monaco);
         }
+        registerStudyCodSnippets(monaco, monacoLang);
+        registerStudyCodLanguageService(monaco, monacoLang);
       }} onMount={(editor: Monaco.editor.IStandaloneCodeEditor, monaco: MonacoApi) => {
         editorRef.current = editor;
         setDidMount(true);
@@ -728,6 +956,23 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         ensureStudyCodMonacoThemes(monaco);
         registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
+        registerStudyCodSnippets(monaco, monacoLang);
+        registerStudyCodLanguageService(monaco, monacoLang);
+
+        try {
+          const model = editor.getModel();
+          if (model) {
+            refreshStudyCodMarkers(monaco, model, monacoLang);
+            const markerSubscription = model.onDidChangeContent(() => refreshStudyCodMarkers(monaco, model, monacoLang));
+            const lspDispose = enableSemanticLsp ? connectStudyCodLsp(monaco, model, monacoLang, filePath || (monacoLang === "python" ? "main.py" : monacoLang === "java" ? "Main.java" : "main.cpp"), readOnly) : () => undefined;
+            editor.onDidDispose(() => {
+              markerSubscription.dispose();
+              lspDispose();
+            });
+          }
+        } catch {
+          // Diagnostics are optional; the editor remains usable without them.
+        }
 
         try {
           editor.addAction({

@@ -39,6 +39,7 @@ import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
 import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
 import { applySeo } from "./lib/seo";
+import { MascotCompanion } from "./components/MascotCompanion";
 const AuthPage = React.lazy(() => import("./pages/auth/AuthPage").then(mod => ({ default: mod.AuthPage })));
 const VerifyEmailPage = React.lazy(() => import("./pages/auth/VerifyEmailPage").then(mod => ({ default: mod.VerifyEmailPage })));
 const ResetPasswordPage = React.lazy(() => import("./pages/auth/ResetPasswordPage").then(mod => ({ default: mod.ResetPasswordPage })));
@@ -1234,6 +1235,7 @@ export const App: React.FC = () => {
   return <TheoryModalProvider>
       <UIModeProvider>
         <ToastViewport />
+        <MascotCompanion />
         <AnimatePresence mode="wait">
           <Routes location={location} key={topLevelRouteKey}>
           {import.meta.env.DEV ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>

@@ -41,6 +41,9 @@ export interface MultiFileEditorProps {
   onChange: (next: CodeFile[]) => void;
   readOnly?: boolean;
   height?: string;
+  fontSize?: number;
+  wordWrap?: boolean;
+  enableSemanticLsp?: boolean;
   /**
    * Increment this number to request opening the “Add file” modal.
    * Useful when the parent triggers file creation from outside the editor.
@@ -55,6 +58,9 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   onChange,
   readOnly,
   height,
+  fontSize,
+  wordWrap,
+  enableSemanticLsp = true,
   requestAddToken,
 }) => {
   const normalized = useMemo(() => {
@@ -187,7 +193,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
 
       <div className="flex-1 min-h-0" id={`${panelAriaId}-panel`} role="tabpanel" aria-labelledby={active ? tabIdForPath(active.path) : undefined}>
         <div className={height ? "h-full" : "h-full"} style={height ? { height } : undefined}>
-          <CodeEditor language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} />
+          <CodeEditor key={active?.path || entryFile} language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} fontSize={fontSize} wordWrap={wordWrap} enableSemanticLsp={enableSemanticLsp} filePath={active?.path || entryFile} />
         </div>
       </div>
 
