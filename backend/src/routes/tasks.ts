@@ -978,6 +978,23 @@ function shouldRequireVariableDeclarations(task: Task): boolean {
   );
 }
 
+const MAX_DECLARATION_SOURCE_LENGTH = 65536;
+const MAX_DECLARATION_SCAN = 4096;
+
+function isAsciiWhitespace(char: string): boolean {
+  return char === " " || char === "\t" || char === "\r" || char === "\n";
+}
+
+function isAsciiIdentifierStart(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || char === "_";
+}
+
+function isAsciiIdentifierPart(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return isAsciiIdentifierStart(char) || (code >= 48 && code <= 57);
+}
+
 function countVariableDeclarations(source: string, lang: TaskLang): number {
   const clean = stripCodeCommentsForVariableCheck(source, lang);
   if (lang === "PYTHON") {
@@ -987,13 +1004,53 @@ function countVariableDeclarations(source: string, lang: TaskLang): number {
       .length;
   }
 
-  if (lang === "CPP") {
-    const matches = clean.match(/\b(?:int|long|long\s+long|double|float|bool|char|string|std::string|auto)\s+[A-Za-z_]\w*(?:\s*=\s*[^;]+)?\s*;/g);
-    return matches?.length ?? 0;
+  const types = lang === "CPP"
+    ? ["std::string", "long long", "string", "int", "long", "double", "float", "bool", "char", "auto"]
+    : ["byte", "short", "int", "long", "float", "double", "boolean", "char", "String", "var"];
+  let count = 0;
+
+  for (const statement of clean.slice(0, MAX_DECLARATION_SOURCE_LENGTH).split(";")) {
+    const trimmed = statement.trimStart();
+    let typeName: string | null = null;
+
+    for (const candidate of types) {
+      if (trimmed.startsWith(candidate)) {
+        const boundary = trimmed.charAt(candidate.length);
+        if (!boundary || isAsciiWhitespace(boundary)) {
+          typeName = candidate;
+          break;
+        }
+      }
+    }
+
+    if (!typeName) continue;
+
+    let index = typeName.length;
+    for (let steps = 0; steps < MAX_DECLARATION_SCAN; steps += 1) {
+      const char = trimmed.charAt(index);
+      if (!isAsciiWhitespace(char)) break;
+      index += 1;
+    }
+
+    const first = trimmed.charAt(index);
+    if (!first || !isAsciiIdentifierStart(first)) continue;
+    index += 1;
+    for (let steps = 0; steps < MAX_DECLARATION_SCAN; steps += 1) {
+      const char = trimmed.charAt(index);
+      if (!isAsciiIdentifierPart(char)) break;
+      index += 1;
+    }
+
+    for (let steps = 0; steps < MAX_DECLARATION_SCAN; steps += 1) {
+      const char = trimmed.charAt(index);
+      if (!isAsciiWhitespace(char)) break;
+      index += 1;
+    }
+    const tail = trimmed.charAt(index);
+    if (!tail || tail === "=") count += 1;
   }
 
-  const matches = clean.match(/\b(?:byte|short|int|long|float|double|boolean|char|String|var)\s+[A-Za-z_]\w*(?:\s*=\s*[^;]+)?\s*;/g);
-  return matches?.length ?? 0;
+  return count;
 }
 
 function validateVariableDeclarationTaskSubmission(task: Task, source: string, uiLanguage: UiLanguage): string | null {

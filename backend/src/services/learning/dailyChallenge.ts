@@ -19,8 +19,10 @@ const MAX_HASH_INPUT_LENGTH = 256;
 export function fnv1a(str: string): number {
   const bounded = String(str ?? "").slice(0, MAX_HASH_INPUT_LENGTH);
   let h = 0x811c9dc5;
-  for (let i = 0; i < bounded.length; i++) {
-    h ^= bounded.charCodeAt(i);
+  for (let i = 0; i < MAX_HASH_INPUT_LENGTH; i += 1) {
+    const code = bounded.charCodeAt(i);
+    if (Number.isNaN(code)) break;
+    h ^= code;
     h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
   }
   return h >>> 0;
