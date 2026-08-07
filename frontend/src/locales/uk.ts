@@ -345,6 +345,7 @@ export default {
   landingCardLibraryBody: 'Каталог задач доступний після входу — щоб зберігати історію та прогрес.',
   landingSupport: 'Підтримка',
   footerTagline: 'StudyCod — learn by building.',
+  footerParentBrand: 'Проєкт Curioloom Labs',
   footerCopyright: '© {{year}} StudyCod. Усі права захищено.',
   footerPrivacyPolicy: 'Політика конфіденційності',
   footerTermsOfUse: 'Умови використання',

@@ -4,6 +4,7 @@ import "../../i18n";
 import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
+  ArrowUpRight,
   BarChart3,
   BookOpen,
   Check,
@@ -374,14 +375,14 @@ export const PublicLandingPage: React.FC = () => {
 
       <footer className="mx-auto w-[min(1120px,calc(100%_-_48px))] pb-8 pt-24 max-md:w-[calc(100%_-_28px)] max-md:pt-20">
         <div className="grid grid-cols-[1fr_1.4fr] gap-24 pb-16 max-md:grid-cols-1 max-md:gap-12">
-          <div><button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="bg-transparent text-left"><BrandLockup /><span className="sr-only">StudyCod — learn by building</span></button><p className="mt-5 max-w-[340px] text-sm leading-6 text-[#667169]">{tr("Освітня платформа для системного навчання програмуванню.", "An education platform for learning programming with structure.")}</p></div>
+          <div><button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="bg-transparent text-left"><BrandLockup /><span className="sr-only">StudyCod — learn by building</span></button><p className="mt-5 max-w-[340px] text-sm leading-6 text-[#667169]">{tr("Освітня платформа для системного навчання програмуванню.", "An education platform for learning programming with structure.")}</p><a href="https://github.com/Curioloom-Labs" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#30223b] transition hover:text-[#e96b55]"><span>{tr("Проєкт Curioloom Labs", "A Curioloom Labs project")}</span><ArrowUpRight className="size-3.5" /></a></div>
           <div className="grid grid-cols-3 gap-10 max-md:gap-5">{[
             [tr("Продукт","Product"),[[tr("Платформа","Platform"),()=>scrollTo("platform")],[tr("Практика","Practice"),()=>scrollTo("practice")],[tr("Тарифи","Pricing"),()=>navigate("/pricing")]]],
             [tr("Ресурси","Resources"),[[tr("Документація","Documentation"),()=>navigate("/docs")],[tr("Підтримка","Support"),()=>navigate("/support")],[tr("Блог","Blog"),()=>navigate("/blog")]]],
             [tr("Правове","Legal"),[[tr("Приватність","Privacy"),()=>navigate("/privacy")],[tr("Умови","Terms"),()=>navigate("/terms")],[tr("Повернення","Refunds"),()=>navigate("/refunds")],["Cookies",()=>navigate("/cookies")]]],
           ].map(([heading,links]) => <div key={String(heading)} className="flex flex-col items-start gap-3"><strong className="mb-1 text-sm">{String(heading)}</strong>{(links as Array<[string,()=>void]>).map(([label,action]) => <button key={label} onClick={action} className="text-left text-[13px] leading-5 text-[#667169] transition hover:text-[#111814]">{label}</button>)}</div>)}</div>
         </div>
-        <div className="flex justify-between gap-4 border-t border-[#122017]/10 pt-6 text-xs leading-5 text-[#667169] max-md:flex-col"><span>© {new Date().getFullYear()} StudyCod</span><span>{tr("Створено для тих, хто вчиться створювати.", "Made for people learning to build.")}</span></div>
+        <div className="flex justify-between gap-4 border-t border-[#122017]/10 pt-6 text-xs leading-5 text-[#667169] max-md:flex-col"><span>© {new Date().getFullYear()} StudyCod · Curioloom Labs</span><span>{tr("Створено для тих, хто вчиться створювати.", "Made for people learning to build.")}</span></div>
       </footer>
     </div>
   );

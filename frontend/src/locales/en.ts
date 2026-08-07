@@ -345,6 +345,7 @@ export default {
   landingCardLibraryBody: 'A catalog of tasks available after sign-in, so your history and progress are saved.',
   landingSupport: 'Support',
   footerTagline: 'StudyCod — learn by building.',
+  footerParentBrand: 'A Curioloom Labs project',
   footerCopyright: '© {{year}} StudyCod. All rights reserved.',
   footerPrivacyPolicy: 'Privacy Policy',
   footerTermsOfUse: 'Terms of Use',
