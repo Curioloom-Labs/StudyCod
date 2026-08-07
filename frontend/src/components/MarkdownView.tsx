@@ -118,7 +118,7 @@ function extractYouTubeVideoId(url: URL): string | null {
     return /^[a-zA-Z0-9_-]{6,20}$/.test(candidate) ? candidate : null;
   }
 
-  if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+  if (host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")) {
     const qv = url.searchParams.get("v") || "";
     if (/^[a-zA-Z0-9_-]{6,20}$/.test(qv)) return qv;
 
@@ -141,7 +141,7 @@ function extractVimeoVideoId(url: URL): string | null {
     return parts[1];
   }
 
-  if (host.endsWith("vimeo.com")) {
+  if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
     const numericSegment = parts.find((segment) => /^\d+$/.test(segment));
     if (numericSegment) return numericSegment;
   }
@@ -158,7 +158,7 @@ function extractDailymotionVideoId(url: URL): string | null {
     return /^[a-zA-Z0-9]+$/.test(candidate) ? candidate : null;
   }
 
-  if (host.endsWith("dailymotion.com")) {
+  if (host === "dailymotion.com" || host.endsWith(".dailymotion.com")) {
     const idx = parts.indexOf("video");
     if (idx >= 0) {
       const candidate = parts[idx + 1] || "";
@@ -171,7 +171,7 @@ function extractDailymotionVideoId(url: URL): string | null {
 
 function extractLoomVideoId(url: URL): string | null {
   const host = url.hostname.toLowerCase().replace(/^www\./, "");
-  if (!host.endsWith("loom.com")) return null;
+  if (host !== "loom.com" && !host.endsWith(".loom.com")) return null;
 
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] === "share" || parts[0] === "embed") {

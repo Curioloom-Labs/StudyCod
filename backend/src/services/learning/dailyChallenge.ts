@@ -13,11 +13,14 @@ export interface DailyChallengePick<T> {
   poolSize: number;
 }
 
+const MAX_HASH_INPUT_LENGTH = 256;
+
 /** FNV-1a 32-bit hash — small, dependency-free, stable across runs. */
 export function fnv1a(str: string): number {
+  const bounded = String(str ?? "").slice(0, MAX_HASH_INPUT_LENGTH);
   let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
+  for (let i = 0; i < bounded.length; i++) {
+    h ^= bounded.charCodeAt(i);
     h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
   }
   return h >>> 0;

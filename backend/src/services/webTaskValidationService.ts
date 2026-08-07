@@ -298,7 +298,25 @@ function safeRegExp(pattern: string, flags?: string): RegExp | null {
 }
 
 function htmlHasInlineScript(html: string): boolean {
-  return /<script(?:\s[^>]*)?>[\s\S]*?<\/script\s*>/i.test(html);
+  const lower = String(html ?? "").toLowerCase();
+  const isTagWhitespace = (value: string): boolean => value === " " || value === "\t" || value === "\n" || value === "\r" || value === "\f";
+  let cursor = 0;
+  while (cursor < lower.length) {
+    const start = lower.indexOf("<script", cursor);
+    if (start < 0) return false;
+    const boundary = lower[start + 7] || "";
+    if (boundary === ">" || isTagWhitespace(boundary)) {
+      const openEnd = lower.indexOf(">", start + 7);
+      if (openEnd < 0) return false;
+      const closeStart = lower.indexOf("</script", openEnd + 1);
+      if (closeStart >= 0) {
+        const closeBoundary = lower[closeStart + 8] || "";
+        if (closeBoundary === ">" || isTagWhitespace(closeBoundary)) return true;
+      }
+    }
+    cursor = start + 7;
+  }
+  return false;
 }
 
 function htmlHasInlineStyleTag(html: string): boolean {

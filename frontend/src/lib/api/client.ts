@@ -102,17 +102,48 @@ function shouldSkipAuthRedirect(config: InternalAxiosRequestConfig | undefined):
   return String((headers as Record<string, unknown>)["X-Skip-Auth-Redirect"] ?? "") === "1";
 }
 
+function readCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const part = document.cookie.split(";").map((value) => value.trim()).find((value) => value.startsWith("XSRF-TOKEN="));
+  return part ? decodeURIComponent(part.slice("XSRF-TOKEN=".length)) : null;
+}
+
+let csrfBootstrap: Promise<void> | null = null;
+
 export const api = axios.create({
   baseURL: joinApiBase(import.meta.env.VITE_API_URL || getDefaultBaseUrl()),
-  withCredentials: true
+  withCredentials: true,
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN"
 });
 const savedToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 if (savedToken) {
   api.defaults.headers.common.Authorization = `Bearer ${savedToken}`;
 }
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  const method = String(config.method || "get").toLowerCase();
+  if (typeof window !== "undefined" && !["get", "head", "options"].includes(method) && !readCsrfCookie()) {
+    csrfBootstrap ??= axios.get(`${config.baseURL || ""}/csrf-token`, { withCredentials: true }).then(() => undefined).finally(() => {
+      csrfBootstrap = null;
+    });
+    await csrfBootstrap;
+  }
+
   const token = localStorage.getItem("token");
   const uiLanguage = localStorage.getItem("studycod_language") || "en";
+  if (typeof document !== "undefined") {
+    const csrf = readCsrfCookie();
+    if (csrf) {
+      if (config.headers && typeof config.headers.set === "function") {
+        config.headers.set("X-XSRF-TOKEN", csrf);
+      } else {
+        config.headers = AxiosHeaders.from({
+          ...(config.headers || {}),
+          "X-XSRF-TOKEN": csrf
+        });
+      }
+    }
+  }
   if (token) {
     if (config.headers && typeof config.headers.set === "function") {
       config.headers.set("Authorization", `Bearer ${token}`);

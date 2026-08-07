@@ -341,10 +341,6 @@ export const TaskLibraryPage: React.FC = () => {
   }, [location.pathname, location.search]);
 
   const leaveLibrary = () => {
-    if (typeof window !== "undefined") {
-      window.location.assign(safeExitPath);
-      return;
-    }
     navigate(safeExitPath, { replace: true });
   };
 

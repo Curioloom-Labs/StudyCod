@@ -1,0 +1,4 @@
+name: StudyCod CodeQL configuration
+
+paths-ignore:
+  - frontend/public/monaco-editor/**

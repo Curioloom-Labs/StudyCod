@@ -431,7 +431,7 @@ type CertificateExtraObject = {
 };
 
 function createDefaultCertificateExtraObject(type: CertificateExtraObjectType, x = 50, y = 50): CertificateExtraObject {
-  const id = `extra-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const id = createSecureClientId("extra");
   if (type === "image") {
     return {
       id,
@@ -533,40 +533,86 @@ function certificateLayoutPresetStorageKey(contestId: number | null): string {
   return `studycod:capture:certificate-layout-presets:${Number.isFinite(Number(contestId)) ? Number(contestId) : "global"}`;
 }
 
-function readCertificateLayoutPresets(contestId: number | null): CertificateLayoutPresetItem[] {
-  if (typeof window === "undefined") return [];
+const LAYOUT_PRESET_DB = "studycod-certificate-layouts";
+const LAYOUT_PRESET_STORE = "presets";
+
+function createSecureClientId(prefix: string): string {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") return `${prefix}-${cryptoApi.randomUUID()}`;
+  const bytes = new Uint8Array(16);
+  cryptoApi?.getRandomValues(bytes);
+  return `${prefix}-${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function openLayoutPresetDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(LAYOUT_PRESET_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(LAYOUT_PRESET_STORE)) {
+        request.result.createObjectStore(LAYOUT_PRESET_STORE, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function normalizeStoredCertificatePresets(raw: unknown): CertificateLayoutPresetItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p) => {
+      if (!p || typeof p !== "object") return null;
+      const anyPreset = p as Partial<CertificateLayoutPresetItem>;
+      const name = String(anyPreset.name ?? "").trim();
+      const id = String(anyPreset.id ?? "").trim();
+      if (!name || !id) return null;
+      return {
+        id,
+        name,
+        createdAt: String(anyPreset.createdAt ?? new Date().toISOString()),
+        bgUrl: String((anyPreset as { bgUrl?: unknown }).bgUrl ?? (anyPreset as { backgroundUrl?: unknown }).backgroundUrl ?? ""),
+        layout: normalizeCertificateLayoutState(anyPreset.layout as CertificateLayoutState),
+      } as CertificateLayoutPresetItem;
+    })
+    .filter((p): p is CertificateLayoutPresetItem => Boolean(p));
+}
+
+async function readCertificateLayoutPresets(contestId: number | null): Promise<CertificateLayoutPresetItem[]> {
+  if (typeof window === "undefined" || typeof indexedDB === "undefined") return [];
   try {
-    const raw = localStorage.getItem(certificateLayoutPresetStorageKey(contestId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((p) => {
-        if (!p || typeof p !== "object") return null;
-        const anyPreset = p as Partial<CertificateLayoutPresetItem>;
-        const name = String(anyPreset.name ?? "").trim();
-        const id = String(anyPreset.id ?? "").trim();
-        if (!name || !id) return null;
-        return {
-          id,
-          name,
-          createdAt: String(anyPreset.createdAt ?? new Date().toISOString()),
-          bgUrl: String((anyPreset as { bgUrl?: unknown }).bgUrl ?? (anyPreset as { backgroundUrl?: unknown }).backgroundUrl ?? ""),
-          layout: normalizeCertificateLayoutState(anyPreset.layout as CertificateLayoutState),
-        } as CertificateLayoutPresetItem;
-      })
-      .filter((p): p is CertificateLayoutPresetItem => Boolean(p));
+    const db = await openLayoutPresetDb();
+    return await new Promise<CertificateLayoutPresetItem[]>((resolve) => {
+      const request = db.transaction(LAYOUT_PRESET_STORE, "readonly").objectStore(LAYOUT_PRESET_STORE).get(certificateLayoutPresetStorageKey(contestId));
+      request.onsuccess = () => {
+        db.close();
+        resolve(normalizeStoredCertificatePresets((request.result as { presets?: unknown } | undefined)?.presets));
+      };
+      request.onerror = () => {
+        db.close();
+        resolve([]);
+      };
+    });
   } catch {
     return [];
   }
 }
 
-function writeCertificateLayoutPresets(contestId: number | null, presets: CertificateLayoutPresetItem[]): void {
-  if (typeof window === "undefined") return;
+async function writeCertificateLayoutPresets(contestId: number | null, presets: CertificateLayoutPresetItem[]): Promise<void> {
+  if (typeof window === "undefined" || typeof indexedDB === "undefined") return;
   try {
-    localStorage.setItem(certificateLayoutPresetStorageKey(contestId), JSON.stringify(presets));
+    const db = await openLayoutPresetDb();
+    await new Promise<void>((resolve) => {
+      const transaction = db.transaction(LAYOUT_PRESET_STORE, "readwrite");
+      transaction.objectStore(LAYOUT_PRESET_STORE).put({
+        key: certificateLayoutPresetStorageKey(contestId),
+        presets: normalizeStoredCertificatePresets(presets),
+      });
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => { db.close(); resolve(); };
+      transaction.onabort = () => { db.close(); resolve(); };
+    });
   } catch {
-    // ignore storage write errors
+    // Ignore private-mode and unavailable IndexedDB errors.
   }
 }
 
@@ -2043,7 +2089,10 @@ export const ContestPage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    setCertificateLayoutPresets(readCertificateLayoutPresets(contestId));
+    let active = true;
+    void readCertificateLayoutPresets(contestId).then((presets) => {
+      if (active) setCertificateLayoutPresets(presets);
+    });
     setCertificateLayoutPresetId("");
     setCertificateLayoutHistory([
       {
@@ -2052,6 +2101,7 @@ export const ContestPage: React.FC = () => {
       },
     ]);
     setCertificateLayoutHistoryIndex(0);
+    return () => { active = false; };
   }, [contestId]);
 
   const applySnap = React.useCallback(
@@ -2392,7 +2442,7 @@ export const ContestPage: React.FC = () => {
     if (!current) return;
     const duplicated = {
       ...current,
-      id: `extra-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: createSecureClientId("extra"),
       x: clampNumber(current.x + 2, 0, 100),
       y: clampNumber(current.y + 2, 0, 100),
       zIndex: clampNumber(Number(current.zIndex ?? 20) + 1, 1, 999),
@@ -2624,7 +2674,7 @@ export const ContestPage: React.FC = () => {
     }
 
     const preset = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: createSecureClientId("preset"),
       name,
       createdAt: new Date().toISOString(),
       bgUrl: certificateLayoutBackgroundUrl,
@@ -2634,7 +2684,7 @@ export const ContestPage: React.FC = () => {
     setCertificateLayoutPresets(next);
     setCertificateLayoutPresetId(preset.id);
     setCertificateLayoutPresetName("");
-    writeCertificateLayoutPresets(contestId, next);
+    void writeCertificateLayoutPresets(contestId, next);
     setCertificateMessage(tr(`Пресет "${preset.name}" збережено`, `Preset "${preset.name}" saved`));
     setCertificateError(null);
   };
@@ -2658,7 +2708,7 @@ export const ContestPage: React.FC = () => {
     if (!certificateLayoutPresetId) return;
     const next = certificateLayoutPresets.filter((p) => p.id !== certificateLayoutPresetId);
     setCertificateLayoutPresets(next);
-    writeCertificateLayoutPresets(contestId, next);
+    void writeCertificateLayoutPresets(contestId, next);
     setCertificateLayoutPresetId("");
     setCertificateMessage(tr("Пресет видалено", "Preset deleted"));
   };

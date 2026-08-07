@@ -124,7 +124,7 @@ router.post("/classes/:classId/students", authRequired, requireClassCapability("
   }
 });
 
-router.get("/classes/:classId/students/export", authRequired, requireClassCapability("STUDENT_MANAGE"), async (req: ClassAccessRequest, res: Response) => {
+router.post("/classes/:classId/students/export", authRequired, requireClassCapability("STUDENT_MANAGE"), async (req: ClassAccessRequest, res: Response) => {
   try {
     const classId = req.classAccess!.cls.id;
 
@@ -140,7 +140,7 @@ router.get("/classes/:classId/students/export", authRequired, requireClassCapabi
       }
     });
 
-    const withPasswordsRaw = Array.isArray((req.query as any)?.withPasswords) ? String((req.query as any).withPasswords[0] || "") : String((req.query as any)?.withPasswords || "");
+    const withPasswordsRaw = String((req.body as any)?.withPasswords ?? "");
     const withPasswords = ["1", "true", "yes"].includes(withPasswordsRaw.toLowerCase().trim());
 
     const csvEscape = (value: unknown) => {
@@ -188,7 +188,7 @@ router.get("/classes/:classId/students/export", authRequired, requireClassCapabi
     res.setHeader("Content-Disposition", `attachment; filename=students_class_${classId}.csv`);
     res.send("\uFEFF" + csv);
   } catch (error) {
-    logger.error("[edu/classStudents] GET /classes/:classId/students/export error", { requestId: req.requestId, userId: req.userId, error });
+    logger.error("[edu/classStudents] POST /classes/:classId/students/export error", { requestId: req.requestId, userId: req.userId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });

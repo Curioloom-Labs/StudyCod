@@ -921,13 +921,46 @@ function composeTaskStatementMarkdown(params: {
 }
 
 function stripCodeCommentsForVariableCheck(source: string, lang: TaskLang): string {
-  let text = String(source || "");
-  if (lang === "PYTHON") {
-    text = text.replace(/#.*$/gm, "");
-  } else {
-    text = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const text = String(source || "");
+  const out: string[] = [];
+  let inBlockComment = false;
+
+  // Use a linear scan so attacker-controlled source cannot trigger the
+  // quadratic backtracking behavior of the old comment-removal regexes.
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1] || "";
+
+    if (lang !== "PYTHON" && inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i += 1;
+      } else if (ch === "\n") {
+        out.push("\n");
+      }
+      continue;
+    }
+
+    if (lang === "PYTHON" && ch === "#") {
+      while (i + 1 < text.length && text[i + 1] !== "\n") i += 1;
+      continue;
+    }
+
+    if (lang !== "PYTHON" && ch === "/" && next === "*") {
+      inBlockComment = true;
+      i += 1;
+      continue;
+    }
+
+    if (lang !== "PYTHON" && ch === "/" && next === "/") {
+      while (i + 1 < text.length && text[i + 1] !== "\n") i += 1;
+      continue;
+    }
+
+    out.push(ch);
   }
-  return text;
+
+  return out.join("");
 }
 
 function shouldRequireVariableDeclarations(task: Task): boolean {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
@@ -701,7 +702,7 @@ export class OpenRouterProvider implements LLMProvider {
       maxRetries = 2,
       userId,
       topicId,
-      traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      traceId = `trace-${randomUUID()}`,
       signal
     } = options;
     const requestTimeoutMs = (() => {

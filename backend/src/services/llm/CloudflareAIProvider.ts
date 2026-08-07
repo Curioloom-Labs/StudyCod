@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { logger } from '../../utils/logger';
 interface CloudflareWorkerRequest {
@@ -135,7 +136,7 @@ ${JSON.stringify(schema, null, 2)}
       maxRetries = 1,
       userId,
       topicId,
-      traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      traceId = `trace-${randomUUID()}`,
       signal
     } = options;
     const url = process.env.CLOUDFLARE_AI_URL;

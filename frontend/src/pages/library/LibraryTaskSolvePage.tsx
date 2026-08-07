@@ -277,10 +277,6 @@ export const LibraryTaskSolvePage: React.FC = () => {
     const primaryTarget = !isSolvePath(safeBackPath) ? safeBackPath : libraryListPath;
     const target = primaryTarget || libraryListPath;
 
-    if (typeof window !== "undefined") {
-      window.location.assign(target);
-      return;
-    }
     navigate(target, { replace: true });
   };
 

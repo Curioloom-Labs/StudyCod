@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger';
 export interface OpenRouterRequest {
   model: string;
@@ -120,7 +121,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
     maxRetries = 2,
     userId,
     topicId,
-    traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    traceId = `trace-${randomUUID()}`
   } = options;
   const model = request.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
   const url = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';

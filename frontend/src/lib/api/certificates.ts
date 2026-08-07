@@ -110,9 +110,10 @@ export type ProfileCertificate = {
 
 
 export async function getCertificateVerification(certificateId: string): Promise<CertificateVerification> {
-  const safeId = encodeURIComponent(String(certificateId ?? "").trim());
   try {
-    const res = await api.get(`/certificate/${safeId}`);
+    const res = await api.post("/certificate/verify", {
+      certificateId: String(certificateId ?? "").trim()
+    });
     return res.data as CertificateVerification;
   } catch (e: any) {
     const msg = e?.response?.data?.message;

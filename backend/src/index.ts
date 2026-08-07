@@ -5,6 +5,7 @@ import morgan from "morgan";
 import session from "express-session";
 import { RedisStore } from "connect-redis";
 import passport from "passport";
+import lusca from "lusca";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { AppDataSource } from "./data-source";
@@ -494,6 +495,23 @@ app.use((req, res, next) => {
   if (isSessionlessPath(req.path)) return next();
   return passportSessionMiddleware(req, res, next);
 });
+
+// Protect cookie-authenticated state-changing requests. The Angular-compatible
+// cookie/header mode lets the browser client send the token without placing it
+// in URLs or request bodies. Tests use JWT fixtures and intentionally bypass
+// this browser-only middleware.
+if (process.env.NODE_ENV !== "test") {
+  app.use(lusca.csrf({
+    angular: true,
+    cookie: {
+      options: {
+        httpOnly: false,
+        secure: IS_PRODUCTION,
+        sameSite: "lax"
+      }
+    }
+  }));
+}
 setupGoogleStrategy();
 if (!IS_PRODUCTION) {
   app.use(morgan("dev"));
@@ -511,6 +529,9 @@ app.get(["/api", "/api/"], (_req, res) => {
     version: "1.0.0",
     status: "ok"
   });
+});
+app.get(["/csrf-token", "/api/csrf-token"], (_req, res) => {
+  res.status(204).end();
 });
 app.get(["/health", "/api/health"], (_req, res) => {
   res.json({

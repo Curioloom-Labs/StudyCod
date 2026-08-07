@@ -301,9 +301,9 @@ certificateRouter.put("/contest/:contestId/settings", authRequired, async (req: 
   }
 });
 
-certificateRouter.get("/:certificateId", authOptional, async (req: AuthRequest, res: Response) => {
+certificateRouter.post("/verify", authOptional, async (req: AuthRequest, res: Response) => {
   try {
-    const certificateId = String(req.params.certificateId ?? "").trim();
+    const certificateId = String((req.body as any)?.certificateId ?? "").trim();
     if (!certificateId) return res.status(400).json({ message: "INVALID_CERTIFICATE_ID" });
 
     const payload = await verificationService.getByCertificateId(certificateId);

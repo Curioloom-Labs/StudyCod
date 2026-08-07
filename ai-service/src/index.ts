@@ -36,6 +36,10 @@ import { getLLMOrchestrator } from '../../backend/src/services/llm/LLMOrchestrat
 const PORT = process.env.AI_SERVICE_PORT ? parseInt(process.env.AI_SERVICE_PORT, 10) : 3001;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const app = express();
+const corsOrigins = String(process.env.CORS_ORIGIN || (IS_PRODUCTION ? '' : 'http://localhost:5173'))
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 function safePreview(value: unknown, max = 200): string {
   try {
     const raw = typeof value === 'string' ? value : JSON.stringify(value);
@@ -46,7 +50,13 @@ function safePreview(value: unknown, max = 200): string {
   }
 }
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: (origin, callback) => {
+    if (!origin || corsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('CORS origin is not allowed'));
+  },
   credentials: true
 }));
 app.use(express.json({

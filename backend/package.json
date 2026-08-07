@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@types/express-session": "^1.18.2",
+    "@types/lusca": "^1.7.5",
     "@types/nodemailer": "^7.0.9",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
@@ -41,6 +42,7 @@
     "imapflow": "^1.0.190",
     "jsonwebtoken": "^9.0.3",
     "livekit-server-sdk": "^2.15.4",
+    "lusca": "^1.7.0",
     "mailparser": "^3.9.0",
     "morgan": "^1.11.0",
     "multer": "^2.2.0",

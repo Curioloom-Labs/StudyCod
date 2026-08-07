@@ -54,7 +54,16 @@ export function isVisualizerSupported(language: string): language is JudgeLangua
 
 /** Build the tracer wrapper for a language, or null when visualization isn't supported. */
 export function buildTracer(language: string, code: string, maxSteps: number = DEFAULT_MAX_STEPS): TracerPlan | null {
-  const builder = TIER_A[language as JudgeLanguage];
-  if (!builder) return null;
-  return { judgeLanguage: language as JudgeLanguage, source: builder(code, maxSteps) };
+  switch (language) {
+    case "python":
+      return { judgeLanguage: "python", source: buildPythonTracerScript(code, maxSteps) };
+    case "ruby":
+      return { judgeLanguage: "ruby", source: buildRubyTracerScript(code, maxSteps) };
+    case "lua":
+      return { judgeLanguage: "lua", source: buildLuaTracerScript(code, maxSteps) };
+    case "php":
+      return { judgeLanguage: "php", source: buildPhpTracerScript(code, maxSteps) };
+    default:
+      return null;
+  }
 }

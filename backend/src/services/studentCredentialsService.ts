@@ -82,10 +82,9 @@ export function generateUsername(firstName: string, lastName: string, middleName
 export function generatePassword(): string {
   const length = 10;
   const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const randomBytes = crypto.randomBytes(length);
   let password = "";
-  for (let i = 0; i < length; i++) {
-    password += charset[randomBytes[i] % charset.length];
+  for (let i = 0; i < length; i += 1) {
+    password += charset[crypto.randomInt(0, charset.length)];
   }
   return password;
 }

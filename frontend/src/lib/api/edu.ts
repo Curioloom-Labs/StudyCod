@@ -491,8 +491,9 @@ export async function getStudents(classId: number): Promise<Student[]> {
   return res.data.students;
 }
 export async function exportStudents(classId: number, withPasswords?: boolean): Promise<Blob> {
-  const query = withPasswords ? "?withPasswords=1" : "";
-  const res = await api.get(`/edu/classes/${classId}/students/export${query}`, {
+  const res = await api.post(`/edu/classes/${classId}/students/export`, {
+    withPasswords: Boolean(withPasswords)
+  }, {
     responseType: "blob"
   });
   return res.data;
