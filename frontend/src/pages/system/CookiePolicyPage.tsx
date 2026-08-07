@@ -43,7 +43,7 @@ export const CookiePolicyPage: React.FC = () => {
       title: tr("1. Що таке cookies і локальне сховище", "1. What cookies and local storage are"),
       paragraphs: [
         tr("Cookies — це невеликі файли, які сайт може зберігати у браузері. LocalStorage і sessionStorage — схожі механізми браузера, які дозволяють зберігати налаштування, токени, чернетки та стан інтерфейсу.", "Cookies are small files a website may store in the browser. LocalStorage and sessionStorage are similar browser mechanisms that store settings, tokens, drafts, and interface state."),
-        tr("У цій політиці слово 'cookies' охоплює також localStorage, sessionStorage та інші подібні технології, якщо контекст не вимагає іншого.", "In this policy, the word 'cookies' also covers localStorage, sessionStorage, and similar technologies unless the context requires otherwise.")
+        tr("Cookies, localStorage та sessionStorage є різними технологіями. Для прозорості ця сторінка описує їх разом, але не ототожнює браузерні cookies з локальним сховищем.", "Cookies, local storage, and session storage are different technologies. For transparency, this page describes them together but does not treat browser cookies and local storage as the same thing.")
       ]
     },
     {
@@ -72,14 +72,14 @@ export const CookiePolicyPage: React.FC = () => {
     {
       title: tr("4. Аналітика та покращення сервісу", "4. Analytics and service improvement"),
       paragraphs: [
-        tr("StudyCod може використовувати внутрішні журнали подій, помилок і продуктивності для виправлення багів, захисту від зловживань та покращення навчального досвіду.", "StudyCod may use internal event, error, and performance logs to fix bugs, protect against abuse, and improve the learning experience."),
-        tr("Якщо в майбутньому буде підключено необов'язкову сторонню аналітику або рекламні cookies, ми маємо показати відповідне повідомлення або отримати згоду там, де це вимагається законом.", "If optional third-party analytics or advertising cookies are added in the future, we should show a relevant notice or obtain consent where required by law.")
+        tr("StudyCod може використовувати внутрішні журнали подій, помилок і продуктивності для виправлення багів, захисту від зловживань та покращення навчального досвіду. Такі журнали не повинні використовуватися для несумісних із цією метою цілей.", "StudyCod may use internal event, error, and performance logs to fix bugs, protect against abuse, and improve the learning experience. Such logs are not used for purposes incompatible with this notice."),
+        tr("Станом на дату оновлення цієї політики StudyCod не описує рекламні cookies або необов'язкову сторонню аналітику як необхідні технології. Якщо такі технології буде додано, ми окремо оновимо повідомлення та отримаємо згоду там, де це вимагається законом.", "As of the date of this policy, StudyCod does not treat advertising cookies or optional third-party analytics as necessary technologies. If such technologies are added, we will update this notice and obtain consent where required by law.")
       ]
     },
     {
       title: tr("5. Сторонні сервіси", "5. Third-party services"),
       paragraphs: [
-        tr("Окремі функції можуть взаємодіяти зі сторонніми сервісами, наприклад Google OAuth, email-доставкою, хостингом, Cloudflare Turnstile або AI-провайдерами. Такі сервіси можуть встановлювати власні cookies або обробляти технічні дані згідно зі своїми політиками.", "Some features may interact with third-party services, such as Google OAuth, email delivery, hosting, Cloudflare Turnstile, or AI providers. These services may set their own cookies or process technical data under their own policies.")
+        tr("Окремі функції можуть взаємодіяти зі сторонніми сервісами, наприклад Google OAuth, email-доставкою, хостингом, Cloudflare Turnstile або AI-провайдерами. Такі сервіси можуть встановлювати власні cookies або обробляти технічні дані згідно зі своїми політиками; їх перелік і роль мають відповідати фактично підключеним інтеграціям.", "Some features may interact with third-party services, such as Google OAuth, email delivery, hosting, Cloudflare Turnstile, or AI providers. These services may set their own cookies or process technical data under their own policies; the list and role of each service must match the integrations actually enabled.")
       ]
     },
     {
@@ -110,7 +110,7 @@ export const CookiePolicyPage: React.FC = () => {
     current="cookies"
     title={tr("Cookies і локальне сховище", "Cookies & Local Storage")}
     description={tr("Які браузерні технології використовує StudyCod, навіщо вони потрібні та як ними керувати.", "Which browser technologies StudyCod uses, why they are needed, and how to manage them.")}
-    updated={tr("Оновлено 31 травня 2026", "Updated May 31, 2026")}
+    updated={tr("Оновлено 7 серпня 2026", "Updated August 7, 2026")}
     sections={sections}
     tr={tr}
     icon={Cookie}

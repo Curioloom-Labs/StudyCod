@@ -43,7 +43,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       title: tr("1. Хто відповідає за обробку даних", "1. Who is responsible for data processing"),
       paragraphs: [
         tr("Ця політика пояснює, як StudyCod обробляє персональні дані користувачів платформи: учнів, студентів, вчителів, організаторів змагань, адміністраторів та користувачів персонального режиму.", "This policy explains how StudyCod processes personal data of platform users: learners, students, teachers, contest organizers, administrators, and personal-mode users."),
-        tr("Для персонального режиму оператором даних є StudyCod. Для класів, створених навчальним закладом або вчителем, відповідальність за склад учнів, навчальні матеріали й оцінювання може розподілятися між StudyCod та відповідним навчальним організатором.", "For personal mode, StudyCod acts as the data operator. For classes created by an educational institution or teacher, responsibility for student rosters, learning materials, and assessment may be shared between StudyCod and the relevant educational organizer.")
+        tr(`У межах персонального режиму StudyCod є володільцем персональних даних. Для класів, створених навчальним закладом або вчителем, StudyCod та відповідний навчальний організатор можуть бути володільцями або розпорядниками даних залежно від фактичної ролі та договору між сторонами. Контакт для питань щодо даних StudyCod: ${SUPPORT_EMAIL}.`, `In personal mode, StudyCod is the personal-data controller. For classes created by an educational institution or teacher, StudyCod and the relevant educational organizer may act as controllers or processors depending on their actual roles and agreement. StudyCod contact for data questions: ${SUPPORT_EMAIL}.`)
       ]
     },
     {
@@ -72,8 +72,8 @@ export const PrivacyPolicyPage: React.FC = () => {
     {
       title: tr("4. Правові підстави обробки", "4. Legal bases for processing"),
       paragraphs: [
-        tr("Залежно від ситуації ми обробляємо дані на підставі виконання домовленості з користувачем або навчальним організатором, законного інтересу в безпеці й розвитку сервісу, згоди користувача або вимог законодавства.", "Depending on the situation, we process data to perform an agreement with the user or educational organizer, based on legitimate interests in security and service improvement, with user consent, or to comply with legal requirements."),
-        tr("Якщо учень користується платформою в межах класу, вчитель або навчальна організація мають переконатися, що для створення й використання учнівського акаунта є належна підстава або згода батьків/законних представників, коли це потрібно.", "If a student uses the platform as part of a class, the teacher or educational organization must ensure there is a proper basis or parent/legal guardian consent for creating and using the student account when required.")
+        tr("Залежно від ситуації обробка ґрунтується на згоді суб’єкта, необхідності укладення або виконання договору, дозволі чи обов’язку, встановленому законом, або необхідності захисту законного інтересу StudyCod чи іншого одержувача, якщо такий інтерес не переважає над правами та свободами суб’єкта.", "Depending on the situation, processing is based on the data subject's consent, the need to enter into or perform a contract, a legal permission or obligation, or the need to protect the legitimate interests of StudyCod or another recipient where those interests do not override the data subject's rights and freedoms."),
+        tr("Якщо учень користується платформою в межах класу, навчальний організатор має визначити належну правову підставу для створення й використання учнівського акаунта та отримати згоду батьків або законного представника, коли цього вимагає закон. Сам факт дозволу вчителя не замінює таку підставу.", "If a student uses the platform as part of a class, the educational organizer must establish the proper legal basis for creating and using the student account and obtain a parent or legal guardian's consent where the law requires it. A teacher's permission alone does not replace that basis.")
       ]
     },
     {
@@ -97,7 +97,7 @@ export const PrivacyPolicyPage: React.FC = () => {
     {
       title: tr("7. Міжнародна передача даних", "7. International data transfers"),
       paragraphs: [
-        tr("Окремі технічні або AI-сервіси можуть бути розміщені за межами країни користувача. У таких випадках ми застосовуємо доступні договірні, технічні та організаційні заходи для захисту даних відповідно до застосовного законодавства.", "Some technical or AI services may be hosted outside the user's country. In those cases, we use available contractual, technical, and organizational safeguards to protect data in line with applicable law.")
+        tr("Окремі технічні або AI-сервіси можуть бути розміщені за межами України. Передача іноземним одержувачам здійснюється лише за підставами та з гарантіями, передбаченими Законом України «Про захист персональних даних», з урахуванням необхідних договірних, технічних і організаційних заходів.", "Some technical or AI services may be hosted outside Ukraine. Transfers to foreign recipients are made only on the grounds and with the safeguards provided by the Ukrainian Law on Personal Data Protection, together with appropriate contractual, technical, and organizational measures.")
       ]
     },
     {
@@ -117,12 +117,13 @@ export const PrivacyPolicyPage: React.FC = () => {
     {
       title: tr("10. Права користувача", "10. User rights"),
       bullets: [
-        tr("Отримати інформацію про те, які дані ми обробляємо.", "Receive information about what data we process."),
+        tr("Знати джерела збирання, місцезнаходження даних, мету їх обробки та одержувачів, яким вони передаються.", "Know the sources, location, purposes, and recipients of their personal data."),
         tr("Попросити виправити неточні або застарілі дані.", "Ask us to correct inaccurate or outdated data."),
         tr("Попросити видалити акаунт або окремі дані, якщо немає законної причини зберігати їх далі.", "Ask us to delete an account or specific data when there is no lawful reason to keep it."),
         tr("Обмежити або заперечити проти певної обробки у випадках, передбачених законом.", "Restrict or object to certain processing where the law allows it."),
         tr("Відписатися від маркетингових листів без втрати доступу до службових повідомлень.", "Unsubscribe from marketing emails without losing access to service messages."),
-        tr("Попросити експорт даних у розумному технічному форматі, якщо це можливо й передбачено законом.", "Request data export in a reasonable technical format where possible and required by law.")
+        tr("Отримати доступ до своїх персональних даних та відповідь на запит у строк, встановлений законом; запит щодо доступу задовольняється, як правило, протягом 30 календарних днів.", "Access their personal data and receive a response within the period set by law; an access request is generally fulfilled within 30 calendar days."),
+        tr("Звернутися зі скаргою до Уповноваженого Верховної Ради України з прав людини або до суду.", "Complain to the Ukrainian Parliament Commissioner for Human Rights or to a court.")
       ],
       paragraphs: [
         tr("Ми можемо попросити підтвердити особу перед виконанням запиту, щоб не розкрити дані сторонній особі.", "We may ask you to verify your identity before fulfilling a request so that we do not disclose data to someone else.")
@@ -131,14 +132,14 @@ export const PrivacyPolicyPage: React.FC = () => {
     {
       title: tr("11. Діти та навчальні акаунти", "11. Children and educational accounts"),
       paragraphs: [
-        tr("StudyCod є навчальною платформою, тому нею можуть користуватися неповнолітні. Учнівські акаунти в EDU-режимі мають створюватися або використовуватися з відома вчителя, навчальної організації або законного представника, якщо це потрібно за законом.", "StudyCod is an educational platform, so minors may use it. Student accounts in EDU mode should be created or used with the knowledge of a teacher, educational organization, or legal guardian where required by law."),
+        tr("StudyCod є навчальною платформою, тому нею можуть користуватися неповнолітні. Учнівські акаунти в EDU-режимі мають створюватися та використовуватися на належній правовій підставі, визначеній навчальним організатором, із залученням батьків або законного представника, коли це потрібно за законом.", "StudyCod is an educational platform, so minors may use it. Student accounts in EDU mode must be created and used on a proper legal basis established by the educational organizer, involving a parent or legal guardian where required by law."),
         tr("Ми не просимо учнів додавати зайві персональні дані й рекомендуємо вчителям мінімізувати дані в назвах класів, матеріалах, коментарях і вкладеннях.", "We do not ask students to add unnecessary personal data and recommend that teachers minimize personal data in class names, materials, comments, and attachments.")
       ]
     },
     {
       title: tr("12. Cookies і локальне сховище", "12. Cookies and local storage"),
       paragraphs: [
-        tr("Ми використовуємо cookies, localStorage і sessionStorage для входу, безпеки, Google OAuth, мови інтерфейсу, чернеток, налаштувань, стану сесій і стабільної роботи платформи. Детальніше це описано в Cookie Policy.", "We use cookies, localStorage, and sessionStorage for login, security, Google OAuth, interface language, drafts, settings, session state, and stable platform operation. This is described in more detail in the Cookie Policy.")
+        tr("Ми використовуємо cookies, localStorage і sessionStorage для входу, безпеки, Google OAuth, мови інтерфейсу, чернеток, налаштувань, стану сесій і стабільної роботи платформи. Необов’язкові технології не використовуються без окремого повідомлення та згоди, якщо така згода потрібна законом. Детальніше це описано в Cookie Policy.", "We use cookies, local storage, and session storage for login, security, Google OAuth, interface language, drafts, settings, session state, and stable platform operation. Optional technologies are not used without separate notice and consent where the law requires consent. This is described in more detail in the Cookie Policy.")
       ]
     },
     {
@@ -159,7 +160,7 @@ export const PrivacyPolicyPage: React.FC = () => {
     current="privacy"
     title={tr("Політика конфіденційності", "Privacy Policy")}
     description={tr("Як StudyCod обробляє й захищає дані учнів, викладачів, організаторів та користувачів Personal.", "How StudyCod processes and protects data for students, teachers, organizers, and Personal users.")}
-    updated={tr("Оновлено 31 травня 2026", "Updated May 31, 2026")}
+    updated={tr("Оновлено 7 серпня 2026", "Updated August 7, 2026")}
     sections={sections}
     tr={tr}
     icon={ShieldCheck}

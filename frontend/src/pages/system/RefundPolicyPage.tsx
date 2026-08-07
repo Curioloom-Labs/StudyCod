@@ -11,15 +11,15 @@ export const RefundPolicyPage: React.FC = () => {
 
   const sections: LegalSection[] = [
     {
-      title: tr("1. Мінімальне 14-денне вікно повернення", "1. Minimum 14-day refund window"),
+      title: tr("1. Добровільне 14-денне повернення", "1. Voluntary 14-day refund window"),
       paragraphs: [
         tr(
-          "Для покупок, здійснених через Paddle Checkout, StudyCod надає мінімальне 14-денне вікно повернення коштів. Якщо ви надішлете запит на повернення протягом 14 днів з дати покупки, ми оформимо повернення без винятків і без додаткових умов з боку StudyCod.",
-          "For purchases made through Paddle Checkout, StudyCod provides a minimum 14-day refund window. If you submit a refund request within 14 days of purchase, we will issue the refund with no exceptions and no additional conditions imposed by StudyCod."
+          "Для покупок платних планів, цифрового доступу та підписок StudyCod добровільно надає 14-денний строк для запиту на повернення коштів. Якщо ви надішлете запит протягом 14 календарних днів з дати покупки, ми розглянемо його за цим правилом без вимоги пояснювати причину.",
+          "For purchases of paid plans, digital access, and subscriptions, StudyCod voluntarily provides a 14-day period for requesting a refund. If you submit a request within 14 calendar days of the purchase date, we will review it under this rule without requiring an explanation."
         ),
         tr(
-          "Це мінімальне правило застосовується до платних планів, цифрового доступу, підписок та організаційних або custom/enterprise оплат, якщо вони оплачуються через Paddle Checkout.",
-          "This minimum rule applies to paid plans, digital access, subscriptions, and organization or custom/enterprise purchases when they are paid through Paddle Checkout."
+          "Це добровільне правило застосовується до оплат StudyCod, якщо інше не визначено індивідуальними умовами замовлення або обов’язковими нормами законодавства.",
+          "This voluntary rule applies to StudyCod payments unless the applicable order terms or mandatory law provide otherwise."
         )
       ]
     },
@@ -27,8 +27,8 @@ export const RefundPolicyPage: React.FC = () => {
       title: tr("2. Ваші законні права", "2. Your legal rights"),
       paragraphs: [
         tr(
-          "Ця політика не обмежує обов'язкові права споживача, які можуть надавати довше право на скасування або повернення відповідно до застосовного законодавства чи умов Paddle Buyer Terms.",
-          "This policy does not limit mandatory consumer rights that may provide a longer cancellation or refund right under applicable law or the Paddle Buyer Terms."
+          "Ця політика не обмежує обов’язкові права споживача, зокрема право розірвати дистанційний договір та інші права, передбачені чинним законодавством України. Якщо закон встановлює інший порядок або виняток для цифрової послуги, застосовується закон.",
+          "This policy does not limit mandatory consumer rights, including the right to withdraw from a distance contract and other rights provided by Ukrainian law. If the law establishes a different procedure or an exception for a digital service, the law applies."
         )
       ]
     },
@@ -36,8 +36,8 @@ export const RefundPolicyPage: React.FC = () => {
       title: tr("3. Як подати запит", "3. How to request a refund"),
       paragraphs: [
         tr(
-          `Надішліть запит на ${SUPPORT_EMAIL} або зверніться через підтримку в акаунті. Щоб ми швидше знайшли платіж, додайте email акаунта, дату платежу, суму, назву тарифу або продукту та ID транзакції Paddle, якщо він у вас є.`,
-          `Send a request to ${SUPPORT_EMAIL} or contact support from your account. To help us find the payment faster, include the account email, payment date, amount, plan or product name, and the Paddle transaction ID if you have it.`
+          `Надішліть запит на ${SUPPORT_EMAIL} або зверніться через підтримку в акаунті. Щоб ми швидше знайшли платіж, додайте email акаунта, дату платежу, суму, назву тарифу або продукту та ідентифікатор транзакції або інше підтвердження платежу, якщо воно у вас є.`,
+          `Send a request to ${SUPPORT_EMAIL} or contact support from your account. To help us find the payment faster, include the account email, payment date, amount, plan or product name, and the transaction ID or other payment confirmation if available.`
         )
       ],
       bullets: [
@@ -50,8 +50,8 @@ export const RefundPolicyPage: React.FC = () => {
       title: tr("4. Обробка повернення", "4. Refund processing"),
       paragraphs: [
         tr(
-          "Після отримання запиту, що підпадає під 14-денне вікно, ми передаємо повернення на обробку через Paddle або відповідний платіжний метод. Фактичне зарахування коштів залежить від банку, карткової мережі або платіжного провайдера.",
-          "After receiving a request that falls within the 14-day window, we submit the refund for processing through Paddle or the relevant payment method. The actual posting of funds depends on the bank, card network, or payment provider."
+          "Після схвалення повернення ми оформлюємо його тим самим платіжним методом, який використовувався для оплати, якщо інше не передбачено законом або неможливо з технічних причин. Фактичне зарахування коштів залежить від банку, карткової мережі або іншого платіжного провайдера.",
+          "After a refund is approved, we process it using the same payment method used for the purchase unless the law provides otherwise or this is technically impossible. The actual posting of funds depends on the bank, card network, or other payment provider."
         )
       ],
     },
@@ -93,8 +93,8 @@ export const RefundPolicyPage: React.FC = () => {
   return <LegalExperience
     current="refunds"
     title={tr("Політика повернення коштів", "Refund Policy")}
-    description={tr("Мінімальне 14-денне повернення коштів, скасування оплат і порядок подання запиту.", "Minimum 14-day refunds, payment cancellations, and how to submit a request.")}
-    updated={tr("Оновлено 15 липня 2026", "Updated July 15, 2026")}
+    description={tr("14-денний запит на повернення коштів, скасування оплат і порядок звернення.", "14-day refund requests, payment cancellations, and how to submit a request.")}
+    updated={tr("Оновлено 7 серпня 2026", "Updated August 7, 2026")}
     sections={sections}
     tr={tr}
     icon={RotateCcw}

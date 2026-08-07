@@ -42,7 +42,7 @@ export const TermsOfUsePage: React.FC = () => {
     {
       title: tr("1. Прийняття умов", "1. Acceptance of terms"),
       paragraphs: [
-        tr("Використовуючи StudyCod, створюючи акаунт, входячи через Google, приєднуючись до класу або беручи участь у змаганні, ви погоджуєтесь із цими Умовами використання та Політикою конфіденційності.", "By using StudyCod, creating an account, signing in with Google, joining a class, or participating in a contest, you agree to these Terms of Use and the Privacy Policy."),
+        tr("Використовуючи StudyCod, створюючи акаунт, входячи через Google, приєднуючись до класу або беручи участь у змаганні, ви погоджуєтесь із цими Умовами використання та Політикою конфіденційності в межах, дозволених законом.", "By using StudyCod, creating an account, signing in with Google, joining a class, or participating in a contest, you agree to these Terms of Use and the Privacy Policy to the extent permitted by law."),
         tr("Якщо ви не погоджуєтесь із цими умовами, не використовуйте платформу. Якщо ви користуєтесь StudyCod від імені навчальної організації, класу або команди, ви підтверджуєте, що маєте право діяти від їхнього імені.", "If you do not agree to these terms, do not use the platform. If you use StudyCod on behalf of an educational organization, class, or team, you confirm that you have authority to act on their behalf.")
       ]
     },
@@ -66,7 +66,7 @@ export const TermsOfUsePage: React.FC = () => {
       title: tr("4. Учні, неповнолітні та EDU-режим", "4. Students, minors, and EDU mode"),
       paragraphs: [
         tr("EDU-режим призначений для навчального процесу. Вчитель або навчальна організація відповідає за коректність списку учнів, правомірність створення учнівських акаунтів, призначення матеріалів та використання оцінок.", "EDU mode is intended for the learning process. The teacher or educational organization is responsible for the accuracy of student rosters, lawful creation of student accounts, assignment of materials, and use of grades."),
-        tr("Якщо користувач є неповнолітнім, платформа має використовуватися з дозволу батьків, законного представника, вчителя або навчальної організації, коли така згода чи підстава потрібна.", "If a user is a minor, the platform should be used with permission from a parent, legal guardian, teacher, or educational organization where such consent or basis is required.")
+        tr("Якщо користувач є неповнолітнім, платформа має використовуватися на належній правовій підставі, визначеній батьками, законним представником або навчальним організатором, коли така підстава потрібна. Сам дозвіл вчителя не замінює згоди чи іншої підстави, передбаченої законом.", "If a user is a minor, the platform must be used on a proper legal basis established by a parent, legal guardian, or educational organizer where required. A teacher's permission alone does not replace consent or another legal basis required by law.")
       ]
     },
     {
@@ -82,7 +82,7 @@ export const TermsOfUsePage: React.FC = () => {
     {
       title: tr("6. Код, завдання та користувацький контент", "6. Code, tasks, and user content"),
       paragraphs: [
-        tr("Ви зберігаєте права на власний код, нотатки, коментарі, матеріали та інший контент, який створюєте або завантажуєте. Водночас ви надаєте StudyCod право обробляти цей контент настільки, наскільки це потрібно для роботи платформи: запуску тестів, показу вчителю, збереження прогресу, підтримки, безпеки та покращення сервісу.", "You keep rights to your own code, notes, comments, materials, and other content you create or upload. At the same time, you grant StudyCod the right to process that content as needed to operate the platform: run tests, show it to a teacher, save progress, provide support, maintain security, and improve the service."),
+        tr("Ви зберігаєте права на власний код, нотатки, коментарі, матеріали та інший контент, який створюєте або завантажуєте, якщо інше не випливає із прав третіх осіб. Водночас ви надаєте StudyCod обмежене, невиключне та безоплатне право використовувати й обробляти цей контент лише настільки і протягом такого строку, наскільки це потрібно для запуску тестів, показу вчителю, збереження прогресу, підтримки, безпеки та роботи сервісу. Це не передає StudyCod право власності на ваш контент.", "You retain rights to your own code, notes, comments, materials, and other content you create or upload, subject to third-party rights. You grant StudyCod a limited, non-exclusive, royalty-free right to use and process that content only to the extent and for as long as needed to run tests, show it to a teacher, save progress, provide support, maintain security, and operate the service. This does not transfer ownership of your content to StudyCod."),
         tr("Не додавайте до задач, коду, коментарів або вкладень секрети, паролі, API-ключі, приватні токени, банківські дані чи зайві персональні дані.", "Do not add secrets, passwords, API keys, private tokens, banking data, or unnecessary personal data to tasks, code, comments, or attachments.")
       ]
     },
@@ -110,7 +110,7 @@ export const TermsOfUsePage: React.FC = () => {
     {
       title: tr("10. Доступність сервісу", "10. Service availability"),
       paragraphs: [
-        tr("Ми прагнемо підтримувати стабільну роботу StudyCod, але сервіс надається на умовах 'як є' та 'за наявності'. Можливі перерви через технічне обслуговування, помилки, оновлення, дії провайдерів, мережеві проблеми або форс-мажор.", "We aim to keep StudyCod reliable, but the service is provided 'as is' and 'as available'. Interruptions may occur because of maintenance, bugs, updates, provider actions, network issues, or force majeure."),
+        tr("Ми прагнемо підтримувати стабільну роботу StudyCod, але сервіс може тимчасово перериватися через технічне обслуговування, помилки, оновлення, дії провайдерів, мережеві проблеми або обставини непереборної сили. Це положення не скасовує вимог щодо якості послуг і інших обов’язкових прав споживача.", "We aim to keep StudyCod reliable, but the service may be temporarily interrupted because of maintenance, bugs, updates, provider actions, network issues, or force majeure. This provision does not remove quality requirements or other mandatory consumer rights."),
         tr("Ми не гарантуємо, що кожна задача, тест, AI-відповідь або оцінка буде безпомилковою. Якщо результат здається неправильним, користувач має звернутися до вчителя, організатора або підтримки.", "We do not guarantee that every task, test, AI answer, or grade will be error-free. If a result seems incorrect, the user should contact the teacher, organizer, or support.")
       ]
     },
@@ -124,18 +124,24 @@ export const TermsOfUsePage: React.FC = () => {
     {
       title: tr("12. Призупинення або припинення доступу", "12. Suspension or termination"),
       paragraphs: [
-        tr("Ми можемо обмежити, призупинити або припинити доступ до акаунта, якщо є порушення цих Умов, загроза безпеці, зловживання, незаконний контент, спам, атаки на сервіс або вимога закону.", "We may limit, suspend, or terminate account access if there is a breach of these Terms, a security risk, abuse, unlawful content, spam, attacks on the service, or a legal requirement."),
-        tr("Якщо доступ обмежено помилково, користувач може звернутися до підтримки для перегляду ситуації.", "If access was limited by mistake, the user may contact support for review.")
+        tr("Ми можемо тимчасово обмежити, призупинити або припинити доступ до акаунта лише настільки, наскільки це розумно потрібно через порушення цих Умов, загрозу безпеці, зловживання, незаконний контент, спам, атаки на сервіс або вимогу закону. Якщо це можливо, ми повідомляємо причину та спосіб оскарження.", "We may temporarily limit, suspend, or terminate account access only to the extent reasonably needed because of a breach of these Terms, a security risk, abuse, unlawful content, spam, attacks on the service, or a legal requirement. Where possible, we will explain the reason and how to appeal."),
+        tr("Якщо доступ обмежено помилково, користувач може звернутися до підтримки для перегляду ситуації. Таке обмеження не позбавляє користувача права на вже сплачені послуги або повернення коштів, якщо це передбачено законом чи умовами покупки.", "If access was limited by mistake, the user may contact support for review. This limitation does not remove a user's right to paid services already purchased or to a refund where provided by law or the purchase terms.")
       ]
     },
     {
       title: tr("13. Зміни умов", "13. Changes to terms"),
       paragraphs: [
-        tr("Ми можемо оновлювати ці Умови, коли змінюється платформа, законодавство, безпека або спосіб надання сервісу. Актуальна версія публікується на цій сторінці. Подальше використання StudyCod після оновлення означає прийняття нової редакції.", "We may update these Terms when the platform, laws, security, or service delivery changes. The current version is published on this page. Continued use of StudyCod after an update means acceptance of the new version.")
+        tr("Ми можемо оновлювати ці Умови, коли змінюється платформа, законодавство, безпека або спосіб надання сервісу. Актуальна версія публікується на цій сторінці, а про істотні зміни ми повідомляємо до їх застосування, коли це вимагається законом. Нова редакція застосовується до подальшого користування та нових замовлень і не змінює заднім числом уже укладений договір без належної правової підстави.", "We may update these Terms when the platform, laws, security, or service delivery changes. The current version is published on this page, and we will notify users of material changes before they apply where required by law. A new version applies to future use and new orders and does not retroactively change an existing contract without a proper legal basis.")
       ]
     },
     {
-      title: tr("14. Контакти", "14. Contact"),
+      title: tr("14. Застосовне право", "14. Governing law"),
+      paragraphs: [
+        tr("До цих Умов та користування StudyCod застосовується законодавство України. Обов’язкові права споживача, правила електронної комерції, захисту персональних даних та інші норми, від яких не можна відступити договором, мають перевагу над цими Умовами.", "Ukrainian law applies to these Terms and the use of StudyCod. Mandatory consumer rights, e-commerce rules, personal-data protections, and other non-waivable rules prevail over these Terms.")
+      ]
+    },
+    {
+      title: tr("15. Контакти", "15. Contact"),
       paragraphs: [
         tr(`Питання щодо цих Умов можна надіслати на ${SUPPORT_EMAIL} або через розділ підтримки після входу в акаунт.`, `Questions about these Terms can be sent to ${SUPPORT_EMAIL} or through the support section after signing in.`)
       ]
@@ -146,7 +152,7 @@ export const TermsOfUsePage: React.FC = () => {
     current="terms"
     title={tr("Умови використання", "Terms of Use")}
     description={tr("Правила користування StudyCod, відповідальність сторін і межі роботи освітньої платформи.", "Rules for using StudyCod, responsibilities, and the boundaries of the education platform.")}
-    updated={tr("Оновлено 31 травня 2026", "Updated May 31, 2026")}
+    updated={tr("Оновлено 7 серпня 2026", "Updated August 7, 2026")}
     sections={sections}
     tr={tr}
     icon={ScrollText}
