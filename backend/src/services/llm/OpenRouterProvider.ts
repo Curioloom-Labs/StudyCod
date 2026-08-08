@@ -526,7 +526,6 @@ function shouldFallbackToNextModel(error: any): boolean {
   );
 }
 
-type OpenRouterMode = 'text' | 'json';
 
 export interface OpenRouterRuntimeDiagnostics {
   generatedAt: string;

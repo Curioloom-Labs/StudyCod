@@ -1,5 +1,3 @@
-import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../shared/utils/taskValidator';
-import { getTaskExamples, formatExamplesForPrompt } from './taskExamples';
 import { getLLMOrchestrator } from './llm/LLMOrchestrator';
 import { getLLMProvider } from './llm/provider';
 export interface AiTaskGenerationResult {
@@ -24,13 +22,13 @@ export interface AiTheoryResult {
 export interface AiQuizResult {
   quizJson: string;
 }
-function getDifficultyPrompt(difus: number): string {
+/* function getDifficultyPrompt(difus: number): string {
   if (difus < 0.2) return "Рівень: ПОЧАТКОВИЙ (Дуже легко). Завдання має бути максимально простим, лише на відпрацювання синтаксису. Жодних складних алгоритмів.";
   if (difus < 0.4) return "Рівень: ЛЕГКИЙ. Просте завдання, мінімум умов. Фокус на розумінні теми.";
   if (difus < 0.6) return "Рівень: СЕРЕДНІЙ. Додай 1-2 прості умови або розгалуження. Стандартна складність.";
   if (difus < 0.8) return "Рівень: ВИЩЕ СЕРЕДНЬОГО. Потрібно трохи подумати. Можна додати неочевидний момент в умові.";
   return "Рівень: СКЛАДНИЙ. Завдання на логічне мислення. Вимагає оптимізації або обробки граничних випадків.";
-}
+} */
 export async function generateTaskWithAI(params: {
   topicTitle: string;
   theory: string;
@@ -60,6 +58,7 @@ export async function generateTaskCondition(params: {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateTaskCondition(params);
 }
+/* Legacy provider implementation retained only in history; orchestration is the live path.
 async function generateTaskCondition_OLD(params: {
   topicTitle: string;
   taskType: "PRACTICE" | "CONTROL";
@@ -102,6 +101,7 @@ ${difficultyPrompt}
     throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
   }
 }
+*/
 export async function generateTaskTemplate(params: {
   topicTitle: string;
   taskTitle?: string;
@@ -115,6 +115,7 @@ export async function generateTaskTemplate(params: {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateTaskTemplate(params);
 }
+/*
 async function generateTaskTemplate_OLD(params: {
   topicTitle: string;
   language: "JAVA" | "PYTHON";
@@ -169,6 +170,7 @@ public class Main {
     throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
   }
 }
+*/
 export async function generateTheoryWithAI(params: {
   topicTitle: string;
   lang: "JAVA" | "PYTHON";
@@ -181,6 +183,7 @@ export async function generateTheoryWithAI(params: {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateTheoryWithAI(params);
 }
+/*
 async function generateTheoryWithAI_OLD(params: {
   topicTitle: string;
   lang: "JAVA" | "PYTHON";
@@ -236,6 +239,7 @@ ${params.taskDescription}
     throw new Error(`AI_GENERATION_FAILED: Theory generation failed: ${err.message || 'Unknown error'}`);
   }
 }
+*/
 
 /** Best-effort JSON extraction from an LLM response (strips code fences + surrounding prose). */
 function parseJsonLoose(raw: string): any {
@@ -320,6 +324,7 @@ export async function generateQuizWithAI(params: {
   const orchestrator = getLLMOrchestrator();
   return orchestrator.generateQuizWithAI(params);
 }
+/*
 async function generateQuizWithAI_OLD(params: {
   lang: "JAVA" | "PYTHON";
   prevTopics: string;
@@ -361,7 +366,7 @@ async function generateQuizWithAI_OLD(params: {
             const codeBlockEnd = cleaned.lastIndexOf('```');
             if (codeBlockEnd !== -1 && codeBlockEnd > codeBlockStart) {
               cleaned = cleaned.substring(codeBlockStart + 3, codeBlockEnd);
-              cleaned = cleaned.replace(/^(?:json|JSON)\s*/i, '');
+              cleaned = cleaned.replace(/^(?:json|JSON)\s*\/i, '');
               cleaned = cleaned.trim();
             }
           }
@@ -458,3 +463,4 @@ async function generateQuizWithAI_OLD(params: {
   }
   throw new Error(`AI_GENERATION_FAILED: Quiz generation failed: ${lastError?.message || 'Unknown error'}`);
 }
+*/

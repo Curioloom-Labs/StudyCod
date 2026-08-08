@@ -545,6 +545,7 @@ function getSequentialCompletedTopicCount(params: {
   return completed;
 }
 
+/* Legacy bulk grade helper no longer used by the current task route.
 async function getLatestGradesByTaskId(params: { userId: number; taskIds: number[] }): Promise<Map<number, Grade>> {
   const out = new Map<number, Grade>();
   if (!params.taskIds.length) return out;
@@ -563,6 +564,7 @@ async function getLatestGradesByTaskId(params: { userId: number; taskIds: number
   return out;
 }
 
+*/
 async function buildLocalizedTheoryEnByBlockId(params: {
   req: AuthRequest;
   theoryBlockIds: number[];
@@ -1078,6 +1080,7 @@ function pickNoInputFixedExpectedOutput(params: {
   if (fromOutputFormat) return fromOutputFormat;
   return null;
 }
+/* Legacy theory fallback superseded by getTopicTheoryInfo.
 function getTopicTheoryMarkdown(task: Task, uiLanguage: UiLanguage = "uk"): string {
   const fromBlock = (task.topic as any)?.theoryBlock?.content;
   const theory = stripPracticeLikeSectionsFromTheory(String(fromBlock ?? ""));
@@ -1091,6 +1094,7 @@ function getTopicTheoryMarkdown(task: Task, uiLanguage: UiLanguage = "uk"): stri
   );
 }
 
+*/
 type TopicTheorySource = "topic.theoryBlock" | "topic.theoryMarkdown" | "fallback";
 function getTopicTheoryInfo(task: Task, opts?: {
   uiLanguage?: UiLanguage;

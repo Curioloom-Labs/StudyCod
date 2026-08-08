@@ -18,7 +18,6 @@ import { EduGrade } from "../entities/EduGrade";
 import { SummaryGrade } from "../entities/SummaryGrade";
 import { ControlWork } from "../entities/ControlWork";
 import { TopicNew } from "../entities/TopicNew";
-import { TopicTask } from "../entities/TopicTask";
 import { validateFormula } from "../utils/safeFormulaEvaluator";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
 import { saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
@@ -105,22 +104,6 @@ function mimeByExt(fileName: string): string {
   if (ext === ".gif") return "image/gif";
   if (ext === ".avif") return "image/avif";
   return "application/octet-stream";
-}
-const THEMATIC_CANONICAL_NAME = "THEMATIC";
-
-function isThematicSummaryName(raw: unknown): boolean {
-  const normalized = String(raw ?? "").trim().toLowerCase();
-  return normalized === "тематична" || normalized === "thematic";
-}
-
-function canonicalizeSummaryGradeName(raw: unknown): string {
-  const normalized = String(raw ?? "").trim();
-  if (!normalized) return "";
-  return isThematicSummaryName(normalized) ? THEMATIC_CANONICAL_NAME : normalized;
-}
-
-function thematicLabelForLocale(locale: "uk" | "en"): string {
-  return locale === "en" ? "Thematic" : "Тематична";
 }
 function normalizeLang(input?: string | null): UserLang {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();

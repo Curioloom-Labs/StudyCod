@@ -76,9 +76,7 @@ const ScoreBar: React.FC<{ percent: number; tone?: string }> = ({ percent, tone 
   );
 };
 
-export const StudentDashboardPage: React.FC<Props> = ({
-  user
-}) => {
+export const StudentDashboardPage: React.FC<Props> = () => {
   const navigate = useNavigate();
   const {
     t,

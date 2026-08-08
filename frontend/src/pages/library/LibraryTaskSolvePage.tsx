@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Play, RotateCcw, Save, CheckCircle2, LayoutDashboard, FolderCode, TerminalSquare, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { useProctoring } from "../../hooks/useProctoring";
 import { scoreProctoring, recordConceptReview } from "../../lib/api/tasks";

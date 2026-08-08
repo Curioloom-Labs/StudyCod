@@ -365,7 +365,6 @@ function selectorHasAttribute(html: string, selector: string, attribute: string,
 
   const chunks = html.match(/<[^>]+>/g) ?? [];
   for (const c of chunks) {
-    const lower = c.toLowerCase();
     if (tag && !new RegExp(`^<\\s*${escapeRegExp(tag)}(\\s|>)`, "i").test(c)) continue;
     if (id && !new RegExp(`\\sid\\s*=\\s*(["'])${escapeRegExp(id)}\\1`, "i").test(c)) continue;
     if (cls && !new RegExp(`\\sclass\\s*=\\s*(["'])[^"']*\\b${escapeRegExp(cls)}\\b[^"']*\\1`, "i").test(c)) continue;

@@ -1,25 +1,20 @@
 ﻿import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { listTasks, generateTask, saveDraft, submitTask, resetTopic, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
+import { listTasks, generateTask, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
-import { Button } from "../../components/ui/Button";
-import { Badge } from "../../components/ui/Badge";
-import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { CodeEditor } from "../../components/CodeEditor";
 import { MultiFileEditor, type CodeFile } from "../../components/MultiFileEditor";
 import { MarkdownView } from "../../components/MarkdownView";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import type { Task, User } from "../../types";
-import { Play, CheckCircle2, ChevronLeft, ChevronRight, Plus, Save, PlayCircle, LayoutDashboard, FolderCode, TerminalSquare, Activity, PanelRightClose, PanelRightOpen, SquareArrowOutUpRight, FoldHorizontal, NotebookPen, ListTodo, GripVertical, Sparkles, type LucideIcon } from "lucide-react";
+import { Play, CheckCircle2, ChevronLeft, ChevronRight, Plus, Save, NotebookPen } from "lucide-react";
 import { tr } from "../../i18n";
-import { useTheoryModal } from "../../components/theory/TheoryModalProvider";
 import { TaskGenerationOverlay, type TaskGenerationPhase } from "../../components/TaskGenerationOverlay";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
-import { useUIMode } from "../../components/interface/UIModeProvider";
 import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
-import { FailureRecoveryCard, type FailureRecoveryData } from "../../components/FailureRecoveryCard";
+import { type FailureRecoveryData } from "../../components/FailureRecoveryCard";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
@@ -119,7 +114,6 @@ type PracticeSegment = "task" | "io" | "constraints" | "examples" | "notes";
 type CenterTab = "mission" | "hints" | "notes" | "activity";
 type MissionBlock = "statement" | "editor";
 type WorkspaceColumn = "tasks" | "center" | "console";
-type WorkspaceArea = "mission" | "tasks" | "output" | "live";
 type QuizReviewQuestion = NonNullable<PersonalControlQuizSubmitResponse["review"]>["questions"][number];
 type TaskApiErrorLike = {
   message?: unknown;
@@ -288,14 +282,8 @@ export const TasksPage: React.FC<Props> = ({
     i18n
   } = useTranslation();
   const uiLanguage = typeof i18n.language === "string" && i18n.language.startsWith("en") ? "en" : "uk";
-  const locale = typeof i18n.language === "string" && i18n.language.startsWith("uk") ? "uk-UA" : "en-US";
-  const isAurora = useUIMode().mode === "aurora";
   const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
   const { element: viewportEl } = useWorkspaceViewport();
-  const {
-    openTheory,
-    isOpen: isTheoryOpen
-  } = useTheoryModal();
   const [searchParams, setSearchParams] = useSearchParams();
   const isPreviewMode = import.meta.env.DEV && searchParams.get("preview") === "true";
   const safeServerMessage = (value: unknown) => {
@@ -353,37 +341,6 @@ export const TasksPage: React.FC<Props> = ({
     return msg || statusText || tr("Невідома помилка", "Unknown error");
   };
 
-  const errorKindLabel = (kind?: string | null): string | null => {
-    if (!kind) return null;
-    switch (kind) {
-      case "compile":
-        return tr("Компіляція", "Compilation");
-      case "syntax":
-        return tr("Синтаксис", "Syntax");
-      case "type":
-        return tr("Типи", "Types");
-      case "name":
-        return tr("Назва", "Name");
-      case "index":
-        return tr("Індекс", "Index");
-      case "key":
-        return tr("Ключ", "Key");
-      case "value":
-        return tr("Значення", "Value");
-      case "zero_division":
-        return tr("Ділення на нуль", "Division by zero");
-      case "null":
-        return tr("Null", "Null");
-      case "oom":
-        return tr("Пам’ять", "Memory");
-      case "timeout":
-        return tr("Час", "Time");
-      case "runtime":
-        return tr("Виконання", "Runtime");
-      default:
-        return kind;
-    }
-  };
   const splitLegacyDescription = (content: string): {
     theory: string | null;
     practice: string | null;
@@ -470,7 +427,7 @@ export const TasksPage: React.FC<Props> = ({
     if (saved === "0") return false;
     return (user.userMode ?? "PERSONAL") !== "PERSONAL";
   });
-  const [blockState, setBlockState] = useState<BlockState>(null);
+  const [, setBlockState] = useState<BlockState>(null);
   const [aiResult, setAiResult] = useState<{
     gradingMode?: "TESTS" | "AI";
     total: number;
@@ -522,30 +479,27 @@ export const TasksPage: React.FC<Props> = ({
     codeHash: string;
   } | null>(null);
 
-  const [revealedHints, setRevealedHints] = useState(0);
+  const [, setRevealedHints] = useState(0);
   const [theoryAcknowledged, setTheoryAcknowledged] = useState(false);
   const [theoryPanelOpen, setTheoryPanelOpen] = useState(false);
   const [activeTheoryChapter, setActiveTheoryChapter] = useState(0);
   const [showTaskHistory, setShowTaskHistory] = useState(true);
   const [uiState, setUIState] = useState<UIState>("idle");
-  const [milestone, setMilestone] = useState<{
+  const [, setMilestone] = useState<{
     id?: string | number;
     type: string;
     message: string;
     previousAverage?: number;
     currentAverage?: number;
   } | null>(null);
-  const [activeCenterTab, setActiveCenterTab] = useState<CenterTab>("mission");
-  const [activeSegment, setActiveSegment] = useState<PracticeSegment>("task");
+  const [, setActiveCenterTab] = useState<CenterTab>("mission");
   const [statementModalOpen, setStatementModalOpen] = useState(false);
   const [personalNotes, setPersonalNotes] = useState("");
   const [dockCollapsed, setDockCollapsed] = useState(false);
-  const [dockPopOut, setDockPopOut] = useState(false);
+  const [, setDockPopOut] = useState(false);
   const [dockWidth, setDockWidth] = useState(400);
   const [columnOrder, setColumnOrder] = useState<Record<WorkspaceColumn, number>>({ tasks: 1, center: 2, console: 3 });
-  const [draggingColumn, setDraggingColumn] = useState<WorkspaceColumn | null>(null);
   const [missionBlockOrder, setMissionBlockOrder] = useState<MissionBlock[]>(["statement", "editor"]);
-  const [draggingMissionBlock, setDraggingMissionBlock] = useState<MissionBlock | null>(null);
   const tasksColumnRef = useRef<HTMLDivElement | null>(null);
   const centerColumnRef = useRef<HTMLDivElement | null>(null);
   const consoleColumnRef = useRef<HTMLDivElement | null>(null);
@@ -669,21 +623,6 @@ export const TasksPage: React.FC<Props> = ({
     }
   }, []);
 
-  const handleQuizWheelCapture = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (!isPersonalControlQuizTask) return;
-    const el = quizScrollRef.current;
-    if (!el) return;
-    const deltaY = Number(event.deltaY || 0);
-    if (!deltaY) return;
-
-    const canScrollDown = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-    const canScrollUp = el.scrollTop > 0;
-    if ((deltaY > 0 && canScrollDown) || (deltaY < 0 && canScrollUp)) {
-      event.preventDefault();
-      event.stopPropagation();
-      el.scrollTop += deltaY;
-    }
-  }, [isPersonalControlQuizTask]);
 
   const handleSaveQuizAnswers = useCallback((silent = false) => {
     if (!active || !isPersonalControlQuizTask || !personalQuiz) return;
@@ -751,22 +690,6 @@ export const TasksPage: React.FC<Props> = ({
     if (fromExamples) return fromExamples;
     return extractFirstExampleInput(fullPracticeText);
   }, [segmentedPractice.examples, fullPracticeText]);
-  const nonContestHints = useMemo(() => {
-    const direct = Array.isArray(aiResult?.hints) ? aiResult!.hints!.filter(Boolean) : [];
-    if (direct.length > 0) return direct;
-
-    const hints: string[] = [];
-    if (active?.kind === "CONTROL") {
-      hints.push(tr("Почни з найпростішого випадку й перевір типи даних.", "Start from the simplest case and verify your data types."));
-    }
-    if (active?.status !== "GRADED") {
-      hints.push(tr("Спершу напиши мінімальне робоче рішення, потім оптимізуй.", "Write a minimal working solution first, then optimize."));
-    }
-    hints.push(tr("Прогони на крайових випадках: 0, 1, мін/макс межі, порожній ввід.", "Test edge cases: 0, 1, min/max bounds, and empty input."));
-    hints.push(tr("Звір формат виводу: зайві пробіли/переноси часто ламають тести.", "Verify output format: extra spaces/newlines often break tests."));
-    return hints;
-  }, [aiResult?.hints, active?.id, active?.kind, active?.status]);
-
   const activeId = active?.id ?? null;
   const resumeStep = useMemo(() => {
     if (!active) return undefined;
@@ -852,7 +775,6 @@ export const TasksPage: React.FC<Props> = ({
   }, [activeId]);
 
   useEffect(() => {
-    setActiveSegment("task");
     setActiveTheoryChapter(0);
   }, [active?.id]);
 
@@ -913,56 +835,6 @@ export const TasksPage: React.FC<Props> = ({
       // ignore storage errors
     }
   }, [columnOrder, dockWidth, dockCollapsed, showTaskHistory, missionBlockOrder]);
-
-  const startDockResize = (event: React.MouseEvent<HTMLDivElement>, edge: "left" | "right") => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = dockWidth;
-    const onMove = (e: MouseEvent) => {
-      const delta = edge === "left" ? startX - e.clientX : e.clientX - startX;
-      const next = Math.min(560, Math.max(300, startWidth + delta));
-      setDockWidth(next);
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
-
-  const moveMissionBlock = useCallback((from: MissionBlock, to: MissionBlock) => {
-    if (from === to) return;
-    setMissionBlockOrder((prev) => {
-      const fromIdx = prev.indexOf(from);
-      const toIdx = prev.indexOf(to);
-      if (fromIdx < 0 || toIdx < 0) return prev;
-      const copy = [...prev];
-      const [item] = copy.splice(fromIdx, 1);
-      copy.splice(toIdx, 0, item);
-      return copy;
-    });
-  }, []);
-
-  const swapColumns = useCallback((from: WorkspaceColumn, to: WorkspaceColumn) => {
-    if (from === to) return;
-    setColumnOrder((prev) => {
-      const next = { ...prev };
-      const fromOrder = prev[from];
-      next[from] = prev[to];
-      next[to] = fromOrder;
-      return next;
-    });
-  }, []);
-
-  const handleColumnDrop = useCallback((target: WorkspaceColumn) => {
-    if (!draggingColumn) return;
-    swapColumns(draggingColumn, target);
-    setDraggingColumn(null);
-  }, [draggingColumn, swapColumns]);
-
-  const consoleResizeEdge: "left" | "right" = columnOrder.console > columnOrder.center ? "left" : "right";
-  const consoleResizerOrder = consoleResizeEdge === "left" ? columnOrder.console - 0.1 : columnOrder.console + 0.1;
 
   useEffect(() => {
     if (cooldownSecondsLeft <= 0) return;
@@ -1236,51 +1108,13 @@ export const TasksPage: React.FC<Props> = ({
       localStorage.setItem("studycod_tasks_editor_open", editorOpen ? "1" : "0");
     } catch {}
   }, [editorOpen]);
-  const reloadTasks = useCallback(async (selectLast = false) => {
-    const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage);
-    const filtered = data.filter(t => true);
-    setTasks(filtered);
-    const currentActiveId = active?.id;
-    const currentAiResult = aiResult;
-    if (selectLast && filtered.length) {
-      const latest = filtered[0];
-      setActive(latest);
-      const next = deriveEditorFromTask(latest);
-      setUseFiles(next.useFiles);
-      setFiles(next.files);
-      setCode(next.code);
-      setAiResult(null);
-      setRevealedHints(0);
-      setConsoleOutput("");
-      const hasTheory = computeHasTheory(latest);
-      setTheoryAcknowledged(!hasTheory);
-    } else if (active) {
-      const updated = filtered.find(t => t.id === active.id);
-      if (updated) {
-        setActive(updated);
-        if (!currentAiResult || currentAiResult.total >= 50) {
-          const next = deriveEditorFromTask(updated);
-          setUseFiles(next.useFiles);
-          setFiles(next.files);
-          setCode(next.code);
-        }
-      } else {
-        setActive(null);
-        setCode("");
-        setUseFiles(false);
-        setFiles([]);
-        setAiResult(null);
-        setRevealedHints(0);
-      }
-    }
-  }, [active?.id, aiResult?.total, uiLanguage, isPreviewMode]);
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
         const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage);
         if (mounted) {
-          const filtered = data.filter(t => true);
+          const filtered = data;
           setTasks(filtered);
           if (filtered.length > 0 && !active) {
             const requested = requestedTaskIdFromUrl
@@ -1700,7 +1534,7 @@ export const TasksPage: React.FC<Props> = ({
         setUIState(total >= 75 ? "success" : total >= 50 ? "idle" : "error");
 
         const updatedTasks = await listTasks(uiLanguage);
-        setTasks(updatedTasks.filter(t => true));
+        setTasks(updatedTasks);
         if (autoGeneratedPracticeId) {
           const nextPractice = updatedTasks.find(t => t.id === autoGeneratedPracticeId);
           if (nextPractice) {
@@ -1781,7 +1615,7 @@ export const TasksPage: React.FC<Props> = ({
         setRevealedHints(0);
         setUIState(gradeTotal >= 75 ? "success" : gradeTotal >= 50 ? "idle" : "error");
         const updatedTasks = await listTasks(uiLanguage);
-        setTasks(updatedTasks.filter(t => true));
+        setTasks(updatedTasks);
         const updated = updatedTasks.find(t => t.id === active.id);
         if (updated) setActive(updated);
         return;
@@ -1899,7 +1733,7 @@ export const TasksPage: React.FC<Props> = ({
         }
       }
       const updatedTasks = await listTasks(uiLanguage);
-      let effectiveTasks = updatedTasks.filter(t => true);
+      let effectiveTasks = updatedTasks;
 
       const activeSubtitle = String(active?.subtitle ?? "");
       const activeBatchPrefix = activeSubtitle.startsWith("PCW:") ? (activeSubtitle.split("|")[0] || "") : "";
@@ -1915,7 +1749,7 @@ export const TasksPage: React.FC<Props> = ({
             const payload = asRecord(gen);
             if (String(payload?.status ?? "") === "ok" && payload?.task && typeof payload.task === "object") {
               const refreshed = await listTasks(uiLanguage);
-              effectiveTasks = refreshed.filter(t => true);
+              effectiveTasks = refreshed;
             }
           } catch (genErr: unknown) {
             if (isPlacementRequiredError(genErr)) {
@@ -1929,11 +1763,9 @@ export const TasksPage: React.FC<Props> = ({
       }
 
       setTasks(effectiveTasks);
-      if (active) {
-        const updated = effectiveTasks.find(t => t.id === active.id);
-        if (updated) {
-          setActive(updated);
-        }
+      const updated = effectiveTasks.find(t => t.id === active.id);
+      if (updated) {
+        setActive(updated);
       }
     } catch (err: unknown) {
       console.error("Submit error:", err);
@@ -1949,36 +1781,6 @@ export const TasksPage: React.FC<Props> = ({
     }
   };
 
-  const handleFixErrorRetryTopic = async () => {
-    // Match GradesPage “Перепройти тему”: reset the whole topic, then navigate/reload tasks.
-    const topicIdRaw = active?.topicId ?? null;
-    const topicId = typeof topicIdRaw === "number" ? topicIdRaw : typeof topicIdRaw === "string" ? Number(topicIdRaw) : null;
-    if (!topicId || !Number.isFinite(topicId)) {
-      // Fallback to old behavior when topic info is unavailable.
-      setAiResult(null);
-      setConsoleOutput("");
-      setUIState("idle");
-      return;
-    }
-    try {
-      setSubmitting(true);
-      setUIState("evaluating");
-      setConsoleOutput(tr("Перезапуск теми...", "Retrying topic..."));
-      await resetTopic(topicId);
-      setAiResult(null);
-      setRevealedHints(0);
-      setConsoleOutput("");
-      setUIState("idle");
-      setEditorOpen(true);
-      await reloadTasks(true);
-    } catch (err) {
-      console.error("Failed to reset topic from Fix error:", err);
-      setConsoleOutput(tr("Не вдалося перепройти тему. Спробуйте ще раз.", "Failed to retry the topic. Please try again."));
-      setUIState("error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
   const canEdit = active && theoryAcknowledged && (active.status !== "GRADED" || aiResult && aiResult.total < 6);
 
   const handleSaveDraft = async () => {
@@ -2068,13 +1870,6 @@ export const TasksPage: React.FC<Props> = ({
     centerColumnRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   };
 
-  const isRailItemActive = (id: "mission" | "tasks" | "output" | "live") => {
-    if (id === "tasks") return showTaskHistory;
-    if (id === "output") return !dockCollapsed || dockPopOut;
-    if (id === "live") return activeCenterTab === "activity";
-    return activeCenterTab === "mission";
-  };
-
   useEffect(() => {
     if (!isCompactViewport) return;
     setDockPopOut(false);
@@ -2082,14 +1877,11 @@ export const TasksPage: React.FC<Props> = ({
     setShowTaskHistory(false);
   }, [isCompactViewport]);
 
-  const canQuickGenerate = canGenerate && !loading && cooldownSecondsLeft <= 0;
   const canQuickSave = Boolean(active && (isPersonalControlQuizTask ? true : currentCodeText.trim()));
   const canQuickRun = Boolean(active && theoryAcknowledged && currentCodeText.trim());
   const canQuickCheck = Boolean(canEdit && !submitting && theoryAcknowledged && currentCodeText.trim());
   const hasTheoryForActive = computeHasTheory(active);
   const activeTaskStatusMeta = active ? sidebarStatusMeta(active.status) : null;
-  const activeLessonInTopic = Number(active?.lessonInTopic ?? NaN);
-  const hasActiveLessonInTopic = Number.isFinite(activeLessonInTopic) && activeLessonInTopic > 0;
   const activeTaskModeLabel = active?.taskMode === "WEB"
     ? tr("WEB-проєкт", "WEB project")
     : tr("Code задача", "Code task");
@@ -2130,24 +1922,6 @@ export const TasksPage: React.FC<Props> = ({
       toneClass: "border-border/70 bg-bg-base/70 text-text-secondary"
     };
   }, [uiState, submitting, loading, quizLoading, quizSubmitting]);
-
-  const activeSectionProgress = useMemo(() => {
-    const section = sidebarSections.find((candidate) => candidate.items.some((item) => isSidebarItemActive(item)));
-    if (!section) return null;
-    const total = section.items.length;
-    const completed = section.items.filter((item) => item.status === "GRADED").length;
-    const reviewing = section.items.filter((item) => item.status === "SUBMITTED").length;
-    const inProgress = Math.max(0, total - completed - reviewing);
-    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return {
-      sectionTitle: section.title,
-      total,
-      completed,
-      reviewing,
-      inProgress,
-      progress
-    };
-  }, [sidebarSections, isSidebarItemActive]);
 
   if (!theoryPanelOpen && !isPersonalControlQuizTask) {
     const ideLanguage = (active?.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
@@ -2193,12 +1967,6 @@ export const TasksPage: React.FC<Props> = ({
     />;
   }
 
-
-  const isMacPlatform = typeof navigator !== "undefined" && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
-  const modKeyLabel = isMacPlatform ? "вЊ" : "Ctrl";
-  const saveShortcutLabel = `${modKeyLabel}+S`;
-  const runShortcutLabel = `${modKeyLabel}+Enter`;
-  const checkShortcutLabel = `${modKeyLabel}+Shift+Enter`;
 
   const runFromRail = () => {
     if (!editorOpen) {
@@ -2294,6 +2062,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [canQuickCheck, canQuickRun, canQuickSave, checkFromRail, focusWorkspaceArea, runFromRail, saveFromRail]);
 
+  /* Removed legacy rail metadata and console status card; the live workspace renders these directly.
   const railItems: Array<{ id: WorkspaceArea; label: string; Icon: LucideIcon }> = [
     { id: "mission", label: tr("Місія", "Mission"), Icon: LayoutDashboard },
     { id: "tasks", label: tr("Задачі", "Tasks"), Icon: FolderCode },
@@ -2366,7 +2135,7 @@ export const TasksPage: React.FC<Props> = ({
         </div>
       </div>
     );
-  })();
+  })(); */
 
   const previewPractice = active ? getPracticeText(active) : "";
   const routeTiles = sidebarSections.flatMap((section) =>

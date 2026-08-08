@@ -1,7 +1,6 @@
 import { Response } from 'express';
 import { getLLMOrchestrator } from '../llm/LLMOrchestrator';
 import { AIResponseValidator, AIValidationError, makeAIValidationError } from '../llm/AIResponseValidator';
-import type { AiTaskGenerationResult, AiTheoryResult, AiQuizResult, TestDataExample } from '../llm/LLMOrchestrator';
 import { logger } from '../../utils/logger';
 import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from './curriculumPolicy';
 import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from './aiCircuitBreaker';

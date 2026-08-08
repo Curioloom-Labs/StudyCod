@@ -1,11 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Clock3, FileText, Image as ImageIcon, LifeBuoy, MessageSquarePlus, Paperclip, Plus, RefreshCw, Send, X } from "lucide-react";
 import { tr } from "../../i18n";
-import { Card } from "../../components/ui/Card";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Skeleton } from "../../components/ui/Skeleton";
 import {
   closeSupportChatConversation,
   createSupportChatConversation,
@@ -45,7 +40,6 @@ export const SupportPage: React.FC = () => {
   const [composerFiles, setComposerFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [attachmentPreviewUrls, setAttachmentPreviewUrls] = useState<Record<number, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const statusLabel = (status: string) => {
@@ -82,19 +76,6 @@ export const SupportPage: React.FC = () => {
     const v = Number(raw);
     return Number.isFinite(v) && v > 0 ? v : null;
   }, [searchParams]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(attachmentPreviewUrls).forEach((url) => {
-        try {
-          URL.revokeObjectURL(url);
-        } catch {
-          // ignore
-        }
-      });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const loadConversations = async () => {
     setLoading(true);
@@ -255,21 +236,6 @@ export const SupportPage: React.FC = () => {
       const msg = getErrorMessageFromUnknown(err, tr("Не вдалося завантажити файл", "Failed to download file"));
       setError(String(msg));
     }
-  };
-
-  const isImageAttachment = (mimeType: string | undefined, filename: string | undefined) => {
-    const mt = String(mimeType || "").toLowerCase();
-    if (mt.startsWith("image/")) return true;
-    const name = String(filename || "").toLowerCase();
-    return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"].some(ext => name.endsWith(ext));
-  };
-
-  const ensureAttachmentPreview = async (attachmentId: number) => {
-    if (attachmentPreviewUrls[attachmentId]) return attachmentPreviewUrls[attachmentId];
-    const { blob } = await downloadSupportChatAttachment(attachmentId);
-    const url = URL.createObjectURL(blob);
-    setAttachmentPreviewUrls(prev => ({ ...prev, [attachmentId]: url }));
-    return url;
   };
 
   const closeConversation = async () => {

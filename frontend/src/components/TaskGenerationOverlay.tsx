@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Layers3, Loader2, Radar, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { tr } from "../i18n";

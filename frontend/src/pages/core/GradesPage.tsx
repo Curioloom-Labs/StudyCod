@@ -1,56 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { animate, motion, useReducedMotion } from "framer-motion";
-import { AlertTriangle, Clock3, RefreshCcw, TrendingUp, TrendingDown, Minus, Target, Flame } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { listGrades } from "../../lib/api/grades";
 import { resetTopic } from "../../lib/api/tasks";
-import { Button } from "../../components/ui/Button";
-import { PageHero } from "../../components/ui/PageHero";
 import type { Grade } from "../../types";
 import { tr } from "../../i18n";
-import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import { PremiumProgress } from "./PremiumPersonalExperience";
-
-const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
-  const reduce = useReducedMotion();
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (reduce) {
-      node.textContent = value.toFixed(decimals);
-      return;
-    }
-    const controls = animate(0, value, {
-      duration: 0.8,
-      ease: "easeOut",
-      onUpdate: (v) => {
-        node.textContent = v.toFixed(decimals);
-      },
-    });
-    return () => controls.stop();
-  }, [value, decimals, reduce]);
-  return <span ref={ref} className={className}>{value.toFixed(decimals)}</span>;
-};
-
-const ScoreBar: React.FC<{ value: number; tone: string }> = ({ value, tone }) => {
-  const reduce = useReducedMotion();
-  const pct = Math.max(0, Math.min(100, value));
-  return (
-    <div className="h-1.5 rounded-full bg-bg-hover overflow-hidden">
-      <motion.div
-        className={`h-full rounded-full origin-left ${tone}`}
-        initial={reduce ? false : { scaleX: 0 }}
-        whileInView={{ scaleX: pct / 100 }}
-        viewport={{ once: true, amount: 0.4 }}
-        transition={{ duration: 0.6, ease: easeOutQuint }}
-        style={{ width: "100%", transformOrigin: "left" }}
-      />
-    </div>
-  );
-};
 
 interface HeatTopicItem {
   key: string;
@@ -73,36 +29,13 @@ interface Props {
   onNavigate?: (page: "home" | "tasks") => void;
 }
 
-function gradeTone(value: number): string {
-  if (value >= 85) return "text-accent-success";
-  if (value >= 65) return "text-accent-warn";
-  if (value >= 40) return "text-accent-warning";
-  return "text-accent-error";
-}
-
-function gradeHeatTone(value: number): string {
-  if (value >= 85) return "bg-accent-success/25 border-accent-success/40";
-  if (value >= 65) return "bg-accent-warn/20 border-accent-warn/35";
-  if (value >= 40) return "bg-accent-warning/15 border-accent-warning/35";
-  return "bg-accent-error/20 border-accent-error/40";
-}
-
-function gradeFillTone(value: number): string {
-  if (value >= 85) return "bg-accent-success";
-  if (value >= 65) return "bg-accent-warn";
-  if (value >= 40) return "bg-accent-warning";
-  return "bg-accent-error";
-}
-
 export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
-  const locale = i18n.language === "uk" ? "uk-UA" : "en-US";
   const isDesignPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 
   const [grades, setGrades] = useState<Grade[]>(() => isDesignPreview ? PREVIEW_GRADES : []);
   const [loading, setLoading] = useState(true);
-  const [retryingTopicId, setRetryingTopicId] = useState<number | null>(null);
 
   useEffect(() => {
     listGrades()
@@ -180,7 +113,6 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
 
   const handleRetryTopic = async (topicId: number | null) => {
     if (topicId === null) return;
-    setRetryingTopicId(topicId);
     try {
       await resetTopic(topicId);
       if (onNavigate) onNavigate("tasks");
@@ -188,7 +120,6 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
     } catch (err) {
       console.error("Failed to reset topic:", err);
     } finally {
-      setRetryingTopicId(null);
     }
   };
 

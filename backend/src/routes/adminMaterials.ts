@@ -136,15 +136,6 @@ function parseMaybeJsonTags(tags: string | null | undefined): any {
   }
 }
 
-function buildTheorySnapshot(block: TheoryBlock): { title: string; content: string; level: number | null; tags: any } {
-  return {
-    title: String(block.title ?? "").trim(),
-    content: String(block.content ?? ""),
-    level: block.level === undefined ? null : (block.level ?? null),
-    tags: parseMaybeJsonTags(block.tags)
-  };
-}
-
 async function writeTheoryRevisionTx(params: {
   manager: any;
   theoryBlock: TheoryBlock;
@@ -1851,10 +1842,6 @@ adminMaterialsRouter.get(
     }
   }
 );
-
-const rollbackTheorySchema = z.object({
-  comment: z.string().max(255).optional()
-});
 
 const translateTheoryEnSchema = z.object({
   force: z.boolean().optional()

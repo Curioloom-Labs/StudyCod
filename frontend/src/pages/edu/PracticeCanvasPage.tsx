@@ -1,16 +1,6 @@
 import React from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft,
-  CheckCircle2,
-  ChevronDown,
-  CircleAlert,
-  Code2,
-  Play,
-  Send,
-  Sparkles,
-} from "lucide-react";
-import {
   getTask,
   runCode,
   submitCode,
@@ -24,17 +14,9 @@ import {
 } from "../../components/ide/StudyCodIDEWorkspace";
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
 
-const Editor = React.lazy(() =>
-  import("@monaco-editor/react").then((mod) => ({ default: mod.default })),
-);
 const preview = () =>
   import.meta.env.DEV &&
   new URLSearchParams(window.location.search).get("preview") === "true";
-const languageMap: Record<string, string> = {
-  PYTHON: "python",
-  JAVA: "java",
-  CPP: "cpp",
-};
 const starter: Record<string, string> = {
   PYTHON:
     "def solve(numbers):\n    # write your solution\n    return 0\n\nprint(solve([]))",
@@ -79,7 +61,6 @@ export const PracticeCanvasPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState<"run" | "submit" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = React.useState(true);
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -175,9 +156,10 @@ export const PracticeCanvasPage: React.FC = () => {
   if (!task)
     return <div className={workspace}>{error || "Задачу не знайдено."}</div>;
   const grade = task.grade;
-  const status = grade?.isCompleted
+  /* const status = grade?.isCompleted
     ? "Завершено"
     : `${task.attemptsUsed || 0} / ${task.maxAttempts || "∞"} спроб`;
+  */
   const ideCheckResult: StudyCodIdeCheckResult | null = grade
     ? {
         verdict: grade.isCompleted ? "AC" : "WA",

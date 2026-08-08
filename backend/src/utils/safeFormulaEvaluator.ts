@@ -224,7 +224,7 @@ class Parser {
     this.eat('VARIABLE');
     throw new Error(`Variable ${varName} not substituted`);
   }
-  parse(variables: FormulaVariables): number {
+  parse(_variables: FormulaVariables): number {
     try {
       const result = this.parseExpression();
       if (this.currentToken.type !== 'EOF') {

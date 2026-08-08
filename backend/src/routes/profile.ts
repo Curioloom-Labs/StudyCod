@@ -1498,15 +1498,13 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
       }
     }
 
-    if (level !== undefined && level !== null) {
-      const allowed = new Set(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
-      if (!allowed.has(level)) {
-        return res.status(400).json({
-          message: "INVALID_LEVEL"
-        });
-      }
-      (user as any).placementLevel = level;
+    const allowed = new Set(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
+    if (!allowed.has(level)) {
+      return res.status(400).json({
+        message: "INVALID_LEVEL"
+      });
     }
+    (user as any).placementLevel = level;
     if (score !== undefined) {
       if (score !== null && (!Number.isFinite(Number(score)) || Number(score) < 0)) {
         return res.status(400).json({

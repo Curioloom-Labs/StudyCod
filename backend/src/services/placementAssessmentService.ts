@@ -259,7 +259,7 @@ int main() {
   };
 }
 
-function taskEvenStats(seed: number): PlacementAssessmentTask {
+/* function taskEvenStats(seed: number): PlacementAssessmentTask {
   const rng = mulberry32(seed);
   const solve = (arr: number[]) => {
     let c = 0;
@@ -301,7 +301,7 @@ function taskEvenStats(seed: number): PlacementAssessmentTask {
     sampleOutput: sample.out,
     tests,
   };
-}
+} */
 
 function taskDistinctSort(seed: number): PlacementAssessmentTask {
   const rng = mulberry32(seed);

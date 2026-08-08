@@ -249,7 +249,7 @@ function studyCodWordAt(model: Monaco.editor.ITextModel, position: Monaco.Positi
   return model.getWordAtPosition(position)?.word || null;
 }
 
-function studyCodWordRanges(monaco: MonacoApi, model: Monaco.editor.ITextModel, word: string) {
+function studyCodWordRanges(model: Monaco.editor.ITextModel, word: string) {
   const ranges: Monaco.IRange[] = [];
   const expression = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`, "g");
   const lines = model.getLinesContent();
@@ -333,14 +333,14 @@ const registerStudyCodLanguageService = (monaco: MonacoApi, language: string) =>
     monaco.languages.registerReferenceProvider(language, {
       provideReferences: (model, position) => {
         const word = studyCodWordAt(model, position);
-        return word ? studyCodWordRanges(monaco, model, word).map((range) => ({ uri: model.uri, range })) : [];
+        return word ? studyCodWordRanges(model, word).map((range) => ({ uri: model.uri, range })) : [];
       },
     });
     monaco.languages.registerRenameProvider(language, {
       provideRenameEdits: (model, position, newName) => {
         const word = studyCodWordAt(model, position);
         if (!word || !/^[A-Za-z_$][\w$]*$/.test(newName)) return { edits: [] };
-        return { edits: studyCodWordRanges(monaco, model, word).map((range) => ({ resource: model.uri, versionId: model.getVersionId(), textEdit: { range, text: newName } })) };
+        return { edits: studyCodWordRanges(model, word).map((range) => ({ resource: model.uri, versionId: model.getVersionId(), textEdit: { range, text: newName } })) };
       },
     });
   } catch {

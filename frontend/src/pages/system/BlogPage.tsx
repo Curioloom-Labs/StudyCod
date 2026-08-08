@@ -6,7 +6,6 @@ import { getMe } from "../../lib/api/profile";
 import {
   listBlogPosts,
   getBlogPost,
-  BLOG_CATEGORIES,
   type BlogCategory,
   type BlogPostListItem,
   type BlogPostDetail

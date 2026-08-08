@@ -4,7 +4,6 @@ import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { TopicNew } from "../../entities/TopicNew";
-import { User } from "../../entities/User";
 import { EduGrade } from "../../entities/EduGrade";
 import { SummaryGrade } from "../../entities/SummaryGrade";
 import { AssessmentType, validateAssessmentType } from "../../types/AssessmentType";

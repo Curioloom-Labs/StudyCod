@@ -26,7 +26,6 @@ router.get("/classes/:classId/similarity", authRequired, async (req: AuthRequest
     const access = await authorizeClassForReq(req, classId, "CLASS_VIEW");
     if (!access || !access.allowed) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
     const cls = access.cls;
-
     const rows = await gradeRepo()
       .createQueryBuilder("g")
       .innerJoin("g.task", "t")
@@ -96,8 +95,6 @@ router.get("/classes/:classId/similarity/compare", authRequired, async (req: Aut
 
     const access = await authorizeClassForReq(req, classId, "CLASS_VIEW");
     if (!access || !access.allowed) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
-    const cls = access.cls;
-
     const rows = await gradeRepo()
       .createQueryBuilder("g")
       .innerJoin("g.task", "t")

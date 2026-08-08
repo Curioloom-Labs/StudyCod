@@ -2,14 +2,12 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Button } from "../../components/ui/Button";
 import { Logo } from "../../components/Logo";
 import { register, login, resendVerificationEmail, requestPasswordReset } from "../../lib/api/auth";
 import { registerTeacher, studentLogin } from "../../lib/api/edu";
 import type { User, CourseLanguage } from "../../types";
 import { applyTheme, getCurrentTheme } from "../../theme";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import { AlertCircle, ArrowLeft, ArrowRight, BarChart3, Check, CheckCircle2, Code2, Globe, GraduationCap, LoaderCircle, Lock, Mail, Moon, School, ShieldCheck, Sun, UserRound } from "lucide-react";
 
 type Mode = "login" | "register";

@@ -17,13 +17,13 @@ function requestConfig() {
   return { headers: { "X-Skip-Auth-Redirect": "1" } };
 }
 
-function toPosition(monaco: typeof Monaco, value: any): Monaco.IPosition {
+function toPosition(value: any): Monaco.IPosition {
   return { lineNumber: Number(value?.line ?? 0) + 1, column: Number(value?.character ?? 0) + 1 };
 }
 
-function toRange(monaco: typeof Monaco, value: any): Monaco.IRange {
-  const start = toPosition(monaco, value?.start);
-  const end = toPosition(monaco, value?.end);
+function toRange(value: any): Monaco.IRange {
+  const start = toPosition(value?.start);
+  const end = toPosition(value?.end);
   return { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column };
 }
 
@@ -62,7 +62,7 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
       if (!response?.result) return undefined;
       const contents = formatMarkup(response.result.contents);
       if (!contents) return undefined;
-      return { range: response.result.range ? toRange(monaco, response.result.range) : undefined, contents: [{ value: contents }] };
+      return { range: response.result.range ? toRange(response.result.range) : undefined, contents: [{ value: contents }] };
     }
   });
 
@@ -78,7 +78,7 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
       return locations.map((location: any) => {
         const uri = String(location.uri || location.targetUri || model.uri.toString());
         const range = location.range || location.targetSelectionRange;
-        return { uri: monaco.Uri.parse(uri), range: toRange(monaco, range) };
+        return { uri: monaco.Uri.parse(uri), range: toRange(range) };
       });
     }
   });
@@ -94,7 +94,7 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
       });
       return (Array.isArray(response?.result) ? response.result : []).map((location: any) => ({
         uri: monaco.Uri.parse(String(location.uri || model.uri.toString())),
-        range: toRange(monaco, location.range)
+        range: toRange(location.range)
       }));
     }
   });
@@ -118,7 +118,7 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
           documentation: typeof item.documentation === "string" ? item.documentation : formatMarkup(item.documentation),
           insertText: item.insertText || item.label,
           insertTextRules: item.insertTextFormat === 2 ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
-          range: item.textEdit?.range ? toRange(monaco, item.textEdit.range) : undefined
+          range: item.textEdit?.range ? toRange(item.textEdit.range) : undefined
         }))
       };
     }
@@ -137,7 +137,7 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
       const edits: Monaco.languages.IWorkspaceTextEdit[] = [];
       for (const [uri, uriEdits] of Object.entries(changes)) {
         for (const edit of (Array.isArray(uriEdits) ? uriEdits : [])) {
-          edits.push({ resource: monaco.Uri.parse(uri), versionId: 0, textEdit: { range: toRange(monaco, (edit as any).range), text: String((edit as any).newText || "") } });
+          edits.push({ resource: monaco.Uri.parse(uri), versionId: 0, textEdit: { range: toRange((edit as any).range), text: String((edit as any).newText || "") } });
         }
       }
       return { edits };

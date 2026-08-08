@@ -14,7 +14,6 @@ import { User } from "../entities/User";
 import { SummaryGrade } from "../entities/SummaryGrade";
 import { EduGrade } from "../entities/EduGrade";
 import { TestData } from "../entities/TestData";
-import { generateTaskCondition, generateTaskTemplate, generateTheoryWithAI } from "../services/openRouterService";
 import { emailService } from "../services/emailService";
 import { safeAICall, sendAIError } from "../services/ai/safeAICall";
 import { translateSingleTopicTitleUkToEn as translateSingleTopicTitleUkToEnService } from "../services/translation/topicTitleTranslator";
@@ -1728,7 +1727,6 @@ topicsRouter.post("/tasks/:taskId/unassign", authRequired, async (req: AuthReque
     await AppDataSource.transaction("SERIALIZABLE", async manager => {
       const taskRepoManager = manager.getRepository(TopicTask);
       const gradeRepoManager = manager.getRepository(EduGrade);
-      const summaryGradeRepoManager = manager.getRepository(SummaryGrade);
       const lockedTask = await manager.createQueryBuilder(TopicTask, "t").setLock("pessimistic_write").where("t.id = :taskId", {
         taskId
       }).getOne();

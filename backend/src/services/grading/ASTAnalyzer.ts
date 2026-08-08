@@ -20,14 +20,14 @@ export class ASTAnalyzer implements IASTAnalyzer {
       suggestions
     };
   }
-  private async parseCode(code: string, language: "JAVA" | "PYTHON"): Promise<any> {
+  private async parseCode(_code: string, language: "JAVA" | "PYTHON"): Promise<any> {
     if (language === "JAVA") {
       throw new Error("Java AST parsing not yet implemented");
     } else {
       throw new Error("Python AST parsing not yet implemented");
     }
   }
-  private calculateMetrics(ast: any, language: "JAVA" | "PYTHON"): ASTAnalysisResult['metrics'] {
+  private calculateMetrics(_ast: any, _language: "JAVA" | "PYTHON"): ASTAnalysisResult['metrics'] {
     return {
       cyclomaticComplexity: 0,
       maxNestingDepth: 0,
@@ -37,11 +37,11 @@ export class ASTAnalyzer implements IASTAnalyzer {
       averageFunctionLength: 0
     };
   }
-  private detectViolations(ast: any, language: "JAVA" | "PYTHON"): ASTAnalysisResult['violations'] {
+  private detectViolations(_ast: any, _language: "JAVA" | "PYTHON"): ASTAnalysisResult['violations'] {
     const violations: ASTAnalysisResult['violations'] = [];
     return violations;
   }
-  private generateSuggestions(ast: any, metrics: ASTAnalysisResult['metrics'], language: "JAVA" | "PYTHON"): ASTAnalysisResult['suggestions'] {
+  private generateSuggestions(_ast: any, _metrics: ASTAnalysisResult['metrics'], _language: "JAVA" | "PYTHON"): ASTAnalysisResult['suggestions'] {
     const suggestions: ASTAnalysisResult['suggestions'] = [];
     return suggestions;
   }

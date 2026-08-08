@@ -1,11 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../components/ui/Button";
 import { showToast } from "../../lib/toast";
-import { MarkdownView } from "../../components/MarkdownView";
 import { getDocsSections, type DocsAudience, type DocsSectionId } from "../../content/docs";
-import { ArrowLeft, BookOpen, Search, Sparkles } from "lucide-react";
 import { OnboardingOverlay } from "../../components/onboarding/OnboardingOverlay";
 import { DocsExperience } from "./DocsExperience";
 

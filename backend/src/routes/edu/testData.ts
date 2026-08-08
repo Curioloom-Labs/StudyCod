@@ -184,8 +184,6 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_VIEW_TEST_DATA" });
     }
 
-    const isSystemAdmin = req.userRole === "SYSTEM_ADMIN";
-
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
       .leftJoinAndSelect("topicTask.topic", "topic")
@@ -367,8 +365,6 @@ router.get("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
 
-    const isSystemAdmin = req.userRole === "SYSTEM_ADMIN";
-
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
       .leftJoinAndSelect("topicTask.topic", "topic")
@@ -421,8 +417,6 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
     if (!req.userId) {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
-
-    const isSystemAdmin = req.userRole === "SYSTEM_ADMIN";
 
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")
@@ -492,8 +486,6 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     if (!req.userId) {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
-
-    const isSystemAdmin = req.userRole === "SYSTEM_ADMIN";
 
     const topicTask = await topicTaskRepo()
       .createQueryBuilder("topicTask")

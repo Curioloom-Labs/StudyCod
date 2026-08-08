@@ -17,14 +17,9 @@ const snippetRepo = () => AppDataSource.getRepository(PlaygroundSnippet);
 const MAX_CODE = 100_000;
 const MAX_STDIN = 100_000;
 
-function normLang(raw: unknown): "JAVA" | "PYTHON" | "CPP" | null {
-  const s = String(raw ?? "").trim().toUpperCase();
-  return s === "JAVA" || s === "PYTHON" || s === "CPP" ? s : null;
-}
-
 // Languages runnable via the playground "/run" endpoint. Accepts the legacy uppercase
 // trio (JAVA/PYTHON/CPP) and every lower-case judge family. Snippet storage stays on the
-// legacy trio (see normLang) to avoid a DB enum migration.
+// legacy trio to avoid a DB enum migration.
 const RUN_LANGUAGES = new Set<ExecLanguage>([
   "JAVA", "PYTHON", "CPP",
   "java", "python", "cpp", "c", "csharp", "kotlin", "js", "go", "rust", "pascal",

@@ -63,7 +63,7 @@ function runOne(language, compiler, source) {
     child.stdout.on("data", (b) => (out += b));
     child.stderr.on("data", (b) => (err += b));
     child.on("close", () => {
-      let verdict = "??", detail = "";
+      let verdict, detail = "";
       try {
         const j = JSON.parse(out);
         if (j.error) { verdict = "ERR"; detail = j.error; }

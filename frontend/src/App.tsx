@@ -4,7 +4,7 @@ import { enforceSubdomain, getHostContext } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
 import { getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon, Search, SwatchBook, LogOut, Users } from "lucide-react";
+import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon, Search, SwatchBook, LogOut } from "lucide-react";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";

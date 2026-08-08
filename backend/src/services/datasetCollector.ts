@@ -1,6 +1,5 @@
 import { AppDataSource } from '../data-source';
 import { Task } from '../entities/Task';
-import { Grade } from '../entities/Grade';
 import { logger } from '../utils/logger';
 const taskRepo = () => AppDataSource.getRepository(Task);
 export interface TrainingExample {

@@ -1,7 +1,6 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { User } from "../../entities/User";
 import { Student } from "../../entities/Student";
 import { Class } from "../../entities/Class";
 import { TopicNew } from "../../entities/TopicNew";

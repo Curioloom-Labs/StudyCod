@@ -6,7 +6,7 @@ import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
-import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, getTestDataItem, updateTestData, deleteTestData, deleteGeneratedTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type Task, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade, type TaskGrade } from "../../lib/api/edu";
+import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, getTestDataItem, updateTestData, deleteTestData, deleteGeneratedTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade, type TaskGrade } from "../../lib/api/edu";
 import { GlobalTimer } from "../../components/GlobalTimer";
 import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock, BookOpen, ShieldCheck, CheckCircle2, Lock } from "lucide-react";
 import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
@@ -621,7 +621,7 @@ export const LessonDetailsPage: React.FC = () => {
       source: "ALL"
     });
   };
-  const handleSaveTest = async (testDataId: number, index: number) => {
+  const handleSaveTest = async (testDataId: number) => {
     if (!testDataTaskId || !editingTest) return;
     try {
       await updateTestData(testDataTaskId, testDataId, editingTest);
@@ -936,7 +936,7 @@ export const LessonDetailsPage: React.FC = () => {
                         </div>
                         <div className="space-y-2">
                           {(Array.isArray(q.options) ? q.options.map((opt: string, idx: number) => [['А', 'Б', 'В', 'Г', 'Д'][idx], opt] as const) : Object.entries((q.options || {}) as Record<string, string>)).map(([key, value]) => <label key={key} className="flex items-center gap-2 cursor-pointer hover:bg-bg-hover p-2 rounded">
-                              <input type="radio" name={`quiz_question_${index}`} value={key} checked={studentQuizAnswers[index] === key} onChange={e => {
+                              <input type="radio" name={`quiz_question_${index}`} value={key} checked={studentQuizAnswers[index] === key} onChange={() => {
                       const newAnswers = {
                         ...studentQuizAnswers,
                         [index]: key as QuizOptionKey
@@ -1826,7 +1826,7 @@ export const LessonDetailsPage: React.FC = () => {
                 }} className="text-xs">
                               <X className="w-4 h-4" />
                             </Button>
-                            <Button variant="primary" onClick={() => handleSaveTest(test.id, index)} className="text-xs">
+                            <Button variant="primary" onClick={() => handleSaveTest(test.id)} className="text-xs">
                               <Save className="w-4 h-4 mr-1" />
                               {t("save")}
                             </Button>

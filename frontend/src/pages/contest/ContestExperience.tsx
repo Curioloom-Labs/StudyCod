@@ -6,15 +6,12 @@ import {
   Check,
   ChevronRight,
   Clock3,
-  Code2,
   Crown,
   FileCode2,
   LoaderCircle,
   LockKeyhole,
-  Play,
   Plus,
   RotateCw,
-  Send,
   Trophy,
   UsersRound,
 } from "lucide-react";
@@ -35,10 +32,7 @@ import {
   type ContestStandings,
   type JudgeLanguage,
 } from "../../lib/api/contests";
-import {
-  JUDGE_LANGUAGE_LABELS,
-  enabledJudgeLanguages,
-} from "../../lib/judgeLanguages";
+import { enabledJudgeLanguages } from "../../lib/judgeLanguages";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 
@@ -825,7 +819,7 @@ export const ContestProblemPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [running, setRunning] = React.useState(false);
   const [checking, setChecking] = React.useState(false);
-  const [result, setResult] = React.useState<{
+  const [, setResult] = React.useState<{
     kind: "run" | "check";
     text: string;
     good: boolean;
@@ -885,9 +879,6 @@ export const ContestProblemPage: React.FC = () => {
   React.useEffect(() => {
     void load();
   }, [load]);
-  const languages = statement?.task.allowedLanguages.length
-    ? statement.task.allowedLanguages
-    : enabledJudgeLanguages();
   const switchLanguage = (next: JudgeLanguage) => {
     setLanguage(next);
     if (statement)

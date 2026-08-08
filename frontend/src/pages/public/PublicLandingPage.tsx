@@ -9,23 +9,15 @@ import {
   BookOpen,
   Check,
   CheckCircle2,
-  ChevronRight,
   CirclePlay,
-  Clock3,
   Code2,
-  FileCode2,
-  Flame,
   FlaskConical,
   GraduationCap,
-  LayoutDashboard,
   Lightbulb,
   Play,
-  Plus,
   ShieldCheck,
   Sparkles,
-  Target,
   Trophy,
-  Terminal,
   Users,
 } from "lucide-react";
 import { Logo } from "../../components/Logo";
@@ -53,6 +45,7 @@ const GreenButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ 
   </button>
 );
 
+/* Legacy landing previews superseded by the current product preview.
 const RotatingTypedHeadline: React.FC<{ tr: Translate }> = ({ tr }) => {
   const phrases = React.useMemo(() => [
     tr("Програмування стає зрозумілим, коли практика має систему.", "Programming clicks when practice has a system."),
@@ -210,7 +203,7 @@ const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
     </div>
     <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-white/10 bg-[#121e16] p-4"><BookOpen className="size-4 text-[#62ecaa]" /><div className="mt-4 text-sm font-black">{tr("Теорія", "Theory")}</div><div className="mt-1 text-xs text-[#8fa598]">{tr("3 поняття · 8 хв", "3 concepts · 8 min")}</div></div><div className="rounded-2xl border border-white/10 bg-[#121e16] p-4"><Code2 className="size-4 text-[#ffb454]" /><div className="mt-4 text-sm font-black">{tr("Практика", "Practice")}</div><div className="mt-1 text-xs text-[#8fa598]">{tr("1 задача · автоперевірка", "1 task · auto-check")}</div></div><div className="rounded-2xl border border-white/10 bg-[#121e16] p-4"><Trophy className="size-4 text-[#ffd93d]" /><div className="mt-4 text-sm font-black">{tr("Наступна ціль", "Next milestone")}</div><div className="mt-1 text-xs text-[#8fa598]">{tr("Закрий тему на 80%", "Reach 80% in this topic")}</div></div></div>
   </div>
-);
+); */
 
 const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   <div className={`${card} overflow-hidden bg-[#f8faf7] dark:bg-[#101814]`}>

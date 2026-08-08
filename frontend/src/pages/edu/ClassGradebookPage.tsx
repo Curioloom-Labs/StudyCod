@@ -6,7 +6,7 @@ import { useUIMode } from "../../components/interface/UIModeProvider";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
-import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, updateSemesterGrade, deleteThematicForTopic, getControlWorkStudentWork, getTopicTaskStudentWork, getTopicTaskAIDetection, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type GradebookLesson, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork, type TopicTaskAIDetectionResponse } from "../../lib/api/edu";
+import { getClassGradebook, createManualGrade, updateGrade, createSummaryGrade, updateSummaryGrade, updateSemesterGrade, deleteThematicForTopic, getControlWorkStudentWork, getTopicTaskStudentWork, getTopicTaskAIDetection, unassignTask, unassignControlWork, updateControlWorkGrade, deleteTaskGrade, type GradebookResponse, type GradebookStudent, type UpdateGradeRequest, type ControlWorkDetails, type ControlWorkStudentWork, type TopicTaskStudentWork, type TopicTaskAIDetectionResponse } from "../../lib/api/edu";
 import { ArrowLeft, Calculator, Download, Trash2 } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { useTranslation } from "react-i18next";

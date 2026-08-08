@@ -44,7 +44,7 @@ import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
 import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
-import { FailureRecoveryCard, type FailureRecoveryData } from "../../components/FailureRecoveryCard";
+import { FailureRecoveryCard } from "../../components/FailureRecoveryCard";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { useMediaQuery } from "../../utils/useMediaQuery";

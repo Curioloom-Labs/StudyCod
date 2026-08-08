@@ -161,7 +161,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
       steps.length - 1,
     );
 
-    let nextHint = "Review the latest verdict and keep iterating.";
+    let nextHint: string;
     if (!hasCode) nextHint = "Write a baseline solution first, then run it on sample input.";
     else if (!hasRun) nextHint = "Run your solution on sample input before your first submit.";
     else if (!hasSubmitted) nextHint = "Submit now to validate against hidden tests and subtasks.";

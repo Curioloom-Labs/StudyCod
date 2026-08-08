@@ -86,7 +86,7 @@ const draftSchema = z.object({
   attachments: mailAttachmentsSchema,
 });
 
-router.get("/status", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+router.get("/status", authRequired, systemAdminGuard, async (_req: AuthRequest, res: Response) => {
   const cfg = studyCodMailService.isConfigured();
   return res.json({
     ok: cfg.ok,
