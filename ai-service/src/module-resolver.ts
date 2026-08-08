@@ -1,4 +1,5 @@
 import Module from 'module';
+import path from 'path';
 import fs from 'fs';
 const originalResolveFilename = (Module as any)._resolveFilename;
 (Module as any)._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
