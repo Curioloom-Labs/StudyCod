@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ConnectionStateToast, LiveKitRoom, PreJoin, VideoConference } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { ArrowLeft, BookOpen, Code2, Loader2, MessageSquare, Mic, MonitorUp, PenSquare, PhoneOff, PlayCircle, Radio, RotateCcw, Users, Video, WifiOff } from "lucide-react";
+import { ArrowLeft, BookOpen, Code2, Loader2, Mic, MonitorUp, PenSquare, PhoneOff, PlayCircle, Radio, RotateCcw, Users, Video, WifiOff } from "lucide-react";
 import { BreakoutPanel } from "../../components/BreakoutPanel";
 import { ClassLiveOverview } from "../../components/ClassLiveOverview";
 import { LessonMaterialsPanel } from "../../components/LessonMaterialsPanel";

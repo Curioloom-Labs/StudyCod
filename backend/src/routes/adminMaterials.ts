@@ -159,12 +159,9 @@ async function writeTheoryRevisionTx(params: {
   void comment;
   void createdByUserId;
   const cur = Number((theoryBlock as any).version ?? 0);
-  let nextVersion = 1;
-  if (action === "CREATE") {
-    nextVersion = Math.max(1, cur || 1);
-  } else {
-    nextVersion = Math.max(1, cur || 1) + 1;
-  }
+  const nextVersion = action === "CREATE"
+    ? Math.max(1, cur || 1)
+    : Math.max(1, cur || 1) + 1;
 
   (theoryBlock as any).version = nextVersion;
   return (await manager.getRepository(TheoryBlock).save(theoryBlock as any)) as any as TheoryBlock;
@@ -370,8 +367,8 @@ function parseImportYamlPayload(yamlText: string): { language?: MaterialsLanguag
   if (!Array.isArray(topicsRaw)) {
     const details: any = {};
     try {
-      details.rootType = Array.isArray(doc) ? "array" : doc === null ? "null" : typeof doc;
-      if (doc && typeof doc === "object" && !Array.isArray(doc)) {
+      details.rootType = Array.isArray(doc) ? "array" : typeof doc;
+      if (typeof doc === "object" && !Array.isArray(doc)) {
         details.rootKeys = Object.keys(doc).slice(0, 50);
         details.hasTopicsKey = Object.prototype.hasOwnProperty.call(doc, "topics");
         details.topicsType = (doc as any).topics === null ? "null" : typeof (doc as any).topics;
@@ -1238,7 +1235,6 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
                   comment: "sync:repo",
                   createdByUserId: req.userId ?? null
                 });
-                changed = true;
               }
             } else {
               const createdBlock = await bRepo.save(
@@ -1258,7 +1254,6 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
                 comment: "sync:repo",
                 createdByUserId: req.userId ?? null
               });
-              changed = true;
             }
 
             (existing as any).theoryMarkdown = normalizedContent;

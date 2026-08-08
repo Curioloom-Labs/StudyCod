@@ -180,12 +180,6 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [turnstileScriptReady, setTurnstileScriptReady] = React.useState(false);
   const [turnstileLoadFailed, setTurnstileLoadFailed] = React.useState(false);
   const [turnstileToken, setTurnstileToken] = React.useState<string | null>(null);
-  const shouldEnforceTurnstileClient = React.useMemo(() => {
-    if (!turnstileEnabled) return false;
-    if (turnstileLoadFailed) return false;
-    return turnstileScriptReady || (typeof window !== "undefined" && Boolean(window.turnstile));
-  }, [turnstileEnabled, turnstileLoadFailed, turnstileScriptReady]);
-
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [statement, setStatement] = React.useState<ContestProblemStatement | null>(null);

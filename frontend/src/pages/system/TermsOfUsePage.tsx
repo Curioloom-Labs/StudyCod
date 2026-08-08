@@ -1,11 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Mail, ScrollText } from "lucide-react";
-import { Button } from "../../components/ui/Button";
-import { PageEyebrow } from "../../components/ui/PageEyebrow";
-import { fadeUpItem, staggerContainer, easeOutQuint } from "../../lib/motion";
+import { ScrollText } from "lucide-react";
 import { LegalExperience } from "./LegalExperience";
 
 type LegalSection = {
@@ -16,26 +11,8 @@ type LegalSection = {
 
 const SUPPORT_EMAIL = "studycod@studycod.space";
 
-const LegalSectionBlock: React.FC<{ section: LegalSection }> = ({ section }) => (
-  <section className="space-y-2.5">
-    <h2 className="text-sm font-mono font-semibold text-text-primary">{section.title}</h2>
-    {section.paragraphs?.map((paragraph) => (
-      <p key={paragraph} className="text-sm leading-7 text-text-secondary">{paragraph}</p>
-    ))}
-    {section.bullets ? (
-      <ul className="space-y-1.5 pl-4 border-l-2 border-primary/20">
-        {section.bullets.map((bullet) => (
-          <li key={bullet} className="text-sm leading-6 text-text-secondary pl-2">{bullet}</li>
-        ))}
-      </ul>
-    ) : null}
-  </section>
-);
-
 export const TermsOfUsePage: React.FC = () => {
   const { i18n } = useTranslation();
-  const navigate = useNavigate();
-  const prefersReducedMotion = useReducedMotion();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
 
   const sections: LegalSection[] = [
@@ -159,73 +136,4 @@ export const TermsOfUsePage: React.FC = () => {
     email={SUPPORT_EMAIL}
   />;
 
-  return (
-    <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-      {/* Header */}
-      <motion.header
-        initial={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
-        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: easeOutQuint }}
-        className="min-h-14 border-b border-border bg-bg-surface flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 md:px-6 py-2 shrink-0"
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            {tr("Назад", "Back")}
-          </Button>
-          <div className="h-4 w-px bg-border hidden sm:block" />
-          <div className="flex items-center gap-2 min-w-0">
-            <ScrollText className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-mono text-text-primary">{tr("Умови використання", "Terms of Use")}</span>
-          </div>
-        </div>
-      </motion.header>
-
-      <main className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-8">
-        <motion.div
-          variants={prefersReducedMotion ? undefined : staggerContainer}
-          initial={prefersReducedMotion ? undefined : "initial"}
-          animate={prefersReducedMotion ? undefined : "animate"}
-          className="max-w-3xl mx-auto"
-        >
-          {/* Hero */}
-          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mb-8">
-            <PageEyebrow label="legal" />
-            <h1 className="mt-1 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-              {tr("Умови використання", "Terms of Use")}
-            </h1>
-            <p className="mt-2 text-sm text-text-secondary">
-              {tr("Ці Умови визначають правила використання StudyCod, відповідальність користувачів і межі роботи платформи.", "These Terms define the rules for using StudyCod, user responsibilities, and the boundaries of platform operation.")}
-            </p>
-            <p className="mt-1.5 text-xs font-mono text-text-muted">{tr("Оновлено: 31.05.2026", "Updated: 2026-05-31")}</p>
-          </motion.div>
-
-          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
-            <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent mb-8" />
-          </motion.div>
-
-          {/* Sections */}
-          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="space-y-7">
-            {sections.map((section) => (
-              <LegalSectionBlock key={section.title} section={section} />
-            ))}
-          </motion.div>
-
-          {/* Footer actions */}
-          <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem} className="mt-10 pt-6 border-t border-border flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => navigate("/privacy")}>
-              {tr("Політика конфіденційності", "Privacy Policy")}
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/support")}>
-              {tr("До підтримки", "Go to support")}
-            </Button>
-            <Button variant="ghost" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }}>
-              <Mail className="w-4 h-4 mr-2" />
-              {SUPPORT_EMAIL}
-            </Button>
-          </motion.div>
-        </motion.div>
-      </main>
-    </div>
-  );
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Code2, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { Logo } from '../components/Logo';
 interface MobileHeaderProps {
   onOpenMenu: () => void;

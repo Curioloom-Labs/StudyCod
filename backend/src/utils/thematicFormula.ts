@@ -71,7 +71,7 @@ export function computeThematicGrade(inputs: ThematicInputs, formula?: string | 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn("Thematic formula evaluation failed; using default", {
-      hasFormula: Boolean(formula && formula.trim()),
+      hasFormula: true,
       error: message
     });
     return defaultThematicGrade(inputs);

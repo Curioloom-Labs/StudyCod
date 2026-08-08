@@ -234,7 +234,6 @@ export const PremiumProgress: React.FC<{
 }> = ({ stats, topics, recent, onRetry }) => {
   const c = useCopy();
   const trendUp = stats.trend >= 0;
-  const scoreTone = stats.avg >= 75 ? "text-[#00a75a] dark:text-[#62ecaa]" : stats.avg >= 50 ? "text-[#d78000]" : "text-[#e95b80]";
   const metricCards: Array<{ label: string; value: React.ReactNode; Icon: LucideIcon; color: string }> = [
     { label: c.attempts, value: stats.count, Icon: Layers3, color: "#147b47" },
     { label: c.average, value: stats.avg.toFixed(1), Icon: Target, color: "#00a75a" },
@@ -303,7 +302,6 @@ export const PremiumProfileV2: React.FC<{
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const label = (ukText: string, enText: string) => uk ? ukText : enText;
   const courseName = course === "PYTHON" ? "Python" : course === "CPP" ? "C++" : "Java";
-  const completion = Math.min(100, Math.max(8, Math.round((stats.librarySolved / 30) * 100)));
   const [badgesOpen, setBadgesOpen] = React.useState(false);
   const badges = [
     { threshold: 5, name: label("Перші кроки", "First steps"), detail: label("Закрий 5 задач", "Complete 5 problems") },

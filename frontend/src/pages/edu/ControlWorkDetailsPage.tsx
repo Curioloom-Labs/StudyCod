@@ -12,7 +12,6 @@ import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { api } from "../../lib/api/client";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
-import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import { generateTestData, getTestData, getTestDataItem, addTestData, updateTestData, deleteTestData, deleteGeneratedTestData, type TestData, updateControlWorkFormula } from "../../lib/api/edu";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";

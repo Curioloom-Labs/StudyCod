@@ -13,7 +13,6 @@ import { TheoryBlock } from "../entities/TheoryBlock";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
 import { In } from "typeorm";
-import { generateTaskWithAI, generateTheoryWithAI, generateQuizWithAI } from "../services/openRouterService";
 import { safeAICall, sendAIError, neutralizePromptInjection } from "../services/ai/safeAICall";
 import { generateAlgorithmicHints, explainSubmissionError, type HintLanguage } from "../services/ai/failureHints";
 import { debugMentorReply, type DebugChatMessage, DEBUG_CHAT_MAX_HISTORY, DEBUG_CHAT_MAX_MESSAGE_CHARS } from "../services/ai/debugMentor";
@@ -23,7 +22,6 @@ import { ConceptReviewState } from "../entities/ConceptReviewState";
 import { SubmissionIntegrity } from "../entities/SubmissionIntegrity";
 import { SolveSession } from "../entities/SolveSession";
 import { boundSnapshots, type ReplaySnapshot } from "../services/replay/replaySession";
-import { checkMilestone } from "../utils/milestoneDetector";
 import { getStableDifus } from "../utils/adaptiveDifficulty";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
@@ -39,7 +37,7 @@ import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, 
 import { buildLearningFirstFailure } from "../services/learning/firstFailure";
 import { recordLearningOutcome } from "../services/learning/failureToSkillEngine";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
-import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
+import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn } from "../services/translation/translateUkToEn";
 import { env } from "../env";
 import {
   normalizeWebTaskFiles,
@@ -49,7 +47,7 @@ import {
   type WebTaskValidationRule,
   validateWebTaskSubmission,
 } from "../services/webTaskValidationService";
-import { decodeWebTaskPayload, encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTaskPayload";
+import { encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { getSharedRedisClient, redisKey } from "../services/redis/sharedRedis";
 import {
   buildLocalizedTopicTitleEnById as buildLocalizedTopicTitleEnByIdService,

@@ -2,25 +2,14 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, RotateCcw, Save, CheckCircle2, LayoutDashboard, FolderCode, TerminalSquare, Sparkles } from "lucide-react";
-import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { Skeleton } from "../../components/ui/Skeleton";
-import { Modal } from "../../components/ui/Modal";
-import { StatusChip, type StatusChipTone } from "../../components/ui/StatusChip";
-import { CodeEditor } from "../../components/CodeEditor";
-import { MultiFileEditor } from "../../components/MultiFileEditor";
-import { MarkdownView } from "../../components/MarkdownView";
-import { ErrorExplainButton } from "../../components/ErrorExplainButton";
-import { DebugMentorChat } from "../../components/DebugMentorChat";
 import { useProctoring } from "../../hooks/useProctoring";
 import { scoreProctoring, recordConceptReview } from "../../lib/api/tasks";
 import { saveSolveReplay, type ReplaySnapshot } from "../../lib/api/learning";
-import { WebPreviewPane } from "../../components/WebPreviewPane";
 import { FailureRecoveryCard } from "../../components/FailureRecoveryCard";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
-import { useMediaQuery } from "../../utils/useMediaQuery";
 import {
   checkLibraryWebTask,
   checkLibraryTask,
@@ -40,11 +29,9 @@ import {
   type JudgeLanguage,
   type WebTaskFile,
 } from "../../lib/api/library";
-import { JUDGE_LANGUAGE_LABELS, JUDGE_ENTRY_FILES, enabledJudgeLanguages, compilersForFamily, defaultCompilerForFamily } from "../../lib/judgeLanguages";
+import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily } from "../../lib/judgeLanguages";
 import { StudyCodIDEWorkspace } from "../../components/ide/StudyCodIDEWorkspace";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
-
-const FRIENDLY_LANG = JUDGE_LANGUAGE_LABELS;
 
 const previewLibraryTask: LibraryTaskListItem = {
   id: 901,
@@ -149,83 +136,12 @@ function filesEqual(a: CodeFile[], b: CodeFile[]): boolean {
 }
 
 function entryContentFromFiles(fs: CodeFile[], entryFile: string): string {
-  const hit = (fs || []).find(f => f.path === entryFile);
-  return hit?.content ?? "";
-}
-
-type TrFn = (uk: string, en: string) => string;
-
-function runStatusChip(success: boolean, tr: TrFn) {
-  return success
-    ? {
-        glyph: "▶",
-        label: tr("Успіх", "Success"),
-        tone: "success" as StatusChipTone,
-      }
-    : {
-        glyph: "■",
-        label: tr("Помилка", "Error"),
-        tone: "error" as StatusChipTone,
-      };
-}
-
-function verdictChip(verdictRaw: string | null | undefined, tr: TrFn) {
-  const verdict = String(verdictRaw ?? "").trim().toUpperCase();
-  if (!verdict) {
-    return {
-      glyph: "·",
-      label: tr("Н/Д", "N/A"),
-      tone: "neutral" as StatusChipTone,
-    };
-  }
-
-  if (verdict === "AC") {
-    return {
-      glyph: "✓",
-      label: "AC",
-      tone: "success" as StatusChipTone,
-    };
-  }
-  if (verdict === "WA") {
-    return {
-      glyph: "≈",
-      label: "WA",
-      tone: "warn" as StatusChipTone,
-    };
-  }
-  if (verdict === "TLE") {
-    return {
-      glyph: "⏱",
-      label: "TLE",
-      tone: "warn" as StatusChipTone,
-    };
-  }
-  if (verdict === "CE") {
-    return {
-      glyph: "⚙",
-      label: "CE",
-      tone: "error" as StatusChipTone,
-    };
-  }
-  if (verdict === "RE") {
-    return {
-      glyph: "💥",
-      label: "RE",
-      tone: "error" as StatusChipTone,
-    };
-  }
-
-  return {
-    glyph: "•",
-    label: verdict,
-    tone: "neutral" as StatusChipTone,
-  };
+  return (fs || []).find(file => file.path === entryFile)?.content ?? "";
 }
 
 export const LibraryTaskSolvePage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
-  const isCompactViewport = useMediaQuery("(max-width: 1023.98px)");
   const navigate = useNavigate();
   const location = useLocation();
   const hasToken = useMemo(() => {
@@ -295,7 +211,6 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const [judgeLanguage, setJudgeLanguage] = useState<JudgeLanguage>("java");
   const [judgeCompiler, setJudgeCompiler] = useState<string>(defaultCompilerForFamily("java"));
-  const compilerOptions = compilersForFamily(judgeLanguage);
   // Reset the compiler to the family default whenever the language changes.
   useEffect(() => { setJudgeCompiler(defaultCompilerForFamily(judgeLanguage)); }, [judgeLanguage]);
 
@@ -338,14 +253,14 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const [trace, setTrace] = useState<TraceResult | null>(null);
   const [tracing, setTracing] = useState(false);
   const [nextTask, setNextTask] = useState<LibraryTaskListItem | null>(null);
-  const [lastReplayId, setLastReplayId] = useState<number | null>(null);
-  const [actionRecovery, setActionRecovery] = useState<{
+  const [, setLastReplayId] = useState<number | null>(null);
+  const [, setActionRecovery] = useState<{
     tone: "error" | "warning";
     message: string;
     retry: "run" | "check" | "save";
   } | null>(null);
-  const [showCompactStatuses, setShowCompactStatuses] = useState(false);
-  const [compactFailedOnly, setCompactFailedOnly] = useState(true);
+  const [, setShowCompactStatuses] = useState(false);
+  const [, setCompactFailedOnly] = useState(true);
 
   const firstFailedTest = useMemo(() => {
     if (!checkResult) return null;
@@ -399,27 +314,13 @@ export const LibraryTaskSolvePage: React.FC = () => {
     ];
   };
 
-  const [resultsOpen, setResultsOpen] = useState(false);
-  const [resultsTab, setResultsTab] = useState<"run" | "check">("check");
-  const [statementModalOpen, setStatementModalOpen] = useState(false);
-  const [activeRailItem, setActiveRailItem] = useState<"mission" | "task" | "console">("mission");
+  const [, setResultsOpen] = useState(false);
+  const [, setResultsTab] = useState<"run" | "check">("check");
+  const [, setActiveRailItem] = useState<"mission" | "task" | "console">("mission");
   const statementSectionRef = useRef<HTMLDivElement | null>(null);
   const editorSectionRef = useRef<HTMLDivElement | null>(null);
   const outputSectionRef = useRef<HTMLDivElement | null>(null);
 
-  const libraryHints = useMemo(() => {
-    const hints: string[] = [];
-    if (checkResult?.compileError) {
-      hints.push(tr("Спочатку виправ компіляцію: перевір назви класів/файлів і сигнатуру main.", "Fix compilation first: verify class/file names and main signature."));
-    }
-    if (checkResult && checkResult.testsTotal > 0 && checkResult.testsPassed < checkResult.testsTotal) {
-      hints.push(tr("Пройдися по крайових кейсах: порожній ввід, 0, 1, мін/макс межі.", "Go through edge cases: empty input, 0, 1, min/max bounds."));
-      hints.push(tr("Звір формат виводу: зайві пробіли або переноси рядків ламають тести.", "Verify output format: extra spaces/newlines often break tests."));
-    }
-    hints.push(tr("Запускай локальні малі тести перед Check, щоб швидше знаходити баги.", "Run small local tests before Check to find bugs faster."));
-    hints.push(tr("Спочатку зроби коректність, потім оптимізацію.", "Lock correctness first, optimize second."));
-    return hints;
-  }, [checkResult, tr]);
   const firstExampleInput = useMemo(() => extractFirstExampleInput(String(task?.description ?? "")), [task?.description]);
 
   const scrollToSection = (id: "mission" | "task" | "console") => {
@@ -924,11 +825,6 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setTracing(false);
     }
   };
-  const isMacPlatform = typeof navigator !== "undefined" && /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
-  const modKeyLabel = isMacPlatform ? "⌘" : "Ctrl";
-  const saveShortcutLabel = `${modKeyLabel}+S`;
-  const runShortcutLabel = `${modKeyLabel}+Enter`;
-  const checkShortcutLabel = `${modKeyLabel}+Shift+Enter`;
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {

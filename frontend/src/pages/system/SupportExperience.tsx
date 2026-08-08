@@ -1,6 +1,6 @@
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, BookOpen, Bug, CheckCircle2, Clock3, CreditCard, FileText, LifeBuoy, MessageCircle, Paperclip, Plus, RefreshCw, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Bug, Clock3, CreditCard, FileText, LifeBuoy, MessageCircle, Paperclip, Plus, RefreshCw, Send, Sparkles } from "lucide-react";
 import type { SupportChatConversation, SupportChatMessage } from "../../lib/api/support";
 import { Logo } from "../../components/Logo";
 import { PublicProductNav } from "../../components/layout/PublicProductNav";

@@ -177,11 +177,9 @@ interface RiskInterventionPlanPayload {
 
 const router = Router();
 
-const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
-const taskRepo = () => AppDataSource.getRepository(TopicTask);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 const appealRepo = () => AppDataSource.getRepository(GradeAppeal);
 const hintFeedbackRepo = () => AppDataSource.getRepository(EduHintFeedback);

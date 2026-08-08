@@ -7,7 +7,7 @@ import { Button } from "../../components/ui/Button";
 import { showToast } from "../../lib/toast";
 import type { User } from "../../types";
 import { CheckCircle2, XCircle, Mail, Loader2 } from "lucide-react";
-import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 
 interface Props {
   onAuth: (user: User) => void;

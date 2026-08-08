@@ -54,7 +54,7 @@ import { AdminMailWorkspace } from "../../components/admin/AdminMailWorkspace";
 import { createCertificateTemplate, getCertificateTemplateById, listCertificateTemplates, updateCertificateTemplate } from "../../lib/api/certificates";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { BookOpen, Boxes, Check, ChevronRight, CircleDot, FileText, Inbox, LayoutDashboard, Library, Mail, MessageSquare, Plus, RotateCw, Save, Send, ShieldCheck, Trash2, UserRoundPlus, Users, Wrench, X } from "lucide-react";
+import { BookOpen, Boxes, Check, ChevronRight, CircleDot, FileText, Inbox, LayoutDashboard, Library, MessageSquare, Plus, RotateCw, Save, Send, ShieldCheck, Trash2, UserRoundPlus, Users, Wrench, X } from "lucide-react";
 
 const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const languages: AdminMaterialsLanguage[] = ["JAVA", "PYTHON", "CPP"];

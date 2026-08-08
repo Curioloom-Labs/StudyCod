@@ -122,11 +122,6 @@ async function getBrowser(): Promise<Browser> {
     throw error;
   }
 
-  const browser = sharedBrowser;
-  if (!browser) {
-    throw new Error("CERTIFICATE_RENDERER_BROWSER_UNAVAILABLE: Browser launch returned null instance.");
-  }
-  return browser!;
 }
 
 /**

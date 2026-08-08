@@ -37,7 +37,6 @@ import { z } from "zod";
   });
 })();
 const isProduction = process.env.NODE_ENV === "production";
-const enforcePathExistence = isProduction && process.platform !== "win32";
 
 function parseBoolEnv(v: unknown): boolean {
   const s = String(v ?? "").trim().toLowerCase();

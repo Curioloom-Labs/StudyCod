@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useDataChannel, useLocalParticipant } from "@livekit/components-react";
 import { tr } from "../i18n";
 

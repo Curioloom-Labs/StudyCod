@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, ClipboardCheck, Code2, LockKeyhole, Play, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, ClipboardCheck, LockKeyhole, Play, Plus, Sparkles } from "lucide-react";
 import { createTask, generateQuiz, getLesson, saveQuiz, startLessonAttempt, submitQuizAnswers, type Lesson, type Task } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 

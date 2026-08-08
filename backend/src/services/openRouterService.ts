@@ -391,7 +391,7 @@ async function generateQuizWithAI_OLD(params: {
                 escapeNext = true;
                 continue;
               }
-              if (char === '"' && !escapeNext) {
+              if (char === '"') {
                 inString = !inString;
                 continue;
               }

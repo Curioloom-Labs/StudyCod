@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
 import { Modal } from "../../components/ui/Modal";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
-import { getStudents, getSummaryGrades, createSummaryGrade, updateSummaryGrade, deleteSummaryGrade, getTaskGrades, getTopics, type Student, type SummaryGradeGroup, type Topic } from "../../lib/api/edu";
+import { getStudents, getSummaryGrades, createSummaryGrade, updateSummaryGrade, deleteSummaryGrade, getTopics, type Student, type SummaryGradeGroup, type Topic } from "../../lib/api/edu";
 import { ArrowLeft, Plus, FileText, Trash2 } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";

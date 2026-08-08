@@ -187,7 +187,7 @@ export const StudentTaskPage: React.FC = () => {
   const [hintFeedbackStored, setHintFeedbackStored] = useState<boolean | null>(null);
   const [revealedHints, setRevealedHints] = useState(0);
   const [showResults, setShowResults] = useState(false);
-  const [testProgress, setTestProgress] = useState<Record<number, 'pending' | 'running' | 'passed' | 'failed'>>({});
+  const [testProgress] = useState<Record<number, 'pending' | 'running' | 'passed' | 'failed'>>({});
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [theoryAcknowledged, setTheoryAcknowledged] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
@@ -1093,10 +1093,8 @@ export const StudentTaskPage: React.FC = () => {
           codeHash: String(submissionMeta.codeHash)
         };
       }
-      if (taskId) {
-        localStorage.removeItem(`task_draft_${taskId}`);
-        localStorage.removeItem(`task_draft_files_${taskId}`);
-      }
+      localStorage.removeItem(`task_draft_${taskId}`);
+      localStorage.removeItem(`task_draft_files_${taskId}`);
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(hideControlResults ? [] : finalTestResults);
       setHints(hideControlResults ? [] : Array.isArray(result.hints) ? result.hints : []);
@@ -1216,10 +1214,8 @@ export const StudentTaskPage: React.FC = () => {
           codeHash: String(submissionMeta.codeHash)
         };
       }
-      if (taskId) {
-        localStorage.removeItem(`task_draft_${taskId}`);
-        localStorage.removeItem(`task_draft_files_${taskId}`);
-      }
+      localStorage.removeItem(`task_draft_${taskId}`);
+      localStorage.removeItem(`task_draft_files_${taskId}`);
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(hideControlResults ? [] : finalTestResults);
       setHints(hideControlResults ? [] : Array.isArray(result.hints) ? result.hints : []);

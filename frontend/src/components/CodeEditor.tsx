@@ -5,11 +5,6 @@ import type * as Monaco from "monaco-editor";
 import { getCurrentTheme, type AppTheme } from "../theme";
 import { connectStudyCodLsp } from "../lib/lspClient";
 
-// Monaco's base CSS is required to correctly position/hide internal elements
-// like the hidden input <textarea>. Without it, the editor can render with a
-// big, resizable textarea overlay (browser default styles).
-import "monaco-editor/min/vs/editor/editor.main.css";
-
 let javaStdlibCompletionRegistered = false;
 let studycodMonacoThemesRegistered = false;
 let kotlinLanguageRegistered = false;
@@ -530,16 +525,49 @@ const registerKotlinHighlighting = (monaco: MonacoApi) => {
     // ignore
   }
 };
-if (typeof window !== "undefined") {
-  loader.config({
-    paths: {
-      vs: "/monaco-editor/min/vs"
-    }
-  });
-}
-const Editor = React.lazy(() => import("@monaco-editor/react").then(mod => ({
-  default: mod.default
-})));
+let monacoLoadPromise: Promise<MonacoApi> | null = null;
+
+/**
+ * Keep Monaco out of the application entry chunk. The editor API, the small
+ * set of languages used by StudyCod, and the worker are fetched together only
+ * when an editor is actually rendered.
+ */
+export const loadStudyCodMonaco = (): Promise<MonacoApi> => {
+  if (!monacoLoadPromise) {
+    monacoLoadPromise = Promise.all([
+      import("monaco-editor/esm/vs/editor/editor.api"),
+      import("monaco-editor/esm/vs/editor/editor.worker?worker"),
+      import("monaco-editor/esm/vs/basic-languages/java/java.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/python/python.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/kotlin/kotlin.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/html/html.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/css/css.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/xml/xml.contribution"),
+      import("monaco-editor/esm/vs/basic-languages/sql/sql.contribution"),
+      import("monaco-editor/min/vs/editor/editor.main.css"),
+    ]).then(([monaco, editorWorker]) => {
+      const worker = editorWorker.default;
+      (globalThis as typeof globalThis & {
+        MonacoEnvironment?: { getWorker: () => Worker };
+      }).MonacoEnvironment = {
+        getWorker: () => new worker(),
+      };
+      loader.config({ monaco });
+      return monaco as MonacoApi;
+    });
+  }
+  return monacoLoadPromise;
+};
+
+const Editor = React.lazy(async () => {
+  await loadStudyCodMonaco();
+  const mod = await import("@monaco-editor/react");
+  return { default: mod.default };
+});
 interface Props {
   language: "JAVA" | "PYTHON" | "CPP" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin" | "js" | "go" | "rust" | "pascal" | "d" | "dart" | "haskell" | "lisp" | "lua" | "perl" | "php" | "ruby" | "swift" | "html" | "css" | "javascript";
   value: string;
@@ -755,8 +783,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
     if (typeof window === "undefined") return;
     let cancelled = false;
 
-    loader
-      .init()
+    loadStudyCodMonaco()
+      .then(() => loader.init())
       .then(monaco => {
         if (cancelled) return;
         setLoaderReady(true);
@@ -904,7 +932,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
       <div ref={containerRef} className="relative min-h-0 flex-1">
       {import.meta.env.DEV && mountTimedOut && !didMount && <div className="absolute inset-0 z-10 flex items-start justify-end p-2 pointer-events-none">
           <div className="pointer-events-none rounded border border-accent-warn/50 bg-bg-surface/80 px-3 py-2 text-xs font-mono text-text-secondary">
-            Monaco did not mount (5s). Check console/network for <span className="text-text-primary">/monaco-editor/min/vs/</span>
+            Monaco did not mount (5s). Check the browser console and bundled editor assets.
           </div>
         </div>}
       {import.meta.env.DEV && <div className="absolute z-10 left-2 bottom-2 pointer-events-none">

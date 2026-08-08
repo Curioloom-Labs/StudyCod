@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Code2, MessageSquareText, Save } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Code2, Save } from "lucide-react";
 import { getStudentCode, updateGrade, type UpdateGradeRequest } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 

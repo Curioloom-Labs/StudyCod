@@ -12,39 +12,6 @@ export interface RetryConfig {
   shouldRetry?: (error: AxiosError, retryCount: number) => boolean;
 }
 
-const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxRetries: 3,
-  initialDelayMs: 100,
-  maxDelayMs: 5000,
-  backoffFactor: 2,
-  shouldRetry: (error, retryCount) => {
-    if (retryCount <= 0) return false;
-
-    // Don't retry client errors (4xx). Rate limits are intentional back-pressure;
-    // retrying them here amplifies request bursts during UI toggles.
-    if (error.response?.status && error.response.status >= 400 && error.response.status < 500) {
-      return false;
-    }
-
-    // Retry server errors (5xx)
-    if (error.response?.status && error.response.status >= 500) {
-      return true;
-    }
-
-    // Retry network errors (timeout, connection refused, etc.)
-    if (error.code === "ECONNABORTED" || error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
-      return true;
-    }
-
-    // Retry on network timeout
-    if (error.message === "Network Error" || error.message?.includes("timeout")) {
-      return true;
-    }
-
-    return false;
-  }
-};
-
 /**
  * Get retry delay with exponential backoff and jitter
  */

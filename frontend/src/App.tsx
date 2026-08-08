@@ -101,7 +101,6 @@ const CollabDemoPage = React.lazy(() => import("./pages/system/CollabDemoPage").
 const OnboardingEntry = React.lazy(() => import("./components/onboarding/OnboardingEntry").then(mod => ({ default: mod.OnboardingEntry })));
 const PlacementEntry = React.lazy(() => import("./components/placement/PlacementEntry").then(mod => ({ default: mod.PlacementEntry })));
 const PlaygroundPage = React.lazy(() => import("./pages/system/PlaygroundPage").then(mod => ({ default: mod.PlaygroundPage })));
-const ScoreboardPage = React.lazy(() => import("./pages/contest/ScoreboardPage").then(mod => ({ default: mod.ScoreboardPage })));
 const MyLearningPage = React.lazy(() => import("./pages/edu/StudentPathPages").then(mod => ({ default: mod.LearningProgressWorkspace })));
 const ParentDashboardPage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.ParentWorkspace })));
 const AcceptInvitePage = React.lazy(() => import("./pages/edu/AcceptInvitePage").then(mod => ({ default: mod.AcceptInvitePage })));
@@ -303,10 +302,10 @@ const AppContent: React.FC = React.memo(() => {
     t,
     i18n
   } = useTranslation();
-  const ui = useUIMode();
-  const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const ui = useUIMode();
+  const navigate = useNavigate();
   const [page, setPage] = useState<Page>("home");
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
@@ -698,30 +697,6 @@ const AppContent: React.FC = React.memo(() => {
     setNavOpen(false);
   }, []);
 
-  const handleGoHomeOrResume = useCallback(() => {
-    if (!user) {
-      startTransition(() => setPage("home"));
-      return;
-    }
-    const state = loadResumeState(user.id);
-    if (isResumableSession(user, state)) {
-      const resolved = resolveResumeRoute(user, state);
-      if (resolved.type === "path") {
-        navigate(resolved.path);
-        return;
-      }
-      if (resolved.type === "appPage") {
-        if (resolved.extras?.openTaskId) {
-          sessionStorage.setItem("openTaskId", resolved.extras.openTaskId);
-        }
-        startTransition(() => setPage(resolved.page));
-        return;
-      }
-    }
-
-    // No resumable session: show entry surface.
-    startTransition(() => setPage("home"));
-  }, [user?.id]);
   const handleToggleNav = useCallback(() => {
     setNavOpen(prev => !prev);
   }, []);
@@ -1107,9 +1082,9 @@ const AppContent: React.FC = React.memo(() => {
           </main>
         </WorkspaceViewportProvider>
         <PlatformFooter className="flex-shrink-0" />
-        {user ? <Suspense fallback={null}>
+        <Suspense fallback={null}>
             <PlacementEntry user={user} onUserChange={setUser} />
-          </Suspense> : null}
+          </Suspense>
         <Suspense fallback={null}>
           <OnboardingEntry />
         </Suspense>
@@ -1193,9 +1168,9 @@ const AppContent: React.FC = React.memo(() => {
         {content}
       </Shell>
       </Suspense>
-      {user ? <Suspense fallback={null}>
+      <Suspense fallback={null}>
           <PlacementEntry user={user} onUserChange={setUser} />
-        </Suspense> : null}
+        </Suspense>
       <Suspense fallback={null}>
         <OnboardingEntry />
       </Suspense>
@@ -1523,7 +1498,6 @@ function decodeJwtPayload(token: string | null): JwtUserPayload | null {
 }
 
 const ContestRoutes: React.FC = React.memo(() => {
-  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
@@ -1617,11 +1591,6 @@ const ContestRoutes: React.FC = React.memo(() => {
 ContestRoutes.displayName = "ContestRoutes";
 
 const EduRoutes: React.FC = React.memo(() => {
-  const {
-    t,
-    i18n
-  } = useTranslation();
-  const ui = useUIMode();
   const navigate = useNavigate();
   const location = useLocation();
   const isEduDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
@@ -1630,7 +1599,6 @@ const EduRoutes: React.FC = React.memo(() => {
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
-  const [workspaceViewportEl, setWorkspaceViewportEl] = useState<HTMLElement | null>(null);
   const [controlExamSession, setControlExamSession] = useState(() => getControlExamSession());
   useEffect(() => {
     const unsubscribe = subscribeControlExamSession(() => {
@@ -1778,83 +1746,15 @@ const EduRoutes: React.FC = React.memo(() => {
       return next;
     });
   }, []);
-  const courseLabel = useMemo(() => {
-    if (!user) return "Java";
-    return user.course === "JAVA" ? "Java" : user.course === "PYTHON" ? "Python" : "C++";
-  }, [user?.course]);
-
-  const setEduWorkspaceViewportRef = useCallback((el: HTMLElement | null) => {
-    setWorkspaceViewportEl(el);
-  }, []);
-
   const isControlExamActive = !!controlExamSession;
-
-  const [eduPaletteOpen, setEduPaletteOpen] = useState(false);
-  useEffect(() => {
-    if (ui.mode !== "classic" || !user || isControlExamActive) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
-        e.preventDefault();
-        setEduPaletteOpen(v => !v);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [ui.mode, user?.id, isControlExamActive]);
-
-  const eduPaletteItems = useMemo<PaletteItem[]>(() => {
-    if (!user) return [];
-    const navLabel = t("navigation", { defaultValue: "Navigation" });
-    const list: PaletteItem[] = [];
-    if (user.studentId) {
-      list.push({ id: "lessons", label: t("lessons"), icon: FileText, group: navLabel });
-      list.push({ id: "student", label: t("myJournal"), icon: BookOpen, group: navLabel });
-      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
-      list.push({ id: "appeals", label: i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції", icon: HelpCircle, group: navLabel });
-      list.push({ id: "calendar", label: t("eduNavCalendar", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Calendar" : "Календар" }), icon: BookOpen, group: navLabel });
-      list.push({ id: "tutor", label: t("eduNavTutor", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "AI tutor" : "AI-тьютор" }), icon: BookOpen, group: navLabel });
-    } else {
-      list.push({ id: "teacher", label: t("eduNavSchool", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "School" : "Школа" }), icon: GraduationCap, group: navLabel });
-      list.push({ id: "calendar", label: t("eduNavCalendar", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Calendar" : "Календар" }), icon: BookOpen, group: navLabel });
-      list.push({ id: "org", label: t("eduNavMembers", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Members" : "Учасники" }), icon: Users, group: navLabel });
-      list.push({ id: "courses", label: t("eduNavCourses", { defaultValue: i18n.language?.toLowerCase().startsWith("en") ? "Courses" : "Курси" }), icon: BookOpen, group: navLabel });
-      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
-    }
-    return list;
-  }, [user?.id, user?.studentId, t, i18n.language]);
-
-  const eduPaletteActions = useMemo<PaletteAction[]>(() => [
-    { id: "help", label: t("help"), icon: HelpCircle, run: () => navigate("/docs") },
-    { id: "home", label: t("toHome"), icon: Home, run: () => navigate("/") },
-    { id: "theme", label: theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme"), icon: SunMoon, run: toggleTheme },
-    { id: "interface", label: `${t("interfaceLabel")}: ${t("classicUiName")}`, icon: SwatchBook, run: () => ui.setMode("focus") },
-    { id: "logout", label: t("logout"), icon: LogOut, danger: true, run: () => {
-      localStorage.removeItem("token");
-      navigate("/");
-    } }
-  ], [t, navigate, theme, toggleTheme, ui]);
-
-  const handleEduPaletteSelect = useCallback((id: string) => {
-    if (id === "lessons") navigate("/edu/lessons");
-    else if (id === "student") navigate("/edu/journal");
-    else if (id === "library") navigate("/edu/library");
-    else if (id === "appeals") navigate("/edu/appeals");
-    else if (id === "org") navigate("/edu/organization");
-    else if (id === "courses") navigate("/edu/courses");
-    else if (id === "calendar") navigate("/edu/calendar");
-    else if (id === "tutor") navigate("/edu/tutor");
-    else if (id === "teacher") navigate("/edu");
-  }, [navigate]);
-
   if (loading) {
     return <PageLoader />;
   }
   if (!user) {
     return <Suspense fallback={<PageLoader />}>
-        <AuthPage onAuth={handleAuth} />
-      </Suspense>;
+      <AuthPage onAuth={handleAuth} />
+    </Suspense>;
   }
-  const eduUser = user;
   const eduMain = <main className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="wait">
@@ -1918,147 +1818,6 @@ const EduRoutes: React.FC = React.memo(() => {
       {eduMain}
     </PremiumModuleShell>;
 
-  if (ui.mode === "classic") {
-    return <div className="min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-        {!isControlExamActive && <header className="min-h-16 border-b border-border bg-bg-surface flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
-            <div className="flex items-center gap-4 min-w-0">
-              <div className="flex items-center gap-2">
-                <Logo size={24} className="text-primary" />
-                <span className="text-lg font-mono text-text-primary">StudyCod EDU</span>
-              </div>
-              <div className="hidden sm:block h-6 w-px bg-border" />
-              <div className="hidden sm:block px-3 py-1 border border-border text-sm font-mono text-text-secondary">
-                {courseLabel}
-              </div>
-            </div>
-            <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap">
-              <button onClick={() => setEduPaletteOpen(true)} className="shrink-0 px-3 py-2 text-xs font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2" title={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-label={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-haspopup="dialog">
-                <Search className="w-4 h-4" />
-                <kbd className="hidden md:inline px-1.5 py-0.5 border border-border text-[10px] font-mono text-text-muted">Ctrl K</kbd>
-              </button>
-              <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
-                {i18n.language === 'uk' ? 'EN' : 'UA'}
-              </button>
-              <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-                {theme === "dark" ? "Light" : "Dark"}
-              </button>
-              <button onClick={() => navigate("/docs")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast flex items-center gap-2">
-                <HelpCircle className="w-4 h-4" />
-                {t("help")}
-              </button>
-              <button onClick={() => navigate("/")} className="shrink-0 px-4 py-2 border border-border text-sm font-mono hover:bg-bg-hover transition-fast">
-                {t('toHome')}
-              </button>
-            </div>
-          </header>}
-
-        {!isControlExamActive && <SwitchToMomentumNudge />}
-        <WorkspaceViewportProvider element={workspaceViewportEl}>
-          <div ref={setEduWorkspaceViewportRef} className="flex-1 min-h-0 overflow-y-auto">
-            {eduMain}
-          </div>
-        </WorkspaceViewportProvider>
-        {!isControlExamActive && <PlatformFooter className="flex-shrink-0" />}
-        <OnboardingEntry />
-        {!isControlExamActive && <CommandPalette open={eduPaletteOpen} onClose={() => setEduPaletteOpen(false)} items={eduPaletteItems} onSelect={handleEduPaletteSelect} extraActions={eduPaletteActions} />}
-      </div>;
-  }
-
-  const momentumCurrent: MomentumNavTarget = /^\/edu\/organization/.test(location.pathname)
-    ? "org"
-    : /^\/edu\/courses/.test(location.pathname)
-      ? "courses"
-      : /^\/edu\/calendar/.test(location.pathname)
-      ? "calendar"
-      : /^\/edu\/tutor/.test(location.pathname)
-      ? "tutor"
-      : /^\/edu\/library/.test(location.pathname)
-        ? "library"
-        : /^\/edu\/journal/.test(location.pathname)
-          ? "student"
-          : /^\/edu\/(lessons|tasks|grades)\b/.test(location.pathname)
-            ? "lessons"
-            : eduUser.studentId
-              ? "lessons"
-              : "teacher";
-  const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
-  return <>
-      <Suspense fallback={<PageLoader />}>
-      <Shell user={eduUser} current={momentumCurrent} navigationHidden={isControlExamActive} onNavigate={target => {
-      if (isControlExamActive && controlExamSession) {
-        navigate(`/edu/lessons/${controlExamSession.controlWorkId}?type=CONTROL`, {
-          replace: true
-        });
-        return;
-      }
-      if (target === "library") {
-        navigate("/edu/library");
-        return;
-      }
-      if (target === "support") {
-        navigate("/support");
-        return;
-      }
-      if (target === "blog") {
-        navigate("/blog");
-        return;
-      }
-      if (target === "contests") {
-        navigate("/contests");
-        return;
-      }
-      if (target === "profile") {
-        // Profile is a shared page rendered by the main app shell; use the URL
-        // intent param so the shell resolves it synchronously (no redirect race).
-        navigate("/?app=profile");
-        return;
-      }
-      if (target === "teacher") {
-        navigate("/edu");
-        return;
-      }
-      if (target === "org") {
-        navigate("/edu/organization");
-        return;
-      }
-      if (target === "courses") {
-        navigate("/edu/courses");
-        return;
-      }
-      if (target === "calendar") {
-        navigate("/edu/calendar");
-        return;
-      }
-      if (target === "tutor") {
-        navigate("/edu/tutor");
-        return;
-      }
-      if (target === "student") {
-        navigate("/edu/journal");
-        return;
-      }
-      if (target === "lessons") {
-        navigate("/edu/lessons");
-        return;
-      }
-      if (target === "continue") {
-        navigate("/edu/lessons");
-        return;
-      }
-    }} onLogout={() => {
-      localStorage.removeItem("token");
-      navigate("/");
-    }} topRight={<div className="flex items-center gap-2"><NotificationsBell /><button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-          <SunMoon className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
-          </button></div>}>
-        {eduMain}
-      </Shell>
-      </Suspense>
-      <Suspense fallback={null}>
-        <OnboardingEntry />
-      </Suspense>
-    </>;
 });
 EduRoutes.displayName = "EduRoutes";
 const VerifyEmailWrapper: React.FC = React.memo(() => {

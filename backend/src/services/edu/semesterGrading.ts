@@ -2,7 +2,6 @@ import { AppDataSource } from "../../data-source";
 import { Class } from "../../entities/Class";
 import { TopicNew } from "../../entities/TopicNew";
 import { SummaryGrade } from "../../entities/SummaryGrade";
-import { Student } from "../../entities/Student";
 import { AssessmentType } from "../../types/AssessmentType";
 import { logger } from "../../utils/logger";
 

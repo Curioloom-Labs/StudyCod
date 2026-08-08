@@ -1,5 +1,5 @@
 import React from "react";
-import { Code2, User as UserIcon, List, FileText, Home } from "lucide-react";
+import { User as UserIcon, List, FileText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Logo } from "../Logo";
 import type { User } from "../../types";

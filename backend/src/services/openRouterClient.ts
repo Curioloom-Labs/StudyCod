@@ -237,7 +237,6 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
               await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
-            lastError = error;
             if (isRateLimit) {
               throw new Error(`AI_GENERATION_FAILED: Rate limit exceeded for model ${model}. ${errorText}`);
             }

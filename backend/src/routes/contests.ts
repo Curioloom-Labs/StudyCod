@@ -156,13 +156,6 @@ function getAllowedJudgeLanguages(_task: LibraryTask): JudgeLanguage[] {
   return Array.from(ALL_JUDGE_LANGS) as JudgeLanguage[];
 }
 
-function isNowWithinContest(contest: Contest): boolean {
-  const now = Date.now();
-  const startOk = !contest.startsAt || now >= new Date(contest.startsAt).getTime();
-  const endOk = !contest.endsAt || now <= new Date(contest.endsAt).getTime();
-  return startOk && endOk;
-}
-
 function isContestOnlyUser(req: AuthRequest): boolean {
   return req.userType === "USER" && req.userMode === "CONTEST";
 }

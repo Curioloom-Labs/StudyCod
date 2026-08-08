@@ -173,10 +173,9 @@ const ErrorDisplay: React.FC<{
 };
 class ErrorBoundary extends React.Component<{
   children: React.ReactNode;
-}, {
+  }, {
   hasError: boolean;
   error?: Error;
-  errorInfo?: string | null;
 }> {
   constructor(props: {
     children: React.ReactNode;
@@ -200,9 +199,6 @@ class ErrorBoundary extends React.Component<{
     if (import.meta.env.DEV) {
       console.error("App error:", error, errorInfo);
     }
-    this.setState({
-      errorInfo: errorInfo.componentStack ?? null
-    });
   }
   render() {
     if (this.state.hasError) {

@@ -923,7 +923,6 @@ router.post("/placement/assessment-submit", authMiddleware, async (req: AuthRequ
     const normalizedLang = normalizeLang(course || lang || user.lang);
     const pack = buildPlacementAssessmentPack(normalizedTrack, normalizedLang, user.id);
 
-    const quizById = new Map(pack.quizQuestions.map((q) => [q.id, q]));
     const answerById = new Map<string, number>();
     for (const item of Array.isArray(quizAnswers) ? quizAnswers : []) {
       if (!item || typeof item.questionId !== "string") continue;

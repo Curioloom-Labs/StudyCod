@@ -1,4 +1,4 @@
-import { Task, TaskValidationError, JudgeMode } from "../types/Task";
+import { Task, TaskValidationError } from "../types/Task";
 export function validateTaskConfig(task: Task): void {
   if (!task.id || typeof task.id !== "string") {
     throw new TaskValidationError("Task id is required and must be a string", "id");

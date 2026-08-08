@@ -260,7 +260,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
 
     const hasHeader = headerKeys.some(k => k.includes("email") || k.includes("e-mail"))
       || headerKeys.some(k => k.includes("прізвище") || k.includes("призвище"))
-      || headerKeys.some(k => k.includes("імя") || k.includes("імя") || k.includes("имя"))
+      || headerKeys.some(k => k.includes("імя") || k.includes("имя"))
       || headerKeys.some(k => k.includes("firstname") || k.includes("lastname"));
 
     const colIndex = (variants: string[]) => {

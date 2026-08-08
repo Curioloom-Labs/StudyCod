@@ -6,10 +6,10 @@ import { Button } from "../../components/ui/Button";
 import { resetPassword } from "../../lib/api/auth";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { Lock, CheckCircle2, AlertCircle } from "lucide-react";
-import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { staggerContainer, fadeUpItem } from "../../lib/motion";
 
 export const ResetPasswordPage: React.FC = () => {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const prefersReducedMotion = useReducedMotion();
   const [searchParams] = useSearchParams();

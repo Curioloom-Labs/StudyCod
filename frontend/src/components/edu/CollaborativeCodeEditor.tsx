@@ -3,7 +3,7 @@ import type * as Y from "yjs";
 import { MonacoBinding } from "y-monaco";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Monaco from "monaco-editor";
-import { ensureStudyCodMonacoThemes } from "../CodeEditor";
+import { ensureStudyCodMonacoThemes, loadStudyCodMonaco } from "../CodeEditor";
 
 /**
  * Collaborative code editor (Live-coding P1). Monaco bound to a Yjs text via
@@ -11,7 +11,11 @@ import { ensureStudyCodMonacoThemes } from "../CodeEditor";
  * prop). Transport-agnostic: the parent wires how the Y.Doc syncs (in-memory
  * for the demo; LiveKit data channel in P2).
  */
-const Editor = React.lazy(() => import("@monaco-editor/react").then(mod => ({ default: mod.default })));
+const Editor = React.lazy(async () => {
+  await loadStudyCodMonaco();
+  const mod = await import("@monaco-editor/react");
+  return { default: mod.default };
+});
 
 interface Props {
   yText: Y.Text;

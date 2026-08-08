@@ -11,10 +11,7 @@ export const GlobalTimer: React.FC<GlobalTimerProps> = ({
   onExpired,
   className = ""
 }) => {
-  const {
-    t,
-    i18n
-  } = useTranslation();
+  const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const [displaySeconds, setDisplaySeconds] = useState(remainingSeconds);
   useEffect(() => {

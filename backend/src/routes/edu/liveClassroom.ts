@@ -27,7 +27,6 @@ import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 
 const router = Router();
 
-const classRepo = () => AppDataSource.getRepository(Class);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const lessonRepo = () => AppDataSource.getRepository(EduLesson);
 const liveRepo = () => AppDataSource.getRepository(EduLiveSession);

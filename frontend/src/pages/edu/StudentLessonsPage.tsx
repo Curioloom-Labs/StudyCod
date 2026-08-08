@@ -39,7 +39,6 @@ const CountUp: React.FC<{ value: number }> = ({ value }) => {
 export const StudentLessonsPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const reduce = useReducedMotion();
   const {
     t,
     i18n

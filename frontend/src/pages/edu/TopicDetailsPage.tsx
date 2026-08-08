@@ -120,7 +120,6 @@ export const TopicDetailsPage: React.FC = () => {
   const [liveTaskId, setLiveTaskId] = useState<number | null>(null);
   const [showTaskTheory, setShowTaskTheory] = useState(false);
   const [taskTheory, setTaskTheory] = useState("");
-  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [showEditTask, setShowEditTask] = useState(false);
   const [editingTask, setEditingTask] = useState<TopicTask | null>(null);
   const [showAssignTask, setShowAssignTask] = useState(false);
@@ -348,7 +347,7 @@ export const TopicDetailsPage: React.FC = () => {
   const handleCreateControlWork = async () => {
     if (!topicId) return;
     try {
-      const res = await api.post(`/topics/${topicId}/control-works`, {
+      await api.post(`/topics/${topicId}/control-works`, {
         title: newControlWorkTitle.trim() || null,
         timeLimitMinutes: null,
         hasTheory: false,

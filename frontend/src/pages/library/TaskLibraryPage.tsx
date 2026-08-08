@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ChevronDown, ChevronUp, Download, Edit2, GripVertical, Library, Play, Plus, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Download, Edit2, GripVertical, Library, Play, Plus, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
@@ -10,7 +10,6 @@ import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import { Badge } from "../../components/ui/Badge";
 import { Skeleton } from "../../components/ui/Skeleton";
-import { useUIMode } from "../../components/interface/UIModeProvider";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { getMe } from "../../lib/api/profile";
@@ -306,13 +305,11 @@ const CountUp: React.FC<{ value: number; decimals?: number; className?: string }
 export const TaskLibraryPage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
-  const isAurora = useUIMode().mode === "aurora";
   const navigate = useNavigate();
   const location = useLocation();
   const isDesignPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   const solvePathPrefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve" : "/library/solve";
-  const libraryBasePath = location.pathname.startsWith("/edu/") ? "/edu/library" : "/library";
 
   const safeExitPath = useMemo(() => {
     const fallback = location.pathname.startsWith("/edu/") ? "/edu" : "/";
@@ -368,7 +365,7 @@ export const TaskLibraryPage: React.FC = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsTab, setDetailsTab] = useState<"description" | "theory" | "tests">("description");
 
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [, setFiltersOpen] = useState(false);
 
   const hydratedFromUrlRef = useRef(false);
   const listSectionRef = useRef<HTMLDivElement | null>(null);

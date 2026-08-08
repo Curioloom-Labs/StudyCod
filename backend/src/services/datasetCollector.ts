@@ -3,7 +3,6 @@ import { Task } from '../entities/Task';
 import { Grade } from '../entities/Grade';
 import { logger } from '../utils/logger';
 const taskRepo = () => AppDataSource.getRepository(Task);
-const gradeRepo = () => AppDataSource.getRepository(Grade);
 export interface TrainingExample {
   messages: Array<{
     role: 'system' | 'user' | 'assistant';

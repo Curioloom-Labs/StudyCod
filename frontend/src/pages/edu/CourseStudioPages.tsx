@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BookMarked, ChevronRight, FileText, FolderPlus, GraduationCap, Layers3, LoaderCircle, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronRight, FileText, FolderPlus, GraduationCap, Layers3, LoaderCircle, Plus, Sparkles } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 

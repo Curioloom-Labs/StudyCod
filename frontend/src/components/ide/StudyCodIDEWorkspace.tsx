@@ -6,25 +6,20 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
   Code2,
-  Columns3,
   FileCode2,
   FileText,
   FolderCode,
   Gauge,
   History,
-  Keyboard,
   Maximize2,
   Minimize2,
   Play,
   RotateCcw,
   Save,
-  Settings2,
   Sparkles,
   SquareTerminal,
   TestTube2,
-  XCircle,
 } from "lucide-react";
 import { CodeEditor } from "../CodeEditor";
 import { MultiFileEditor } from "../MultiFileEditor";
@@ -329,11 +324,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
     setBottomTab("tests");
     props.onCheck();
   };
-  const completeNotice = (message: string) => {
-    setNotice(message);
-    window.setTimeout(() => setNotice(null), 1800);
-  };
-
   const renderBottom = () => {
     if (bottomTab === "debugger") {
       const step =

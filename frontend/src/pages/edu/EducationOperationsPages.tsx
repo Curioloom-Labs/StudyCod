@@ -1,8 +1,8 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Check, CheckCircle2, ClipboardCheck, Clock3, FileQuestion, GraduationCap, HeartHandshake, MessageSquare, Plus, Save, ShieldCheck, UsersRound } from "lucide-react";
+import { HeartHandshake, Plus, Save, UsersRound } from "lucide-react";
 import { api } from "../../lib/api/client";
-import { cancelMyGradeAppeal, createGradeAppeal, getAttendance, getClassGradeAppeal, getClassGradeAppeals, getMyGradeAppeal, getMyGradeAppeals, getStudentGrades, getStudents, postClassGradeAppealMessage, postMyGradeAppealMessage, resolveClassGradeAppeal, setAttendance, updateClassGradeAppealStatus, type AttendanceStatus, type GradeAppealItem, type GradeAppealMessageItem, type GradeAppealReasonCode, type Student } from "../../lib/api/edu";
+import { cancelMyGradeAppeal, createGradeAppeal, getAttendance, getClassGradeAppeal, getClassGradeAppeals, getMyGradeAppeal, getMyGradeAppeals, getStudents, postClassGradeAppealMessage, postMyGradeAppealMessage, resolveClassGradeAppeal, setAttendance, updateClassGradeAppealStatus, type AttendanceStatus, type GradeAppealItem, type GradeAppealMessageItem, type GradeAppealReasonCode, type Student } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
 

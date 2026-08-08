@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock3, LoaderCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock3 } from "lucide-react";
 import { getAgenda, type AgendaItemDto } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 

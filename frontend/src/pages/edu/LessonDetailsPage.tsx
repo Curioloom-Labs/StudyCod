@@ -8,7 +8,7 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { getLesson, createTask, generateTestData, getTaskGrades, generateQuiz, saveQuiz, submitQuizAnswers, getTestData, getTestDataItem, updateTestData, deleteTestData, deleteGeneratedTestData, addTestData, updateTaskDetails, getTask, startLessonAttempt, getLessonAttemptStatus, getControlWorkStatus, type Lesson, type Task, type CreateTaskRequest, type TestData, type TestDataItem, type TaskWithGrade, type TaskGrade } from "../../lib/api/edu";
 import { GlobalTimer } from "../../components/GlobalTimer";
-import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock, BookOpen, ShieldCheck, CheckCircle2, ArrowRight, Lock } from "lucide-react";
+import { Plus, ArrowLeft, FileText, Users, Sparkles, Play, Trash2, Edit2, X, Send, Settings, Save, Clock, BookOpen, ShieldCheck, CheckCircle2, Lock } from "lucide-react";
 import { PageSkeleton, Skeleton } from "../../components/ui/Skeleton";
 import { getMe } from "../../lib/api/profile";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -152,11 +152,11 @@ export const LessonDetailsPage: React.FC = () => {
   const [taskDeadline, setTaskDeadline] = useState<string>("");
   const [taskIsClosed, setTaskIsClosed] = useState<boolean>(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
-  const [timeExpired, setTimeExpired] = useState(false);
+  const [, setTimeExpired] = useState(false);
   const [studentQuizAnswers, setStudentQuizAnswers] = useState<Record<number, QuizOptionKey>>({});
   const [studentQuizSubmitted, setStudentQuizSubmitted] = useState(false);
-  const [studentQuizGrade, setStudentQuizGrade] = useState<number | null>(null);
-  const [studentQuizReview, setStudentQuizReview] = useState<StudentQuizReview | null>(null);
+  const [, setStudentQuizGrade] = useState<number | null>(null);
+  const [, setStudentQuizReview] = useState<StudentQuizReview | null>(null);
   const [hasAutoRedirected, setHasAutoRedirected] = useState(false);
   const [controlWorkStatus, setControlWorkStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | null>(null);
   const [showControlStartWarning, setShowControlStartWarning] = useState(false);
@@ -440,7 +440,7 @@ export const LessonDetailsPage: React.FC = () => {
       if (status === 404 || status === 403) {
         showToast({ type: "error", message: getErrorMessage(error, tr("Урок не знайдено. Повертаємо до списку уроків.", "Lesson not found. Redirecting to lessons.")) });
 
-        const parsedLessonId = lessonId ? Number.parseInt(lessonId, 10) : null;
+        const parsedLessonId = Number.parseInt(lessonId, 10);
         if (userContext?.id && parsedLessonId !== null) {
           const state = loadResumeState(userContext.id);
           if (state?.kind === "edu_lesson" && state.lessonId === parsedLessonId) {
@@ -751,7 +751,6 @@ export const LessonDetailsPage: React.FC = () => {
   }
 
   const isStudentControlWork = lesson.type === "CONTROL" && !!user?.studentId;
-  const isStudentTimedControlWork = isStudentControlWork && lesson.timeLimitMinutes !== undefined && lesson.timeLimitMinutes !== null;
   const controlWorkAttemptStarted = !isStudentControlWork || controlWorkStatus === "IN_PROGRESS" || controlWorkStatus === "COMPLETED";
   const reportOnlyByDeadline = lesson.reportOnly === true && lesson.reportReason === "DEADLINE_EXPIRED";
   const reportOnlyByCompletion = lesson.reportOnly === true && lesson.reportReason === "COMPLETED" && controlWorkStatus !== "NOT_STARTED";
@@ -965,7 +964,7 @@ export const LessonDetailsPage: React.FC = () => {
                 return;
               }
               try {
-                const result = await submitQuizAnswers(parseInt(lessonId!, 10), studentQuizAnswers, true);
+                await submitQuizAnswers(parseInt(lessonId!, 10), studentQuizAnswers, true);
                 setStudentQuizSubmitted(true);
                 setStudentQuizGrade(null);
                 setStudentQuizReview(null);

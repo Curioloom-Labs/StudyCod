@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,14 +9,12 @@ import {
   Code2,
   Crown,
   FileCode2,
-  Flag,
   LoaderCircle,
   LockKeyhole,
   Play,
   Plus,
   RotateCw,
   Send,
-  Sparkles,
   Trophy,
   UsersRound,
 } from "lucide-react";

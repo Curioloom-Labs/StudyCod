@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, BookOpen, CheckCircle2, ClipboardCheck, Plus, Users } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Plus, Users } from "lucide-react";
 import { createClass, getClasses, getPendingReviews, type Class, type PendingReview } from "../../lib/api/edu";
 
 export const TeacherWorkspacePage: React.FC = () => {

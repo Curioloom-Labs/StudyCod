@@ -28,7 +28,6 @@ const router = Router();
 
 const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
-const classRepo = () => AppDataSource.getRepository(Class);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
 const appealRepo = () => AppDataSource.getRepository(GradeAppeal);

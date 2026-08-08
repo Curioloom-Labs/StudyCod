@@ -2,8 +2,8 @@ import { CloudflareAIProvider } from './CloudflareAIProvider';
 import { OpenRouterProvider } from './OpenRouterProvider';
 import { LocalLLMProvider } from './LocalLLMProvider';
 import type { LLMProvider } from './LLMProvider';
-import { validateTaskGenerationResponse, tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
-import { AIResponseValidator, AIValidationError } from './AIResponseValidator';
+import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
+import { AIResponseValidator } from './AIResponseValidator';
 import { logger } from '../../utils/logger';
 import { redisKey, runWithRedis } from '../redis/sharedRedis';
 import { BoundedCache } from '../../utils/boundedCache';
@@ -141,11 +141,6 @@ function buildResponseLanguageInstruction(responseLanguage: string | null, isEng
     : `\n\nВАЖЛИВО: Пиши весь пояснювальний текст мовою "${responseLanguage}". Синтаксис коду залишай мовою програмування.`;
 }
 
-function isCloudflareError(error: any): boolean {
-  if (!error) return false;
-  const message = error.message || String(error);
-  return message.includes('AI_GENERATION_FAILED') || message.includes('CloudflareAI') || message.includes('Cloudflare Worker') || message.includes('timeout') || message.includes('CLOUDFLARE_AI_URL not configured') || message.includes('Failed to parse') || message.includes('Empty response');
-}
 function shouldFallbackToOpenRouter(error: any): boolean {
   if (!error) return false;
   if (error.shouldFallback) return true;
@@ -1377,7 +1372,7 @@ REQUIREMENTS:
                   escapeNext = true;
                   continue;
                 }
-                if (char === '"' && !escapeNext) {
+                if (char === '"') {
                   inString = !inString;
                   continue;
                 }

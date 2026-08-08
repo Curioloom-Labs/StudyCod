@@ -213,7 +213,7 @@ class Parser {
     this.eat('FUNCTION');
     this.eat('LPAREN');
     if (funcName.toLowerCase() === 'avg') {
-      const arg = this.parseVariable();
+      this.parseVariable();
       this.eat('RPAREN');
       throw new Error('avg() function must be used as avg(practice)');
     }
@@ -266,7 +266,7 @@ export function evaluateFormula(formula: string | null | undefined, variables: F
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn("Safe formula evaluation failed", {
-      hasFormula: Boolean(formula && formula.trim()),
+      hasFormula: true,
       error: message
     });
     return calculateDefaultGrade(variables);

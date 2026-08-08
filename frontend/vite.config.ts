@@ -72,21 +72,10 @@ export default defineConfig({
           // Syntax highlighting (very large) – also lazy-loaded in MarkdownView.
           if (norm.includes("/node_modules/react-syntax-highlighter/")) return "syntax-highlighter";
 
-          // Monaco is huge even when lazy-loaded. Split its internal ESM layers
-          // so the editor does not become one multi-megabyte production chunk.
+          // Keep Monaco in one async vendor chunk. Splitting its internal ESM
+          // layers creates circular chunks; the editor itself is lazy-loaded.
           if (norm.includes("/node_modules/@monaco-editor/react/")) return "monaco-react";
-          if (norm.includes("/node_modules/monaco-editor/")) {
-            if (norm.includes("/esm/vs/basic-languages/")) return "monaco-languages";
-            if (norm.includes("/esm/vs/language/")) return "monaco-language-services";
-            if (norm.includes("/esm/vs/editor/contrib/")) return "monaco-editor-contrib";
-            if (norm.includes("/esm/vs/editor/browser/")) return "monaco-editor-browser";
-            if (norm.includes("/esm/vs/editor/common/")) return "monaco-editor-common";
-            if (norm.includes("/esm/vs/editor/standalone/")) return "monaco-editor-standalone";
-            if (norm.includes("/esm/vs/editor/")) return "monaco-editor-core";
-            if (norm.includes("/esm/vs/platform/")) return "monaco-platform";
-            if (norm.includes("/esm/vs/base/")) return "monaco-base";
-            return "monaco-editor";
-          }
+          if (norm.includes("/node_modules/monaco-editor/")) return "monaco-editor";
 
           // Charts
           if (norm.includes("/node_modules/recharts/") || norm.includes("/node_modules/d3-")) return "charts";

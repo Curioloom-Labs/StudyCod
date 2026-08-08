@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { dirname, join, normalize, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 type Language = "java" | "cpp" | "c" | "python";
 type JsonObject = Record<string, unknown>;
@@ -70,11 +70,6 @@ function safeRelativePath(value: unknown, language: Language): string {
     throw new Error("Invalid workspace path");
   }
   return normalized;
-}
-
-function uriFor(session: LspSession, value: unknown): string {
-  const filePath = join(session.workspace, safeRelativePath(value, session.language));
-  return pathToFileURL(filePath).toString();
 }
 
 function commandFor(language: Language, session: string): { command: string; args: string[] } {

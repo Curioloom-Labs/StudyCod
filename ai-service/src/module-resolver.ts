@@ -1,8 +1,6 @@
 import Module from 'module';
-import path from 'path';
 import fs from 'fs';
 const originalResolveFilename = (Module as any)._resolveFilename;
-const backendSrc = path.resolve(__dirname, '../../backend/src');
 (Module as any)._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
   if (request.startsWith('../') || request.startsWith('./')) {
     const parentFilename = parent?.filename || parent?.id;

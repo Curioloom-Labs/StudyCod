@@ -30,8 +30,6 @@ export function normalizeJoinCode(raw: unknown): string {
 }
 
 const classRepo = () => AppDataSource.getRepository(Class);
-const studentRepo = () => AppDataSource.getRepository(Student);
-const userRepo = () => AppDataSource.getRepository(User);
 
 /** Set (rotate) or clear a class's join code. Retries on the unlikely collision. */
 export async function setJoinCode(classId: number, enabled: boolean): Promise<string | null> {

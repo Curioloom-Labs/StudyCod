@@ -5,8 +5,6 @@ import { motion, useReducedMotion, animate } from "framer-motion";
 import { easeOutQuint } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { useUIMode } from "../../components/interface/UIModeProvider";
-import { Card } from "../../components/ui/Card";
-import { Modal } from "../../components/ui/Modal";
 import { getStudentCode, updateGrade, type UpdateGradeRequest } from "../../lib/api/edu";
 import { ArrowLeft, Save, Code2 } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
@@ -75,7 +73,7 @@ export const GradeDetailsPage: React.FC = () => {
   const [code, setCode] = useState("");
   const [student, setStudent] = useState<GradeStudent | null>(null);
   const [task, setTask] = useState<GradeTask | null>(null);
-  const [grade, setGrade] = useState<GradeInfo | null>(null);
+  const [, setGrade] = useState<GradeInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState<number>(0);
   const [feedback, setFeedback] = useState("");

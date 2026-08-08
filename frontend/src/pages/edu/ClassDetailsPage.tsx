@@ -43,7 +43,6 @@ import { Users, BookOpen, Plus, Download, Upload, ArrowLeft, Settings, MessageSq
 import { api } from "../../lib/api/client";
 import { SectionHeading } from "../../components/ui/SectionHeading";
 import { PageSkeleton } from "../../components/ui/Skeleton";
-import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";

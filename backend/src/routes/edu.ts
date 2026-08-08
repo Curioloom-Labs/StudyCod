@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -12,34 +11,17 @@ import { Class } from "../entities/Class";
 import { Student } from "../entities/Student";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { requireClassCapability, type ClassAccessRequest } from "../middleware/orgContext";
-import { authorizeClassAction } from "../services/edu/classAccess";
-import { generateUsername, generatePassword, hashPassword } from "../services/studentCredentialsService";
 import { emailService } from "../services/emailService";
 import { EduLesson, LessonType } from "../entities/EduLesson";
 import { EduTask } from "../entities/EduTask";
-import { TestData } from "../entities/TestData";
 import { EduGrade } from "../entities/EduGrade";
 import { SummaryGrade } from "../entities/SummaryGrade";
 import { ControlWork } from "../entities/ControlWork";
 import { TopicNew } from "../entities/TopicNew";
 import { TopicTask } from "../entities/TopicTask";
-import { LessonAttempt } from "../entities/LessonAttempt";
-import { TaskTheory } from "../entities/TaskTheory";
-import { EntityManager } from "typeorm";
-import { executeCodeWithInput, compareOutput, filterStderr } from "../services/codeExecutionService";
-import { generateTestDataWithAI } from "../services/generateTestDataService";
-import { safeAICall } from "../services/ai/safeAICall";
-import { generateAlgorithmicHints } from "../services/ai/failureHints";
-import { judgeWithSemaphore } from "../services/judgeWorker";
-import type { JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
-import { JudgeBusyError } from "../services/judgeWorker/Semaphore";
-import { JWT_SECRET } from "../config";
-import { evaluateFormula, FormulaVariables, validateFormula } from "../utils/safeFormulaEvaluator";
-import { AssessmentType, validateAssessmentType } from "../types/AssessmentType";
+import { validateFormula } from "../utils/safeFormulaEvaluator";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
-import { detectAICode } from "../services/ai/aiCodeDetector";
-import { markControlWorkAttemptCompletedIfReadyWithManager, saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
-import { notifyStudentGradeChange } from "../services/edu/gradeNotificationService";
+import { saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
 import { logger } from "../utils/logger";
 import { generateInteractiveLessonWithAI } from "../services/openRouterService";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
@@ -70,17 +52,9 @@ import tutorRouter from "./edu/tutor";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
-const studentRepo = () => AppDataSource.getRepository(Student);
 const lessonRepo = () => AppDataSource.getRepository(EduLesson);
 const taskRepo = () => AppDataSource.getRepository(EduTask);
-const testDataRepo = () => AppDataSource.getRepository(TestData);
-const gradeRepo = () => AppDataSource.getRepository(EduGrade);
-const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
-const lessonAttemptRepo = () => AppDataSource.getRepository(LessonAttempt);
-const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
-const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
-const taskTheoryRepo = () => AppDataSource.getRepository(TaskTheory);
 const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
 const STATEMENT_IMAGES_DIR = path.join(UPLOADS_ROOT, "statement-images");
 const ALLOWED_STATEMENT_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
@@ -132,12 +106,6 @@ function mimeByExt(fileName: string): string {
   if (ext === ".avif") return "image/avif";
   return "application/octet-stream";
 }
-function clampGradeToInt(raw: unknown): number {
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
-
 const THEMATIC_CANONICAL_NAME = "THEMATIC";
 
 function isThematicSummaryName(raw: unknown): boolean {
@@ -160,12 +128,6 @@ function normalizeLang(input?: string | null): UserLang {
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
-function disableCache(res: Response) {
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
-  res.set("Pragma", "no-cache");
-  res.set("Expires", "0");
-}
-
 // Split-out auth endpoints.
 eduRouter.use(studentAuthRouter);
 eduRouter.use(announcementsRouter);

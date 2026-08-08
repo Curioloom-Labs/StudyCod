@@ -222,7 +222,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   const [msg, setMsg] = useState<string | null>(null);
   const [linkingGoogle, setLinkingGoogle] = useState(false);
 
-  const [gradesLoading, setGradesLoading] = useState(false);
+  const [, setGradesLoading] = useState(false);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryTasks, setLibraryTasks] = useState<LibraryTaskListItem[]>([]);
@@ -879,9 +879,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 </div>
               ) : recentHistory.length === 0 ? (
                 <div className="rounded-xl border border-border bg-bg-base/70 p-4 text-sm text-text-secondary">
-                  {libraryLoading
-                    ? tr("Завантаження історії бібліотеки...", "Loading library history...")
-                    : tr("Ще немає зарахованих задач з Бібліотеки. Розвʼяжи перші задачі — тут зʼявиться історія.", "No completed Library tasks yet. Solve your first ones and history will appear here.")}
+                  {tr("Ще немає зарахованих задач з Бібліотеки. Розвʼяжи перші задачі — тут зʼявиться історія.", "No completed Library tasks yet. Solve your first ones and history will appear here.")}
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[620px] overflow-auto pr-1">

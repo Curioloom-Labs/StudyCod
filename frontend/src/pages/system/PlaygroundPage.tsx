@@ -196,7 +196,7 @@ export const PlaygroundPage: React.FC = () => {
 
   const renderValue = (value: unknown, heap: Record<string, any> | undefined, depth = 0): string => {
     if (value === null || value === undefined) return "None";
-    if (typeof value === "object" && value !== null && "ref" in (value as any)) {
+    if (typeof value === "object" && "ref" in (value as any)) {
       const id = String((value as any).ref);
       const obj = heap?.[id];
       if (!obj || depth > 2) return `#${id}`;

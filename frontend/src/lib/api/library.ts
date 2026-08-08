@@ -54,8 +54,6 @@ export type WebTaskRule = {
   pattern?: string;
   flags?: string;
 };
-type CodeOrFiles = string | { code?: string; files?: CodeFile[] };
-
 type JwtPayload = {
   type?: string;
   studentId?: number;
@@ -73,11 +71,6 @@ type StudentAttemptLangState = {
   };
   submissionsCount?: number;
 };
-
-function toPayload(input: CodeOrFiles): { code?: string; files?: CodeFile[] } {
-  if (typeof input === "string") return { code: input };
-  return { code: input.code, files: input.files };
-}
 
 export type LibraryTaskAttemptSummary = {
   solved: boolean;

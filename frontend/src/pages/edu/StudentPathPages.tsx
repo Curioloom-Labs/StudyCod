@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, BookOpen, CheckCircle2, CircleDot, ClipboardList, Compass, FileDown, KeyRound, Link2, Lock, Megaphone, Sparkles, Target } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, CircleDot, ClipboardList, Compass, FileDown, KeyRound, Lock, Megaphone, Sparkles, Target } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { getMyAnnouncements, getMyStudentInfo, getStudentLessons, type Lesson } from "../../lib/api/edu";
 import { downloadProgressReport, getConceptsDue, getDailyChallenge, getMySkillTree, type DailyChallenge, type SkillTree } from "../../lib/api/learning";

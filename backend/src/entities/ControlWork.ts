@@ -1,6 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { TopicNew } from "./TopicNew";
-import { TopicTask } from "./TopicTask";
 import { LessonAttempt } from "./LessonAttempt";
 import { SummaryGrade } from "./SummaryGrade";
 @Entity("control_works")

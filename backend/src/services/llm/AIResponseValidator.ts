@@ -699,7 +699,7 @@ export class AIResponseValidator {
     try {
       const validated = TaskTemplateSchema.parse(data);
       const template = validated.template.trim().toLowerCase();
-      const forbiddenPatterns = [/for\s*\([^)]*\)\s*\{[^}]*[^\/\/][^\/\/]/i, /while\s*\([^)]*\)\s*\{[^}]*[^\/\/][^\/\/]/i, /if\s*\([^)]*\)\s*\{[^}]*[^\/\/][^\/\/]/i, /return\s+[^;]+;/i, /system\.out\.print/i, /print\s*\(/i, /console\.log/i];
+      const forbiddenPatterns = [/for\s*\([^)]*\)\s*\{[^}]*[^/][^/]/i, /while\s*\([^)]*\)\s*\{[^}]*[^/][^/]/i, /if\s*\([^)]*\)\s*\{[^}]*[^/][^/]/i, /return\s+[^;]+;/i, /system\.out\.print/i, /print\s*\(/i, /console\.log/i];
       const hasImplementation = forbiddenPatterns.some(pattern => pattern.test(template));
       const hasTODO = /todo|#\s*todo|\/\/\s*todo/i.test(template);
       if (hasImplementation && !hasTODO) {
