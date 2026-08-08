@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles } from "lucide-react";
 import { Skeleton } from "../../components/ui/Skeleton";
@@ -563,7 +562,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 </>
               )}
             </div>
-            {!isStudent && !isEducational ? (
+            {/*
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Link
                   to={`/u/${encodeURIComponent(user.username)}`}
@@ -584,7 +583,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                   {tr("Сертифікати", "Certificates")}
                 </Link>
               </div>
-            ) : null}
+            */}
           </motion.div>
         </motion.div>
 
@@ -674,7 +673,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-6 md:p-7 border border-border/70 bg-bg-surface/80 space-y-7">
-              {!isStudent && !isEducational ? (
+              {/*
                 <div className="space-y-3">
                   <h3 className="text-sm font-mono text-text-primary">{t("programmingLanguage")}</h3>
                   <div className="flex gap-2">
@@ -704,7 +703,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                     </button>
                   </div>
                 </div>
-              ) : null}
+              */}
 
               <div className="space-y-3">
                 <h3 className="text-sm font-mono text-text-primary">{t("profileAvatar")}</h3>
@@ -718,7 +717,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 </div>
               </div>
 
-              {!isStudent && !isEducational ? (
+              {/*
                 <div className="space-y-3">
                   <h3 className="text-sm font-mono text-text-primary">{tr("Приватність публічного профілю", "Public profile privacy")}</h3>
                   <div className="border border-border bg-bg-code p-4 rounded-md space-y-3">
@@ -766,7 +765,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                     </label>
                   </div>
                 </div>
-              ) : null}
+              */}
 
               {emailPrefEmail ? (
                 <div className="space-y-3">

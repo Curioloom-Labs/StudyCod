@@ -1,21 +1,199 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Code2, Save } from "lucide-react";
-import { getStudentCode, updateGrade, type UpdateGradeRequest } from "../../lib/api/edu";
+import {
+  getStudentCode,
+  updateGrade,
+  type UpdateGradeRequest,
+} from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const root = "mx-auto max-w-[1180px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10";
-const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
+const preview = () =>
+  import.meta.env.DEV &&
+  new URLSearchParams(window.location.search).get("preview") === "true";
 type GradePayload = Awaited<ReturnType<typeof getStudentCode>>;
-const demo: GradePayload = { code: "from collections import Counter\n\ndef frequency(words):\n    return Counter(word.lower() for word in words)", student: { id: 11, firstName: "Марія", lastName: "Коваль" }, task: { id: 501, title: "Словник частот" }, grade: { id: 91, total: 86, feedback: "Гарне рішення. Зверни увагу на обробку порожнього списку.", testsPassed: 6, testsTotal: 7, isManuallyGraded: true } };
+const demo: GradePayload = {
+  code: "from collections import Counter\n\ndef frequency(words):\n    return Counter(word.lower() for word in words)",
+  student: { id: 11, firstName: "Марія", lastName: "Коваль" },
+  task: { id: 501, title: "Словник частот" },
+  grade: {
+    id: 91,
+    total: 86,
+    feedback: "Гарне рішення. Зверни увагу на обробку порожнього списку.",
+    testsPassed: 6,
+    testsTotal: 7,
+    isManuallyGraded: true,
+  },
+};
 
 export const GradeStudioPage: React.FC = () => {
-  const { gradeId } = useParams<{ gradeId: string }>(); const id = Number(gradeId); const navigate = useNavigate(); const [data, setData] = React.useState<GradePayload | null>(null); const [score, setScore] = React.useState(0); const [feedback, setFeedback] = React.useState(""); const [loading, setLoading] = React.useState(true); const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState<string | null>(null);
-  const load = React.useCallback(async () => { setLoading(true); try { const result = await getStudentCode(id); setData(result); setScore(result.grade.total || 0); setFeedback(result.grade.feedback || ""); setError(null); } catch (caught) { if (preview()) { setData(demo); setScore(demo.grade.total); setFeedback(demo.grade.feedback || ""); } else setError(getErrorMessageFromUnknown(caught, "Не вдалося відкрити оцінку.")); } finally { setLoading(false); } }, [id]);
-  React.useEffect(() => { void load(); }, [load]);
-  const save = async () => { setBusy(true); try { if (!preview()) await updateGrade(id, { total: score, feedback: feedback.trim() || undefined } as UpdateGradeRequest); await load(); } catch (caught) { setError(getErrorMessageFromUnknown(caught, "Не вдалося зберегти оцінку.")); } finally { setBusy(false); } };
-  if (loading) return <div className={root}><div className="h-[620px] animate-pulse rounded-[32px] bg-[#e8eeea] dark:bg-white/[.05]" /></div>;
-  if (!data) return <div className={root}>{error || "Оцінку не знайдено."}</div>;
-  const initial = `${data.student.firstName?.[0] || ""}${data.student.lastName?.[0] || ""}`; const tone = score >= 85 ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : score >= 60 ? "bg-[#fff1dc] text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]" : "bg-[#fff0f5] text-[#bd4067] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
-  return <div className={root}><button onClick={() => navigate(-1)} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"><ArrowLeft className="h-4 w-4" />Назад</button><header className="flex flex-col justify-between gap-6 rounded-[32px] bg-[#f1f6f2] p-6 dark:bg-[#152119] sm:p-9 lg:flex-row lg:items-end"><div className="flex items-center gap-4"><span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-extrabold text-[#16834d] shadow-sm dark:bg-white/[.08] dark:text-[#72edb0]">{initial}</span><div><p className="text-xs font-bold uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">Результат учня</p><h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] sm:text-4xl">{data.task.title}</h1><p className="mt-2 text-sm text-[#66776c] dark:text-[#c0cec4]">{data.student.lastName} {data.student.firstName}</p></div></div><div className={`rounded-2xl px-5 py-4 ${tone}`}><p className="text-xs font-bold uppercase tracking-[.12em] opacity-75">Поточний результат</p><p className="mt-1 text-3xl font-extrabold">{score}</p></div></header>{error && <div className="mt-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">{error}</div>}<main className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_.8fr]"><section className="overflow-hidden rounded-[30px] border border-[#19291d]/10 bg-white dark:border-white/[.09] dark:bg-[#111b14]"><div className="flex items-center gap-3 border-b border-[#19291d]/10 px-6 py-5 dark:border-white/[.08]"><Code2 className="h-5 w-5 text-[#e17800]" /><div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">Відправлений код</p><h2 className="mt-1 text-xl font-bold">Розв'язок</h2></div></div><pre className="max-h-[520px] overflow-auto bg-[#fbfdfb] p-6 font-mono text-sm leading-7 text-[#304238] dark:bg-[#0d1710] dark:text-[#d4dfd7]">{data.code || "Учень не надіслав код."}</pre></section><aside className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14]"><p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">Фідбек</p><h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">Підсумок перевірки</h2><label className="mt-6 block text-sm font-bold">Оцінка<input value={score} onChange={(event) => setScore(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} type="number" min="0" max="100" className="mt-2 w-full rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-lg font-bold dark:border-white/10 dark:bg-[#0d1710]" /></label><label className="mt-5 block text-sm font-bold">Коментар учню<textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={7} placeholder="Що вже вийшло і що варто покращити…" className="mt-2 w-full resize-none rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-sm font-normal leading-6 dark:border-white/10 dark:bg-[#0d1710]" /></label><div className="mt-4 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]"><CheckCircle2 className="h-5 w-5 text-[#16834d] dark:text-[#72edb0]" /><p className="mt-2 text-sm leading-6 text-[#65766b] dark:text-[#bdc9c0]">Збереження оновить і оцінку, і коментар у поточній роботі учня.</p></div><button disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"><Save className="h-4 w-4" />{busy ? "Зберігаємо…" : "Зберегти результат"}</button></aside></main></div>;
+  const { gradeId } = useParams<{ gradeId: string }>();
+  const id = Number(gradeId);
+  const navigate = useNavigate();
+  const [data, setData] = React.useState<GradePayload | null>(null);
+  const [score, setScore] = React.useState(0);
+  const [feedback, setFeedback] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getStudentCode(id);
+      setData(result);
+      setScore(result.grade.total || 0);
+      setFeedback(result.grade.feedback || "");
+      setError(null);
+    } catch (caught) {
+      if (preview()) {
+        setData(demo);
+        setScore(demo.grade.total);
+        setFeedback(demo.grade.feedback || "");
+      } else
+        setError(
+          getErrorMessageFromUnknown(caught, "Не вдалося відкрити оцінку."),
+        );
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (!preview())
+        await updateGrade(id, {
+          total: score,
+          feedback: feedback.trim() || undefined,
+        } as UpdateGradeRequest);
+      await load();
+    } catch (caught) {
+      setError(
+        getErrorMessageFromUnknown(caught, "Не вдалося зберегти оцінку."),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (loading)
+    return (
+      <div className={root}>
+        <div className="h-[620px] animate-pulse rounded-[32px] bg-[#e8eeea] dark:bg-white/[.05]" />
+      </div>
+    );
+  if (!data)
+    return <div className={root}>{error || "Оцінку не знайдено."}</div>;
+  const initial = `${data.student.firstName?.[0] || ""}${data.student.lastName?.[0] || ""}`;
+  const tone =
+    score >= 85
+      ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]"
+      : score >= 60
+        ? "bg-[#fff1dc] text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"
+        : "bg-[#fff0f5] text-[#bd4067] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
+  return (
+    <div className={root}>
+      <button
+        onClick={() => navigate(-1)}
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Назад
+      </button>
+      <header className="flex flex-col justify-between gap-6 rounded-[32px] bg-[#f1f6f2] p-6 dark:bg-[#152119] sm:p-9 lg:flex-row lg:items-end">
+        <div className="flex items-center gap-4">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-extrabold text-[#16834d] shadow-sm dark:bg-white/[.08] dark:text-[#72edb0]">
+            {initial}
+          </span>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">
+              Результат учня
+            </p>
+            <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] sm:text-4xl">
+              {data.task.title}
+            </h1>
+            <p className="mt-2 text-sm text-[#66776c] dark:text-[#c0cec4]">
+              {data.student.lastName} {data.student.firstName}
+            </p>
+          </div>
+        </div>
+        <div className={`rounded-2xl px-5 py-4 ${tone}`}>
+          <p className="text-xs font-bold uppercase tracking-[.12em] opacity-75">
+            Поточний результат
+          </p>
+          <p className="mt-1 text-3xl font-extrabold">{score}</p>
+        </div>
+      </header>
+      {error && (
+        <div className="mt-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">
+          {error}
+        </div>
+      )}
+      <main className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
+        <section className="overflow-hidden rounded-[30px] border border-[#19291d]/10 bg-white dark:border-white/[.09] dark:bg-[#111b14]">
+          <div className="flex items-center gap-3 border-b border-[#19291d]/10 px-6 py-5 dark:border-white/[.08]">
+            <Code2 className="h-5 w-5 text-[#e17800]" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">
+                Відправлений код
+              </p>
+              <h2 className="mt-1 text-xl font-bold">Розв'язок</h2>
+            </div>
+          </div>
+          <pre className="max-h-[520px] overflow-auto bg-[#fbfdfb] p-6 font-mono text-sm leading-7 text-[#304238] dark:bg-[#0d1710] dark:text-[#d4dfd7]">
+            {data.code || "Учень не надіслав код."}
+          </pre>
+        </section>
+        <aside className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14]">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
+            Фідбек
+          </p>
+          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
+            Підсумок перевірки
+          </h2>
+          <label className="mt-6 block text-sm font-bold">
+            Оцінка
+            <input
+              value={score}
+              onChange={(event) =>
+                setScore(
+                  Math.max(0, Math.min(100, Number(event.target.value) || 0)),
+                )
+              }
+              type="number"
+              min="0"
+              max="100"
+              className="mt-2 w-full rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-lg font-bold dark:border-white/10 dark:bg-[#0d1710]"
+            />
+          </label>
+          <label className="mt-5 block text-sm font-bold">
+            Коментар учню
+            <textarea
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value)}
+              rows={7}
+              placeholder="Що вже вийшло і що варто покращити…"
+              className="mt-2 w-full resize-none rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-sm font-normal leading-6 dark:border-white/10 dark:bg-[#0d1710]"
+            />
+          </label>
+          <div className="mt-4 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]">
+            <CheckCircle2 className="h-5 w-5 text-[#16834d] dark:text-[#72edb0]" />
+            <p className="mt-2 text-sm leading-6 text-[#65766b] dark:text-[#bdc9c0]">
+              Збереження оновить і оцінку, і коментар у поточній роботі учня.
+            </p>
+          </div>
+          <button
+            disabled={busy}
+            onClick={() => void save()}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
+          >
+            <Save className="h-4 w-4" />
+            {busy ? "Зберігаємо…" : "Зберегти результат"}
+          </button>
+        </aside>
+      </main>
+    </div>
+  );
 };
