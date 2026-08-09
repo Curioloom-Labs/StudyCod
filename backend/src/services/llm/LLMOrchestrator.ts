@@ -326,7 +326,7 @@ export class LLMOrchestrator {
       }, {
         signal: params.signal
       });
-      return AIResponseValidator.validateGenerateTask(raw, params.topicTitle);
+      return AIResponseValidator.validateGenerateTask(raw, params.topicTitle, params.topicIndex);
     };
 
     const tryOpenRouter = async () => {
@@ -730,6 +730,65 @@ ${difficultyPrompt}
 - Do not invent a shop, prices, quantities, or user interaction story.
 ` : "";
 
+    const qualityInstructionsUa = params.topicIndex === 0 ? `
+ЯКІСТЬ ПЕРШОЇ УМОВИ:
+- practicalTask має бути дуже коротким: 1–2 прості речення, без міні-сюжету, зайвих пояснень і списків.
+- Скажи лише, що потрібно написати повну програму та один раз вивести точний текст "Hello, World!".
+- Не додавай інші вимоги, приклади взаємодії, змінні, числа, обчислення або додатковий текст у вивід.
+` : `
+ЯКІСТЬ УМОВИ (важливо для студентів):
+- practicalTask має бути пізнавальним, цікавим і зрозумілим: мінімум 4–6 речень зв'язного тексту (1–2 абзаци), з природним стилем як у класичній умові задачі.
+- У перших 1–2 реченнях ОБОВ'ЯЗКОВО поясни простими словами, що саме треба вивести, щоб студент це зрозумів ще ДО секції "Формат вихідних даних".
+- Додай короткий реалістичний контекст (міні-сюжет), але без зайвої "води".
+- Окремим фінальним реченням у practicalTask додай маркер "Що потрібно вивести: ...", але не можна писати саме "Що потрібно вивести:", а до прикладу: Необхідно вивести n, тощо (без списків).
+- Заборонено робити умову «в 1 рядок» типу “Оголосіть змінну ...”. Додай контекст і чіткий критерій перевірки.
+- КАТЕГОРИЧНО ЗАБОРОНЕНО оформлювати practicalTask як нумерований чекліст типу "1.", "2.", "3.".
+- Якщо треба структуру, роби це через зв'язні речення; не перетворюй умову на список кроків.
+- Якщо завдання про змінні/типи/операції — вимагай ВИВЕСТИ результат (print) так, щоб автотест міг перевірити (детермінований stdout).
+`;
+    const qualityInstructionsEn = params.topicIndex === 0 ? `
+QUALITY OF THE FIRST STATEMENT:
+- practicalTask must be very short: 1–2 simple sentences, with no mini-story, filler, or lists.
+- Say only that the student must write a complete program and print the exact text "Hello, World!" once.
+- Do not add interaction, variables, numbers, calculations, or any extra output requirement.
+` : `
+QUALITY OF STATEMENT (important for students):
+- practicalTask must be informative, interesting, and clear: at least 4–6 sentences of connected text (1–2 paragraphs), with a natural style as in a classic problem statement.
+- In the first 1–2 sentences, EXPLAIN in simple words what exactly needs to be output, so the student understands this BEFORE the "Output format" section.
+- Add a short realistic context (mini-plot), but without unnecessary "filler".
+- As a separate final sentence in practicalTask, add a marker "Output required: ...", but do not write "Output required:" literally, for example: "It is necessary to output n, etc." (no lists).
+- Forbidden to make the statement "1 line" like "Declare a variable ...". Add context and clear check criteria.
+- CATEGORICALLY FORBIDDEN to format practicalTask as a numbered checklist like "1.", "2.", "3.".
+- If structure is needed, do it through connected sentences; do not turn the statement into a list of steps.
+- If the task is about variables/types/operations — require to OUTPUT (print) the result so the autotest can check it (deterministic stdout).
+`;
+    const selfCheckUa = params.topicIndex === 0 ? `
+САМОПЕРЕВІРКА ПЕРЕД ВІДПОВІДДЮ:
+1) Переконайся, що програма виводить рівно "Hello, World!" один раз, без зайвих символів.
+2) Переконайся, що examples[0].input порожній, а examples[0].output збігається з очікуваним виводом символ-у-символ.
+3) Не додавай жодних змінних, введення, чисел, обчислень або додаткових вимог.
+` : `
+САМОПЕРЕВІРКА ПЕРЕД ВІДПОВІДДЮ (обов'язково, інакше завдання погане):
+1) Подумки виконай свою програму на КОЖНОМУ прикладі й переконайся, що examples[i].output збігається з реальним виводом СИМВОЛ-У-СИМВОЛ (включно з пробілами/переносами).
+2) Умова має спиратися ЛИШЕ на поняття з наданої теорії — нічого, чого студент на цьому етапі ще не вчив.
+3) Складність відповідає вказаному рівню: не легше і не важче.
+4) Сюжет, числа й формулювання НЕ банальні (заборонені кліше типу "сума двох чисел", "hello world", "знайдіть більше з двох") і відрізняються від типових прикладів.
+5) practicalTask читається як жива умова (4–6 зв'язних речень), а не сухий технічний рядок.
+`;
+    const selfCheckEn = params.topicIndex === 0 ? `
+SELF-CHECK BEFORE ANSWERING:
+1) Confirm that the program prints exactly "Hello, World!" once, with no extra characters.
+2) Confirm that examples[0].input is empty and examples[0].output matches the expected stdout character-by-character.
+3) Do not add variables, input, numbers, calculations, or extra requirements.
+` : `
+SELF-CHECK BEFORE ANSWERING (mandatory, otherwise the task is bad):
+1) Mentally run your program on EVERY example and confirm examples[i].output matches the real output CHARACTER-BY-CHARACTER (including spaces/newlines).
+2) The statement must rely ONLY on concepts from the provided theory — nothing the student hasn't learned yet at this stage.
+3) Difficulty matches the stated level: not easier, not harder.
+4) The plot, numbers and wording are NOT trivial (clichés like "sum of two numbers", "hello world", "max of two" are forbidden) and differ from typical examples.
+5) practicalTask reads like a living statement (4–6 connected sentences), not a dry technical line.
+`;
+
     const instructionsUa = `${stdinAllowed ? '' : `
 🚫 IO-ПОЛІТИКА ЦІЄЇ ТЕМИ (НАЙВИЩИЙ ПРІОРИТЕТ) 🚫
 ВВІД ЗАБОРОНЕНО. Постав ioType = NO_INPUT_FIXED_OUTPUT (або NO_INPUT_FREE_OUTPUT). Програма НЕ читає stdin: жодних input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". Якщо нижче щось підказує читати ввід — ІГНОРУЙ, ця політика головніша.
@@ -765,15 +824,7 @@ ${introInstructionsUa}
 ✗ ПОГАНО (вимагає unit-тестів — ЗАБОРОНЕНО):
   "Напиши функцію, яка перевіряє, чи число просте."
 
-ЯКІСТЬ УМОВИ (важливо для студентів):
-- practicalTask має бути пізнавальним, цікавим і зрозумілим: мінімум 4–6 речень зв'язного тексту (1–2 абзаци), з природним стилем як у класичній умові задачі.
-- У перших 1–2 реченнях ОБОВ'ЯЗКОВО поясни простими словами, що саме треба вивести, щоб студент це зрозумів ще ДО секції "Формат вихідних даних".
-- Додай короткий реалістичний контекст (міні-сюжет), але без зайвої "води".
-- Окремим фінальним реченням у practicalTask додай маркер "Що потрібно вивести: ...", але не можна писати саме "Що потрібно вивести:", а до прикладу: Необхідно вивести n, тощо (без списків).
-- Заборонено робити умову «в 1 рядок» типу “Оголосіть змінну ...”. Додай контекст і чіткий критерій перевірки.
-- КАТЕГОРИЧНО ЗАБОРОНЕНО оформлювати practicalTask як нумерований чекліст типу "1.", "2.", "3.".
-- Якщо треба структуру, роби це через зв'язні речення; не перетворюй умову на список кроків.
-- Якщо завдання про змінні/типи/операції — вимагай ВИВЕСТИ результат (print) так, щоб автотест міг перевірити (детермінований stdout).
+${qualityInstructionsUa}
 
 ДОЗВОЛЕНІ IO-ТИПИ (allowedIoTypes): ${allowedIoTypes.join(' | ')}
 - Якщо STDIN_STDOUT НЕ дозволено — ЗАБОРОНЕНО просити введення даних, читати stdin або згадувати input()/Scanner/System.in/std::cin/cin/getline.
@@ -840,12 +891,7 @@ ${stdinAllowed
 "Магазин щодня записує температуру у холодильній вітрині. Сьогодні зранку термометр показував 8 градусів, а до обіду температура піднялася ще на 5. Порахуй, скільки градусів показує термометр зараз. Необхідно вивести одне ціле число — підсумкову температуру."
 Чому добре: короткий живий контекст, чітко сказано ЩО рахувати і ЩО САМЕ вивести, рівно один детермінований результат.
 
-САМОПЕРЕВІРКА ПЕРЕД ВІДПОВІДДЮ (обов'язково, інакше завдання погане):
-1) Подумки виконай свою програму на КОЖНОМУ прикладі й переконайся, що examples[i].output збігається з реальним виводом СИМВОЛ-У-СИМВОЛ (включно з пробілами/переносами).
-2) Умова має спиратися ЛИШЕ на поняття з наданої теорії — нічого, чого студент на цьому етапі ще не вчив.
-3) Складність відповідає вказаному рівню: не легше і не важче.
-4) Сюжет, числа й формулювання НЕ банальні (заборонені кліше типу "сума двох чисел", "hello world", "знайдіть більше з двох") і відрізняються від типових прикладів.
-5) practicalTask читається як жива умова (4–6 зв'язних речень), а не сухий технічний рядок.
+${selfCheckUa}
 
 Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
 `;
@@ -884,15 +930,7 @@ CONCRETE EXAMPLES:
 ✗ BAD (requires unit tests - FORBIDDEN):
   "Write a function that checks if a number is prime."
 
-QUALITY OF STATEMENT (important for students):
-- practicalTask must be informative, interesting, and clear: at least 4–6 sentences of connected text (1–2 paragraphs), with a natural style as in a classic problem statement.
-- In the first 1–2 sentences, EXPLAIN in simple words what exactly needs to be output, so the student understands this BEFORE the "Output format" section.
-- Add a short realistic context (mini-plot), but without unnecessary "filler".
-- As a separate final sentence in practicalTask, add a marker "Output required: ...", but do not write "Output required:" literally, for example: "It is necessary to output n, etc." (no lists).
-- Forbidden to make the statement "1 line" like "Declare a variable ...". Add context and clear check criteria.
-- CATEGORICALLY FORBIDDEN to format practicalTask as a numbered checklist like "1.", "2.", "3.".
-- If structure is needed, do it through connected sentences; do not turn the statement into a list of steps.
-- If the task is about variables/types/operations — require to OUTPUT (print) the result so the autotest can check it (deterministic stdout).
+${qualityInstructionsEn}
 
 ALLOWED IO-TYPES (allowedIoTypes): ${allowedIoTypes.join(' | ')}
 - If STDIN_STDOUT is NOT allowed — FORBIDDEN to ask for data input, read stdin, or mention input()/Scanner/System.in/std::cin/cin/getline.
@@ -959,12 +997,7 @@ QUALITY EXEMPLAR (style only — do NOT copy this topic, plot or numbers):
 "A shop logs the temperature inside its fridge display every day. This morning the thermometer read 8 degrees, and by noon it rose by another 5. Work out what the thermometer shows now. You must output a single integer — the resulting temperature."
 Why it's good: short living context, clearly states WHAT to compute and WHAT exactly to output, exactly one deterministic result.
 
-SELF-CHECK BEFORE ANSWERING (mandatory, otherwise the task is bad):
-1) Mentally run your program on EVERY example and confirm examples[i].output matches the real output CHARACTER-BY-CHARACTER (including spaces/newlines).
-2) The statement must rely ONLY on concepts from the provided theory — nothing the student hasn't learned yet at this stage.
-3) Difficulty matches the stated level: not easier, not harder.
-4) The plot, numbers and wording are NOT trivial (clichés like "sum of two numbers", "hello world", "max of two" are forbidden) and differ from typical examples.
-5) practicalTask reads like a living statement (4–6 connected sentences), not a dry technical line.
+${selfCheckEn}
 
 Respond ONLY with JSON, without markdown blocks, without explanations.
 `;

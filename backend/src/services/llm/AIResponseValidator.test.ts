@@ -30,6 +30,24 @@ test('AIResponseValidator.validateGenerateTask: rejects no-input task that asks 
   );
 });
 
+test('AIResponseValidator.validateGenerateTask: allows a concise first Hello World task', () => {
+  const data = {
+    title: 'Hello World',
+    topic: 'Introduction to Java',
+    difficulty: 1,
+    theoryMarkdown: 'A Java program starts in the main method.',
+    practicalTask: 'Write a complete program that prints exactly "Hello, World!" once.',
+    ioType: 'NO_INPUT_FIXED_OUTPUT' as const,
+    inputFormat: 'There is no input.',
+    outputFormat: 'Hello, World!',
+    constraints: 'Print the exact text once.',
+    examples: [{ input: '', output: 'Hello, World!', explanation: 'The program prints the required greeting.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) { /* TODO */ } }'
+  };
+
+  assert.doesNotThrow(() => AIResponseValidator.validateGenerateTask(data, 'Introduction to Java', 0));
+});
+
 test('AIResponseValidator.validateGenerateTask: NO_INPUT_* auto-fixes missing inputFormat no-input wording', () => {
   const data = {
     title: 'Друк привітання',

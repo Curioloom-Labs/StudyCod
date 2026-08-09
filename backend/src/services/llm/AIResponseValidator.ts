@@ -328,6 +328,7 @@ export function makeAIValidationError(mode: string, message: string, rawResponse
 // previous linear if/throw chain so client-side error strings stay stable.
 type TaskValidationContext = {
   topicTitle: string;
+  isIntroTopic: boolean;
   ioType: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
   practical: string;
   outFmt: string;
@@ -348,7 +349,7 @@ const TASK_VALIDATION_RULES: TaskValidationRule[] = [
   {
     id: "practical.too_short",
     message: "Task generation validation failed: practicalTask is too short/vague; must be a detailed multi-sentence narrative",
-    fails: c => looksTooShortOrVaguePracticalTask(c.practical),
+    fails: c => !c.isIntroTopic && looksTooShortOrVaguePracticalTask(c.practical),
   },
   {
     id: "practical.checklist",
@@ -489,7 +490,7 @@ export class AIResponseValidator {
       throw new AIValidationError('generateTheory', emptyZod(), 'Theory generation validation failed: contains task-like instructions');
     }
   }
-  static validateGenerateTask(data: unknown, expectedTopic?: string): AiTaskGenerationResult {
+  static validateGenerateTask(data: unknown, expectedTopic?: string, topicIndex?: number): AiTaskGenerationResult {
     try {
       const fixed = this.fixTaskGenerationData(data);
       const validated = TaskGenerationSchema.parse(fixed);
@@ -515,6 +516,7 @@ export class AIResponseValidator {
 
       const ctx: TaskValidationContext = {
         topicTitle: String(expectedTopic ?? '').trim(),
+        isIntroTopic: topicIndex === 0,
         ioType,
         practical,
         outFmt,
