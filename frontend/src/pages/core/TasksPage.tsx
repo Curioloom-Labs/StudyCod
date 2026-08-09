@@ -9,7 +9,7 @@ import { MultiFileEditor, type CodeFile } from "../../components/MultiFileEditor
 import { MarkdownView } from "../../components/MarkdownView";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import type { Task, User } from "../../types";
-import { Play, CheckCircle2, ChevronLeft, ChevronRight, Plus, Save, NotebookPen } from "lucide-react";
+import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save } from "lucide-react";
 import { tr } from "../../i18n";
 import { TaskGenerationOverlay, type TaskGenerationPhase } from "../../components/TaskGenerationOverlay";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
@@ -2032,7 +2032,8 @@ export const TasksPage: React.FC<Props> = ({
     );
     const canGenerateFromToolbar = !loading && cooldownSecondsLeft <= 0 && canGenerateFromSidebar;
     return (
-      <div className="min-h-full space-y-3 bg-[#0b120e] p-3 text-[#e8f1ea] sm:p-4">
+      <div className="min-h-full space-y-3 bg-bg-base p-3 text-text-primary sm:p-4">
+        <TaskGenerationOverlay open={loading} phase={generationPhase} />
         <StudyCodIDEWorkspace
           task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
           theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
@@ -2040,8 +2041,8 @@ export const TasksPage: React.FC<Props> = ({
           languageOptions={[ideLanguage]}
           toolbar={
             <>
-              <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">
-                <NotebookPen className="size-3.5" />{tr("Завдання", "Tasks")} ({sidebarStats.completed}/{sidebarStats.total})
+              <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}>
+                <History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})
               </button>
               <button type="button" onClick={() => void handleGenerate()} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
                 <Plus className="size-3.5" />{tr("Нове", "New")}
@@ -2075,7 +2076,7 @@ export const TasksPage: React.FC<Props> = ({
           isWebTask={isWebTask}
           webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
         />
-        <Modal open={taskHistoryOpen} onClose={() => setTaskHistoryOpen(false)} title={tr("Історія завдань", "Task history")} description={tr("Відкрий попереднє завдання або створи нове.", "Open a previous task or create a new one.")}>
+        <Modal open={taskHistoryOpen} onClose={() => setTaskHistoryOpen(false)} title={tr("Історія завдань", "Task history")} description={tr("Відкрий попереднє завдання або створи нове.", "Open a previous task or create a new one.")} panelClassName="max-w-[720px]">
           <div className="max-h-[60vh] space-y-2 overflow-y-auto">
             {taskHistoryItems.length ? taskHistoryItems.map((item) => (
               <button key={`${item.openTask.id}-${item.batchKey ?? "task"}`} type="button" onClick={() => { openSidebarTask(item.openTask); setTaskHistoryOpen(false); }} className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#152219]/10 p-3 text-left transition hover:bg-[#eef4ef] dark:border-white/10 dark:hover:bg-white/[.06]">
