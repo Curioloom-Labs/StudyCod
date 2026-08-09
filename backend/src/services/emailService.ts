@@ -39,7 +39,12 @@ class EmailService {
      ========================= */
 
   private initializeTransporter() {
-    const providerRaw = String(process.env.EMAIL_PROVIDER || "smtp").trim().toLowerCase();
+    // Tests must be runnable without production SMTP secrets. The explicit
+    // EMAIL_PROVIDER setting still wins, while test mode defaults to the
+    // existing no-op/log provider instead of failing during module import.
+    const providerRaw = String(
+      process.env.EMAIL_PROVIDER || (process.env.NODE_ENV === "test" ? "log" : "smtp")
+    ).trim().toLowerCase();
     this.provider = (providerRaw === "brevo-api" || providerRaw === "brevo_api")
       ? "brevo-api"
       : providerRaw === "smtp"
