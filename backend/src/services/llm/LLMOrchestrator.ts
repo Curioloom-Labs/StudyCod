@@ -283,6 +283,7 @@ export class LLMOrchestrator {
     topicTitle: string;
     theory: string;
     lang: LLMTaskLanguage;
+    topicIndex?: number;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
@@ -312,6 +313,7 @@ export class LLMOrchestrator {
         topicTitle: params.topicTitle,
         theory: params.theory,
         lang: params.lang,
+        topicIndex: params.topicIndex,
         numInTopic: params.numInTopic,
         isFirstTask: params.isFirstTask,
         difus: params.difus,
@@ -584,6 +586,7 @@ Return ONLY JSON without explanations.`
     topicTitle: string;
     theory: string;
     lang: LLMTaskLanguage;
+    topicIndex?: number;
     anchor: {
       topic: string;
       coreOperation: string;
@@ -712,10 +715,26 @@ SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
 ${difficultyPrompt}
 `;
 
+    const introInstructionsUa = params.topicIndex === 0 ? `
+🚨 ПЕРША ТЕМА: це найперше завдання курсу.
+- Створи тільки Hello World: програма друкує точний текст "Hello, World!" один раз.
+- Заборонені ввід, Scanner/System.in, змінні, числа, арифметика, кілька обчислень, умови, цикли, функції та методи.
+- outputFormat має бути рівно "Hello, World!", examples[0].input — порожній рядок.
+- Не вигадуй сюжет про магазин, ціни, кількість товарів або користувача.
+` : "";
+    const introInstructionsEn = params.topicIndex === 0 ? `
+🚨 FIRST TOPIC: this is the learner's very first task.
+- Create only Hello World: the program prints the exact text "Hello, World!" once.
+- No input, Scanner/System.in, variables, numbers, arithmetic, multiple calculations, conditions, loops, functions, or methods.
+- outputFormat must be exactly "Hello, World!" and examples[0].input must be empty.
+- Do not invent a shop, prices, quantities, or user interaction story.
+` : "";
+
     const instructionsUa = `${stdinAllowed ? '' : `
 🚫 IO-ПОЛІТИКА ЦІЄЇ ТЕМИ (НАЙВИЩИЙ ПРІОРИТЕТ) 🚫
 ВВІД ЗАБОРОНЕНО. Постав ioType = NO_INPUT_FIXED_OUTPUT (або NO_INPUT_FREE_OUTPUT). Програма НЕ читає stdin: жодних input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". Якщо нижче щось підказує читати ввід — ІГНОРУЙ, ця політика головніша.
 `}
+${introInstructionsUa}
 ⚠️ ПЕРШ ЛІЖ УСЬОГО — ОСНОВНЕ ПРАВИЛО ⚠️
 ЗАВДАННЯ ОБОВ'ЯЗКОВО ПОВИННО ВИМАГАТИ ПОВНОЇ ПРОГРАМИ (Програма = код зі STDIN/STDOUT або без вводу).
 ЯКЩО ТИ НАПИШЕШ, ЩО СТУДЕНТ ПОВИНЕН РЕАЛІЗУВАТИ ФУНКЦІЮ/МЕТОД/КЛАС (ЗАМІСТЬ ПОВНОЇ ПРОГРАМИ) — ЗАВДАННЯ БУДЕ АВТОМАТИЧНО ВІДХИЛЕНО.
@@ -834,6 +853,7 @@ ${stdinAllowed
 🚫 IO POLICY FOR THIS STAGE (HIGHEST PRIORITY) 🚫
 INPUT IS FORBIDDEN. Set ioType = NO_INPUT_FIXED_OUTPUT (or NO_INPUT_FREE_OUTPUT). The program does NOT read stdin: no input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". If anything below hints at reading input — IGNORE it, this policy wins.
 `}
+${introInstructionsEn}
 ⚠️ MOST CRITICAL RULE — READ THIS FIRST ⚠️
 THE TASK MUST REQUIRE WRITING A COMPLETE FULL PROGRAM (Program = code with STDIN/STDOUT or no input with fixed output).
 IF YOU WRITE THAT A STUDENT MUST IMPLEMENT A FUNCTION/METHOD/CLASS (INSTEAD OF A FULL PROGRAM) — THE TASK WILL BE AUTOMATICALLY REJECTED.
@@ -1019,6 +1039,7 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
     topicTitle: string;
     theory: string;
     lang: LLMTaskLanguage;
+    topicIndex?: number;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
@@ -1034,19 +1055,31 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
     requestId?: string;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const anchor = await this.generateTaskAnchor({
-      topicTitle: params.topicTitle,
-      lang: params.lang,
-      userId: params.userId,
-      topicId: params.topicId,
-      language: params.language,
-      signal: params.signal,
-      requestId: params.requestId
-    }, provider);
+    const isIntroTopic = params.topicIndex === 0;
+    const isEnglish = params.language === "en";
+    const anchor = isIntroTopic
+      ? {
+          topic: params.topicTitle,
+          coreOperation: isEnglish
+            ? 'Write a complete program that prints exactly "Hello, World!" once to stdout.'
+            : 'Написати повну програму, яка рівно один раз виводить у stdout текст «Hello, World!».',
+          allowedScope: ["printing one fixed string", "complete program with main()", "stdout"],
+          forbiddenScope: ["input", "variables", "arithmetic", "multiple calculations", "loops", "conditions", "functions/methods", "extra output"]
+        }
+      : await this.generateTaskAnchor({
+          topicTitle: params.topicTitle,
+          lang: params.lang,
+          userId: params.userId,
+          topicId: params.topicId,
+          language: params.language,
+          signal: params.signal,
+          requestId: params.requestId
+        }, provider);
     const result = await this.generateTaskFromAnchor({
       topicTitle: params.topicTitle,
       theory: params.theory,
       lang: params.lang,
+      topicIndex: params.topicIndex,
       anchor: anchor,
       prevTopics: params.prevTopics,
       previousTasks: params.previousTasks,

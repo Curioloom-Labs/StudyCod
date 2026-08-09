@@ -2022,6 +2022,16 @@ export const TasksPage: React.FC<Props> = ({
       verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
       testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
       score: Number(aiResult.total || 0), maxScore: 12,
+      compileError: aiResult.testResults?.find((test) => test.verdict === "CE")?.error ?? null,
+      publicTestResults: (aiResult.testResults ?? []).map((test) => ({
+        testId: test.testId,
+        input: test.input,
+        expectedOutput: test.expectedOutput,
+        actualOutput: test.actualOutput,
+        passed: test.passed,
+        verdict: test.verdict,
+        error: test.error,
+      })),
     } : null;
     const ideRunResult: StudyCodIdeRunResult | null = consoleOutput.trim() ? {
       stdout: uiState === "error" ? "" : consoleOutput, stderr: uiState === "error" ? consoleOutput : "",
@@ -2073,6 +2083,7 @@ export const TasksPage: React.FC<Props> = ({
           readOnly={!active || !canEdit}
           runResult={ideRunResult}
           checkResult={ideCheckResult}
+          hints={aiResult?.hints ?? []}
           isWebTask={isWebTask}
           webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
         />

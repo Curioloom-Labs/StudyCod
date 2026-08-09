@@ -2,6 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from "./curriculumPolicy";
 
+test("curriculumPolicy: first topic only allows Hello World-style output", () => {
+  const arithmetic = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "JAVA",
+    topicIndex: 0,
+    topicTitle: "Вступ до Java",
+    title: "Арифметика для початківців",
+    practicalTask: "Виведіть суму двох чисел у консоль та обчисліть результат."
+  });
+  assert.match(String(arithmetic), /Hello World|arithmetic|multi-step/i);
+
+  const hello = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "JAVA",
+    topicIndex: 0,
+    topicTitle: "Вступ до Java",
+    title: "Hello, World!",
+    practicalTask: "Напишіть повну програму, яка виводить у консоль точний рядок Hello, World! одним рядком."
+  });
+  assert.equal(hello, null);
+});
+
 test("curriculumPolicy: CPP early topics forbid variables (UA слово)", () => {
   const v = getCurriculumPolicyViolationForGeneratedTask({
     lang: "CPP",

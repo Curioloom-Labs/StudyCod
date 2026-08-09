@@ -168,5 +168,21 @@ export function getCurriculumPolicyViolationForGeneratedTask(params: {
     }
   }
 
+  // The first curriculum topic is a syntax/orientation checkpoint, not an
+  // arithmetic exercise. Keep it to the smallest deterministic program so
+  // learners meet the language before variables, input and expressions.
+  if (topicIndex === 0) {
+    if (/(?:введі|ввод|зчит|прочит|scanner|system\.in|stdin|input\s*\(|cin\s*>>|getline)/i.test(text)) {
+      return `UNTAUGHT_CONCEPT: The first topic must not require reading user input (topicIndex=${topicIndex}).`;
+    }
+    if (/(арифмет|обчисл|су[мп]а|різниц|рiзниц|добут|ділен|числ|оператор|expression|arithmetic|sum|difference|product|divide|price|вартіст|кількіст)/i.test(text)
+      || /\d\s*[+*/%\-]\s*\d/.test(text)) {
+      return `UNTAUGHT_CONCEPT: The first topic must be a simple Hello World-style output task, not arithmetic or multi-step computation (topicIndex=${topicIndex}).`;
+    }
+    if (!/(hello\b|привіт\s*,?\s*(світ|світе)|привітання|greeting)/i.test(text)) {
+      return `CURRICULUM_MISMATCH: The first topic must generate a Hello World-style task (topicIndex=${topicIndex}).`;
+    }
+  }
+
   return null;
 }

@@ -344,6 +344,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
     props.checkResult.testsTotal > 0 &&
     props.checkResult.testsPassed >= props.checkResult.testsTotal,
   );
+  React.useEffect(() => {
+    if (props.hints?.length && props.checkResult && !allTestsPassed) {
+      setAssistantTab("hints");
+    }
+  }, [allTestsPassed, props.checkResult?.verdict, props.checkResult?.testsPassed, props.hints?.length]);
   const lineCount = (props.code || "").split("\n").length;
   const fileList = props.useFiles
     ? props.files
@@ -1013,9 +1018,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
               <button
                 type="button"
                 onClick={() => setAssistantTab("hints")}
-                className="hidden"
+                className={`rounded px-2 py-1.5 text-[10px] font-semibold ${assistantTab === "hints" ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a]"}`}
               >
+                <Sparkles className="mr-1 inline size-3" />
                 {tr("Підказки", "Hints")}
+                {props.hints?.length ? ` (${props.hints.length})` : ""}
               </button>
               <button
                 type="button"

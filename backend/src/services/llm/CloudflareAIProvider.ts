@@ -392,6 +392,7 @@ ${JSON.stringify(schema, null, 2)}
     topicTitle: string;
     theory: string;
     lang: "JAVA" | "PYTHON" | "CPP";
+    topicIndex?: number;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
