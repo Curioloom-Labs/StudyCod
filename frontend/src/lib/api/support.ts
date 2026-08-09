@@ -38,7 +38,7 @@ export type SupportChatAttachment = {
 
 export type SupportChatMessage = {
   id: number;
-  senderType: "USER" | "ADMIN" | "SYSTEM";
+  senderType: "USER" | "ADMIN" | "SUPPORT" | "SYSTEM";
   text: string;
   createdAt: string;
   attachments: SupportChatAttachment[];

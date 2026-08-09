@@ -20,7 +20,7 @@ export type SupportDeskAttachment = {
 
 export type SupportDeskMessage = {
   id: number;
-  senderType: "USER" | "ADMIN" | "SYSTEM";
+  senderType: "USER" | "ADMIN" | "SUPPORT" | "SYSTEM";
   text: string;
   createdAt: string;
   attachments: SupportDeskAttachment[];

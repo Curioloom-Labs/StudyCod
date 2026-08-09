@@ -61,7 +61,7 @@ router.post("/ticket", async (req, res: Response) => {
  */
 const createConversationSchema = z.object({
   subject: z.string().trim().min(1).max(255),
-  message: z.string().trim().min(1).max(20_000)
+  message: z.string().trim().max(20_000).optional().default("")
 });
 
 const closeConversationSchema = z.object({
@@ -75,7 +75,7 @@ const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) :
 // could be abused if the serving behaviour ever changes, while still accepting the
 // screenshots, logs, docs and archives users legitimately attach to tickets.
 const ALLOWED_SUPPORT_MIME = new Set([
-  "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/avif",
+  "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/tiff", "image/heic", "image/heif",
   "application/pdf", "text/plain", "application/json", "text/csv",
   "application/zip", "application/x-zip-compressed",
   "application/msword",
@@ -216,6 +216,10 @@ router.post("/chat/conversations", authRequired, maybeParseMultipartFiles, async
     if (req.userType === "STUDENT" && !req.studentId) return res.status(401).json({ message: "UNAUTHORIZED" });
 
     const { subject, message } = validated.data;
+    const files = (req as any).files as any[] | undefined;
+    if (!message && (!Array.isArray(files) || files.length === 0)) {
+      return res.status(400).json({ message: "TEXT_OR_FILES_REQUIRED" });
+    }
     let email: string | null = null;
     let user: User | null = null;
     let student: Student | null = null;
@@ -223,15 +227,11 @@ router.post("/chat/conversations", authRequired, maybeParseMultipartFiles, async
     if (req.userType === "STUDENT" && req.studentId) {
       student = await studentRepo().findOne({ where: { id: req.studentId } });
       if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
-      email = student.email;
+      email = student.email || `student-${student.id}@support.local`;
     } else {
       user = await userRepo().findOne({ where: { id: req.userId } });
       if (!user) return res.status(404).json({ message: "USER_NOT_FOUND" });
-      email = user.email || null;
-    }
-
-    if (!email) {
-      return res.status(400).json({ message: "EMAIL_REQUIRED" });
+      email = user.email || `user-${user.id}@support.local`;
     }
 
     const now = new Date();
@@ -253,7 +253,7 @@ router.post("/chat/conversations", authRequired, maybeParseMultipartFiles, async
       text: message
     } as Partial<SupportMessage>);
     await msgRepo().save(firstMsg);
-    const attachments = await saveSupportAttachments(firstMsg, (req as any).files || []);
+    const attachments = await saveSupportAttachments(firstMsg, files || []);
 
     await convRepo().update({ id: conversation.id }, { lastMessageAt: firstMsg.createdAt } as any);
 

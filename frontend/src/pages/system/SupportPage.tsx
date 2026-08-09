@@ -28,7 +28,7 @@ const PREVIEW_MESSAGES: SupportChatMessage[] = [
 
 export const SupportPage: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isPreview = import.meta.env.DEV && ["1", "true"].includes(searchParams.get("preview") || "");
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<SupportChatConversation[]>([]);
@@ -42,6 +42,8 @@ export const SupportPage: React.FC = () => {
   const [composerFiles, setComposerFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachmentPreviewUrls, setAttachmentPreviewUrls] = useState<Record<number, string>>({});
+  const attachmentPreviewUrlsRef = useRef<Record<number, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -148,6 +150,38 @@ export const SupportPage: React.FC = () => {
   }, [selectedConversationId]);
 
   useEffect(() => {
+    const imageAttachments = messages.flatMap(message => (message.attachments || []).filter(file => file.mimeType.startsWith("image/")));
+    const missing = imageAttachments.filter(file => !attachmentPreviewUrlsRef.current[file.id]);
+    if (!missing.length) return;
+    let cancelled = false;
+    void Promise.all(missing.map(async file => {
+      try {
+        const result = await downloadSupportChatAttachment(file.id);
+        return [file.id, URL.createObjectURL(result.blob)] as const;
+      } catch {
+        return null;
+      }
+    })).then(entries => {
+      const created = entries.filter((entry): entry is readonly [number, string] => Boolean(entry));
+      if (cancelled) {
+        created.forEach(([, url]) => URL.revokeObjectURL(url));
+        return;
+      }
+      if (!created.length) return;
+      setAttachmentPreviewUrls(current => {
+        const next = { ...current };
+        created.forEach(([id, url]) => { next[id] = url; attachmentPreviewUrlsRef.current[id] = url; });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [messages]);
+
+  useEffect(() => () => {
+    Object.values(attachmentPreviewUrlsRef.current).forEach(url => URL.revokeObjectURL(url));
+  }, []);
+
+  useEffect(() => {
     if (isPreview || !selectedConversationId) return;
     const timer = window.setInterval(() => {
       void loadConversations(true);
@@ -199,6 +233,11 @@ export const SupportPage: React.FC = () => {
 
   const selectConversation = (id: number | null) => {
     setSelectedConversationId(id);
+    if (id === null && searchParams.has("conversationId")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("conversationId");
+      setSearchParams(next, { replace: true });
+    }
     setComposerText("");
     setComposerFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -255,10 +294,11 @@ export const SupportPage: React.FC = () => {
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
+      a.rel = "noopener";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err: unknown) {
       const msg = getErrorMessageFromUnknown(err, tr("Не вдалося завантажити файл", "Failed to download file"));
       setError(String(msg));
@@ -330,6 +370,7 @@ export const SupportPage: React.FC = () => {
     onReopenConversation={reopenConversation}
     onHome={() => navigate("/")}
     onDownloadAttachment={downloadAttachment}
+    attachmentPreviewUrls={attachmentPreviewUrls}
     statusLabel={statusLabel}
     senderLabel={senderLabel}
     humanSize={humanSize}

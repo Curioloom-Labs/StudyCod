@@ -49,6 +49,8 @@ export const SupportDeskPage: React.FC = () => {
   const [threadLoading, setThreadLoading] = React.useState(false);
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [attachmentPreviewUrls, setAttachmentPreviewUrls] = React.useState<Record<number, string>>({});
+  const attachmentPreviewUrlsRef = React.useRef<Record<number, string>>({});
   const selectedIdRef = React.useRef<number | null>(null);
   const selectedTicketRef = React.useRef<SupportDeskTicket | null>(null);
 
@@ -103,6 +105,38 @@ export const SupportDeskPage: React.FC = () => {
     }, 15_000);
     return () => window.clearInterval(timer);
   }, [loadInbox, loadThread, preview, selectedId]);
+
+  React.useEffect(() => {
+    const imageAttachments = messages.flatMap(message => (message.attachments || []).filter(file => file.mimeType.startsWith("image/")));
+    const missing = imageAttachments.filter(file => !attachmentPreviewUrlsRef.current[file.id]);
+    if (!missing.length) return;
+    let cancelled = false;
+    void Promise.all(missing.map(async file => {
+      try {
+        const result = await downloadSupportChatAttachment(file.id);
+        return [file.id, URL.createObjectURL(result.blob)] as const;
+      } catch {
+        return null;
+      }
+    })).then(entries => {
+      const created = entries.filter((entry): entry is readonly [number, string] => Boolean(entry));
+      if (cancelled) {
+        created.forEach(([, url]) => URL.revokeObjectURL(url));
+        return;
+      }
+      if (!created.length) return;
+      setAttachmentPreviewUrls(current => {
+        const next = { ...current };
+        created.forEach(([id, url]) => { next[id] = url; attachmentPreviewUrlsRef.current[id] = url; });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [messages]);
+
+  React.useEffect(() => () => {
+    Object.values(attachmentPreviewUrlsRef.current).forEach(url => URL.revokeObjectURL(url));
+  }, []);
 
   const openConversation = (id: number) => {
     setSelectedTicket(null);
@@ -175,10 +209,11 @@ export const SupportDeskPage: React.FC = () => {
       const link = document.createElement("a");
       link.href = url;
       link.download = result.filename;
+      link.rel = "noopener";
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (cause) {
       setError(getErrorMessageFromUnknown(cause, "Не вдалося завантажити вкладення."));
     }
