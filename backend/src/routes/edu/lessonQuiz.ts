@@ -3,10 +3,12 @@ import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { authorizeClassForReq } from "../../middleware/orgContext";
 import { EduLesson } from "../../entities/EduLesson";
+import { User } from "../../entities/User";
 import { Student } from "../../entities/Student";
 import { QuizAttempt } from "../../entities/QuizAttempt";
 import { gradeQuiz, stripQuizForStudent, manualPointsAwarded, type Quiz } from "../../services/edu/quizGrader";
 import { logger } from "../../utils/logger";
+import { safeAICall } from "../../services/ai/safeAICall";
 
 /**
  * Lesson quizzes using the new quiz engine (P2.5). Operates on EduLesson.quizJson
@@ -17,12 +19,102 @@ const router = Router();
 const lessonRepo = () => AppDataSource.getRepository(EduLesson);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const attemptRepo = () => AppDataSource.getRepository(QuizAttempt);
+const userRepo = () => AppDataSource.getRepository(User);
+
+function normalizeLegacyQuiz(raw: unknown): Array<{ question: string; options: Record<string, string>; correct: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item: any) => {
+    const options = Array.isArray(item?.options)
+      ? Object.fromEntries(item.options.map((value: unknown, index: number) => [String.fromCharCode(65 + index), String(value ?? "")]))
+      : (item?.options && typeof item.options === "object" ? item.options : {});
+    const correctIndex = Number(item?.correctIndex ?? item?.correct);
+    const correct = Number.isInteger(correctIndex) && correctIndex >= 0
+      ? String.fromCharCode(65 + correctIndex)
+      : String(item?.correct ?? "A");
+    return { question: String(item?.q ?? item?.question ?? ""), options, correct };
+  }).filter((item) => item.question.trim() && Object.keys(item.options).length > 0);
+}
+
+async function loadTeacherLesson(req: AuthRequest, lessonId: number): Promise<EduLesson | null> {
+  if (!req.userId || req.userType === "STUDENT") return null;
+  const user = await userRepo().findOne({ where: { id: req.userId }, select: ["id", "userMode"] });
+  if (!user || user.userMode !== "EDUCATIONAL") return null;
+  const lesson = await lessonRepo().findOne({ where: { id: lessonId }, relations: ["class", "class.teacher"] });
+  return lesson && lesson.class?.teacher?.id === req.userId ? lesson : null;
+}
+
+// Teacher Studio uses a legacy, editor-friendly quiz shape. Keep this route
+// compatible with that UI while storing the validated payload on EduLesson.
+router.post("/lessons/:lessonId/generate-quiz", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const lessonId = Number(req.params.lessonId);
+    if (!Number.isInteger(lessonId) || lessonId <= 0) return res.status(400).json({ message: "INVALID_LESSON_ID" });
+    const lesson = await loadTeacherLesson(req, lessonId);
+    if (!lesson) return res.status(403).json({ message: "ONLY_LESSON_TEACHER" });
+    const count = Math.min(30, Math.max(1, Math.floor(Number(req.body?.count) || 8)));
+    const result = await safeAICall("generateQuiz", {
+      lang: lesson.class.language,
+      prevTopics: String(req.body?.topicTitle || lesson.title).trim(),
+      count,
+      userId: req.userId
+    }, { expectedCount: count, language: req.headers["accept-language"]?.toString().includes("en") ? "en" : "uk", requestId: req.requestId, maxAttempts: 2 });
+    if (!result.success) return res.status(502).json({ message: result.error || "AI_GENERATION_FAILED" });
+    const quiz = normalizeLegacyQuiz(JSON.parse(result.data.quizJson));
+    if (!quiz.length) return res.status(502).json({ message: "EMPTY_QUIZ_GENERATED" });
+    lesson.quizJson = JSON.stringify(quiz);
+    lesson.hasTheory = true;
+    await lessonRepo().save(lesson);
+    return res.json({ count: quiz.length, quiz, quizJson: lesson.quizJson });
+  } catch (error: any) {
+    logger.error("[edu/lessonQuiz] generate quiz failed", { requestId: req.requestId, err: error });
+    return res.status(502).json({ message: error?.message || "AI_GENERATION_FAILED" });
+  }
+});
+
+router.put("/lessons/:lessonId/quiz", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const lessonId = Number(req.params.lessonId);
+    if (!Number.isInteger(lessonId) || lessonId <= 0) return res.status(400).json({ message: "INVALID_LESSON_ID" });
+    const lesson = await loadTeacherLesson(req, lessonId);
+    if (!lesson) return res.status(403).json({ message: "ONLY_LESSON_TEACHER" });
+    const quiz = normalizeLegacyQuiz(req.body?.quiz);
+    if (!quiz.length || quiz.length > 100) return res.status(400).json({ message: "INVALID_QUIZ" });
+    lesson.quizJson = JSON.stringify(quiz);
+    lesson.hasTheory = true;
+    await lessonRepo().save(lesson);
+    return res.status(204).send();
+  } catch (error: any) {
+    logger.error("[edu/lessonQuiz] save quiz failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
 
 function parseQuiz(raw: string | null | undefined): Quiz | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.questions)) return parsed as Quiz;
+    // Teacher Studio stores its compact legacy array shape. Convert it at the
+    // boundary so the student-facing quiz engine can grade the same payload.
+    if (Array.isArray(parsed)) {
+      const questions = parsed.map((item: any, index: number) => {
+        const options = Array.isArray(item?.options)
+          ? item.options.map((value: unknown) => String(value ?? ""))
+          : Object.values(item?.options || {}).map((value) => String(value ?? ""));
+        const correctKey = String(item?.correct ?? "A");
+        const correctIndex = Array.isArray(item?.options)
+          ? Number(item?.correctIndex ?? item?.correct)
+          : Math.max(0, Object.keys(item?.options || {}).indexOf(correctKey));
+        return {
+          id: String(item?.id ?? index),
+          type: "SINGLE_CHOICE" as const,
+          prompt: String(item?.q ?? item?.question ?? ""),
+          options,
+          correctIndex: Number.isInteger(correctIndex) && correctIndex >= 0 ? correctIndex : 0
+        };
+      }).filter((question) => question.prompt.trim() && question.options.length > 0);
+      return questions.length ? { questions } : null;
+    }
     return null;
   } catch {
     return null;

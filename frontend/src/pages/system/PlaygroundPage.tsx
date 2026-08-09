@@ -77,7 +77,12 @@ export const PlaygroundPage: React.FC = () => {
     const next = !showHistory;
     setShowHistory(next);
     if (next && mySnippets === null) {
-      setMySnippets(isDevPreview() ? previewSnippets : await getMyPlaygroundSnippets());
+      try {
+        setMySnippets(isDevPreview() ? previewSnippets : await getMyPlaygroundSnippets());
+      } catch {
+        setMySnippets([]);
+        showToast({ type: "error", message: tr("Не вдалося завантажити історію.", "Couldn't load history.") });
+      }
     }
   };
 
@@ -91,7 +96,7 @@ export const PlaygroundPage: React.FC = () => {
       .then((languages) => {
         if (!cancelled && languages.length) setVizLangs(languages);
       })
-      .catch(() => {});
+      .catch(() => showToast({ type: "error", message: tr("Не вдалося завантажити мови візуалізації.", "Couldn't load visualizer languages.") }));
     return () => { cancelled = true; };
   }, []);
 

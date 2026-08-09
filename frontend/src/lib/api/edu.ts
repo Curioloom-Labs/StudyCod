@@ -160,7 +160,7 @@ export interface Lesson {
     title: string;
     description?: string;
     template?: string;
-    taskMode?: "CODE" | "WEB";
+    taskMode?: "CODE" | "WEB" | "MANUAL";
     webTemplateFiles?: WebTaskFile[] | null;
     webValidationRules?: WebTaskRule[] | null;
     deadline?: string | null;
@@ -169,6 +169,7 @@ export interface Lesson {
     isClosed?: boolean;
     testDataCount?: number;
     attemptsUsed?: number;
+    source?: "course" | "legacy";
     progressCompleted?: boolean;
     hasGrade?: boolean;
     grade?: {
@@ -206,7 +207,7 @@ export interface TaskWithGrade {
   title: string;
   description: string;
   template: string;
-  taskMode?: "CODE" | "WEB";
+  taskMode?: "CODE" | "WEB" | "MANUAL";
   webTemplateFiles?: WebTaskFile[] | null;
   webValidationRules?: WebTaskRule[] | null;
   language: "JAVA" | "PYTHON" | "CPP";
@@ -616,7 +617,7 @@ export interface CreateTaskRequest {
   title: string;
   description: string;
   template: string;
-  taskMode?: "CODE" | "WEB";
+  taskMode?: "CODE" | "WEB" | "MANUAL";
   webTemplateFiles?: WebTaskFile[];
   webValidationRules?: WebTaskRule[];
 }

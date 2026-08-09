@@ -32,6 +32,7 @@ import type {
   JudgeLanguage,
   WebTaskFile,
 } from "../../lib/api/library";
+import { scopedStorageKey } from "../../lib/storageScope";
 import {
   JUDGE_LANGUAGE_LABELS,
   compilersForFamily,
@@ -190,7 +191,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       ? en
       : uk;
   };
-  const taskTheoryKey = `${THEORY_KEY}:${props.task.id}`;
+  const taskTheoryKey = scopedStorageKey(THEORY_KEY, props.task.id);
   const [mode, setMode] = React.useState<IdeMode>(() => {
     if (!props.theory) return "practice";
     try {
@@ -215,7 +216,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   >(() => {
     try {
       const raw = JSON.parse(
-        localStorage.getItem(`${HISTORY_KEY}:${props.task.id}`) || "[]",
+        localStorage.getItem(scopedStorageKey(HISTORY_KEY, props.task.id)) || "[]",
       );
       return Array.isArray(raw)
         ? raw
@@ -245,7 +246,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       setHistory(next);
       try {
         localStorage.setItem(
-          `${HISTORY_KEY}:${props.task.id}`,
+          scopedStorageKey(HISTORY_KEY, props.task.id),
           JSON.stringify(next),
         );
       } catch {

@@ -14,9 +14,9 @@ import { isGoogleOAuthEnabled } from "../config/googleOAuth";
 import { logger } from "../utils/logger";
 import { getUserIadForLang } from "../utils/iad";
 import { env } from "../env";
-import { generateJti } from "../services/auth/jwtRevocation";
+import { generateJti, revokeJti, revokeUserTokensBeforeTime } from "../services/auth/jwtRevocation";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
-import { setSharedAuthCookie } from "../utils/authCookie";
+import { AUTH_COOKIE_NAME, clearSharedAuthCookie, setSharedAuthCookie } from "../utils/authCookie";
 export const authRouter = Router();
 
 // Pre-computed bcrypt hash used when the user does not exist, so bcrypt.compare
@@ -328,6 +328,31 @@ function signUserToken(user: User): string {
     expiresIn: "7d"
   });
 }
+
+function getAuthToken(req: Request): string | null {
+  const authorization = String(req.headers.authorization ?? "");
+  if (authorization.startsWith("Bearer ")) return authorization.slice("Bearer ".length).trim() || null;
+  return getCookieValue(req.headers.cookie, AUTH_COOKIE_NAME);
+}
+
+authRouter.post("/logout", async (req: Request, res: Response) => {
+  // Clear the httpOnly session even when the access token is already expired.
+  clearSharedAuthCookie(res);
+  const token = getAuthToken(req);
+  if (token) {
+    try {
+      const payload = jwt.verify(token, JWT_SECRET) as { jti?: string; userId?: number; iat?: number; exp?: number };
+      if (payload.jti) {
+        const ttl = payload.exp && payload.iat ? Math.max(1, payload.exp - Math.floor(Date.now() / 1000)) : 7 * 24 * 60 * 60;
+        await revokeJti(payload.jti, ttl);
+      }
+      if (payload.userId) await revokeUserTokensBeforeTime(payload.userId, Date.now());
+    } catch {
+      // Logout is idempotent: an invalid/expired token must not prevent cookie cleanup.
+    }
+  }
+  return res.status(204).send();
+});
 
 function getGoogleLinkUserIdFromSession(req: Request): number | null {
   const raw = Number((req.session as any)?.[GOOGLE_LINK_SESSION_KEY] ?? 0);
@@ -1161,25 +1186,20 @@ authRouter.post("/reset-password", async (req: AuthRequest, res: Response) => {
       newPassword
     } = validated.data;
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    const updateResult = await userRepo()
-      .createQueryBuilder()
-      .update(User)
-      .set({
-        password: passwordHash,
-        passwordResetToken: null,
-        passwordResetExpires: null
-      })
-      .where("passwordResetToken = :tokenHash", { tokenHash })
-      .andWhere("passwordResetExpires IS NOT NULL")
-      .andWhere("passwordResetExpires > :now", { now: new Date() })
-      .execute();
-
-    if (!updateResult.affected || updateResult.affected < 1) {
+    const user = await userRepo().findOne({
+      where: { passwordResetToken: tokenHash }
+    });
+    if (!user || !user.passwordResetExpires || user.passwordResetExpires <= new Date()) {
       return res.status(400).json({
         message: "INVALID_OR_EXPIRED_TOKEN"
       });
     }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetToken = null;
+    user.passwordResetExpires = null;
+    await userRepo().save(user);
+    await revokeUserTokensBeforeTime(user.id, Date.now());
 
     return res.json({
       message: "PASSWORD_UPDATED"

@@ -21,6 +21,7 @@ import { useUIMode } from "../../components/interface/UIModeProvider";
 import { buildResumeState, clearResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { scopedStorageKey } from "../../lib/storageScope";
 import { activateControlExamSession, clearControlExamSession } from "../../lib/controlExamSession";
 
 type QuizOptionKey = "А" | "Б" | "В" | "Г" | "Д";
@@ -258,7 +259,7 @@ export const LessonDetailsPage: React.FC = () => {
       if (lesson.type === "LESSON" && lesson.tasks.length === 1) {
         const task = lesson.tasks[0];
         setHasAutoRedirected(true);
-        navigate(`/edu/tasks/${task.id}`, {
+        navigate(`${task.taskMode === "MANUAL" ? "/edu/manual-tasks" : "/edu/tasks"}/${task.id}${task.source === "course" ? "?source=course" : ""}`, {
           replace: true
         });
       }
@@ -408,12 +409,12 @@ export const LessonDetailsPage: React.FC = () => {
               } else {
                 setStudentQuizReview(null);
               }
-              localStorage.removeItem(`quiz_answers_lesson_${lessonId}`);
-              localStorage.removeItem(`quiz_submitted_lesson_${lessonId}`);
-              localStorage.removeItem(`quiz_grade_lesson_${lessonId}`);
+              localStorage.removeItem(scopedStorageKey("quiz_answers_lesson", lessonId));
+              localStorage.removeItem(scopedStorageKey("quiz_submitted_lesson", lessonId));
+              localStorage.removeItem(scopedStorageKey("quiz_grade_lesson", lessonId));
             } else {
               try {
-                const savedAnswers = localStorage.getItem(`quiz_answers_lesson_${lessonId}`);
+                const savedAnswers = localStorage.getItem(scopedStorageKey("quiz_answers_lesson", lessonId));
                 if (savedAnswers) {
                   const parsed = JSON.parse(savedAnswers);
                   if (parsed && typeof parsed === 'object') {
@@ -421,7 +422,7 @@ export const LessonDetailsPage: React.FC = () => {
                   }
                 }
               } catch (e) {
-                localStorage.removeItem(`quiz_answers_lesson_${lessonId}`);
+                localStorage.removeItem(scopedStorageKey("quiz_answers_lesson", lessonId));
               }
               setStudentQuizSubmitted(false);
               setStudentQuizGrade(null);
@@ -943,7 +944,7 @@ export const LessonDetailsPage: React.FC = () => {
                       };
                       setStudentQuizAnswers(newAnswers);
                       try {
-                        localStorage.setItem(`quiz_answers_lesson_${lessonId}`, JSON.stringify(newAnswers));
+                        localStorage.setItem(scopedStorageKey("quiz_answers_lesson", lessonId || "unknown"), JSON.stringify(newAnswers));
                       } catch (e) {
                         console.error("Failed to save quiz answers to localStorage:", e);
                       }
@@ -968,8 +969,8 @@ export const LessonDetailsPage: React.FC = () => {
                 setStudentQuizSubmitted(true);
                 setStudentQuizGrade(null);
                 setStudentQuizReview(null);
-                localStorage.setItem(`quiz_submitted_lesson_${lessonId}`, "true");
-                localStorage.removeItem(`quiz_grade_lesson_${lessonId}`);
+                localStorage.setItem(scopedStorageKey("quiz_submitted_lesson", lessonId || "unknown"), "true");
+                localStorage.removeItem(scopedStorageKey("quiz_grade_lesson", lessonId || "unknown"));
                 try {
                   const statusData = await getControlWorkStatus(parseInt(lessonId!, 10));
                   if (statusData.status === "COMPLETED") {
@@ -1264,7 +1265,7 @@ export const LessonDetailsPage: React.FC = () => {
                         disabled={!isActiveControlTask}
                         onClick={() => {
                           if (!isActiveControlTask) return;
-                          navigate(`/edu/tasks/${task.id}`, {
+                           navigate(`${task.taskMode === "MANUAL" ? "/edu/manual-tasks" : "/edu/tasks"}/${task.id}${task.source === "course" ? "?source=course" : ""}`, {
                             state: {
                               from: currentLessonPath
                             }
@@ -1283,7 +1284,7 @@ export const LessonDetailsPage: React.FC = () => {
                             {tr("Заблоковано", "Locked")}
                           </>}
                       </Button> : <Button variant={showViewButton ? "ghost" : "primary"} onClick={() => {
-                  navigate(`/edu/tasks/${task.id}`, {
+                  navigate(`${task.taskMode === "MANUAL" ? "/edu/manual-tasks" : "/edu/tasks"}/${task.id}${task.source === "course" ? "?source=course" : ""}`, {
                     state: {
                       from: currentLessonPath
                     }

@@ -33,6 +33,7 @@ import type { GeoBlockedPayload } from "./pages/system/GeoBlockedPage";
 import { getAdminMaintenance } from "./lib/api/admin";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
 import { getControlWorkStatus } from "./lib/api/edu";
+import { api } from "./lib/api/client";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
 import { NotificationsBell } from "./components/blog/NotificationsBell";
 import { ToastViewport } from "./components/ui/ToastViewport";
@@ -74,7 +75,7 @@ const CourseDetailPage = React.lazy(() => import("./pages/edu/CourseStudioPages"
 const LessonQuizPage = React.lazy(() => import("./pages/edu/QuizCanvasPage").then(mod => ({ default: mod.QuizCanvasPage })));
 const TeacherQuizReviewPage = React.lazy(() => import("./pages/edu/TeacherQuizReviewPage").then(mod => ({ default: mod.TeacherQuizReviewPage })));
 const ManualTaskPage = React.lazy(() => import("./pages/edu/ManualReviewPages").then(mod => ({ default: mod.ManualSubmissionCanvas })));
-const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualReviewPages").then(mod => ({ default: mod.ManualReviewCanvas })));
+const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualTeacherReviewPage").then(mod => ({ default: mod.ManualTeacherReviewPage })));
 const OrgMembersPage = React.lazy(() => import("./pages/edu/OrgWorkspacePage").then(mod => ({ default: mod.OrgWorkspacePage })));
 const LiveClassroomPage = React.lazy(() => import("./pages/edu/LiveClassroomPage").then(mod => ({ default: mod.LiveClassroomPage })));
 const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthCompletePage").then(mod => ({ default: mod.GoogleAuthCompletePage })));
@@ -674,7 +675,14 @@ const AppContent: React.FC = React.memo(() => {
     getAdminMaintenance().then(r => setAdminMaintenanceEnabled(!!r.state?.enabled)).catch(() => setAdminMaintenanceEnabled(false));
   }, [user?.role]);
   const handleLogout = useCallback(() => {
+    // Best-effort server logout clears the httpOnly cookie and revokes the
+    // current JWT. Local state is cleared immediately so a slow API cannot
+    // keep the UI in an authenticated state.
+    void api.post("/auth/logout", undefined, {
+      headers: { "X-Skip-Auth-Redirect": "1" }
+    }).catch(() => undefined);
     localStorage.removeItem("token");
+    clearControlExamSession();
     startTransition(() => {
       setUser(null);
       setPage("home");
@@ -1569,7 +1577,9 @@ const ContestRoutes: React.FC = React.memo(() => {
   }
 
   return <PremiumModuleShell product="CONTEST" user={user} theme={theme} currentPath={location.pathname} onNavigate={navigate} onToggleTheme={toggleTheme} onLogout={() => {
+    void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
     localStorage.removeItem("token");
+    clearControlExamSession();
     navigate("/contest", { replace: true });
     window.location.reload();
   }}>
@@ -1595,7 +1605,9 @@ const EduRoutes: React.FC = React.memo(() => {
   const location = useLocation();
   const isEduDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
   const eduPreviewPersona = new URLSearchParams(location.search).get("persona");
-  const eduPreviewStudent = eduPreviewPersona === "student" || (/^\/edu\/(journal|lessons(?:\/|$)|tasks\/|grades\/|appeals(?:\/|$))/).test(location.pathname);
+  const eduPreviewStudent = eduPreviewPersona !== "teacher" && (
+    eduPreviewPersona === "student" || (/^\/edu\/(journal|lessons(?:\/|$)|tasks\/|grades\/|appeals(?:\/|$))/).test(location.pathname)
+  );
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
@@ -1755,6 +1767,8 @@ const EduRoutes: React.FC = React.memo(() => {
       <AuthPage onAuth={handleAuth} />
     </Suspense>;
   }
+  const teacherOnly = (element: React.ReactElement) => user.studentId ? <Navigate to="/edu/lessons" replace /> : element;
+  const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
   const eduMain = <main className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="wait">
@@ -1763,40 +1777,40 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route index element={user.studentId ? <Navigate to="/edu/lessons" replace /> : <AnimatedPage>
                     <TeacherDashboardPage />
                   </AnimatedPage>} />
-            <Route path="classes/:classId" element={<AnimatedPage><ClassDetailsPage /></AnimatedPage>} />
-            <Route path="classes/:classId/teacher-os" element={<Navigate to=".." relative="path" replace />} />
-            <Route path="classes/:classId/lessons/new" element={<AnimatedPage><CreateLessonPage /></AnimatedPage>} />
-            <Route path="classes/:classId/topics/new" element={<AnimatedPage><CreateTopicPage /></AnimatedPage>} />
-            <Route path="topics/:topicId" element={<AnimatedPage><TopicDetailsPage /></AnimatedPage>} />
+            <Route path="classes/:classId" element={teacherOnly(<AnimatedPage><ClassDetailsPage /></AnimatedPage>)} />
+            <Route path="classes/:classId/teacher-os" element={teacherOnly(<Navigate to=".." relative="path" replace />)} />
+            <Route path="classes/:classId/lessons/new" element={teacherOnly(<AnimatedPage><CreateLessonPage /></AnimatedPage>)} />
+            <Route path="classes/:classId/topics/new" element={teacherOnly(<AnimatedPage><CreateTopicPage /></AnimatedPage>)} />
+            <Route path="topics/:topicId" element={teacherOnly(<AnimatedPage><TopicDetailsPage /></AnimatedPage>)} />
             <Route path="library" element={<AnimatedPage><TaskLibraryPage /></AnimatedPage>} />
             <Route path="library/solve/:taskKey" element={<AnimatedPage><LibraryTaskSolvePage /></AnimatedPage>} />
-            <Route path="control-works/:controlWorkId" element={<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>} />
-            <Route path="classes/:classId/summary-grades" element={<AnimatedPage><SummaryGradesPage /></AnimatedPage>} />
-            <Route path="classes/:classId/gradebook" element={<AnimatedPage><ClassGradebookPage /></AnimatedPage>} />
-            <Route path="classes/:classId/attendance" element={<AnimatedPage><AttendancePage /></AnimatedPage>} />
+            <Route path="control-works/:controlWorkId" element={teacherOnly(<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>)} />
+            <Route path="classes/:classId/summary-grades" element={teacherOnly(<AnimatedPage><SummaryGradesPage /></AnimatedPage>)} />
+            <Route path="classes/:classId/gradebook" element={teacherOnly(<AnimatedPage><ClassGradebookPage /></AnimatedPage>)} />
+            <Route path="classes/:classId/attendance" element={teacherOnly(<AnimatedPage><AttendancePage /></AnimatedPage>)} />
             <Route path="classes/:classId/similarity" element={<Navigate to="../gradebook" relative="path" replace />} />
             <Route path="classes/:classId/gradebook-config" element={<Navigate to="../gradebook" relative="path" replace />} />
             <Route path="join" element={<AnimatedPage><JoinClassPage /></AnimatedPage>} />
-            <Route path="courses" element={<AnimatedPage><CoursesPage /></AnimatedPage>} />
+            <Route path="courses" element={teacherOnly(<AnimatedPage><CoursesPage /></AnimatedPage>)} />
             <Route path="calendar" element={<AnimatedPage><CalendarPage /></AnimatedPage>} />
             <Route path="tutor" element={<AnimatedPage><TutorPage /></AnimatedPage>} />
             <Route path="parent" element={<AnimatedPage><ParentDashboardPage /></AnimatedPage>} />
-            <Route path="courses/:courseId" element={<AnimatedPage><CourseDetailPage /></AnimatedPage>} />
-            <Route path="lessons/:lessonId/quiz" element={<AnimatedPage><LessonQuizPage /></AnimatedPage>} />
-            <Route path="lessons/:lessonId/quiz/review" element={<AnimatedPage><TeacherQuizReviewPage /></AnimatedPage>} />
-            <Route path="manual-tasks/:taskId" element={<AnimatedPage><ManualTaskPage /></AnimatedPage>} />
-            <Route path="manual-tasks/:taskId/submissions" element={<AnimatedPage><ManualTaskSubmissionsPage /></AnimatedPage>} />
-            <Route path="organization" element={<AnimatedPage><OrgMembersPage /></AnimatedPage>} />
+            <Route path="courses/:courseId" element={teacherOnly(<AnimatedPage><CourseDetailPage /></AnimatedPage>)} />
+            <Route path="lessons/:lessonId/quiz" element={studentOnly(<AnimatedPage><LessonQuizPage /></AnimatedPage>)} />
+            <Route path="lessons/:lessonId/quiz/review" element={teacherOnly(<AnimatedPage><TeacherQuizReviewPage /></AnimatedPage>)} />
+            <Route path="manual-tasks/:taskId" element={studentOnly(<AnimatedPage><ManualTaskPage /></AnimatedPage>)} />
+            <Route path="manual-tasks/:taskId/submissions" element={teacherOnly(<AnimatedPage><ManualTaskSubmissionsPage /></AnimatedPage>)} />
+            <Route path="organization" element={teacherOnly(<AnimatedPage><OrgMembersPage /></AnimatedPage>)} />
             <Route path="profile" element={<Navigate to="/profile" replace />} />
-            <Route path="classes/:classId/live" element={<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>} />
-            <Route path="classes/:classId/appeals" element={<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>} />
-            <Route path="journal" element={<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>} />
+            <Route path="classes/:classId/live" element={teacherOnly(<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>)} />
+            <Route path="classes/:classId/appeals" element={teacherOnly(<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>)} />
+            <Route path="journal" element={studentOnly(<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>)} />
             <Route path="student" element={<Navigate to="/edu/journal" replace />} />
-            <Route path="lessons" element={<AnimatedPage><StudentLessonsPage /></AnimatedPage>} />
-            <Route path="lessons/:lessonId" element={<AnimatedPage><LessonDetailsPage student={Boolean(user.studentId)} /></AnimatedPage>} />
-            <Route path="tasks/:taskId" element={<AnimatedPage><StudentTaskPage /></AnimatedPage>} />
+            <Route path="lessons" element={studentOnly(<AnimatedPage><StudentLessonsPage /></AnimatedPage>)} />
+            <Route path="lessons/:lessonId" element={studentOnly(<AnimatedPage><LessonDetailsPage student={Boolean(user.studentId)} /></AnimatedPage>)} />
+            <Route path="tasks/:taskId" element={studentOnly(<AnimatedPage><StudentTaskPage /></AnimatedPage>)} />
             <Route path="grades/:gradeId" element={<Navigate to="/edu/journal" replace />} />
-            <Route path="appeals" element={<AnimatedPage><StudentAppealsPage /></AnimatedPage>} />
+            <Route path="appeals" element={studentOnly(<AnimatedPage><StudentAppealsPage /></AnimatedPage>)} />
             <Route path="docs" element={<AnimatedPage><DocsPage /></AnimatedPage>} />
             {}
             <Route path="*" element={<Navigate to={user.studentId ? "/edu/lessons" : "/edu"} replace />} />
@@ -1813,7 +1827,12 @@ const EduRoutes: React.FC = React.memo(() => {
       navigationHidden={isControlExamActive}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
-      onLogout={() => { localStorage.removeItem("token"); navigate("/"); }}
+      onLogout={() => {
+        void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
+        localStorage.removeItem("token");
+        clearControlExamSession();
+        navigate("/");
+      }}
     >
       {eduMain}
     </PremiumModuleShell>;

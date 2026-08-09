@@ -22,6 +22,12 @@ const RETRY_CONFIG = {
   shouldRetry: (error: AxiosError, retryCount: number) => {
     if (retryCount <= 0) return false;
 
+    // Retrying a POST/PATCH can duplicate side effects (messages, submissions,
+    // payments). Only automatically retry idempotent reads; callers that have
+    // an explicit idempotency key can retry their mutation themselves.
+    const method = String(error.config?.method || "get").toLowerCase();
+    if (!["get", "head", "options"].includes(method)) return false;
+
     // Don't retry client errors (4xx). Rate limits are intentional back-pressure;
     // retrying them here amplifies request bursts during UI toggles.
     if (error.response?.status && error.response.status >= 400 && error.response.status < 500) {
@@ -130,6 +136,7 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   }
 
   const token = localStorage.getItem("token");
+  (config as InternalAxiosRequestConfig & { __authToken?: string }).__authToken = token || undefined;
   const uiLanguage = localStorage.getItem("studycod_language") || "en";
   if (typeof document !== "undefined") {
     const csrf = readCsrfCookie();
@@ -184,7 +191,11 @@ api.interceptors.response.use((response: AxiosResponse) => {
   }
   return response;
 }, (error: AxiosError<MaintenanceErrorData>) => {
-  if (error.response?.status === 401 && !shouldSkipAuthRedirect(error.config as InternalAxiosRequestConfig | undefined)) {
+  const requestConfig = error.config as (InternalAxiosRequestConfig & { __authToken?: string }) | undefined;
+  const requestToken = requestConfig?.__authToken;
+  const currentToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const isCurrentSession = !requestToken || requestToken === currentToken;
+  if (error.response?.status === 401 && isCurrentSession && !shouldSkipAuthRedirect(requestConfig)) {
     localStorage.removeItem("token");
     if (typeof window !== "undefined") {
       window.location.href = buildLoginRedirectTarget();

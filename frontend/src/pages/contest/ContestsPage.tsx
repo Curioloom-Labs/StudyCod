@@ -58,6 +58,18 @@ export const ContestsPage: React.FC = () => {
       return false;
     }
   }, []);
+  const canCreateContest = React.useMemo(() => {
+    if (!hasToken || typeof window === "undefined") return false;
+    try {
+      const token = localStorage.getItem("token") || "";
+      const raw = token.split(".")[1];
+      if (!raw) return false;
+      const payload = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(raw.length / 4) * 4, "="))) as Record<string, unknown>;
+      return payload.type === "USER" && !payload.studentId;
+    } catch {
+      return false;
+    }
+  }, [hasToken]);
 
   const [loading, setLoading] = React.useState(true);
   const [contests, setContests] = React.useState<ContestListItem[]>([]);
@@ -306,7 +318,7 @@ export const ContestsPage: React.FC = () => {
 
             {hasToken ? (
               <div className="flex flex-wrap items-center gap-2">
-                <Button
+                {canCreateContest ? <Button
                   variant="secondary"
                   onClick={() => {
                     setJoinOpen(true);
@@ -316,7 +328,7 @@ export const ContestsPage: React.FC = () => {
                   title={tr("Приєднатись за кодом", "Join by code")}
                 >
                   {tr("Приєднатись", "Join")}
-                </Button>
+                </Button> : null}
                 <Button
                   variant="secondary"
                   onClick={() => {

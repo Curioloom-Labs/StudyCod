@@ -47,6 +47,7 @@ import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/re
 import { FailureRecoveryCard } from "../../components/FailureRecoveryCard";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { scopedStorageKey } from "../../lib/storageScope";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeTrace } from "../../components/ide/StudyCodIDEWorkspace";
 import { tracePlayground } from "../../lib/api/playground";
@@ -407,7 +408,7 @@ export const StudentTaskPage: React.FC = () => {
 
   const currentDraftKey = useMemo(() => {
     if (!taskIdNum) return undefined;
-    return useFiles ? `task_draft_files_${taskIdNum}` : `task_draft_${taskIdNum}`;
+    return useFiles ? scopedStorageKey("task_draft_files", taskIdNum) : scopedStorageKey("task_draft", taskIdNum);
   }, [taskIdNum, useFiles]);
 
   const saveResume = useCallback(
@@ -634,8 +635,8 @@ export const StudentTaskPage: React.FC = () => {
   }, [taskId]);
   useEffect(() => {
     if (!taskId) return;
-    const codeKey = `task_draft_${taskId}`;
-    const filesKey = `task_draft_files_${taskId}`;
+    const codeKey = scopedStorageKey("task_draft", taskId);
+    const filesKey = scopedStorageKey("task_draft_files", taskId);
     const timeoutId = setTimeout(() => {
       try {
         if (useFiles) {
@@ -652,8 +653,8 @@ export const StudentTaskPage: React.FC = () => {
   useEffect(() => {
     return () => {
       if (!taskId) return;
-      const codeKey = `task_draft_${taskId}`;
-      const filesKey = `task_draft_files_${taskId}`;
+      const codeKey = scopedStorageKey("task_draft", taskId);
+      const filesKey = scopedStorageKey("task_draft_files", taskId);
       try {
         if (useFilesRef.current) {
           localStorage.setItem(filesKey, JSON.stringify(filesRef.current));
@@ -789,14 +790,14 @@ export const StudentTaskPage: React.FC = () => {
       const submittedFiles = data.grade?.submittedFiles;
       const draftFilesRaw = (() => {
         try {
-          const s = localStorage.getItem(`task_draft_files_${taskId}`);
+          const s = localStorage.getItem(scopedStorageKey("task_draft_files", taskId));
           return s ? (JSON.parse(s) as unknown) : null;
         } catch {
           return null;
         }
       })();
       const draftFiles = Array.isArray(draftFilesRaw) ? (draftFilesRaw as CodeFile[]) : null;
-      const draftCode = localStorage.getItem(`task_draft_${taskId}`);
+      const draftCode = localStorage.getItem(scopedStorageKey("task_draft", taskId));
       const savedCode = data.savedCode;
 
       const entryFromData = data.language === "JAVA" ? "Main.java" : data.language === "CPP" ? "main.cpp" : "main.py";
@@ -871,13 +872,13 @@ export const StudentTaskPage: React.FC = () => {
           if (serverQuizSubmitted) {
             setQuizSubmitted(true);
             setQuizGrade(serverQuizGrade);
-            localStorage.removeItem(`quiz_submitted_${taskId}`);
-            localStorage.removeItem(`quiz_answers_${taskId}`);
+            localStorage.removeItem(scopedStorageKey("quiz_submitted", taskId));
+            localStorage.removeItem(scopedStorageKey("quiz_answers", taskId));
           } else {
-            const savedAnswers = localStorage.getItem(`quiz_answers_${taskId}`);
+            const savedAnswers = localStorage.getItem(scopedStorageKey("quiz_answers", taskId));
             if (savedAnswers) {
               setQuizAnswers(JSON.parse(savedAnswers));
-              localStorage.setItem(`quiz_answers_${taskId}_timestamp`, Date.now().toString());
+              localStorage.setItem(scopedStorageKey("quiz_answers_timestamp", taskId), Date.now().toString());
             }
             setQuizSubmitted(false);
             setQuizGrade(null);
@@ -894,7 +895,7 @@ export const StudentTaskPage: React.FC = () => {
         setQuizGrade(null);
       }
       if (data.lesson.type === "CONTROL" && data.lesson.timeLimitMinutes) {
-        const startTime = localStorage.getItem(`task_${taskId}_start_time`);
+        const startTime = localStorage.getItem(scopedStorageKey("task_start_time", taskId));
         if (startTime) {
           const elapsed = Math.floor((Date.now() - parseInt(startTime)) / 1000 / 60);
           const remaining = data.lesson.timeLimitMinutes - elapsed;
@@ -906,8 +907,8 @@ export const StudentTaskPage: React.FC = () => {
           }
         } else {
           const now = Date.now();
-          localStorage.setItem(`task_${taskId}_start_time`, now.toString());
-          localStorage.setItem(`task_${taskId}_start_time_timestamp`, now.toString());
+          localStorage.setItem(scopedStorageKey("task_start_time", taskId), now.toString());
+          localStorage.setItem(scopedStorageKey("task_start_time_timestamp", taskId), now.toString());
           setTimeRemaining(data.lesson.timeLimitMinutes);
           setTimeStarted(new Date(now));
         }
@@ -990,10 +991,10 @@ export const StudentTaskPage: React.FC = () => {
       setQuizGrade(result.grade.theoryGrade);
       setQuizSubmitted(true);
       const now = Date.now().toString();
-      localStorage.setItem(`quiz_submitted_${taskId}`, "true");
-      localStorage.setItem(`quiz_submitted_${taskId}_timestamp`, now);
-      localStorage.setItem(`quiz_grade_${taskId}`, result.grade.theoryGrade.toString());
-      localStorage.setItem(`quiz_grade_${taskId}_timestamp`, now);
+      localStorage.setItem(scopedStorageKey("quiz_submitted", taskId), "true");
+      localStorage.setItem(scopedStorageKey("quiz_submitted_timestamp", taskId), now);
+      localStorage.setItem(scopedStorageKey("quiz_grade", taskId), result.grade.theoryGrade.toString());
+      localStorage.setItem(scopedStorageKey("quiz_grade_timestamp", taskId), now);
       toastSuccess(t("quizCompletedWithGrade", {
         grade: result.grade.theoryGrade,
         correct: result.grade.correctAnswers,
@@ -1093,8 +1094,8 @@ export const StudentTaskPage: React.FC = () => {
           codeHash: String(submissionMeta.codeHash)
         };
       }
-      localStorage.removeItem(`task_draft_${taskId}`);
-      localStorage.removeItem(`task_draft_files_${taskId}`);
+      localStorage.removeItem(scopedStorageKey("task_draft", taskId));
+      localStorage.removeItem(scopedStorageKey("task_draft_files", taskId));
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(hideControlResults ? [] : finalTestResults);
       setHints(hideControlResults ? [] : Array.isArray(result.hints) ? result.hints : []);
@@ -1214,8 +1215,8 @@ export const StudentTaskPage: React.FC = () => {
           codeHash: String(submissionMeta.codeHash)
         };
       }
-      localStorage.removeItem(`task_draft_${taskId}`);
-      localStorage.removeItem(`task_draft_files_${taskId}`);
+      localStorage.removeItem(scopedStorageKey("task_draft", taskId));
+      localStorage.removeItem(scopedStorageKey("task_draft_files", taskId));
       const finalTestResults: TestResult[] = Array.isArray(result.testResults) ? result.testResults : [];
       setTestResults(hideControlResults ? [] : finalTestResults);
       setHints(hideControlResults ? [] : Array.isArray(result.hints) ? result.hints : []);
@@ -1525,7 +1526,7 @@ export const StudentTaskPage: React.FC = () => {
       title: task.title,
       description: getPracticeText() || task.description,
       section: task.lesson.title,
-      taskMode: task.taskMode,
+      taskMode: (task.taskMode === "WEB" ? "WEB" : "CODE") as "CODE" | "WEB",
     };
     return <div className="min-h-full bg-[#f7f8f5] px-3 py-4 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-5 lg:px-8">
       <div className="mx-auto max-w-[1800px]">
@@ -1811,7 +1812,7 @@ export const StudentTaskPage: React.FC = () => {
                           [index]: option
                         };
                         setQuizAnswers(newAnswers);
-                        localStorage.setItem(`quiz_answers_${taskId}`, JSON.stringify(newAnswers));
+                        localStorage.setItem(scopedStorageKey("quiz_answers", taskId || "unknown"), JSON.stringify(newAnswers));
 
                         // Persist last interacted quiz question for resume.
                         resumeExtrasRef.current.questionIndex = index;

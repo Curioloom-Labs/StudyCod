@@ -242,8 +242,24 @@ async function getOrCreateParticipant(params: { contestId: number; req: AuthRequ
     notificationFullName: displayName || null,
     ...(principalType === "USER" ? { user: { id: principalId } as any } : { student: { id: principalId } as any }),
   });
-  const saved: ContestParticipant = await participantRepo().save(created as any);
-  return saved;
+  try {
+    const saved: ContestParticipant = await participantRepo().save(created as any);
+    return saved;
+  } catch (error: any) {
+    // Two tabs may join simultaneously. The database unique constraint is the
+    // arbiter; return the row created by the winner instead of surfacing 500.
+    const code = String(error?.code ?? "").toUpperCase();
+    if (code === "ER_DUP_ENTRY" || String(error?.message ?? "").toLowerCase().includes("duplicate")) {
+      const winner = await participantRepo().findOne({
+        where: {
+          contest: { id: params.contestId } as any,
+          ...(principalType === "USER" ? { user: { id: principalId } as any } : { student: { id: principalId } as any }),
+        } as any,
+      });
+      if (winner) return winner;
+    }
+    throw error;
+  }
 }
 
 async function ensureContestParticipantNotificationColumns(): Promise<void> {
@@ -653,6 +669,9 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
 
     const contest = await contestRepo().findOne({ where: { id: contestId } as any });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.visibility !== "PUBLIC" && !(await canAccessContest({ contest, req }))) {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
 
     const subs = await submissionRepo().find({
       where: { contest: { id: contestId } } as any,

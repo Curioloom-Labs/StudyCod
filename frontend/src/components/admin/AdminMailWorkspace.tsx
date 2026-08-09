@@ -1,6 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown from "react-markdown";
+import DOMPurify from "dompurify";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import {
@@ -574,7 +575,14 @@ export const AdminMailWorkspace: React.FC = () => {
 
               <div className="border border-border bg-bg-code p-3 rounded-md">
                 {selected.html ? (
-                  <div dangerouslySetInnerHTML={{ __html: selected.html }} />
+                  <div
+                    // Mail HTML is untrusted IMAP content. Keep the rich
+                    // preview, but strip scripts, event handlers and unsafe
+                    // URLs before handing markup to the browser.
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(selected.html, { USE_PROFILES: { html: true } })
+                    }}
+                  />
                 ) : (
                   <pre className="text-xs whitespace-pre-wrap text-text-primary">{selected.text || "(empty)"}</pre>
                 )}

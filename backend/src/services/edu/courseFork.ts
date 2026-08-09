@@ -6,6 +6,7 @@ import { CourseItem, type CourseItemKind } from "../../entities/CourseItem";
 import { Class } from "../../entities/Class";
 import { EduLesson } from "../../entities/EduLesson";
 import { EduTask } from "../../entities/EduTask";
+import { TestData } from "../../entities/TestData";
 import { CourseAssignment, type OriginEntry } from "../../entities/CourseAssignment";
 import { renderPageContent } from "./contentRender";
 
@@ -27,6 +28,7 @@ export interface PlannedTask {
   webTemplateFiles?: unknown;
   webValidationRules?: unknown;
   webValidationProfile?: unknown;
+  tests?: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>;
 }
 
 export interface PlannedLesson {
@@ -100,7 +102,10 @@ export function planTaskFromItem(item: Pick<CourseItem, "id" | "kind" | "title" 
     taskMode,
     webTemplateFiles: content.webTemplateFiles,
     webValidationRules: content.webValidationRules,
-    webValidationProfile: content.webValidationProfile
+    webValidationProfile: content.webValidationProfile,
+    tests: Array.isArray(content.tests)
+      ? content.tests.filter((test): test is { input: string; expectedOutput: string; isHidden?: boolean; points?: number } => Boolean(test && typeof test === "object" && typeof (test as any).input === "string" && typeof (test as any).expectedOutput === "string")).slice(0, 500)
+      : []
   };
 }
 
@@ -199,6 +204,13 @@ export async function assignCourseToClass(input: {
     const cls = await manager.getRepository(Class).findOne({ where: { id: input.classId } });
     if (!cls || cls.organizationId !== input.orgId) throw new Error("CLASS_NOT_IN_ORG");
 
+    const existing = await manager.getRepository(CourseAssignment).findOne({
+      where: { class: { id: input.classId }, course: { id: input.courseId } }
+    });
+    if (existing) {
+      return { assignmentId: existing.id, lessonsCreated: 0, tasksCreated: 0, skipped: plan.skipped.length };
+    }
+
     const originMap: Record<string, OriginEntry> = {};
     const moduleMap: Record<string, number> = {};
     let lessonsCreated = 0;
@@ -231,6 +243,17 @@ export async function assignCourseToClass(input: {
           isClosed: false
         });
         await manager.getRepository(EduTask).save(task);
+        if (plannedTask.tests?.length) {
+          await manager.getRepository(TestData).save(plannedTask.tests.map((test) => manager.getRepository(TestData).create({
+            task,
+            input: test.input,
+            expectedOutput: test.expectedOutput,
+            isHidden: test.isHidden === true,
+            kind: test.isHidden === true ? "JUDGE" : "SAMPLE",
+            points: Math.max(1, Math.min(1000, Number(test.points) || 1)),
+            source: "MANUAL"
+          })));
+        }
         tasksCreated++;
         originMap[String(plannedTask.sourceItemId)] = {
           sourceHash: plannedTask.sourceHash,

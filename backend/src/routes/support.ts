@@ -140,10 +140,15 @@ router.get("/chat/conversations", authRequired, async (req: AuthRequest, res: Re
       where.user = { id: req.userId };
     }
 
-    const conversations = await convRepo().find({
+    const rawLimit = Number(req.query.limit);
+    const rawOffset = Number(req.query.offset);
+    const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 50;
+    const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0;
+    const [conversations, total] = await convRepo().findAndCount({
       where,
       order: { lastMessageAt: "DESC" },
-      take: 50
+      take: limit,
+      skip: offset
     });
 
     return res.json({
@@ -154,7 +159,9 @@ router.get("/chat/conversations", authRequired, async (req: AuthRequest, res: Re
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         lastMessageAt: c.lastMessageAt
-      }))
+      })),
+      total,
+      hasMore: offset + conversations.length < total
     });
   } catch (err: any) {
     logger.error("[support chat] failed to list conversations", { requestId: req.requestId, principalId: req.principalId, err });

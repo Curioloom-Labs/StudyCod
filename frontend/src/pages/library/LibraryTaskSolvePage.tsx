@@ -569,7 +569,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
           setLastSavedCode(nextCode);
         })
         .catch(() => {
-          // ignore autosave errors
+          showToast({ type: "error", message: tr("Чернетку не вдалося зберегти.", "Draft could not be saved.") });
         });
     }, 900);
 

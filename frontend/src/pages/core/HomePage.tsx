@@ -8,6 +8,7 @@ import { Logo } from "../../components/Logo";
 import type { User, Task } from "../../types";
 import { ArrowRight, FileText, GraduationCap, BookOpen, Users, TrendingUp, Clock as ClockIcon, CheckCircle2, TimerReset, Layers3, Gauge, Sparkles } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
+import { showToast } from "../../lib/toast";
 
 const CountUp: React.FC<{ value: number; decimals?: number; suffix?: string; className?: string }> = ({ value, decimals = 0, suffix = "", className }) => {
   const reduce = useReducedMotion();
@@ -100,6 +101,7 @@ export const HomePage: React.FC<Props> = ({
           if (tasks.length) setLastTask(tasks[0]);
         })
         .catch(() => {
+          showToast({ type: "error", message: "Не вдалося завантажити практику." });
           if (isDesignPreview) {
             setAllTasks(PREVIEW_TASKS);
             setLastTask(PREVIEW_TASKS[0]);
@@ -108,14 +110,14 @@ export const HomePage: React.FC<Props> = ({
         .finally(() => setLoading(false));
     } else if (isTeacher) {
       setLoading(true);
-      getClasses().then(setClasses).finally(() => setLoading(false));
+      getClasses().then(setClasses).catch(() => showToast({ type: "error", message: "Не вдалося завантажити класи." })).finally(() => setLoading(false));
     } else if (isStudent && user.studentId) {
       setLoading(true);
       Promise.all([getStudentLessons(), getStudentGrades(user.studentId)]).then(([lessons, gradesData]) => {
         setStudentLessons(lessons);
         setStudentGrades(gradesData.grades || []);
         setStudentSummaryGrades(gradesData.summaryGrades || []);
-      }).finally(() => setLoading(false));
+      }).catch(() => showToast({ type: "error", message: "Не вдалося завантажити навчальний прогрес." })).finally(() => setLoading(false));
     }
   }, [isEducational, isStudent, isTeacher, user.studentId, isDesignPreview]);
   const totalStudents = classes.reduce((sum, cls) => sum + cls.studentsCount, 0);

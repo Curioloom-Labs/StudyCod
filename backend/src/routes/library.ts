@@ -847,7 +847,9 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
       qb.andWhere("(t.allowed_languages IS NULL OR t.allowed_languages LIKE :jl)", { jl: `%\"${judgeLanguage}\"%` });
     }
     if (q) {
-      qb.andWhere("(t.title LIKE :q OR t.description LIKE :q)", { q: `%${q}%` });
+      // Search all user-visible catalog identifiers, including JSON tags. This
+      // keeps the UI promise (title/tag/code/topic) aligned with the API.
+      qb.andWhere("(t.title LIKE :q OR t.description LIKE :q OR t.problem_code LIKE :q OR t.slug LIKE :q OR t.section LIKE :q OR t.tags LIKE :q)", { q: `%${q}%` });
     }
     qb.orderBy("t.updatedAt", "DESC");
 

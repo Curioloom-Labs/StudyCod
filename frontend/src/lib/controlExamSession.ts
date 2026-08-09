@@ -1,3 +1,5 @@
+import { currentPrincipalStorageId } from "./storageScope";
+
 export type ControlExamSession = {
   controlWorkId: number;
   active: true;
@@ -6,6 +8,10 @@ export type ControlExamSession = {
 
 const STORAGE_KEY = "studycod.edu.controlExamSession.v1";
 const EVENT_NAME = "studycod:control-exam-session";
+
+function scopedStorageKey(): string {
+  return `${STORAGE_KEY}:${currentPrincipalStorageId()}`;
+}
 
 function dispatchSessionChanged(): void {
   if (typeof window === "undefined") return;
@@ -30,7 +36,7 @@ function isValidSession(value: unknown): value is ControlExamSession {
 export function getControlExamSession(): ControlExamSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(scopedStorageKey());
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return isValidSession(parsed) ? parsed : null;
@@ -47,12 +53,14 @@ export function activateControlExamSession(controlWorkId: number): void {
     active: true,
     activatedAt: new Date().toISOString()
   };
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  window.sessionStorage.setItem(scopedStorageKey(), JSON.stringify(payload));
   dispatchSessionChanged();
 }
 
 export function clearControlExamSession(): void {
   if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(scopedStorageKey());
+  // Remove the pre-isolation key left by older builds.
   window.sessionStorage.removeItem(STORAGE_KEY);
   dispatchSessionChanged();
 }
@@ -65,7 +73,7 @@ export function subscribeControlExamSession(listener: () => void): () => void {
   if (typeof window === "undefined") return () => {};
 
   const onStorage = (event: StorageEvent) => {
-    if (event.key && event.key !== STORAGE_KEY) return;
+    if (event.key && !event.key.startsWith(STORAGE_KEY)) return;
     listener();
   };
   const onCustom = () => listener();

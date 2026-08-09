@@ -8,6 +8,7 @@ import { TopicNew } from "../../entities/TopicNew";
 import { ControlWork } from "../../entities/ControlWork";
 import { TopicTask } from "../../entities/TopicTask";
 import { EduGrade } from "../../entities/EduGrade";
+import { EduLesson } from "../../entities/EduLesson";
 import { SummaryGrade } from "../../entities/SummaryGrade";
 import { logger } from "../../utils/logger";
 import { isAssignedToStudent } from "../../utils/assignmentVisibility";
@@ -23,6 +24,7 @@ const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
+const eduLessonRepo = () => AppDataSource.getRepository(EduLesson);
 
 const THEMATIC_CANONICAL_NAME = "THEMATIC";
 const CONTROL_TASK_MAX_ATTEMPTS = 3;
@@ -133,7 +135,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       where: {
         id: req.studentId
       },
-      relations: ["class"]
+      relations: ["class", "class.teacher"]
     });
 
     if (!student) {
@@ -209,6 +211,65 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       });
       controlWork.topic.tasks = controlTasks;
     }
+
+    const courseLessons = await eduLessonRepo().find({
+      where: { class: { id: student.class.id } },
+      relations: ["class", "tasks", "tasks.testData"],
+      order: { createdAt: "ASC" }
+    });
+    const courseLessonsMapped = await Promise.all(courseLessons.map(async (lesson, lessonIndex) => ({
+      id: lesson.id,
+      title: lesson.title,
+      description: lesson.theory || null,
+      order: lessonIndex,
+      language: student.class!.language,
+      // StudentPathPages groups regular course lessons with topics; preserve
+      // CONTROL for assessments while exposing LESSON as a normal topic card.
+      type: lesson.type === "CONTROL" ? "CONTROL" : "TOPIC",
+      hasTheory: lesson.hasTheory,
+      theory: lesson.theory || undefined,
+      timeLimitMinutes: lesson.timeLimitMinutes || null,
+      deadlineTimezone: classDeadlineTimezone,
+      controlHasTheory: lesson.controlHasTheory,
+      controlHasPractice: lesson.controlHasPractice,
+      quizJson: lesson.quizJson || null,
+      tasks: await Promise.all((lesson.tasks || []).map(async (task, taskIndex) => {
+        const grade = await gradeRepo().findOne({
+          where: { task: { id: task.id }, student: { id: req.studentId } },
+          order: { createdAt: "DESC" }
+        });
+        const attemptsUsed = await gradeRepo().count({ where: { task: { id: task.id }, student: { id: req.studentId } } });
+        return {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        template: task.template,
+        taskMode: task.taskMode,
+        maxAttempts: task.maxAttempts,
+        deadline: task.deadline || null,
+        deadlineTimezone: classDeadlineTimezone,
+        isClosed: task.isClosed,
+        isAssigned: true,
+        type: task.taskMode,
+        order: taskIndex,
+        source: "course" as const,
+        grade: grade ? {
+          id: grade.id,
+          total: grade.total,
+          testsPassed: grade.testsPassed,
+          testsTotal: grade.testsTotal,
+          isCompleted: grade.isCompleted,
+          submittedCode: grade.submittedCode,
+          testResults: grade.testResults ? (() => { try { return JSON.parse(grade.testResults!); } catch { return null; } })() : null
+        } : null,
+        attemptsUsed,
+        hasGrade: Boolean(grade),
+        progressCompleted: Boolean(grade?.isCompleted || grade?.isManuallyGraded)
+        };
+      })),
+      tasksCount: (lesson.tasks || []).length,
+      createdAt: lesson.createdAt.toISOString()
+    })));
 
     logger.debug("[GET /edu/students/me/lessons] Lessons fetched", {
       requestId: req.requestId,
@@ -370,7 +431,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       };
     }));
 
-    const allLessons = [...topicsWithGrades, ...controlWorksWithGrades].sort((a, b) => {
+    const allLessons = [...topicsWithGrades, ...controlWorksWithGrades, ...courseLessonsMapped].sort((a, b) => {
       if (a.order !== b.order) return a.order - b.order;
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
@@ -416,13 +477,15 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
       });
     }
 
+    let isStaffViewer = false;
+    let isParentViewer = false;
     if (!req.studentId) {
       const classId = targetStudent.class?.id;
       const access = classId ? await authorizeClassForReq(req, classId, "STUDENT_DATA_VIEW") : null;
-      const isStaff = Boolean(access?.allowed);
+      isStaffViewer = Boolean(access?.allowed);
       // A linked parent may view their own child's grades (read-only observer).
-      const isParent = isStaff ? false : await isParentOf(req.userId!, studentId);
-      if (!isStaff && !isParent) {
+      isParentViewer = isStaffViewer ? false : await isParentOf(req.userId!, studentId);
+      if (!isStaffViewer && !isParentViewer) {
         return res.status(403).json({
           message: "ACCESS_DENIED"
         });
@@ -481,8 +544,10 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
           testsTotal: grade.testsTotal,
           feedback: grade.feedback,
           isManuallyGraded: grade.isManuallyGraded,
-          submittedCode: grade.submittedCode,
-          testResults: parsedTestResults,
+          // Source and raw test diagnostics are private student/teacher data;
+          // linked parents only receive the grade and feedback summary.
+          submittedCode: isParentViewer ? null : grade.submittedCode,
+          testResults: isParentViewer ? null : parsedTestResults,
           createdAt: grade.createdAt,
           task: grade.task ? {
             id: grade.task.id,

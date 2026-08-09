@@ -11,6 +11,7 @@ import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertB
 import { Badge } from "../../components/ui/Badge";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { showToast } from "../../lib/toast";
+import { scopedStorageKey } from "../../lib/storageScope";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { getMe } from "../../lib/api/profile";
 import {
@@ -386,7 +387,7 @@ export const TaskLibraryPage: React.FC = () => {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("library:favorites");
+      const raw = localStorage.getItem(scopedStorageKey("library:favorites", "all"));
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
@@ -404,7 +405,7 @@ export const TaskLibraryPage: React.FC = () => {
   const persistFavorites = (next: Set<number>) => {
     setFavoriteIds(next);
     try {
-      localStorage.setItem("library:favorites", JSON.stringify(Array.from(next)));
+      localStorage.setItem(scopedStorageKey("library:favorites", "all"), JSON.stringify(Array.from(next)));
     } catch {
       // ignore
     }
@@ -587,6 +588,10 @@ export const TaskLibraryPage: React.FC = () => {
         setTasks(res.tasks);
         setTotal(typeof res.total === "number" ? res.total : null);
       }
+    } catch (caught) {
+      setTasks([]);
+      setTotal(0);
+      showToast({ type: "error", message: getErrorMessageFromUnknown(caught, tr("Не вдалося завантажити бібліотеку.", "Failed to load the library.")) });
     } finally {
       setLoading(false);
     }

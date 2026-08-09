@@ -145,9 +145,6 @@ export const AppDataSource = new DataSource({
     // unbounded, which masks DB overload as latency. A bounded queue makes the
     // pool fail-fast under sustained pressure.
     queueLimit: parseInt(env.DB_POOL_QUEUE_LIMIT || "100", 10),
-    // mysql2 honours `acquireTimeout` (alias `waitForConnections`-respecting).
-    // Without it a slow DB silently blocks request handlers forever.
-    acquireTimeout: parseInt(env.DB_ACQUIRE_TIMEOUT_MS || "10000", 10),
     waitForConnections: true,
     multipleStatements: false,
     dateStrings: false

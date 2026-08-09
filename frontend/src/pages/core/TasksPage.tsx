@@ -18,6 +18,7 @@ import { type FailureRecoveryData } from "../../components/FailureRecoveryCard";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
+import { scopedStorageKey } from "../../lib/storageScope";
 interface Props {
   user: User;
 }
@@ -768,7 +769,7 @@ export const TasksPage: React.FC<Props> = ({
       return;
     }
     try {
-      setPersonalNotes(localStorage.getItem(`studycod.personal.notes.${activeId}`) ?? "");
+      setPersonalNotes(localStorage.getItem(scopedStorageKey("studycod.personal.notes", activeId)) ?? "");
     } catch {
       setPersonalNotes("");
     }
@@ -781,7 +782,7 @@ export const TasksPage: React.FC<Props> = ({
   useEffect(() => {
     if (!activeId) return;
     try {
-      localStorage.setItem(`studycod.personal.notes.${activeId}`, personalNotes);
+      localStorage.setItem(scopedStorageKey("studycod.personal.notes", activeId), personalNotes);
     } catch {
       // ignore
     }

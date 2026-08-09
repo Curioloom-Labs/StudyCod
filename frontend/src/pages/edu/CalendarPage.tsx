@@ -113,7 +113,7 @@ export const CalendarPage: React.FC = () => {
   };
 
   const openItem = (it: AgendaItemDto) => {
-    if (it.kind === "CONTROL") navigate(`/edu/control-works/${it.id}`);
+    if (it.kind === "CONTROL") navigate(`/edu/lessons/${it.id}?type=CONTROL`);
     else if (it.lessonId) navigate(`/edu/lessons/${it.lessonId}`);
   };
 

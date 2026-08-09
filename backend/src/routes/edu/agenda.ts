@@ -24,8 +24,10 @@ function parseDate(raw: unknown, fallback: Date): Date {
 router.get("/agenda", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const now = new Date();
-    const from = parseDate(req.query.from, new Date(now.getTime() - 30 * DAY));
-    const to = parseDate(req.query.to, new Date(now.getTime() + 120 * DAY));
+    // Keep enough history and future range for calendar navigation. Explicit
+    // query dates still win, so clients can request a narrower window.
+    const from = parseDate(req.query.from, new Date(now.getTime() - 365 * DAY));
+    const to = parseDate(req.query.to, new Date(now.getTime() + 730 * DAY));
 
     let classIds: number[] = [];
     if (req.userType === "STUDENT" && req.studentId) {

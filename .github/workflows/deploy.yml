@@ -11,7 +11,39 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    name: verify (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        package: [frontend, backend, judge, ai-service, lsp-service]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Run backend unit tests
+        if: matrix.package == 'backend'
+        run: npm test -- --runInBand
+
   deploy:
+    needs: verify
     runs-on: ubuntu-latest
 
     steps:

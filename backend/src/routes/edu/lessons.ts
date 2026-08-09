@@ -7,6 +7,7 @@ import { Student } from "../../entities/Student";
 import { TopicNew } from "../../entities/TopicNew";
 import { ControlWork } from "../../entities/ControlWork";
 import { TopicTask } from "../../entities/TopicTask";
+import { EduLesson } from "../../entities/EduLesson";
 import { LessonAttempt } from "../../entities/LessonAttempt";
 import { EduGrade } from "../../entities/EduGrade";
 import { SummaryGrade } from "../../entities/SummaryGrade";
@@ -25,6 +26,7 @@ const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const lessonAttemptRepo = () => AppDataSource.getRepository(LessonAttempt);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
+const eduLessonRepo = () => AppDataSource.getRepository(EduLesson);
 
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
@@ -136,6 +138,54 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       }
 
       classIdScope = student.class.id;
+    }
+
+    // Course-fork lessons live in edu_lessons, alongside the legacy topic and
+    // control-work resources. Resolve them before the legacy lookup so a
+    // published course can actually be opened by its student.
+    if (!requestedType || requestedType === "LESSON" || requestedType === "TOPIC" || requestedType === "CONTROL") {
+      const eduLesson = await eduLessonRepo().findOne({
+        where: classIdScope ? { id, class: { id: classIdScope } } : { id },
+        relations: ["class", "class.teacher", "tasks"]
+      });
+      const matchesRequestedType = !requestedType || requestedType === "LESSON"
+        || (requestedType === "TOPIC" && eduLesson?.type === "LESSON")
+        || (requestedType === "CONTROL" && eduLesson?.type === "CONTROL");
+      if (eduLesson && matchesRequestedType) {
+        if (req.studentId && eduLesson.class?.id !== classIdScope) return res.status(403).json({ message: "ACCESS_DENIED" });
+        if (req.userId) {
+          const access = eduLesson.class?.id ? await authorizeClassForReq(req, eduLesson.class.id, "CLASS_VIEW") : null;
+          if (!access?.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+        }
+        return res.json({
+          lesson: {
+            id: eduLesson.id,
+            type: eduLesson.type,
+            title: eduLesson.title,
+            theory: eduLesson.theory || undefined,
+            hasTheory: eduLesson.hasTheory,
+            timeLimitMinutes: eduLesson.timeLimitMinutes || undefined,
+            controlHasTheory: eduLesson.controlHasTheory,
+            controlHasPractice: eduLesson.controlHasPractice,
+            quizJson: eduLesson.quizJson || null,
+            tasks: (eduLesson.tasks || []).map((task) => ({
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              template: task.template,
+              taskMode: task.taskMode,
+              webTemplateFiles: task.webTemplateFiles || null,
+              webValidationRules: task.webValidationRules || null,
+              maxAttempts: task.maxAttempts,
+              deadline: task.deadline || null,
+              isClosed: task.isClosed,
+              createdAt: task.createdAt.toISOString()
+            })),
+            tasksCount: (eduLesson.tasks || []).length,
+            createdAt: eduLesson.createdAt.toISOString()
+          }
+        });
+      }
     }
     // USER principals are not query-scoped here; each matched resource is
     // authorized against its class below via the central authorizer.

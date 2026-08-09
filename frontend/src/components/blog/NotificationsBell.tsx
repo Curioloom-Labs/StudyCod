@@ -62,10 +62,6 @@ export const NotificationsBell: React.FC = () => {
         const res = await getNotifications();
         setItems(res.notifications);
         setUnread(res.unread);
-        if (res.unread > 0) {
-          await markNotificationsRead();
-          setUnread(0);
-        }
       } catch {
         // ignore — bell stays usable
       } finally {
@@ -76,6 +72,12 @@ export const NotificationsBell: React.FC = () => {
 
   const openItem = (n: AppNotification) => {
     setOpen(false);
+    if (!n.read) {
+      void markNotificationsRead([n.id]).then(() => {
+        setItems((current) => current.map((item) => item.id === n.id ? { ...item, read: true } : item));
+        setUnread((current) => Math.max(0, current - 1));
+      }).catch(() => undefined);
+    }
     if (n.postSlug) navigate(`/blog/${n.postSlug}`);
   };
 

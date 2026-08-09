@@ -1,7 +1,7 @@
 import React from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, ClipboardCheck, LockKeyhole, Play, Plus, Sparkles } from "lucide-react";
-import { createTask, generateQuiz, getLesson, saveQuiz, startLessonAttempt, submitQuizAnswers, type Lesson, type Task } from "../../lib/api/edu";
+import { createTask, generateQuiz, getLesson, saveQuiz, startLessonAttempt, type Lesson, type Task } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 type Quiz = { question: string; options: Record<string, string>; correct: string };
@@ -18,8 +18,23 @@ const LessonTeacherStudio: React.FC = () => {
   React.useEffect(() => { if (!lesson?.quizJson) return; try { const parsed = JSON.parse(lesson.quizJson); if (Array.isArray(parsed)) setQuiz(parsed); } catch { /* invalid legacy payload is intentionally ignored */ } }, [lesson?.quizJson]);
   const create = async () => { if (!task.title.trim()) return; setBusy(true); try { await createTask(id, { title: task.title.trim(), description: task.description.trim(), template: task.template }); setTask({ title: "", description: "", template: "" }); setModal(null); await load(); } catch (caught) { setError(getErrorMessageFromUnknown(caught, "Не вдалося додати практику.")); } finally { setBusy(false); } };
   const createQuiz = async () => { setBusy(true); try { const result = await generateQuiz(id, 8, lesson?.title); setQuiz(result.quiz); await saveQuiz(id, result.quiz); setModal(null); await load(); } catch (caught) { setError(getErrorMessageFromUnknown(caught, "Не вдалося згенерувати квіз.")); } finally { setBusy(false); } };
-  const begin = async () => { try { if (!preview()) await startLessonAttempt(id); } catch (caught) { setError(getErrorMessageFromUnknown(caught, "Не вдалося почати спробу.")); } };
-  const submit = async () => { if (!quiz.length) return; setBusy(true); try { if (!preview()) await submitQuizAnswers(id, answers, true); setQuizState("done"); } catch (caught) { setError(getErrorMessageFromUnknown(caught, "Не вдалося надіслати відповіді.")); } finally { setBusy(false); } };
+  const begin = async () => {
+    // This component is the teacher/editor surface. Attempt endpoints are
+    // student-only, so starting a teacher preview must never issue a request
+    // that deterministically returns 403.
+    setError(null);
+  };
+  const submit = async () => {
+    if (!quiz.length) return;
+    setBusy(true);
+    try {
+      // Keep the editor's self-check local; student submissions use the
+      // dedicated StudentLessonWorkspace flow.
+      setQuizState("done");
+    } finally {
+      setBusy(false);
+    }
+  };
   if (loading) return <div className={shell}><div className="h-12 w-64 animate-pulse rounded-xl bg-[#e8eeea] dark:bg-white/[.06]" /><div className="mt-8 h-[650px] animate-pulse rounded-[34px] bg-[#e8eeea] dark:bg-white/[.05]" /></div>;
   if (!lesson) return <div className={shell}>{error || "Урок не знайдено."}</div>;
   const title = lesson.title || "Навчальний блок"; const tasks = lesson.tasks || []; const isControl = lesson.type === "CONTROL" || Boolean(lesson.timeLimitMinutes);

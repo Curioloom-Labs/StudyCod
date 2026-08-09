@@ -21,10 +21,15 @@ router.get("/", authRequired, async (req: AuthRequest, res: Response) => {
   const me = principalOf(req);
   if (!me) return res.status(401).json({ message: "UNAUTHENTICATED" });
 
+  const requestedLimit = Number(req.query.limit ?? 50);
+  const requestedOffset = Number(req.query.offset ?? 0);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(100, Math.floor(requestedLimit))) : 50;
+  const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
   const items = await repo().find({
     where: { recipientType: me.type, recipientId: me.id },
     order: { createdAt: "DESC" },
-    take: 30
+    take: limit,
+    skip: offset
   });
   const unread = await repo().count({
     where: { recipientType: me.type, recipientId: me.id, readAt: IsNull() }
@@ -41,7 +46,8 @@ router.get("/", authRequired, async (req: AuthRequest, res: Response) => {
       read: !!n.readAt,
       createdAt: n.createdAt
     })),
-    unread
+    unread,
+    hasMore: items.length === limit
   });
 });
 

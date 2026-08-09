@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate as useRouterNavigate } from "react-router-dom";
 import { ArrowRight, BookOpen, CheckCircle2, CircleDot, ClipboardList, Compass, FileDown, KeyRound, Lock, Megaphone, Sparkles, Target } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { getMyAnnouncements, getMyStudentInfo, getStudentLessons, type Lesson } from "../../lib/api/edu";
@@ -7,6 +7,15 @@ import { downloadProgressReport, getConceptsDue, getDailyChallenge, getMySkillTr
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
+const useNavigate = () => {
+  const navigate = useRouterNavigate();
+  return React.useCallback((to: any, options?: any) => {
+    if (typeof to === "string" && to.startsWith("/edu/lessons/") && preview() && !to.includes("preview=")) {
+      to += `${to.includes("?") ? "&" : "?"}preview=true`;
+    }
+    return navigate(to, options);
+  }, [navigate]);
+};
 const lessonSample: Lesson[] = [
   { id: 101, type: "TOPIC", title: "Колекції та робота з даними", tasksCount: 5, createdAt: "", hasTheory: true },
   { id: 102, type: "CONTROL", title: "Контрольна: цикли", tasksCount: 3, createdAt: "", parentTopicId: 101, timeLimitMinutes: 40 },

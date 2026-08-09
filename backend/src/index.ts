@@ -501,7 +501,7 @@ app.use((req, res, next) => {
 // in URLs or request bodies. Tests use JWT fixtures and intentionally bypass
 // this browser-only middleware.
 if (process.env.NODE_ENV !== "test") {
-  app.use(lusca.csrf({
+  const csrfMiddleware = lusca.csrf({
     angular: true,
     cookie: {
       options: {
@@ -510,7 +510,14 @@ if (process.env.NODE_ENV !== "test") {
         sameSite: "lax"
       }
     }
-  }));
+  });
+  // Health/readiness/metrics probes deliberately bypass sessions. Lusca
+  // requires req.session even for safe GET requests, so do not invoke it for
+  // those sessionless endpoints.
+  app.use((req, res, next) => {
+    if (isSessionlessPath(req.path)) return next();
+    return csrfMiddleware(req, res, next);
+  });
 }
 setupGoogleStrategy();
 if (!IS_PRODUCTION) {

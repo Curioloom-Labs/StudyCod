@@ -28,6 +28,7 @@ import { AuroraSection, AuroraList, AuroraRow } from "../../components/ui/Aurora
 import { PageHero } from "../../components/ui/PageHero";
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import type { User } from "../../types";
+import { showToast } from "../../lib/toast";
 interface Props {
   user: User;
 }
@@ -142,6 +143,7 @@ export const StudentDashboardPage: React.FC<Props> = () => {
       setNextTaskRecommendation(recommendationResult.status === "fulfilled" ? recommendationResult.value : null);
     } catch (error) {
       console.error("Failed to load grades:", error);
+      showToast({ type: "error", message: tr("Не вдалося завантажити журнал.", "Failed to load the journal.") });
     } finally {
       setLoading(false);
     }

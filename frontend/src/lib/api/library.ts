@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { scopedStorageKey } from "../storageScope";
 import i18n from "../../i18n";
 
 export type LibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
@@ -209,7 +210,7 @@ function isStudentToken(): boolean {
 }
 
 function studentAttemptKey(taskId: number): string {
-  return `library:studentAttempt:v1:${taskId}`;
+  return scopedStorageKey("library:studentAttempt:v1", taskId);
 }
 
 function readStudentAttempt(taskId: number): StudentLibraryAttemptV1 | null {

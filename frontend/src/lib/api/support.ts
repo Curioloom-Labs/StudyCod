@@ -44,8 +44,11 @@ export type SupportChatMessage = {
   attachments: SupportChatAttachment[];
 };
 
-export async function listSupportChatConversations(): Promise<{ conversations: SupportChatConversation[] }> {
-  const res = await api.get("/support/chat/conversations");
+export async function listSupportChatConversations(params?: { limit?: number; offset?: number }): Promise<{ conversations: SupportChatConversation[]; total?: number; hasMore?: boolean }> {
+  const query = new URLSearchParams();
+  if (params?.limit != null) query.set("limit", String(params.limit));
+  if (params?.offset != null) query.set("offset", String(params.offset));
+  const res = await api.get(`/support/chat/conversations${query.toString() ? `?${query.toString()}` : ""}`);
   return res.data;
 }
 

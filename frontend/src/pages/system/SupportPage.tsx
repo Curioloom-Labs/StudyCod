@@ -28,7 +28,7 @@ const PREVIEW_MESSAGES: SupportChatMessage[] = [
 export const SupportPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const isPreview = import.meta.env.DEV && searchParams.get("preview") === "1";
+  const isPreview = import.meta.env.DEV && ["1", "true"].includes(searchParams.get("preview") || "");
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<SupportChatConversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);

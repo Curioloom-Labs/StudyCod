@@ -32,6 +32,7 @@ import classStudentsRouter from "./edu/classStudents";
 import studentsRouter from "./edu/students";
 import lessonsRouter from "./edu/lessons";
 import tasksRouter from "./edu/tasks";
+import courseTasksRouter from "./edu/courseTasks";
 import testDataRouter from "./edu/testData";
 import gradingRouter from "./edu/grading";
 import appealsRouter from "./edu/appeals";
@@ -122,6 +123,7 @@ eduRouter.use(lessonsRouter);
 // task id and the request 400s. Their :taskId sub-routes have disjoint suffixes,
 // so this reorder introduces no new shadowing.
 eduRouter.use(gradingRouter);
+eduRouter.use(courseTasksRouter);
 eduRouter.use(tasksRouter);
 eduRouter.use(testDataRouter);
 eduRouter.use(appealsRouter);

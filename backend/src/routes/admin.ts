@@ -17,6 +17,7 @@ import { logger } from "../utils/logger";
 import { getUserIadForLang } from "../utils/iad";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS } from "../types/GradingSystem";
 import { getExecutionQueueMode } from "../services/execution/distributedJudgeQueueSingleton";
+import { revokeUserTokensBeforeTime } from "../services/auth/jwtRevocation";
 import {
   getJudgeDeadLetterQueue,
   getJudgeExecutionMetrics,
@@ -248,6 +249,7 @@ adminRouter.patch("/users/:id/role", authRequired, systemAdminGuard, async (req:
     }
     user.role = validated.data.role;
     await userRepo().save(user);
+    await revokeUserTokensBeforeTime(user.id, Date.now());
     return res.json({
       message: "User role updated successfully",
       user: buildUserDto(user)
@@ -310,10 +312,12 @@ adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: Auth
     if (req.body.lang) user.lang = normalizeLang(req.body.lang);
     if (req.body.userMode) user.userMode = req.body.userMode;
     if (req.body.emailVerified !== undefined) user.emailVerified = req.body.emailVerified;
+    const securityChanged = Boolean(req.body.password || req.body.userMode);
     if (req.body.password) {
       user.password = await bcrypt.hash(req.body.password, 10);
     }
     await userRepo().save(user);
+    if (securityChanged) await revokeUserTokensBeforeTime(user.id, Date.now());
     return res.json({
       message: "User updated successfully",
       user: buildUserDto(user)

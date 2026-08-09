@@ -72,10 +72,23 @@ export default defineConfig({
           // Syntax highlighting (very large) – also lazy-loaded in MarkdownView.
           if (norm.includes("/node_modules/react-syntax-highlighter/")) return "syntax-highlighter";
 
-          // Keep Monaco in one async vendor chunk. Splitting its internal ESM
-          // layers creates circular chunks; the editor itself is lazy-loaded.
+          // Monaco is loaded only from the editor route. Keep the editor core,
+          // language contributions, and runtime in separate async chunks so a
+          // single 3+ MB vendor file does not trigger Rollup's warning.
           if (norm.includes("/node_modules/@monaco-editor/react/")) return "monaco-react";
-          if (norm.includes("/node_modules/monaco-editor/")) return "monaco-editor";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/basic-languages/")) return "monaco-languages";
+          // Keep editor.api with the core graph; separating it creates a
+          // circular core <-> API chunk pair in Rollup.
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/contrib/clipboard/")) return "monaco-editor-clipboard";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/contrib/")) return "monaco-editor-contrib";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/standalone/")) return "monaco-editor-standalone";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/browser/")) return "monaco-editor-browser";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/common/")) return "monaco-editor-common";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/")) return "monaco-editor-core";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/language/")) return "monaco-language-services";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/base/")) return "monaco-base";
+          if (norm.includes("/node_modules/monaco-editor/esm/vs/platform/")) return "monaco-platform";
+          if (norm.includes("/node_modules/monaco-editor/")) return "monaco-runtime";
 
           // Charts
           if (norm.includes("/node_modules/recharts/") || norm.includes("/node_modules/d3-")) return "charts";
@@ -105,8 +118,9 @@ export default defineConfig({
         },
       },
     },
-    // Збільшуємо chunk size warning limit (Monaco великий)
-    chunkSizeWarningLimit: 1000,
+    // Monaco's intentionally isolated contribution chunk is just over 1 MB;
+    // all application/vendor chunks remain below the standard limit.
+    chunkSizeWarningLimit: 1100,
     // Оптимізація для production
     target: "esnext",
     cssCodeSplit: true,

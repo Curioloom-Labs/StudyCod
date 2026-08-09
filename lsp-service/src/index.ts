@@ -13,6 +13,9 @@ const SECRET = String(process.env.LSP_SECRET || "").trim();
 const ROOT = resolve(process.env.LSP_DATA_DIR || "/var/lib/studycod-lsp");
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20_000;
+const MAX_SESSIONS = Math.max(1, Number(process.env.LSP_MAX_SESSIONS || 16));
+const MAX_PENDING_REQUESTS = Math.max(1, Number(process.env.LSP_MAX_PENDING_REQUESTS || 64));
+const MAX_BODY_BYTES = Math.max(64 * 1024, Number(process.env.LSP_MAX_BODY_BYTES || 2 * 1024 * 1024));
 
 if (!SECRET) {
   throw new Error("LSP_SECRET must be configured");
@@ -49,7 +52,13 @@ function json(res: ServerResponse, status: number, payload: unknown): void {
 
 async function readBody(req: IncomingMessage): Promise<JsonObject> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  let total = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > MAX_BODY_BYTES) throw new Error("Request body too large");
+    chunks.push(buffer);
+  }
   if (!chunks.length) return {};
   const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("JSON object expected");
@@ -161,6 +170,7 @@ function consumeMessages(session: LspSession): void {
 }
 
 function request(session: LspSession, method: string, params: unknown): Promise<unknown> {
+  if (session.pending.size >= MAX_PENDING_REQUESTS) return Promise.reject(new Error("Too many pending LSP requests"));
   const id = session.nextRequestId++;
   return new Promise((resolvePromise, reject) => {
     const timer = setTimeout(() => {
@@ -260,6 +270,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const parts = url.pathname.split("/").filter(Boolean);
   try {
     if (req.method === "POST" && parts.length === 1 && parts[0] === "session") {
+      if (sessions.size >= MAX_SESSIONS) return json(res, 429, { message: "LSP session capacity reached" });
       const body = await readBody(req);
       const session = await startSession(languageOf(body.language));
       return json(res, 201, { sessionId: session.id, language: session.language });

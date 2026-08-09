@@ -29,6 +29,7 @@ export interface OriginEntry {
 
 @Entity("course_assignments")
 @Index("idx_assignment_class", ["class"])
+@Index("uq_assignment_class_course", ["class", "course"], { unique: true })
 export class CourseAssignment {
   @PrimaryGeneratedColumn()
   id!: number;
