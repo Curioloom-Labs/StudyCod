@@ -284,6 +284,7 @@ export async function postAdminSupportConversationMessage(conversationId: number
   sendEmail?: boolean;
 }): Promise<{
   ok: boolean;
+  emailSent?: boolean;
   message: {
     id: number;
     senderType: "ADMIN";

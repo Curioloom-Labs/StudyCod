@@ -111,6 +111,7 @@ router.post("/conversations/:id/messages", authRequired, systemAdminGuard, async
     await msgRepo().save(msg);
     await convRepo().update({ id: conversation.id }, { lastMessageAt: msg.createdAt } as any);
 
+    let emailSent = false;
     if (validated.data.sendEmail !== false) {
       try {
         await emailService.sendSupportReply({
@@ -118,18 +119,20 @@ router.post("/conversations/:id/messages", authRequired, systemAdminGuard, async
           subject: conversation.subject,
           message: validated.data.text
         });
+        emailSent = true;
       } catch (err: any) {
-        return res.status(502).json({
-          message: "EMAIL_SEND_FAILED",
-          ...(process.env.NODE_ENV !== "production" && {
-            details: err?.message || String(err)
-          })
+        logger.warn("[admin support] chat reply saved but email delivery failed", {
+          requestId: req.requestId,
+          userId: req.userId,
+          conversationId,
+          error: err?.message || String(err)
         });
       }
     }
 
     return res.json({
       ok: true,
+      emailSent,
       message: {
         id: msg.id,
         senderType: msg.senderType,

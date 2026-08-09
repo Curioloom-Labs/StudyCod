@@ -55,6 +55,7 @@ export async function listSupportChatConversations(params?: { limit?: number; of
 export async function createSupportChatConversation(data: {
   subject: string;
   message: string;
+  files?: File[];
 }): Promise<{
   ok: boolean;
   conversation: {
@@ -63,9 +64,22 @@ export async function createSupportChatConversation(data: {
     status: SupportConversationStatus;
     createdAt: string;
     lastMessageAt: string;
+    attachments?: SupportChatAttachment[];
   };
 }> {
-  const res = await api.post("/support/chat/conversations", data);
+  const files = data.files?.filter(Boolean) ?? [];
+  if (files.length > 0) {
+    const form = new FormData();
+    form.append("subject", data.subject);
+    form.append("message", data.message);
+    for (const file of files) form.append("files", file);
+    const res = await api.post("/support/chat/conversations", form);
+    return res.data;
+  }
+  const res = await api.post("/support/chat/conversations", {
+    subject: data.subject,
+    message: data.message
+  });
   return res.data;
 }
 
@@ -108,6 +122,14 @@ export async function closeSupportChatConversation(conversationId: number, reaso
   const res = await api.patch(`/support/chat/conversations/${conversationId}/close`, {
     reason: reason?.trim() || undefined
   });
+  return res.data;
+}
+
+export async function reopenSupportChatConversation(conversationId: number): Promise<{
+  ok: boolean;
+  conversation: SupportChatConversation;
+}> {
+  const res = await api.patch(`/support/chat/conversations/${conversationId}/reopen`, {});
   return res.data;
 }
 

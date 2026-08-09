@@ -106,6 +106,38 @@ function safeFilename(name: string): string {
   return base.replace(/[\\/<>:"|?*\x00-\x1F]/g, "_").slice(0, 180) || "file";
 }
 
+type SavedSupportAttachment = {
+  id: number;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+async function saveSupportAttachments(message: SupportMessage, files: any[]): Promise<SavedSupportAttachment[]> {
+  const saved: SavedSupportAttachment[] = [];
+  if (!Array.isArray(files) || files.length === 0) return saved;
+  const messageDirectory = path.posix.join("support", String(message.conversation.id), String(message.id));
+  ensureDir(path.join(UPLOADS_ROOT, ...messageDirectory.split("/")));
+
+  for (const file of files) {
+    const originalName = safeFilename(file.originalname);
+    const extension = path.extname(originalName);
+    const storedName = `${Date.now()}_${crypto.randomBytes(8).toString("hex")}${extension || ""}`;
+    const storageKey = path.posix.join(messageDirectory, storedName);
+    fs.writeFileSync(path.join(UPLOADS_ROOT, ...storageKey.split("/")), file.buffer);
+    const attachment = attRepo().create({
+      message,
+      originalName,
+      mimeType: file.mimetype || "application/octet-stream",
+      sizeBytes: file.size,
+      storageKey
+    } as Partial<SupportAttachment>);
+    await attRepo().save(attachment);
+    saved.push({ id: attachment.id, originalName: attachment.originalName, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes });
+  }
+  return saved;
+}
+
 const maybeParseMultipartFiles = (req: any, res: any, next: any) => {
   const ct = String(req.headers["content-type"] || "");
   if (ct.includes("multipart/form-data")) {
@@ -169,7 +201,7 @@ router.get("/chat/conversations", authRequired, async (req: AuthRequest, res: Re
   }
 });
 
-router.post("/chat/conversations", authRequired, async (req: AuthRequest, res: Response) => {
+router.post("/chat/conversations", authRequired, maybeParseMultipartFiles, async (req: AuthRequest, res: Response) => {
   const validated = createConversationSchema.safeParse(req.body);
   if (!validated.success) {
     return res.status(400).json({
@@ -221,6 +253,7 @@ router.post("/chat/conversations", authRequired, async (req: AuthRequest, res: R
       text: message
     } as Partial<SupportMessage>);
     await msgRepo().save(firstMsg);
+    const attachments = await saveSupportAttachments(firstMsg, (req as any).files || []);
 
     await convRepo().update({ id: conversation.id }, { lastMessageAt: firstMsg.createdAt } as any);
 
@@ -231,7 +264,8 @@ router.post("/chat/conversations", authRequired, async (req: AuthRequest, res: R
         subject: conversation.subject,
         status: conversation.status,
         createdAt: conversation.createdAt,
-        lastMessageAt: firstMsg.createdAt
+        lastMessageAt: firstMsg.createdAt,
+        attachments
       }
     });
   } catch (err: any) {
@@ -353,6 +387,47 @@ router.patch("/chat/conversations/:id/close", authRequired, async (req: AuthRequ
   }
 });
 
+router.patch("/chat/conversations/:id/reopen", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userType) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (req.userType === "USER" && !req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+    if (req.userType === "STUDENT" && !req.studentId) return res.status(401).json({ message: "UNAUTHORIZED" });
+
+    const conversationId = Number.parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(conversationId) || conversationId <= 0) return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
+    const conversation = await convRepo().findOne({ where: { id: conversationId } as any, relations: ["user", "student"] });
+    if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
+
+    const isOwner = req.userType === "STUDENT" && req.studentId
+      ? (conversation.student as any)?.id === req.studentId
+      : (conversation.user as any)?.id === req.userId;
+    if (!isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    if (conversation.status !== "OPEN") {
+      await convRepo().update({ id: conversation.id }, { status: "OPEN" } as any);
+      const systemMessage = msgRepo().create({ conversation, senderType: "SYSTEM", text: "Conversation reopened by user." } as Partial<SupportMessage>);
+      await msgRepo().save(systemMessage);
+      await convRepo().update({ id: conversation.id }, { lastMessageAt: systemMessage.createdAt } as any);
+    }
+
+    const updated = await convRepo().findOne({ where: { id: conversation.id } as any });
+    return res.json({
+      ok: true,
+      conversation: {
+        id: updated?.id ?? conversation.id,
+        subject: updated?.subject ?? conversation.subject,
+        status: updated?.status ?? "OPEN",
+        createdAt: updated?.createdAt ?? conversation.createdAt,
+        updatedAt: updated?.updatedAt ?? conversation.updatedAt,
+        lastMessageAt: updated?.lastMessageAt ?? conversation.lastMessageAt
+      }
+    });
+  } catch (err: any) {
+    logger.error("[support chat] failed to reopen conversation", { requestId: req.requestId, principalId: req.principalId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 router.post("/chat/conversations/:id/messages", authRequired, maybeParseMultipartFiles, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userType) return res.status(401).json({ message: "UNAUTHORIZED" });
@@ -401,40 +476,7 @@ router.post("/chat/conversations/:id/messages", authRequired, maybeParseMultipar
     } as Partial<SupportMessage>);
     await msgRepo().save(msg);
 
-    const savedAttachments: Array<{
-      id: number;
-      originalName: string;
-      mimeType: string;
-      sizeBytes: number;
-    }> = [];
-    if (hasFiles) {
-      const msgDirRel = path.posix.join("support", String(conversation.id), String(msg.id));
-      const msgDirAbs = path.join(UPLOADS_ROOT, ...msgDirRel.split("/"));
-      ensureDir(msgDirAbs);
-      for (const f of files!) {
-        const originalName = safeFilename(f.originalname);
-        const ext = path.extname(originalName);
-        const token = crypto.randomBytes(8).toString("hex");
-        const storedName = `${Date.now()}_${token}${ext || ""}`;
-        const storageKey = path.posix.join(msgDirRel, storedName);
-        const abs = path.join(UPLOADS_ROOT, ...storageKey.split("/"));
-        fs.writeFileSync(abs, f.buffer);
-        const att: SupportAttachment = attRepo().create({
-          message: msg,
-          originalName,
-          mimeType: f.mimetype || "application/octet-stream",
-          sizeBytes: f.size,
-          storageKey
-        } as Partial<SupportAttachment>);
-        await attRepo().save(att);
-        savedAttachments.push({
-          id: att.id,
-          originalName: att.originalName,
-          mimeType: att.mimeType,
-          sizeBytes: att.sizeBytes
-        });
-      }
-    }
+    const savedAttachments = await saveSupportAttachments(msg, files || []);
 
     await convRepo().update({ id: conversation.id }, { lastMessageAt: msg.createdAt } as any);
 

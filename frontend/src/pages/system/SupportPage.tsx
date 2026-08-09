@@ -8,6 +8,7 @@ import {
   getSupportChatConversation,
   listSupportChatConversations,
   postSupportChatMessage,
+  reopenSupportChatConversation,
   type SupportChatConversation,
   type SupportChatMessage
 } from "../../lib/api/support";
@@ -36,11 +37,13 @@ export const SupportPage: React.FC = () => {
   const [messages, setMessages] = useState<SupportChatMessage[]>([]);
   const [newSubject, setNewSubject] = useState("");
   const [newMessage, setNewMessage] = useState("");
+  const [newFiles, setNewFiles] = useState<File[]>([]);
   const [composerText, setComposerText] = useState("");
   const [composerFiles, setComposerFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const newFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const statusLabel = (status: string) => {
     if (status === "OPEN") return tr("Відкрито", "Open");
@@ -77,12 +80,12 @@ export const SupportPage: React.FC = () => {
     return Number.isFinite(v) && v > 0 ? v : null;
   }, [searchParams]);
 
-  const loadConversations = async () => {
-    setLoading(true);
+  const loadConversations = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     if (isPreview) {
       setConversations(PREVIEW_CONVERSATIONS);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
     try {
@@ -92,7 +95,7 @@ export const SupportPage: React.FC = () => {
       const msg = getErrorMessageFromUnknown(err, tr("Не вдалося завантажити звернення", "Failed to load requests"));
       setError(String(msg));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -144,6 +147,18 @@ export const SupportPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversationId]);
 
+  useEffect(() => {
+    if (isPreview || !selectedConversationId) return;
+    const timer = window.setInterval(() => {
+      void loadConversations(true);
+      void loadThread(selectedConversationId);
+    }, 15_000);
+    return () => window.clearInterval(timer);
+    // These functions intentionally use the current selected id captured for
+    // this polling interval; selecting another thread recreates the interval.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreview, selectedConversationId]);
+
   const onCreateConversation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canCreate) return;
@@ -157,16 +172,21 @@ export const SupportPage: React.FC = () => {
       setSelectedConversationId(902);
       setNewSubject("");
       setNewMessage("");
+      setNewFiles([]);
+      if (newFileInputRef.current) newFileInputRef.current.value = "";
       setSending(false);
       return;
     }
     try {
       const res = await createSupportChatConversation({
         subject: newSubject.trim(),
-        message: newMessage.trim()
+        message: newMessage.trim(),
+        files: newFiles
       });
       setNewSubject("");
       setNewMessage("");
+      setNewFiles([]);
+      if (newFileInputRef.current) newFileInputRef.current.value = "";
       await loadConversations();
       setSelectedConversationId(res.conversation.id);
     } catch (err: unknown) {
@@ -175,6 +195,13 @@ export const SupportPage: React.FC = () => {
     } finally {
       setSending(false);
     }
+  };
+
+  const selectConversation = (id: number | null) => {
+    setSelectedConversationId(id);
+    setComposerText("");
+    setComposerFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const onSendMessage = async (e: React.FormEvent) => {
@@ -255,6 +282,22 @@ export const SupportPage: React.FC = () => {
     }
   };
 
+  const reopenConversation = async () => {
+    if (!selectedConversationId) return;
+    if (isPreview) {
+      setConversations(prev => prev.map(item => item.id === selectedConversationId ? { ...item, status: "OPEN" } : item));
+      return;
+    }
+    try {
+      await reopenSupportChatConversation(selectedConversationId);
+      await loadConversations();
+      await loadThread(selectedConversationId);
+    } catch (err: unknown) {
+      const msg = getErrorMessageFromUnknown(err, tr("Не вдалося знову відкрити звернення", "Failed to reopen request"));
+      setError(String(msg));
+    }
+  };
+
   return <SupportExperience
     tr={tr}
     loading={loading}
@@ -267,20 +310,24 @@ export const SupportPage: React.FC = () => {
     messages={messages}
     newSubject={newSubject}
     newMessage={newMessage}
+    newFiles={newFiles}
     composerText={composerText}
     composerFiles={composerFiles}
     canCreate={canCreate}
     canSend={canSend}
     fileInputRef={fileInputRef}
+    newFileInputRef={newFileInputRef}
     setNewSubject={setNewSubject}
     setNewMessage={setNewMessage}
+    setNewFiles={setNewFiles}
     setComposerText={setComposerText}
     setComposerFiles={setComposerFiles}
-    selectConversation={setSelectedConversationId}
+    selectConversation={selectConversation}
     onCreateConversation={onCreateConversation}
     onSendMessage={onSendMessage}
     onRefresh={loadConversations}
     onCloseConversation={closeConversation}
+    onReopenConversation={reopenConversation}
     onHome={() => navigate("/")}
     onDownloadAttachment={downloadAttachment}
     statusLabel={statusLabel}
