@@ -9,7 +9,7 @@ export interface AdminUser {
   firstName: string | null;
   lastName: string | null;
   userMode: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
-  role: "USER" | "TEACHER" | "SYSTEM_ADMIN";
+  role: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
   lang: "JAVA" | "PYTHON" | "CPP";
   iad: number;
   difus?: number;
@@ -104,48 +104,12 @@ export interface AdminJudgeDeadLetterReplayResult {
   limit: number;
   replayedAt: string;
 }
-export type SupportTicketStatus = "OPEN" | "ANSWERED" | "CLOSED";
 export type MaintenanceState = {
   enabled: boolean;
   title: string;
   message: string;
   until: string | null;
   updatedAt: string;
-};
-export interface AdminSupportTicket {
-  id: number;
-  userEmail: string;
-  subject: string;
-  message: string;
-  status: SupportTicketStatus;
-  createdAt: string;
-  answeredAt: string | null;
-}
-
-export type AdminSupportConversationStatus = "OPEN" | "CLOSED";
-
-export type AdminSupportChatConversation = {
-  id: number;
-  userEmail: string;
-  subject: string;
-  status: AdminSupportConversationStatus;
-  createdAt: string;
-  lastMessageAt: string;
-};
-
-export type AdminSupportChatAttachment = {
-  id: number;
-  originalName: string;
-  mimeType: string;
-  sizeBytes: number;
-};
-
-export type AdminSupportChatMessage = {
-  id: number;
-  senderType: "USER" | "ADMIN" | "SYSTEM";
-  text: string;
-  createdAt: string;
-  attachments: AdminSupportChatAttachment[];
 };
 export interface CreateUserData {
   username: string;
@@ -154,7 +118,7 @@ export interface CreateUserData {
   firstName?: string;
   lastName?: string;
   userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
-  role?: "USER" | "TEACHER" | "SYSTEM_ADMIN";
+  role?: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
   lang?: "JAVA" | "PYTHON" | "CPP";
   emailVerified?: boolean;
 }
@@ -166,7 +130,7 @@ export interface UpdateUserData {
   lang?: "JAVA" | "PYTHON" | "CPP";
 }
 export interface UpdateUserRoleData {
-  role: "USER" | "TEACHER" | "SYSTEM_ADMIN";
+  role: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
 }
 export interface CreateClassData {
   name: string;
@@ -248,51 +212,6 @@ export async function replayAdminJudgeDeadLetter(data?: {
   limit?: number;
 }): Promise<AdminJudgeDeadLetterReplayResult> {
   const res = await api.post("/admin/judge/dead-letter/replay", data || {});
-  return res.data;
-}
-export async function getAdminSupportTickets(): Promise<{
-  tickets: AdminSupportTicket[];
-}> {
-  const res = await api.get("/admin/support");
-  return res.data;
-}
-export async function replyAdminSupportTicket(id: number, data: {
-  replyText: string;
-}): Promise<{
-  ok: boolean;
-  ticket: AdminSupportTicket;
-}> {
-  const res = await api.post(`/admin/support/${id}/reply`, data);
-  return res.data;
-}
-
-export async function getAdminSupportConversations(): Promise<{ conversations: AdminSupportChatConversation[] }> {
-  const res = await api.get("/admin/support/conversations");
-  return res.data;
-}
-
-export async function getAdminSupportConversation(conversationId: number): Promise<{
-  conversation: AdminSupportChatConversation;
-  messages: AdminSupportChatMessage[];
-}> {
-  const res = await api.get(`/admin/support/conversations/${conversationId}`);
-  return res.data;
-}
-
-export async function postAdminSupportConversationMessage(conversationId: number, data: {
-  text: string;
-  sendEmail?: boolean;
-}): Promise<{
-  ok: boolean;
-  emailSent?: boolean;
-  message: {
-    id: number;
-    senderType: "ADMIN";
-    text: string;
-    createdAt: string;
-  };
-}> {
-  const res = await api.post(`/admin/support/conversations/${conversationId}/messages`, data);
   return res.data;
 }
 export async function getAdminMaintenance(): Promise<{

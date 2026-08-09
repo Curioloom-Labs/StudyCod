@@ -509,9 +509,9 @@ router.get("/chat/attachments/:attachmentId/download", authRequired, async (req:
     if (!attachment) return res.status(404).json({ message: "ATTACHMENT_NOT_FOUND" });
 
     const conversation = (attachment.message as any)?.conversation as SupportConversation;
-    const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    const isSupportAgent = req.userRole === "SYSTEM_ADMIN" || req.userRole === "SUPPORT";
     const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student as any)?.id === req.studentId : (conversation.user as any)?.id === req.userId;
-    if (!isAdmin && !isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (!isSupportAgent && !isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const abs = path.join(UPLOADS_ROOT, ...String(attachment.storageKey).split("/"));
     if (!fs.existsSync(abs)) return res.status(404).json({ message: "FILE_NOT_FOUND" });

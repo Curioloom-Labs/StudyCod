@@ -18,14 +18,9 @@ import {
   getAdminMaintenance,
   getAdminMaterialTopics,
   getAdminStats,
-  getAdminSupportConversation,
-  getAdminSupportConversations,
-  getAdminSupportTickets,
   getAdminUsers,
   importAdminMaterialTopicsLegacy,
-  postAdminSupportConversationMessage,
   replayAdminJudgeDeadLetter,
-  replyAdminSupportTicket,
   rejectAdminLibraryTask,
   sendAdminBroadcastEmail,
   syncAdminMaterialTopicsFromRepo,
@@ -44,32 +39,26 @@ import {
   type AdminMaterialTopic,
   type AdminMaterialsLanguage,
   type AdminStats,
-  type AdminSupportChatConversation,
-  type AdminSupportChatAttachment,
-  type AdminSupportChatMessage,
-  type AdminSupportTicket,
   type AdminUser,
   type MaintenanceState,
 } from "../../lib/api/admin";
 import { AdminMailWorkspace } from "../../components/admin/AdminMailWorkspace";
 import { createCertificateTemplate, getCertificateTemplateById, listCertificateTemplates, updateCertificateTemplate } from "../../lib/api/certificates";
-import { downloadSupportChatAttachment } from "../../lib/api/support";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { BookOpen, Boxes, Check, ChevronRight, CircleDot, FileText, Inbox, LayoutDashboard, Library, MessageSquare, Plus, RotateCw, Save, Send, ShieldCheck, Trash2, UserRoundPlus, Users, Wrench, X } from "lucide-react";
+import { BookOpen, Boxes, Check, ChevronRight, CircleDot, FileText, Inbox, LayoutDashboard, Library, Plus, RotateCw, Save, Send, ShieldCheck, Trash2, UserRoundPlus, Users, Wrench, X } from "lucide-react";
 
 const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const languages: AdminMaterialsLanguage[] = ["JAVA", "PYTHON", "CPP"];
 const fieldKeys = ["contest_name", "name", "full_name", "place", "score", "max_score", "date", "organizer", "signature", "certificate_id", "qr_code"] as const;
 
-type Tab = "overview" | "people" | "classes" | "materials" | "library" | "support" | "judge" | "maintenance" | "broadcast" | "mailbox" | "certificates";
+type Tab = "overview" | "people" | "classes" | "materials" | "library" | "judge" | "maintenance" | "broadcast" | "mailbox" | "certificates";
 const tabs: Array<{ id: Tab; label: string; Icon: React.ComponentType<{ className?: string }> }> = [
   { id: "overview", label: "Огляд", Icon: LayoutDashboard },
   { id: "people", label: "Люди", Icon: Users },
   { id: "classes", label: "Класи", Icon: Boxes },
   { id: "materials", label: "Матеріали", Icon: BookOpen },
   { id: "library", label: "Бібліотека", Icon: Library },
-  { id: "support", label: "Підтримка", Icon: MessageSquare },
   { id: "judge", label: "Judge", Icon: RotateCw },
   { id: "maintenance", label: "Maintenance", Icon: Wrench },
   { id: "broadcast", label: "Розсилки", Icon: Send },
@@ -126,14 +115,6 @@ export const AdminWorkspacePage: React.FC = () => {
   const [rejectReason, setRejectReason] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
 
-  const [conversations, setConversations] = useState<AdminSupportChatConversation[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
-  const [supportMessages, setSupportMessages] = useState<AdminSupportChatMessage[]>([]);
-  const [supportReply, setSupportReply] = useState("");
-  const [supportTickets, setSupportTickets] = useState<AdminSupportTicket[]>([]);
-  const [selectedTicket, setSelectedTicket] = useState<AdminSupportTicket | null>(null);
-  const [ticketReply, setTicketReply] = useState("");
-
   const [maintenanceDraft, setMaintenanceDraft] = useState({ title: "Технічне обслуговування", message: "Ми тимчасово виконуємо оновлення. Спробуйте трохи пізніше.", until: "" });
   const [broadcast, setBroadcast] = useState({ subject: "", title: "", content: "", delivery: "NOTIFICATION" as "MARKETING" | "NOTIFICATION", emails: "", classIds: "", userIds: "", includeSubscribed: false, includeAllUsers: false, confirm: "", dryRun: true });
   const [broadcastResult, setBroadcastResult] = useState<AdminBroadcastDryRunResult | AdminBroadcastSendResult | unknown | null>(null);
@@ -167,8 +148,6 @@ export const AdminWorkspacePage: React.FC = () => {
       setUsers(demoUsers); setUsersTotal(1); setClasses([{ id: 1, name: "Python 10-Б", language: "PYTHON", teacherId: 2, teacherName: "Ірина Кравець", createdAt: "", updatedAt: "" }]);
       setTopics([{ id: 1, order: 1, title: "Змінні та типи", description: "База", language: "PYTHON", theoryBlock: { id: 1, title: "Змінні", content: "Markdown theory", version: 3, level: null, tags: null, createdAt: "", updatedAt: "" } }]);
       setLibrary([{ id: 11, title: "Сума парних", description: "Опишіть алгоритм.", template: "n = int(input())", lang: "PYTHON", maxAttempts: 15, status: "PENDING", rejectionReason: null, submittedAt: "", publishedAt: null, createdAt: "", updatedAt: "", author: { id: 1, username: "mentor-anna", email: "anna@example.test" } }]);
-      setConversations([{ id: 1, subject: "Не відкривається урок", userEmail: "student@example.test", status: "OPEN", createdAt: "", lastMessageAt: new Date().toISOString() }]);
-      setSupportTickets([{ id: 7, userEmail: "parent@example.test", subject: "Сертифікат не прийшов", message: "Після завершення олімпіади листа немає.", status: "OPEN", createdAt: new Date().toISOString(), answeredAt: null }]);
       setDeadLetterItems([{ jobId: "job_demo_1", submissionId: "1042", state: "FAILED", attempts: 3, updatedAt: new Date().toISOString(), finishedAt: null, error: "Runner timeout" }]); setDeadLetterTotal(1);
       setMaintenance({ enabled: false, title: "", message: "", until: null, updatedAt: new Date().toISOString() });
       setMailOk(true); setCertificates([{ id: 1, name: "StudyCod achievement", isActive: true, type: "custom", version: 1, contestId: null }]);
@@ -183,7 +162,6 @@ export const AdminWorkspacePage: React.FC = () => {
       if (tab === "classes") { const r = await getAdminClasses(); setClasses(r.classes); }
       if (tab === "materials") { const r = await getAdminMaterialTopics({ language: materialsLanguage }); setTopics(r.topics); if (!selectedTopicId && r.topics[0]) selectTopic(r.topics[0]); }
       if (tab === "library") { const r = await getAdminLibraryTasks({ status: libraryStatus }); setLibrary(r.tasks); setSelectedLibraryTask((prev) => prev ? r.tasks.find((t) => t.id === prev.id) ?? null : r.tasks[0] ?? null); }
-      if (tab === "support") { const [chat, legacy] = await Promise.all([getAdminSupportConversations(), getAdminSupportTickets().catch(() => ({ tickets: [] }))]); setConversations(chat.conversations); setSelectedConversationId((current) => current && chat.conversations.some((item) => item.id === current) ? current : null); setSupportTickets(legacy.tickets); }
       if (tab === "judge") { const [latestLoad, dead] = await Promise.all([getAdminJudgeLoad().catch(() => null), getAdminJudgeDeadLetter({ limit: parseLimit(deadLetterLimit, 200) })]); setJudge(latestLoad); setDeadLetterItems(dead.items || []); setDeadLetterTotal(Number.isFinite(dead.total) ? dead.total : (dead.items || []).length); }
       if (tab === "maintenance") { const r = await getAdminMaintenance(); setMaintenance(r.state); setMaintenanceDraft({ title: r.state.title || "Технічне обслуговування", message: r.state.message || "", until: isoToLocalDateTimeInput(r.state.until) }); }
       if (tab === "mailbox") { const mail = await getAdminMailStatus(); setMailOk(mail.ok); }
@@ -196,25 +174,6 @@ export const AdminWorkspacePage: React.FC = () => {
   };
 
   useEffect(() => { void load(); }, [tab, libraryStatus, materialsLanguage]);
-
-  useEffect(() => {
-    if (tab !== "support" || isPreview()) return;
-    let cancelled = false;
-    const refreshSupport = async () => {
-      const result = await getAdminSupportConversations();
-      if (cancelled) return;
-      setConversations(result.conversations);
-      setSelectedConversationId((current) => current && result.conversations.some((item) => item.id === current) ? current : null);
-      if (selectedConversationId && result.conversations.some((item) => item.id === selectedConversationId)) {
-        const detail = await getAdminSupportConversation(selectedConversationId);
-        if (!cancelled) setSupportMessages(detail.messages);
-      }
-    };
-    const timer = window.setInterval(() => {
-      void refreshSupport().catch((cause) => reportError(cause, "Не вдалося оновити звернення."));
-    }, 15_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [tab, selectedConversationId]);
 
   const selectUser = (user: AdminUser) => {
     setSelectedUser(user);
@@ -286,42 +245,6 @@ export const AdminWorkspacePage: React.FC = () => {
     } catch (cause) { reportError(cause, "Не вдалося оновити задачу."); } finally { setBusyId(null); }
   };
 
-  const openConversation = async (id: number) => {
-    setSelectedConversationId(id);
-    setSupportMessages([]);
-    try { const r = await getAdminSupportConversation(id); setSupportMessages(r.messages); } catch (cause) { reportError(cause, "Не вдалося відкрити чат."); }
-  };
-  const replySupport = async () => {
-    if (!selectedConversationId || !supportReply.trim()) return;
-    try {
-      const result = await postAdminSupportConversationMessage(selectedConversationId, { text: supportReply, sendEmail: true });
-      setSupportReply("");
-      await openConversation(selectedConversationId);
-      showToast({ type: result.emailSent === false ? "error" : "success", message: result.emailSent === false ? "Відповідь збережено, але email не доставлено." : "Відповідь надіслано." });
-    } catch (cause) { reportError(cause, "Не вдалося відповісти."); }
-  };
-  const downloadSupportAttachment = async (attachment: AdminSupportChatAttachment) => {
-    try {
-      const result = await downloadSupportChatAttachment(attachment.id);
-      const url = URL.createObjectURL(result.blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = result.filename || attachment.originalName;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (cause) { reportError(cause, "Не вдалося завантажити вкладення."); }
-  };
-  const replyTicket = async () => {
-    if (!selectedTicket || !ticketReply.trim()) return;
-    try {
-      const result = await replyAdminSupportTicket(selectedTicket.id, { replyText: ticketReply });
-      setSelectedTicket(result.ticket);
-      setTicketReply("");
-      const legacy = await getAdminSupportTickets();
-      setSupportTickets(legacy.tickets);
-      showToast({ type: "success", message: "Відповідь на legacy ticket надіслано." });
-    } catch (cause) { reportError(cause, "Не вдалося відповісти на legacy ticket."); }
-  };
   const refreshDeadLetter = async () => {
     try {
       const [latestLoad, dead] = await Promise.all([getAdminJudgeLoad().catch(() => null), getAdminJudgeDeadLetter({ limit: parseLimit(deadLetterLimit, 200) })]);
@@ -402,7 +325,6 @@ export const AdminWorkspacePage: React.FC = () => {
       {tab === "classes" && <ClassesPanel classes={classes} users={users} draft={classDraft} setDraft={setClassDraft} onSave={saveClass} onDelete={removeClass} />}
       {tab === "materials" && <MaterialsPanel language={materialsLanguage} setLanguage={setMaterialsLanguage} topics={topics} selectedTopicId={selectedTopicId} draft={materialDraft} setDraft={setMaterialDraft} selectTopic={selectTopic} newTopic={newTopic} saveTopic={saveTopic} removeTopic={removeTopic} syncMaterials={syncMaterials} />}
       {tab === "library" && <LibraryPanel status={libraryStatus} setStatus={setLibraryStatus} tasks={library} selected={selectedLibraryTask} setSelected={setSelectedLibraryTask} rejectReason={rejectReason} setRejectReason={setRejectReason} busyId={busyId} moderate={moderate} />}
-      {tab === "support" && <SupportPanel conversations={conversations} selectedConversationId={selectedConversationId} messages={supportMessages} reply={supportReply} setReply={setSupportReply} openConversation={openConversation} replySupport={replySupport} downloadAttachment={downloadSupportAttachment} tickets={supportTickets} selectedTicket={selectedTicket} setSelectedTicket={setSelectedTicket} ticketReply={ticketReply} setTicketReply={setTicketReply} replyTicket={replyTicket} />}
       {tab === "judge" && <JudgePanel judge={judge} items={deadLetterItems} total={deadLetterTotal} limit={deadLetterLimit} setLimit={setDeadLetterLimit} lastReplay={deadLetterReplay} busy={deadLetterBusy} refresh={refreshDeadLetter} replay={replayDeadLetter} />}
       {tab === "maintenance" && <MaintenancePanel maintenance={maintenance} draft={maintenanceDraft} setDraft={setMaintenanceDraft} save={saveMaintenance} />}
       {tab === "broadcast" && <BroadcastPanel broadcast={broadcast} setBroadcast={setBroadcast} result={broadcastResult} send={sendBroadcast} />}
@@ -425,12 +347,6 @@ const MaterialsPanel: React.FC<{ language: AdminMaterialsLanguage; setLanguage: 
 
 const LibraryPanel: React.FC<{ status: AdminLibraryTaskStatus; setStatus: (s: AdminLibraryTaskStatus) => void; tasks: AdminLibraryTask[]; selected: AdminLibraryTask | null; setSelected: (t: AdminLibraryTask) => void; rejectReason: string; setRejectReason: (v: string) => void; busyId: number | null; moderate: (task: AdminLibraryTask, action: "approve" | "reject") => void }> = ({ status, setStatus, tasks, selected, setSelected, rejectReason, setRejectReason, busyId, moderate }) => <div className="grid gap-5 xl:grid-cols-[.78fr_1.22fr]"><Surface><div className="flex items-start justify-between gap-4"><div><Label tone="text-[#d97706]">Модерація</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Бібліотека задач</h2></div><Select value={status} onChange={(e) => setStatus(e.target.value as AdminLibraryTaskStatus)}><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="DRAFT">Draft</option></Select></div><div className="mt-5 space-y-3">{tasks.map((task) => <button key={task.id} onClick={() => setSelected(task)} className={`w-full rounded-2xl border p-4 text-left ${selected?.id === task.id ? "border-[#00c96d]/50 bg-[#e8f6ed] dark:bg-[#00ff88]/10" : "border-[#152219]/8 bg-[#fafcf9] dark:border-white/8 dark:bg-white/[.025]"}`}><div className="font-semibold">{task.title}</div><div className="mt-1 text-sm text-[#728176] dark:text-[#a4b2a7]">{task.lang} · {task.author?.username || "Unknown author"} · #{task.id}</div></button>)}</div></Surface><Surface>{selected ? <div><Label>Деталі задачі</Label><div className="mt-3 flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-2xl font-semibold tracking-[-.04em]">{selected.title}</h2><p className="mt-1 text-sm text-[#708075] dark:text-[#a4b2a7]">{selected.lang} · max attempts {selected.maxAttempts}</p></div><Pill green={selected.status === "APPROVED"}>{selected.status}</Pill></div><TextBlock title="Опис">{selected.description || "(empty)"}</TextBlock><TextBlock title="Template" mono>{selected.template || ""}</TextBlock>{selected.rejectionReason && <TextBlock title="Причина відхилення">{selected.rejectionReason}</TextBlock>}<TextArea label="Причина відхилення" rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} /><div className="mt-4 flex flex-wrap gap-2"><PrimaryButton disabled={busyId === selected.id || selected.status !== "PENDING"} onClick={() => moderate(selected, "approve")}><Check className="mr-2 inline h-4 w-4" />Approve</PrimaryButton><PrimaryButton muted disabled={busyId === selected.id || selected.status !== "PENDING"} onClick={() => moderate(selected, "reject")}>Reject</PrimaryButton></div></div> : <div className="text-sm text-[#708075]">Оберіть задачу.</div>}</Surface></div>;
 
-const SupportPanel: React.FC<{ conversations: AdminSupportChatConversation[]; selectedConversationId: number | null; messages: AdminSupportChatMessage[]; reply: string; setReply: (v: string) => void; openConversation: (id: number) => void; replySupport: () => void; downloadAttachment: (attachment: AdminSupportChatAttachment) => void; tickets: AdminSupportTicket[]; selectedTicket: AdminSupportTicket | null; setSelectedTicket: (ticket: AdminSupportTicket | null) => void; ticketReply: string; setTicketReply: (value: string) => void; replyTicket: () => void }> = ({ conversations, selectedConversationId, messages, reply, setReply, openConversation, replySupport, downloadAttachment, tickets, selectedTicket, setSelectedTicket, ticketReply, setTicketReply, replyTicket }) => {
-  const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
-  const canReply = Boolean(selectedConversation && selectedConversation.status === "OPEN");
-  return <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]"><div className="space-y-5"><Surface><Label>Підтримка</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Звернення користувачів</h2><p className="mt-2 text-sm text-[#708075] dark:text-[#a4b2a7]">Список оновлюється автоматично. Закриті звернення залишаються доступними для перегляду.</p><div className="mt-5 space-y-2">{conversations.map((item) => <button type="button" key={item.id} onClick={() => openConversation(item.id)} className={`w-full rounded-2xl p-4 text-left transition ${selectedConversationId === item.id ? "bg-[#e8f6ed] dark:bg-[#00ff88]/10" : "bg-[#f5f8f5] hover:bg-[#edf5ee] dark:bg-white/[.04] dark:hover:bg-white/[.07]"}`}><div className="flex items-start justify-between gap-3"><div className="font-semibold">{item.subject}</div><Pill>{item.status === "OPEN" ? "Відкрите" : "Закрите"}</Pill></div><div className="mt-1 text-sm text-[#708075] dark:text-[#a4b2a7]">{item.userEmail}</div><div className="mt-2 text-xs text-[#708075] dark:text-[#8f9e93]">Остання активність: {item.lastMessageAt ? new Date(item.lastMessageAt).toLocaleString() : "—"}</div></button>)}{!conversations.length && <div className="rounded-2xl bg-[#f5f8f5] p-4 text-sm text-[#708075] dark:bg-white/[.04]">Нових звернень немає.</div>}</div></Surface><Surface><Label tone="text-[#d97706]">Legacy tickets</Label><p className="mt-2 text-sm text-[#708075] dark:text-[#a4b2a7]">Старі звернення з email-відповіддю перенесені сюди.</p><div className="mt-4 space-y-2">{tickets.map((ticket) => <button type="button" key={ticket.id} onClick={() => setSelectedTicket(ticket)} className={`w-full rounded-2xl p-4 text-left ${selectedTicket?.id === ticket.id ? "bg-[#fff8ec] dark:bg-[#ff8c00]/10" : "bg-[#f5f8f5] dark:bg-white/[.04]"}`}><div className="flex items-center justify-between gap-3"><span className="font-semibold">{ticket.subject}</span><Pill>{ticket.status}</Pill></div><div className="mt-1 text-sm text-[#708075] dark:text-[#a4b2a7]">{ticket.userEmail}</div></button>)}{!tickets.length && <div className="text-sm text-[#708075]">Legacy tickets порожні.</div>}</div></Surface></div><div className="space-y-5"><Surface><div className="flex items-start justify-between gap-3"><div><Label>Чат</Label>{selectedConversation ? <p className="mt-2 text-sm text-[#708075] dark:text-[#a4b2a7]">{selectedConversation.subject} · {selectedConversation.userEmail}</p> : null}</div>{selectedConversation ? <Pill>{selectedConversation.status === "OPEN" ? "Відкрите" : "Закрите"}</Pill> : null}</div><div className="mt-5 max-h-[420px] overflow-auto space-y-3">{messages.map((m) => <div key={m.id} className={`rounded-2xl p-3 ${m.senderType === "ADMIN" ? "bg-[#e8f6ed] dark:bg-[#00ff88]/10" : "bg-[#f5f8f5] dark:bg-white/[.04]"}`}><div className="text-xs font-semibold uppercase tracking-[.12em] text-[#708075]">{m.senderType} · {new Date(m.createdAt).toLocaleString()}</div>{m.text ? <div className="mt-2 whitespace-pre-wrap text-sm">{m.text}</div> : null}{m.attachments?.length ? <div className="mt-3 flex flex-wrap gap-2">{m.attachments.map((attachment) => <button type="button" key={attachment.id} onClick={() => downloadAttachment(attachment)} className="rounded-xl border border-[#152219]/10 bg-white/70 px-3 py-2 text-left text-xs font-semibold text-[#147b47] transition hover:border-[#00c96d] dark:border-white/10 dark:bg-black/10 dark:text-[#62ecaa]">↧ {attachment.originalName} <span className="ml-1 font-normal text-[#708075]">({Math.ceil(attachment.sizeBytes / 1024)} KB)</span></button>)}</div> : null}</div>)}{!messages.length && <div className="rounded-2xl bg-[#f5f8f5] p-4 text-sm text-[#708075] dark:bg-white/[.04]">{selectedConversation ? "У зверненні ще немає повідомлень." : "Оберіть діалог."}</div>}</div>{selectedConversation?.status === "CLOSED" ? <div className="mt-4 rounded-2xl bg-[#fff8ec] p-4 text-sm text-[#a45e08] dark:bg-[#ff8c00]/10 dark:text-[#ffbf66]">Це звернення закрите. Користувач може відкрити його знову; відповідь адміністратора доступна лише для відкритих звернень.</div> : null}<TextArea rows={4} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={canReply ? "Відповідь користувачу..." : "Оберіть відкрите звернення..."} disabled={!canReply} /><PrimaryButton className="mt-3" onClick={replySupport} disabled={!canReply || !reply.trim()}>Надіслати відповідь</PrimaryButton></Surface><Surface><Label>Legacy ticket</Label>{selectedTicket ? <div className="mt-4 space-y-4"><div className="rounded-2xl bg-[#f5f8f5] p-4 text-sm dark:bg-white/[.04]"><div className="font-semibold">{selectedTicket.subject}</div><div className="mt-1 text-[#708075] dark:text-[#a4b2a7]">{selectedTicket.userEmail} · {selectedTicket.status}</div><p className="mt-3 whitespace-pre-wrap">{selectedTicket.message}</p></div><TextArea rows={5} value={ticketReply} onChange={(e) => setTicketReply(e.target.value)} placeholder="Email-відповідь користувачу..." /><PrimaryButton onClick={replyTicket} disabled={!ticketReply.trim()}>Відповісти на ticket</PrimaryButton></div> : <div className="mt-4 text-sm text-[#708075]">Оберіть legacy ticket.</div>}</Surface></div></div>;
-};
-
 const JudgePanel: React.FC<{ judge: AdminJudgeLoad | null; items: AdminJudgeDeadLetterItem[]; total: number; limit: string; setLimit: (value: string) => void; lastReplay: AdminJudgeDeadLetterReplayResult | null; busy: boolean; refresh: () => void; replay: () => void }> = ({ judge, items, total, limit, setLimit, lastReplay, busy, refresh, replay }) => <div className="grid gap-5 xl:grid-cols-[.75fr_1.25fr]"><Surface><Label>Judge operations</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Черга перевірок</h2><div className="mt-5 grid gap-3 sm:grid-cols-2"><Status label="Mode" value={judge?.mode ?? "—"} healthy={judge?.mode === "distributed"} /><Status label="Active / queued" value={judge ? `${judge.active} / ${judge.queued}` : "—"} healthy={(judge?.queued ?? 0) < 20} /><Status label="DLQ length" value={String(judge?.deadLetterQueueLength ?? total)} healthy={(judge?.deadLetterQueueLength ?? total) === 0} /><Status label="Avg execution" value={judge ? `${Math.round(judge.avgExecutionTimeMs)} ms` : "—"} healthy /></div><div className="mt-5 flex flex-wrap items-end gap-3"><Field label="DLQ limit" value={limit} onChange={(e) => setLimit(e.target.value)} /><PrimaryButton muted onClick={refresh}>Оновити</PrimaryButton><PrimaryButton onClick={replay} disabled={busy || judge?.mode === "local"}>{busy ? "Replay..." : "Replay DLQ"}</PrimaryButton></div>{lastReplay && <div className="mt-4 rounded-2xl bg-[#e8f6ed] p-4 text-sm dark:bg-[#00ff88]/10">Останній replay: moved {lastReplay.moved}, skipped {lastReplay.skipped}, remaining {lastReplay.remaining}, queued {lastReplay.queued}.</div>}</Surface><Surface><Label>Dead-letter jobs</Label><div className="mt-4 space-y-3">{items.map((item) => <div key={item.jobId} className="rounded-2xl border border-[#152219]/10 bg-[#f5f8f5] p-4 dark:border-white/10 dark:bg-white/[.04]"><div className="flex flex-wrap items-center justify-between gap-3"><div className="font-semibold">{item.jobId}</div><Pill>{item.state || "unknown"}</Pill></div><div className="mt-2 text-sm text-[#708075] dark:text-[#a4b2a7]">submission {item.submissionId || "—"} · attempts {item.attempts} · {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "no date"}</div>{item.error && <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-xl bg-[#08130c] p-3 text-xs text-[#dce8de]">{item.error}</pre>}</div>)}{!items.length && <div className="rounded-2xl bg-[#f5f8f5] p-5 text-sm text-[#708075] dark:bg-white/[.04]">DLQ порожня.</div>}</div></Surface></div>;
 
 const MaintenancePanel: React.FC<{ maintenance: MaintenanceState | null; draft: { title: string; message: string; until: string }; setDraft: React.Dispatch<React.SetStateAction<{ title: string; message: string; until: string }>>; save: (enabled: boolean) => void }> = ({ maintenance, draft, setDraft, save }) => <Surface><Label tone="text-[#d97706]">Maintenance</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Стан платформи</h2><div className={`mt-5 rounded-2xl p-5 ${maintenance?.enabled ? "bg-[#fff0f4] dark:bg-[#ff6b9d]/10" : "bg-[#e9f8ee] dark:bg-[#00ff88]/10"}`}><div className="flex items-center gap-3"><CircleDot className={`h-5 w-5 ${maintenance?.enabled ? "text-[#d64168]" : "text-[#147b47] dark:text-[#62ecaa]"}`} /><div><div className="font-semibold">{maintenance?.enabled ? "Maintenance увімкнено" : "Платформа доступна"}</div><div className="mt-1 text-sm text-[#6d7b71] dark:text-[#a3b1a6]">{maintenance?.message || "Немає активних обмежень."}</div></div></div></div><div className="mt-5 grid gap-3 md:grid-cols-2"><Field label="Заголовок" value={draft.title} onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))} /><label className="block text-sm font-semibold text-[#314037] dark:text-[#dce8de]"><span>Завершити о (необов’язково)</span><input type="datetime-local" value={draft.until} onChange={(e) => setDraft((p) => ({ ...p, until: e.target.value }))} className="mt-2 w-full rounded-xl border border-[#152219]/10 bg-[#fafcf9] px-3 py-3 text-sm font-normal outline-none focus:border-[#00c96d] dark:border-white/10 dark:bg-white/[.035]" /><span className="mt-1 block text-xs font-normal text-[#708075] dark:text-[#a4b2a7]">Локальний час браузера, збережеться коректно для сервера.</span></label></div><TextArea className="mt-3" rows={4} label="Повідомлення" value={draft.message} onChange={(e) => setDraft((p) => ({ ...p, message: e.target.value }))} /><div className="mt-4 flex gap-2"><PrimaryButton onClick={() => save(true)}>Увімкнути</PrimaryButton><PrimaryButton muted onClick={() => save(false)}>Вимкнути</PrimaryButton></div></Surface>;
@@ -439,8 +355,8 @@ const BroadcastPanel: React.FC<{ broadcast: { subject: string; title: string; co
 
 const CertificatesPanel: React.FC<{ certificates: CertificateListItem[]; open: (id: number) => void; create: () => void }> = ({ certificates, open, create }) => <Surface><div className="flex flex-wrap items-start justify-between gap-4"><div><Label>Сертифікати</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Шаблони сертифікатів</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[#708075] dark:text-[#a4b2a7]">Створюй і редагуй шаблон у новій адмінці, одразу перевіряючи його візуальний результат.</p></div><PrimaryButton onClick={create}><Plus className="mr-2 inline h-4 w-4" />Новий шаблон</PrimaryButton></div><div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{certificates.map((item) => <button type="button" onClick={() => open(item.id)} key={item.id} className="rounded-2xl border border-[#152219]/8 bg-[#fafcf9] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#00c96d]/35 dark:border-white/8 dark:bg-white/[.025]"><div className="font-semibold">{item.name}</div><div className="mt-2 text-sm text-[#728176] dark:text-[#a4b2a7]">{item.isActive ? "Активний шаблон" : "Чернетка або вимкнений"}</div><div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-[#64736a] dark:text-[#a5b4a8]"><Pill>{item.type || "template"}</Pill>{item.version ? <Pill>v{item.version}</Pill> : null}{item.contestId ? <Pill>contest #{item.contestId}</Pill> : null}</div></button>)}</div></Surface>;
 
-const CreateUserModal: React.FC<{ newUser: any; setNewUser: React.Dispatch<React.SetStateAction<any>>; close: () => void; submit: (e: React.FormEvent) => void }> = ({ newUser, setNewUser, close, submit }) => <ModalFrame close={close}><form onSubmit={submit} className="space-y-3"><Label>Новий користувач</Label><Field label="Username" required value={newUser.username} onChange={(e) => setNewUser((p: any) => ({ ...p, username: e.target.value }))} /><Field label="Email" value={newUser.email} onChange={(e) => setNewUser((p: any) => ({ ...p, email: e.target.value }))} /><Field label="Password" required type="password" value={newUser.password} onChange={(e) => setNewUser((p: any) => ({ ...p, password: e.target.value }))} /><div className="grid grid-cols-2 gap-3"><Select label="Role" value={newUser.role} onChange={(e) => setNewUser((p: any) => ({ ...p, role: e.target.value }))}><option>USER</option><option>TEACHER</option><option>SYSTEM_ADMIN</option></Select><Select label="Mode" value={newUser.userMode} onChange={(e) => setNewUser((p: any) => ({ ...p, userMode: e.target.value }))}><option>PERSONAL</option><option>EDUCATIONAL</option><option>CONTEST</option></Select></div><PrimaryButton className="w-full">Створити</PrimaryButton></form></ModalFrame>;
-const UserModal: React.FC<{ selectedUser: AdminUser; draft: { email: string; firstName: string; lastName: string; password: string; role: AdminUser["role"]; lang: AdminUser["lang"] }; setDraft: React.Dispatch<React.SetStateAction<any>>; close: () => void; save: () => void; remove: () => void }> = ({ selectedUser, draft, setDraft, close, save, remove }) => <ModalFrame close={close}><Label>Користувач</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">@{selectedUser.username}</h2><div className="mt-5 grid gap-3 sm:grid-cols-2"><Field label="Email" value={draft.email} onChange={(e) => setDraft((p: any) => ({ ...p, email: e.target.value }))} /><Field label="First name" value={draft.firstName} onChange={(e) => setDraft((p: any) => ({ ...p, firstName: e.target.value }))} /><Field label="Last name" value={draft.lastName} onChange={(e) => setDraft((p: any) => ({ ...p, lastName: e.target.value }))} /><Field label="New password" type="password" value={draft.password} onChange={(e) => setDraft((p: any) => ({ ...p, password: e.target.value }))} /><Select label="Role" value={draft.role} onChange={(e) => setDraft((p: any) => ({ ...p, role: e.target.value }))}><option>USER</option><option>TEACHER</option><option>SYSTEM_ADMIN</option></Select><Select label="Lang" value={draft.lang} onChange={(e) => setDraft((p: any) => ({ ...p, lang: e.target.value }))}>{languages.map((l) => <option key={l}>{l}</option>)}</Select></div><div className="mt-5 flex flex-wrap gap-2"><PrimaryButton onClick={save}>Зберегти</PrimaryButton><PrimaryButton muted onClick={remove}><Trash2 className="mr-2 inline h-4 w-4" />Видалити</PrimaryButton></div></ModalFrame>;
+const CreateUserModal: React.FC<{ newUser: any; setNewUser: React.Dispatch<React.SetStateAction<any>>; close: () => void; submit: (e: React.FormEvent) => void }> = ({ newUser, setNewUser, close, submit }) => <ModalFrame close={close}><form onSubmit={submit} className="space-y-3"><Label>Новий користувач</Label><Field label="Username" required value={newUser.username} onChange={(e) => setNewUser((p: any) => ({ ...p, username: e.target.value }))} /><Field label="Email" value={newUser.email} onChange={(e) => setNewUser((p: any) => ({ ...p, email: e.target.value }))} /><Field label="Password" required type="password" value={newUser.password} onChange={(e) => setNewUser((p: any) => ({ ...p, password: e.target.value }))} /><div className="grid grid-cols-2 gap-3"><Select label="Role" value={newUser.role} onChange={(e) => setNewUser((p: any) => ({ ...p, role: e.target.value }))}><option>USER</option><option>TEACHER</option><option>SUPPORT</option><option>SYSTEM_ADMIN</option></Select><Select label="Mode" value={newUser.userMode} onChange={(e) => setNewUser((p: any) => ({ ...p, userMode: e.target.value }))}><option>PERSONAL</option><option>EDUCATIONAL</option><option>CONTEST</option></Select></div><PrimaryButton className="w-full">Створити</PrimaryButton></form></ModalFrame>;
+const UserModal: React.FC<{ selectedUser: AdminUser; draft: { email: string; firstName: string; lastName: string; password: string; role: AdminUser["role"]; lang: AdminUser["lang"] }; setDraft: React.Dispatch<React.SetStateAction<any>>; close: () => void; save: () => void; remove: () => void }> = ({ selectedUser, draft, setDraft, close, save, remove }) => <ModalFrame close={close}><Label>Користувач</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">@{selectedUser.username}</h2><div className="mt-5 grid gap-3 sm:grid-cols-2"><Field label="Email" value={draft.email} onChange={(e) => setDraft((p: any) => ({ ...p, email: e.target.value }))} /><Field label="First name" value={draft.firstName} onChange={(e) => setDraft((p: any) => ({ ...p, firstName: e.target.value }))} /><Field label="Last name" value={draft.lastName} onChange={(e) => setDraft((p: any) => ({ ...p, lastName: e.target.value }))} /><Field label="New password" type="password" value={draft.password} onChange={(e) => setDraft((p: any) => ({ ...p, password: e.target.value }))} /><Select label="Role" value={draft.role} onChange={(e) => setDraft((p: any) => ({ ...p, role: e.target.value }))}><option>USER</option><option>TEACHER</option><option>SUPPORT</option><option>SYSTEM_ADMIN</option></Select><Select label="Lang" value={draft.lang} onChange={(e) => setDraft((p: any) => ({ ...p, lang: e.target.value }))}>{languages.map((l) => <option key={l}>{l}</option>)}</Select></div><div className="mt-5 flex flex-wrap gap-2"><PrimaryButton onClick={save}>Зберегти</PrimaryButton><PrimaryButton muted onClick={remove}><Trash2 className="mr-2 inline h-4 w-4" />Видалити</PrimaryButton></div></ModalFrame>;
 const CertificateModal: React.FC<{ details: CertificateTemplate; draft: { name: string; type: "studycod" | "custom"; htmlTemplate: string; cssTemplate: string; isActive: boolean; fields: CertificateTemplate["fields"] }; setDraft: React.Dispatch<React.SetStateAction<any>>; close: () => void; save: () => void }> = ({ details, draft, setDraft, close, save }) => {
   const previewHtml = useMemo(() => {
     const sampleValues: Record<string, string> = { contest_name: "StudyCod Challenge", name: "Nikita", full_name: "Нікіта Рубан", place: "1", score: "96", max_score: "100", date: "14.07.2026", organizer: "StudyCod", signature: "StudyCod team", certificate_id: "SC-2026-0021", qr_code: "✓" };

@@ -21,6 +21,7 @@ import topicsRouter from "./routes/topics";
 import { theoryRouter } from "./routes/theory";
 import adminRouter from "./routes/admin";
 import supportRouter from "./routes/support";
+import supportDeskRouter from "./routes/adminSupport";
 import libraryRouter from "./routes/library";
 import contestsRouter from "./routes/contests";
 import emailsRouter from "./routes/emails";
@@ -845,6 +846,7 @@ app.use("/streak", authMiddleware, forbidContestModeUsers, placementGate, streak
 app.use("/birthday", authMiddleware, forbidContestModeUsers, placementGate, birthdayRouter);
 app.use("/admin", authMiddleware, forbidContestModeUsers, adminRouter);
 app.use("/support", supportRouter);
+app.use("/support/desk", supportDeskRouter);
 app.use("/library", authMiddleware, forbidContestModeUsers, libraryRouter);
 app.use("/contests", contestsRouter);
 app.use("/certificate", certificateRouter);
@@ -864,6 +866,7 @@ app.use("/api/streak", authMiddleware, forbidContestModeUsers, placementGate, st
 app.use("/api/birthday", authMiddleware, forbidContestModeUsers, placementGate, birthdayRouter);
 app.use("/api/admin", authMiddleware, forbidContestModeUsers, adminRouter);
 app.use("/api/support", supportRouter);
+app.use("/api/support/desk", supportDeskRouter);
 app.use("/api/library", authMiddleware, forbidContestModeUsers, libraryRouter);
 app.use("/api/contests", contestsRouter);
 app.use("/api/certificate", certificateRouter);

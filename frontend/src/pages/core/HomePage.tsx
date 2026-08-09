@@ -484,7 +484,7 @@ export const HomePage: React.FC<Props> = ({
           </div>
 
           <div className={`grid gap-3 ${isStudent && (!hasControlInAverage || averageGrade === null) ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"}`}>
-            <MetricTile icon={Gauge} label={tr("Роль", "Role")} value={user.role === "SYSTEM_ADMIN" ? "Admin" : isTeacher ? tr("Вчитель", "Teacher") : isStudent ? tr("Учень", "Student") : tr("Personal", "Personal")} />
+            <MetricTile icon={Gauge} label={tr("Роль", "Role")} value={user.role === "SYSTEM_ADMIN" ? "Admin" : user.role === "SUPPORT" ? tr("Підтримка", "Support") : isTeacher ? tr("Вчитель", "Teacher") : isStudent ? tr("Учень", "Student") : tr("Personal", "Personal")} />
             <MetricTile icon={Layers3} label={tr("Активне", "Active")} value={!isEducational ? String(personalStats.open) : isTeacher ? String(classes.length) : String(activeLessons)} />
             <MetricTile icon={CheckCircle2} label={tr("Готово", "Done")} value={!isEducational ? `${personalStats.done}/${personalStats.total || 0}` : resumeMeta ?? tr("щойно", "just now")} />
             {!(isStudent && (!hasControlInAverage || averageGrade === null)) ? (

@@ -82,6 +82,7 @@ const GoogleAuthCompletePage = React.lazy(() => import("./pages/auth/GoogleAuthC
 const AdminWorkspacePage = React.lazy(() => import("./pages/system/AdminWorkspacePage").then(mod => ({ default: mod.AdminWorkspacePage })));
 const DocsPage = React.lazy(() => import("./pages/system/DocsPage").then(mod => ({ default: mod.DocsPage })));
 const SupportPage = React.lazy(() => import("./pages/system/SupportPage").then(mod => ({ default: mod.SupportPage })));
+const SupportDeskPage = React.lazy(() => import("./pages/system/SupportDeskPage").then(mod => ({ default: mod.SupportDeskPage })));
 const PrivacyPolicyPage = React.lazy(() => import("./pages/system/PrivacyPolicyPage").then(mod => ({ default: mod.PrivacyPolicyPage })));
 const TermsOfUsePage = React.lazy(() => import("./pages/system/TermsOfUsePage").then(mod => ({ default: mod.TermsOfUsePage })));
 const CookiePolicyPage = React.lazy(() => import("./pages/system/CookiePolicyPage").then(mod => ({ default: mod.CookiePolicyPage })));
@@ -790,6 +791,9 @@ const AppContent: React.FC = React.memo(() => {
     if (user.role === "SYSTEM_ADMIN") {
       list.push({ id: "admin", label: "Admin", icon: Shield, group: navLabel });
     }
+    if (user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") {
+      list.push({ id: "support-desk", label: "Support desk", icon: HelpCircle, group: navLabel });
+    }
     list.push({ id: "profile", label: t("profile"), icon: UserIcon, group: t("account") });
     return list;
   }, [user?.id, user?.userMode, user?.studentId, user?.role, t, i18n.language]);
@@ -809,6 +813,10 @@ const AppContent: React.FC = React.memo(() => {
       } else {
         navigate("/library");
       }
+      return;
+    }
+    if (id === "support-desk") {
+      navigate("/support/desk");
       return;
     }
     if (id === "lessons") {
@@ -972,6 +980,11 @@ const AppContent: React.FC = React.memo(() => {
             {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} onPointerEnter={() => prefetchNavTarget("admin")} onFocus={() => prefetchNavTarget("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <Shield className="w-4 h-4" />
                 Admin
+              </button>}
+
+            {(user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") && <button onClick={() => navigate("/support/desk")} onPointerEnter={() => prefetchPath("/support/desk")} onFocus={() => prefetchPath("/support/desk")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+                <HelpCircle className="w-4 h-4" />
+                Support desk
               </button>}
 
             {}
@@ -1293,6 +1306,11 @@ export const App: React.FC = () => {
                     </AnimatedPage>
                   </Suspense>
               </PublicPageWithFooter></RequireToken>} />
+          <Route path="/support/desk" element={<RequireToken><SupportDeskGuard><Suspense fallback={<PageLoader />}>
+                  <AnimatedPage>
+                    <SupportDeskPage />
+                  </AnimatedPage>
+                </Suspense></SupportDeskGuard></RequireToken>} />
           <Route path="/blog" element={<RequireToken><PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <BlogPage />
@@ -1438,6 +1456,25 @@ export const App: React.FC = () => {
         </AnimatePresence>
       </UIModeProvider>
     </TheoryModalProvider>;
+};
+
+const SupportDeskGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+  const preview = import.meta.env.DEV && ["1", "true"].includes(new URLSearchParams(location.search).get("preview") || "");
+  const [state, setState] = React.useState<"checking" | "allowed" | "denied">(preview ? "allowed" : "checking");
+
+  React.useEffect(() => {
+    if (preview) return;
+    let active = true;
+    getMe({ force: true, suppressAuthRedirect: true })
+      .then((user) => active && setState(user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN" ? "allowed" : "denied"))
+      .catch(() => active && setState("denied"));
+    return () => { active = false; };
+  }, [preview]);
+
+  if (state === "checking") return <PageLoader />;
+  if (state === "denied") return <Navigate to="/support" replace />;
+  return <>{children}</>;
 };
 
 const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => {

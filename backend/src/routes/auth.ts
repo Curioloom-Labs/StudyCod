@@ -581,10 +581,9 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
       });
     }
 
-    // During maintenance we allow SYSTEM_ADMIN to log in (so they can disable maintenance),
-    // but block regular users.
+    // During maintenance, platform admins and support agents can still log in.
     const state = await maintenanceService.getStateCached();
-    if (state.enabled && user.role !== "SYSTEM_ADMIN") {
+    if (state.enabled && user.role !== "SYSTEM_ADMIN" && user.role !== "SUPPORT") {
       return res.status(503).json({
         maintenance: true,
         title: state.title,

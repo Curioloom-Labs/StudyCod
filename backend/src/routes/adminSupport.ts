@@ -5,7 +5,7 @@ import { SupportTicket } from "../entities/SupportTicket";
 import { SupportConversation } from "../entities/SupportConversation";
 import { SupportMessage } from "../entities/SupportMessage";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
-import { systemAdminGuard } from "../middleware/rolesGuard";
+import { supportAgentGuard } from "../middleware/rolesGuard";
 import { emailService } from "../services/emailService";
 import { logger } from "../utils/logger";
 const router = Router();
@@ -20,8 +20,11 @@ const adminChatReplySchema = z.object({
   text: z.string().trim().min(1).max(20_000),
   sendEmail: z.boolean().optional().default(true)
 });
+const conversationStatusSchema = z.object({
+  status: z.enum(["OPEN", "CLOSED"])
+});
 
-router.get("/conversations", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+router.get("/conversations", authRequired, supportAgentGuard, async (req: AuthRequest, res: Response) => {
   try {
     const conversations = await convRepo().find({
       order: { lastMessageAt: "DESC" },
@@ -39,12 +42,12 @@ router.get("/conversations", authRequired, systemAdminGuard, async (req: AuthReq
       }))
     });
   } catch (err: any) {
-    logger.error("[admin support] failed to list conversations", { requestId: req.requestId, userId: req.userId, err });
+    logger.error("[support desk] failed to list conversations", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 
-router.get("/conversations/:id", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+router.get("/conversations/:id", authRequired, supportAgentGuard, async (req: AuthRequest, res: Response) => {
   try {
     const conversationId = Number.parseInt(String(req.params.id), 10);
     if (!Number.isFinite(conversationId) || conversationId <= 0) {
@@ -83,12 +86,45 @@ router.get("/conversations/:id", authRequired, systemAdminGuard, async (req: Aut
       }))
     });
   } catch (err: any) {
-    logger.error("[admin support] failed to get conversation", { requestId: req.requestId, userId: req.userId, err });
+    logger.error("[support desk] failed to get conversation", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 
-router.post("/conversations/:id/messages", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+router.patch("/conversations/:id/status", authRequired, supportAgentGuard, async (req: AuthRequest, res: Response) => {
+  const conversationId = Number.parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(conversationId) || conversationId <= 0) return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
+  const validated = conversationStatusSchema.safeParse(req.body);
+  if (!validated.success) return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+  try {
+    const conversation = await convRepo().findOne({ where: { id: conversationId } as any });
+    if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
+    if (conversation.status !== validated.data.status) {
+      await convRepo().update({ id: conversation.id }, { status: validated.data.status } as any);
+      const systemMessage = msgRepo().create({
+        conversation,
+        senderType: "SYSTEM",
+        text: validated.data.status === "CLOSED" ? "Conversation closed by support." : "Conversation reopened by support."
+      } as Partial<SupportMessage>);
+      await msgRepo().save(systemMessage);
+      await convRepo().update({ id: conversation.id }, { lastMessageAt: systemMessage.createdAt } as any);
+    }
+    const updated = await convRepo().findOne({ where: { id: conversation.id } as any });
+    return res.json({ ok: true, conversation: {
+      id: updated?.id ?? conversation.id,
+      userEmail: updated?.userEmail ?? conversation.userEmail,
+      subject: updated?.subject ?? conversation.subject,
+      status: updated?.status ?? conversation.status,
+      createdAt: updated?.createdAt ?? conversation.createdAt,
+      lastMessageAt: updated?.lastMessageAt ?? conversation.lastMessageAt
+    } });
+  } catch (err: any) {
+    logger.error("[support desk] failed to change conversation status", { requestId: req.requestId, userId: req.userId, conversationId, err });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/conversations/:id/messages", authRequired, supportAgentGuard, async (req: AuthRequest, res: Response) => {
   const conversationId = Number.parseInt(String(req.params.id), 10);
   if (!Number.isFinite(conversationId) || conversationId <= 0) {
     return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
@@ -121,7 +157,7 @@ router.post("/conversations/:id/messages", authRequired, systemAdminGuard, async
         });
         emailSent = true;
       } catch (err: any) {
-        logger.warn("[admin support] chat reply saved but email delivery failed", {
+        logger.warn("[support desk] chat reply saved but email delivery failed", {
           requestId: req.requestId,
           userId: req.userId,
           conversationId,
@@ -141,11 +177,11 @@ router.post("/conversations/:id/messages", authRequired, systemAdminGuard, async
       }
     });
   } catch (err: any) {
-    logger.error("[admin support] failed to post admin message", { requestId: req.requestId, userId: req.userId, err });
+    logger.error("[support desk] failed to post message", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
-router.get("/", authRequired, systemAdminGuard, async (_req: AuthRequest, res: Response) => {
+router.get("/", authRequired, supportAgentGuard, async (_req: AuthRequest, res: Response) => {
   const tickets = await supportRepo().find({
     order: {
       createdAt: "DESC"
@@ -163,7 +199,7 @@ router.get("/", authRequired, systemAdminGuard, async (_req: AuthRequest, res: R
     }))
   });
 });
-router.post("/:id/reply", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
+router.post("/:id/reply", authRequired, supportAgentGuard, async (req: AuthRequest, res: Response) => {
   const ticketId = Number.parseInt(String(req.params.id), 10);
   if (!Number.isFinite(ticketId) || ticketId <= 0) {
     return res.status(400).json({

@@ -1,6 +1,6 @@
 export type CourseLanguage = "JAVA" | "PYTHON" | "CPP";
 export type UserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
-export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
+export type UserRole = "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
 
 export interface PublicProfilePrivacy {
   showContestStats: boolean;

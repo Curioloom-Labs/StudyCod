@@ -39,6 +39,7 @@ const NAV_IMPORTS: Record<MomentumNavTarget, () => Promise<unknown>> = {
 
 const PATH_IMPORTS: Record<string, () => Promise<unknown>> = {
   "/docs": () => import("../pages/system/DocsPage"),
+  "/support/desk": () => import("../pages/system/SupportDeskPage"),
   "/support": () => import("../pages/system/SupportPage"),
   "/edu/library": () => import("../pages/library/TaskLibraryPage")
 };

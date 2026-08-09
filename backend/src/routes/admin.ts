@@ -6,7 +6,6 @@ import { User, UserLang, UserRole } from "../entities/User";
 import { Class } from "../entities/Class";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { systemAdminGuard } from "../middleware/rolesGuard";
-import adminSupportRouter from "./adminSupport";
 import adminMaintenanceRouter from "./adminMaintenance";
 import adminLibraryRouter from "./adminLibrary";
 import adminMaterialsRouter from "./adminMaterials";
@@ -24,7 +23,6 @@ import {
   replayJudgeDeadLetterQueue,
 } from "../services/judgeWorker";
 const adminRouter = Router();
-adminRouter.use("/support", adminSupportRouter);
 adminRouter.use("/maintenance", adminMaintenanceRouter);
 adminRouter.use("/library", adminLibraryRouter);
 adminRouter.use("/materials", adminMaterialsRouter);
@@ -65,12 +63,12 @@ const createUserSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   userMode: z.enum(["PERSONAL", "EDUCATIONAL", "CONTEST"]).optional(),
-  role: z.enum(["USER", "TEACHER", "SYSTEM_ADMIN"]).optional(),
+  role: z.enum(["USER", "TEACHER", "SUPPORT", "SYSTEM_ADMIN"]).optional(),
   lang: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   emailVerified: z.boolean().optional()
 });
 const updateUserRoleSchema = z.object({
-  role: z.enum(["USER", "TEACHER", "SYSTEM_ADMIN"])
+  role: z.enum(["USER", "TEACHER", "SUPPORT", "SYSTEM_ADMIN"])
 });
 const createClassSchema = z.object({
   name: z.string().min(1).max(255),

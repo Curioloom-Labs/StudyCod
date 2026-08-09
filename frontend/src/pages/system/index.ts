@@ -7,6 +7,7 @@ export * from "./DocsPage";
 export * from "./MaintenancePage";
 export * from "./PrivacyPolicyPage";
 export * from "./SupportPage";
+export * from "./SupportDeskPage";
 export * from "./TermsOfUsePage";
 export * from "./TheoryPage";
 export { default as MaintenancePage } from "./MaintenancePage";

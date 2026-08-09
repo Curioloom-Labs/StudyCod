@@ -20,7 +20,7 @@ export function isMaintenanceBypassPath(pathname: string): boolean {
   // Allow reading maintenance state (frontend banner/page).
   if (pathname === "/api/auth/maintenance" || pathname === "/auth/maintenance") return true;
 
-  // Allow login so SYSTEM_ADMIN can authenticate and disable maintenance.
+  // Allow login so SYSTEM_ADMIN/support agents can authenticate and work the queue.
   // Non-admins will still be blocked inside the login handler once credentials are verified.
   if (pathname === "/api/auth/login" || pathname === "/auth/login") return true;
 
@@ -52,7 +52,7 @@ export async function maintenanceMiddleware(req: AuthRequest, res: Response, nex
   const state = await maintenanceService.getStateCached();
   if (!state.enabled) return next();
   const role = tryGetRoleFromBearer(req);
-  if (role === "SYSTEM_ADMIN") return next();
+  if (role === "SYSTEM_ADMIN" || role === "SUPPORT") return next();
   return res.status(503).json({
     maintenance: true,
     title: state.title,

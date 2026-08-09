@@ -28,7 +28,7 @@ import { BrandedPageLoader } from "../ui/BrandedPageLoader";
 import { PlatformFooter } from "./PlatformFooter";
 
 type Props = {
-  current: "home" | "tasks" | "grades" | "profile" | "learn" | "library" | "playground" | "blog";
+  current: "home" | "tasks" | "grades" | "profile" | "learn" | "library" | "playground" | "blog" | "support";
   children: React.ReactNode;
 };
 
@@ -138,6 +138,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         { key: "grades", label: ukrainian ? "Прогрес" : "Progress", icon: Trophy, path: "/?app=grades" },
         { key: "library", label: ukrainian ? "Бібліотека" : "Library", icon: BookOpen, path: "/library" },
         { key: "playground", label: ukrainian ? "Пісочниця" : "Playground", icon: PlaySquare, path: "/playground" },
+        ...((shellUser.role === "SUPPORT" || shellUser.role === "SYSTEM_ADMIN") ? [{ key: "support", label: ukrainian ? "Support desk" : "Support desk", icon: HelpCircle, path: "/support/desk" }] : []),
       ];
 
   const navigateTo = (path: string) => {

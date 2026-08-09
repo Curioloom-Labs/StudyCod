@@ -3,7 +3,7 @@ import { Task } from "./Task";
 import { Grade } from "./Grade";
 export type UserLang = "JAVA" | "PYTHON" | "CPP";
 export type UserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
-export type UserRole = "USER" | "TEACHER" | "SYSTEM_ADMIN";
+export type UserRole = "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
 export type PlacementLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
 
 const iadDecimalTransformer = {
@@ -90,7 +90,7 @@ export class User {
   userMode!: UserMode;
   @Column({
     type: "enum",
-    enum: ["USER", "TEACHER", "SYSTEM_ADMIN"],
+    enum: ["USER", "TEACHER", "SUPPORT", "SYSTEM_ADMIN"],
     default: null,
     nullable: true,
     name: "role"

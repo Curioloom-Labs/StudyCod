@@ -8,7 +8,7 @@ type EduUserPayload = {
   difus: number;
   avatarUrl: string | null;
   userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
-  role?: "USER" | "TEACHER" | "SYSTEM_ADMIN";
+  role?: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
   studentId?: number;
   classId?: number;
   className?: string;

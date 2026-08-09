@@ -19,3 +19,4 @@ export const rolesGuard = (allowedRoles: UserRole[]) => {
 };
 export const systemAdminGuard = rolesGuard(['SYSTEM_ADMIN']);
 export const teacherOrAdminGuard = rolesGuard(['TEACHER', 'SYSTEM_ADMIN']);
+export const supportAgentGuard = rolesGuard(['SUPPORT', 'SYSTEM_ADMIN']);
