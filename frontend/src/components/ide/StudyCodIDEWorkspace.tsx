@@ -32,7 +32,7 @@ import type {
   JudgeLanguage,
   WebTaskFile,
 } from "../../lib/api/library";
-import { scopedStorageKey } from "../../lib/storageScope";
+import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
 import {
   JUDGE_LANGUAGE_LABELS,
   compilersForFamily,
@@ -138,7 +138,6 @@ type Props = {
 };
 
 const LAYOUT_KEY = "studycod:ide:layout:v3";
-const THEORY_KEY = "studycod:ide:theory-complete:v1";
 const HISTORY_KEY = "studycod:ide:history:v1";
 
 type LayoutState = {
@@ -194,7 +193,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       ? en
       : uk;
   };
-  const taskTheoryKey = scopedStorageKey(THEORY_KEY, props.task.id);
+  const taskTheoryKey = scopedStorageKey(IDE_THEORY_COMPLETION_KEY, props.task.id);
   const languageOptions = props.languageOptions ?? (Object.keys(JUDGE_LANGUAGE_LABELS) as JudgeLanguage[]);
   const [mode, setMode] = React.useState<IdeMode>(() => {
     if (!props.theory) return "practice";

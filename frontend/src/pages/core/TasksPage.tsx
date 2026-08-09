@@ -18,7 +18,7 @@ import { type FailureRecoveryData } from "../../components/FailureRecoveryCard";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
-import { scopedStorageKey } from "../../lib/storageScope";
+import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
 interface Props {
   user: User;
 }
@@ -64,6 +64,14 @@ const PERSONAL_TASK_PREVIEW_FIXTURES: Task[] = [
     language: "PYTHON"
   }
 ];
+
+function readIdeTheoryCompletion(taskId: number): boolean {
+  try {
+    return localStorage.getItem(scopedStorageKey(IDE_THEORY_COMPLETION_KEY, taskId)) === "1";
+  } catch {
+    return false;
+  }
+}
 
 const textEncoder = new TextEncoder();
 
@@ -402,6 +410,10 @@ export const TasksPage: React.FC<Props> = ({
   const computeHasTheory = (t: Task | null) => {
     return getTheoryMarkdown(t).trim().length > 0;
   };
+  const theoryIsAcknowledged = useCallback((t: Task | null) => {
+    if (!t || isPreviewMode || !computeHasTheory(t)) return Boolean(t);
+    return readIdeTheoryCompletion(t.id);
+  }, [isPreviewMode]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [active, setActive] = useState<Task | null>(null);
   const [code, setCode] = useState("");
@@ -1028,10 +1040,9 @@ export const TasksPage: React.FC<Props> = ({
       setAiResult(null);
       setConsoleOutput("");
       setUIState("idle");
-      const hasTheory = computeHasTheory(task);
-      setTheoryAcknowledged(!hasTheory);
+      setTheoryAcknowledged(theoryIsAcknowledged(task));
     });
-  }, [deriveEditorFromTask, isCompactViewport, syncTaskSelectionToUrl]);
+  }, [deriveEditorFromTask, isCompactViewport, syncTaskSelectionToUrl, theoryIsAcknowledged]);
 
   useEffect(() => {
     if (!requestedTaskIdFromUrl) return;
@@ -1049,9 +1060,8 @@ export const TasksPage: React.FC<Props> = ({
     setAiResult(null);
     setConsoleOutput("");
     setUIState("idle");
-    const hasTheory = computeHasTheory(requested);
-    setTheoryAcknowledged(!hasTheory);
-  }, [requestedTaskIdFromUrl, tasks, active?.id, deriveEditorFromTask]);
+    setTheoryAcknowledged(theoryIsAcknowledged(requested));
+  }, [requestedTaskIdFromUrl, tasks, active?.id, deriveEditorFromTask, theoryIsAcknowledged]);
 
   useEffect(() => {
     if (requestedTaskIdFromUrl && active?.id !== requestedTaskIdFromUrl) {
@@ -1128,7 +1138,7 @@ export const TasksPage: React.FC<Props> = ({
             setUseFiles(next.useFiles);
             setFiles(next.files);
             setCode(next.code);
-            setTheoryAcknowledged(isPreviewMode || !computeHasTheory(firstTask));
+            setTheoryAcknowledged(theoryIsAcknowledged(firstTask));
             if (isPreviewMode) {
               setStdin("5\n12 7 7 18 9");
               setPersonalNotes(tr("Перевірити випадок, коли два автобуси мають однаковий час.", "Check the case where two buses have the same arrival time."));
@@ -1153,7 +1163,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode]);
+  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode, theoryIsAcknowledged]);
   useEffect(() => {
     if (tasks.length > 0 && !active) {
       const openTaskId = sessionStorage.getItem("openTaskId");
@@ -1185,18 +1195,16 @@ export const TasksPage: React.FC<Props> = ({
       setUseFiles(next.useFiles);
       setFiles(next.files);
       setCode(next.code);
-      const hasTheory = computeHasTheory(taskToOpen);
-      setTheoryAcknowledged(!hasTheory);
+      setTheoryAcknowledged(theoryIsAcknowledged(taskToOpen));
     }
-  }, [tasks.length, active, requestedTaskIdFromUrl]);
+  }, [tasks.length, active, requestedTaskIdFromUrl, theoryIsAcknowledged]);
   useEffect(() => {
     if (active) {
-      const hasTheory = computeHasTheory(active);
-      setTheoryAcknowledged(isPreviewMode || !hasTheory);
+      setTheoryAcknowledged(theoryIsAcknowledged(active));
     } else {
       setTheoryAcknowledged(false);
     }
-  }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, isPreviewMode]);
+  }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, isPreviewMode, theoryIsAcknowledged]);
   useEffect(() => {
     if (!active) return;
     const theory = getTheoryMarkdown(active);
@@ -1365,8 +1373,7 @@ export const TasksPage: React.FC<Props> = ({
         setCode(nextEditorState.code);
         setAiResult(null);
         setConsoleOutput("");
-        const hasTheory = computeHasTheory(openedTask);
-        setTheoryAcknowledged(!hasTheory);
+        setTheoryAcknowledged(theoryIsAcknowledged(openedTask));
         setGenerationPhase("finishing");
       } else if (status === "blocked" || status === "warn") {
         setBlockState({
@@ -1541,8 +1548,7 @@ export const TasksPage: React.FC<Props> = ({
             setUseFiles(next.useFiles);
             setFiles(next.files);
             setCode(next.code);
-            const hasTheory = computeHasTheory(nextPractice);
-            setTheoryAcknowledged(!hasTheory);
+            setTheoryAcknowledged(theoryIsAcknowledged(nextPractice));
           }
         } else {
           const updated = updatedTasks.find(t => t.id === active.id);

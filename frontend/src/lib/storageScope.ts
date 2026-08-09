@@ -1,4 +1,6 @@
 /** Stable browser-storage namespace for the currently authenticated principal. */
+export const IDE_THEORY_COMPLETION_KEY = "studycod:ide:theory-complete:v1";
+
 export function currentPrincipalStorageId(): string {
   if (typeof window === "undefined") return "anonymous";
   try {
