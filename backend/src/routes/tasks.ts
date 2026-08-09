@@ -860,9 +860,12 @@ function rewriteChecklistPracticalTaskToNarrative(text: string): string {
 function formatStatementSectionValueForMarkdown(value: string, options?: {
   preferCodeBlock?: boolean;
 }): string {
-  const normalized = normalizeMarkdownText(String(value ?? "")).trim();
+  const normalized = normalizeMarkdownText(String(value ?? ""))
+    .split(/\r?\n/)
+    .filter(line => !/^\s*```(?:[a-z0-9_-]+)?\s*$/i.test(line))
+    .join("\n")
+    .trim();
   if (!normalized) return "";
-  if (/^```/.test(normalized)) return normalized;
 
   const sanitized = normalized.replace(/```/g, "").trim();
   const hasMultipleLines = /\n/.test(sanitized);
@@ -3077,7 +3080,10 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }, {
       language: userLanguage,
       requestId: req.requestId,
-      maxAttempts: 1,
+      // One semantic retry prevents a malformed/contradictory AI task from
+      // reaching the learner (for example, asking for input in a no-input
+      // topic while declaring an empty stdin).
+      maxAttempts: 2,
       ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: taskBudgetMs })
     });
     if (!aiTaskResult.success) {

@@ -65,6 +65,16 @@ function mentionsNoInput(text: string): boolean {
   return /вхідн(их|і)\s+дан(их|і)\s+нема|вхідні\s+дані\s+відсутн|не\s+потрібно\s+вводити|нічого\s+не\s+ввод(ити|иться)|без\s+введенн(я|я\s+даних)|дані\s+не\s+пода(ю|ю)ться|stdin\s*(?:is\s*)?empty|no\s+input|without\s+input|input\s+is\s+not\s+provided|there\s+is\s+no\s+input/.test(s);
 }
 
+function looksLikeInputRequirement(text: string): boolean {
+  const s = String(text ?? '').toLowerCase();
+  return /(?:введі(ть|ть ім)|ввести|вводиться|зчита(?:й|йте)|прочита(?:й|йте)|запита(?:ти|й|йте)|отримати\s+(?:ім['’ʼ`]|дан)|ім['’ʼ`]я\s+.*введ|з\s+(?:консолі|стандартного\s+потоку)|stdin|system\.in|scanner|input\s*\(|read\s+from\s+stdin|enter\s+(?:your|the)|please\s+enter|read\s+input)/i.test(s);
+}
+
+function looksLikeInteractiveOutputPrompt(text: string): boolean {
+  const s = String(text ?? '').toLowerCase();
+  return /(?:введі(ть|ть ім)|запита(?:й|йте)|будь\s+ласка,?\s+введ|enter\s+(?:your|the)|please\s+enter|type\s+(?:your|the)|input\s+prompt)/i.test(s);
+}
+
 function defaultNoInputFormat(preferUkrainian: boolean): string {
   return preferUkrainian
     ? 'Вхідні дані відсутні (нічого не вводиться).'
@@ -98,6 +108,16 @@ function normalizeIoType(raw: unknown, context?: { practicalTask?: string; input
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '');
 
+  const practical = String(context?.practicalTask ?? '').trim();
+  const inputFmt = String(context?.inputFormat ?? '').trim();
+  const outputFmt = String(context?.outputFormat ?? '').trim().toLowerCase();
+  const requiresInput = looksLikeInputRequirement(`${practical}\n${inputFmt}`);
+
+  // A model sometimes emits NO_INPUT_* while its own statement asks the
+  // learner to type a value. Prefer the semantic contract so the validator
+  // can either accept STDIN_STDOUT or retry against the topic's IO policy.
+  if (requiresInput) return 'STDIN_STDOUT';
+
   if (compact === 'STDIN_STDOUT' || compact === 'STDIN' || compact === 'INPUT_OUTPUT' || compact === 'WITH_INPUT') {
     return 'STDIN_STDOUT';
   }
@@ -125,9 +145,6 @@ function normalizeIoType(raw: unknown, context?: { practicalTask?: string; input
   }
 
   // Semantic fallback if model returns unsupported enum labels.
-  const practical = String(context?.practicalTask ?? '').trim();
-  const inputFmt = String(context?.inputFormat ?? '').trim();
-  const outputFmt = String(context?.outputFormat ?? '').trim().toLowerCase();
   const noInput = mentionsNoInput(`${practical}\n${inputFmt}`);
   if (noInput) {
     const freeOutputHint = /(будь-як|непорожн|any\s+non-?empty|any\s+output|free\s+output)/i.test(outputFmt);
@@ -400,7 +417,20 @@ const TASK_VALIDATION_RULES: TaskValidationRule[] = [
     id: "no_input.no_stdin_in_practical",
     applies: c => c.ioType !== "STDIN_STDOUT",
     message: "Task generation validation failed: NO_INPUT_* task statement must not require reading input",
-    fails: c => /\b(input\s*\(|stdin|system\.in|scanner\b|bufferedreader\b|зчитай|прочитай|введіть|введи)\b/i.test(c.practical.toLowerCase()),
+    fails: c => looksLikeInputRequirement(c.practical),
+  },
+  {
+    id: "no_input.no_interactive_output_prompt",
+    applies: c => c.ioType !== "STDIN_STDOUT",
+    message: "Task generation validation failed: NO_INPUT_* outputFormat must not contain an interactive input prompt",
+    fails: c => looksLikeInteractiveOutputPrompt(c.outFmt),
+  },
+  {
+    id: "io.input_contract_consistent",
+    message: "Task generation validation failed: inputFormat and practicalTask contradict the selected IO type",
+    fails: c => c.ioType === "STDIN_STDOUT"
+      ? mentionsNoInput(c.inFmt)
+      : looksLikeInputRequirement(`${c.practical}\n${c.inFmt}`),
   },
   {
     id: "fixed_output.outFmt_must_be_concrete",

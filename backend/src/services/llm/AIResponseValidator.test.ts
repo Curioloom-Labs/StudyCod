@@ -2,6 +2,34 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AIResponseValidator } from './AIResponseValidator';
 
+test('AIResponseValidator.validateGenerateTask: rejects no-input task that asks for a name', () => {
+  const data = {
+    title: 'Персональне привітання',
+    topic: 'Вивід даних',
+    difficulty: 1,
+    theoryMarkdown: 'Теорія про виведення тексту.',
+    practicalTask:
+      'Напишіть повну програму, яка спочатку виводить рядок Hello, World!, а потім запитує ім’я користувача та читає його з консолі. ' +
+      'Після введення імені програма повинна вивести персоналізоване привітання у точно заданому форматі. ' +
+      'Не додавайте до результату пояснень або зайвих рядків.',
+    ioType: 'NO_INPUT_FIXED_OUTPUT' as const,
+    inputFormat: 'Вхідних даних немає.',
+    outputFormat: 'Hello, World!\nВведіть ваше ім’я:',
+    constraints: 'Без додаткових обмежень.',
+    examples: [{
+      input: 'Олена',
+      output: 'Hello, World!\nПривіт, Олено!',
+      explanation: 'Ім’я вводиться користувачем.'
+    }],
+    codeTemplate: 'public class Main {}'
+  };
+
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTask(data),
+    /inputFormat and practicalTask contradict the selected IO type/i
+  );
+});
+
 test('AIResponseValidator.validateGenerateTask: NO_INPUT_* auto-fixes missing inputFormat no-input wording', () => {
   const data = {
     title: 'Друк привітання',

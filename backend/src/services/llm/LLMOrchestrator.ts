@@ -1161,8 +1161,8 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
     const isEnglish = params.language === "en";
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const systemPrompt = isEnglish
-      ? `You are an experienced programming teacher. Return theoretical explanation in Markdown.`
-      : `Ти досвідчений викладач програмування. Повертай теоретичне пояснення у форматі Markdown.`;
+      ? `You are an experienced programming teacher. Return a clear, concise, beginner-friendly theoretical explanation in Markdown.`
+      : `Ти досвідчений викладач програмування. Повертай чітке, компактне й зрозуміле новачку теоретичне пояснення у форматі Markdown.`;
     let userPrompt: string;
     const context = params.taskDescription && params.taskType ? `\n\nКОНТЕКСТ (НЕ ПЕРЕПОВІДАЙ, НЕ ФОРМУЛЮЙ УМОВУ, НЕ ДОДАВАЙ ЗАВДАННЯ):\n${params.taskDescription}` : "";
     if (isEnglish) {
@@ -1176,7 +1176,10 @@ REQUIREMENTS (mandatory):
 - Do NOT write problem statements.
 - Do NOT use imperative instruction style ("solve", "compute", "implement", etc.).
 - Do NOT add sections like "Practice", "Task", "Exercise", "Problem".
-- Allowed: concept explanations, syntax notes, short code snippets as illustration.
+- Use 3–5 meaningful headings, short paragraphs, and one small realistic analogy at most; avoid generic motivational filler.
+- Allowed: concept explanations, syntax notes, and short valid code snippets as illustration.
+- Code fences must be balanced. Do not put raw JSON, interactive blocks, or Markdown headings inside a code fence.
+- Prefer one focused example and explain the key lines briefly instead of repeating the same idea.
 - Format: Markdown only.${responseLanguageInstruction}`;
     } else {
       userPrompt = `Згенеруй ТІЛЬКИ теоретичне пояснення теми "${params.topicTitle}" для мови ${langName}.${context}
@@ -1186,7 +1189,10 @@ REQUIREMENTS (mandatory):
 - НЕ формулюй умови задач.
 - НЕ використовуй імперативи типу: "виконайте", "обчисліть", "знайдіть", "написати програму", "введіть/прочитайте".
 - НЕ додавай секцій "Практика", "Завдання", "Вправа", "Умова".
-- МОЖНА: пояснення понять, синтаксис, короткі приклади коду (як ілюстрація).
+- Використай 3–5 змістовних заголовків, короткі абзаци й не більше однієї конкретної аналогії; прибери загальні мотиваційні фрази.
+- МОЖНА: пояснення понять, синтаксис і короткі валідні приклади коду як ілюстрацію.
+- Markdown-фенси коду мають бути збалансовані. Не клади сирий JSON, interactive-блоки або заголовки Markdown усередину code fence.
+- Краще один сфокусований приклад із коротким поясненням ключових рядків, ніж повторення тієї самої думки.
 - Формат: Markdown. Без вступів на кшталт "Ось теорія".${responseLanguageInstruction}`;
     }
     try {
@@ -1196,7 +1202,7 @@ REQUIREMENTS (mandatory):
         topicId: params.topicId,
         signal: params.signal,
         temperature: 0.7,
-        maxTokens: 3000
+        maxTokens: 2200
       });
       const validated = AIResponseValidator.validateGenerateTheory({
         theory: content.trim()

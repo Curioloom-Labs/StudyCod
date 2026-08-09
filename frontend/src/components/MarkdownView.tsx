@@ -8,6 +8,26 @@ import { InteractiveBlock, parseInteractiveSpec } from "./theory/InteractiveBloc
 const MATH_MARKUP_RE = /(\$\$[^$]+?\$\$)|(\$[^$\n]+?\$)|\\\(|\\\[|\\begin\{/;
 const CODE_FENCE_RE = /(^|\n)\s*```[^\n]*\n/;
 
+function normalizeLanguageLessFenceOpenings(raw: string): string {
+  const lines = String(raw ?? "").split("\n");
+  let inFence = false;
+
+  return lines.map((line) => {
+    const match = line.match(/^([ \t]*)```([^\s`]*)?[ \t]*$/);
+    if (!match) return line;
+
+    const indent = match[1] ?? "";
+    const language = (match[2] ?? "").trim();
+    if (!inFence) {
+      inFence = true;
+      return language ? line : `${indent}\`\`\`text`;
+    }
+
+    inFence = false;
+    return line;
+  }).join("\n");
+}
+
 let katexCssLoadPromise: Promise<unknown> | null = null;
 
 function ensureKatexCssLoaded(): Promise<unknown> {
@@ -647,9 +667,10 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     processed = processed.replace(/\\textit\{([^}]+)\}/g, "*$1*");
     processed = processed.replace(/\\emph\{([^}]+)\}/g, "*$1*");
     // react-markdown 10 does not expose the parent <pre> to the `code`
-    // renderer. Give language-less fenced blocks an explicit marker so they
-    // remain blocks while backtick snippets inside prose stay inline.
-    processed = processed.replace(/(^|\n)([ \t]*)```[ \t]*(?=\n)/g, "$1$2```text");
+    // renderer. Give only opening language-less fences an explicit marker;
+    // converting closing fences too leaves the whole document inside one
+    // literal code block.
+    processed = normalizeLanguageLessFenceOpenings(processed);
     return processed;
   }, [content]);
   return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-sans prose-invert"} prose max-w-none
