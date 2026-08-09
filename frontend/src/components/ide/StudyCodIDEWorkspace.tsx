@@ -122,6 +122,7 @@ type Props = {
   onReset: () => void;
   onTheoryComplete?: () => void;
   toolbar?: React.ReactNode;
+  languageOptions?: JudgeLanguage[];
   readOnly?: boolean;
   onBack?: () => void;
   disableLanguageChange?: boolean;
@@ -194,6 +195,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       : uk;
   };
   const taskTheoryKey = scopedStorageKey(THEORY_KEY, props.task.id);
+  const languageOptions = props.languageOptions ?? (Object.keys(JUDGE_LANGUAGE_LABELS) as JudgeLanguage[]);
   const [mode, setMode] = React.useState<IdeMode>(() => {
     if (!props.theory) return "practice";
     try {
@@ -720,31 +722,31 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   const showBottom = !focusMode && !layout.bottomCollapsed;
 
   return (
-    <div className="flex h-[min(1100px,calc(100dvh-2rem))] min-h-[780px] flex-col overflow-hidden rounded-[26px] border border-white/10 bg-[#0d130f] text-[#e8f1ea] shadow-[0_24px_70px_-40px_rgba(0,0,0,.8)]">
-      <header className="flex min-h-14 flex-wrap items-center gap-2 border-b border-white/10 bg-[#151d17] px-3 py-2">
+    <div className="flex h-[min(1100px,calc(100dvh-2rem))] min-h-[780px] flex-col overflow-hidden rounded-[26px] border border-white/[.09] bg-[#0d130f] text-[#e8f1ea] shadow-[0_24px_70px_-40px_rgba(0,0,0,.8)]">
+      <header className="flex min-h-[68px] flex-wrap items-center gap-2 border-b border-white/[.08] bg-[#121b16] px-4 py-3">
         {props.onBack ? (
           <button
             type="button"
             onClick={props.onBack}
-            className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/10 text-[#a7b5aa] hover:bg-white/[.06] hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[.025] text-[#a7b5aa] transition hover:bg-white/[.07] hover:text-white"
             title={tr("Назад", "Back")}
           >
             <ChevronRight className="size-4 rotate-180" />
           </button>
         ) : null}
-        <div className="mr-auto flex min-w-0 items-center gap-2">
+        <div className="mr-auto flex min-w-0 items-center gap-2.5">
           <FolderCode className="size-4 shrink-0 text-[#72edb0]" />
           <div className="min-w-0">
-            <div className="truncate text-xs font-semibold">
+            <div className="truncate text-[13px] font-bold tracking-[-.01em] text-[#edf5ee]">
               {props.task.title}
             </div>
-            <div className="truncate text-[10px] text-[#82968a]">
+            <div className="mt-0.5 truncate text-[10px] font-medium uppercase tracking-[.12em] text-[#82968a]">
               {props.task.section || tr("Практична задача", "Practice task")}
             </div>
           </div>
         </div>
-        {props.toolbar ? <div className="flex items-center gap-1.5">{props.toolbar}</div> : null}
-        {!props.isWebTask && (
+        {props.toolbar ? <div className="flex items-center gap-1.5 rounded-xl border border-white/[.07] bg-black/10 p-1">{props.toolbar}</div> : null}
+        {!props.isWebTask && languageOptions.length > 1 && (
           <select
             value={props.language}
             disabled={props.disableLanguageChange}
@@ -756,7 +758,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             <option value={props.language} className="text-black">
               {languageLabel(props.language)}
             </option>
-            {Object.keys(JUDGE_LANGUAGE_LABELS)
+            {languageOptions
               .filter((language) => language !== props.language)
               .map((language) => (
                 <option key={language} value={language} className="text-black">

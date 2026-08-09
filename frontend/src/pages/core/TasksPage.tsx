@@ -2037,12 +2037,13 @@ export const TasksPage: React.FC<Props> = ({
           task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
           theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
           onTheoryComplete={() => setTheoryAcknowledged(true)}
+          languageOptions={[ideLanguage]}
           toolbar={
             <>
-              <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">
+              <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">
                 <NotebookPen className="size-3.5" />{tr("Завдання", "Tasks")} ({sidebarStats.completed}/{sidebarStats.total})
               </button>
-              <button type="button" onClick={() => void handleGenerate()} disabled={!canGenerateFromToolbar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-2.5 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
+              <button type="button" onClick={() => void handleGenerate()} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
                 <Plus className="size-3.5" />{tr("Нове", "New")}
               </button>
             </>
