@@ -203,9 +203,16 @@ export const SupportDeskPage: React.FC = () => {
   };
 
   const downloadAttachment = async (attachmentId: number) => {
+    const attachment = messages.flatMap((message) => message.attachments || []).find((item) => item.id === attachmentId);
+    const previewWindow = attachment?.mimeType.startsWith("image/") ? window.open("about:blank", "_blank", "noopener,noreferrer") : null;
     try {
       const result = await downloadSupportChatAttachment(attachmentId);
       const url = URL.createObjectURL(result.blob);
+      if (previewWindow) {
+        previewWindow.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
       const link = document.createElement("a");
       link.href = url;
       link.download = result.filename;
@@ -215,6 +222,7 @@ export const SupportDeskPage: React.FC = () => {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (cause) {
+      previewWindow?.close();
       setError(getErrorMessageFromUnknown(cause, "Не вдалося завантажити вкладення."));
     }
   };
