@@ -1924,51 +1924,6 @@ export const TasksPage: React.FC<Props> = ({
     };
   }, [uiState, submitting, loading, quizLoading, quizSubmitting]);
 
-  if (!theoryPanelOpen && !isPersonalControlQuizTask) {
-    const ideLanguage = (active?.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
-    const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
-    const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
-      verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
-      testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
-      score: Number(aiResult.total || 0), maxScore: 12,
-    } : null;
-    const ideRunResult: StudyCodIdeRunResult | null = consoleOutput.trim() ? {
-      stdout: uiState === "error" ? "" : consoleOutput, stderr: uiState === "error" ? consoleOutput : "",
-      exitCode: uiState === "error" ? 1 : 0, success: uiState !== "error",
-    } : null;
-    return <StudyCodIDEWorkspace
-      task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
-      theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
-      language={ideLanguage}
-      onLanguageChange={() => undefined}
-      compiler={user.course}
-      onCompilerChange={() => undefined}
-      code={code}
-      onCodeChange={setCode}
-      files={files.length ? files : [{ path: ideEntryFile, content: code }]}
-      onFilesChange={setFiles}
-      useFiles={useFiles}
-      onEnableFiles={() => { setUseFiles(true); setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]); setMfAddToken((value) => value + 1); }}
-      entryFile={ideEntryFile}
-      stdin={stdin}
-      onStdinChange={setStdin}
-      firstExampleInput={undefined}
-      onUseExampleInput={() => undefined}
-      running={Boolean(active) && uiState === "evaluating" && !submitting}
-      checking={Boolean(active) && submitting}
-      onRun={() => { if (active) void handleRun(); }}
-      onCheck={() => { if (active) void handleSubmit(); }}
-      onSave={() => { if (active) void handleSaveDraft(); }}
-      onReset={() => setCode(active?.starterCode ?? "")}
-      readOnly={!active || !canEdit}
-      runResult={ideRunResult}
-      checkResult={ideCheckResult}
-      isWebTask={isWebTask}
-      webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
-    />;
-  }
-
-
   const runFromRail = () => {
     if (!editorOpen) {
       setEditorOpen(true);
@@ -2062,6 +2017,50 @@ export const TasksPage: React.FC<Props> = ({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [canQuickCheck, canQuickRun, canQuickSave, checkFromRail, focusWorkspaceArea, runFromRail, saveFromRail]);
+
+  if (!theoryPanelOpen && !isPersonalControlQuizTask) {
+    const ideLanguage = (active?.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
+    const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
+    const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
+      verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
+      testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
+      score: Number(aiResult.total || 0), maxScore: 12,
+    } : null;
+    const ideRunResult: StudyCodIdeRunResult | null = consoleOutput.trim() ? {
+      stdout: uiState === "error" ? "" : consoleOutput, stderr: uiState === "error" ? consoleOutput : "",
+      exitCode: uiState === "error" ? 1 : 0, success: uiState !== "error",
+    } : null;
+    return <StudyCodIDEWorkspace
+      task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
+      theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
+      language={ideLanguage}
+      onLanguageChange={() => undefined}
+      compiler={user.course}
+      onCompilerChange={() => undefined}
+      code={code}
+      onCodeChange={setCode}
+      files={files.length ? files : [{ path: ideEntryFile, content: code }]}
+      onFilesChange={setFiles}
+      useFiles={useFiles}
+      onEnableFiles={() => { setUseFiles(true); setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]); setMfAddToken((value) => value + 1); }}
+      entryFile={ideEntryFile}
+      stdin={stdin}
+      onStdinChange={setStdin}
+      firstExampleInput={undefined}
+      onUseExampleInput={() => undefined}
+      running={Boolean(active) && uiState === "evaluating" && !submitting}
+      checking={Boolean(active) && submitting}
+      onRun={() => { if (active) void handleRun(); }}
+      onCheck={() => { if (active) void handleSubmit(); }}
+      onSave={() => { if (active) void handleSaveDraft(); }}
+      onReset={() => setCode(active?.starterCode ?? "")}
+      readOnly={!active || !canEdit}
+      runResult={ideRunResult}
+      checkResult={ideCheckResult}
+      isWebTask={isWebTask}
+      webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
+    />;
+  }
 
   /* Removed legacy rail metadata and console status card; the live workspace renders these directly.
   const railItems: Array<{ id: WorkspaceArea; label: string; Icon: LucideIcon }> = [
