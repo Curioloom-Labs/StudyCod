@@ -1773,9 +1773,7 @@ export const TasksPage: React.FC<Props> = ({
       }
     } catch (err: unknown) {
       console.error("Submit error:", err);
-      const apiErr = toApiErrorLike(err);
-      const responseObj = asRecord(apiErr?.response?.data);
-      const raw = safeServerMessage(responseObj?.message ?? apiErr?.message ?? String(err));
+      const raw = formatApiError(err);
       setConsoleOutput(`${tr("Помилка відправлення:", "Submit error:")}${raw ? ` ${raw}` : ""}`);
       setUIState("error");
     } finally {
@@ -1803,9 +1801,7 @@ export const TasksPage: React.FC<Props> = ({
       }
       setConsoleOutput(tr("Чернетку збережено", "Draft saved"));
     } catch (err: unknown) {
-      const apiErr = toApiErrorLike(err);
-      const responseObj = asRecord(apiErr?.response?.data);
-      const raw = safeServerMessage(responseObj?.message ?? apiErr?.message ?? String(err));
+      const raw = formatApiError(err);
       setConsoleOutput(`${tr("Помилка збереження:", "Save error:")}${raw ? ` ${raw}` : ""}`);
     }
   };
@@ -1839,9 +1835,7 @@ export const TasksPage: React.FC<Props> = ({
       setConsoleOutput(res.output || res.stderr || tr("Вивід відсутній", "No output"));
       setUIState("idle");
     } catch (err: unknown) {
-      const apiErr = toApiErrorLike(err);
-      const responseObj = asRecord(apiErr?.response?.data);
-      const raw = safeServerMessage(responseObj?.message ?? apiErr?.message ?? String(err));
+      const raw = formatApiError(err);
       setConsoleOutput(`${tr("Помилка запуску:", "Run error:")}${raw ? ` ${raw}` : ""}`);
       setUIState("error");
     }
