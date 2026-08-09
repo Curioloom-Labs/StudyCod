@@ -35,6 +35,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # ai-service compiles shared LLM code from ../backend/src. TypeScript
+      # resolves those imports from backend/src, so that package's runtime
+      # dependencies must be installed in the backend package as well.
+      - name: Install backend dependencies for AI service
+        if: matrix.package == 'ai-service'
+        working-directory: backend
+        run: npm ci
+
       - name: Build package
         run: npm run build
 
