@@ -63,3 +63,26 @@ test('AIResponseValidator.validateGenerateTask: rejects function-only tasks', ()
     /implementing a function\/method\/class/i
   );
 });
+
+test('AIResponseValidator.validateGenerateTask: allows method-oriented tasks on a methods topic', () => {
+  const data = {
+    title: 'Overloaded sum methods',
+    topic: 'Methods; parameters; overloading',
+    difficulty: 3,
+    theoryMarkdown: 'Methods can receive parameters and be overloaded by signature.',
+    practicalTask:
+      'Write a complete program with main() that reads two integers and uses overloaded methods to calculate their sum. ' +
+      'The program must define one method for two values and another overloaded method for three values, then print the result from main(). ' +
+      'The solution must produce the answer through standard output.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'Read two integers from stdin.',
+    outputFormat: 'Print one integer containing the sum to stdout.',
+    constraints: 'The input integers are between 0 and 1000.',
+    examples: [{ input: '3 5', output: '8', explanation: 'The two input values sum to 8.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) { } }'
+  };
+
+  assert.doesNotThrow(() =>
+    AIResponseValidator.validateGenerateTask(data, 'Methods; parameters; overloading')
+  );
+});

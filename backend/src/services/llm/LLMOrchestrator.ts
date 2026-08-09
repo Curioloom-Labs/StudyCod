@@ -324,7 +324,7 @@ export class LLMOrchestrator {
       }, {
         signal: params.signal
       });
-      return AIResponseValidator.validateGenerateTask(raw);
+      return AIResponseValidator.validateGenerateTask(raw, params.topicTitle);
     };
 
     const tryOpenRouter = async () => {

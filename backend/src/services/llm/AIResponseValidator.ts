@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AiQuizResult, AiTaskGenerationResult, AiTheoryResult, TestDataExample } from './LLMOrchestrator';
-import { looksLikeFunctionImplementationTask } from '../ai/curriculumPolicy';
+import { isFunctionsTopic, looksLikeFunctionImplementationTask } from '../ai/curriculumPolicy';
 
 const TaskGenerationSchema = z.object({
   title: z.string().min(1, 'title must be a non-empty string'),
@@ -310,6 +310,7 @@ export function makeAIValidationError(mode: string, message: string, rawResponse
 // rules against no-input tasks. Messages are kept BYTE-IDENTICAL to the
 // previous linear if/throw chain so client-side error strings stay stable.
 type TaskValidationContext = {
+  topicTitle: string;
   ioType: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
   practical: string;
   outFmt: string;
@@ -340,7 +341,7 @@ const TASK_VALIDATION_RULES: TaskValidationRule[] = [
   {
     id: "practical.function_impl",
     message: "Task generation validation failed: practicalTask appears to require implementing a function/method/class instead of a full program",
-    fails: c => looksLikeFunctionImplementationTask(c.practical),
+    fails: c => !isFunctionsTopic(c.topicTitle) && looksLikeFunctionImplementationTask(c.practical),
   },
   {
     id: "outFmt.meta_success",
@@ -482,7 +483,16 @@ export class AIResponseValidator {
         (validated as any).inputFormat = defaultNoInputFormat(practicalHasCyrillic);
       }
 
-      const ctx: TaskValidationContext = { ioType, practical, outFmt, inFmt, constraints, exInput, exOutput };
+      const ctx: TaskValidationContext = {
+        topicTitle: String(expectedTopic ?? '').trim(),
+        ioType,
+        practical,
+        outFmt,
+        inFmt,
+        constraints,
+        exInput,
+        exOutput
+      };
 
       // Iterate the declarative rule registry. The previous implementation
       // was 100+ lines of linear `if/throw` blocks; this version keeps the

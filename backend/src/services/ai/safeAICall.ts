@@ -408,7 +408,12 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               signal: controller?.signal,
               requestId: options?.requestId
             });
-            result = AIResponseValidator.validateGenerateTask(result);
+            result = AIResponseValidator.validateGenerateTask(
+              result,
+              typeof (sanitizedParams as any).topicTitle === 'string'
+                ? String((sanitizedParams as any).topicTitle)
+                : undefined
+            );
 
             // Curriculum stage policy enforcement (e.g., prevent tasks requiring concepts not taught yet).
             {

@@ -92,7 +92,7 @@ export function rewriteNonJudgeablePracticalTaskToJudgeable(practicalTask: strin
 // in those topics the "looks like function implementation" rejection would
 // destroy the curriculum. We still rely on the surrounding prompt to insist on
 // a `main()` driver, but the policy gate is relaxed.
-function isFunctionsTopic(title: string): boolean {
+export function isFunctionsTopic(title: string): boolean {
   const t = String(title ?? "").toLowerCase();
   return /(функц|метод|процедур|підпрограм|\bfunctions?\b|\bmethods?\b|\bprocedures?\b)/i.test(t);
 }
