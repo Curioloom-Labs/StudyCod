@@ -3851,9 +3851,37 @@ tasksRouter.post(
   const serverCodeHash = sha256Hex(persistedSubmission);
   const variableDeclarationError = validateVariableDeclarationTaskSubmission(task, sourceText, resolveUiLanguage(req));
   if (variableDeclarationError) {
-    throw new HttpError(400, variableDeclarationError, {
-      code: "VARIABLE_DECLARATION_REQUIRED",
-      expose: true
+    // This is an intentional learning guard, not a broken request. Return a
+    // regular failed-check result so the IDE can show the explanation and hint
+    // without presenting it as a server error.
+    return res.status(200).json({
+      status: "VALIDATION_FAILED",
+      message: variableDeclarationError,
+      validation: {
+        code: "VARIABLE_DECLARATION_REQUIRED",
+        message: variableDeclarationError
+      },
+      grade: {
+        gradingMode: "TESTS" as const,
+        total: 0,
+        aiFeedback: variableDeclarationError,
+        testsPassed: 0,
+        testsTotal: 1,
+        score: 0,
+        maxScore: 1,
+        groupScores: [{ group: "validation", score: 0, maxScore: 1 }],
+        testResults: [{
+          testId: 0,
+          input: "",
+          expectedOutput: "",
+          actualOutput: "",
+          passed: false,
+          verdict: "WA",
+          error: variableDeclarationError,
+          errorKind: "VARIABLE_DECLARATION_REQUIRED"
+        }],
+        hints: [variableDeclarationError]
+      }
     });
   }
 
