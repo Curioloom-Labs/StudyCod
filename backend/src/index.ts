@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import express from "express";
+import express, { type Request as ExpressRequest } from "express";
 import cors from "cors";
 import morgan from "morgan";
 import session from "express-session";
@@ -485,6 +485,15 @@ function isSessionlessPath(path: string): boolean {
   }
   return false;
 }
+function isGoogleOAuthPath(req: ExpressRequest): boolean {
+  if (req.method !== "GET") return false;
+  return [
+    "/api/auth/google",
+    "/api/auth/google/callback",
+    "/auth/google",
+    "/auth/google/callback",
+  ].includes(req.path);
+}
 app.use((req, res, next) => {
   if (isSessionlessPath(req.path)) return next();
   return sessionMiddleware(req, res, next);
@@ -515,7 +524,10 @@ if (process.env.NODE_ENV !== "test") {
   // requires req.session even for safe GET requests, so do not invoke it for
   // those sessionless endpoints.
   app.use((req, res, next) => {
-    if (isSessionlessPath(req.path)) return next();
+    // OAuth redirects are top-level GET requests initiated by Google and do
+    // not carry the browser's CSRF header/token. OAuth state validation covers
+    // these endpoints; state-changing exchange requests remain protected.
+    if (isSessionlessPath(req.path) || isGoogleOAuthPath(req)) return next();
     return csrfMiddleware(req, res, next);
   });
 }

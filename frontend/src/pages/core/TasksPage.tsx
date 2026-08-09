@@ -485,6 +485,7 @@ export const TasksPage: React.FC<Props> = ({
   const [theoryPanelOpen, setTheoryPanelOpen] = useState(false);
   const [activeTheoryChapter, setActiveTheoryChapter] = useState(0);
   const [showTaskHistory, setShowTaskHistory] = useState(true);
+  const [taskHistoryOpen, setTaskHistoryOpen] = useState(false);
   const [uiState, setUIState] = useState<UIState>("idle");
   const [, setMilestone] = useState<{
     id?: string | number;
@@ -1367,10 +1368,6 @@ export const TasksPage: React.FC<Props> = ({
         const hasTheory = computeHasTheory(openedTask);
         setTheoryAcknowledged(!hasTheory);
         setGenerationPhase("finishing");
-        if (hasTheory) {
-          const theory = getTheoryMarkdown(openedTask);
-          if (theory) setTheoryPanelOpen(true);
-        }
       } else if (status === "blocked" || status === "warn") {
         setBlockState({
           mode: status === "blocked" ? "low" : "weak",
@@ -2018,7 +2015,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [canQuickCheck, canQuickRun, canQuickSave, checkFromRail, focusWorkspaceArea, runFromRail, saveFromRail]);
 
-  if (!theoryPanelOpen && !isPersonalControlQuizTask) {
+  if (!isPersonalControlQuizTask) {
     const ideLanguage = (active?.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
     const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
     const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
@@ -2030,36 +2027,65 @@ export const TasksPage: React.FC<Props> = ({
       stdout: uiState === "error" ? "" : consoleOutput, stderr: uiState === "error" ? consoleOutput : "",
       exitCode: uiState === "error" ? 1 : 0, success: uiState !== "error",
     } : null;
-    return <StudyCodIDEWorkspace
-      task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
-      theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
-      language={ideLanguage}
-      onLanguageChange={() => undefined}
-      compiler={user.course}
-      onCompilerChange={() => undefined}
-      code={code}
-      onCodeChange={setCode}
-      files={files.length ? files : [{ path: ideEntryFile, content: code }]}
-      onFilesChange={setFiles}
-      useFiles={useFiles}
-      onEnableFiles={() => { setUseFiles(true); setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]); setMfAddToken((value) => value + 1); }}
-      entryFile={ideEntryFile}
-      stdin={stdin}
-      onStdinChange={setStdin}
-      firstExampleInput={undefined}
-      onUseExampleInput={() => undefined}
-      running={Boolean(active) && uiState === "evaluating" && !submitting}
-      checking={Boolean(active) && submitting}
-      onRun={() => { if (active) void handleRun(); }}
-      onCheck={() => { if (active) void handleSubmit(); }}
-      onSave={() => { if (active) void handleSaveDraft(); }}
-      onReset={() => setCode(active?.starterCode ?? "")}
-      readOnly={!active || !canEdit}
-      runResult={ideRunResult}
-      checkResult={ideCheckResult}
-      isWebTask={isWebTask}
-      webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
-    />;
+    const taskHistoryItems = sidebarSections.flatMap((section) =>
+      section.items.map((item) => ({ ...item, sectionTitle: section.title }))
+    );
+    const canGenerateFromToolbar = !loading && cooldownSecondsLeft <= 0 && canGenerateFromSidebar;
+    return (
+      <div className="min-h-full space-y-3 bg-[#0b120e] p-3 text-[#e8f1ea] sm:p-4">
+        <StudyCodIDEWorkspace
+          task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
+          theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
+          onTheoryComplete={() => setTheoryAcknowledged(true)}
+          toolbar={
+            <>
+              <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">
+                <NotebookPen className="size-3.5" />{tr("Завдання", "Tasks")} ({sidebarStats.completed}/{sidebarStats.total})
+              </button>
+              <button type="button" onClick={() => void handleGenerate()} disabled={!canGenerateFromToolbar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-2.5 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
+                <Plus className="size-3.5" />{tr("Нове", "New")}
+              </button>
+            </>
+          }
+          language={ideLanguage}
+          onLanguageChange={() => undefined}
+          compiler={user.course}
+          onCompilerChange={() => undefined}
+          code={code}
+          onCodeChange={setCode}
+          files={files.length ? files : [{ path: ideEntryFile, content: code }]}
+          onFilesChange={setFiles}
+          useFiles={useFiles}
+          onEnableFiles={() => { setUseFiles(true); setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]); setMfAddToken((value) => value + 1); }}
+          entryFile={ideEntryFile}
+          stdin={stdin}
+          onStdinChange={setStdin}
+          firstExampleInput={undefined}
+          onUseExampleInput={() => undefined}
+          running={Boolean(active) && uiState === "evaluating" && !submitting}
+          checking={Boolean(active) && submitting}
+          onRun={() => { if (active) void handleRun(); }}
+          onCheck={() => { if (active) void handleSubmit(); }}
+          onSave={() => { if (active) void handleSaveDraft(); }}
+          onReset={() => setCode(active?.starterCode ?? "")}
+          readOnly={!active || !canEdit}
+          runResult={ideRunResult}
+          checkResult={ideCheckResult}
+          isWebTask={isWebTask}
+          webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
+        />
+        <Modal open={taskHistoryOpen} onClose={() => setTaskHistoryOpen(false)} title={tr("Історія завдань", "Task history")} description={tr("Відкрий попереднє завдання або створи нове.", "Open a previous task or create a new one.")}>
+          <div className="max-h-[60vh] space-y-2 overflow-y-auto">
+            {taskHistoryItems.length ? taskHistoryItems.map((item) => (
+              <button key={`${item.openTask.id}-${item.batchKey ?? "task"}`} type="button" onClick={() => { openSidebarTask(item.openTask); setTaskHistoryOpen(false); }} className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#152219]/10 p-3 text-left transition hover:bg-[#eef4ef] dark:border-white/10 dark:hover:bg-white/[.06]">
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{item.renderTitle}</span><span className="mt-1 block text-xs text-[#718075]">{item.sectionTitle}</span></span>
+                <span className={`shrink-0 text-xs font-semibold ${item.openTask.status === "GRADED" ? "text-[#00a75a]" : "text-[#d78000]"}`}>{item.openTask.status === "GRADED" ? tr("Завершено", "Done") : tr("В роботі", "Open")}</span>
+              </button>
+            )) : <p className="py-6 text-center text-sm text-[#718075]">{tr("Історія поки порожня.", "No tasks yet.")}</p>}
+          </div>
+        </Modal>
+      </div>
+    );
   }
 
   /* Removed legacy rail metadata and console status card; the live workspace renders these directly.

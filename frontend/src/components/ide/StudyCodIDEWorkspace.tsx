@@ -120,6 +120,8 @@ type Props = {
   onCheck: () => void;
   onSave: () => void;
   onReset: () => void;
+  onTheoryComplete?: () => void;
+  toolbar?: React.ReactNode;
   readOnly?: boolean;
   onBack?: () => void;
   disableLanguageChange?: boolean;
@@ -236,6 +238,35 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
 
   React.useEffect(() => writeLayout(layout), [layout]);
   React.useEffect(() => {
+    let nextMode: IdeMode = props.theory ? "theory" : "practice";
+    if (props.theory) {
+      try {
+        if (localStorage.getItem(taskTheoryKey) === "1") nextMode = "practice";
+      } catch {
+        // Keep the theory gate when storage is unavailable.
+      }
+    }
+    setMode(nextMode);
+    setAssistantTab("task");
+    setBottomTab("tests");
+    setFocusMode(false);
+    setTraceStep(0);
+  }, [props.task.id, props.theory, taskTheoryKey]);
+  React.useEffect(() => {
+    try {
+      const raw = JSON.parse(
+        localStorage.getItem(scopedStorageKey(HISTORY_KEY, props.task.id)) || "[]",
+      );
+      const next = Array.isArray(raw)
+        ? raw.filter((item) => item && typeof item.code === "string").slice(0, 20)
+        : [];
+      setHistory(next);
+    } catch {
+      setHistory([]);
+    }
+    lastHistoryCode.current = props.code;
+  }, [props.task.id]);
+  React.useEffect(() => {
     if (!props.code.trim() || props.code === lastHistoryCode.current) return;
     const timer = window.setTimeout(() => {
       const next = [
@@ -267,6 +298,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       /* ignore */
     }
     setMode("practice");
+    props.onTheoryComplete?.();
   };
 
   const updateLayout = (patch: Partial<LayoutState>) =>
@@ -711,6 +743,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             </div>
           </div>
         </div>
+        {props.toolbar ? <div className="flex items-center gap-1.5">{props.toolbar}</div> : null}
         {!props.isWebTask && (
           <select
             value={props.language}

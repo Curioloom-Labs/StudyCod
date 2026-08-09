@@ -5,7 +5,6 @@ import {
   ChevronDown,
   CircleUserRound,
   Code2,
-  Compass,
   HelpCircle,
   Home,
   LogOut,
@@ -75,7 +74,6 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     { id: "home", label: uk ? "Огляд" : "Overview", Icon: Home },
     { id: "tasks", label: uk ? "Практика" : "Practice", Icon: Code2 },
     { id: "grades", label: uk ? "Прогрес" : "Progress", Icon: Trophy },
-    { id: "plan", label: uk ? "План" : "Plan", Icon: Compass },
     ...(user.role === "SYSTEM_ADMIN"
       ? [{ id: "admin" as const, label: uk ? "Адміністрування" : "Admin", Icon: ShieldCheck }]
       : []),

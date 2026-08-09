@@ -896,7 +896,7 @@ const AppContent: React.FC = React.memo(() => {
       }
       if (resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       if (resolvedPage === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
-      if (resolvedPage === "plan" && user.userMode !== "EDUCATIONAL") return <LearningPlanPage />;
+      if (resolvedPage === "plan" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       // EDU teacher/student dashboards live under /edu only (the redirect guard
       // above bounces EDU users here away from the main shell).
       if (resolvedPage === "profile") return <ProfilePage user={user} onUserChange={setUser} />;
