@@ -867,7 +867,12 @@ function formatStatementSectionValueForMarkdown(value: string, options?: {
     .trim();
   if (!normalized) return "";
 
-  const sanitized = normalized.replace(/```/g, "").trim();
+  const sanitized = normalized
+    .replace(/```/g, "")
+    .split(/\r?\n/)
+    .map(line => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"))
+    .join("\n")
+    .trim();
   const hasMultipleLines = /\n/.test(sanitized);
   if (options?.preferCodeBlock || hasMultipleLines) {
     return `\`\`\`text\n${sanitized}\n\`\`\``;
@@ -1248,7 +1253,7 @@ function sanitizeMetaOutputFormatInStatement(
   ioType: TaskIoType | null | undefined,
   uiLanguage: UiLanguage = "uk"
 ): string {
-  const s = String(statementMarkdown ?? "");
+  const s = normalizeLegacyOutputFormatSection(String(statementMarkdown ?? ""));
   if (!s) return s;
   const re = /(Програма\s+скомпілювал[а-яіїє]*\s+та\s+виконал[а-яіїє]*\s+без\s+помилок\.)|(Program\s+compiled\s+and\s+ran\s+without\s+errors\.?)/gi;
   if (!re.test(s)) return s;
@@ -1277,6 +1282,35 @@ function sanitizeMetaOutputFormatInStatement(
 
   // Replace only the meta message itself; keep the rest of the statement intact.
   return s.replace(re, replacement);
+}
+
+/**
+ * Older generated tasks sometimes stored each expected output line as an
+ * inline Markdown code span (`7`, `25.5`, `true`). That renders as separate
+ * rounded pills instead of one output sample. Normalize that persisted
+ * representation when the task is read; newly generated tasks already use a
+ * fenced text block.
+ */
+function normalizeLegacyOutputFormatSection(statementMarkdown: string): string {
+  const source = String(statementMarkdown ?? "");
+  if (!source.trim()) return source;
+
+  return source.replace(
+    /(^#{2,6}\s*(?:Формат\s+вихідних\s+даних|Output\s+format)\s*$)([\s\S]*?)(?=^#{2,6}\s+|(?![\s\S]))/gim,
+    (match, heading: string, rawBody: string) => {
+      const body = String(rawBody ?? "").trim();
+      if (!body || /^```/i.test(body)) return match;
+
+      const outputLines = body
+        .split(/\r?\n/)
+        .filter((line: string) => !/^\s*```(?:text)?\s*$/i.test(line))
+        .map((line: string) => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"));
+      const output = outputLines.join("\n").trim();
+      if (!output) return match;
+
+      return `${heading}\n\n\`\`\`text\n${output}\n\`\`\``;
+    }
+  );
 }
 
 function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
