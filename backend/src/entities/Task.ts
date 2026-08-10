@@ -3,6 +3,7 @@ import { User } from "./User";
 import { Grade } from "./Grade";
 import { Topic } from "./Topic";
 import { TestData } from "./TestData";
+import type { LibraryTaskProjectSpec } from "./LibraryTask";
 export type TaskType = "INTRO" | "TOPIC" | "CONTROL";
 export type TaskStatus = "OPEN" | "SUBMITTED" | "GRADED";
 export type TaskLang = "JAVA" | "PYTHON" | "CPP";
@@ -65,6 +66,12 @@ export class Task {
     name: "task_mode"
   })
   taskMode!: TaskMode;
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "project_spec"
+  })
+  projectSpec?: LibraryTaskProjectSpec | null;
   @Column({
     type: "simple-json",
     nullable: true,

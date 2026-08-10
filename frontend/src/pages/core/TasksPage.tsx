@@ -2045,7 +2045,7 @@ export const TasksPage: React.FC<Props> = ({
       <div className="min-h-full space-y-3 bg-bg-base p-3 text-text-primary sm:p-4">
         <TaskGenerationOverlay open={loading} phase={generationPhase} />
         <StudyCodIDEWorkspace
-          task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
+          task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode, projectSpec: active.projectSpec } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
           theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
           onTheoryComplete={() => setTheoryAcknowledged(true)}
           languageOptions={[ideLanguage]}

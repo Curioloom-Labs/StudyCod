@@ -179,6 +179,19 @@ const createLessonTaskBodySchema = z.object({
   description: z.string().min(1).max(50_000),
   template: z.string().max(200_000).optional(),
   taskMode: z.enum(["CODE", "WEB"]).optional(),
+  projectSpec: z.object({
+    version: z.literal(1),
+    kind: z.literal("MINI_PROJECT"),
+    estimatedMinutes: z.number().int().min(5).max(600),
+    skills: z.array(z.string().trim().min(1).max(120)).min(1).max(20),
+    milestones: z.array(z.object({
+      id: z.string().trim().min(1).max(80),
+      title: z.string().trim().min(1).max(255),
+      description: z.string().trim().min(1).max(2000),
+      required: z.boolean().optional()
+    })).min(1).max(12),
+    extensions: z.array(z.string().trim().min(1).max(255)).max(20).optional()
+  }).strict().optional(),
   webTemplateFiles: z.array(z.object({
     path: z.enum(["index.html", "styles.css", "script.js"]),
     content: z.string().max(200_000)
@@ -615,6 +628,7 @@ eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability(
           description: task.description || null,
           template: task.template || null,
           taskMode: (task as any).taskMode ?? "CODE",
+          projectSpec: (task as any).projectSpec ?? null,
           webTemplateFiles: (task as any).webTemplateFiles ?? null,
           webValidationRules: (task as any).webValidationRules ?? null,
           deadline: task.deadline ? task.deadline.toISOString() : null,
@@ -699,6 +713,7 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
     webTemplateFiles: normalizedTaskInput.webTemplateFiles,
     webValidationRules: normalizedTaskInput.webValidationRules,
     webValidationProfile: normalizedTaskInput.webValidationProfile,
+    projectSpec: parsedBody.data.projectSpec ?? null,
     maxAttempts: 1,
     isClosed: false
   });

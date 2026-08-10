@@ -1527,6 +1527,7 @@ export const StudentTaskPage: React.FC = () => {
       description: getPracticeText() || task.description,
       section: task.lesson.title,
       taskMode: (task.taskMode === "WEB" ? "WEB" : "CODE") as "CODE" | "WEB",
+      projectSpec: task.projectSpec ?? null,
     };
     return <div className="min-h-full bg-[#f7f8f5] px-3 py-4 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-5 lg:px-8">
       <div className="mx-auto max-w-[1800px]">

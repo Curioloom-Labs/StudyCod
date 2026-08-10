@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Download, Edit2, GripVertical, Library, Play, Plus, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Download, Edit2, GripVertical, Library, Play, Plus, Rocket, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
@@ -29,6 +29,7 @@ import {
   type LibraryCheckerSpec,
   type LibraryTaskDifficulty,
   type LibraryTaskListItem,
+  type LibraryTaskProjectSpec,
   type WebTaskFile,
   type WebTaskProfileId,
   type WebTaskRule,
@@ -46,6 +47,7 @@ type TaskDetails = {
 type EditorState = {
   id: number | null;
   taskMode: "CODE" | "WEB";
+  projectSpecJson: string;
   problemCode: string;
   slug: string;
   title: string;
@@ -422,6 +424,7 @@ export const TaskLibraryPage: React.FC = () => {
     () => ({
       id: null,
       taskMode: "CODE",
+      projectSpecJson: "",
       problemCode: "",
       slug: "",
       title: "",
@@ -735,6 +738,7 @@ export const TaskLibraryPage: React.FC = () => {
       setEditor({
         id: d.task.id,
         taskMode: d.task.taskMode === "WEB" ? "WEB" : "CODE",
+        projectSpecJson: d.task.projectSpec ? JSON.stringify(d.task.projectSpec, null, 2) : "",
         problemCode: String(d.task.problemCode ?? ""),
         slug: String(d.task.slug ?? ""),
         title: d.task.title,
@@ -799,6 +803,21 @@ export const TaskLibraryPage: React.FC = () => {
 
     let webValidationRules: WebTaskRule[] | undefined = undefined;
     let webValidationProfile: WebTaskProfileId | undefined = undefined;
+    let projectSpec: LibraryTaskProjectSpec | null | undefined = undefined;
+    if (editor.projectSpecJson.trim()) {
+      try {
+        const parsed = JSON.parse(editor.projectSpecJson) as LibraryTaskProjectSpec;
+        if (parsed?.kind !== "MINI_PROJECT" || parsed?.version !== 1) {
+          throw new Error("projectSpec must have version 1 and kind MINI_PROJECT");
+        }
+        projectSpec = parsed;
+      } catch (e: unknown) {
+        showToast({ type: "error", message: tr("Некоректний JSON мініпроєкту", "Invalid mini-project JSON") + ": " + getErrorMessage(e, "Unknown error") });
+        return;
+      }
+    } else if (editor.id != null) {
+      projectSpec = null;
+    }
     if (editor.taskMode === "WEB") {
       try {
         const parsed = safeParseWebRulesJson(editor.webRulesJson);
@@ -816,6 +835,8 @@ export const TaskLibraryPage: React.FC = () => {
         .split(",")
         .map((x: string) => x.trim())
         .filter(Boolean)
+        .concat(projectSpec?.skills ?? [])
+        .filter((tag, index, all) => all.indexOf(tag) === index)
         .slice(0, 20);
 
       const allowedLanguages: JudgeLanguage[] = Array.isArray(editor.allowedLanguages) && editor.allowedLanguages.length
@@ -888,6 +909,7 @@ export const TaskLibraryPage: React.FC = () => {
       if (editor.id == null) {
         await createLibraryTask({
           taskMode: editor.taskMode,
+          projectSpec,
           title: editor.title,
           problemCode: editor.problemCode.trim() || undefined,
           slug: editor.slug.trim() || undefined,
@@ -910,6 +932,7 @@ export const TaskLibraryPage: React.FC = () => {
       } else {
         await updateLibraryTask(editor.id, {
           taskMode: editor.taskMode,
+          projectSpec: projectSpec ?? null,
           title: editor.title,
           problemCode: editor.problemCode.trim() || undefined,
           slug: editor.slug.trim() || undefined,
@@ -1853,6 +1876,7 @@ export const TaskLibraryPage: React.FC = () => {
                               />
                             ) : null}
                             {diffMeta ? <Badge color={diffMeta.color}>{tr(diffMeta.uk, diffMeta.en)}</Badge> : null}
+                            {task.projectSpec ? <Badge color="info"><Rocket className="mr-1 inline h-3 w-3" />{tr("Мініпроєкт", "Mini-project")}</Badge> : null}
                             {task.attempt?.solved ? <Badge color="success">{tr("Виконано", "Solved")}</Badge> : null}
                             {view === "mine" && canManage ? (
                               <Badge color={task.status === "APPROVED" ? "success" : task.status === "REJECTED" ? "error" : task.status === "PENDING" ? "warn" : "info"}>
@@ -1895,6 +1919,7 @@ export const TaskLibraryPage: React.FC = () => {
                         {(task.problemCode || task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.problemCode || task.slug}</span> : null}
                         {task.section ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.section}</span> : null}
                         <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
+                        {task.projectSpec ? <span className="rounded-full bg-[#fff4df] px-2.5 py-1 text-[#a65600] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">{task.projectSpec.estimatedMinutes} {tr("хв проєкту", "min project")}</span> : null}
                       </div>
 
                       {Array.isArray(task.tags) && task.tags.length ? (
@@ -2152,6 +2177,28 @@ export const TaskLibraryPage: React.FC = () => {
                   <option value="WEB">WEB</option>
                 </select>
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3">
+              <label className="block text-sm font-mono text-text-secondary mb-2">
+                {tr("Мініпроєкт (projectSpec JSON, опційно)", "Mini-project (projectSpec JSON, optional)")}
+              </label>
+              <textarea
+                value={editor.projectSpecJson}
+                onChange={(e) => setEditor((s) => ({ ...s, projectSpecJson: e.target.value }))}
+                className="w-full min-h-[180px] px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-xs leading-5 focus:outline-none"
+                placeholder={`{
+  "version": 1,
+  "kind": "MINI_PROJECT",
+  "estimatedMinutes": 30,
+  "skills": ["conditions", "functions"],
+  "milestones": [{ "id": "core", "title": "Основна логіка", "description": "Реалізуй базовий сценарій." }],
+  "extensions": ["Додай обробку помилок"]
+}`}
+              />
+              <p className="mt-2 text-xs text-text-secondary">
+                {tr("Проєкт використовує той самий judge, підказки та skill-evidence, що й звичайна задача.", "The project uses the same judge, hints, and skill evidence as a regular task.")}
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

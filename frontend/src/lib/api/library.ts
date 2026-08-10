@@ -8,6 +8,19 @@ export type LibraryTaskDifficulty = "EASY" | "MEDIUM" | "HARD";
 import type { JudgeLanguage } from "../judgeLanguages";
 export type { JudgeLanguage };
 export type LibraryCheckerSpec = { type: "exact" } | { type: "whitespace" } | { type: "float"; epsilon: number };
+export type LibraryTaskProjectSpec = {
+  version: 1;
+  kind: "MINI_PROJECT";
+  estimatedMinutes: number;
+  skills: string[];
+  milestones: Array<{
+    id: string;
+    title: string;
+    description: string;
+    required?: boolean;
+  }>;
+  extensions?: string[];
+};
 
 export type CodeFile = { path: string; content: string };
 export type WebTaskFile = { path: "index.html" | "styles.css" | "script.js"; content: string };
@@ -110,6 +123,7 @@ export type LibraryTaskListItem = {
   description: string;
   template: string;
   taskMode?: "CODE" | "WEB";
+  projectSpec?: LibraryTaskProjectSpec | null;
   webTemplateFiles?: WebTaskFile[] | null;
   webValidationRules?: WebTaskRule[] | null;
   webValidationProfile?: WebTaskValidationProfile | null;
@@ -482,6 +496,7 @@ export async function createLibraryTask(payload: {
   tags?: string[];
   section?: string;
   taskMode?: "CODE" | "WEB";
+  projectSpec?: LibraryTaskProjectSpec | null;
   webTemplateFiles?: WebTaskFile[];
   webValidationRules?: WebTaskRule[];
   webValidationProfile?: WebTaskProfileId | WebTaskValidationProfile;
@@ -528,6 +543,7 @@ export async function updateLibraryTask(
     tags: string[] | null;
     section: string | null;
     taskMode: "CODE" | "WEB";
+    projectSpec: LibraryTaskProjectSpec | null;
     webTemplateFiles: WebTaskFile[] | null;
     webValidationRules: WebTaskRule[] | null;
     webValidationProfile: WebTaskProfileId | WebTaskValidationProfile | null;

@@ -161,6 +161,14 @@ export interface Lesson {
     description?: string;
     template?: string;
     taskMode?: "CODE" | "WEB" | "MANUAL";
+    projectSpec?: {
+      version: 1;
+      kind: "MINI_PROJECT";
+      estimatedMinutes: number;
+      skills: string[];
+      milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
+      extensions?: string[];
+    } | null;
     webTemplateFiles?: WebTaskFile[] | null;
     webValidationRules?: WebTaskRule[] | null;
     deadline?: string | null;
@@ -208,6 +216,14 @@ export interface TaskWithGrade {
   description: string;
   template: string;
   taskMode?: "CODE" | "WEB" | "MANUAL";
+  projectSpec?: {
+    version: 1;
+    kind: "MINI_PROJECT";
+    estimatedMinutes: number;
+    skills: string[];
+    milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
+    extensions?: string[];
+  } | null;
   webTemplateFiles?: WebTaskFile[] | null;
   webValidationRules?: WebTaskRule[] | null;
   language: "JAVA" | "PYTHON" | "CPP";
@@ -620,6 +636,14 @@ export interface CreateTaskRequest {
   taskMode?: "CODE" | "WEB" | "MANUAL";
   webTemplateFiles?: WebTaskFile[];
   webValidationRules?: WebTaskRule[];
+  projectSpec?: {
+    version: 1;
+    kind: "MINI_PROJECT";
+    estimatedMinutes: number;
+    skills: string[];
+    milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
+    extensions?: string[];
+  } | null;
 }
 
 export async function uploadStatementImage(file: File): Promise<{ url: string; markdown: string }> {

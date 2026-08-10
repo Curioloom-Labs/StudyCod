@@ -6,14 +6,18 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Clock3,
   Code2,
   FileCode2,
   FileText,
   FolderCode,
   Gauge,
   History,
+  Lightbulb,
+  LockKeyhole,
   Maximize2,
   Minimize2,
+  Rocket,
   Play,
   RotateCcw,
   Save,
@@ -30,6 +34,7 @@ import { WebPreviewPane } from "../WebPreviewPane";
 import type {
   CodeFile,
   JudgeLanguage,
+  LibraryTaskProjectSpec,
   WebTaskFile,
 } from "../../lib/api/library";
 import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
@@ -50,6 +55,7 @@ export type StudyCodIdeTask = {
   difficulty?: string | null;
   tags?: string[] | null;
   taskMode?: "CODE" | "WEB";
+  projectSpec?: LibraryTaskProjectSpec | null;
 };
 
 export type StudyCodIdeRunResult = {
@@ -207,6 +213,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   });
   const [layout, setLayout] = React.useState<LayoutState>(readLayout);
   const [assistantTab, setAssistantTab] = React.useState<AssistantTab>("task");
+  const [openHintIndex, setOpenHintIndex] = React.useState<number | null>(null);
   const [bottomTab, setBottomTab] = React.useState<BottomTab>("tests");
   const [activeFile, setActiveFile] = React.useState(props.entryFile);
   const [fontSize, setFontSize] = React.useState(14);
@@ -249,6 +256,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
     }
     setMode(nextMode);
     setAssistantTab("task");
+    setOpenHintIndex(null);
     setBottomTab("tests");
     setFocusMode(false);
     setTraceStep(0);
@@ -346,6 +354,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   React.useEffect(() => {
     if (props.hints?.length && props.checkResult && !allTestsPassed) {
       setAssistantTab("hints");
+      setOpenHintIndex((current) =>
+        current !== null && current < props.hints!.length ? current : 0,
+      );
     }
   }, [allTestsPassed, props.checkResult?.verdict, props.checkResult?.testsPassed, props.hints?.length]);
   const lineCount = (props.code || "").split("\n").length;
@@ -726,8 +737,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   const showBottom = !focusMode && !layout.bottomCollapsed;
 
   return (
-    <div className="flex h-[min(1100px,calc(100dvh-2rem))] min-h-[780px] flex-col overflow-hidden rounded-[26px] border border-white/[.09] bg-[#0d130f] text-[#e8f1ea] shadow-[0_24px_70px_-40px_rgba(0,0,0,.8)]">
-      <header className="flex min-h-[68px] flex-wrap items-center gap-2 border-b border-white/[.08] bg-[#121b16] px-4 py-3">
+    <div className="flex h-[min(1100px,calc(100dvh-2rem))] min-h-[780px] flex-col overflow-hidden rounded-[30px] border border-white/[.1] bg-[#0d130f] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_28px_80px_-44px_rgba(15,35,21,.9)]">
+      <header className="flex min-h-[72px] flex-wrap items-center gap-2 border-b border-white/[.08] bg-[#101913] px-4 py-3 sm:px-5">
         {props.onBack ? (
           <button
             type="button"
@@ -741,10 +752,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
         <div className="mr-auto flex min-w-0 items-center gap-2.5">
           <FolderCode className="size-4 shrink-0 text-[#72edb0]" />
           <div className="min-w-0">
-            <div className="truncate text-[13px] font-bold tracking-[-.01em] text-[#edf5ee]">
+            <div className="truncate text-sm font-bold tracking-[-.02em] text-[#edf5ee]">
               {props.task.title}
             </div>
-            <div className="mt-0.5 truncate text-[10px] font-medium uppercase tracking-[.12em] text-[#82968a]">
+            <div className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[.13em] text-[#82968a]">
               {props.task.section || tr("Практична задача", "Practice task")}
             </div>
           </div>
@@ -1006,30 +1017,31 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             style={{ width: layout.right }}
             className="hidden shrink-0 flex-col border-l border-white/10 bg-[#111912] lg:flex"
           >
-            <div className="flex h-11 items-center gap-1 border-b border-white/10 px-2">
+            <div className="flex min-h-12 items-center gap-1 border-b border-white/10 bg-[#101913] px-2.5">
               <button
                 type="button"
                 onClick={() => setAssistantTab("task")}
-                className={`rounded px-2 py-1.5 text-[10px] font-semibold ${assistantTab === "task" ? "bg-white/[.08] text-white" : "text-[#82968a]"}`}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "task" ? "bg-white/[.09] text-white shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
               >
+                <FileText className="size-3.5" />
                 {tr("Завдання", "Task")}
               </button>
               <button
                 type="button"
                 onClick={() => setAssistantTab("hints")}
-                className={`rounded px-2 py-1.5 text-[10px] font-semibold ${assistantTab === "hints" ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a]"}`}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "bg-[#00d978]/10 text-[#72edb0] shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
               >
-                <Sparkles className="mr-1 inline size-3" />
+                <Lightbulb className="size-3.5" />
                 {tr("Підказки", "Hints")}
                 {props.hints?.length ? ` (${props.hints.length})` : ""}
               </button>
               <button
                 type="button"
                 onClick={() => setAssistantTab("mentor")}
-                className={`rounded px-2 py-1.5 text-[10px] font-semibold ${assistantTab === "mentor" ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a]"}`}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "bg-[#00d978]/10 text-[#72edb0] shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
               >
-                <Bot className="mr-1 inline size-3" />
-                AI
+                <Bot className="size-3.5" />
+                {tr("Ментор", "Mentor")}
               </button>
               <button
                 type="button"
@@ -1047,6 +1059,70 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                     <FileText className="size-4 text-[#72edb0]" />
                     {props.task.title}
                   </div>
+                  {props.task.projectSpec ? (
+                    <div className="overflow-hidden rounded-2xl border border-[#ffb454]/20 bg-[linear-gradient(145deg,rgba(255,180,84,.1),rgba(0,217,120,.035))]">
+                      <div className="flex items-start gap-3 border-b border-white/[.08] p-3.5">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#ffb454]/15 text-[#ffca7e]">
+                          <Rocket className="size-4.5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-bold text-[#edf5ee]">
+                              {tr("Мініпроєкт", "Mini-project")}
+                            </p>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-white/[.08] px-2 py-0.5 text-[10px] font-semibold text-[#b9c9bd]">
+                              <Clock3 className="size-3" />
+                              {props.task.projectSpec.estimatedMinutes} {tr("хв", "min")}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[11px] leading-5 text-[#a7b5aa]">
+                            {tr("Збери маленький продукт і покажи, що навичка працює в реальному сценарії.", "Build a small product and prove the skill in a real scenario.")}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-3 p-3.5">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">
+                            {tr("Навички", "Skills")}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {props.task.projectSpec.skills.map((skill) => (
+                              <span key={skill} className="rounded-lg bg-[#00d978]/10 px-2 py-1 text-[10px] font-semibold text-[#72edb0]">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">
+                            {tr("Етапи", "Milestones")}
+                          </p>
+                          <div className="mt-2 space-y-2">
+                            {props.task.projectSpec.milestones.map((milestone, index) => (
+                              <div key={milestone.id} className="flex gap-2.5">
+                                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-white/[.14] text-[10px] font-bold text-[#a7b5aa]">
+                                  {index + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-semibold text-[#d6e3d9]">
+                                    {milestone.title}
+                                    {milestone.required === false ? <span className="ml-1.5 text-[10px] font-normal text-[#82968a]">{tr("додатково", "optional")}</span> : null}
+                                  </p>
+                                  <p className="mt-0.5 text-[10px] leading-5 text-[#8fa696]">{milestone.description}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {props.task.projectSpec.extensions?.length ? (
+                          <div className="rounded-xl bg-black/15 px-3 py-2 text-[10px] leading-5 text-[#8fa696]">
+                            <span className="font-bold text-[#b9c9bd]">{tr("Для наступного рівня:", "For the next level:")}</span>{" "}
+                            {props.task.projectSpec.extensions.join(" · ")}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="prose prose-sm max-w-none text-xs leading-6 dark:prose-invert">
                     <MarkdownView content={props.task.description} />
                   </div>
@@ -1090,30 +1166,106 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                 </div>
               ) : null}
               {assistantTab === "hints" ? (
-                <div className="space-y-2">
-                  {(props.hints || []).map((hint, index) => (
-                    <details
-                      key={hint}
-                      className="rounded-xl border border-white/10 bg-white/[.03] p-3"
-                    >
-                      <summary className="cursor-pointer text-xs font-semibold text-[#c8d6cc]">
-                        {tr(
-                          `Підказка рівня ${index + 1}`,
-                          `Hint level ${index + 1}`,
-                        )}
-                      </summary>
-                      <p className="mt-3 text-xs leading-6 text-[#a7b5aa]">
-                        {hint}
-                      </p>
-                    </details>
-                  ))}
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-[#ffb454]/20 bg-[linear-gradient(145deg,rgba(255,180,84,.11),rgba(0,217,120,.045))] p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#ffb454]/15 text-[#ffca7e]">
+                        <Lightbulb className="size-4.5" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-bold text-[#edf5ee]">
+                            {tr("Рухайся крок за кроком", "Take it one step at a time")}
+                          </p>
+                          {props.hints?.length ? (
+                            <span className="rounded-full bg-white/[.08] px-2 py-0.5 text-[10px] font-bold text-[#b9c9bd]">
+                              {props.hints.length} {tr("рівні", "levels")}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1.5 text-[11px] leading-5 text-[#a7b5aa]">
+                          {tr(
+                            "Почни з першої підказки. Наступна відкриває трохи більше деталей, але не готове рішення.",
+                            "Start with the first hint. Each next level adds detail without giving away the solution.",
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    {props.hints?.length ? (
+                      <div className="mt-4 flex gap-1.5" aria-label={tr("Прогрес підказок", "Hint progress")}>
+                        {props.hints.map((_, index) => (
+                          <span
+                            key={`hint-progress-${index}`}
+                            className={`h-1.5 flex-1 rounded-full transition-colors ${openHintIndex !== null && index <= openHintIndex ? "bg-[#00d978]" : "bg-white/[.12]"}`}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {(props.hints || []).map((hint, index) => {
+                    const isOpen = openHintIndex === index;
+                    const isLast = index === (props.hints?.length || 1) - 1;
+                    return (
+                      <div
+                        key={`${index}-${hint}`}
+                        className={`overflow-hidden rounded-2xl border transition ${isOpen ? "border-[#00d978]/35 bg-[#102017] shadow-[0_12px_28px_-22px_rgba(0,217,120,.8)]" : "border-white/[.09] bg-white/[.025] hover:border-white/[.16]"}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setOpenHintIndex(isOpen ? null : index)}
+                          className="flex w-full items-center gap-3 px-3.5 py-3 text-left"
+                          aria-expanded={isOpen}
+                          aria-controls={`ide-hint-${index}`}
+                        >
+                          <span className={`grid size-8 shrink-0 place-items-center rounded-xl text-xs font-extrabold ${isOpen ? "bg-[#00d978] text-[#062211]" : "bg-white/[.08] text-[#a7b5aa]"}`}>
+                            {index + 1}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-[11px] font-bold ${isOpen ? "text-[#72edb0]" : "text-[#c8d6cc]"}`}>
+                              {tr(`Підказка ${index + 1}`, `Hint ${index + 1}`)}
+                            </span>
+                            <span className="mt-0.5 block text-[10px] text-[#82968a]">
+                              {index === 0
+                                ? tr("Напрямок", "Direction")
+                                : isLast
+                                  ? tr("Останній крок", "Final step")
+                                  : tr("Трохи більше деталей", "More detail")}
+                            </span>
+                          </span>
+                          <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${isOpen ? "rotate-180 text-[#72edb0]" : ""}`} />
+                        </button>
+                        {isOpen ? (
+                          <div id={`ide-hint-${index}`} className="border-t border-white/[.08] px-3.5 pb-3.5 pt-3">
+                            <div className="flex gap-2.5">
+                              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#ffb454]" />
+                              <p className="text-xs leading-6 text-[#d4e1d7]">{hint}</p>
+                            </div>
+                            <p className="mt-3 rounded-xl bg-black/15 px-3 py-2 text-[10px] leading-5 text-[#8fa696]">
+                              <LockKeyhole className="mr-1.5 inline size-3" />
+                              {tr("Спробуй застосувати це самостійно перед наступною підказкою.", "Try applying this yourself before opening the next hint.")}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+
                   {!props.hints?.length ? (
-                    <p className="text-xs text-[#82968a]">
-                      {tr(
-                        "Підказки з’являться після першої спроби.",
-                        "Hints will appear after your first attempt.",
-                      )}
-                    </p>
+                    <div className="rounded-2xl border border-dashed border-white/[.14] bg-white/[.02] px-4 py-8 text-center">
+                      <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-[#00d978]/10 text-[#72edb0]">
+                        <Sparkles className="size-5" />
+                      </span>
+                      <p className="mt-3 text-sm font-bold text-[#c8d6cc]">
+                        {tr("Підказки ще готуються", "Hints are not ready yet")}
+                      </p>
+                      <p className="mx-auto mt-1.5 max-w-[220px] text-[11px] leading-5 text-[#82968a]">
+                        {tr(
+                          "Зроби першу спробу — після перевірки тут з’явиться наступний крок.",
+                          "Make a first attempt. After checking, your next step will appear here.",
+                        )}
+                      </p>
+                    </div>
                   ) : null}
                 </div>
               ) : null}

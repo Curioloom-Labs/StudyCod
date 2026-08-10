@@ -198,11 +198,20 @@ async function persistLibraryLearningOutcome(params: {
   const principal = learningPrincipal(params.req);
   if (!principal) return null;
   try {
+    const projectSkills = Array.isArray((params.task as any).projectSpec?.skills)
+      ? (params.task as any).projectSpec.skills.map((skill: unknown) => String(skill).trim()).filter(Boolean)
+      : [];
+    const topicLabel = String(
+      (params.task as any).section
+      || projectSkills[0]
+      || (Array.isArray((params.task as any).tags) ? (params.task as any).tags[0] : "")
+      || "",
+    ).trim() || null;
     return await recordLearningOutcome({
       ...principal,
       taskKind: "LIBRARY",
       taskId: params.task.id,
-      topicLabel: String((params.task as any).section ?? (Array.isArray((params.task as any).tags) ? (params.task as any).tags[0] : "") ?? "").trim() || null,
+      topicLabel,
       submissionId: params.submissionId ?? null,
       sourceAttemptId: params.sourceAttemptId ?? null,
       outcome: params.outcome,
@@ -517,6 +526,7 @@ function buildTaskDto(task: LibraryTask, quality: LibraryTaskQuality | null = nu
     description: task.description,
     template: task.template,
     taskMode,
+    projectSpec: (task as any).projectSpec ?? null,
     webTemplateFiles: taskMode === "WEB" ? normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalizedWeb?.files ?? []) : null,
     webValidationRules: taskMode === "WEB" ? normalizeWebRules((task as any).webValidationRules ?? normalizedWeb?.rules ?? []) : null,
     webValidationProfile: taskMode === "WEB" ? normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB") : null,
@@ -728,6 +738,22 @@ const createLibraryTaskSchema = z.object({
   tags: z.array(z.string().min(1).max(32)).max(20).optional(),
   section: z.string().min(1).max(80).optional(),
   taskMode: z.enum(["CODE", "WEB"]).optional(),
+  projectSpec: z
+    .object({
+      version: z.literal(1).default(1),
+      kind: z.literal("MINI_PROJECT"),
+      estimatedMinutes: z.number().int().min(10).max(600),
+      skills: z.array(z.string().trim().min(1).max(64)).min(1).max(12),
+      milestones: z.array(z.object({
+        id: z.string().trim().min(1).max(64),
+        title: z.string().trim().min(1).max(160),
+        description: z.string().trim().min(1).max(1000),
+        required: z.boolean().optional(),
+      })).min(1).max(12),
+      extensions: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
+    })
+    .nullable()
+    .optional(),
   webTemplateFiles: z
     .array(
       z.object({
@@ -803,7 +829,7 @@ const createLibraryTaskSchema = z.object({
   allowedLanguages: z
     .array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
     .min(1)
-    .max(6)
+    .max(JUDGE_LANGS.length)
     .optional(),
   theory: z.string().optional(),
   tests: z
@@ -1917,6 +1943,7 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
       tags: data.tags ?? null,
       section: data.section?.trim() ?? null,
       taskMode: taskMode as any,
+      projectSpec: (data as any).projectSpec ?? null,
       webTemplateFiles: normalizedWebFiles,
       webValidationRules: normalizedWebRules,
       webValidationProfile: normalizedWebProfile,
@@ -2033,6 +2060,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
     if ((data as any).tags !== undefined) (task as any).tags = (data as any).tags ?? null;
     if ((data as any).section !== undefined) (task as any).section = String((data as any).section ?? "").trim() || null;
     if (typeof data.description === "string") task.description = data.description.trim();
+    if ((data as any).projectSpec !== undefined) (task as any).projectSpec = (data as any).projectSpec ?? null;
     const effectiveTaskMode = String(((data as any).taskMode ?? (task as any).taskMode ?? "CODE")) === "WEB" ? "WEB" : "CODE";
     const normalizedTaskInput = normalizeWebTaskInput(
       {
@@ -2421,6 +2449,19 @@ async function importSingleLibraryArchive(params: {
     description: z.string().min(1),
     template: z.string().optional(),
     taskMode: z.enum(["CODE", "WEB"]).optional(),
+    projectSpec: z.object({
+      version: z.literal(1).default(1),
+      kind: z.literal("MINI_PROJECT"),
+      estimatedMinutes: z.coerce.number().int().min(10).max(600),
+      skills: z.array(z.string().trim().min(1).max(64)).min(1).max(12),
+      milestones: z.array(z.object({
+        id: z.string().trim().min(1).max(64),
+        title: z.string().trim().min(1).max(160),
+        description: z.string().trim().min(1).max(1000),
+        required: z.boolean().optional(),
+      })).min(1).max(12),
+      extensions: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
+    }).nullable().optional(),
     webTemplateFiles: z
       .array(
         z.object({
@@ -2531,7 +2572,7 @@ async function importSingleLibraryArchive(params: {
         },
         z.array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
           .min(1)
-          .max(6)
+          .max(JUDGE_LANGS.length)
       )
       .optional(),
     templatesByLanguage: z.record(z.string(), z.string()).optional(),
@@ -2596,6 +2637,7 @@ async function importSingleLibraryArchive(params: {
     tags: (taskJson as any).tags ?? null,
     section: taskJson.section?.trim() ?? null,
     taskMode: normalizedTaskInput.taskMode as any,
+    projectSpec: (taskJson as any).projectSpec ?? null,
     webTemplateFiles: normalizedTaskInput.webTemplateFiles,
     webValidationRules: normalizedTaskInput.webValidationRules,
     webValidationProfile: normalizedTaskInput.webValidationProfile,
@@ -2880,6 +2922,7 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
             tags: (task as any).tags ?? undefined,
             section: (task as any).section ?? undefined,
             taskMode: (task as any).taskMode ?? "CODE",
+            projectSpec: (task as any).projectSpec ?? undefined,
             webTemplateFiles: (task as any).webTemplateFiles ?? undefined,
             webValidationRules: (task as any).webValidationRules ?? undefined,
             webValidationProfile: (task as any).webValidationProfile ?? undefined,

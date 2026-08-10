@@ -132,6 +132,7 @@ export const TopicStudioPage: React.FC = () => {
     template: "",
     maxAttempts: "3",
     theory: "",
+    projectSpecJson: "",
   });
   const [controlForm, setControlForm] = React.useState({
     title: "",
@@ -167,7 +168,7 @@ export const TopicStudioPage: React.FC = () => {
   const backPath = topic?.class?.id ? `/edu/classes/${topic.class.id}${preview() ? "?preview=true" : ""}` : `/edu${preview() ? "?preview=true" : ""}`;
 
   const openTaskBuilder = () => {
-    setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "" });
+    setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
     setMode("task");
   };
 
@@ -275,6 +276,16 @@ export const TopicStudioPage: React.FC = () => {
     if (!taskForm.title.trim()) return;
     setBusy(true);
     try {
+      let projectSpec: unknown = null;
+      if (taskForm.projectSpecJson.trim()) {
+        try {
+          projectSpec = JSON.parse(taskForm.projectSpecJson);
+        } catch {
+          setError("Перевірте JSON опису мініпроєкту.");
+          setBusy(false);
+          return;
+        }
+      }
       let created: TopicTask | null = null;
       if (!preview()) {
         const response = await api.post(`/topics/${id}/tasks`, {
@@ -283,6 +294,7 @@ export const TopicStudioPage: React.FC = () => {
           template: taskForm.template,
           type: "PRACTICE",
           maxAttempts: Number(taskForm.maxAttempts) || 3,
+          projectSpec,
         });
         created = response.data.task ?? response.data.topicTask ?? response.data;
         if ((!created?.id || !created?.title) && response.data.id) created = response.data as TopicTask;
@@ -302,7 +314,7 @@ export const TopicStudioPage: React.FC = () => {
         };
         setTopic((old) => old ? { ...old, tasks: [...(old.tasks || []), created as TopicTask] } : old);
       }
-      setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "" });
+      setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
       if (!preview()) await load();
       if (created?.id) {
         setSelectedTask(created);
@@ -641,6 +653,17 @@ export const TopicStudioPage: React.FC = () => {
                   {aiBusy === "theory" ? "Генерую…" : "Згенерувати теорію"}
                 </button>
                 <textarea value={taskForm.theory} onChange={(event) => setTaskForm({ ...taskForm, theory: event.target.value })} placeholder="Коротке пояснення перед практикою: поняття, приклад, пастки" rows={9} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <div>
+                  <label className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">Мініпроєкт · projectSpec JSON (необовʼязково)</label>
+                  <textarea
+                    value={taskForm.projectSpecJson}
+                    onChange={(event) => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })}
+                    placeholder={'{"version":1,"kind":"MINI_PROJECT","estimatedMinutes":45,"skills":["цикли"],"milestones":[{"id":"step-1","title":"Перший етап","description":"Що має зробити учень.","required":true}]}' }
+                    rows={7}
+                    className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-xs text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10"
+                  />
+                  <p className="mt-2 text-xs leading-5 text-[#718075] dark:text-[#a6b4a9]">Для мініпроєкту додайте тести нижче. Учень побачить етапи в IDE, а submit перевірятиметься judgeʼом.</p>
+                </div>
                 <button disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   <ArrowRight className="size-4" />
                   Створити й додати тести

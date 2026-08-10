@@ -158,6 +158,14 @@ export interface Task {
   practiceText?: string;
   starterCode: string;
   taskMode?: "CODE" | "WEB";
+  projectSpec?: {
+    version: 1;
+    kind: "MINI_PROJECT";
+    estimatedMinutes: number;
+    skills: string[];
+    milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
+    extensions?: string[];
+  } | null;
   webTemplateFiles?: Array<{ path: "index.html" | "styles.css" | "script.js"; content: string }>;
   webValidationRules?: Array<{
     id?: string;

@@ -245,6 +245,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
         description: task.description,
         template: task.template,
         taskMode: task.taskMode,
+        projectSpec: task.projectSpec ?? null,
         maxAttempts: task.maxAttempts,
         deadline: task.deadline || null,
         deadlineTimezone: classDeadlineTimezone,

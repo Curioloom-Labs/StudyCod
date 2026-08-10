@@ -4,6 +4,7 @@ import { ControlWork } from "./ControlWork";
 import { TaskTheory } from "./TaskTheory";
 import { TestData } from "./TestData";
 import { EduGrade } from "./EduGrade";
+import type { LibraryTaskProjectSpec } from "./LibraryTask";
 export type TaskType = "PRACTICE" | "CONTROL";
 export type TopicTaskMode = "CODE" | "WEB";
 export type WebValidationProfileId = "FREE_WEB" | "HTML_ONLY" | "HTML_CSS_NO_JS" | "HTML_JS_NO_CSS" | "JS_ONLY_DOM" | "CSS_ONLY" | "HTML_AND_INLINE_ONLY";
@@ -54,6 +55,12 @@ export class TopicTask {
     name: "task_mode"
   })
   taskMode!: TopicTaskMode;
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "project_spec"
+  })
+  projectSpec?: LibraryTaskProjectSpec | null;
   @Column({
     type: "simple-json",
     nullable: true,

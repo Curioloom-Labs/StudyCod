@@ -19,6 +19,20 @@ export type LibraryTaskDifficulty = "EASY" | "MEDIUM" | "HARD";
 export type LibraryTaskMode = "CODE" | "WEB";
 export type WebValidationProfileId = "FREE_WEB" | "HTML_ONLY" | "HTML_CSS_NO_JS" | "HTML_JS_NO_CSS" | "JS_ONLY_DOM" | "CSS_ONLY" | "HTML_AND_INLINE_ONLY";
 
+export type LibraryTaskProjectSpec = {
+  version: 1;
+  kind: "MINI_PROJECT";
+  estimatedMinutes: number;
+  skills: string[];
+  milestones: Array<{
+    id: string;
+    title: string;
+    description: string;
+    required?: boolean;
+  }>;
+  extensions?: string[];
+};
+
 @Entity("library_tasks")
 export class LibraryTask {
   @PrimaryGeneratedColumn()
@@ -92,6 +106,10 @@ export class LibraryTask {
     name: "task_mode"
   })
   taskMode!: LibraryTaskMode;
+
+  /** Optional project brief. The task remains CODE or WEB so existing judge, hints and skill evidence keep working. */
+  @Column({ type: "simple-json", name: "project_spec", nullable: true })
+  projectSpec?: LibraryTaskProjectSpec | null;
 
   @Column({ type: "simple-json", name: "web_template_files", nullable: true })
   webTemplateFiles?: Array<{

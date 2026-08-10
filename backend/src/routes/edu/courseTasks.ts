@@ -14,6 +14,7 @@ import {
   validateWebTaskSubmission,
 } from "../../services/webTaskValidationService";
 import { encodeWebTaskPayload } from "../../utils/webTaskPayload";
+import { generateAlgorithmicHints } from "../../services/ai/failureHints";
 
 /** Student-facing handlers for materialised course EduTasks.
  * The legacy router below serves TopicTask. Keeping this router first makes the
@@ -85,6 +86,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       description: task.description,
       template: task.template,
       taskMode: task.taskMode,
+      projectSpec: task.projectSpec ?? null,
       webTemplateFiles: task.webTemplateFiles ?? null,
       webValidationRules: task.webValidationRules ?? null,
       language: languageFor(task),
@@ -126,7 +128,15 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
       const passed = execution.success;
       const result = [{ testId: 0, passed, verdict: passed ? "AC" : "RE" }];
       const grade = await gradeRepo().save(gradeRepo().create({ task, student, total: passed ? 100 : 0, score: passed ? 100 : 0, maxScore: 100, testsPassed: passed ? 1 : 0, testsTotal: 1, submittedCode: code.data, testResults: JSON.stringify(result), isCompleted: passed, isManuallyGraded: false, feedback: "No authored tests; submission was executed successfully." }));
-      return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false, isCompleted: grade.isCompleted }, testResults: result, scoring: { score: grade.score ?? 0, maxScore: 100 } });
+      const hints = passed ? [] : await generateAlgorithmicHints({
+        taskTitle: task.title,
+        taskText: task.description,
+        language: languageFor(task),
+        code: code.data,
+        failures: [{ testId: 0, input: "", expected: "успішне виконання", actual: execution.stdout || "", verdict: execution.success ? "WA" : "RE", stderr: execution.stderr || null }],
+        maxHints: 4
+      }).catch(() => []);
+      return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false, isCompleted: grade.isCompleted }, testResults: result, hints, scoring: { score: grade.score ?? 0, maxScore: 100 } });
     }
     const results: Array<{ testId: number; passed: boolean; verdict: string }> = [];
     for (const test of tests) {
@@ -138,7 +148,19 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
     const total = Math.round((passed / results.length) * 100);
     const grade = gradeRepo().create({ task, student, total, score: total, maxScore: 100, testsPassed: passed, testsTotal: results.length, submittedCode: code.data, testResults: JSON.stringify(results), isCompleted: passed === results.length, isManuallyGraded: false, feedback: null });
     const saved = await gradeRepo().save(grade);
-    return res.json({ grade: { id: saved.id, total: saved.total, testsPassed: saved.testsPassed, testsTotal: saved.testsTotal, isManuallyGraded: false, isCompleted: saved.isCompleted }, testResults: results, scoring: { score: total, maxScore: 100 } });
+    const failures = results.filter((item) => !item.passed).map((item) => {
+      const test = tests.find((candidate) => candidate.id === item.testId);
+      return { testId: item.testId, input: test?.input || "", expected: test?.expectedOutput || "", actual: "", verdict: item.verdict };
+    });
+    const hints = failures.length ? await generateAlgorithmicHints({
+      taskTitle: task.title,
+      taskText: task.description,
+      language: languageFor(task),
+      code: code.data,
+      failures,
+      maxHints: 4
+    }).catch(() => []) : [];
+    return res.json({ grade: { id: saved.id, total: saved.total, testsPassed: saved.testsPassed, testsTotal: saved.testsTotal, isManuallyGraded: false, isCompleted: saved.isCompleted }, testResults: results, hints, scoring: { score: total, maxScore: 100 } });
   });
 });
 
@@ -181,7 +203,7 @@ router.post("/tasks/:taskId/web-submit", authRequired, async (req: AuthRequest, 
     const score = check.maxScore > 0 ? check.score : check.passedRules;
     const total = Math.round((score / maxScore) * 100);
     const grade = await gradeRepo().save(gradeRepo().create({ task, student, total, score, maxScore, testsPassed: check.passedRules, testsTotal: check.totalRules, submittedCode: encodeWebTaskPayload({ mode: "WEB", version: 1, files }), testResults: JSON.stringify(check.results), isCompleted: check.passed, isManuallyGraded: false, feedback: check.passed ? null : "Some validation rules failed." }));
-    return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false }, testResults: check.results, scoring: { score, maxScore }, taskMode: "WEB" });
+    return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false }, testResults: check.results, hints: check.passed ? [] : check.results.filter((result: any) => !result.passed).map((result: any) => result.message || "Перевір цю вимогу ще раз.").slice(0, 4), scoring: { score, maxScore }, taskMode: "WEB" });
   });
 });
 

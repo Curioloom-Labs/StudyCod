@@ -6,6 +6,7 @@ import { AppDataSource } from "../data-source";
 import { Task, TaskType } from "../entities/Task";
 import type { TaskIoType, TaskLang } from "../entities/Task";
 import { Topic } from "../entities/Topic";
+import { getPersonalMiniProjectDefinition, PERSONAL_MINI_PROJECT_INTERVAL } from "../data/personalMiniProjects";
 import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
 import { TestData } from "../entities/TestData";
@@ -351,6 +352,7 @@ const PERSONAL_CONTROL_QUIZ_COUNT = 15;
 const PERSONAL_CONTROL_PRACTICE_COUNT = 3;
 const PERSONAL_CONTROL_PRACTICE_COEFF = 1.3;
 const PERSONAL_CONTROL_PASS_GRADE = 60;
+const PERSONAL_TOPIC_PASS_GRADE = 60;
 
 const GENERATE_COOLDOWN_MIN_MS = (() => {
   const raw = Number(process.env.TASKS_GENERATE_COOLDOWN_MIN_MS);
@@ -543,6 +545,54 @@ function getSequentialCompletedTopicCount(params: {
     else break;
   }
   return completed;
+}
+
+async function findOrCreatePersonalMiniProject(params: {
+  userId: number;
+  lang: "JAVA" | "PYTHON" | "CPP";
+  sequence: number;
+  topics: Topic[];
+}): Promise<Task | null> {
+  const prefix = `MPJ:${params.lang}:${params.sequence}`;
+  const existing = await taskRepo()
+    .createQueryBuilder("task")
+    .where("task.user_id = :userId", { userId: params.userId })
+    .andWhere("task.lang = :lang", { lang: params.lang })
+    .andWhere("task.subtitle LIKE :prefix", { prefix: `${prefix}%` })
+    .orderBy("task.createdAt", "ASC")
+    .getOne();
+  if (existing) return existing;
+
+  const definition = getPersonalMiniProjectDefinition(params.lang, params.sequence);
+  const task = await taskRepo().save(taskRepo().create({
+    user: { id: params.userId } as any,
+    topic: null,
+    title: `${definition.title} · ${params.sequence + 1}`,
+    subtitle: `${prefix}|MINI_PROJECT|${definition.key}`,
+    description: definition.description,
+    descriptionMarkdown: definition.description,
+    template: definition.template,
+    taskMode: "CODE",
+    projectSpec: definition.projectSpec,
+    draftCode: definition.template,
+    finalCode: "",
+    completed: 0,
+    lang: params.lang,
+    difus: 0,
+    numInTopic: 1,
+    topicIndex: params.topics.length > 0 ? params.topics[params.topics.length - 1].topicIndex : 0,
+    type: "TOPIC" as TaskType,
+    ioType: "STDIN_STDOUT" as TaskIoType,
+  })) as Task;
+
+  const tests = definition.tests.map(test => testDataRepo().create({
+    input: test.input,
+    expectedOutput: test.expectedOutput,
+    points: test.points,
+    personalTask: { id: task.id } as any,
+  }));
+  await testDataRepo().save(tests);
+  return task;
 }
 
 /* Legacy bulk grade helper no longer used by the current task route.
@@ -1399,6 +1449,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
       : {}),
     practiceText,
     taskMode,
+    projectSpec: (task as any).projectSpec ?? null,
     webTemplateFiles: taskMode === "WEB" ? normalizedWebTemplate?.files ?? normalizeWebTaskFiles((task as any).webTemplateFiles ?? []) : undefined,
     webValidationRules: taskMode === "WEB" ? normalizeWebRules((task as any).webValidationRules ?? normalizedWebTemplate?.rules ?? []) : undefined,
     starterCode,
@@ -2800,6 +2851,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       .where("task.user_id = :userId", { userId })
       .andWhere("task.lang = :lang", { lang })
       .andWhere("task.type = :type", { type: "TOPIC" })
+      .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :miniProjectPrefix)", { miniProjectPrefix: "MPJ:%" })
       .groupBy("task.topic_index")
       .getRawMany();
     const countByTopicIndex = new Map<number, number>();
@@ -2809,13 +2861,72 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       if (Number.isFinite(idx) && Number.isFinite(cnt)) countByTopicIndex.set(idx, cnt);
     }
 
+    // Topic completion is based on a passing grade, not merely on the fact
+    // that a task row was generated or submitted. A failed submission can be
+    // retried, but it must not unlock the next topic/project.
+    const passedRawCounts = await taskRepo()
+      .createQueryBuilder("task")
+      .leftJoin("task.grades", "grade")
+      .select("task.topic_index", "topicIndex")
+      .addSelect("COUNT(DISTINCT task.id)", "cnt")
+      .where("task.user_id = :userId", { userId })
+      .andWhere("task.lang = :lang", { lang })
+      .andWhere("task.type = :type", { type: "TOPIC" })
+      .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :miniProjectPrefix)", { miniProjectPrefix: "MPJ:%" })
+      .andWhere("task.completed = 1")
+      .andWhere("grade.total >= :passGrade", { passGrade: PERSONAL_TOPIC_PASS_GRADE })
+      .groupBy("task.topic_index")
+      .getRawMany();
+    const passedCountByTopicIndex = new Map<number, number>();
+    for (const row of passedRawCounts) {
+      const idx = Number((row as any)?.topicIndex);
+      const cnt = Number((row as any)?.cnt);
+      if (Number.isFinite(idx) && Number.isFinite(cnt)) passedCountByTopicIndex.set(idx, cnt);
+    }
+
+    const topicTasksForRetry = await taskRepo().find({
+      where: { user: { id: userId }, lang, type: "TOPIC" },
+      relations: ["grades"],
+      order: { createdAt: "ASC" }
+    });
+    const retryTaskByTopicIndex = new Map<number, Task>();
+    for (const candidate of topicTasksForRetry) {
+      if (String(candidate.subtitle ?? "").startsWith("MPJ:")) continue;
+      if (!candidate.completed) continue;
+      const grades = [...(candidate.grades ?? [])].sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt)));
+      const latest = grades[0];
+      if (!latest || Number(latest.total ?? 0) < PERSONAL_TOPIC_PASS_GRADE) {
+        if (!retryTaskByTopicIndex.has(candidate.topicIndex)) retryTaskByTopicIndex.set(candidate.topicIndex, candidate);
+      }
+    }
+
     // Personal control work insertion: after each 5 fully completed topics (since placement), generate/continue a control work.
     const baseStartTopicIndex = masteredUntilTopicIndex + 1;
     const sequentialCompletedTopics = getSequentialCompletedTopicCount({
       topics,
-      countByTopicIndex,
+      countByTopicIndex: passedCountByTopicIndex,
       baseStartTopicIndex
     });
+
+    // Every three sequentially completed topics unlock a ready-to-solve
+    // project. It is persisted as a normal personal task, so the existing
+    // judge, hints, skill evidence and progress UI continue to work unchanged.
+    const projectDue = sequentialCompletedTopics > 0 && sequentialCompletedTopics % PERSONAL_MINI_PROJECT_INTERVAL === 0;
+    if (projectDue) {
+      const sequence = Math.floor(sequentialCompletedTopics / PERSONAL_MINI_PROJECT_INTERVAL) - 1;
+      const projectTask = await findOrCreatePersonalMiniProject({ userId, lang, sequence, topics });
+      const projectGrade = projectTask
+        ? await gradeRepo().findOne({ where: { user: { id: userId }, task: { id: projectTask.id } }, order: { createdAt: "DESC" } })
+        : null;
+      const projectPassed = Boolean(projectGrade && Number(projectGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE);
+      if (projectTask && !projectPassed) {
+        return res.json({
+          status: "ok",
+          task: mapTaskToDto(projectTask, undefined, { uiLanguage: userLanguage })
+        });
+      }
+    }
+
     const controlDue = sequentialCompletedTopics > 0 && sequentialCompletedTopics % PERSONAL_CONTROL_BATCH_SIZE === 0;
     const forceControlDue = forcePersonalControl && sequentialCompletedTopics > 0;
     if (controlDue || forceControlDue) {
@@ -2974,10 +3085,20 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     for (const t of topics) {
       if (t.topicIndex <= masteredUntilTopicIndex) continue;
       const count = countByTopicIndex.get(t.topicIndex) ?? 0;
+      const passedCount = passedCountByTopicIndex.get(t.topicIndex) ?? 0;
       const required = t.topicIndex === 0 ? REQUIRED_TASKS_FOR_INTRO_TOPIC : REQUIRED_TASKS_FOR_REGULAR_TOPIC;
-      if (count < required) {
-        topic = t;
-        break;
+      if (passedCount < required) {
+        const retryTask = retryTaskByTopicIndex.get(t.topicIndex);
+        if (retryTask) {
+          return res.json({
+            status: "ok",
+            task: mapTaskToDto(retryTask, undefined, { uiLanguage: userLanguage })
+          });
+        }
+        if (count < required) {
+          topic = t;
+          break;
+        }
       }
     }
     if (!topic) return res.status(400).json({

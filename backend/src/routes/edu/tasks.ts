@@ -706,6 +706,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         description: topicTask.description,
         template: topicTask.template,
         taskMode: (topicTask as any).taskMode ?? "CODE",
+        projectSpec: (topicTask as any).projectSpec ?? null,
         webTemplateFiles: (topicTask as any).webTemplateFiles ?? null,
         webValidationRules: (topicTask as any).webValidationRules ?? null,
         maxAttempts: resolveTaskMaxAttempts(topicTask),

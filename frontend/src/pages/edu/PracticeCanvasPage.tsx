@@ -58,6 +58,7 @@ export const PracticeCanvasPage: React.FC = () => {
   const [consoleTone, setConsoleTone] = React.useState<"idle" | "ok" | "bad">(
     "idle",
   );
+  const [hints, setHints] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState<"run" | "submit" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -69,6 +70,7 @@ export const PracticeCanvasPage: React.FC = () => {
       setCode(
         result.savedCode || result.template || starter[result.language] || "",
       );
+      setHints([]);
       setError(null);
     } catch (caught) {
       if (preview()) {
@@ -117,6 +119,10 @@ export const PracticeCanvasPage: React.FC = () => {
       if (preview()) {
         setConsoleTone("ok");
         setConsoleText("5 / 5 тестів пройдено\nРоботу надіслано на перевірку.");
+        setHints([
+          "Перевір, де саме формується словник частот, і чи всі слова проходять через lower().",
+          "Спробуй використати один прохід по списку та оновлювати значення ключа під час зустрічі слова.",
+        ]);
         setTask({
           ...task,
           hasGrade: true,
@@ -133,6 +139,7 @@ export const PracticeCanvasPage: React.FC = () => {
       const response = await submitCode(task.id, code);
       const passed = response.grade.testsPassed;
       const total = response.grade.testsTotal;
+      setHints(Array.isArray(response.hints) ? response.hints : []);
       setConsoleTone(passed === total ? "ok" : "bad");
       setConsoleText(
         `${passed} / ${total} тестів пройдено\n${response.hints?.join("\n") || "Результат збережено."}`,
@@ -243,6 +250,7 @@ export const PracticeCanvasPage: React.FC = () => {
       }
       runResult={ideRunResult}
       checkResult={ideCheckResult}
+      hints={hints}
     />
   );
   /* Legacy task canvas retained below for reference; the shared IDE is the live renderer.

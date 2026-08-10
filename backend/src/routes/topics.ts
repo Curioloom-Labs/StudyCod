@@ -24,6 +24,7 @@ import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { normalizeAssignedStudentIds, normalizeTargetedAssignmentForStorage } from "../utils/assignmentVisibility";
 import { validateUploadedZip, ZipValidationError, ZipExtractionBudget } from "../utils/zipUploadValidator";
 import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../services/edu/assignmentTargetsService";
+import type { LibraryTaskProjectSpec } from "../entities/LibraryTask";
 const topicsRouter = Router();
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
@@ -38,6 +39,34 @@ const testDataRepo = () => AppDataSource.getRepository(TestData);
 const CONTROL_WORK_MAX_TASKS_COUNT = 3;
 const CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT = 1;
 const CONTROL_TASK_MAX_ATTEMPTS = 3;
+
+function normalizeProjectSpec(raw: unknown): LibraryTaskProjectSpec | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (!raw || typeof raw !== "object") throw new Error("INVALID_PROJECT_SPEC");
+  const value = raw as any;
+  if (value.version !== 1 || value.kind !== "MINI_PROJECT") throw new Error("INVALID_PROJECT_SPEC");
+  const skills = Array.isArray(value.skills) ? value.skills.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 12) : [];
+  const milestones = Array.isArray(value.milestones)
+    ? value.milestones.map((item: any, index: number) => ({
+        id: String(item?.id || `milestone-${index + 1}`).trim(),
+        title: String(item?.title || "").trim(),
+        description: String(item?.description || "").trim(),
+        ...(item?.required === false ? { required: false } : { required: true })
+      })).filter((item: any) => item.id && item.title && item.description).slice(0, 12)
+    : [];
+  const estimatedMinutes = Number(value.estimatedMinutes);
+  if (!Number.isFinite(estimatedMinutes) || estimatedMinutes < 10 || estimatedMinutes > 600 || !skills.length || !milestones.length) {
+    throw new Error("INVALID_PROJECT_SPEC");
+  }
+  return {
+    version: 1,
+    kind: "MINI_PROJECT",
+    estimatedMinutes: Math.round(estimatedMinutes),
+    skills,
+    milestones,
+    extensions: Array.isArray(value.extensions) ? value.extensions.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 10) : []
+  };
+}
 
 function normalizeTaskMaxAttempts(type: "PRACTICE" | "CONTROL", raw: unknown): number {
   if (type === "CONTROL") {
@@ -444,6 +473,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webTemplateFiles,
       webValidationRules,
       webValidationProfile,
+      projectSpec,
       type,
       order,
       maxAttempts,
@@ -462,6 +492,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webValidationRules,
       webValidationProfile,
     });
+    const normalizedProjectSpec = normalizeProjectSpec(projectSpec);
     if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
         message: "INVALID_INPUT"
@@ -512,6 +543,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webTemplateFiles: normalizedTaskInput.webTemplateFiles,
       webValidationRules: normalizedTaskInput.webValidationRules,
       webValidationProfile: normalizedTaskInput.webValidationProfile,
+      projectSpec: normalizedProjectSpec,
       type: type as "PRACTICE" | "CONTROL",
       order: order || 0,
       maxAttempts: normalizeTaskMaxAttempts(type as "PRACTICE" | "CONTROL", maxAttempts),
@@ -522,6 +554,9 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       task
     });
   } catch (error: any) {
+    if (error?.message === "INVALID_PROJECT_SPEC") {
+      return res.status(400).json({ message: "INVALID_PROJECT_SPEC" });
+    }
     logger.error("[topics] Error creating task", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -593,6 +628,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
         valuePattern?: string;
         property?: string;
       }>;
+      projectSpec?: unknown;
       type?: "PRACTICE" | "CONTROL";
       order?: number;
       maxAttempts?: number;
@@ -619,6 +655,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       webTemplateFiles: normalizedTaskInput.webTemplateFiles,
       webValidationRules: normalizedTaskInput.webValidationRules,
       webValidationProfile: normalizedTaskInput.webValidationProfile,
+      projectSpec: normalizeProjectSpec(taskJson.projectSpec),
       type,
       order,
       maxAttempts,
@@ -666,6 +703,9 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     });
   } catch (error: any) {
     // A budgeted decompression that blows the actual-byte cap surfaces here.
+    if (error?.message === "INVALID_PROJECT_SPEC") {
+      return res.status(400).json({ message: "INVALID_PROJECT_SPEC" });
+    }
     if (error instanceof ZipValidationError) {
       return res.status(400).json({ message: error.code });
     }
@@ -720,6 +760,7 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
         webTemplateFiles: (task as any).webTemplateFiles ?? undefined,
         webValidationRules: (task as any).webValidationRules ?? undefined,
         webValidationProfile: (task as any).webValidationProfile ?? undefined,
+        projectSpec: (task as any).projectSpec ?? undefined,
         type: task.type,
         order: task.order,
         maxAttempts: task.maxAttempts
@@ -791,6 +832,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       taskMode,
       webTemplateFiles,
       webValidationRules,
+      projectSpec,
       maxAttempts
     } = req.body || {};
     if (!title || !description) {
@@ -805,6 +847,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       webValidationRules,
       webValidationProfile: (req.body || {}).webValidationProfile,
     });
+    const normalizedProjectSpec = normalizeProjectSpec(projectSpec);
     if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
         message: "INVALID_INPUT"
@@ -817,6 +860,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     task.webTemplateFiles = normalizedTaskInput.webTemplateFiles;
     task.webValidationRules = normalizedTaskInput.webValidationRules;
     (task as any).webValidationProfile = normalizedTaskInput.webValidationProfile;
+    task.projectSpec = normalizedProjectSpec;
     if (maxAttempts !== undefined) {
       task.maxAttempts = normalizeTaskMaxAttempts(task.type, maxAttempts);
     } else if (task.type === "CONTROL" && task.maxAttempts !== CONTROL_TASK_MAX_ATTEMPTS) {
@@ -827,6 +871,9 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       task
     });
   } catch (error: any) {
+    if (error?.message === "INVALID_PROJECT_SPEC") {
+      return res.status(400).json({ message: "INVALID_PROJECT_SPEC" });
+    }
     logger.error("[topics] Error updating task", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"

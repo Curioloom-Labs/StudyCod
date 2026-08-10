@@ -3,6 +3,7 @@ import { EduLesson } from "./EduLesson";
 import { TestData } from "./TestData";
 import { EduGrade } from "./EduGrade";
 import { TaskTheory } from "./TaskTheory";
+import type { LibraryTaskProjectSpec } from "./LibraryTask";
 export type EduTaskMode = "CODE" | "WEB" | "MANUAL";
 export type WebValidationProfileId = "FREE_WEB" | "HTML_ONLY" | "HTML_CSS_NO_JS" | "HTML_JS_NO_CSS" | "JS_ONLY_DOM" | "CSS_ONLY" | "HTML_AND_INLINE_ONLY";
 @Entity("edu_tasks")
@@ -33,6 +34,12 @@ export class EduTask {
     name: "task_mode"
   })
   taskMode!: EduTaskMode;
+  @Column({
+    type: "simple-json",
+    nullable: true,
+    name: "project_spec"
+  })
+  projectSpec?: LibraryTaskProjectSpec | null;
   @Column({
     type: "simple-json",
     nullable: true,

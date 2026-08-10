@@ -1455,6 +1455,12 @@ async function ensureWebTaskColumns(): Promise<void> {
         await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`web_validation_profile\` MEDIUMTEXT NULL AFTER \`web_validation_rules\``);
         logger.info(`[DB Patch] Added column ${table}.web_validation_profile`);
       }
+
+      if ((table === "tasks" || table === "topic_tasks" || table === "edu_tasks" || table === "library_tasks") && !(await hasColumn("project_spec"))) {
+        logger.warn(`[DB Patch] Column ${table}.project_spec is missing. Applying ALTER TABLE...`);
+        await AppDataSource.query(`ALTER TABLE \`${table}\` ADD COLUMN \`project_spec\` MEDIUMTEXT NULL AFTER \`task_mode\``);
+        logger.info(`[DB Patch] Added column ${table}.project_spec`);
+      }
     } catch (err: any) {
       logger.error(`[DB Patch] Failed to ensure web task columns for ${table}:`, {
         message: err?.message,
