@@ -1,16 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
-import { X } from "lucide-react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowRight, BookOpen, X } from "lucide-react";
 import Mascot, { type MascotVariant } from "./Mascot";
 import "./MascotCompanion.css";
 
 const DISMISSED_STORAGE_PREFIX = "studycod.mascot.dismissed.v2";
 const LEGACY_DISMISSED_STORAGE_KEY = "studycod.mascot.dismissed";
 
+type MascotAction = {
+  href: string;
+  uk: string;
+  en: string;
+};
+
 type MascotMessage = {
   variant: MascotVariant;
   uk: string;
   en: string;
+  action?: MascotAction;
+  secondaryAction?: MascotAction;
 };
 
 type MascotSignalDetail = {
@@ -65,6 +73,8 @@ const defaultMessage: MascotMessage = {
   variant: "happy",
   uk: "Готовий до короткої практики? Одна задача — вже хороший наступний крок.",
   en: "Ready for a short practice session? One task is already a good next step.",
+  action: { href: "/?app=tasks", uk: "Почати практику", en: "Start practicing" },
+  secondaryAction: { href: "/library", uk: "Відкрити бібліотеку", en: "Open library" },
 };
 
 function messageForSurface(pathname: string, app: string | null): MascotMessage {
@@ -73,14 +83,23 @@ function messageForSurface(pathname: string, app: string | null): MascotMessage 
       variant: "focus",
       uk: "Почни з однієї задачі. Результат перевірки підкаже, що робити далі.",
       en: "Start with one task. The check result will tell you what to do next.",
+      action: { href: "/library", uk: "Знайти задачу", en: "Find a task" },
+      secondaryAction: { href: "/playground", uk: "Відкрити playground", en: "Open playground" },
     };
   }
 
   if (/(?:\/library\/solve(?:\/|$)|\/edu\/tasks(?:\/|$)|\/edu\/lessons\/[^/]+(?:\/|$))/.test(pathname)) {
+    const isEducational = pathname.startsWith("/edu/");
     return {
       variant: "encourage",
-      uk: "Якщо тест не пройде — це не глухий кут. Подивись на першу невдачу й виправ одну річ за раз.",
+      uk: "Якщо тест не пройде — це не глухий кут. Виправ одну річ і перевір ще раз.",
       en: "A failed test is not a dead end. Inspect the first failure and change one thing at a time.",
+      action: isEducational
+        ? { href: "/edu/tutor", uk: "Запитати AI-тьютора", en: "Ask the AI tutor" }
+        : { href: "/playground", uk: "Перевірити ідею", en: "Test the idea" },
+      secondaryAction: isEducational
+        ? { href: "/edu/lessons", uk: "До моїх уроків", en: "Back to lessons" }
+        : { href: "/library", uk: "Інша задача", en: "Try another task" },
     };
   }
 
@@ -89,6 +108,8 @@ function messageForSurface(pathname: string, app: string | null): MascotMessage 
       variant: "eureka",
       uk: "Тут можна спокійно перевірити ідею. Експериментуй без тиску на результат.",
       en: "This is a safe place to test an idea. Experiment without pressure to be perfect.",
+      action: { href: "/library", uk: "Знайти задачу", en: "Find a task" },
+      secondaryAction: { href: "/?app=tasks", uk: "До всіх задач", en: "View all tasks" },
     };
   }
 
@@ -97,6 +118,18 @@ function messageForSurface(pathname: string, app: string | null): MascotMessage 
       variant: "proud",
       uk: "Подивись, що вже вийшло, і вибери один посильний наступний крок.",
       en: "Look at what you have already achieved and choose one manageable next step.",
+      action: { href: "/?app=tasks", uk: "Наступна задача", en: "Next task" },
+      secondaryAction: { href: "/library", uk: "Бібліотека", en: "Library" },
+    };
+  }
+
+  if (pathname.startsWith("/edu/")) {
+    return {
+      variant: "happy",
+      uk: "Я поруч, щоб допомогти не зависнути на складному місці.",
+      en: "I am here to help you get unstuck.",
+      action: { href: "/edu/tutor", uk: "Запитати AI-тьютора", en: "Ask the AI tutor" },
+      secondaryAction: { href: "/edu/lessons", uk: "Мої уроки", en: "My lessons" },
     };
   }
 
@@ -117,8 +150,6 @@ function isAuthenticatedSurface(pathname: string, app: string | null, search: st
   if (/^\/(?:auth|verify-email|pricing|privacy|terms|cookies|refunds|certificate|u)(?:\/|$)/.test(pathname)) return false;
   if (/^\/edu\//.test(pathname) && /(?:type=CONTROL|control)/i.test(search)) return false;
 
-  // Keep the mascot close to learning work. It should not become another piece
-  // of permanent chrome on support, blog, admin, or documentation screens.
   return pathname === "/"
     || app === "tasks"
     || app === "grades"
@@ -133,6 +164,7 @@ export function announceMascot(detail: MascotSignalDetail): void {
 
 export const MascotCompanion: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -176,13 +208,15 @@ export const MascotCompanion: React.FC = () => {
         variant: detail.variant ?? "encourage",
         uk: detail.uk ?? defaultMessage.uk,
         en: detail.en ?? defaultMessage.en,
+        action: routeMessage.action,
+        secondaryAction: routeMessage.secondaryAction,
       });
       if (detail.open) setOpen(true);
     };
 
     window.addEventListener("studycod:mascot", onMascotSignal);
     return () => window.removeEventListener("studycod:mascot", onMascotSignal);
-  }, []);
+  }, [routeMessage.action, routeMessage.secondaryAction]);
 
   useEffect(() => {
     if (!open) return;
@@ -203,6 +237,11 @@ export const MascotCompanion: React.FC = () => {
     }
   }, [dismissedStorageKey]);
 
+  const followAction = useCallback((href: string) => {
+    setOpen(false);
+    navigate(href);
+  }, [navigate]);
+
   if (!visible || dismissed) return null;
 
   return (
@@ -212,13 +251,29 @@ export const MascotCompanion: React.FC = () => {
           <div className="flex items-start gap-3">
             <Mascot variant={message.variant} size={68} className="mascot-companion-popover-image" alt="" />
             <div className="min-w-0 flex-1">
-              <p className="mascot-companion-eyebrow">{isEnglish ? "A small nudge" : "Маленький поштовх"}</p>
+              <p className="mascot-companion-eyebrow">{isEnglish ? "Your study companion" : "Твій навчальний напарник"}</p>
               <p className="mascot-companion-copy">{isEnglish ? message.en : message.uk}</p>
             </div>
             <button type="button" className="mascot-companion-close" onClick={() => setOpen(false)} aria-label={isEnglish ? "Close" : "Закрити"}>
               <X size={14} />
             </button>
           </div>
+          {(message.action || message.secondaryAction) && (
+            <div className="mascot-companion-actions">
+              {message.action && (
+                <button type="button" className="mascot-companion-action mascot-companion-action-primary" onClick={() => followAction(message.action!.href)}>
+                  <span>{isEnglish ? message.action.en : message.action.uk}</span>
+                  <ArrowRight size={14} aria-hidden="true" />
+                </button>
+              )}
+              {message.secondaryAction && (
+                <button type="button" className="mascot-companion-action mascot-companion-action-secondary" onClick={() => followAction(message.secondaryAction!.href)}>
+                  <BookOpen size={14} aria-hidden="true" />
+                  <span>{isEnglish ? message.secondaryAction.en : message.secondaryAction.uk}</span>
+                </button>
+              )}
+            </div>
+          )}
           <button type="button" className="mascot-companion-dismiss" onClick={dismiss}>
             {isEnglish ? "Hide mascot" : "Сховати маскота"}
           </button>

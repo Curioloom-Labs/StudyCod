@@ -120,6 +120,13 @@ export interface DifusDetails {
   lang: CourseLanguage;
   currentIad?: number;
   currentDifus: number;
+  currentTopicIndex?: number;
+  currentTopicCeiling?: number;
+  modelVersion?: number;
+  reform?: {
+    message: string;
+    topicCeilings: number[];
+  };
   iadByLang?: Record<CourseLanguage, number>;
   difusByLang: Record<CourseLanguage, number>;
   limits: {

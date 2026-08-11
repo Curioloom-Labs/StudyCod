@@ -11,6 +11,9 @@ const previewDetails: IadDetails = {
   lang: "PYTHON",
   currentIad: 0.64,
   currentDifus: 0.64,
+  currentTopicIndex: 4,
+  currentTopicCeiling: 0.115,
+  modelVersion: 2,
   iadByLang: { PYTHON: 0.64, JAVA: 0.42, CPP: 0.51 },
   difusByLang: { PYTHON: 0.64, JAVA: 0.42, CPP: 0.51 },
   limits: { min: 0, max: 1 },
@@ -174,6 +177,7 @@ export const IadPage: React.FC = () => {
 
             <section className="mt-6 rounded-[28px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15]">
               <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#147b47] dark:text-[#71edaf]">{tr("Правила", "Rules")}</div>
+              {details.reform ? <p className="mt-2 max-w-3xl text-sm leading-6 text-[#718075] dark:text-[#a3b1a6]">{tr("Реформа v2: ранні теми дають лише малий сигнал. Високий IAD відкривається поступово й обмежений найскладнішою темою, яку ти реально пройшов.", "Reform v2: early topics provide only a small signal. High IAD unlocks gradually and is capped by the most advanced topic you have actually completed.")}</p> : null}
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {details.rules.map((rule) => <div key={`${rule.minGrade}-${rule.maxGrade}`} className="rounded-2xl bg-[#f5f8f5] p-4 text-sm dark:bg-white/[.04]">
                   <div className="font-semibold">{rule.minGrade}-{rule.maxGrade}</div>

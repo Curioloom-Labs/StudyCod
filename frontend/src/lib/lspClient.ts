@@ -3,6 +3,14 @@ import { api } from "./api/client";
 
 type LspLanguage = "java" | "cpp" | "c" | "python";
 type JsonObject = Record<string, any>;
+type LspRequestOptions = {
+  timeout?: number;
+  cancelPrevious?: boolean;
+};
+
+const CHANGE_DEBOUNCE_MS = 180;
+const DIAGNOSTICS_DEBOUNCE_MS = 300;
+const COMPLETION_TIMEOUT_MS = 3000;
 
 const connections = new Map<string, SemanticLspConnection>();
 const providerRegistrations = new Set<string>();
@@ -13,8 +21,8 @@ function lspLanguage(language: string): LspLanguage | null {
   return null;
 }
 
-function requestConfig() {
-  return { headers: { "X-Skip-Auth-Redirect": "1" } };
+function requestConfig(options: { signal?: AbortSignal; timeout?: number } = {}) {
+  return { headers: { "X-Skip-Auth-Redirect": "1" }, ...options };
 }
 
 function toPosition(value: any): Monaco.IPosition {
@@ -108,7 +116,7 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
         textDocument: { uri: model.uri.toString() },
         position: { line: position.lineNumber - 1, character: position.column - 1 },
         context: { triggerKind: 1 }
-      });
+      }, { timeout: COMPLETION_TIMEOUT_MS, cancelPrevious: true });
       const items = Array.isArray(response?.result) ? response.result : Array.isArray(response?.result?.items) ? response.result.items : [];
       return {
         suggestions: items.map((item: any) => ({
@@ -152,6 +160,10 @@ class SemanticLspConnection {
   private disposed = false;
   private version = 1;
   private diagnosticsTimer: number | null = null;
+  private changeTimer: number | null = null;
+  private changeInFlight = false;
+  private requestedVersion = 1;
+  private completionAbortController: AbortController | null = null;
 
   constructor(
     private readonly monaco: typeof Monaco,
@@ -168,39 +180,82 @@ class SemanticLspConnection {
     const created = await api.post<{ sessionId: string }>("/lsp/session", { language: this.language }, requestConfig());
     if (this.disposed) return;
     this.sessionId = created.data.sessionId;
-    const opened = await api.post<{ uri: string }>(`/lsp/session/${this.sessionId}/open`, {
+    const opened = await api.post<{ uri: string; diagnostics?: any[] }>(`/lsp/session/${this.sessionId}/open`, {
       path: this.filePath,
       languageId: this.language,
       version: this.version,
       text: this.model.getValue()
     }, requestConfig());
     this.serverUri = opened.data.uri;
+    applyDiagnostics(this.monaco, this.model, opened.data.diagnostics || []);
     this.refreshDiagnostics();
   }
 
-  async request(method: string, params: JsonObject): Promise<JsonObject | null> {
+  async request(method: string, params: JsonObject, options: LspRequestOptions = {}): Promise<JsonObject | null> {
+    let abortController: AbortController | null = null;
+    if (options.cancelPrevious) {
+      this.completionAbortController?.abort();
+      abortController = new AbortController();
+      this.completionAbortController = abortController;
+    }
+
     try {
       await this.ready;
       if (this.disposed || !this.sessionId) return null;
-      const response = await api.post(`/lsp/session/${this.sessionId}/request`, { method, params: { ...params, textDocument: params.textDocument ? { ...params.textDocument, uri: this.serverUri } : params.textDocument }, uri: this.serverUri }, requestConfig());
+      const response = await api.post(`/lsp/session/${this.sessionId}/request`, { method, params: { ...params, textDocument: params.textDocument ? { ...params.textDocument, uri: this.serverUri } : params.textDocument }, uri: this.serverUri }, requestConfig({ signal: abortController?.signal, timeout: options.timeout }));
       applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
       return response.data || null;
     } catch {
       return null;
+    } finally {
+      if (abortController && this.completionAbortController === abortController) {
+        this.completionAbortController = null;
+      }
     }
   }
 
   changed(): void {
     if (this.readOnly || this.disposed) return;
     this.version += 1;
-    void this.ready.then(async () => {
-      if (this.disposed || !this.sessionId) return;
-      try {
-        const response = await api.post(`/lsp/session/${this.sessionId}/change`, { path: this.filePath, version: this.version, text: this.model.getValue() }, requestConfig());
+    this.requestedVersion = this.version;
+    this.scheduleChange();
+  }
+
+  private scheduleChange(): void {
+    if (this.readOnly || this.disposed) return;
+    if (this.changeTimer !== null) window.clearTimeout(this.changeTimer);
+    if (this.changeInFlight) return;
+    this.changeTimer = window.setTimeout(() => {
+      this.changeTimer = null;
+      void this.flushChange();
+    }, CHANGE_DEBOUNCE_MS);
+  }
+
+  private async flushChange(): Promise<void> {
+    if (this.readOnly || this.disposed) return;
+    try {
+      await this.ready;
+    } catch {
+      return;
+    }
+    if (this.disposed || !this.sessionId) return;
+
+    const version = this.requestedVersion;
+    const text = this.model.getValue();
+    this.changeInFlight = true;
+    try {
+      const response = await api.post(`/lsp/session/${this.sessionId}/change`, { path: this.filePath, version, text }, requestConfig());
+      // Do not paint diagnostics for an older snapshot over newer editor text.
+      if (!this.disposed && version === this.requestedVersion) {
         applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
         this.refreshDiagnostics();
-      } catch {}
-    });
+      }
+    } catch {
+      // A newer change may already be queued; it will retry the latest snapshot.
+    } finally {
+      this.changeInFlight = false;
+      if (!this.disposed && this.requestedVersion > version) this.scheduleChange();
+    }
   }
 
   private refreshDiagnostics(): void {
@@ -213,17 +268,19 @@ class SemanticLspConnection {
         const response = await api.get(`/lsp/session/${this.sessionId}/diagnostics?uri=${uri}`, requestConfig());
         applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
       } catch {}
-    }, 450);
+    }, DIAGNOSTICS_DEBOUNCE_MS);
   }
 
   async dispose(): Promise<void> {
     this.disposed = true;
     if (this.diagnosticsTimer !== null) window.clearTimeout(this.diagnosticsTimer);
+    if (this.changeTimer !== null) window.clearTimeout(this.changeTimer);
+    this.completionAbortController?.abort();
     try {
       await this.ready;
       if (this.sessionId) await api.delete(`/lsp/session/${this.sessionId}`, requestConfig());
     } catch {}
-    connections.delete(this.model.uri.toString());
+    if (connections.get(this.model.uri.toString()) === this) connections.delete(this.model.uri.toString());
   }
 }
 

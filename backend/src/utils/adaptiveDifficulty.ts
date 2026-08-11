@@ -1,20 +1,52 @@
 import {
   clampIad,
   getIadDeltaByGrade,
+  getIadCeilingForTopic,
   getLastProcessedGradeIdForLang,
   getUserIadForLang,
   setLastProcessedGradeIdForLang,
   setUserIadForLang,
+  type IadEvidence,
 } from "./iad";
 
 /**
  * Backward-compatible helper for quick deterministic updates in tests/tools.
  */
-export function calculateAdaptiveIad(currentIad: number, grade: number): number {
-  return clampIad(Number(currentIad ?? 0) + getIadDeltaByGrade(Number(grade ?? 0)));
+export function calculateAdaptiveIad(currentIad: number, grade: number, evidence: IadEvidence = {}): number {
+  return clampIad(Number(currentIad ?? 0) + getIadDeltaByGrade(Number(grade ?? 0), evidence));
 }
 
 export const calculateAdaptiveDifus = calculateAdaptiveIad;
+
+function evidenceFromGrade(grade: any): IadEvidence {
+  const task = grade?.task;
+  const topicIndex = Number(task?.topicIndex);
+  const numInTopic = Number(task?.numInTopic);
+  return {
+    topicIndex: Number.isFinite(topicIndex) ? topicIndex : null,
+    taskType: task?.type ?? null,
+    numInTopic: Number.isFinite(numInTopic) ? numInTopic : null,
+    isMiniProject: String(task?.subtitle ?? "").startsWith("MPJ:"),
+  };
+}
+
+function rebuildIadFromGrades(grades: any[]): { value: number; maxTopicIndex: number | null } {
+  let value = 0;
+  let maxTopicIndex: number | null = null;
+  for (const grade of grades) {
+    const evidence = evidenceFromGrade(grade);
+    if (Number.isFinite(Number(evidence.topicIndex))) {
+      maxTopicIndex = Math.max(maxTopicIndex ?? 0, Number(evidence.topicIndex));
+    }
+    value = calculateAdaptiveIad(value, Number(grade?.total ?? 0), evidence);
+  }
+
+  // Apply the curriculum ceiling after all evidence has been replayed. This
+  // prevents revisiting an easy early topic from lowering a learner who has
+  // already reached a later topic.
+  const ceiling = getIadCeilingForTopic(maxTopicIndex);
+  return { value: clampIad(Math.min(value, ceiling)), maxTopicIndex };
+}
 
 export async function getStableIad(
   userId: number,
@@ -26,79 +58,32 @@ export async function getStableIad(
   const user = await userRepo().findOne({ where: { id: userId } });
   if (!user) return 0;
 
-  let currentIad = getUserIadForLang(user, lang);
-  let lastProcessedGradeId = getLastProcessedGradeIdForLang(user, lang);
-
-  // Older accounts can have a zero IAD with a populated grade history and no
-  // processing cursor. Rebuild that value once so the headline value and the
-  // journal events cannot disagree.
-  if (currentIad <= 0 && lastProcessedGradeId == null) {
-    const historicGrades = await gradeRepo()
-      .createQueryBuilder("grade")
-      .leftJoin("grade.task", "task")
-      .where("grade.user_id = :userId", { userId })
-      .andWhere("task.lang = :lang", { lang })
-      .andWhere("grade.total IS NOT NULL")
-      .orderBy("grade.id", "ASC")
-      .getMany();
-
-    if (historicGrades.length > 0) {
-      for (const grade of historicGrades) {
-        currentIad = calculateAdaptiveIad(currentIad, Number((grade as any)?.total ?? 0));
-      }
-      setUserIadForLang(user, lang, currentIad);
-      setLastProcessedGradeIdForLang(user, lang, Number(historicGrades[historicGrades.length - 1]?.id ?? 0));
-      (user as any).lastIadChange = new Date();
-      (user as any).lastDifusChange = new Date();
-      await userRepo().save(user);
-      return currentIad;
-    }
-  }
-
-  // Compatibility bootstrap: do not replay all historic grades on first run.
-  // Start from the current IAD and begin applying deltas only for new grades.
-  if (lastProcessedGradeId == null) {
-    const latestKnownGrade = await gradeRepo()
-      .createQueryBuilder("grade")
-      .leftJoin("grade.task", "task")
-      .where("grade.user_id = :userId", { userId })
-      .andWhere("task.lang = :lang", { lang })
-      .andWhere("grade.total IS NOT NULL")
-      .orderBy("grade.id", "DESC")
-      .take(1)
-      .getOne();
-
-    if (latestKnownGrade?.id) {
-      setLastProcessedGradeIdForLang(user, lang, Number(latestKnownGrade.id));
-      await userRepo().save(user);
-    }
-    return currentIad;
-  }
-
-  const newGrades = await gradeRepo()
+  const storedIad = getUserIadForLang(user, lang);
+  const grades = await gradeRepo()
     .createQueryBuilder("grade")
-    .leftJoin("grade.task", "task")
+    .leftJoinAndSelect("grade.task", "task")
     .where("grade.user_id = :userId", { userId })
     .andWhere("task.lang = :lang", { lang })
     .andWhere("grade.total IS NOT NULL")
-    .andWhere("grade.id > :lastProcessedGradeId", { lastProcessedGradeId })
     .orderBy("grade.id", "ASC")
     .getMany();
 
-  if (!Array.isArray(newGrades) || newGrades.length === 0) return currentIad;
+  // Replaying the compact grade history makes the v2 reform apply to existing
+  // accounts too; it also keeps the headline and event log on one formula.
+  if (!Array.isArray(grades) || grades.length === 0) return storedIad;
+  const rebuilt = rebuildIadFromGrades(grades);
+  const latestGradeId = Number(grades[grades.length - 1]?.id ?? 0);
+  const lastProcessedGradeId = getLastProcessedGradeIdForLang(user, lang);
 
-  for (const grade of newGrades) {
-    const gradeValue = Number((grade as any)?.total ?? 0);
-    currentIad = calculateAdaptiveIad(currentIad, gradeValue);
+  if (Math.abs(storedIad - rebuilt.value) > 0.0005 || lastProcessedGradeId !== latestGradeId) {
+    setUserIadForLang(user, lang, rebuilt.value);
+    setLastProcessedGradeIdForLang(user, lang, latestGradeId);
+    (user as any).lastIadChange = new Date();
+    (user as any).lastDifusChange = new Date();
+    await userRepo().save(user);
   }
 
-  setUserIadForLang(user, lang, currentIad);
-  setLastProcessedGradeIdForLang(user, lang, Number(newGrades[newGrades.length - 1]?.id ?? lastProcessedGradeId));
-  (user as any).lastIadChange = new Date();
-  (user as any).lastDifusChange = new Date();
-  await userRepo().save(user);
-
-  return currentIad;
+  return rebuilt.value;
 }
 
 export const getStableDifus = getStableIad;

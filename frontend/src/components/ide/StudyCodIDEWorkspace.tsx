@@ -15,6 +15,7 @@ import {
   History,
   Lightbulb,
   LockKeyhole,
+  Loader2,
   Maximize2,
   Minimize2,
   Rocket,
@@ -588,6 +589,51 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
         </div>
       );
     }
+    if (props.checking) {
+      return (
+        <div
+          className="flex h-full min-h-0 items-center justify-center overflow-auto p-4"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="w-full max-w-xl rounded-2xl border border-[#00d978]/30 bg-[linear-gradient(145deg,rgba(0,217,120,.11),rgba(255,255,255,.025))] p-5 shadow-[0_18px_42px_-30px_rgba(0,217,120,.8)]">
+            <div className="flex items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#00d978]/15 text-[#72edb0]">
+                <Loader2 className="size-5 animate-spin" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">
+                    {tr("Система тестує твоє рішення", "The system is testing your solution")}
+                  </h3>
+                  <span className="rounded-full bg-[#00d978]/10 px-2 py-0.5 text-[10px] font-bold text-[#72edb0]">
+                    judge
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs leading-5 text-[#a7b5aa]">
+                  {tr(
+                    "Компілюємо код і проганяємо публічні та приховані тести. Результати з’являться тут одразу після завершення перевірки.",
+                    "Compiling the code and running public and hidden tests. Results will appear here as soon as the check finishes.",
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[.09]">
+              <div className="h-full w-2/5 animate-pulse rounded-full bg-[#00d978]" />
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-[10px] font-semibold text-[#82968a]">
+              {[tr("Компіляція", "Compile"), tr("Публічні кейси", "Public cases"), tr("Приховані кейси", "Hidden cases")].map((label) => (
+                <div key={label} className="flex items-center gap-1.5 rounded-lg bg-black/15 px-2.5 py-2">
+                  <span className="size-1.5 animate-pulse rounded-full bg-[#72edb0]" />
+                  {label}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="h-full overflow-auto p-4 text-xs text-[#c8d6cc]">
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -823,8 +869,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
           disabled={props.readOnly || props.running || props.checking}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50"
         >
-          <TestTube2 className="size-3.5" />
-          {props.checking ? "…" : tr("Test", "Test")}
+          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}
+          {props.checking ? tr("Тестуємо…", "Testing…") : tr("Test", "Test")}
         </button>
         <button
           type="button"
@@ -900,28 +946,28 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
         ) : null}
 
         <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex min-h-10 items-center gap-2 border-b border-white/10 bg-[#0f1511] px-3">
-            <span className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
+          <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 border-b border-white/10 bg-[#0f1511] px-3 py-2.5">
+            <span className="col-start-1 row-start-1 text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
               stdin
             </span>
             <textarea
               value={props.stdin}
               onChange={(event) => props.onStdinChange(event.target.value)}
               disabled={props.isWebTask}
-              rows={1}
+              rows={4}
               spellCheck={false}
               placeholder={
                 props.isWebTask
                   ? tr("WEB без stdin", "WEB has no stdin")
                   : tr("Власний input для Run", "Custom input for Run")
               }
-              className="min-h-7 min-w-0 flex-1 resize-none rounded-md border border-white/10 bg-black/20 px-2 py-1 font-mono text-[11px] leading-5 text-[#dce7df] outline-none focus:border-[#00d978]/50 disabled:opacity-50"
+              className="col-span-2 row-start-2 min-h-24 max-h-56 min-w-0 w-full resize-y overflow-auto rounded-md border border-white/10 bg-black/20 px-2.5 py-2 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] focus:border-[#00d978]/50 disabled:opacity-50"
             />
             {props.firstExampleInput ? (
               <button
                 type="button"
                 onClick={props.onUseExampleInput}
-                className="shrink-0 text-[10px] font-semibold text-[#72edb0] hover:text-white"
+                className="col-start-2 row-start-1 shrink-0 text-[10px] font-semibold text-[#72edb0] hover:text-white"
               >
                 {tr("Приклад", "Example")}
               </button>
@@ -1398,12 +1444,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
         <span>UTF-8</span>
         <span>Spaces: 2</span>
         <span className="ml-auto flex items-center gap-1 text-[#72edb0]">
-          <CheckCircle2 className="size-3" />
-          {props.checkResult
-            ? allTestsPassed
-              ? "Accepted"
-              : "Needs attention"
-            : "Autosave"}
+          {props.checking ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
+          {props.checking
+            ? tr("Система тестує", "Testing")
+            : props.checkResult
+              ? allTestsPassed
+                ? "Accepted"
+                : "Needs attention"
+              : "Autosave"}
         </span>
       </footer>
     </div>

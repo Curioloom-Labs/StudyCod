@@ -97,6 +97,56 @@
   line-height: 1.5;
 }
 
+.mascot-companion-actions {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.mascot-companion-action {
+  display: flex;
+  min-height: 2.2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+}
+
+.mascot-companion-action:hover {
+  transform: translateY(-1px);
+}
+
+.mascot-companion-action-primary {
+  border-color: color-mix(in oklch, var(--primary) 75%, var(--border));
+  background: var(--primary);
+  color: var(--primary-foreground, #07140c);
+}
+
+.mascot-companion-action-primary:hover {
+  background: color-mix(in oklch, var(--primary) 88%, white);
+}
+
+.mascot-companion-action-secondary {
+  border-color: var(--border);
+  background: color-mix(in oklch, var(--bg-surface) 88%, var(--primary));
+  color: var(--text-secondary);
+}
+
+.mascot-companion-action-secondary:hover {
+  border-color: color-mix(in oklch, var(--primary) 55%, var(--border));
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .mascot-companion-close {
   display: grid;
   width: 1.5rem;
@@ -151,6 +201,10 @@
   .mascot-companion-trigger img {
     width: 3.5rem;
     height: 3.5rem;
+  }
+
+  .mascot-companion-popover {
+    bottom: 5rem;
   }
 }
 

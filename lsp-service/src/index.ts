@@ -12,7 +12,9 @@ const PORT = Number(process.env.LSP_PORT || 4010);
 const SECRET = String(process.env.LSP_SECRET || "").trim();
 const ROOT = resolve(process.env.LSP_DATA_DIR || "/var/lib/studycod-lsp");
 const SESSION_TTL_MS = 30 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 8_000;
+const INITIALIZE_TIMEOUT_MS = 20_000;
+const DIAGNOSTICS_WAIT_MS = 800;
 const MAX_SESSIONS = Math.max(1, Number(process.env.LSP_MAX_SESSIONS || 16));
 const MAX_PENDING_REQUESTS = Math.max(1, Number(process.env.LSP_MAX_PENDING_REQUESTS || 64));
 const MAX_BODY_BYTES = Math.max(64 * 1024, Number(process.env.LSP_MAX_BODY_BYTES || 2 * 1024 * 1024));
@@ -27,6 +29,13 @@ interface PendingRequest {
   timer: NodeJS.Timeout;
 }
 
+interface DiagnosticWaiter {
+  uri: string;
+  revision: number;
+  timer: NodeJS.Timeout;
+  done: () => void;
+}
+
 interface LspSession {
   id: string;
   language: Language;
@@ -37,6 +46,8 @@ interface LspSession {
   nextRequestId: number;
   pending: Map<number, PendingRequest>;
   diagnostics: Map<string, unknown[]>;
+  diagnosticRevisions: Map<string, number>;
+  diagnosticWaiters: Set<DiagnosticWaiter>;
   lastUsedAt: number;
 }
 
@@ -151,6 +162,11 @@ function consumeMessages(session: LspSession): void {
       const uri = String(params.uri || "");
       const diagnostics = Array.isArray(params.diagnostics) ? params.diagnostics : [];
       session.diagnostics.set(uri, diagnostics);
+      const revision = (session.diagnosticRevisions.get(uri) || 0) + 1;
+      session.diagnosticRevisions.set(uri, revision);
+      for (const waiter of [...session.diagnosticWaiters]) {
+        if (waiter.uri === uri && revision > waiter.revision) waiter.done();
+      }
       continue;
     }
 
@@ -169,14 +185,14 @@ function consumeMessages(session: LspSession): void {
   }
 }
 
-function request(session: LspSession, method: string, params: unknown): Promise<unknown> {
+function request(session: LspSession, method: string, params: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
   if (session.pending.size >= MAX_PENDING_REQUESTS) return Promise.reject(new Error("Too many pending LSP requests"));
   const id = session.nextRequestId++;
   return new Promise((resolvePromise, reject) => {
     const timer = setTimeout(() => {
       session.pending.delete(id);
       reject(new Error(`LSP timeout: ${method}`));
-    }, REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
     session.pending.set(id, { resolve: resolvePromise, reject, timer });
     sendMessage(session, { jsonrpc: "2.0", id, method, params });
   });
@@ -193,7 +209,7 @@ async function startSession(language: Language): Promise<LspSession> {
   await mkdir(workspace, { recursive: true });
   const spec = commandFor(language, id);
   const child = spawn(spec.command, spec.args, { cwd: workspace, stdio: "pipe", env: { ...process.env, HOME: process.env.LSP_HOME || "/tmp" } });
-  const session: LspSession = { id, language, root, workspace, process: child, buffer: Buffer.alloc(0), nextRequestId: 1, pending: new Map(), diagnostics: new Map(), lastUsedAt: Date.now() };
+  const session: LspSession = { id, language, root, workspace, process: child, buffer: Buffer.alloc(0), nextRequestId: 1, pending: new Map(), diagnostics: new Map(), diagnosticRevisions: new Map(), diagnosticWaiters: new Set(), lastUsedAt: Date.now() };
   child.stdout.on("data", (chunk: Buffer) => { session.buffer = Buffer.concat([session.buffer, chunk]); consumeMessages(session); });
   child.stderr.on("data", (chunk: Buffer) => { if (process.env.LSP_DEBUG === "1") process.stderr.write(`[lsp:${id}] ${chunk}`); });
   child.on("error", error => rejectPending(session, error));
@@ -217,7 +233,7 @@ async function startSession(language: Language): Promise<LspSession> {
         workspace: { workspaceFolders: true, configuration: true }
       },
       clientInfo: { name: "StudyCod IDE", version: "1.0" }
-    });
+    }, INITIALIZE_TIMEOUT_MS);
     notify(session, "initialized", {});
     return session;
   } catch (error) {
@@ -228,6 +244,7 @@ async function startSession(language: Language): Promise<LspSession> {
 
 async function stopSession(session: LspSession): Promise<void> {
   sessions.delete(session.id);
+  for (const waiter of [...session.diagnosticWaiters]) waiter.done();
   rejectPending(session, new Error("LSP session closed"));
   try { notify(session, "shutdown", null); } catch {}
   try { session.process.kill(); } catch {}
@@ -253,9 +270,26 @@ async function changeDocument(session: LspSession, body: JsonObject): Promise<st
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, text, "utf8");
   const uri = pathToFileURL(filePath).toString();
+  const diagnosticRevision = session.diagnosticRevisions.get(uri) || 0;
   notify(session, "textDocument/didChange", { textDocument: { uri, version: Number(body.version || Date.now()) }, contentChanges: [{ text }] });
+  await waitForDiagnostics(session, uri, diagnosticRevision);
   session.lastUsedAt = Date.now();
   return uri;
+}
+
+function waitForDiagnostics(session: LspSession, uri: string, revision: number): Promise<void> {
+  if ((session.diagnosticRevisions.get(uri) || 0) > revision) return Promise.resolve();
+
+  return new Promise(resolve => {
+    let waiter: DiagnosticWaiter;
+    const done = () => {
+      clearTimeout(waiter.timer);
+      session.diagnosticWaiters.delete(waiter);
+      resolve();
+    };
+    waiter = { uri, revision, timer: setTimeout(done, DIAGNOSTICS_WAIT_MS), done };
+    session.diagnosticWaiters.add(waiter);
+  });
 }
 
 function diagnosticsFor(session: LspSession, uri: string): unknown[] {
@@ -297,7 +331,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     }
     if (req.method === "POST" && parts[2] === "request") {
       const body = await readBody(req);
-      const result = await request(session, String(body.method || ""), body.params ?? {});
+      const method = String(body.method || "");
+      const timeout = method === "textDocument/completion" ? 3_000 : method === "textDocument/hover" ? 5_000 : REQUEST_TIMEOUT_MS;
+      const result = await request(session, method, body.params ?? {}, timeout);
       const uri = typeof body.uri === "string" ? body.uri : "";
       return json(res, 200, { result, diagnostics: uri ? diagnosticsFor(session, uri) : [] });
     }

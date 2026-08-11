@@ -10,6 +10,7 @@ let studycodMonacoThemesRegistered = false;
 let kotlinLanguageRegistered = false;
 const snippetLanguagesRegistered = new Set<string>();
 const languageServicesRegistered = new Set<string>();
+const importCompletionLanguagesRegistered = new Set<string>();
 
 type MonacoApi = typeof Monaco;
 type MonacoDebugWindow = Window & {
@@ -97,6 +98,274 @@ const JAVA_LANG_COMMON = [
   "Character"
 ];
 
+type ImportCompletionSpec = {
+  label: string;
+  importText: string;
+  detail?: string;
+};
+
+const IMPORT_COMPLETIONS: Record<string, ImportCompletionSpec[]> = {
+  java: [
+    { label: "Scanner", importText: "import java.util.Scanner;" },
+    { label: "ArrayList", importText: "import java.util.ArrayList;" },
+    { label: "HashMap", importText: "import java.util.HashMap;" },
+    { label: "HashSet", importText: "import java.util.HashSet;" },
+    { label: "List", importText: "import java.util.List;" },
+    { label: "Map", importText: "import java.util.Map;" },
+    { label: "Set", importText: "import java.util.Set;" },
+    { label: "Queue", importText: "import java.util.Queue;" },
+    { label: "Arrays", importText: "import java.util.Arrays;" },
+    { label: "Collections", importText: "import java.util.Collections;" },
+    { label: "StringTokenizer", importText: "import java.util.StringTokenizer;" },
+    { label: "BufferedReader", importText: "import java.io.BufferedReader;" },
+    { label: "File", importText: "import java.io.File;" },
+    { label: "LocalDate", importText: "import java.time.LocalDate;" },
+    { label: "BigInteger", importText: "import java.math.BigInteger;" },
+  ],
+  python: [
+    { label: "Path", importText: "from pathlib import Path" },
+    { label: "Counter", importText: "from collections import Counter" },
+    { label: "defaultdict", importText: "from collections import defaultdict" },
+    { label: "deque", importText: "from collections import deque" },
+    { label: "datetime", importText: "from datetime import datetime" },
+    { label: "List", importText: "from typing import List" },
+    { label: "Dict", importText: "from typing import Dict" },
+    { label: "Optional", importText: "from typing import Optional" },
+    { label: "json", importText: "import json" },
+    { label: "math", importText: "import math" },
+    { label: "random", importText: "import random" },
+    { label: "re", importText: "import re" },
+    { label: "sys", importText: "import sys" },
+    { label: "heapq", importText: "import heapq" },
+  ],
+  cpp: [
+    { label: "iostream", importText: "#include <iostream>" },
+    { label: "vector", importText: "#include <vector>" },
+    { label: "string", importText: "#include <string>" },
+    { label: "algorithm", importText: "#include <algorithm>" },
+    { label: "map", importText: "#include <map>" },
+    { label: "unordered_map", importText: "#include <unordered_map>" },
+    { label: "set", importText: "#include <set>" },
+    { label: "queue", importText: "#include <queue>" },
+    { label: "stack", importText: "#include <stack>" },
+    { label: "deque", importText: "#include <deque>" },
+    { label: "sstream", importText: "#include <sstream>" },
+    { label: "cmath", importText: "#include <cmath>" },
+    { label: "limits", importText: "#include <limits>" },
+    { label: "printf", importText: "#include <cstdio>" },
+    { label: "strlen", importText: "#include <cstring>" },
+  ],
+  c: [
+    { label: "printf", importText: "#include <stdio.h>" },
+    { label: "scanf", importText: "#include <stdio.h>" },
+    { label: "malloc", importText: "#include <stdlib.h>" },
+    { label: "strlen", importText: "#include <string.h>" },
+    { label: "qsort", importText: "#include <stdlib.h>" },
+  ],
+  csharp: [
+    { label: "Console", importText: "using System;" },
+    { label: "List", importText: "using System.Collections.Generic;" },
+    { label: "Dictionary", importText: "using System.Collections.Generic;" },
+    { label: "Enumerable", importText: "using System.Linq;" },
+    { label: "StringBuilder", importText: "using System.Text;" },
+    { label: "File", importText: "using System.IO;" },
+    { label: "DateTime", importText: "using System;" },
+  ],
+  kotlin: [
+    { label: "Scanner", importText: "import java.util.Scanner" },
+    { label: "StringTokenizer", importText: "import java.util.StringTokenizer" },
+    { label: "BufferedReader", importText: "import java.io.BufferedReader" },
+    { label: "File", importText: "import java.io.File" },
+    { label: "LocalDate", importText: "import java.time.LocalDate" },
+  ],
+  javascript: [
+    { label: "readFileSync", importText: 'import { readFileSync } from "node:fs"' },
+    { label: "writeFileSync", importText: 'import { writeFileSync } from "node:fs"' },
+    { label: "join", importText: 'import { join } from "node:path"' },
+    { label: "resolve", importText: 'import { resolve } from "node:path"' },
+    { label: "randomUUID", importText: 'import { randomUUID } from "node:crypto"' },
+    { label: "createServer", importText: 'import { createServer } from "node:http"' },
+  ],
+  go: [
+    { label: "fmt", importText: 'import "fmt"' },
+    { label: "bufio", importText: 'import "bufio"' },
+    { label: "os", importText: 'import "os"' },
+    { label: "strings", importText: 'import "strings"' },
+    { label: "strconv", importText: 'import "strconv"' },
+    { label: "sort", importText: 'import "sort"' },
+    { label: "time", importText: 'import "time"' },
+  ],
+  rust: [
+    { label: "HashMap", importText: "use std::collections::HashMap;" },
+    { label: "HashSet", importText: "use std::collections::HashSet;" },
+    { label: "io", importText: "use std::io::{self, Read};" },
+    { label: "fs", importText: "use std::fs;" },
+    { label: "Ordering", importText: "use std::cmp::Ordering;" },
+  ],
+  pascal: [
+    { label: "TStringList", importText: "uses SysUtils, Classes;" },
+    { label: "Format", importText: "uses SysUtils;" },
+    { label: "Sqrt", importText: "uses Math;" },
+  ],
+  dart: [
+    { label: "jsonDecode", importText: "import 'dart:convert';" },
+    { label: "File", importText: "import 'dart:io';" },
+    { label: "Platform", importText: "import 'dart:io';" },
+    { label: "Future", importText: "import 'dart:async';" },
+  ],
+  haskell: [
+    { label: "sort", importText: "import Data.List (sort)" },
+    { label: "nub", importText: "import Data.List (nub)" },
+    { label: "Map", importText: "import qualified Data.Map as Map" },
+    { label: "Set", importText: "import qualified Data.Set as Set" },
+  ],
+  lua: [
+    { label: "cjson", importText: 'local cjson = require("cjson")' },
+    { label: "socket", importText: 'local socket = require("socket")' },
+    { label: "lfs", importText: 'local lfs = require("lfs")' },
+  ],
+  perl: [
+    { label: "decode_json", importText: "use JSON qw(decode_json);" },
+    { label: "encode_json", importText: "use JSON qw(encode_json);" },
+    { label: "sum", importText: "use List::Util qw(sum);" },
+    { label: "max", importText: "use List::Util qw(max);" },
+  ],
+  php: [
+    { label: "DateTime", importText: "use DateTime;" },
+    { label: "json_encode", importText: "use function json_encode;" },
+    { label: "json_decode", importText: "use function json_decode;" },
+  ],
+  ruby: [
+    { label: "JSON", importText: "require 'json'" },
+    { label: "Set", importText: "require 'set'" },
+    { label: "Date", importText: "require 'date'" },
+    { label: "CSV", importText: "require 'csv'" },
+  ],
+  swift: [
+    { label: "Foundation", importText: "import Foundation" },
+    { label: "URLSession", importText: "import Foundation" },
+    { label: "UIKit", importText: "import UIKit" },
+  ],
+};
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
+function hasImport(text: string, importText: string): boolean {
+  const normalized = importText.trim().replace(/;$/, "");
+  if (!normalized) return false;
+  return new RegExp(`(^|\\n)\\s*${escapeRegExp(normalized)}\\s*;?\\s*(?=\\n|$)`, "m").test(text);
+}
+
+function importInsertionLine(model: Monaco.editor.ITextModel, language: string): number {
+  const lines = model.getLinesContent();
+  const normalized = language.toLowerCase();
+  let lastHeaderLine = 0;
+  const headerPattern = normalized === "cpp" || normalized === "c"
+    ? /^\s*#include\b/
+    : normalized === "go"
+      // Separate import declarations are valid in Go and avoid corrupting an
+      // existing import (...) block.
+      ? /^\s*package\b/
+      : normalized === "php"
+        ? /^\s*<\?php\b/
+        : normalized === "haskell"
+          ? /^\s*(?:module\b|import\b)/
+          : normalized === "pascal"
+            ? /^\s*(?:program\b|unit\b|uses\b)/i
+            : normalized === "python"
+              ? /^\s*(?:#!|#.*coding[:=]|from\s+__future__\s+import\b|import\b|from\b)/
+              : normalized === "rust"
+                ? /^\s*(?:#!\[|extern\s+crate\b|use\b)/
+                : normalized === "csharp"
+                  ? /^\s*using\b/
+                  : normalized === "lua"
+                    ? /^\s*(?:local\s+\w+\s*=\s*)?require\s*\(/
+                    : normalized === "ruby"
+                      ? /^\s*(?:require|gem)\b/
+                      : normalized === "perl"
+                        ? /^\s*(?:use|require)\b/
+                        : normalized === "java" || normalized === "kotlin"
+                          ? /^\s*(?:package|import)\b/
+                          : /^\s*(?:import|require)\b/;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (headerPattern.test(lines[index])) lastHeaderLine = index + 1;
+  }
+
+  if (normalized === "php" && lastHeaderLine > 0) return lastHeaderLine + 1;
+  return lastHeaderLine > 0 ? lastHeaderLine + 1 : 1;
+}
+
+function importEditFor(model: Monaco.editor.ITextModel, language: string, importText: string): Monaco.editor.ISingleEditOperation | undefined {
+  if (hasImport(model.getValue(), importText)) return undefined;
+  const lineNumber = importInsertionLine(model, language);
+  return {
+    range: { startLineNumber: lineNumber, startColumn: 1, endLineNumber: lineNumber, endColumn: 1 },
+    text: `${importText}\n`,
+  };
+}
+
+function registerImportCompletions(monaco: MonacoApi, language: string): void {
+  const sourceLanguage = language.toLowerCase();
+  const normalized = sourceLanguage === "c" || sourceLanguage === "d" ? "cpp" : sourceLanguage === "js" || sourceLanguage === "typescript" ? "javascript" : sourceLanguage;
+  const specs = normalized === "cpp"
+    ? [...(IMPORT_COMPLETIONS.cpp || []), ...(IMPORT_COMPLETIONS.c || [])]
+    : IMPORT_COMPLETIONS[normalized];
+  if (!monaco || !specs?.length || importCompletionLanguagesRegistered.has(normalized)) return;
+  importCompletionLanguagesRegistered.add(normalized);
+
+  try {
+    monaco.languages.registerCompletionItemProvider(normalized, {
+      provideCompletionItems: (model, position) => {
+        const word = model.getWordUntilPosition(position);
+        const prefix = word.word.trim();
+        if (!prefix) return { suggestions: [] };
+        const simpleRange = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn,
+        };
+
+        const suggestions = specs
+          .filter((spec) => spec.label.toLowerCase().startsWith(prefix.toLowerCase()))
+          .map((spec) => {
+            const importEdit = importEditFor(model, normalized, spec.importText);
+            let range = simpleRange;
+            let insertText = spec.label;
+            let additionalTextEdits = importEdit ? [importEdit] : undefined;
+
+            // Monaco forbids overlapping main/additional edits. If the user is
+            // completing on the first line, fold the import into one edit.
+            if (importEdit && importEdit.range.startLineNumber === position.lineNumber) {
+              const line = model.getLineContent(position.lineNumber);
+              const completedLine = `${line.slice(0, word.startColumn - 1)}${spec.label}${line.slice(word.endColumn - 1)}`;
+              range = { startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: line.length + 1 };
+              insertText = `${spec.importText}\n${completedLine}`;
+              additionalTextEdits = undefined;
+            }
+
+            return {
+              label: spec.label,
+              kind: monaco.languages.CompletionItemKind.Module,
+              detail: spec.detail || `Add import: ${spec.importText}`,
+              documentation: "Adds import: " + spec.importText,
+              insertText,
+              range,
+              additionalTextEdits,
+            } as Monaco.languages.CompletionItem;
+          });
+
+        return { suggestions };
+      },
+    });
+  } catch {
+    // Import suggestions are optional and must never block the editor.
+  }
+}
+
 const registerJavaStdlibCompletions = (monaco: MonacoApi) => {
   if (!monaco || javaStdlibCompletionRegistered) return;
   javaStdlibCompletionRegistered = true;
@@ -128,7 +397,11 @@ const registerJavaStdlibCompletions = (monaco: MonacoApi) => {
             kind: monaco.languages.CompletionItemKind.Class,
             insertText: label,
             detail,
-            range
+            range,
+            additionalTextEdits: detail === "java.util" ? (() => {
+              const edit = importEditFor(model, "java", `import java.util.${label};`);
+              return edit ? [edit] : undefined;
+            })() : undefined,
           });
 
           const suggestions: Monaco.languages.CompletionItem[] = [];
@@ -794,6 +1067,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         ensureStudyCodMonacoThemes(monaco);
         registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
+        registerImportCompletions(monaco, language);
         registerStudyCodSnippets(monaco, monacoLang);
       })
       .catch(err => {
@@ -806,7 +1080,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
     return () => {
       cancelled = true;
     };
-  }, [monacoLang]);
+  }, [monacoLang, language]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -961,6 +1235,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         if (monacoLang === "java") {
           registerJavaStdlibCompletions(monaco);
         }
+        registerImportCompletions(monaco, language);
         registerStudyCodSnippets(monaco, monacoLang);
         registerStudyCodLanguageService(monaco, monacoLang);
       }} onMount={(editor: Monaco.editor.IStandaloneCodeEditor, monaco: MonacoApi) => {
@@ -984,6 +1259,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         ensureStudyCodMonacoThemes(monaco);
         registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
+        registerImportCompletions(monaco, language);
         registerStudyCodSnippets(monaco, monacoLang);
         registerStudyCodLanguageService(monaco, monacoLang);
 
@@ -992,7 +1268,10 @@ export const CodeEditor: React.FC<Props> = React.memo(({
           if (model) {
             refreshStudyCodMarkers(monaco, model, monacoLang);
             const markerSubscription = model.onDidChangeContent(() => refreshStudyCodMarkers(monaco, model, monacoLang));
-            const lspDispose = enableSemanticLsp ? connectStudyCodLsp(monaco, model, monacoLang, filePath || (monacoLang === "python" ? "main.py" : monacoLang === "java" ? "Main.java" : "main.cpp"), readOnly) : () => undefined;
+            // Read-only previews do not need a dedicated language-server process.
+            // Starting one for every preview (especially JDTLS) made opening pages
+            // compete with the active editor and delayed completions.
+            const lspDispose = enableSemanticLsp && !readOnly ? connectStudyCodLsp(monaco, model, monacoLang, filePath || (monacoLang === "python" ? "main.py" : monacoLang === "java" ? "Main.java" : "main.cpp"), readOnly) : () => undefined;
             editor.onDidDispose(() => {
               markerSubscription.dispose();
               lspDispose();

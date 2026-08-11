@@ -684,6 +684,14 @@ CRITICAL: The "topic" field in JSON MUST be equal to "${params.anchor.topic}". D
       ? params.allowedIoTypes
       : ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
     const stdinAllowed = allowedIoTypes.includes("STDIN_STDOUT");
+    // Keep foundational exercises direct: a long story can hide the values
+    // that a learner is actually expected to assign and print.
+    const taskSemanticText = [
+      params.anchor.topic,
+      params.anchor.coreOperation,
+      ...params.anchor.allowedScope,
+    ].join(" ").toLowerCase();
+    const isFoundationalDataTask = /змінн|тип\s+дан|типи|оголош|присво|літерал|variable|data\s+type|declar|literal|primitive/.test(taskSemanticText);
     const compactPreviousTasks = compactPromptText(params.previousTasks ?? '', LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS);
     const compactTheoryContext = compactPromptText(params.theory, LLM_TASK_THEORY_CONTEXT_CHARS);
 
@@ -735,12 +743,19 @@ ${difficultyPrompt}
 - practicalTask має бути дуже коротким: 1–2 прості речення, без міні-сюжету, зайвих пояснень і списків.
 - Скажи лише, що потрібно написати повну програму та один раз вивести точний текст "Hello, World!".
 - Не додавай інші вимоги, приклади взаємодії, змінні, числа, обчислення або додатковий текст у вивід.
+` : isFoundationalDataTask ? `
+ЯКІСТЬ ПРОСТОЇ ТЕМИ ПРО ЗМІННІ Й ТИПИ:
+- practicalTask має бути коротким і прямим: 2–4 зрозумілі речення без міні-сюжету та зайвої "води".
+- Якщо вводу немає, назви в practicalTask КОЖНЕ конкретне значення, яке потрібно задати в програмі, і поясни, що саме треба надрукувати. Учень не повинен здогадуватися про це лише з outputFormat.
+- Не пиши "виведіть їх" або "у форматі нижче" без переліку. Назви змінні/значення та порядок рядків прямо в умові.
+- Вимагай повну програму й детермінований stdout; не додавай кроків, функцій, зайвих обчислень чи взаємодії з користувачем.
 ` : `
 ЯКІСТЬ УМОВИ (важливо для студентів):
-- practicalTask має бути пізнавальним, цікавим і зрозумілим: мінімум 4–6 речень зв'язного тексту (1–2 абзаци), з природним стилем як у класичній умові задачі.
+- practicalTask має бути пізнавальним, цікавим і зрозумілим: 3–5 речень зв'язного тексту (1–2 абзаци), з природним стилем як у класичній умові задачі.
 - У перших 1–2 реченнях ОБОВ'ЯЗКОВО поясни простими словами, що саме треба вивести, щоб студент це зрозумів ще ДО секції "Формат вихідних даних".
 - Додай короткий реалістичний контекст (міні-сюжет), але без зайвої "води".
-- Окремим фінальним реченням у practicalTask додай маркер "Що потрібно вивести: ...", але не можна писати саме "Що потрібно вивести:", а до прикладу: Необхідно вивести n, тощо (без списків).
+- Окремим фінальним реченням у practicalTask чітко назви, що саме потрібно вивести та в якому порядку; не відсилай учня лише до секції "Формат вихідних даних".
+- Якщо вводу немає, усі конкретні значення, з якими працює програма, мають бути названі прямо в practicalTask.
 - Заборонено робити умову «в 1 рядок» типу “Оголосіть змінну ...”. Додай контекст і чіткий критерій перевірки.
 - КАТЕГОРИЧНО ЗАБОРОНЕНО оформлювати practicalTask як нумерований чекліст типу "1.", "2.", "3.".
 - Якщо треба структуру, роби це через зв'язні речення; не перетворюй умову на список кроків.
@@ -751,12 +766,19 @@ QUALITY OF THE FIRST STATEMENT:
 - practicalTask must be very short: 1–2 simple sentences, with no mini-story, filler, or lists.
 - Say only that the student must write a complete program and print the exact text "Hello, World!" once.
 - Do not add interaction, variables, numbers, calculations, or any extra output requirement.
+` : isFoundationalDataTask ? `
+QUALITY FOR A SIMPLE VARIABLES/TYPES TASK:
+- practicalTask must be short and direct: 2–4 clear sentences, with no mini-story or filler.
+- If there is no input, name EVERY concrete value that must be assigned in the program and explain exactly what must be printed. The learner must not have to infer this only from outputFormat.
+- Do not say only "print them" or "in the format below"; name the variables/values and the output line order directly in the statement.
+- Require a complete program and deterministic stdout; do not add steps, functions, extra calculations, or user interaction.
 ` : `
 QUALITY OF STATEMENT (important for students):
-- practicalTask must be informative, interesting, and clear: at least 4–6 sentences of connected text (1–2 paragraphs), with a natural style as in a classic problem statement.
+- practicalTask must be informative, interesting, and clear: 3–5 sentences of connected text (1–2 paragraphs), with a natural style as in a classic problem statement.
 - In the first 1–2 sentences, EXPLAIN in simple words what exactly needs to be output, so the student understands this BEFORE the "Output format" section.
 - Add a short realistic context (mini-plot), but without unnecessary "filler".
-- As a separate final sentence in practicalTask, add a marker "Output required: ...", but do not write "Output required:" literally, for example: "It is necessary to output n, etc." (no lists).
+- In a final sentence in practicalTask, clearly name exactly what must be output and in what order; do not send the learner only to the "Output format" section.
+- If there is no input, every concrete value used by the program must be named directly in practicalTask.
 - Forbidden to make the statement "1 line" like "Declare a variable ...". Add context and clear check criteria.
 - CATEGORICALLY FORBIDDEN to format practicalTask as a numbered checklist like "1.", "2.", "3.".
 - If structure is needed, do it through connected sentences; do not turn the statement into a list of steps.
@@ -767,26 +789,36 @@ QUALITY OF STATEMENT (important for students):
 1) Переконайся, що програма виводить рівно "Hello, World!" один раз, без зайвих символів.
 2) Переконайся, що examples[0].input порожній, а examples[0].output збігається з очікуваним виводом символ-у-символ.
 3) Не додавай жодних змінних, введення, чисел, обчислень або додаткових вимог.
+` : isFoundationalDataTask ? `
+SELF-CHECK ПЕРЕД ВІДПОВІДДЮ:
+1) У practicalTask названі всі конкретні значення, які потрібно задати в програмі.
+2) У practicalTask прямо названо кожен рядок/значення, яке має бути виведено, а outputFormat та examples[0].output точно збігаються з цим описом.
+3) Умова коротка, не вимагає вводу або взаємодії з користувачем і перевіряє лише заявлені змінні/типи.
 ` : `
 САМОПЕРЕВІРКА ПЕРЕД ВІДПОВІДДЮ (обов'язково, інакше завдання погане):
 1) Подумки виконай свою програму на КОЖНОМУ прикладі й переконайся, що examples[i].output збігається з реальним виводом СИМВОЛ-У-СИМВОЛ (включно з пробілами/переносами).
 2) Умова має спиратися ЛИШЕ на поняття з наданої теорії — нічого, чого студент на цьому етапі ще не вчив.
 3) Складність відповідає вказаному рівню: не легше і не важче.
 4) Сюжет, числа й формулювання НЕ банальні (заборонені кліше типу "сума двох чисел", "hello world", "знайдіть більше з двох") і відрізняються від типових прикладів.
-5) practicalTask читається як жива умова (4–6 зв'язних речень), а не сухий технічний рядок.
+5) practicalTask читається як жива умова (3–5 зв'язних речень), а не сухий технічний рядок.
 `;
     const selfCheckEn = params.topicIndex === 0 ? `
 SELF-CHECK BEFORE ANSWERING:
 1) Confirm that the program prints exactly "Hello, World!" once, with no extra characters.
 2) Confirm that examples[0].input is empty and examples[0].output matches the expected stdout character-by-character.
 3) Do not add variables, input, numbers, calculations, or extra requirements.
+` : isFoundationalDataTask ? `
+SELF-CHECK BEFORE ANSWERING:
+1) practicalTask names every concrete value that must be assigned in the program.
+2) practicalTask directly names every output line/value, and outputFormat plus examples[0].output match that description exactly.
+3) The statement is short, requires no input or user interaction, and checks only the stated variables/types.
 ` : `
 SELF-CHECK BEFORE ANSWERING (mandatory, otherwise the task is bad):
 1) Mentally run your program on EVERY example and confirm examples[i].output matches the real output CHARACTER-BY-CHARACTER (including spaces/newlines).
 2) The statement must rely ONLY on concepts from the provided theory — nothing the student hasn't learned yet at this stage.
 3) Difficulty matches the stated level: not easier, not harder.
 4) The plot, numbers and wording are NOT trivial (clichés like "sum of two numbers", "hello world", "max of two" are forbidden) and differ from typical examples.
-5) practicalTask reads like a living statement (4–6 connected sentences), not a dry technical line.
+5) practicalTask reads like a living statement (3–5 connected sentences), not a dry technical line.
 `;
 
     const instructionsUa = `${stdinAllowed ? '' : `

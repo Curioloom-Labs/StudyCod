@@ -19,6 +19,7 @@ import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { findActiveStudentForUser, applyStudentViewToUserDto } from "../services/edu/studentLink";
 import {
+  getIadCeilingForTopic,
   getIadDeltaByGrade,
   getIadReasonKeyByGrade,
   getLastProcessedGradeIdForLang,
@@ -438,6 +439,8 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
       .addSelect("t.id", "taskId")
       .addSelect("t.title", "taskTitle")
       .addSelect("t.topic_index", "topicIndex")
+      .addSelect("t.type", "taskType")
+      .addSelect("t.subtitle", "subtitle")
       .from("grades", "g")
       .innerJoin("tasks", "t", "t.id = g.task_id")
       .where("g.user_id = :userId", { userId: req.userId })
@@ -453,11 +456,17 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
         taskId: string | number;
         taskTitle: string;
         topicIndex: string | number;
+        taskType?: string | null;
+        subtitle?: string | null;
       }>();
 
     const events = recentGrades.map((row) => {
       const gradeValue = Number(row.grade ?? 0);
-      const delta = getIadDeltaByGrade(gradeValue);
+      const delta = getIadDeltaByGrade(gradeValue, {
+        topicIndex: Number(row.topicIndex ?? 0),
+        taskType: row.taskType,
+        isMiniProject: String(row.subtitle ?? "").startsWith("MPJ:"),
+      });
       const gradeId = Number(row.gradeId ?? 0);
       const applied = lastAppliedGradeId != null ? gradeId <= lastAppliedGradeId : false;
       const appliedDelta = applied ? delta : 0;
@@ -477,6 +486,9 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
       };
     });
 
+    const currentTopicIndex = recentGrades.reduce((max, row) => Math.max(max, Number(row.topicIndex ?? 0)), 0);
+    const currentTopicCeiling = getIadCeilingForTopic(currentTopicIndex);
+
     const positiveEvents = events.filter((e) => e.appliedDelta > 0).length;
     const negativeEvents = events.filter((e) => e.appliedDelta < 0).length;
     const pendingEvents = events.filter((e) => !e.applied).length;
@@ -485,6 +497,8 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
       lang,
       currentIad,
       currentDifus: currentIad,
+      currentTopicIndex,
+      currentTopicCeiling,
       iadByLang: {
         JAVA: getUserIadForLang(iadUser, "JAVA"),
         PYTHON: getUserIadForLang(iadUser, "PYTHON"),
@@ -500,11 +514,16 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
       lastAppliedGradeId,
       updatedAt: iadUser.lastIadChange ?? iadUser.lastDifusChange ?? null,
       rules: [
-        { minGrade: 0, maxGrade: 30, delta: -0.045, reasonKey: "very_low_score" },
-        { minGrade: 31, maxGrade: 55, delta: -0.02, reasonKey: "low_score" },
-        { minGrade: 56, maxGrade: 79, delta: 0.012, reasonKey: "good_score" },
-        { minGrade: 80, maxGrade: 100, delta: 0.028, reasonKey: "excellent_score" },
+        { minGrade: 0, maxGrade: 30, delta: getIadDeltaByGrade(30, { topicIndex: currentTopicIndex }), reasonKey: "very_low_score" },
+        { minGrade: 31, maxGrade: 55, delta: getIadDeltaByGrade(55, { topicIndex: currentTopicIndex }), reasonKey: "low_score" },
+        { minGrade: 56, maxGrade: 79, delta: getIadDeltaByGrade(75, { topicIndex: currentTopicIndex }), reasonKey: "good_score" },
+        { minGrade: 80, maxGrade: 100, delta: getIadDeltaByGrade(100, { topicIndex: currentTopicIndex }), reasonKey: "excellent_score" },
       ],
+      modelVersion: 2,
+      reform: {
+        message: "IAD grows slower on introductory topics and is capped by the most advanced topic reached.",
+        topicCeilings: [0.025, 0.04, 0.06, 0.085, 0.115, 0.15, 0.19, 0.24],
+      },
       recentEvents: events,
       summary: {
         totalEvents: events.length,
