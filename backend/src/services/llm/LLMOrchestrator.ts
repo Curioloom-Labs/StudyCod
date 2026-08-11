@@ -608,6 +608,11 @@ Return ONLY JSON without explanations.`
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
     const isEnglish = params.language === "en";
     const difficultyPrompt = getDifficultyPrompt(params.difus ?? 0, isEnglish);
+    const allowedIoTypes = Array.isArray(params.allowedIoTypes) && params.allowedIoTypes.length
+      ? params.allowedIoTypes
+      : ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
+    const allowedIoTypesText = allowedIoTypes.join(" | ");
+    const stdinAllowed = allowedIoTypes.includes("STDIN_STDOUT");
     const jsonSchema = {
       type: "object",
       properties: {
@@ -633,8 +638,12 @@ Return ONLY JSON without explanations.`
         },
         ioType: {
           type: "string",
-          description: isEnglish ? "IO TYPE (machine-only; DO NOT show in statement). One of: STDIN_STDOUT | NO_INPUT_FIXED_OUTPUT | NO_INPUT_FREE_OUTPUT" : "ТИП ВВОДУ/ВИВОДУ (machine-only; НЕ показувати у statement). Один з: STDIN_STDOUT | NO_INPUT_FIXED_OUTPUT | NO_INPUT_FREE_OUTPUT",
-          enum: ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]
+          description: isEnglish
+            ? `IO TYPE (machine-only; DO NOT show in statement). You MUST choose exactly one of the allowed values: ${allowedIoTypesText}. Any other value is invalid.`
+            : `ТИП ВВОДУ/ВИВОДУ (machine-only; НЕ показувати у statement). ОБОВ'ЯЗКОВО обери рівно одне дозволене значення: ${allowedIoTypesText}. Будь-яке інше значення є помилкою.`,
+          // Constrain the provider's structured output itself, not only the prose prompt.
+          // This prevents models from returning a valid-but-forbidden IO type.
+          enum: allowedIoTypes
         },
         inputFormat: {
           type: "string",
@@ -674,16 +683,14 @@ Return ONLY JSON without explanations.`
       required: ["title", "topic", "difficulty", "theoryMarkdown", "practicalTask", "ioType", "inputFormat", "outputFormat", "constraints", "examples", "codeTemplate"]
     };
     const systemPrompt = isEnglish
-      ? `You are an experienced programming teacher. Create high-quality tasks with theory and practice. Respond in English in JSON format according to the provided schema.
+      ? `You are an experienced programming teacher. Create high-quality, self-contained, auto-checkable programming tasks. Respond in English in JSON format according to the provided schema.
 
+CRITICAL PRIORITY RULE: ioType MUST be exactly one of [${allowedIoTypesText}]. If there is only one allowed value, use that value; never invent or return a disallowed IO type. Keep practicalTask, inputFormat, outputFormat, examples, and codeTemplate consistent with that choice.
 CRITICAL: The "topic" field in JSON MUST be equal to "${params.anchor.topic}". DO NOT change the anchor.`
-      : `Ти досвідчений викладач програмування. Створюй якісні завдання з теорією та практикою. Відповідай українською мовою у форматі JSON згідно з наданою схемою.
+      : `Ти досвідчений викладач програмування. Створюй якісні, самодостатні та придатні для автоперевірки програмні завдання. Відповідай українською мовою у форматі JSON згідно з наданою схемою.
 
+КРИТИЧНИЙ ПРІОРИТЕТ: ioType ОБОВ'ЯЗКОВО має бути рівно одним зі значень [${allowedIoTypesText}]. Якщо дозволене лише одне значення — використай саме його; ніколи не повертай заборонений IO-тип. practicalTask, inputFormat, outputFormat, examples і codeTemplate мають бути узгоджені з цим вибором.
 КРИТИЧНО: Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}". НЕ змінюй anchor.`;
-    const allowedIoTypes = Array.isArray(params.allowedIoTypes) && params.allowedIoTypes.length
-      ? params.allowedIoTypes
-      : ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
-    const stdinAllowed = allowedIoTypes.includes("STDIN_STDOUT");
     // Keep foundational exercises direct: a long story can hide the values
     // that a learner is actually expected to assign and print.
     const taskSemanticText = [
@@ -821,6 +828,21 @@ SELF-CHECK BEFORE ANSWERING (mandatory, otherwise the task is bad):
 5) practicalTask reads like a living statement (3–5 connected sentences), not a dry technical line.
 `;
 
+    const ioSelfCheckUa = `
+ОБОВ'ЯЗКОВА ПЕРЕВІРКА IO ПЕРЕД ВІДПОВІДДЮ:
+1) ioType має бути рівно одним зі значень: ${allowedIoTypesText}. Якщо дозволено лише одне — використай саме його.
+2) Якщо ioType = STDIN_STDOUT, practicalTask прямо вимагає читати вхідні дані, inputFormat описує непорожній stdin, а кожен examples[i].input є непорожнім і відповідає описаному формату.
+3) Якщо ioType = NO_INPUT_*, у practicalTask/inputFormat не можна вимагати введення або згадувати Scanner, System.in, input(), cin чи stdin; examples[i].input мають бути порожніми.
+4) Для кожного прикладу подумки виконай програму: examples[i].output має точно збігатися з очікуваним stdout, а outputFormat — з умовою. Якщо будь-яка перевірка не проходить, виправ завдання до відповіді.
+`;
+    const ioSelfCheckEn = `
+MANDATORY IO CHECK BEFORE ANSWERING:
+1) ioType must be exactly one of: ${allowedIoTypesText}. If only one value is allowed, use that value.
+2) If ioType = STDIN_STDOUT, practicalTask must explicitly require reading input, inputFormat must describe non-empty stdin, and every examples[i].input must be non-empty and match that format.
+3) If ioType = NO_INPUT_*, practicalTask/inputFormat must not require input or mention Scanner, System.in, input(), cin, or stdin; every examples[i].input must be empty.
+4) Mentally execute the program for every example: examples[i].output must exactly match the expected stdout, and outputFormat must match the statement. If any check fails, fix the task before answering.
+`;
+
     const instructionsUa = `${stdinAllowed ? '' : `
 🚫 IO-ПОЛІТИКА ЦІЄЇ ТЕМИ (НАЙВИЩИЙ ПРІОРИТЕТ) 🚫
 ВВІД ЗАБОРОНЕНО. Постав ioType = NO_INPUT_FIXED_OUTPUT (або NO_INPUT_FREE_OUTPUT). Програма НЕ читає stdin: жодних input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". Якщо нижче щось підказує читати ввід — ІГНОРУЙ, ця політика головніша.
@@ -923,6 +945,7 @@ ${stdinAllowed
 "Магазин щодня записує температуру у холодильній вітрині. Сьогодні зранку термометр показував 8 градусів, а до обіду температура піднялася ще на 5. Порахуй, скільки градусів показує термометр зараз. Необхідно вивести одне ціле число — підсумкову температуру."
 Чому добре: короткий живий контекст, чітко сказано ЩО рахувати і ЩО САМЕ вивести, рівно один детермінований результат.
 
+${ioSelfCheckUa}
 ${selfCheckUa}
 
 Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
@@ -1029,6 +1052,7 @@ QUALITY EXEMPLAR (style only — do NOT copy this topic, plot or numbers):
 "A shop logs the temperature inside its fridge display every day. This morning the thermometer read 8 degrees, and by noon it rose by another 5. Work out what the thermometer shows now. You must output a single integer — the resulting temperature."
 Why it's good: short living context, clearly states WHAT to compute and WHAT exactly to output, exactly one deterministic result.
 
+${ioSelfCheckEn}
 ${selfCheckEn}
 
 Respond ONLY with JSON, without markdown blocks, without explanations.
