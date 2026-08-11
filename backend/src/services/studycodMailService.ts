@@ -83,9 +83,11 @@ class StudyCodMailService {
     const imapIssues: string[] = [];
     const smtpIssues: string[] = [];
     if (!this.imapHost) imapIssues.push("STUDYCOD_MAIL_IMAP_HOST is missing");
+    else if (/your-mail-provider\.tld|example\.(com|org|net)$/i.test(this.imapHost)) imapIssues.push("STUDYCOD_MAIL_IMAP_HOST is still a placeholder");
     if (!this.imapUser) imapIssues.push("STUDYCOD_MAIL_IMAP_USER is missing");
     if (!this.imapPass) imapIssues.push("STUDYCOD_MAIL_IMAP_PASS is missing");
     if (!this.smtpHost) smtpIssues.push("STUDYCOD_MAIL_SMTP_HOST or EMAIL_SMTP_HOST is missing");
+    else if (/your-mail-provider\.tld|example\.(com|org|net)$/i.test(this.smtpHost)) smtpIssues.push("STUDYCOD_MAIL_SMTP_HOST is still a placeholder");
     if (!this.smtpUser) smtpIssues.push("STUDYCOD_MAIL_SMTP_USER/EMAIL_SMTP_USER is missing");
     if (!this.smtpPass) smtpIssues.push("STUDYCOD_MAIL_SMTP_PASS/EMAIL_SMTP_PASS is missing");
     const canRead = imapIssues.length === 0;

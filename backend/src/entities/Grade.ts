@@ -81,6 +81,33 @@ export class Grade {
     name: "comparison_feedback"
   })
   comparisonFeedback!: string | null;
+  @Column({
+    type: "varchar",
+    length: 128,
+    nullable: true,
+    name: "client_submission_id"
+  })
+  clientSubmissionId!: string | null;
+  @Column({
+    type: "varchar",
+    length: 128,
+    nullable: true,
+    name: "code_hash"
+  })
+  codeHash!: string | null;
+  @Column({
+    type: "text",
+    nullable: true,
+    name: "hints_json"
+  })
+  hintsJson!: string | null;
+  @Column({
+    type: "varchar",
+    length: 16,
+    nullable: true,
+    name: "hints_status"
+  })
+  hintsStatus!: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED" | null;
   @CreateDateColumn({
     name: "created_at"
   })

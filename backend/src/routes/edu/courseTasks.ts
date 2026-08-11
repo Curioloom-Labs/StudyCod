@@ -48,6 +48,10 @@ function languageFor(task: EduTask): "JAVA" | "PYTHON" | "CPP" {
   return task.lesson.class.language;
 }
 
+function uiLanguageFor(req: AuthRequest): "uk" | "en" {
+  return String(req.headers["accept-language"] ?? "").toLowerCase().startsWith("en") ? "en" : "uk";
+}
+
 function normalizedOutput(value: unknown): string {
   return String(value ?? "").replace(/\r\n/g, "\n").trim();
 }
@@ -134,7 +138,8 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
         language: languageFor(task),
         code: code.data,
         failures: [{ testId: 0, input: "", expected: "успішне виконання", actual: execution.stdout || "", verdict: execution.success ? "WA" : "RE", stderr: execution.stderr || null }],
-        maxHints: 4
+        maxHints: 4,
+        uiLanguage: uiLanguageFor(req)
       }).catch(() => []);
       return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false, isCompleted: grade.isCompleted }, testResults: result, hints, scoring: { score: grade.score ?? 0, maxScore: 100 } });
     }
@@ -158,7 +163,8 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
       language: languageFor(task),
       code: code.data,
       failures,
-      maxHints: 4
+      maxHints: 4,
+      uiLanguage: uiLanguageFor(req)
     }).catch(() => []) : [];
     return res.json({ grade: { id: saved.id, total: saved.total, testsPassed: saved.testsPassed, testsTotal: saved.testsTotal, isManuallyGraded: false, isCompleted: saved.isCompleted }, testResults: results, hints, scoring: { score: total, maxScore: 100 } });
   });

@@ -256,17 +256,38 @@ export async function submissionRateLimitMiddleware(req: AuthRequest, res: Respo
 
   ensureCleanupTimer(longWindowMs);
 
-  const redisDecision = await checkRedisRateLimit({
-    key,
-    now,
-    shortWindowMs,
-    longWindowMs,
-    shortMax,
-    longMax,
-    trackInflight,
-    inFlightMax,
-    inFlightTtlMs,
-  }).catch(() => null);
+  let redisDecision: Awaited<ReturnType<typeof checkRedisRateLimit>> = null;
+  let redisUnavailable = false;
+  try {
+    redisDecision = await checkRedisRateLimit({
+      key,
+      now,
+      shortWindowMs,
+      longWindowMs,
+      shortMax,
+      longMax,
+      trackInflight,
+      inFlightMax,
+      inFlightTtlMs,
+    });
+    redisUnavailable = isRedisEnabled() && !redisDecision;
+  } catch {
+    redisUnavailable = isRedisEnabled();
+  }
+
+  // When Redis is configured it is part of the abuse/cost-control boundary.
+  // Failing open to a process-local Map would make limits inconsistent across
+  // workers and could multiply expensive judge/AI requests. If Redis is not
+  // configured at all, the local fallback below remains available for dev.
+  if (redisUnavailable) {
+    res.setHeader("Retry-After", "5");
+    res.status(503).json({
+      error: "RATE_LIMIT_BACKEND_UNAVAILABLE",
+      status: 503,
+      message: "Submission protection is temporarily unavailable. Please retry shortly."
+    });
+    return;
+  }
 
   if (redisDecision) {
     if (!redisDecision.allowed) {

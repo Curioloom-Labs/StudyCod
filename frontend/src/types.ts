@@ -193,6 +193,7 @@ export interface Task {
   lastGradeTotal?: number | null;
   lastGradeFeedback?: string | null;
   lastGradeHints?: string[];
+  lastGradeHintsStatus?: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED" | null;
   status: "OPEN" | "SUBMITTED" | "GRADED";
   lessonInTopic: number;
   repeatAttempt: number;

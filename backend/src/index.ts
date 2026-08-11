@@ -889,19 +889,23 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 
   const status = Number(err?.statusCode ?? err?.status ?? 500);
   const isHttpError = err instanceof HttpError || err?.name === "HttpError";
+  const isCsrfError = /csrf\s+token|invalid\s+csrf|csrf.*missing/i.test(String(err?.message ?? ""));
 
   // If the judge scheduler is overloaded, tell clients when to retry.
   // This must be present on overload 503 responses.
   setRetryAfterForOverload(err, res);
   const expose = isHttpError ? (err as HttpError).expose !== false : status < 500;
 
-  const error = expose
+  const responseStatus = isCsrfError ? 403 : (Number.isFinite(status) ? status : 500);
+  const error = isCsrfError
+    ? "CSRF_TOKEN_INVALID"
+    : expose
     ? String(err?.message || "INTERNAL_SERVER_ERROR")
     : (process.env.NODE_ENV === "production" ? "INTERNAL_SERVER_ERROR" : String(err?.message || "INTERNAL_SERVER_ERROR"));
 
-  res.status(Number.isFinite(status) ? status : 500).json({
+  res.status(responseStatus).json({
     error,
-    status: Number.isFinite(status) ? status : 500
+    status: responseStatus
   });
 });
 

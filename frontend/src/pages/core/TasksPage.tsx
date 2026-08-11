@@ -1564,7 +1564,7 @@ export const TasksPage: React.FC<Props> = ({
         }
 
         setConsoleOutput(result.aiFeedback + autoGenerateHint);
-        setUIState(total >= 75 ? "success" : total >= 50 ? "idle" : "error");
+        setUIState(total >= PERSONAL_TASK_PASS_GRADE ? "success" : "error");
 
         const updatedTasks = await listTasks(uiLanguage);
         setTasks(updatedTasks);
@@ -1609,7 +1609,10 @@ export const TasksPage: React.FC<Props> = ({
     try {
       if (active.taskMode === "WEB") {
         const checked = await checkWebTask(active.id, toWebTaskFiles());
-        const submitted = await submitWebTask(active.id, toWebTaskFiles());
+        const webFiles = toWebTaskFiles();
+        const webClientSubmissionId = createClientSubmissionId();
+        const webCodeHash = await sha256HexBrowser(JSON.stringify(webFiles));
+        const submitted = await submitWebTask(active.id, webFiles, { clientSubmissionId: webClientSubmissionId, codeHash: webCodeHash });
         if (submitSeq !== latestSubmitRequestSeq.current) {
           return;
         }
@@ -1646,7 +1649,7 @@ export const TasksPage: React.FC<Props> = ({
         setConsoleOutput(tr(`WEB перевірка завершена: ${checked.passedRules}/${checked.totalRules}. Оцінка: ${gradeTotal}`, `WEB check completed: ${checked.passedRules}/${checked.totalRules}. Grade: ${gradeTotal}`));
         setAiResult(result);
         setRevealedHints(0);
-        setUIState(gradeTotal >= 75 ? "success" : gradeTotal >= 50 ? "idle" : "error");
+        setUIState(gradeTotal >= PERSONAL_TASK_PASS_GRADE ? "success" : "error");
         const updatedTasks = await listTasks(uiLanguage);
         setTasks(updatedTasks);
         const updated = updatedTasks.find(t => t.id === active.id);
@@ -1681,6 +1684,7 @@ export const TasksPage: React.FC<Props> = ({
           maxScore: number;
         }>;
         hints?: string[];
+        hintsStatus?: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED";
         testResults?: Array<{
           testId: number;
           input?: string;
@@ -1734,6 +1738,7 @@ export const TasksPage: React.FC<Props> = ({
           maxScore: typeof grade.maxScore === "number" ? Number(grade.maxScore) : undefined,
           groupScores: Array.isArray(grade.groupScores) ? grade.groupScores : undefined,
           hints: Array.isArray(grade.hints) ? grade.hints : undefined,
+          hintsStatus: grade.hintsStatus,
           testResults: grade.testResults ?? undefined,
           learningFeedback: res.learningFeedback,
           learningAttempt: res.learningAttempt,
@@ -1743,10 +1748,10 @@ export const TasksPage: React.FC<Props> = ({
         setConsoleOutput(outputText);
         setAiResult(result);
         setRevealedHints(0);
-        setUIState(result.total >= 75 ? "success" : result.total >= 50 ? "idle" : "error");
+        setUIState(result.total >= PERSONAL_TASK_PASS_GRADE ? "success" : "error");
 
         // Count as a successful study session when the user reaches a passing grade.
-        if (result.total >= 50) {
+        if (result.total >= PERSONAL_TASK_PASS_GRADE) {
           recordSuccessfulStudySession({
             kind: "personal_task_submit",
             taskId: active.id
@@ -2113,6 +2118,7 @@ export const TasksPage: React.FC<Props> = ({
           runResult={ideRunResult}
           checkResult={ideCheckResult}
           hints={aiResult?.hints ?? active?.lastGradeHints ?? []}
+          hintsStatus={aiResult?.hintsStatus ?? active?.lastGradeHintsStatus ?? "NOT_REQUESTED"}
           isWebTask={isWebTask}
           webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
         />

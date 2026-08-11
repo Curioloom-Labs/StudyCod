@@ -255,6 +255,11 @@ function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; pa
 const taskRepo = () => AppDataSource.getRepository(Task);
 const topicRepo = () => AppDataSource.getRepository(Topic);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
+function isDuplicateSubmissionError(error: unknown): boolean {
+  const value = error as any;
+  return String(value?.code ?? value?.driverError?.code ?? "") === "ER_DUP_ENTRY"
+    || Number(value?.errno ?? value?.driverError?.errno ?? 0) === 1062;
+}
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 const conceptReviewRepo = () => AppDataSource.getRepository(ConceptReviewState);
@@ -1237,9 +1242,12 @@ function getTopicTheoryInfo(task: Task, opts?: {
     legacyLength: stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? "")).length
   };
 }
-function computeTaskStatus(task: Task, hasGrade: boolean): TaskStatus {
-  if (hasGrade || !!task.completed) return "GRADED";
-  if (task.finalCode) return "SUBMITTED";
+function computeTaskStatus(task: Task, latestGrade: Grade | null, hasGrade: boolean): TaskStatus {
+  if (latestGrade) {
+    return Number(latestGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE ? "GRADED" : "SUBMITTED";
+  }
+  if (!!task.completed) return "GRADED";
+  if (hasGrade || task.finalCode) return "SUBMITTED";
   return "OPEN";
 }
 
@@ -1401,6 +1409,48 @@ function extractHintsFromGradeFeedback(feedback: string | null | undefined): str
     .slice(0, 4);
 }
 
+function parseStoredHints(grade: Grade | null | undefined): string[] {
+  if (!grade) return [];
+  try {
+    const parsed = JSON.parse(String(grade.hintsJson ?? ""));
+    if (Array.isArray(parsed)) {
+      return parsed.map(item => String(item ?? "").trim()).filter(Boolean).slice(0, 5);
+    }
+  } catch {
+    // Fall back to the legacy feedback format below.
+  }
+  return extractHintsFromGradeFeedback(grade.aiFeedback);
+}
+
+function hintStatusForGrade(grade: Grade | null | undefined): "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED" {
+  const status = String(grade?.hintsStatus ?? "").toUpperCase();
+  if (status === "AI" || status === "FALLBACK" || status === "UNAVAILABLE") return status;
+  return parseStoredHints(grade).length ? "FALLBACK" : "NOT_REQUESTED";
+}
+
+function buildIdempotentSubmissionResponse(grade: Grade, submitMode: "TESTS" | "AI", fallbackCodeHash: string, clientSubmissionId: string) {
+  return {
+    status: "IDEMPOTENT_REPLAY",
+    grade: {
+      id: grade.id,
+      gradingMode: submitMode,
+      total: grade.total,
+      workScore: grade.workScore ?? 0,
+      optimizationScore: grade.optimizationScore ?? 0,
+      integrityScore: grade.integrityScore ?? 0,
+      aiFeedback: grade.aiFeedback,
+      hints: parseStoredHints(grade),
+      hintsStatus: hintStatusForGrade(grade),
+      createdAt: grade.createdAt
+    },
+    submissionMeta: {
+      submissionId: String(grade.id),
+      clientSubmissionId,
+      codeHash: grade.codeHash || fallbackCodeHash
+    }
+  };
+}
+
 function latestTaskGrade(task: Task): Grade | null {
   const grades = Array.isArray((task as any).grades) ? (task as any).grades as Grade[] : [];
   return [...grades]
@@ -1419,7 +1469,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   const uiLanguage = opts?.uiLanguage ?? "uk";
   const lastGrade = opts?.latestGrade ?? latestTaskGrade(task);
   const hasGrade = gradeTaskIds ? gradeTaskIds.has(task.id) : Boolean(lastGrade) || !!task.completed;
-  const status: TaskStatus = computeTaskStatus(task, hasGrade);
+  const status: TaskStatus = computeTaskStatus(task, lastGrade, hasGrade);
   const rawPractice = sanitizeMetaOutputFormatInStatement(
     (task.descriptionMarkdown || task.description || "").toString(),
     (task as any).ioType,
@@ -1464,7 +1514,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     ? normalizeWebTaskTemplate((task as any).template)
     : null;
 
-  const codeRaw = status === "GRADED" ? task.finalCode || "" : task.draftCode || "";
+  const codeRaw = status === "OPEN" ? task.draftCode || "" : task.finalCode || task.draftCode || "";
   const userDecoded = decodeMultiFileSubmissionV1(codeRaw);
   const userFiles = userDecoded?.files ?? null;
   const userEntry = userDecoded?.entry ?? null;
@@ -1508,7 +1558,8 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     finalCode: task.finalCode || null,
     lastGradeTotal: lastGrade?.total ?? null,
     lastGradeFeedback: lastGrade?.aiFeedback ?? null,
-    lastGradeHints: extractHintsFromGradeFeedback(lastGrade?.aiFeedback),
+    lastGradeHints: parseStoredHints(lastGrade),
+    lastGradeHintsStatus: hintStatusForGrade(lastGrade),
     status,
     lessonInTopic: task.numInTopic ?? 1,
     repeatAttempt: 0,
@@ -2956,10 +3007,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const retryTaskByTopicIndex = new Map<number, Task>();
     for (const candidate of topicTasksForRetry) {
       if (String(candidate.subtitle ?? "").startsWith("MPJ:")) continue;
-      if (!candidate.completed) continue;
       const grades = [...(candidate.grades ?? [])].sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt)));
       const latest = grades[0];
-      if (!latest || Number(latest.total ?? 0) < PERSONAL_TOPIC_PASS_GRADE) {
+      if (latest && Number(latest.total ?? 0) < PERSONAL_TOPIC_PASS_GRADE) {
         if (!retryTaskByTopicIndex.has(candidate.topicIndex)) retryTaskByTopicIndex.set(candidate.topicIndex, candidate);
       }
     }
@@ -3844,8 +3894,22 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
     const total = Math.max(1, Math.min(100, Math.round(ratio * 100)));
 
     const codeSnapshot = encodeWebTaskPayload({ mode: "WEB", version: 1, files, rules });
+    const normalizedClientSubmissionId = normalizeClientSubmissionId((req.body as any)?.clientSubmissionId);
+    const serverCodeHash = sha256Hex(codeSnapshot);
+    if (normalizedClientSubmissionId) {
+      const existingSubmission = await gradeRepo().findOne({
+        where: { user: { id: req.userId }, task: { id: task.id }, clientSubmissionId: normalizedClientSubmissionId },
+        order: { createdAt: "DESC" }
+      });
+      if (existingSubmission) {
+        return res.json({
+          ...buildIdempotentSubmissionResponse(existingSubmission, "TESTS", serverCodeHash, normalizedClientSubmissionId),
+          taskMode: "WEB"
+        });
+      }
+    }
     task.finalCode = codeSnapshot;
-    task.completed = 1;
+    task.completed = total >= PERSONAL_TOPIC_PASS_GRADE ? 1 : 0;
     await taskRepo().save(task);
 
     const feedback = check.passed
@@ -3861,10 +3925,28 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
       integrityScore: 0,
       aiFeedback: feedback,
       codeSnapshot,
+      clientSubmissionId: normalizedClientSubmissionId,
+      codeHash: serverCodeHash,
+      hintsJson: JSON.stringify([]),
+      hintsStatus: "NOT_REQUESTED",
       previousGradeId: null,
       comparisonFeedback: null,
     } as any);
-    const savedGradeResult = await gradeRepo().save(grade);
+    let savedGradeResult: Grade | Grade[];
+    try {
+      savedGradeResult = await gradeRepo().save(grade);
+    } catch (error) {
+      if (!normalizedClientSubmissionId || !isDuplicateSubmissionError(error)) throw error;
+      const existing = await gradeRepo().findOne({
+        where: { user: { id: req.userId }, task: { id: task.id }, clientSubmissionId: normalizedClientSubmissionId },
+        order: { createdAt: "DESC" }
+      });
+      if (!existing) throw error;
+      return res.json({
+        ...buildIdempotentSubmissionResponse(existing, "TESTS", serverCodeHash, normalizedClientSubmissionId),
+        taskMode: "WEB"
+      });
+    }
     const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
 
     await syncPostLearningProgress({
@@ -3893,7 +3975,13 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
         maxScore,
         testResults,
         aiFeedback: feedback,
+        hintsStatus: "NOT_REQUESTED" as const,
         createdAt: savedGrade.createdAt,
+      },
+      submissionMeta: {
+        submissionId: String(savedGrade.id),
+        clientSubmissionId: normalizedClientSubmissionId,
+        codeHash: serverCodeHash
       },
       taskMode: "WEB",
       scoring: {
@@ -4037,6 +4125,39 @@ tasksRouter.post(
   const persistedSubmission = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : String(code ?? "");
   const normalizedClientSubmissionId = normalizeClientSubmissionId(clientSubmissionId);
   const serverCodeHash = sha256Hex(persistedSubmission);
+  if (normalizedClientSubmissionId) {
+    const existingSubmission = await gradeRepo().findOne({
+      where: {
+        user: { id: req.userId },
+        task: { id: task.id },
+        clientSubmissionId: normalizedClientSubmissionId
+      },
+      order: { createdAt: "DESC" }
+    });
+    if (existingSubmission) {
+      const existingHints = parseStoredHints(existingSubmission);
+      return res.json({
+        status: "IDEMPOTENT_REPLAY",
+        grade: {
+          id: existingSubmission.id,
+          gradingMode: submitMode,
+          total: existingSubmission.total,
+          workScore: existingSubmission.workScore ?? 0,
+          optimizationScore: existingSubmission.optimizationScore ?? 0,
+          integrityScore: existingSubmission.integrityScore ?? 0,
+          aiFeedback: existingSubmission.aiFeedback,
+          hints: existingHints,
+          hintsStatus: hintStatusForGrade(existingSubmission),
+          createdAt: existingSubmission.createdAt
+        },
+        submissionMeta: {
+          submissionId: String(existingSubmission.id),
+          clientSubmissionId: normalizedClientSubmissionId,
+          codeHash: existingSubmission.codeHash || serverCodeHash
+        }
+      });
+    }
+  }
   const variableDeclarationError = validateVariableDeclarationTaskSubmission(task, sourceText, resolveUiLanguage(req));
   if (variableDeclarationError) {
     // This is an intentional learning guard, not a broken request. Return a
@@ -4127,7 +4248,7 @@ tasksRouter.post(
       aiUnavailableFallback: Boolean(ai.fallbackUsed)
     });
     task.finalCode = persistedSubmission;
-    task.completed = TASK_COMPLETED_FLAG;
+    task.completed = total >= PERSONAL_TOPIC_PASS_GRADE ? TASK_COMPLETED_FLAG : 0;
     await taskRepo().save(task);
     const grade = gradeRepo().create({
       user: {
@@ -4142,10 +4263,25 @@ tasksRouter.post(
       integrityScore: ai.integrity,
       aiFeedback: ai.feedback,
       codeSnapshot: persistedSubmission,
+      clientSubmissionId: normalizedClientSubmissionId,
+      codeHash: serverCodeHash,
+      hintsStatus: "NOT_REQUESTED",
+      hintsJson: JSON.stringify([]),
       previousGradeId: previous?.id ?? null,
       comparisonFeedback: encodedComparisonFeedback
     });
-    const savedGradeResult = await gradeRepo().save(grade);
+    let savedGradeResult: Grade | Grade[];
+    try {
+      savedGradeResult = await gradeRepo().save(grade);
+    } catch (error) {
+      if (!normalizedClientSubmissionId || !isDuplicateSubmissionError(error)) throw error;
+      const existing = await gradeRepo().findOne({
+        where: { user: { id: req.userId }, task: { id: task.id }, clientSubmissionId: normalizedClientSubmissionId },
+        order: { createdAt: "DESC" }
+      });
+      if (!existing) throw error;
+      return res.json(buildIdempotentSubmissionResponse(existing, submitMode, serverCodeHash, normalizedClientSubmissionId));
+    }
     const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
     if (Number(savedGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE) {
       await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch((error: unknown) => {
@@ -4176,6 +4312,7 @@ tasksRouter.post(
         aiUnavailableFallback: parsedComparisonFeedback.aiUnavailableFallback || Boolean(ai.fallbackUsed),
         comparisonFeedback: parsedComparisonFeedback.comparisonFeedback,
         previousGrade: previous?.total ?? null,
+        hintsStatus: "NOT_REQUESTED" as const,
         createdAt: savedGrade.createdAt
       },
       submissionMeta: {
@@ -4188,6 +4325,7 @@ tasksRouter.post(
   let total = 0;
   let passedTests = 0;
   let hintsForUser: string[] = [];
+  let hintsStatus: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED" = "NOT_REQUESTED";
   const learningFeedbackCandidates: Array<{
     testId?: number;
     passed: boolean;
@@ -4373,7 +4511,11 @@ tasksRouter.post(
         language: task.lang,
         code: aiCodeText,
         failures: failuresForHints,
-        maxHints: 4
+        maxHints: 4,
+        uiLanguage: resolveUiLanguage(req),
+        onResult: result => {
+          hintsStatus = result.status;
+        }
       });
       if (hints.length) {
         hintsForUser = hints;
@@ -4381,7 +4523,10 @@ tasksRouter.post(
         feedbackLines.push("Підказки (щоб пройти тести):");
         for (const h of hints) feedbackLines.push(`- ${h}`);
       }
-    } catch {}
+    } catch (error) {
+      hintsStatus = "UNAVAILABLE";
+      logger.warn("[tasks] personal hints unavailable", { requestId: req.requestId, taskId: task.id, error });
+    }
   }
   const feedback = feedbackLines.join("\n");
 
@@ -4402,7 +4547,8 @@ tasksRouter.post(
   }]);
 
   task.finalCode = persistedSubmission;
-  task.completed = TASK_COMPLETED_FLAG;
+  const passedTask = Number(total) >= PERSONAL_TOPIC_PASS_GRADE;
+  task.completed = passedTask ? TASK_COMPLETED_FLAG : 0;
   await taskRepo().save(task);
   const grade = gradeRepo().create({
     user: {
@@ -4417,10 +4563,25 @@ tasksRouter.post(
     integrityScore: 0,
     aiFeedback: feedback,
     codeSnapshot: persistedSubmission,
+    clientSubmissionId: normalizedClientSubmissionId,
+    codeHash: serverCodeHash,
+    hintsJson: JSON.stringify(hintsForUser),
+    hintsStatus,
     comparisonFeedback: null,
     previousGradeId: null
   });
-  const savedGradeResult = await gradeRepo().save(grade);
+  let savedGradeResult: Grade | Grade[];
+  try {
+    savedGradeResult = await gradeRepo().save(grade);
+  } catch (error) {
+    if (!normalizedClientSubmissionId || !isDuplicateSubmissionError(error)) throw error;
+    const existing = await gradeRepo().findOne({
+      where: { user: { id: req.userId }, task: { id: task.id }, clientSubmissionId: normalizedClientSubmissionId },
+      order: { createdAt: "DESC" }
+    });
+    if (!existing) throw error;
+    return res.json(buildIdempotentSubmissionResponse(existing, submitMode, serverCodeHash, normalizedClientSubmissionId));
+  }
   const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
   if (Number(savedGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE) {
     await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch((error: unknown) => {
@@ -4472,6 +4633,7 @@ tasksRouter.post(
       groupScores: scoringGroupScores,
       testResults: sanitizeTestResultsForStudent(testResultsDetailed),
       hints: hintsForUser,
+      hintsStatus,
       createdAt: savedGrade.createdAt
     },
     submissionMeta: {

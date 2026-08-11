@@ -46,7 +46,7 @@ import {
 } from "../../lib/judgeLanguages";
 
 type IdeMode = "theory" | "practice" | "debug";
-type AssistantTab = "task" | "hints";
+type AssistantTab = "task" | "hints" | "mentor";
 type BottomTab = "terminal" | "tests" | "debugger" | "console" | "history";
 
 export type StudyCodIdeTask = {
@@ -140,6 +140,7 @@ type Props = {
   checkResult: StudyCodIdeCheckResult | null;
   resultCards?: React.ReactNode;
   hints?: string[];
+  hintsStatus?: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED" | null;
   trace?: StudyCodIdeTrace | null;
   tracing?: boolean;
   onTrace?: () => void;
@@ -413,7 +414,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
     props.checkResult.testsPassed >= props.checkResult.testsTotal,
   );
   React.useEffect(() => {
-    if (props.hints?.length && props.checkResult && !allTestsPassed) {
+    if (props.hints?.length && (!props.checkResult || !allTestsPassed)) {
       setAssistantTab("hints");
       setOpenHintIndex((current) =>
         current !== null && current < props.hints!.length ? current : 0,
@@ -1179,8 +1180,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
               </button>
               <button
                 type="button"
-                onClick={() => setAssistantTab("hints")}
-                className="hidden"
+                onClick={() => setAssistantTab("mentor")}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "bg-[#6ca8ff]/10 text-[#9bc5ff] shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
               >
                 <Bot className="size-3.5" />
                 {tr("Ментор", "Mentor")}
@@ -1395,6 +1396,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
 
                   {!props.hints?.length ? (
                     <div className="rounded-2xl border border-dashed border-white/[.14] bg-white/[.02] px-4 py-8 text-center">
+                      {props.hintsStatus === "UNAVAILABLE" ? (
+                        <p className="mb-2 rounded-lg bg-[#ffb454]/10 px-2 py-1 text-[10px] font-semibold text-[#ffca7e]">
+                          {tr("Підказки тимчасово недоступні — повтори перевірку.", "Hints are temporarily unavailable — try checking again.")}
+                        </p>
+                      ) : null}
                       <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-[#00d978]/10 text-[#72edb0]">
                         <Sparkles className="size-5" />
                       </span>
@@ -1411,7 +1417,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                   ) : null}
                 </div>
               ) : null}
-              {assistantTab === "hints" ? (
+              {assistantTab === "mentor" ? (
                 <div className="space-y-3">
                   <div className="rounded-xl border border-[#00d978]/20 bg-[#00d978]/[.06] p-3 text-xs text-[#b9c9bd]">
                     <Sparkles className="mr-2 inline size-4 text-[#72edb0]" />

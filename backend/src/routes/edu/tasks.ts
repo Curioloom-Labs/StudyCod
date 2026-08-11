@@ -1479,15 +1479,17 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
           language: langForHints,
           code: codeForHints,
           failures: failuresForHints,
-          maxHints: 4
+          maxHints: 4,
+          uiLanguage: String(req.headers["accept-language"] ?? "").toLowerCase().startsWith("en") ? "en" : "uk",
+          onResult: result => logEduTaskTelemetry({ requestId: req.requestId, action: "submit", status: "succeeded", taskId: topicTask.id, studentId, hintsCount: result.count, hintStrategyVariant })
         });
 
         if (hints.length) {
           hintsForUser = applyHintStrategyVariant(hints, hintStrategyVariant);
           feedback = hintsForUser.map(h => `- ${h}`).join("\n");
         }
-      } catch {
-        // ignore hint failures
+      } catch (error) {
+        logger.warn("[edu] hint generation failed", { requestId: req.requestId, taskId: topicTask.id, studentId, error });
       }
     }
 
@@ -2054,15 +2056,17 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
           language: langForHints,
           code: codeForHints,
           failures: failuresForHints,
-          maxHints: 4
+          maxHints: 4,
+          uiLanguage: String(req.headers["accept-language"] ?? "").toLowerCase().startsWith("en") ? "en" : "uk",
+          onResult: result => logEduTaskTelemetry({ requestId: req.requestId, action: "submit", status: "succeeded", taskId: topicTask.id, studentId, hintsCount: result.count, hintStrategyVariant })
         });
 
         if (hints.length) {
           hintsForUser = applyHintStrategyVariant(hints, hintStrategyVariant);
           feedback = hintsForUser.map(h => `- ${h}`).join("\n");
         }
-      } catch {
-        // ignore hint failures
+      } catch (error) {
+        logger.warn("[edu] hint generation failed", { requestId: req.requestId, taskId: topicTask.id, studentId, error });
       }
     }
 

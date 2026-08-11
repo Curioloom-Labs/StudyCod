@@ -54,6 +54,7 @@ export type PersonalTaskGrade = {
   }>;
   testResults?: PersonalTaskTestResult[];
   hints?: string[];
+  hintsStatus?: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED";
   createdAt?: string;
 };
 
@@ -312,8 +313,8 @@ export async function checkWebTask(id: number, files: WebTaskFile[]): Promise<{
   return res.data;
 }
 
-export async function submitWebTask(id: number, files: WebTaskFile[]): Promise<SubmitTaskResponse> {
-  const res = await api.post(`/tasks/${id}/web-submit`, { files });
+export async function submitWebTask(id: number, files: WebTaskFile[], binding?: SubmitBinding): Promise<SubmitTaskResponse> {
+  const res = await api.post(`/tasks/${id}/web-submit`, { files, ...(binding ?? {}) });
   return res.data as SubmitTaskResponse;
 }
 
