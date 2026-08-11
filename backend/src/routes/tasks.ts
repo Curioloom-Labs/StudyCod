@@ -27,7 +27,7 @@ import { getStableDifus } from "../utils/adaptiveDifficulty";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
 import { judgeWithSemaphore } from "../services/judgeWorker";
-import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
+import { buildJudgeTests, loadTestContentByIds, sweepTestCache } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { normalizeMarkdownText } from "../utils/markdownNormalize";
 import { inferNeedsInput } from "../utils/inferNeedsInput";
@@ -50,6 +50,7 @@ import {
 } from "../services/webTaskValidationService";
 import { encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { getSharedRedisClient, redisKey } from "../services/redis/sharedRedis";
+import { cleanupCompletedPersonalTaskTests } from "../services/personalTaskCleanup";
 import {
   buildLocalizedTopicTitleEnById as buildLocalizedTopicTitleEnByIdService,
   translateTopicTheoryUkToEn as translateTopicTheoryUkToEnService,
@@ -547,6 +548,39 @@ function getSequentialCompletedTopicCount(params: {
   return completed;
 }
 
+async function refreshPersonalMiniProjectIfNeeded(params: {
+  task: Task;
+  definition: ReturnType<typeof getPersonalMiniProjectDefinition>;
+}): Promise<Task> {
+  const { task, definition } = params;
+  if (task.completed !== 0) return task;
+
+  const existingTests = await testDataRepo().find({
+    where: { personalTask: { id: task.id } } as any,
+    order: { id: "ASC" } as any,
+  });
+  const needsRefresh = !task.description.includes("### Формат вводу") || existingTests.length < definition.tests.length;
+  if (!needsRefresh) return task;
+
+  task.description = definition.description;
+  task.projectSpec = definition.projectSpec;
+  await taskRepo().save(task);
+
+  existingTests.slice(0, definition.tests.length).forEach((row, index) => {
+    row.input = definition.tests[index].input;
+    row.expectedOutput = definition.tests[index].expectedOutput;
+    row.points = definition.tests[index].points;
+  });
+  const newTests = definition.tests.slice(existingTests.length).map(test => testDataRepo().create({
+    input: test.input,
+    expectedOutput: test.expectedOutput,
+    points: test.points,
+    personalTask: { id: task.id } as any,
+  }));
+  await testDataRepo().save([...existingTests, ...newTests]);
+  return task;
+}
+
 async function findOrCreatePersonalMiniProject(params: {
   userId: number;
   lang: "JAVA" | "PYTHON" | "CPP";
@@ -558,12 +592,12 @@ async function findOrCreatePersonalMiniProject(params: {
     .createQueryBuilder("task")
     .where("task.user_id = :userId", { userId: params.userId })
     .andWhere("task.lang = :lang", { lang: params.lang })
-    .andWhere("task.subtitle LIKE :prefix", { prefix: `${prefix}%` })
+    .andWhere("task.subtitle LIKE :prefix", { prefix: `${prefix}|%` })
     .orderBy("task.createdAt", "ASC")
     .getOne();
-  if (existing) return existing;
-
   const definition = getPersonalMiniProjectDefinition(params.lang, params.sequence);
+  if (existing) return refreshPersonalMiniProjectIfNeeded({ task: existing, definition });
+
   const task = await taskRepo().save(taskRepo().create({
     user: { id: params.userId } as any,
     topic: null,
@@ -4080,6 +4114,14 @@ tasksRouter.post(
     });
     const savedGradeResult = await gradeRepo().save(grade);
     const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
+    if (Number(savedGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE) {
+      await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch(error => {
+        logger.warn("[tasks] completed personal-task test cleanup failed", { requestId: req.requestId, taskId: task.id, error });
+      });
+      await sweepTestCache(0).catch(error => {
+        logger.warn("[tasks] completed personal-task cache cleanup failed", { requestId: req.requestId, taskId: task.id, error });
+      });
+    }
     const parsedComparisonFeedback = parseGradeComparisonFeedback(savedGrade.comparisonFeedback);
 
     await syncPostLearningProgress({
@@ -4166,9 +4208,12 @@ tasksRouter.post(
       output_limit_kb: 64
     }
   } as const;
+  const isPersonalMiniProject = String(task.subtitle ?? "").startsWith("MPJ:");
   const checker: CheckerSpec = effectiveIoType === "NO_INPUT_FREE_OUTPUT"
     ? { type: "nonempty" }
-    : chooseDefaultCheckerFromExpectedOutputs(sorted.map(t => t.expectedOutput || ""));
+    : isPersonalMiniProject
+      ? { type: "whitespace" }
+      : chooseDefaultCheckerFromExpectedOutputs(sorted.map(t => t.expectedOutput || ""));
   const workerReq: WorkerJudgeRequest = {
     submission_id: `personal_${req.userId}_${task.id}_${Date.now()}`,
     language: judgeLang,
@@ -4344,6 +4389,14 @@ tasksRouter.post(
   });
   const savedGradeResult = await gradeRepo().save(grade);
   const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
+  if (Number(savedGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE) {
+    await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch(error => {
+      logger.warn("[tasks] completed personal-task test cleanup failed", { requestId: req.requestId, taskId: task.id, error });
+    });
+    await sweepTestCache(0).catch(error => {
+      logger.warn("[tasks] completed personal-task cache cleanup failed", { requestId: req.requestId, taskId: task.id, error });
+    });
+  }
 
   await syncPostLearningProgress({
     userId: req.userId,

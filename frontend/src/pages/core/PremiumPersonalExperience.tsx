@@ -69,6 +69,12 @@ const text = {
     topics: "Карта тем",
     recent: "Остання активність",
     noData: "Дані з’являться після першої перевіреної роботи.",
+    projectsKicker: "Колекція перемог",
+    projectsTitle: "Галерея проєктів",
+    projectsCopy: "Тут зберігаються всі мініпроєкти, які ти вже завершив. Повертайся до них, щоб побачити свій шлях і надихнутися наступним кроком.",
+    projectsEmpty: "Перший завершений мініпроєкт з’явиться тут після успішної перевірки.",
+    projectSkills: "Навички",
+    openProject: "Відкрити проєкт",
     improve: "Повернутися до теми",
     strong: "Сильна тема",
     focus: "Точка росту",
@@ -114,6 +120,12 @@ const text = {
     topics: "Topic map",
     recent: "Recent activity",
     noData: "Data will appear after your first reviewed task.",
+    projectsKicker: "Collection of wins",
+    projectsTitle: "Project gallery",
+    projectsCopy: "Every mini-project you complete stays here. Come back to see your path and find momentum for the next step.",
+    projectsEmpty: "Your first completed mini-project will appear here after a successful check.",
+    projectSkills: "Skills",
+    openProject: "Open project",
     improve: "Practice this topic",
     strong: "Strong topic",
     focus: "Growth point",
@@ -153,6 +165,9 @@ export const PremiumDashboard: React.FC<{
   const complete = tasks.filter((task) => task.status === "GRADED").length;
   const active = tasks.find((task) => task.status !== "GRADED") ?? tasks[0];
   const completion = tasks.length ? Math.round((complete / tasks.length) * 100) : 0;
+  const completedProjects = React.useMemo(() => tasks
+    .filter((task) => task.status === "GRADED" && String(task.subtitle ?? "").startsWith("MPJ:"))
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()), [tasks]);
   const shortQueue = tasks.filter((task) => task.id !== active?.id).slice(0, 3);
   const dashboardLead = tasks.length
     ? complete > 0
@@ -219,6 +234,18 @@ export const PremiumDashboard: React.FC<{
         <section className="rounded-[26px] border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15] sm:p-6">
           <div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-semibold tracking-tight">{c.queue}</h2><button onClick={() => onNavigate("tasks")} className="text-sm font-semibold text-[#147b47] dark:text-[#62ecaa]">{c.allTasks}</button></div>
           <div className="grid gap-3 md:grid-cols-3">{shortQueue.length ? shortQueue.map((task, index) => <button type="button" key={task.id} onClick={() => onOpenTask(task)} className="group rounded-2xl border border-[#152219]/10 bg-[#fafcf9] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#00c96d]/40 hover:bg-[#f3fbf5] dark:border-white/10 dark:bg-white/[.025] dark:hover:bg-white/[.06]"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#768379] dark:text-[#93a399]">0{index + 1}</span>{task.status === "GRADED" ? <Check className="h-4 w-4 text-[#00a75a]" /> : <Clock3 className="h-4 w-4 text-[#e87d00]" />}</div><div className="mt-5 font-semibold text-[#1b2820] dark:text-[#eef5ef]">{task.title}</div><div className="mt-2 text-sm text-[#708075] dark:text-[#9faea3]">{task.status === "GRADED" ? c.completed : task.topicTitle || "Practice"}</div></button>) : <div className="col-span-full rounded-2xl bg-[#f5f7f4] px-5 py-7 text-sm text-[#718075] dark:bg-white/[.035] dark:text-[#9dac9f]">{c.empty}</div>}</div>
+        </section>
+
+        <section className="overflow-hidden rounded-[26px] border border-[#152219]/10 bg-[#17251c] p-5 text-white shadow-[0_22px_55px_-38px_rgba(5,25,12,.9)] dark:border-white/10 sm:p-6">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#72edb0]"><Trophy className="h-4 w-4" />{c.projectsKicker}</div>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">{c.projectsTitle}</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-[#b7c9ba]">{c.projectsCopy}</p>
+            </div>
+            <div className="flex h-12 min-w-12 items-center justify-center rounded-2xl bg-[#00d978]/12 px-4 text-xl font-semibold text-[#72edb0]">{completedProjects.length}</div>
+          </div>
+          {completedProjects.length ? <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{completedProjects.map((project, index) => <button key={project.id} type="button" onClick={() => onOpenTask(project)} className="group rounded-2xl border border-white/10 bg-white/[.055] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#72edb0]/45 hover:bg-white/[.09]"><div className="flex items-start justify-between gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#00d978]/12 text-sm font-semibold text-[#72edb0]">{index + 1}</span><Check className="h-4 w-4 text-[#72edb0]" /></div><div className="mt-5 font-semibold text-[#f0f7f1]">{project.title}</div><div className="mt-2 text-xs text-[#a8bbaa]">{project.language === "PYTHON" ? "Python" : project.language === "CPP" ? "C++" : "Java"} · {c.completed}</div><div className="mt-4 flex flex-wrap gap-1.5">{(project.projectSpec?.skills ?? []).slice(0, 3).map((skill) => <span key={skill} className="rounded-full bg-white/[.08] px-2 py-1 text-[11px] text-[#c5d6c8]">{skill}</span>)}</div><div className="mt-4 text-xs font-semibold text-[#72edb0] transition group-hover:text-white">{c.openProject} <ArrowRight className="ml-1 inline h-3.5 w-3.5 transition-transform group-hover:translate-x-1" /></div></button>)}</div> : <div className="mt-6 rounded-2xl border border-dashed border-white/15 px-5 py-8 text-center text-sm leading-6 text-[#a8bbaa]">{c.projectsEmpty}</div>}
         </section>
       </div>
     </div>

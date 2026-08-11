@@ -22,6 +22,7 @@ test("whitespace mode ignores spaces but not comma insertion", () => {
   assert.equal(compareOutput("1, 2", "1,2", { mode: "whitespace" }), true);
   // a genuinely different token must fail.
   assert.equal(compareOutput("1 2 4", "1 2 3", { mode: "whitespace" }), false);
+  assert.equal(compareOutputWithChecker("5.0", "5", { type: "whitespace" }), false);
 });
 
 test("nonempty mode only checks that output exists", () => {

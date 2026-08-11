@@ -20,6 +20,7 @@ import {
   Minimize2,
   Rocket,
   Play,
+  Plus,
   RotateCcw,
   Save,
   Sparkles,
@@ -45,7 +46,7 @@ import {
 } from "../../lib/judgeLanguages";
 
 type IdeMode = "theory" | "practice" | "debug";
-type AssistantTab = "task" | "hints" | "mentor";
+type AssistantTab = "task" | "hints";
 type BottomTab = "terminal" | "tests" | "debugger" | "console" | "history";
 
 export type StudyCodIdeTask = {
@@ -74,6 +75,7 @@ export type StudyCodIdeCheckResult = {
   testsTotal: number;
   score?: number;
   maxScore?: number;
+  groupScores?: Array<{ group: string; score: number; maxScore: number }> | null;
   compileError?: string | null;
   publicTestResults?: Array<{
     testId: number;
@@ -146,6 +148,7 @@ type Props = {
 
 const LAYOUT_KEY = "studycod:ide:layout:v3";
 const HISTORY_KEY = "studycod:ide:history:v1";
+const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
 
 type LayoutState = {
   left: number;
@@ -193,6 +196,17 @@ function languageLabel(language: JudgeLanguage) {
   return JUDGE_LANGUAGE_LABELS[language] || language;
 }
 
+function formatMiniProjectCountdown(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+  }
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
 export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   const tr = (uk: string, en: string) => {
     if (typeof document === "undefined") return uk;
@@ -217,11 +231,17 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   const [openHintIndex, setOpenHintIndex] = React.useState<number | null>(null);
   const [bottomTab, setBottomTab] = React.useState<BottomTab>("tests");
   const [activeFile, setActiveFile] = React.useState(props.entryFile);
+  const [fileAddRequestToken, setFileAddRequestToken] = React.useState(0);
   const [fontSize, setFontSize] = React.useState(14);
   const [wordWrap, setWordWrap] = React.useState(false);
   const [focusMode, setFocusMode] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [traceStep, setTraceStep] = React.useState(0);
+  const [miniProjectTimer, setMiniProjectTimer] = React.useState<{
+    taskId: string;
+    endsAt: number;
+  } | null>(null);
+  const [miniProjectRemainingSeconds, setMiniProjectRemainingSeconds] = React.useState<number | null>(null);
   const [history, setHistory] = React.useState<
     Array<{ at: string; code: string }>
   >(() => {
@@ -300,6 +320,45 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
     if (props.files.some((file) => file.path === activeFile)) return;
     setActiveFile(props.entryFile);
   }, [activeFile, props.entryFile, props.files]);
+  React.useEffect(() => {
+    const estimatedMinutes = Number(props.task.projectSpec?.estimatedMinutes);
+    const taskId = String(props.task.id);
+    if (!Number.isFinite(estimatedMinutes) || estimatedMinutes <= 0) {
+      setMiniProjectTimer(null);
+      setMiniProjectRemainingSeconds(null);
+      return;
+    }
+
+    const storageKey = scopedStorageKey(MINI_PROJECT_TIMER_KEY, props.task.id);
+    let startedAt = 0;
+    try {
+      const saved = Number(localStorage.getItem(storageKey));
+      if (Number.isFinite(saved) && saved > 0) startedAt = saved;
+      if (!startedAt) {
+        startedAt = Date.now();
+        localStorage.setItem(storageKey, String(startedAt));
+      }
+    } catch {
+      startedAt = Date.now();
+    }
+
+    setMiniProjectTimer({
+      taskId,
+      endsAt: startedAt + estimatedMinutes * 60 * 1000,
+    });
+  }, [props.task.id, props.task.projectSpec?.estimatedMinutes]);
+  React.useEffect(() => {
+    if (!miniProjectTimer || miniProjectTimer.taskId !== String(props.task.id)) return;
+
+    const updateRemaining = () => {
+      setMiniProjectRemainingSeconds(
+        Math.max(0, Math.ceil((miniProjectTimer.endsAt - Date.now()) / 1000)),
+      );
+    };
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(interval);
+  }, [miniProjectTimer, props.task.id]);
 
   const markTheoryComplete = () => {
     try {
@@ -656,6 +715,20 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             </span>
           ) : null}
         </div>
+        {props.checkResult?.groupScores?.length ? (
+          <div className="mb-3 rounded-xl border border-white/10 bg-black/15 p-3">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
+              {tr("Сабтаски", "Subtasks")}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {props.checkResult.groupScores.slice(0, 24).map((group) => (
+                <span key={group.group} className="rounded-lg bg-white/[.06] px-2.5 py-1.5 text-[11px] text-[#c8d6cc]">
+                  {group.group}: {group.score}/{group.maxScore}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {props.checkResult?.compileError ? (
           <pre className="mb-3 whitespace-pre-wrap rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/5 p-3 font-mono text-[#ff9aba]">
             {props.checkResult.compileError}
@@ -781,6 +854,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   const showLeft = !focusMode && !layout.leftCollapsed;
   const showRight = !focusMode && !layout.rightCollapsed;
   const showBottom = !focusMode && !layout.bottomCollapsed;
+  const activeMiniProjectRemainingSeconds =
+    miniProjectTimer?.taskId === String(props.task.id)
+      ? miniProjectRemainingSeconds
+      : null;
+  const miniProjectTimerExpired = activeMiniProjectRemainingSeconds === 0;
 
   return (
     <div className="flex h-[min(1100px,calc(100dvh-2rem))] min-h-[780px] flex-col overflow-hidden rounded-[30px] border border-white/[.1] bg-[#0d130f] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_28px_80px_-44px_rgba(15,35,21,.9)]">
@@ -807,6 +885,18 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
           </div>
         </div>
         {props.toolbar ? <div className="flex items-center gap-1.5 rounded-xl border border-white/[.07] bg-black/10 p-1">{props.toolbar}</div> : null}
+        {activeMiniProjectRemainingSeconds !== null ? (
+          <div
+            className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold tabular-nums ${miniProjectTimerExpired ? "border-[#ff6b9d]/45 bg-[#ff6b9d]/10 text-[#ff9aba]" : activeMiniProjectRemainingSeconds <= 300 ? "border-[#ffb454]/45 bg-[#ffb454]/10 text-[#ffca7e]" : "border-white/10 bg-white/[.04] text-[#c8d6cc]"}`}
+            title={tr("Залишок часу мініпроєкту", "Mini-project time remaining")}
+            aria-live="polite"
+          >
+            <Clock3 className="size-3.5" />
+            {miniProjectTimerExpired
+              ? tr("Час вийшов", "Time is up")
+              : formatMiniProjectCountdown(activeMiniProjectRemainingSeconds)}
+          </div>
+        ) : null}
         {!props.isWebTask && languageOptions.length > 1 && (
           <select
             value={props.language}
@@ -913,16 +1003,20 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                   {file.path}
                 </button>
               ))}
-              {!props.useFiles && (
                 <button
                   type="button"
-                  onClick={props.onEnableFiles}
+                  onClick={() => {
+                    if (!props.useFiles) {
+                      props.onEnableFiles();
+                      return;
+                    }
+                    setFileAddRequestToken((value) => value + 1);
+                  }}
                   className="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-white/15 px-2.5 py-2 text-xs text-[#82968a] hover:border-[#72edb0]/40 hover:text-[#72edb0]"
                 >
-                  <Braces className="size-3.5" />
+                  {props.useFiles ? <Plus className="size-3.5" /> : <Braces className="size-3.5" />}
                   {tr("Додати файл", "Add file")}
                 </button>
-              )}
             </div>
             <div className="border-t border-white/10 p-2 text-[10px] text-[#718075]">
               {fileList.length} {tr("файл(ів)", "file(s)")}
@@ -1028,6 +1122,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                   activePath={activeFile}
                   onActivePathChange={setActiveFile}
                   hideTabsOnDesktop
+                  requestAddToken={fileAddRequestToken}
                 />
               ) : (
                 <CodeEditor
@@ -1083,8 +1178,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
               </button>
               <button
                 type="button"
-                onClick={() => setAssistantTab("mentor")}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "bg-[#00d978]/10 text-[#72edb0] shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
+                onClick={() => setAssistantTab("hints")}
+                className="hidden"
               >
                 <Bot className="size-3.5" />
                 {tr("Ментор", "Mentor")}
@@ -1315,7 +1410,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                   ) : null}
                 </div>
               ) : null}
-              {assistantTab === "mentor" ? (
+              {assistantTab === "hints" ? (
                 <div className="space-y-3">
                   <div className="rounded-xl border border-[#00d978]/20 bg-[#00d978]/[.06] p-3 text-xs text-[#b9c9bd]">
                     <Sparkles className="mr-2 inline size-4 text-[#72edb0]" />
