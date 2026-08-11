@@ -70,7 +70,7 @@ export const MarkdownImageInsertButton: React.FC<MarkdownImageInsertButtonProps>
     } catch (error: unknown) {
       const message = getApiErrorMessage(error);
       if (message === "UNSUPPORTED_IMAGE_TYPE") {
-        toast.error(tr("Підтримуються лише PNG, JPG, WEBP, GIF, AVIF", "Only PNG, JPG, WEBP, GIF, AVIF are supported"));
+        toast.error(tr("Підтримуються лише PNG, JPG, WEBP, GIF, AVIF, SVG", "Only PNG, JPG, WEBP, GIF, AVIF, SVG are supported"));
       } else if (message === "IMAGE_TOO_LARGE") {
         toast.error(tr("Зображення завелике (максимум 8MB)", "Image is too large (maximum 8MB)"));
       } else {
@@ -89,7 +89,7 @@ export const MarkdownImageInsertButton: React.FC<MarkdownImageInsertButtonProps>
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/avif"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/avif,image/svg+xml"
         className="hidden"
         onChange={e => onFileChange(e.target.files?.[0] || null)}
       />

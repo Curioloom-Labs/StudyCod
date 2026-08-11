@@ -57,7 +57,7 @@ const taskRepo = () => AppDataSource.getRepository(EduTask);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
 const STATEMENT_IMAGES_DIR = path.join(UPLOADS_ROOT, "statement-images");
-const ALLOWED_STATEMENT_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif"]);
+const ALLOWED_STATEMENT_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif", "image/svg+xml"]);
 const statementImageUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -84,7 +84,7 @@ function ensureDir(p: string) {
 
 function safeExtFromUpload(file: Express.Multer.File): string {
   const fromName = path.extname(String(file.originalname || "")).toLowerCase();
-  const allowed = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"]);
+  const allowed = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif", ".svg"]);
   if (allowed.has(fromName)) return fromName;
   const byMime: Record<string, string> = {
     "image/png": ".png",
@@ -92,7 +92,8 @@ function safeExtFromUpload(file: Express.Multer.File): string {
     "image/jpg": ".jpg",
     "image/webp": ".webp",
     "image/gif": ".gif",
-    "image/avif": ".avif"
+    "image/avif": ".avif",
+    "image/svg+xml": ".svg"
   };
   return byMime[String(file.mimetype || "").toLowerCase()] || ".png";
 }
@@ -104,6 +105,7 @@ function mimeByExt(fileName: string): string {
   if (ext === ".webp") return "image/webp";
   if (ext === ".gif") return "image/gif";
   if (ext === ".avif") return "image/avif";
+  if (ext === ".svg") return "image/svg+xml";
   return "application/octet-stream";
 }
 function normalizeLang(input?: string | null): UserLang {
