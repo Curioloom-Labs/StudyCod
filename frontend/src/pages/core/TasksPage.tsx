@@ -2050,7 +2050,7 @@ export const TasksPage: React.FC<Props> = ({
     const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
       verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
       testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
-      score: Number(aiResult.total || 0), maxScore: 12,
+      score: Number(aiResult.total || 0), maxScore: isPreviewMode ? 12 : 100,
       compileError: aiResult.testResults?.find((test) => test.verdict === "CE")?.error ?? null,
       publicTestResults: (aiResult.testResults ?? []).map((test) => ({
         testId: test.testId,
@@ -2377,7 +2377,7 @@ export const TasksPage: React.FC<Props> = ({
 
               <div className="min-h-[220px] flex-1 p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Результат", "Result")}</p><span className={`rounded-full px-2 py-1 text-[10px] font-black ${consoleStateMeta.toneClass}`}>{consoleStateMeta.label}</span></div>
-                {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ {isPersonalControlQuizTask ? 100 : 12}</span></div>}
+                {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ {isPreviewMode ? 12 : 100}</span></div>}
                 {aiResult?.aiFeedback && <p className="mt-3 text-sm leading-6 text-[#4f5f55] dark:text-[#b8c4bb]">{aiResult.aiFeedback}</p>}
                 <pre className="mt-4 max-h-52 overflow-auto whitespace-pre-wrap rounded-xl bg-[#111713] p-4 font-mono text-xs leading-6 text-[#cfe0d3]">{consoleOutput || tr("Результат запуску з’явиться тут.", "Run output will appear here.")}</pre>
               </div>
