@@ -1397,15 +1397,39 @@ function normalizeLegacyOutputFormatSection(statementMarkdown: string): string {
   );
 }
 
+function extractHintsFromGradeFeedback(feedback: string | null | undefined): string[] {
+  const text = String(feedback ?? "");
+  if (!text.trim()) return [];
+  const marker = text.match(/(?:\u041f\u0456\u0434\u043a\u0430\u0437\u043a\u0438|Hints)\s*(?:\([^:\n]*\))?\s*:/iu);
+  if (!marker || typeof marker.index !== "number") return [];
+
+  return text
+    .slice(marker.index + marker[0].length)
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.startsWith("-") && line.slice(1).trim().length > 0)
+    .map(line => line.slice(1).trim())
+    .slice(0, 4);
+}
+
+function latestTaskGrade(task: Task): Grade | null {
+  const grades = Array.isArray((task as any).grades) ? (task as any).grades as Grade[] : [];
+  return [...grades]
+    .filter(Boolean)
+    .sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt)))[0] ?? null;
+}
+
 function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   includeTheoryDebug?: boolean;
   uiLanguage?: UiLanguage;
   localizedTheoryEnByBlockId?: Map<number, string>;
   localizedLegacyTheoryEnByTopicId?: Map<number, string>;
   localizedTopicTitleEnByTopicId?: Map<number, string>;
+  latestGrade?: Grade | null;
 }) {
   const uiLanguage = opts?.uiLanguage ?? "uk";
-  const hasGrade = gradeTaskIds ? gradeTaskIds.has(task.id) : !!task.completed;
+  const lastGrade = opts?.latestGrade ?? latestTaskGrade(task);
+  const hasGrade = gradeTaskIds ? gradeTaskIds.has(task.id) : Boolean(lastGrade) || !!task.completed;
   const status: TaskStatus = computeTaskStatus(task, hasGrade);
   const rawPractice = sanitizeMetaOutputFormatInStatement(
     (task.descriptionMarkdown || task.description || "").toString(),
@@ -1493,6 +1517,9 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     userFiles: userFiles ?? undefined,
     userEntryFile: userEntry ?? undefined,
     finalCode: task.finalCode || null,
+    lastGradeTotal: lastGrade?.total ?? null,
+    lastGradeFeedback: lastGrade?.aiFeedback ?? null,
+    lastGradeHints: extractHintsFromGradeFeedback(lastGrade?.aiFeedback),
     status,
     lessonInTopic: task.numInTopic ?? 1,
     repeatAttempt: 0,
@@ -1947,6 +1974,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
     });
     const ids = tasks.map(t => t.id);
     const gradeTaskIds = new Set<number>();
+    const latestGradesByTaskId = new Map<number, Grade>();
     if (ids.length > 0) {
       const grades = await gradeRepo().find({
         where: {
@@ -1961,7 +1989,13 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
       });
       for (const g of grades) {
         const tid = (g as any)?.task?.id;
-        if (typeof tid === "number") gradeTaskIds.add(tid);
+        if (typeof tid === "number") {
+          gradeTaskIds.add(tid);
+          const current = latestGradesByTaskId.get(tid);
+          if (!current || Number(new Date(g.createdAt)) > Number(new Date(current.createdAt))) {
+            latestGradesByTaskId.set(tid, g);
+          }
+        }
       }
     }
     const theoryBlockIds = uiLanguage === "en"
@@ -1981,6 +2015,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
     return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds, {
       includeTheoryDebug,
       uiLanguage,
+      latestGrade: latestGradesByTaskId.get(t.id) ?? null,
       localizedTheoryEnByBlockId,
       localizedLegacyTheoryEnByTopicId,
       localizedTopicTitleEnByTopicId
@@ -2024,7 +2059,7 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
     if (!task) return res.status(404).json({
       message: "Task not found"
     });
-    const grade = await gradeRepo().findOne({
+    const grades = await gradeRepo().find({
       where: {
         user: {
           id: req.userId
@@ -2032,8 +2067,13 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
         task: {
           id: task.id
         }
-      }
+      },
+      order: {
+        createdAt: "DESC"
+      },
+      take: 1
     });
+    const grade = grades[0] ?? null;
     const gradeTaskIds = new Set<number>();
     if (grade) gradeTaskIds.add(task.id);
     const theoryBlockId = Number((task as any)?.topic?.theoryBlock?.id);
@@ -2052,6 +2092,7 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
     return res.json(mapTaskToDto(task, gradeTaskIds, {
       includeTheoryDebug,
       uiLanguage,
+      latestGrade: grade,
       localizedTheoryEnByBlockId,
       localizedLegacyTheoryEnByTopicId,
       localizedTopicTitleEnByTopicId

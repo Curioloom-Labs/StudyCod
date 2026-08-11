@@ -190,6 +190,9 @@ export interface Task {
   userFiles?: Array<{ path: string; content: string }>;
   userEntryFile?: string;
   finalCode?: string | null;
+  lastGradeTotal?: number | null;
+  lastGradeFeedback?: string | null;
+  lastGradeHints?: string[];
   status: "OPEN" | "SUBMITTED" | "GRADED";
   lessonInTopic: number;
   repeatAttempt: number;

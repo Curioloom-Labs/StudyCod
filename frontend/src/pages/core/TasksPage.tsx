@@ -23,6 +23,15 @@ interface Props {
   user: User;
 }
 
+const PERSONAL_TASK_PASS_GRADE = 60;
+
+function isPersonalTaskEditable(task: Task | null, latestGradeTotal?: number | null): boolean {
+  if (!task) return false;
+  if (task.status !== "GRADED") return true;
+  const total = typeof task.lastGradeTotal === "number" ? task.lastGradeTotal : latestGradeTotal;
+  return typeof total === "number" && total < PERSONAL_TASK_PASS_GRADE;
+}
+
 const PERSONAL_TASK_PREVIEW_FIXTURES: Task[] = [
   {
     id: 91001,
@@ -1220,10 +1229,10 @@ export const TasksPage: React.FC<Props> = ({
   useEffect(() => {
     if (isPreviewMode) return;
     if (!active || !theoryAcknowledged || currentCodeText.trim() === "") return;
-    const isEditable = active.status !== "GRADED" || aiResult && aiResult.total < 6;
+    const isEditable = isPersonalTaskEditable(active, aiResult?.total);
     if (!isEditable) return;
     const interval = setInterval(() => {
-      if (active && currentCodeText.trim() !== "" && (active.status !== "GRADED" || aiResult && aiResult.total < 6)) {
+      if (active && currentCodeText.trim() !== "" && isPersonalTaskEditable(active, aiResult?.total)) {
         if (active.taskMode === "WEB") {
           saveWebTaskDraft(active.id, toWebTaskFiles()).catch(() => undefined);
         } else {
@@ -1360,6 +1369,7 @@ export const TasksPage: React.FC<Props> = ({
       if (status === "ok" && payload?.task && typeof payload.task === "object") {
         const generatedTask = payload.task as Task;
         const generatedTaskId = Number((generatedTask as { id?: unknown }).id ?? 0);
+        const retryingSameTask = generatedTaskId > 0 && generatedTaskId === active?.id;
         setGenerationPhase("syncing");
         await settleGenerationPhase();
         // The generation endpoint already returns the complete task DTO. Avoid
@@ -1383,7 +1393,13 @@ export const TasksPage: React.FC<Props> = ({
         setFiles(nextEditorState.files);
         setCode(nextEditorState.code);
         setAiResult(null);
-        setConsoleOutput("");
+        setConsoleOutput(retryingSameTask && generatedTask.status === "GRADED"
+          ? tr(
+              "Це завдання ще не пройдено. Код знову доступний для редагування — виправ його та відкрий вкладку «Підказки».",
+              "This task is not solved yet. The code is editable again — fix it and open the Hints tab."
+            )
+          : "");
+        setUIState(retryingSameTask && generatedTask.status === "GRADED" ? "logic-warning" : "idle");
         setTheoryAcknowledged(theoryIsAcknowledged(openedTask));
         setGenerationPhase("finishing");
         await settleGenerationPhase(220);
@@ -1796,7 +1812,7 @@ export const TasksPage: React.FC<Props> = ({
     }
   };
 
-  const canEdit = active && theoryAcknowledged && (active.status !== "GRADED" || aiResult && aiResult.total < 6);
+  const canEdit = Boolean(active && theoryAcknowledged && isPersonalTaskEditable(active, aiResult?.total));
 
   const handleSaveDraft = async () => {
     if (!active || (!isWebTask && !currentCodeText.trim())) return;
@@ -2096,7 +2112,7 @@ export const TasksPage: React.FC<Props> = ({
           readOnly={!active || !canEdit}
           runResult={ideRunResult}
           checkResult={ideCheckResult}
-          hints={aiResult?.hints ?? []}
+          hints={aiResult?.hints ?? active?.lastGradeHints ?? []}
           isWebTask={isWebTask}
           webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
         />
