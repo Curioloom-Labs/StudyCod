@@ -4115,7 +4115,7 @@ tasksRouter.post(
     const savedGradeResult = await gradeRepo().save(grade);
     const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
     if (Number(savedGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE) {
-      await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch(error => {
+      await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch((error: unknown) => {
         logger.warn("[tasks] completed personal-task test cleanup failed", { requestId: req.requestId, taskId: task.id, error });
       });
       await sweepTestCache(0).catch(error => {
@@ -4390,7 +4390,7 @@ tasksRouter.post(
   const savedGradeResult = await gradeRepo().save(grade);
   const savedGrade = Array.isArray(savedGradeResult) ? savedGradeResult[0] : savedGradeResult;
   if (Number(savedGrade.total ?? 0) >= PERSONAL_TOPIC_PASS_GRADE) {
-    await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch(error => {
+    await cleanupCompletedPersonalTaskTests({ taskId: task.id }).catch((error: unknown) => {
       logger.warn("[tasks] completed personal-task test cleanup failed", { requestId: req.requestId, taskId: task.id, error });
     });
     await sweepTestCache(0).catch(error => {
