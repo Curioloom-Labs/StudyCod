@@ -77,6 +77,8 @@ export interface JudgeRequest {
    *   otherwise group score is 0.
    */
   group_scoring_mode?: "SUM" | "BINARY_ALL_OR_NOT";
+  /** When enabled, later groups are not executed after an earlier group fails. */
+  stop_on_group_failure?: boolean;
 }
 export interface CompileResult {
   ok: boolean;
@@ -107,6 +109,7 @@ export interface GroupScore {
   group: string;
   score: number;
   max_score: number;
+  status?: "PASSED" | "PARTIAL" | "FAILED" | "SKIPPED";
 }
 
 export interface JudgeResponse {

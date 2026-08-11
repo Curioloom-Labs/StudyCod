@@ -48,6 +48,7 @@ import { resolveJudgeSandboxConfig, resolveJudgeWorkerEntry } from "./services/j
 import { getExecutionQueueMode } from "./services/execution/distributedJudgeQueueSingleton";
 import { getJudgeExecutionMetrics } from "./services/judgeWorker";
 import { sweepTestCache } from "./services/judgeWorker/testCache";
+import { cleanupCompletedPersonalTaskTests } from "./services/personalTaskCleanup";
 import { getOpenRouterRuntimeDiagnostics } from "./services/llm/OpenRouterProvider";
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
@@ -1144,6 +1145,14 @@ async function bootstrap(): Promise<void> {
     }
 
     startCertificateQueueWorker();
+
+    // Remove test payloads left behind by already-solved generated personal
+    // tasks. Grades keep the result/snapshot, so this is safe and idempotent.
+    void cleanupCompletedPersonalTaskTests()
+      .then(() => sweepTestCache(0))
+      .catch(error => {
+        logger.warn("[startup] completed personal-task/cache cleanup failed", { error });
+      });
 
     // Seed defaults: ON in dev/test, OFF in production. Production seeding
     // on every boot can re-insert rows that were intentionally removed and

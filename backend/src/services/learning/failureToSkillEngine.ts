@@ -241,5 +241,6 @@ export async function getSkillEvidence(principalType: LearningPrincipalType, pri
     where: { principalType, principalId } as any,
     order: { createdAt: "ASC" } as any,
   });
-  return deriveSkillEvidence(attempts);
+  // Library exercises are independent practice and must not become lesson skill evidence.
+  return deriveSkillEvidence(attempts.filter((attempt) => attempt.taskKind !== "LIBRARY"));
 }

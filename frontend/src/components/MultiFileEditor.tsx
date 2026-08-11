@@ -119,8 +119,11 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
     if (readOnly) return;
     if (typeof requestAddToken !== "number") return;
     if (lastRequestToken.current === undefined) {
-      // Do not auto-open on first mount.
       lastRequestToken.current = requestAddToken;
+      // A non-zero token can be supplied by the parent while enabling the
+      // multi-file mode. Open the dialog after the editor mounts so the
+      // first "Add file" click is not lost.
+      if (requestAddToken > 0) openAdd();
       return;
     }
     if (requestAddToken === lastRequestToken.current) return;

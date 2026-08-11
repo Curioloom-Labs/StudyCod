@@ -21,7 +21,6 @@ import {
   runLibraryTask,
   saveLibraryWebTaskDraft,
   saveLibraryTaskDraft,
-  recordLearningEvent,
   type CodeFile,
   type LibraryCheckResult,
   type LibraryTaskListItem,
@@ -84,16 +83,14 @@ const LearningSuccessCard: React.FC<{
   topic: string;
   testsPassed: number;
   testsTotal: number;
-  solvedAfterFailure: boolean;
-  failureCategory?: string | null;
   nextTask?: LibraryTaskListItem | null;
   onNextTask: () => void;
-}> = ({ topic, testsPassed, testsTotal, solvedAfterFailure, failureCategory, nextTask, onNextTask }) => {
+}> = ({ topic, testsPassed, testsTotal, nextTask, onNextTask }) => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   return <div className="mt-4 rounded-2xl border border-[#00d978]/25 bg-[#00d978]/[.07] p-4 text-[#e7f7eb]">
-    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#72edb0]" /><div><div className="text-sm font-bold text-[#72edb0]">{tr(solvedAfterFailure ? "Навичку закріплено" : "Рішення перевірено", solvedAfterFailure ? "Skill reinforced" : "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-[#b9cfbe]">{tr(solvedAfterFailure ? "Ти виправив рішення після невдалої спроби й пройшов усі перевірки." : "Рішення пройшло всі доступні перевірки; це ще не claim про mastery.", solvedAfterFailure ? "You fixed the solution after a failed attempt and passed every check." : "The solution passed all available checks; this is not a mastery claim.")} {testsPassed}/{testsTotal}</p></div></div>
-    <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr(solvedAfterFailure ? "Закріплена тема" : "Поточна тема", solvedAfterFailure ? "Topic reinforced" : "Current topic")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Доказ", "Evidence")}</span><strong className="mt-1 block text-sm">{solvedAfterFailure ? tr(`Подолано: ${failureCategory || "помилка"}`, `Overcame: ${failureCategory || "failure"}`) : tr("Evidence collected", "Evidence collected")}</strong></div></div>
+    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#72edb0]" /><div><div className="text-sm font-bold text-[#72edb0]">{tr("Рішення перевірено", "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-[#b9cfbe]">{tr("Рішення пройшло всі доступні перевірки. Це результат цієї задачі, а не навчальна навичка.", "The solution passed all available checks. This is a result for this task, not a learning skill.")} {testsPassed}/{testsTotal}</p></div></div>
+    <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Задача", "Task")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Статус", "Status")}</span><strong className="mt-1 block text-sm">{tr("Завершено", "Completed")}</strong></div></div>
     {nextTask ? <button type="button" onClick={onNextTask} className="mt-4 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] p-3 text-left transition hover:bg-white/[.09]"><span><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Наступна рекомендована задача", "Next recommended task")}</span><strong className="mt-1 block text-sm">{nextTask.title}</strong></span><ArrowLeft className="size-4 rotate-180 text-[#72edb0]" /></button> : <p className="mt-4 text-xs text-[#9fb5a5]">{tr("Відкрий бібліотеку, щоб обрати наступну задачу з цієї теми.", "Open the library to choose the next task from this topic.")}</p>}
   </div>;
 };
@@ -108,6 +105,49 @@ function normalizeFiles(fs: CodeFile[]): CodeFile[] {
   return Array.from(m.entries())
     .map(([path, content]) => ({ path, content }))
     .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+const MULTI_FILE_TEMPLATE_PREFIX = "__STUDYCOD_MULTI_FILE_V1__\n";
+
+type CodeTemplateState = {
+  code: string;
+  files: CodeFile[];
+  useFiles: boolean;
+};
+
+/** Decode the same starter format that the backend judge accepts for submissions. */
+function decodeCodeTemplate(rawTemplate: string, entryFile: string): CodeTemplateState {
+  const fallback = { code: rawTemplate, files: [], useFiles: false } satisfies CodeTemplateState;
+  if (!rawTemplate.startsWith(MULTI_FILE_TEMPLATE_PREFIX)) return fallback;
+
+  try {
+    const parsed = JSON.parse(rawTemplate.slice(MULTI_FILE_TEMPLATE_PREFIX.length)) as {
+      version?: unknown;
+      entry?: unknown;
+      files?: unknown;
+    };
+    if (parsed?.version !== 1 || String(parsed.entry ?? "").trim() !== entryFile || !Array.isArray(parsed.files)) {
+      return fallback;
+    }
+
+    const files = normalizeFiles(
+      parsed.files.flatMap((file) => {
+        if (!file || typeof file !== "object") return [];
+        const path = String((file as { path?: unknown }).path ?? "").trim();
+        if (!path) return [];
+        return [{ path, content: String((file as { content?: unknown }).content ?? "") }];
+      }),
+    );
+    if (!files.length || !files.some(file => file.path === entryFile)) return fallback;
+
+    return {
+      code: entryContentFromFiles(files, entryFile),
+      files,
+      useFiles: true,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeWebFiles(fs: WebTaskFile[] | null | undefined): CodeFile[] {
@@ -389,21 +429,22 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setJudgeLanguage(initialLang);
 
       if (!hasToken) {
-        const initial = getTemplateForLanguage(d.task, initialLang);
+        const entryFile = entryFileForJudgeLanguage(initialLang);
+        const initialTemplate = decodeCodeTemplate(getTemplateForLanguage(d.task, initialLang), entryFile);
         draftCacheRef.current[initialLang] = {
-          useFiles: false,
-          code: initial,
-          files: [],
-          lastSavedUseFiles: false,
-          lastSavedCode: initial,
-          lastSavedFiles: [],
+          useFiles: initialTemplate.useFiles,
+          code: initialTemplate.code,
+          files: initialTemplate.files,
+          lastSavedUseFiles: initialTemplate.useFiles,
+          lastSavedCode: initialTemplate.code,
+          lastSavedFiles: initialTemplate.files,
         };
-        setUseFiles(false);
-        setFiles([]);
-        setCode(initial);
-        setLastSavedUseFiles(false);
-        setLastSavedFiles([]);
-        setLastSavedCode(initial);
+        setUseFiles(initialTemplate.useFiles);
+        setFiles(initialTemplate.files);
+        setCode(initialTemplate.code);
+        setLastSavedUseFiles(initialTemplate.useFiles);
+        setLastSavedFiles(initialTemplate.files);
+        setLastSavedCode(initialTemplate.code);
         return;
       }
     };
@@ -463,22 +504,22 @@ export const LibraryTaskSolvePage: React.FC = () => {
       return;
     }
 
-    const template = getTemplateForLanguage(task, lang);
+    const templateState = decodeCodeTemplate(getTemplateForLanguage(task, lang), entryFile);
     if (!hasToken) {
       draftCacheRef.current[lang] = {
-        useFiles: false,
-        code: template,
-        files: [],
-        lastSavedUseFiles: false,
-        lastSavedCode: template,
-        lastSavedFiles: [],
+        useFiles: templateState.useFiles,
+        code: templateState.code,
+        files: templateState.files,
+        lastSavedUseFiles: templateState.useFiles,
+        lastSavedCode: templateState.code,
+        lastSavedFiles: templateState.files,
       };
-      setUseFiles(false);
-      setFiles([]);
-      setCode(template);
-      setLastSavedUseFiles(false);
-      setLastSavedFiles([]);
-      setLastSavedCode(template);
+      setUseFiles(templateState.useFiles);
+      setFiles(templateState.files);
+      setCode(templateState.code);
+      setLastSavedUseFiles(templateState.useFiles);
+      setLastSavedFiles(templateState.files);
+      setLastSavedCode(templateState.code);
       return;
     }
 
@@ -487,42 +528,48 @@ export const LibraryTaskSolvePage: React.FC = () => {
         const attempt = a.attempt;
         const serverFiles = Array.isArray(attempt?.draftFiles) ? normalizeFiles(attempt!.draftFiles!) : [];
         const serverUseFiles = serverFiles.length > 0;
-        const draftCode = (attempt?.draftCode ?? "").trim() ? String(attempt?.draftCode ?? "") : template;
+        const savedDraftCode = (attempt?.draftCode ?? "").trim() ? String(attempt?.draftCode ?? "") : "";
+        const templateFiles = templateState.files;
         const draftFiles = serverUseFiles
-          ? (serverFiles.some(f => f.path === entryFile) ? serverFiles : [...serverFiles, { path: entryFile, content: draftCode }])
-          : [];
-        const resolvedCode = serverUseFiles ? entryContentFromFiles(draftFiles, entryFile) : draftCode;
+          ? (serverFiles.some(f => f.path === entryFile) ? serverFiles : [...serverFiles, { path: entryFile, content: savedDraftCode || templateState.code }])
+          : templateFiles.length > 0
+            ? templateFiles.map(file => file.path === entryFile && savedDraftCode ? { ...file, content: savedDraftCode } : file)
+            : [];
+        const useTemplateFiles = draftFiles.length > 0;
+        const resolvedCode = useTemplateFiles
+          ? entryContentFromFiles(draftFiles, entryFile)
+          : savedDraftCode || templateState.code;
         draftCacheRef.current[lang] = {
-          useFiles: serverUseFiles,
+          useFiles: useTemplateFiles,
           code: resolvedCode,
           files: draftFiles,
-          lastSavedUseFiles: serverUseFiles,
+          lastSavedUseFiles: useTemplateFiles,
           lastSavedCode: resolvedCode,
           lastSavedFiles: draftFiles,
         };
-        setUseFiles(serverUseFiles);
+        setUseFiles(useTemplateFiles);
         setFiles(draftFiles);
         setCode(resolvedCode);
-        setLastSavedUseFiles(serverUseFiles);
+        setLastSavedUseFiles(useTemplateFiles);
         setLastSavedFiles(draftFiles);
         setLastSavedCode(resolvedCode);
       })
       .catch(() => {
         // fallback to template
         draftCacheRef.current[lang] = {
-          useFiles: false,
-          code: template,
-          files: [],
-          lastSavedUseFiles: false,
-          lastSavedCode: template,
-          lastSavedFiles: [],
+          useFiles: templateState.useFiles,
+          code: templateState.code,
+          files: templateState.files,
+          lastSavedUseFiles: templateState.useFiles,
+          lastSavedCode: templateState.code,
+          lastSavedFiles: templateState.files,
         };
-        setUseFiles(false);
-        setFiles([]);
-        setCode(template);
-        setLastSavedUseFiles(false);
-        setLastSavedFiles([]);
-        setLastSavedCode(template);
+        setUseFiles(templateState.useFiles);
+        setFiles(templateState.files);
+        setCode(templateState.code);
+        setLastSavedUseFiles(templateState.useFiles);
+        setLastSavedFiles(templateState.files);
+        setLastSavedCode(templateState.code);
       });
   }, [task, judgeLanguage, hasToken, taskId]);
 
@@ -802,13 +849,17 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const resetToTemplate = () => {
     if (!task) return;
     if (!confirm(tr("Скинути код до шаблону?", "Reset code to template?"))) return;
-    const next = getTemplateForLanguage(task, judgeLanguage);
-    if (useFiles) {
-      const entryFile = entryFileForJudgeLanguage(judgeLanguage);
-      setFiles([{ path: entryFile, content: next }]);
-      setCode(next);
+    const entryFile = entryFileForJudgeLanguage(judgeLanguage);
+    const templateState = decodeCodeTemplate(getTemplateForLanguage(task, judgeLanguage), entryFile);
+    if (templateState.useFiles) {
+      setUseFiles(true);
+      setFiles(templateState.files);
+      setCode(templateState.code);
+    } else if (useFiles) {
+      setFiles([{ path: entryFile, content: templateState.code }]);
+      setCode(templateState.code);
     } else {
-      setCode(next);
+      setCode(templateState.code);
     }
   };
 
@@ -901,12 +952,9 @@ export const LibraryTaskSolvePage: React.FC = () => {
       topic={task.section || task.tags?.[0] || tr("практична тема", "the practice topic")}
       testsPassed={checkResult.testsPassed}
       testsTotal={checkResult.testsTotal}
-      solvedAfterFailure={Boolean(checkResult.learningAttempt?.solvedAfterFailure)}
-      failureCategory={checkResult.learningAttempt?.failureCategory}
       nextTask={nextTask}
       onNextTask={() => {
         if (!nextTask) return;
-        void recordLearningEvent({ eventType: "recommended_task_opened", taskId: nextTask.id, taskKind: "LIBRARY" }).catch(() => undefined);
         const prefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve/" : "/library/solve/";
         navigate(`${prefix}${nextTask.id}`);
       }}
@@ -924,6 +972,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       learningAttemptId={checkResult.learningAttempt?.id ?? null}
       failureCategory={checkResult.learningAttempt?.failureCategory ?? firstFailedTest?.errorKind ?? null}
       highestHintLevelShown={checkResult.learningAttempt?.highestHintLevelShown ?? 0}
+      trackLearning={false}
       onTryAgain={() => {
         setCheckResult(null);
         scrollToSection("task");

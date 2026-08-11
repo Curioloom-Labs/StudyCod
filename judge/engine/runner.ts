@@ -551,11 +551,22 @@ export class Runner {
       // Binary subtask scoring requires all tests in a group to be executed, so we only enable it when `run_all=true`.
       const binaryGroupScoring = groupScoringMode === "BINARY_ALL_OR_NOT" && runAll;
       const groupFailed: Record<string, boolean> = {};
+      const stopOnGroupFailure = req.stop_on_group_failure === true && runAll;
+      const groupOrder = scoringPlan.groupOrder;
+      const groupIndexes = new Map(groupOrder.map((group, index) => [group, index]));
+      let failedGroupIndex = -1;
 
       const runPlan = traceRunPlan ?? (profile.run ? profile.run() : adapter.getRunPlan());
       for (let i = 0; i < req.tests.length; i++) {
         const test = req.tests[i];
         const group = normalizeGroup(test.group, test.hidden);
+        const groupIndex = groupIndexes.get(group) ?? 0;
+        // Tests are expected to be ordered by group. Once a group has failed, do not
+        // execute any test belonging to a later group. The current group is allowed
+        // to finish so its partial score remains meaningful.
+        if (stopOnGroupFailure && failedGroupIndex >= 0 && groupIndex > failedGroupIndex) {
+          break;
+        }
         const weight = normalizeWeight(test.weight);
         const useRefInput = testHasRefInput(test);
         const useRefOutput = testHasRefOutput(test);
@@ -666,6 +677,10 @@ export class Runner {
             if (binaryGroupScoring) {
               groupFailed[group] = true;
             }
+            if (stopOnGroupFailure) {
+              groupFailed[group] = true;
+              failedGroupIndex = failedGroupIndex < 0 ? groupIndex : Math.min(failedGroupIndex, groupIndex);
+            }
             if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
             continue;
           }
@@ -685,6 +700,10 @@ export class Runner {
         base.message = runtimeVerdict === "TLE" ? "Time limit exceeded" : runtimeVerdict === "MLE" ? "Memory limit exceeded" : r.outputLimitExceeded ? "Output limit exceeded" : runtimeVerdict === "CE" ? "Compilation error" : "Runtime error";
         if (binaryGroupScoring) {
           groupFailed[group] = true;
+        }
+        if (stopOnGroupFailure) {
+          groupFailed[group] = true;
+          failedGroupIndex = failedGroupIndex < 0 ? groupIndex : Math.min(failedGroupIndex, groupIndex);
         }
         if (allowDetails) {
           const inputSample = useRefInput
@@ -707,7 +726,20 @@ export class Runner {
         }
         score = Object.values(groupAgg).reduce((sum, agg) => sum + (agg.score || 0), 0);
       }
-      return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
+      return finalize(
+        req.submission_id,
+        finalVerdict,
+        totalTime,
+        peakMemKb,
+        tests,
+        score,
+        scoringPlan.maxScore,
+        groupAgg,
+        groupOrder,
+        groupFailed,
+        failedGroupIndex,
+        stopOnGroupFailure
+      );
     } finally {
       await safeRm(workDir);
     }
@@ -749,7 +781,11 @@ function finalize(
   tests: TestRunResult[],
   score: number,
   maxScore: number,
-  groupAgg: GroupAgg
+  groupAgg: GroupAgg,
+  groupOrder?: string[],
+  groupFailed?: Record<string, boolean>,
+  failedGroupIndex?: number,
+  stopOnGroupFailure?: boolean
 ): JudgeResponse {
   return {
     submission_id: submissionId,
@@ -758,23 +794,38 @@ function finalize(
     memory_kb: memoryKb,
     score,
     max_score: maxScore,
-    group_scores: buildGroupScores(groupAgg),
+    group_scores: buildGroupScores(groupAgg, groupOrder, groupFailed, failedGroupIndex, stopOnGroupFailure),
     tests
   };
 }
 
-function buildGroupScores(groupAgg: GroupAgg): GroupScore[] {
-  const entries = Object.entries(groupAgg);
-  entries.sort(([a], [b]) => {
-    const aa = a === "public" ? "\u0000" : a === "hidden" ? "\uffff" : a;
-    const bb = b === "public" ? "\u0000" : b === "hidden" ? "\uffff" : b;
-    return aa.localeCompare(bb);
+function buildGroupScores(
+  groupAgg: GroupAgg,
+  groupOrder?: string[],
+  groupFailed?: Record<string, boolean>,
+  failedGroupIndex = -1,
+  stopOnGroupFailure = false
+): GroupScore[] {
+  const orderedNames = groupOrder?.length ? groupOrder : Object.keys(groupAgg);
+  return orderedNames.filter(group => groupAgg[group]).map((group, index) => {
+    const value = groupAgg[group];
+    let status: GroupScore["status"];
+    if (stopOnGroupFailure && failedGroupIndex >= 0 && index > failedGroupIndex) {
+      status = "SKIPPED";
+    } else if (groupFailed?.[group]) {
+      status = value.score > 0 ? "PARTIAL" : "FAILED";
+    } else if (value.score >= value.max_score) {
+      status = "PASSED";
+    } else {
+      status = "PARTIAL";
+    }
+    return {
+      group,
+      score: stopOnGroupFailure && status === "SKIPPED" ? 0 : value.score,
+      max_score: value.max_score,
+      status
+    };
   });
-  return entries.map(([group, v]) => ({
-    group,
-    score: v.score,
-    max_score: v.max_score
-  }));
 }
 function worsen(current: Verdict, next: Verdict): Verdict {
   const rank: Record<Verdict, number> = {
@@ -922,6 +973,7 @@ function validateRequest(req: JudgeRequest) {
   if (req.debug !== undefined && typeof req.debug !== "boolean") throw new Error("INVALID_REQUEST: debug must be boolean");
   if (req.run_all !== undefined && typeof req.run_all !== "boolean") throw new Error("INVALID_REQUEST: run_all must be boolean");
   if (req.rerun_failed_once !== undefined && typeof req.rerun_failed_once !== "boolean") throw new Error("INVALID_REQUEST: rerun_failed_once must be boolean");
+  if (req.stop_on_group_failure !== undefined && typeof req.stop_on_group_failure !== "boolean") throw new Error("INVALID_REQUEST: stop_on_group_failure must be boolean");
   if (req.group_scoring_mode !== undefined) {
     if (req.group_scoring_mode !== "SUM" && req.group_scoring_mode !== "BINARY_ALL_OR_NOT") {
       throw new Error("INVALID_REQUEST: group_scoring_mode must be SUM|BINARY_ALL_OR_NOT");
@@ -933,9 +985,11 @@ function computeScoringPlan(req: JudgeRequest): {
   maxScore: number;
   groupAgg: GroupAgg;
   groupScoresTemplate: GroupScore[];
+  groupOrder: string[];
 } {
   const groupAgg: GroupAgg = {};
   let maxScore = 0;
+  const groupOrder: string[] = [];
 
   for (const t of req.tests) {
     const group = normalizeGroup(t.group, t.hidden);
@@ -946,6 +1000,7 @@ function computeScoringPlan(req: JudgeRequest): {
         score: 0,
         max_score: 0
       };
+      groupOrder.push(group);
     }
     groupAgg[group].max_score += weight;
   }
@@ -954,7 +1009,8 @@ function computeScoringPlan(req: JudgeRequest): {
   return {
     maxScore,
     groupAgg,
-    groupScoresTemplate
+    groupScoresTemplate,
+    groupOrder
   };
 }
 

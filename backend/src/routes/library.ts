@@ -40,7 +40,8 @@ import {
 } from "../services/webTaskValidationService";
 import { normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
-import { getSkillEvidence, recordLearningEvent, recordLearningOutcome } from "../services/learning/failureToSkillEngine";
+import { getSkillEvidence, recordLearningEvent } from "../services/learning/failureToSkillEngine";
+import { compareLibraryJudgeGroups, hasLibrarySubtasks, libraryTestGroup, normalizeLibraryGroupScores } from "../services/libraryTaskScoring";
 
 const libraryRouter = Router();
 
@@ -184,45 +185,6 @@ function learningPrincipal(req: AuthRequest): { principalType: "USER" | "STUDENT
   if (req.userType === "STUDENT" && req.studentId) return { principalType: "STUDENT", principalId: req.studentId };
   if (req.userId) return { principalType: "USER", principalId: req.userId };
   return null;
-}
-
-async function persistLibraryLearningOutcome(params: {
-  req: AuthRequest;
-  task: LibraryTask;
-  outcome: "FAILED" | "SOLVED";
-  submissionId?: string | null;
-  sourceAttemptId?: number | null;
-  failureCategory?: string | null;
-  firstFailedTestId?: number | null;
-}) {
-  const principal = learningPrincipal(params.req);
-  if (!principal) return null;
-  try {
-    const projectSkills = Array.isArray((params.task as any).projectSpec?.skills)
-      ? (params.task as any).projectSpec.skills.map((skill: unknown) => String(skill).trim()).filter(Boolean)
-      : [];
-    const topicLabel = String(
-      (params.task as any).section
-      || projectSkills[0]
-      || (Array.isArray((params.task as any).tags) ? (params.task as any).tags[0] : "")
-      || "",
-    ).trim() || null;
-    return await recordLearningOutcome({
-      ...principal,
-      taskKind: "LIBRARY",
-      taskId: params.task.id,
-      topicLabel,
-      submissionId: params.submissionId ?? null,
-      sourceAttemptId: params.sourceAttemptId ?? null,
-      outcome: params.outcome,
-      failureCategory: params.failureCategory ?? null,
-      firstFailedTestId: params.firstFailedTestId ?? null,
-    });
-  } catch (error: any) {
-    // Learning history is additive and must never make a judge result fail.
-    logger.warn("[learning] library outcome persistence failed", { requestId: params.req.requestId, error: error?.message });
-    return null;
-  }
 }
 
 function buildLibraryFirstFailure(params: {
@@ -684,7 +646,10 @@ function truncateText(s: string, max: number): string {
   return v.slice(0, max) + `\n…(truncated, ${v.length - max} more chars)`;
 }
 
-const JUDGE_LANGS = ["java", "python", "cpp", "c", "csharp", "kotlin"] as const;
+const JUDGE_LANGS = [
+  "java", "python", "cpp", "c", "csharp", "kotlin",
+  "js", "go", "rust", "pascal", "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift",
+] as const;
 type JudgeLangId = typeof JUDGE_LANGS[number];
 const JUDGE_LANG_SET = new Set<string>(JUDGE_LANGS as readonly string[]);
 
@@ -827,7 +792,7 @@ const createLibraryTaskSchema = z.object({
     ])
     .optional(),
   allowedLanguages: z
-    .array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
+    .array(z.enum(JUDGE_LANGS))
     .min(1)
     .max(JUDGE_LANGS.length)
     .optional(),
@@ -974,6 +939,7 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
         isHidden: !!t.isHidden,
         kind: ((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any,
         points: t.points,
+        subtask: (t as any).subtask ?? null,
       })),
     });
   } catch (error: any) {
@@ -1083,6 +1049,7 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
         isHidden: !!t.isHidden,
         kind: ((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any,
         points: t.points,
+        subtask: (t as any).subtask ?? null,
       })),
     });
   } catch (error: any) {
@@ -1395,7 +1362,6 @@ libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMid
     const rawMaxScore = check.maxScore > 0 ? check.maxScore : check.totalRules;
     const normalizedScore = normalizeScoreTo100(check.score, rawMaxScore);
 
-    let sourceAttemptId: number | null = null;
     if (req.userId) {
       let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
       const serialized = JSON.stringify({ mode: "WEB", version: 1, files });
@@ -1417,20 +1383,8 @@ libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMid
       attempt.lastTestsTotal = check.totalRules;
       attempt.submissionsCount = (attempt.submissionsCount ?? 0) + 1;
       attempt.lastCheckedAt = new Date();
-      const savedAttempt = await attemptRepo().save(attempt);
-      sourceAttemptId = savedAttempt.id;
+      await attemptRepo().save(attempt);
     }
-
-    const firstFailed = check.results.findIndex((result) => !result.passed);
-    const learningOutcome = await persistLibraryLearningOutcome({
-      req,
-      task,
-      outcome: check.passed ? "SOLVED" : "FAILED",
-      submissionId: `library_web_${task.id}_${Date.now()}`,
-      sourceAttemptId,
-      failureCategory: check.passed ? null : "web_rule",
-      firstFailedTestId: firstFailed >= 0 ? firstFailed + 1 : null,
-    });
 
     return res.json({
       taskMode: "WEB",
@@ -1445,16 +1399,6 @@ libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMid
         verdict: r.passed ? "AC" : "WA",
         errorKind: r.passed ? null : "web_rule"
       })),
-      learningAttempt: learningOutcome
-        ? {
-            id: learningOutcome.attempt.id,
-            outcome: learningOutcome.attempt.outcome,
-            failureCategory: learningOutcome.attempt.failureCategory ?? null,
-            firstFailedTestId: learningOutcome.attempt.firstFailedTestId ?? null,
-            highestHintLevelShown: learningOutcome.attempt.highestHintLevelShown ?? 0,
-            solvedAfterFailure: learningOutcome.solvedAfterFailure,
-          }
-        : null,
     });
   } catch (error: any) {
     if (error instanceof HttpError) {
@@ -1687,6 +1631,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const effectiveChecker = explicitChecker ?? chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || ""));
 
     const maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
+    const hasSubtasks = hasLibrarySubtasks(tests);
 
     const normalizedFiles = normalizeApiFiles((validated.data as any).files);
     const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
@@ -1704,12 +1649,15 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const { tests: workerTests } = await buildJudgeTests(tests, {
       meta: t => ({
         hidden: t.isHidden === true,
-        group: t.isHidden === true ? "hidden" : "public",
+        group: libraryTestGroup(t, hasSubtasks),
         weight: t.points || 1
       }),
       hashes: t => ({ inputHash: t.inputSha256, outputHash: t.outputSha256 }),
       loadContent: loadTestContentByIds
     });
+    if (hasSubtasks) {
+      workerTests.sort((a, b) => compareLibraryJudgeGroups(a.group, b.group));
+    }
     const workerReq: WorkerJudgeRequest = {
       submission_id: `library_${principalTag}_${task.id}_${Date.now()}`,
       language: judgeLang,
@@ -1717,6 +1665,10 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
       tests: workerTests,
+      // Library subtasks use partial (SUM) scoring. The judge finishes the current
+      // subtask, then stops before executing later subtasks after the first failure.
+      group_scoring_mode: hasSubtasks ? "SUM" : undefined,
+      stop_on_group_failure: hasSubtasks ? true : undefined,
       limits: effectiveLimits,
       checker: effectiveChecker,
       debug: false,
@@ -1734,8 +1686,8 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const publicResultsLimit = Math.max(0, Math.min(200, parseInt(String(process.env.LIBRARY_CHECK_PUBLIC_RESULTS_LIMIT ?? "25"), 10) || 25));
     // Compact results contain only statuses (no large input/output) and can safely include many tests.
     const publicCompactLimit = Math.max(0, Math.min(20000, parseInt(String(process.env.LIBRARY_CHECK_PUBLIC_COMPACT_LIMIT ?? "5000"), 10) || 5000));
-    const publicResults: Array<{ testId: number; input: string; actualOutput: string; passed: boolean; verdict?: string | null; error?: string | null; errorKind?: string | null }> = [];
-    const publicResultsCompact: Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null }> = [];
+    const publicResults: Array<{ testId: number; input: string; actualOutput: string; passed: boolean; skipped?: boolean; verdict?: string | null; error?: string | null; errorKind?: string | null }> = [];
+    const publicResultsCompact: Array<{ testId: number; passed: boolean; skipped?: boolean; verdict?: string | null; errorKind?: string | null }> = [];
 
     try {
       workerRes = await judgeWithSemaphore(workerReq);
@@ -1770,6 +1722,10 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         for (const t of tests) {
           const r = byId.get(String(t.id));
           const passed = r?.verdict === "AC";
+          const groupResult = hasSubtasks
+            ? workerRes.group_scores?.find(g => String(g.group) === libraryTestGroup(t, true))
+            : null;
+          const skipped = !r && groupResult?.status === "SKIPPED";
           if (passed) {
             totalPassed++;
             totalScore += t.points || 1;
@@ -1780,7 +1736,8 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
             publicResultsCompact.push({
               testId: t.id,
               passed,
-              verdict: r?.verdict ?? null,
+              ...(skipped ? { skipped: true } : {}),
+              verdict: skipped ? "SKIPPED" : r?.verdict ?? null,
               errorKind: (r as any)?.error_kind ?? null
             });
           }
@@ -1792,8 +1749,9 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
               input: "",
               actualOutput: "",
               passed,
-              verdict: r?.verdict ?? null,
-              error: passed ? null : (r?.stderr ? truncateText(r.stderr, 20_000) : null),
+              ...(skipped ? { skipped: true } : {}),
+              verdict: skipped ? "SKIPPED" : r?.verdict ?? null,
+              error: passed || skipped ? null : (r?.stderr ? truncateText(r.stderr, 20_000) : null),
               errorKind: (r as any)?.error_kind ?? null
             });
           }
@@ -1805,9 +1763,9 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const scoringScore = typeof workerRes?.score === "number" ? workerRes.score : totalScore;
     const scoringMaxScore = typeof workerRes?.max_score === "number" ? workerRes.max_score : maxScore;
     const normalizedScore = normalizeScoreTo100(scoringScore, scoringMaxScore);
+    const groupScores = hasSubtasks ? normalizeLibraryGroupScores(workerRes?.group_scores) : null;
 
     // Upsert attempt (draft + last check summary).
-    let sourceAttemptId: number | null = null;
     if (req.userId) {
       try {
         let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
@@ -1837,8 +1795,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         attempt.lastTestsTotal = tests.length;
         attempt.submissionsCount = (attempt.submissionsCount ?? 0) + 1;
         attempt.lastCheckedAt = new Date();
-        const savedAttempt = await attemptRepo().save(attempt);
-        sourceAttemptId = savedAttempt.id;
+        await attemptRepo().save(attempt);
       } catch {}
     }
 
@@ -1849,16 +1806,6 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
       publicResults,
     });
     const solved = String(workerRes?.verdict ?? "").toUpperCase() === "AC";
-    const learningOutcome = await persistLibraryLearningOutcome({
-      req,
-      task,
-      outcome: solved ? "SOLVED" : "FAILED",
-      submissionId: workerReq.submission_id,
-      sourceAttemptId,
-      failureCategory: firstFailure?.errorKind ?? (compileError ? (compileErrorKind || "compile") : null),
-      firstFailedTestId: firstFailure?.testId ?? null,
-    });
-
     return res.json({
       verdict: workerRes?.verdict ?? null,
       testsPassed: totalPassed,
@@ -1878,20 +1825,11 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         total: tests.filter(isJudge).length
       },
       publicTestResults: publicResults,
+      groupScores,
       learningFeedback: {
         verdict: workerRes?.verdict ?? null,
         firstFailure,
       },
-      learningAttempt: learningOutcome
-        ? {
-            id: learningOutcome.attempt.id,
-            outcome: learningOutcome.attempt.outcome,
-            failureCategory: learningOutcome.attempt.failureCategory ?? null,
-            firstFailedTestId: learningOutcome.attempt.firstFailedTestId ?? null,
-            highestHintLevelShown: learningOutcome.attempt.highestHintLevelShown ?? 0,
-            solvedAfterFailure: learningOutcome.solvedAfterFailure,
-          }
-        : null,
     });
   } catch (error: any) {
     logger.error("[library] POST /tasks/:id/check error", { requestId: req.requestId, err: error });
@@ -2570,7 +2508,7 @@ async function importSingleLibraryArchive(params: {
           }
           return v;
         },
-        z.array(z.enum(["java", "python", "cpp", "c", "csharp", "kotlin"]))
+        z.array(z.enum(JUDGE_LANGS))
           .min(1)
           .max(JUDGE_LANGS.length)
       )

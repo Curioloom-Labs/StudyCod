@@ -21,6 +21,7 @@ type Props = {
   learningAttemptId?: number | null;
   failureCategory?: string | null;
   highestHintLevelShown?: number;
+  trackLearning?: boolean;
   nextTask?: { id: number; title: string } | null;
   onTryAgain?: () => void;
   onNextTask?: () => void;
@@ -97,7 +98,7 @@ function hintStageLabel(level: number, isEnglish: boolean): string {
   return labels[Math.max(0, Math.min(labels.length - 1, level))];
 }
 
-export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, score, maxScore, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, onTryAgain }) => {
+export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, score, maxScore, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, trackLearning = true, onTryAgain }) => {
   const { i18n } = useTranslation();
   const isEnglish = i18n.language?.toLowerCase().startsWith("en");
   const upperVerdict = String(verdict ?? "").toUpperCase();
@@ -117,7 +118,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
   }, [learningAttemptId, highestHintLevelShown, persistedCategory]);
 
   useEffect(() => {
-    if (upperVerdict === "AC" || !taskId) return;
+    if (!trackLearning || upperVerdict === "AC" || !taskId) return;
     const key = `${taskKind}:${taskId}:${learningAttemptId ?? "none"}:${hintLevel + 1}`;
     if (reportedHintKey.current === key) return;
     reportedHintKey.current = key;
@@ -129,7 +130,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
       failureCategory: persistedCategory,
       hintLevel: hintLevel + 1,
     }).catch(() => undefined);
-  }, [upperVerdict, taskId, taskKind, learningAttemptId, persistedCategory, hintLevel]);
+  }, [trackLearning, upperVerdict, taskId, taskKind, learningAttemptId, persistedCategory, hintLevel]);
 
   useEffect(() => {
     if (upperVerdict === "AC") return;
@@ -143,8 +144,10 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
   if (upperVerdict === "AC") return null;
 
   const workflowSteps = isEnglish
-    ? ["Failed", "Diagnosed", "Hint", "Retry", "Skill"]
-    : ["Збій", "Діагноз", "Підказка", "Повтор", "Навичка"];
+    ? ["Failed", "Diagnosed", "Hint", "Retry", trackLearning ? "Skill" : "Done"]
+    : ["Збій", "Діагноз", "Підказка", "Повтор", trackLearning ? "Навичка" : "Готово"];
+
+  const displayedWorkflowSteps = workflowSteps.map((step, index) => !trackLearning && index === workflowSteps.length - 1 ? (isEnglish ? "Done" : "Готово") : step);
 
   return (
     <div className="failure-recovery-card mt-4 rounded-2xl">
@@ -161,8 +164,8 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         <span className="rounded-full bg-[#ff6b9d]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff9aba]">{upperVerdict || "—"}</span>
       </div>
 
-      <div className="failure-recovery-steps" aria-label={languageCopy(isEnglish, "Шлях від помилки до навички", "Path from failure to skill")}>
-        {workflowSteps.map((step, index) => {
+      <div className="failure-recovery-steps" aria-label={languageCopy(isEnglish, trackLearning ? "Шлях від помилки до навички" : "Шлях до завершення задачі", trackLearning ? "Path from failure to skill" : "Path to task completion")}>
+        {displayedWorkflowSteps.map((step, index) => {
           const completed = index < 2;
           const current = index === 2;
           return (
@@ -171,7 +174,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
                 <span className="failure-recovery-step-dot">{completed ? "✓" : index + 1}</span>
                 <span>{step}</span>
               </div>
-              {index < workflowSteps.length - 1 && <span className={`failure-recovery-step-line ${completed ? "is-complete" : ""}`} aria-hidden="true" />}
+              {index < displayedWorkflowSteps.length - 1 && <span className={`failure-recovery-step-line ${completed ? "is-complete" : ""}`} aria-hidden="true" />}
             </React.Fragment>
           );
         })}
@@ -216,7 +219,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         <button type="button" onClick={() => {
           const nextLevel = Math.min(hints.length - 1, hintLevel + 1);
           setHintLevel(nextLevel);
-          if (taskId && nextLevel > hintLevel) {
+          if (trackLearning && taskId && nextLevel > hintLevel) {
             void recordLearningEvent({
               eventType: "hint_viewed",
               taskId,
@@ -230,7 +233,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
           {languageCopy(isEnglish, "Показати ще одну підказку", "Show another hint")} <ArrowRight className="size-3.5" />
         </button>
         <button type="button" onClick={() => {
-          if (taskId) {
+          if (trackLearning && taskId) {
             void recordLearningEvent({ eventType: "retry_started", taskId, taskKind, learningAttemptId, failureCategory: persistedCategory }).catch(() => undefined);
           }
           onTryAgain?.();

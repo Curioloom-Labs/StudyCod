@@ -359,8 +359,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   }, [solvedLibraryTasks, validGrades]);
 
   const skillEvidence = useMemo<SkillEvidence>(() => {
-    const hasLegacyAttempts = libraryTasks.some((task) => (task.attempt?.submissionsCount ?? 0) > 0 || Boolean(task.attempt?.solved));
-    if (learningEvidence && (!hasLegacyAttempts || learningEvidence.practicedTasks > 0)) {
+    if (isEducational && learningEvidence) {
       return {
         practicedTasks: learningEvidence.practicedTasks,
         solvedTasks: learningEvidence.solvedTasks,
@@ -371,28 +370,16 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
         recentSkills: learningEvidence.recentSkills,
       };
     }
-    const practiced = libraryTasks.filter((task) => (task.attempt?.submissionsCount ?? 0) > 0 || Boolean(task.attempt?.solved));
-    const topicMap = new Map<string, { practiced: number; solved: number }>();
-    practiced.forEach((task) => {
-      const topics = Array.from(new Set([task.section, ...(task.tags ?? [])].map((value) => String(value ?? "").trim()).filter(Boolean)));
-      topics.forEach((topic) => {
-        const current = topicMap.get(topic) ?? { practiced: 0, solved: 0 };
-        current.practiced += 1;
-        if (task.attempt?.solved) current.solved += 1;
-        topicMap.set(topic, current);
-      });
-    });
     return {
-      practicedTasks: practiced.length,
-      solvedTasks: solvedLibraryTasks.length,
+      practicedTasks: 0,
+      solvedTasks: 0,
       solvedAfterFailure: 0,
-      revisitedSolved: solvedLibraryTasks.filter((task) => (task.attempt?.submissionsCount ?? 0) > 1).length,
-      topics: Array.from(topicMap.entries())
-        .map(([name, values]) => ({ name, ...values }))
-        .sort((a, b) => b.solved - a.solved || b.practiced - a.practiced || a.name.localeCompare(b.name))
-        .slice(0, 8),
+      revisitedSolved: 0,
+      topics: [],
+      overcomeCategories: [],
+      recentSkills: [],
     };
-  }, [learningEvidence, libraryTasks, solvedLibraryTasks]);
+  }, [isEducational, learningEvidence]);
 
   const weeklyActiveDays = useMemo(() => {
     const startOfWindow = Date.now() - 6 * 24 * 60 * 60 * 1000;
@@ -497,16 +484,13 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
           : profileStats}
         currentIad={currentIad}
         weeklyActiveDays={isDesignPreview && weeklyActiveDays === 0 ? 4 : weeklyActiveDays}
-        skillEvidence={skillEvidence}
+        skillEvidence={undefined}
         saving={saving}
         message={msg}
         onAvatar={onSelectFile}
         onCourse={switchCourse}
         onSave={handleSave}
       />
-      <div className="mx-auto w-full max-w-6xl px-4 pb-8 sm:px-6 lg:px-10">
-        <SkillEvidenceDetails evidence={skillEvidence} label={tr} />
-      </div>
     </>;
   }
 

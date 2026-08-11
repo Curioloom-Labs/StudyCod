@@ -41,7 +41,7 @@ import { PremiumLibrary } from "../core/PremiumPersonalExperience";
 type TaskDetails = {
   task: LibraryTaskListItem;
   theory: string | null;
-  tests: Array<{ id: number; input: string; expectedOutput: string; isHidden: boolean; points: number }>;
+  tests: Array<{ id: number; input: string; expectedOutput: string; isHidden: boolean; points: number; subtask?: number | string | null }>;
 };
 
 type EditorState = {
@@ -176,7 +176,7 @@ const parseCheckerType = (value: string): EditorState["checkerType"] | null => {
   return null;
 };
 
-function safeParseTestsJson(text: string): Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }> {
+function safeParseTestsJson(text: string): Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number }> {
   const raw = String(text ?? "").trim();
   if (!raw) return [];
   const parsed = JSON.parse(raw);
@@ -187,12 +187,15 @@ function safeParseTestsJson(text: string): Array<{ input: string; expectedOutput
       expectedOutput?: unknown;
       isHidden?: unknown;
       points?: unknown;
+      subtask?: unknown;
     };
+    const parsedSubtask = Number(item.subtask);
     return {
       input: String(item.input ?? ""),
       expectedOutput: String(item.expectedOutput ?? ""),
       isHidden: item.isHidden ? true : false,
       points: item.points != null ? Number(item.points) : undefined,
+      subtask: Number.isInteger(parsedSubtask) && parsedSubtask >= 1 ? parsedSubtask : undefined,
     };
   });
 }
@@ -764,6 +767,7 @@ export const TaskLibraryPage: React.FC = () => {
                 expectedOutput: t.expectedOutput,
                 isHidden: t.isHidden,
                 points: t.points,
+                subtask: t.subtask ?? undefined,
               })),
               null,
               2
@@ -792,7 +796,7 @@ export const TaskLibraryPage: React.FC = () => {
       return;
     }
 
-    let tests: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }> | undefined = undefined;
+    let tests: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number }> | undefined = undefined;
     try {
       const parsed = safeParseTestsJson(editor.testsJson);
       if (parsed.length > 0) tests = parsed;

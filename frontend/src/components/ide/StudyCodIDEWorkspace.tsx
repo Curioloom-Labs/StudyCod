@@ -75,7 +75,7 @@ export type StudyCodIdeCheckResult = {
   testsTotal: number;
   score?: number;
   maxScore?: number;
-  groupScores?: Array<{ group: string; score: number; maxScore: number }> | null;
+  groupScores?: Array<{ group: string; score: number; maxScore: number; status?: "PASSED" | "PARTIAL" | "FAILED" | "SKIPPED" }> | null;
   compileError?: string | null;
   publicTestResults?: Array<{
     testId: number;
@@ -83,6 +83,7 @@ export type StudyCodIdeCheckResult = {
     expectedOutput?: string;
     actualOutput?: string;
     passed: boolean;
+    skipped?: boolean;
     verdict?: string | null;
     error?: string | null;
     stderr?: string | null;
@@ -723,7 +724,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             <div className="flex flex-wrap gap-2">
               {props.checkResult.groupScores.slice(0, 24).map((group) => (
                 <span key={group.group} className="rounded-lg bg-white/[.06] px-2.5 py-1.5 text-[11px] text-[#c8d6cc]">
-                  {group.group}: {group.score}/{group.maxScore}
+                  {group.group}: {group.score}/{group.maxScore}{group.status === "SKIPPED" ? " (пропущено)" : ""}
                 </span>
               ))}
             </div>
@@ -743,7 +744,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                 onClick={() =>
                   setNotice(`${tr("Тест", "Test")} #${test.testId}`)
                 }
-                className={`rounded-lg border p-2 text-center transition hover:brightness-125 ${test.passed ? "border-[#00d978]/30 bg-[#00d978]/10 text-[#72edb0]" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
+                className={`rounded-lg border p-2 text-center transition hover:brightness-125 ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-[#00d978]/30 bg-[#00d978]/10 text-[#72edb0]" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
               >
                 <span className="block font-bold">
                   {test.passed ? "✓" : "×"} {index + 1}

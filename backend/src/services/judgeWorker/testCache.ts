@@ -183,10 +183,25 @@ export async function materializeTests(
  */
 export async function sweepTestCache(ttlMs?: number): Promise<{ removed: number; scanned: number }> {
   const dir = resolveTestCacheDir();
-  const ttl = ttlMs ?? Math.max(60 * 60 * 1000, parseInt(String(process.env.JUDGE_TEST_CACHE_TTL_MS ?? ""), 10) || 14 * 24 * 60 * 60 * 1000);
+  const ttl = ttlMs === undefined
+    ? Math.max(60 * 60 * 1000, parseInt(String(process.env.JUDGE_TEST_CACHE_TTL_MS ?? ""), 10) || 14 * 24 * 60 * 60 * 1000)
+    : Math.max(0, ttlMs);
   const cutoff = Date.now() - ttl;
   let removed = 0;
   let scanned = 0;
+  let referencedHashes: Set<string> | null = null;
+  try {
+    const rows = (await AppDataSource.query(
+      `SELECT input_sha256 AS inputHash, output_sha256 AS outputHash
+         FROM test_data
+        WHERE input_sha256 IS NOT NULL OR output_sha256 IS NOT NULL`
+    )) as Array<{ inputHash?: string | null; outputHash?: string | null }>;
+    referencedHashes = new Set(
+      rows.flatMap(row => [row.inputHash, row.outputHash].filter((hash): hash is string => Boolean(hash)))
+    );
+  } catch {
+    // A cache sweep must remain best-effort if the database is unavailable.
+  }
   async function walk(d: string): Promise<void> {
     let entries: fsSync.Dirent[];
     try {
@@ -203,7 +218,8 @@ export async function sweepTestCache(ttlMs?: number): Promise<{ removed: number;
         try {
           const st = await fs.stat(full);
           const last = Math.max(st.atimeMs, st.mtimeMs);
-          if (last < cutoff) {
+          const isOrphan = referencedHashes !== null && !referencedHashes.has(e.name);
+          if (isOrphan || last < cutoff) {
             await fs.rm(full, { force: true });
             removed++;
           }
