@@ -7,6 +7,11 @@ import { Task, TaskType } from "../entities/Task";
 import type { TaskIoType, TaskLang } from "../entities/Task";
 import { Topic } from "../entities/Topic";
 import { getPersonalMiniProjectDefinition, PERSONAL_MINI_PROJECT_INTERVAL } from "../data/personalMiniProjects";
+import {
+  getPersonalThematicStartTopicIndex,
+  getSequentialCompletedThematicTopicCount,
+  PERSONAL_REGULAR_TOPIC_TASK_COUNT,
+} from "../utils/personalCurriculumProgress";
 import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
 import { TestData } from "../entities/TestData";
@@ -530,22 +535,6 @@ function buildPrevTopicsTextFromRange(params: { topics: Topic[]; startTopicIndex
     })
     .filter(Boolean);
   return titles.join("\n");
-}
-
-function getSequentialCompletedTopicCount(params: {
-  topics: Topic[];
-  countByTopicIndex: Map<number, number>;
-  baseStartTopicIndex: number;
-}): number {
-  let completed = 0;
-  for (const t of params.topics) {
-    if (t.topicIndex < params.baseStartTopicIndex) continue;
-    const required = t.topicIndex === 0 ? 1 : 3;
-    const count = params.countByTopicIndex.get(t.topicIndex) ?? 0;
-    if (count >= required) completed++;
-    else break;
-  }
-  return completed;
 }
 
 async function refreshPersonalMiniProjectIfNeeded(params: {
@@ -2976,8 +2965,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }
 
     // Personal control work insertion: after each 5 fully completed topics (since placement), generate/continue a control work.
-    const baseStartTopicIndex = masteredUntilTopicIndex + 1;
-    const sequentialCompletedTopics = getSequentialCompletedTopicCount({
+    // Topic 0 is the one-task introduction, not a thematic topic. Milestones
+    // and control-work ranges must therefore start at topic 1 (or after the
+    // placement boundary, whichever comes later).
+    const baseStartTopicIndex = getPersonalThematicStartTopicIndex(masteredUntilTopicIndex);
+    const sequentialCompletedTopics = getSequentialCompletedThematicTopicCount({
       topics,
       countByTopicIndex: passedCountByTopicIndex,
       baseStartTopicIndex
@@ -3227,7 +3219,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       ? await translateTheoryUkToEn({ req, topicId: topic.id, text: topicTheory })
       : topicTheory;
 
-    const requiredTasksInThisTopic = topic.topicIndex === 0 ? 1 : 3;
+    const requiredTasksInThisTopic = topic.topicIndex === 0 ? 1 : PERSONAL_REGULAR_TOPIC_TASK_COUNT;
     const stdinAllowed = isStdinAllowedForTopic({
       allTopics: topics,
       lang,
