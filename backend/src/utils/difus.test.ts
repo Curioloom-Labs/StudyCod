@@ -31,3 +31,11 @@ test("IAD v2 treats a merely good grade as weaker evidence than mastery", () => 
   assert.ok(good < excellent);
 });
 
+test("IAD v2 scales negative evidence with topic difficulty too", () => {
+  const earlyFailure = getIadDeltaByGrade(30, { topicIndex: 0 });
+  const laterFailure = getIadDeltaByGrade(30, { topicIndex: 10 });
+
+  assert.ok(earlyFailure < 0);
+  assert.ok(Math.abs(earlyFailure) < Math.abs(laterFailure));
+  assert.ok(Math.abs(laterFailure) <= 0.035);
+});

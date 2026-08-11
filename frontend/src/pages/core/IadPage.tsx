@@ -95,11 +95,16 @@ export const IadPage: React.FC = () => {
     if (!details) return null;
     const grade = Math.max(0, Math.min(100, Math.round(nextGrade)));
     const rule = details.rules.find((item) => grade >= item.minGrade && grade <= item.maxGrade);
-    const delta = Number(rule?.delta ?? 0);
+    const rawDelta = Number(rule?.delta ?? 0);
     const min = Number(details.limits.min ?? 0);
     const max = Number(details.limits.max ?? 1);
-    const predicted = Math.max(min, Math.min(max, metrics.current + delta));
-    return { grade, delta, predicted };
+    const topicCeiling = Number(details.currentTopicCeiling);
+    const upperBound = Number.isFinite(topicCeiling) ? Math.min(max, Math.max(min, topicCeiling)) : max;
+    const predicted = Math.max(min, Math.min(upperBound, metrics.current + rawDelta));
+    // Show the effective change after the curriculum ceiling, not the raw
+    // rule delta. This keeps the two cards mathematically consistent.
+    const delta = predicted - metrics.current;
+    return { grade, delta, rawDelta, predicted };
   }, [details, metrics.current, nextGrade]);
 
   return (
@@ -147,8 +152,8 @@ export const IadPage: React.FC = () => {
                 <input type="range" min={0} max={100} value={nextGrade} onChange={(event) => setNextGrade(Number(event.target.value))} className="mt-6 w-full accent-[#00c96d]" />
                 <div className="mt-5 grid grid-cols-3 gap-3">
                   <Small label={tr("оцінка", "grade")} value={simulation?.grade ?? nextGrade} />
-                  <Small label="delta" value={simulation ? signed(simulation.delta) : "—"} />
-                  <Small label={tr("буде IAD", "new IAD")} value={simulation ? simulation.predicted.toFixed(3) : "—"} />
+                  <Small label={tr("зміна", "delta")} value={simulation ? signed(simulation.delta) : "—"} />
+                  <Small label={tr("новий IAD", "new IAD")} value={simulation ? simulation.predicted.toFixed(3) : "—"} />
                 </div>
               </article>
 
@@ -177,7 +182,6 @@ export const IadPage: React.FC = () => {
 
             <section className="mt-6 rounded-[28px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15]">
               <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#147b47] dark:text-[#71edaf]">{tr("Правила", "Rules")}</div>
-              {details.reform ? <p className="mt-2 max-w-3xl text-sm leading-6 text-[#718075] dark:text-[#a3b1a6]">{tr("Реформа v2: ранні теми дають лише малий сигнал. Високий IAD відкривається поступово й обмежений найскладнішою темою, яку ти реально пройшов.", "Reform v2: early topics provide only a small signal. High IAD unlocks gradually and is capped by the most advanced topic you have actually completed.")}</p> : null}
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {details.rules.map((rule) => <div key={`${rule.minGrade}-${rule.maxGrade}`} className="rounded-2xl bg-[#f5f8f5] p-4 text-sm dark:bg-white/[.04]">
                   <div className="font-semibold">{rule.minGrade}-{rule.maxGrade}</div>
@@ -200,9 +204,9 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; tone: "green" | 
 );
 
 const Small: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div className="rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]">
-    <div className="text-xs text-[#718075] dark:text-[#a3b1a6]">{label}</div>
-    <div className="mt-1 text-xl font-semibold">{value}</div>
+  <div className="min-w-0 overflow-hidden rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]">
+    <div className="truncate text-xs text-[#718075] dark:text-[#a3b1a6]">{label}</div>
+    <div className="mt-1 min-w-0 whitespace-nowrap text-[clamp(.9rem,5vw,1.25rem)] font-semibold leading-tight tracking-[-.03em]">{value}</div>
   </div>
 );
 

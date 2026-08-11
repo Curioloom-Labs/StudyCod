@@ -53,8 +53,13 @@ export function getIadCeilingForTopic(topicIndexRaw: number | null | undefined):
 
 export function getIadDeltaByGrade(gradeRaw: number, evidence: IadEvidence = {}): number {
   const grade = Number.isFinite(Number(gradeRaw)) ? Math.floor(Number(gradeRaw)) : 0;
-  if (grade <= 30) return -0.035;
-  if (grade <= 55) return -0.018;
+  const topicWeight = getIadTopicWeight(evidence.topicIndex);
+  // A failed easy exercise is still a signal, but it should not erase more
+  // progress than a failure on an advanced task. The penalty grows with the
+  // same topic evidence weight used for positive progress.
+  const penaltyWeight = 0.65 + topicWeight * 0.35;
+  if (grade <= 30) return -0.035 * penaltyWeight;
+  if (grade <= 55) return -0.018 * penaltyWeight;
 
   // 56..79 is a useful learning signal, but not proof of mastery. Strong
   // growth starts at 80 and becomes meaningful only on later topics.
