@@ -76,7 +76,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     id: -1,
     username: ukrainian ? "Демо" : "Demo",
     firstName: ukrainian ? "Демо" : "Demo",
-    course: "PYTHON",
+    activeRuntime: "PYTHON",
     difus: 0,
     avatarUrl: null,
     userMode: "PERSONAL",

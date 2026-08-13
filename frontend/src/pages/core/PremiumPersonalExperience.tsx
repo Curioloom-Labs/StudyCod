@@ -25,7 +25,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Grade, Task, User } from "../../types";
+import type { CourseLanguage, Grade, Task, User } from "../../types";
 import type { LibraryTaskListItem } from "../../lib/api/library";
 import {
   countUnlockedPersonalBadges,
@@ -295,14 +295,14 @@ const Empty: React.FC<{ c: typeof text.uk }> = ({ c }) => <div className="rounde
 export const PremiumProfile: React.FC<{
   user: User;
   avatarUrl: string;
-  course: User["course"];
+  course: CourseLanguage;
   stats: { librarySolved: number; badgesUnlocked: number; totalGrades: number; avgGrade: number | null; excellent: number };
   currentIad: number;
   weeklyActiveDays: number;
   saving: boolean;
   message: string | null;
   onAvatar: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onCourse: (course: User["course"]) => void;
+  onCourse: (course: CourseLanguage) => void;
   onSave: () => void;
 }> = ({ user, avatarUrl, course, stats, currentIad, saving, message, onAvatar, onCourse, onSave }) => {
   const c = useCopy();
@@ -326,7 +326,7 @@ export const SkillEvidenceDetails: React.FC<{ evidence: SkillEvidence; label: (u
 export const PremiumProfileV2: React.FC<{
   user: User;
   avatarUrl: string;
-  course: User["course"];
+  course: CourseLanguage;
   stats: { librarySolved: number; badgesUnlocked: number; totalGrades: number; avgGrade: number | null; excellent: number };
   currentIad: number;
   weeklyActiveDays: number;
@@ -334,7 +334,7 @@ export const PremiumProfileV2: React.FC<{
   saving: boolean;
   message: string | null;
   onAvatar: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onCourse: (course: User["course"]) => void;
+  onCourse: (course: CourseLanguage) => void;
   onSave: () => void;
 }> = ({ user, avatarUrl, course, stats, currentIad, weeklyActiveDays, skillEvidence, saving, message, onAvatar, onCourse, onSave }) => {
   const { i18n } = useTranslation();
