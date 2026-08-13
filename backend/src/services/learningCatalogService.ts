@@ -270,6 +270,54 @@ export async function getCourseForUser(userId: number, courseId: number) {
   };
 }
 
+/**
+ * Resolve the exact course item used by the Practice generator.
+ * Keeping this check in the catalog service makes the API enforce the same
+ * prerequisite/theory gates as the roadmap UI.
+ */
+export async function getCoursePracticeContext(userId: number, itemId: number) {
+  const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
+  if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
+  if (item.kind !== "CODE_TASK") {
+    throw Object.assign(new Error("COURSE_ITEM_NOT_GENERATABLE"), { statusCode: 409 });
+  }
+
+  const enrollment = await enrollmentRepo().findOne({
+    where: { user: { id: userId }, course: { id: item.module.course.id } },
+    relations: ["variant"],
+  });
+  if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
+
+  const dependencyState = await getPrerequisiteState(userId, enrollment.courseId);
+  if (!dependencyState.satisfied && !item.module.course.isBase) {
+    throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), { statusCode: 423, prerequisites: dependencyState.prerequisites });
+  }
+
+  const content = (item.content || {}) as any;
+  const theoryItemId = Number(content.theoryItemId ?? 0);
+  let theoryItem: CourseItem | null = null;
+  if (theoryItemId > 0 && content.generatedAfterTheory === true) {
+    theoryItem = await itemRepo().findOne({ where: { id: theoryItemId } });
+    const theoryProgress = await progressRepo().findOne({
+      where: { enrollment: { id: enrollment.id }, item: { id: theoryItemId }, status: "COMPLETED" },
+    });
+    if (!theoryProgress) {
+      throw Object.assign(new Error("THEORY_REQUIRED_BEFORE_PRACTICE"), { statusCode: 409, theoryItemId });
+    }
+  }
+
+  const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: item.id } } });
+  return {
+    item,
+    course: item.module.course,
+    enrollment,
+    progress,
+    theoryMarkdown: typeof (theoryItem?.content as any)?.markdown === "string"
+      ? String((theoryItem?.content as any).markdown)
+      : "",
+  };
+}
+
 export async function completeCourseItem(userId: number, itemId: number, score?: number): Promise<UserCourseEnrollment> {
   const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
   if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });

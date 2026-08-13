@@ -173,12 +173,15 @@ export async function getTask(id: number, uiLang?: UiLanguage): Promise<Task> {
   });
   return res.data as Task;
 }
-export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean }): Promise<unknown> {
+export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean; courseItemId?: number }): Promise<unknown> {
   requireToken();
   try {
     const res = await api.post("/tasks/generate", {
       ...(language ? { language } : {}),
-      ...(options?.forceControl ? { forceControl: true } : {})
+      ...(options?.forceControl ? { forceControl: true } : {}),
+      ...(Number.isInteger(options?.courseItemId) && Number(options?.courseItemId) > 0
+        ? { courseItemId: Number(options?.courseItemId) }
+        : {})
     });
     return res.data;
   } catch (error: unknown) {

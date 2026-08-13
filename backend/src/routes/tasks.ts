@@ -6,6 +6,7 @@ import { AppDataSource } from "../data-source";
 import { Task, TaskType } from "../entities/Task";
 import type { TaskIoType, TaskLang } from "../entities/Task";
 import { Topic } from "../entities/Topic";
+import { getCoursePracticeContext, completeCourseItem } from "../services/learningCatalogService";
 import { getPersonalMiniProjectDefinition, PERSONAL_MINI_PROJECT_INTERVAL } from "../data/personalMiniProjects";
 import {
   getPersonalThematicStartTopicIndex,
@@ -1365,6 +1366,30 @@ function sanitizeMetaOutputFormatInStatement(
   return s.replace(re, replacement);
 }
 
+function catalogItemIdFromTask(task: Task): number | null {
+  const match = /^CATALOG_ITEM:(\d+)\|/.exec(String(task.subtitle ?? ""));
+  if (!match) return null;
+  const itemId = Number(match[1]);
+  return Number.isInteger(itemId) && itemId > 0 ? itemId : null;
+}
+
+async function syncCatalogPracticeProgress(params: { userId: number; task: Task; score: number; requestId?: string }) {
+  if (params.score < PERSONAL_TOPIC_PASS_GRADE) return;
+  const itemId = catalogItemIdFromTask(params.task);
+  if (!itemId) return;
+  try {
+    await completeCourseItem(params.userId, itemId, params.score);
+  } catch (error: any) {
+    logger.warn("[learning] catalog practice progress sync failed", {
+      requestId: params.requestId,
+      userId: params.userId,
+      taskId: params.task.id,
+      itemId,
+      error: error?.message,
+    });
+  }
+}
+
 /**
  * Older generated tasks sometimes stored each expected output line as an
  * inline Markdown code span (`7`, `25.5`, `true`). That renders as separate
@@ -1758,6 +1783,15 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     ioType
   });
   const saved = await taskRepo().save(task);
+
+  // Catalog practice already has authored theory. Keep it in the task payload
+  // so the Practice page remains self-contained even though catalog items do
+  // not have a legacy Topic relation.
+  if (String(params.subtitle ?? "").startsWith("CATALOG_ITEM:") && params.theoryForAi.trim()) {
+    saved.descriptionMarkdown = `${params.theoryForAi.trim()}\n\n${saved.descriptionMarkdown}`;
+    saved.description = saved.descriptionMarkdown;
+    await taskRepo().save(saved);
+  }
 
   const needsInput = ioType === "STDIN_STDOUT";
   const REQUIRED_TEST_COUNT = needsInput ? 12 : 1;
@@ -2952,6 +2986,84 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       order: { topicIndex: "ASC" },
       select: ["id", "title", "topicIndex", "lang"] as any
     });
+
+    // Roadmap practice is explicitly scoped to a catalog item. This branch
+    // must run before legacy Topic sequencing: specialized courses (Flask,
+    // FastAPI, CV, ...) are not represented by the legacy Topic table.
+    const requestedCourseItemId = Number((req.body as any)?.courseItemId ?? 0);
+    if (Number.isInteger(requestedCourseItemId) && requestedCourseItemId > 0) {
+      const context = await getCoursePracticeContext(userId, requestedCourseItemId);
+      const courseRuntime = String(context.enrollment.variant?.runtime ?? "").toUpperCase();
+      if (courseRuntime && courseRuntime !== lang) {
+        return res.status(409).json({
+          status: "blocked",
+          message: "COURSE_RUNTIME_MISMATCH",
+          expectedRuntime: courseRuntime,
+          activeRuntime: lang,
+        });
+      }
+      if (context.progress?.status === "COMPLETED") {
+        return res.status(409).json({
+          status: "blocked",
+          message: "COURSE_ITEM_COMPLETED",
+          courseItemId: requestedCourseItemId,
+        });
+      }
+
+      const content = (context.item.content || {}) as any;
+      const exercise = content.exercise && typeof content.exercise === "object" ? content.exercise : {};
+      const topicIndex = Math.max(0, Number(context.item.order) || 0);
+      const existingCourseTasks = await taskRepo()
+        .createQueryBuilder("task")
+        .where("task.user_id = :userId", { userId })
+        .andWhere("task.lang = :lang", { lang })
+        .andWhere("task.subtitle LIKE :prefix", { prefix: `CATALOG_ITEM:${requestedCourseItemId}|%` })
+        .orderBy("task.createdAt", "ASC")
+        .select(["task.id", "task.title", "task.description", "task.numInTopic"])
+        .getMany();
+      const difus = await getStableDifus(userId, lang, topicIndex, userRepo, gradeRepo);
+      const theoryForAi = [
+        context.theoryMarkdown,
+        typeof exercise.prompt === "string" ? `Practice brief:\n${exercise.prompt}` : "",
+      ].filter(Boolean).join("\n\n").trim();
+
+      const saved = await generateAndPersistPersonalProgrammingTask({
+        requestStartedAt,
+        requestBudgetMs: REQUEST_BUDGET_MS,
+        requestId: req.requestId,
+        userLanguage,
+        userId,
+        lang,
+        difus,
+        type: "TOPIC",
+        topic: null,
+        topicIndex,
+        numInTopic: existingCourseTasks.length + 1,
+        requiredTasksInThisGroup: 1,
+        topicTitleForAi: context.item.title,
+        theoryForAi,
+        subtitle: `CATALOG_ITEM:${requestedCourseItemId}|${context.course.catalogKey || context.course.id}`,
+        existingTasksForContext: existingCourseTasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          numInTopic: task.numInTopic,
+        })),
+        allTopics: topics,
+        stdinPolicyTopicIndex: topicIndex,
+      });
+
+      if (typeof exercise.starterCode === "string" && exercise.starterCode.trim()) {
+        saved.template = exercise.starterCode;
+        await taskRepo().save(saved);
+      }
+      const hydrated = await taskRepo().findOne({ where: { id: saved.id }, relations: ["topic", "topic.theoryBlock"] });
+      return res.json({
+        status: "ok",
+        task: mapTaskToDto(hydrated ?? saved, undefined, { uiLanguage: userLanguage }),
+      });
+    }
+
     if (!topics.length) return res.status(404).json({
       status: "error",
       message: "NO_TOPICS"
@@ -4291,6 +4403,7 @@ tasksRouter.post(
         logger.warn("[tasks] completed personal-task cache cleanup failed", { requestId: req.requestId, taskId: task.id, error });
       });
     }
+    await syncCatalogPracticeProgress({ userId: req.userId, task, score: Number(savedGrade.total ?? 0), requestId: req.requestId });
     const parsedComparisonFeedback = parseGradeComparisonFeedback(savedGrade.comparisonFeedback);
 
     await syncPostLearningProgress({
@@ -4591,6 +4704,8 @@ tasksRouter.post(
       logger.warn("[tasks] completed personal-task cache cleanup failed", { requestId: req.requestId, taskId: task.id, error });
     });
   }
+
+  await syncCatalogPracticeProgress({ userId: req.userId, task, score: Number(savedGrade.total ?? 0), requestId: req.requestId });
 
   await syncPostLearningProgress({
     userId: req.userId,

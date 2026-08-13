@@ -471,6 +471,7 @@ export const TasksPage: React.FC<Props> = ({
     score?: number;
     maxScore?: number;
     hints?: string[];
+    hintsStatus?: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED";
     testResults?: Array<{
       testId: number;
       input?: string;
@@ -502,6 +503,7 @@ export const TasksPage: React.FC<Props> = ({
 
   const latestSubmitRequestSeq = useRef(0);
   const generateRequestRef = useRef(false);
+  const autoCourseGenerationRef = useRef<string | null>(null);
   const latestSubmissionBindingRef = useRef<{
     submissionId?: string;
     codeHash: string;
@@ -549,6 +551,12 @@ export const TasksPage: React.FC<Props> = ({
     const parsed = Number(raw);
     if (!Number.isFinite(parsed) || parsed <= 0) return null;
     return Math.floor(parsed);
+  }, [searchParams]);
+
+  const requestedCourseItemIdFromUrl = useMemo(() => {
+    const raw = searchParams.get("courseItemId");
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
 
   const syncTaskSelectionToUrl = useCallback((taskId: number | null) => {
@@ -1327,7 +1335,7 @@ export const TasksPage: React.FC<Props> = ({
     if (quizReview) return;
     persistQuizDraftAnswers(active.id, quizAnswers);
   }, [active?.id, isPersonalControlQuizTask, personalQuiz, quizAnswers, quizReview, persistQuizDraftAnswers]);
-  const handleGenerate = async (options?: { forceControl?: boolean }) => {
+  const handleGenerate = async (options?: { forceControl?: boolean; courseItemId?: number }) => {
     const wantsControl = Boolean(options?.forceControl);
     if (generateRequestRef.current) {
       setConsoleOutput(tr("Генерація вже триває — дочекайся результату.", "Generation is already running — wait for the result."));
@@ -1364,7 +1372,10 @@ export const TasksPage: React.FC<Props> = ({
     try {
       await settleGenerationPhase();
       setGenerationPhase("generating");
-      const res = await generateTask(uiLanguage, wantsControl ? { forceControl: true } : undefined);
+      const res = await generateTask(uiLanguage, {
+        ...(wantsControl ? { forceControl: true } : {}),
+        ...(options?.courseItemId ? { courseItemId: options.courseItemId } : {})
+      });
       const payload = asRecord(res);
       const status = String(payload?.status ?? "");
       if (status === "ok" && payload?.task && typeof payload.task === "object") {
@@ -1387,7 +1398,17 @@ export const TasksPage: React.FC<Props> = ({
         await settleGenerationPhase();
         // Replace the previous task in the URL in the same turn. Otherwise
         // the URL-selection effect can restore the task that was just finished.
-        if (generatedTaskId > 0) syncTaskSelectionToUrl(generatedTaskId);
+        if (generatedTaskId > 0) {
+          if (options?.courseItemId) {
+            const nextSearch = new URLSearchParams(searchParams);
+            nextSearch.delete("generate");
+            nextSearch.delete("courseItemId");
+            nextSearch.set("task", String(generatedTaskId));
+            setSearchParams(nextSearch, { replace: true });
+          } else {
+            syncTaskSelectionToUrl(generatedTaskId);
+          }
+        }
         setActive(openedTask);
         const nextEditorState = deriveEditorFromTask(openedTask);
         setUseFiles(nextEditorState.useFiles);
@@ -1468,6 +1489,25 @@ export const TasksPage: React.FC<Props> = ({
       generateRequestRef.current = false;
     }
   };
+
+  // A roadmap click arrives here as /tasks?courseItemId=...&generate=1.
+  // Trigger exactly once, then remove the command parameters so refreshing or
+  // pressing "New" does not unexpectedly regenerate the same catalog item.
+  useEffect(() => {
+    if (isPreviewMode || searchParams.get("generate") !== "1" || !requestedCourseItemIdFromUrl) return;
+    const key = `${requestedCourseItemIdFromUrl}:generate`;
+    if (autoCourseGenerationRef.current === key) return;
+    autoCourseGenerationRef.current = key;
+    const nextSearch = new URLSearchParams(searchParams);
+    nextSearch.delete("generate");
+    nextSearch.delete("courseItemId");
+    setSearchParams(nextSearch, { replace: true });
+    void handleGenerate({ courseItemId: requestedCourseItemIdFromUrl });
+    // handleGenerate is intentionally invoked once per roadmap command; the
+    // ref above prevents reruns when its surrounding workspace state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreviewMode, requestedCourseItemIdFromUrl, searchParams, setSearchParams]);
+
   const handleSubmit = async () => {
     if (!active) return;
     if (isPreviewMode && !isPersonalControlQuizTask) {
@@ -2089,7 +2129,7 @@ export const TasksPage: React.FC<Props> = ({
               <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}>
                 <History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})
               </button>
-              <button type="button" onClick={() => void handleGenerate()} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
+              <button type="button" onClick={() => void handleGenerate({ courseItemId: requestedCourseItemIdFromUrl ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
                 <Plus className="size-3.5" />{tr("Нове", "New")}
               </button>
             </>
