@@ -17,6 +17,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   checkCatalogProject,
   completeCatalogItem,
+  enrollInCatalogCourse,
   getCatalogProject,
   getLearningCourse,
   saveCatalogProject,
@@ -55,6 +56,7 @@ export const LearningCoursePage: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [busyItem, setBusyItem] = React.useState<number | null>(null);
+  const [activating, setActivating] = React.useState(false);
   const [assessmentScore, setAssessmentScore] = React.useState("80");
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -93,6 +95,25 @@ export const LearningCoursePage: React.FC = () => {
   const requiredItems = allItems.filter((item) => item.content.required !== false);
   const completedItems = requiredItems.filter((item) => item.progress.status === "COMPLETED").length;
   const canAssess = requiredItems.length > 0 && completedItems === requiredItems.length;
+  const courseIsActive = course?.enrollment.status === "IN_PROGRESS" || course?.enrollment.status === "COMPLETED";
+
+  const activateCourse = async () => {
+    if (!course || activating || courseIsActive) return;
+    setActivating(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await enrollInCatalogCourse(course.id, course.enrollment.variantId);
+      await load();
+      setMessage(tr("Курс активовано. Тепер можна рухатися roadmap і генерувати практику.", "Course activated. You can now follow the roadmap and generate practice."));
+    } catch (caught: any) {
+      setError(caught?.response?.data?.message === "PREREQUISITES_INCOMPLETE"
+        ? tr("Спочатку завершiть необхідні базові курси.", "Complete the required foundation courses first.")
+        : tr("Не вдалося активувати курс.", "Could not activate the course."));
+    } finally {
+      setActivating(false);
+    }
+  };
 
   const roadmapNodes = React.useMemo<RoadmapNode[]>(() => {
     const nodes: RoadmapNode[] = [];
@@ -130,6 +151,10 @@ export const LearningCoursePage: React.FC = () => {
   };
 
   const completeItem = async (item: LearningCourseItem) => {
+    if (!courseIsActive) {
+      setError(tr("Спочатку активуйте курс.", "Activate the course first."));
+      return;
+    }
     if (item.progress.status === "COMPLETED") return;
     if (item.kind === "CODE_TASK") {
       const theoryId = Number(item.content.theoryItemId || 0);
@@ -229,6 +254,10 @@ export const LearningCoursePage: React.FC = () => {
   };
 
   const handleNodeClick = (node: RoadmapNode, index: number) => {
+    if (!courseIsActive) {
+      setMessage(tr("Активуйте курс, щоб відкрити перший вузол.", "Activate the course to open the first node."));
+      return;
+    }
     const previousComplete = roadmapNodes.slice(0, index).every(nodeCompleted);
     if (!previousComplete || nodeCompleted(node)) return;
 
@@ -261,10 +290,15 @@ export const LearningCoursePage: React.FC = () => {
     <button type="button" onClick={() => navigate("/learning/catalog")} className="mb-7 text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button>
 
     <header className="mb-8 rounded-[28px] border border-border bg-bg-surface p-6 shadow-sm sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-6">
         <div><p className="text-xs font-bold uppercase tracking-[.16em] text-primary">{course.runtime} · {course.level}</p><h1 className="mt-3 text-4xl font-bold tracking-tight text-text-primary">{course.title}</h1><p className="mt-3 max-w-3xl leading-7 text-text-secondary">{course.description}</p></div>
-        <div className="rounded-2xl bg-primary/10 px-4 py-3 text-center"><div className="text-2xl font-bold text-primary">{Math.round(course.enrollment.completionPercent)}%</div><div className="text-xs text-text-secondary">{tr("прогрес", "progress")}</div></div>
+        <div className="min-w-[220px] rounded-2xl border border-primary/20 bg-primary/[.06] p-4">
+          <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase tracking-[.12em] text-text-secondary">{tr("Прогрес курсу", "Course progress")}</span><strong className="text-2xl font-bold text-primary">{Math.round(course.enrollment.completionPercent)}%</strong></div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-base"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, Math.max(0, course.enrollment.completionPercent))}%` }} /></div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-text-secondary"><span>{completedItems} / {requiredItems.length} {tr("елементів", "items")}</span><span>{course.enrollment.status === "AVAILABLE" ? tr("Не активовано", "Not active") : course.enrollment.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("У процесі", "In progress")}</span></div>
+        </div>
       </div>
+      {!courseIsActive ? <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/10 p-4"><div><p className="font-bold text-text-primary">{tr("Цей курс ще не активовано", "This course is not active yet")}</p><p className="mt-1 text-sm text-text-secondary">{tr("Активація відкриє теорію, послідовний roadmap і контекстну практику.", "Activation unlocks theory, the ordered roadmap, and course-scoped practice.")}</p></div><button type="button" disabled={activating} onClick={() => void activateCourse()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{activating ? tr("Активуємо…", "Activating…") : tr("Активувати курс", "Activate course")}</button></div> : null}
       {message && <div className="mt-6 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</div>}
       {error && <div className="mt-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
     </header>
@@ -281,7 +315,7 @@ export const LearningCoursePage: React.FC = () => {
           {roadmapNodes.map((node, index) => {
             const items = nodeItems(node);
             const completed = nodeCompleted(node);
-            const locked = !roadmapNodes.slice(0, index).every(nodeCompleted);
+            const locked = !courseIsActive || !roadmapNodes.slice(0, index).every(nodeCompleted);
             const doneCount = items.filter((item) => item.progress.status === "COMPLETED").length;
             const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
             const isSelected = selectedNodeId === node.id;

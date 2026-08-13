@@ -929,6 +929,7 @@ const AppContent: React.FC = React.memo(() => {
       onToggleTheme={toggleTheme}
       onToggleLanguage={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
       onSupport={() => navigate("/support")}
+      onSupportDesk={() => navigate("/support/desk")}
       onLogout={handleLogout}
     >
       {content}

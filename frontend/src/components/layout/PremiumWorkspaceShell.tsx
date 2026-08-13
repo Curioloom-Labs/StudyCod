@@ -32,6 +32,7 @@ type ShellProps = {
   onToggleTheme: () => void;
   onToggleLanguage: () => void;
   onSupport?: () => void;
+  onSupportDesk?: () => void;
   onLogout: () => void;
   children: React.ReactNode;
 };
@@ -47,6 +48,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   onToggleTheme,
   onToggleLanguage,
   onSupport,
+  onSupportDesk,
   onLogout,
   children,
 }) => {
@@ -94,6 +96,11 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     if (onSupport) onSupport();
     else window.location.assign("/support");
   };
+  const goSupportDesk = () => {
+    if (onSupportDesk) onSupportDesk();
+    else window.location.assign("/support/desk");
+  };
+  const hasSupportDesk = user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN";
 
   return (
     <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
@@ -134,6 +141,10 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               <PlaySquare className="h-4 w-4" />
               {uk ? "Пісочниця" : "Playground"}
             </button>
+            {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]">
+              <HelpCircle className="h-4 w-4" />
+              Support desk
+            </button> : null}
           </nav>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -207,6 +218,10 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             <PlaySquare className="h-4 w-4" />
             {uk ? "Пісочниця" : "Playground"}
           </button>
+          {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[#69786d] dark:text-[#a4b2a7]">
+            <HelpCircle className="h-4 w-4" />
+            Support desk
+          </button> : null}
         </nav>
       </header>
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>

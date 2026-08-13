@@ -2892,7 +2892,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     })();
     const userId = req.userId!;
     const rawLang = String(req.learningRuntime ?? "PYTHON").toUpperCase().trim();
-    const lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
+    let lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
     const forcePersonalControl = req.body && typeof req.body === "object" && (req.body as any).forceControl === true;
     throttleKey = makeGenerateThrottleKey(userId, lang);
 
@@ -2948,6 +2948,20 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       });
     }
 
+    // A roadmap request is authoritative about its runtime. The user may
+    // have arrived from another language, so do not reject a valid course
+    // practice request merely because authMiddleware selected a different
+    // active runtime for the legacy workspace.
+    const requestedCourseItemId = Number((req.body as any)?.courseItemId ?? 0);
+    let courseContext: Awaited<ReturnType<typeof getCoursePracticeContext>> | null = null;
+    if (Number.isInteger(requestedCourseItemId) && requestedCourseItemId > 0) {
+      courseContext = await getCoursePracticeContext(userId, requestedCourseItemId);
+      const courseRuntime = String(courseContext.enrollment.variant?.runtime ?? "").toUpperCase();
+      if (courseRuntime === "JAVA" || courseRuntime === "PYTHON" || courseRuntime === "CPP") {
+        lang = courseRuntime;
+      }
+    }
+
     const masteredUntilTopicIndex = (() => {
       const raw = lang === "JAVA"
         ? (user as any).placementMasteredUntilTopicIndexJava
@@ -2990,18 +3004,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // Roadmap practice is explicitly scoped to a catalog item. This branch
     // must run before legacy Topic sequencing: specialized courses (Flask,
     // FastAPI, CV, ...) are not represented by the legacy Topic table.
-    const requestedCourseItemId = Number((req.body as any)?.courseItemId ?? 0);
     if (Number.isInteger(requestedCourseItemId) && requestedCourseItemId > 0) {
-      const context = await getCoursePracticeContext(userId, requestedCourseItemId);
-      const courseRuntime = String(context.enrollment.variant?.runtime ?? "").toUpperCase();
-      if (courseRuntime && courseRuntime !== lang) {
-        return res.status(409).json({
-          status: "blocked",
-          message: "COURSE_RUNTIME_MISMATCH",
-          expectedRuntime: courseRuntime,
-          activeRuntime: lang,
-        });
-      }
+      const context = courseContext;
+      if (!context) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
       if (context.progress?.status === "COMPLETED") {
         return res.status(409).json({
           status: "blocked",

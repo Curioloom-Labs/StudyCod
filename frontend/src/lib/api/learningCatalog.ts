@@ -88,6 +88,7 @@ export interface LearningCourse {
   runtime: CatalogRuntime;
   enrollment: {
     id: number;
+    variantId: number;
     status: CatalogEnrollmentStatus;
     completionPercent: number;
     masteryScore: number;

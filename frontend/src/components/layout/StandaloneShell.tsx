@@ -13,6 +13,7 @@ import {
   Moon,
   PlaySquare,
   Sun,
+  ShieldCheck,
   Trophy,
   UserRound,
   X,
@@ -28,7 +29,7 @@ import { BrandedPageLoader } from "../ui/BrandedPageLoader";
 import { PlatformFooter } from "./PlatformFooter";
 
 type Props = {
-  current: "home" | "tasks" | "grades" | "profile" | "learn" | "catalog" | "library" | "playground" | "blog" | "support";
+  current: "home" | "tasks" | "grades" | "profile" | "learn" | "catalog" | "library" | "playground" | "blog" | "support" | "admin";
   children: React.ReactNode;
 };
 
@@ -137,6 +138,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         { key: "home", label: ukrainian ? "Огляд" : "Overview", icon: Home, path: "/" },
         { key: "tasks", label: ukrainian ? "Практика" : "Practice", icon: Code2, path: "/?app=tasks" },
         { key: "grades", label: ukrainian ? "Прогрес" : "Progress", icon: Trophy, path: "/?app=grades" },
+        ...((shellUser.role === "SYSTEM_ADMIN") ? [{ key: "admin", label: ukrainian ? "Адміністрування" : "Admin", icon: ShieldCheck, path: "/?app=admin" }] : []),
         { key: "library", label: ukrainian ? "Бібліотека" : "Library", icon: BookOpen, path: "/library" },
         { key: "catalog", label: ukrainian ? "Курси" : "Courses", icon: Compass, path: "/learning/catalog" },
         { key: "playground", label: ukrainian ? "Пісочниця" : "Playground", icon: PlaySquare, path: "/playground" },

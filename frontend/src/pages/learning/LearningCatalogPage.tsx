@@ -59,7 +59,7 @@ export const LearningCatalogPage: React.FC = () => {
     {error && <div className="mb-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
       {courses.map((course) => {
-        const hasUnlocked = course.variants.some((variant) => variant.enrollment?.status === "IN_PROGRESS" || variant.enrollment?.status === "COMPLETED");
+        const hasUnlocked = course.variants.some((variant) => variant.enrollment?.status === "AVAILABLE" || variant.enrollment?.status === "IN_PROGRESS" || variant.enrollment?.status === "COMPLETED");
         return <article key={course.id} className="flex min-h-[275px] flex-col rounded-[26px] border border-border bg-bg-surface p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4"><span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">{levelLabel(course.level)}</span>{course.isBase ? <BookOpen className="size-5 text-primary" /> : <Route className="size-5 text-text-muted" />}</div>
           <h2 className="mt-6 text-2xl font-bold tracking-tight text-text-primary">{course.title}</h2>
@@ -69,10 +69,17 @@ export const LearningCatalogPage: React.FC = () => {
             const enrollment = variant.enrollment;
             const locked = Boolean(variant.gate) || variant.status !== "PUBLISHED";
             const completed = enrollment?.status === "COMPLETED";
+            const actionLabel = locked
+              ? tr("Закрито", "Locked")
+              : completed
+                ? tr("Переглянути курс", "View course")
+                : enrollment?.status === "IN_PROGRESS"
+                  ? tr("Продовжити", "Continue")
+                  : tr("Активувати курс", "Activate course");
             return <button key={variant.id} type="button" disabled={locked || busyVariant === variant.id} onClick={() => void start(course, variant)} className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${locked ? "cursor-not-allowed border-border bg-bg-code/30 opacity-70" : "border-primary/25 bg-primary/5 hover:bg-primary/10"}`}>
               {locked ? <LockKeyhole className="size-4 text-text-muted" /> : completed ? <CheckCircle2 className="size-4 text-primary" /> : <ChevronRight className="size-4 text-primary" />}
               <span className="flex-1 text-sm font-bold text-text-primary">{variant.title}</span>
-              <span className="text-xs text-text-secondary">{enrollment ? `${Math.round(enrollment.completionPercent)}%` : locked ? tr("Закрито", "Locked") : tr("Почати", "Start")}</span>
+              <span className="text-xs font-semibold text-text-secondary">{enrollment && !locked ? `${actionLabel} · ${Math.round(enrollment.completionPercent)}%` : actionLabel}</span>
             </button>;
           })}</div>
           {hasUnlocked && <p className="mt-3 text-xs text-primary">{tr("Продовжуйте з останньої завершеної теми.", "Continue from your latest completed topic.")}</p>}
