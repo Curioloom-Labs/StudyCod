@@ -924,6 +924,7 @@ const AppContent: React.FC = React.memo(() => {
       theme={theme}
       onNavigate={handleSetPage}
       onLibrary={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/library?preview=true" : "/library")}
+      onCourses={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/learning/catalog?preview=true" : "/learning/catalog")}
       onPlayground={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/playground?preview=true" : "/playground")}
       onToggleTheme={toggleTheme}
       onToggleLanguage={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
@@ -976,6 +977,10 @@ const AppContent: React.FC = React.memo(() => {
                 <button onClick={() => navigate("/library")} onPointerEnter={() => prefetchNavTarget("library")} onFocus={() => prefetchNavTarget("library")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
                   <Library className="w-4 h-4" />
                   {t("library")}
+                </button>
+                <button onClick={() => navigate("/learning/catalog")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+                  <BookOpen className="w-4 h-4" />
+                  {i18n.language?.toLowerCase().startsWith("en") ? "Courses" : "Курси"}
                 </button>
               </>}
 

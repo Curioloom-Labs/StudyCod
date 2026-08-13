@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { User } from "../../types";
 import { Logo } from "../../components/Logo";
+import { PlatformFooter } from "../../components/layout/PlatformFooter";
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import { WorkspaceViewportProvider } from "../../components/interface/WorkspaceViewport";
 import { CommandPalette, type PaletteAction, type PaletteItem } from "../../components/interface/CommandPalette";
@@ -177,6 +178,8 @@ export const AuroraShell: React.FC<AuroraShellProps> = ({
       </WorkspaceViewportProvider>
 
       {/* The Dock — the only persistent chrome. One thin floating bar, bottom-center. */}
+      <PlatformFooter className="mt-auto" />
+
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <div className="pointer-events-auto relative" ref={accountRef}>
           {accountOpen ? (

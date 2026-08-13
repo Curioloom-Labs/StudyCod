@@ -153,7 +153,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const displayName = shellUser.firstName || shellUser.username;
 
   return (
-    <div className="mobile-app-shell min-h-[100dvh] bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
+    <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
       <header className="sticky top-0 z-50 border-b border-[#16281b]/10 bg-[#f5f7f4]/86 backdrop-blur-xl dark:border-white/[.08] dark:bg-[#09100c]/84">
         <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-9">
           <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex shrink-0 items-center gap-2.5 text-left">
