@@ -271,7 +271,7 @@ export const AuthPage: React.FC<Props> = ({
                 const studentUser: User = {
                   id: studentResult.student.id,
                   username: studentResult.student.username,
-                  course: studentResult.student.language,
+                  activeRuntime: studentResult.student.language,
                   difus: 0,
                   avatarUrl: null,
                   userMode: "EDUCATIONAL" as const,
@@ -341,7 +341,7 @@ export const AuthPage: React.FC<Props> = ({
             setError(tr("Пароль має бути мінімум 8 символів", "Password must be at least 8 characters"));
             return;
           }
-          const result = await register(username.trim(), email.trim(), password, course, firstName.trim(), lastName.trim(), Number(birthDay), Number(birthMonth), currentTurnstileToken || undefined);
+          const result = await register(username.trim(), email.trim(), password, firstName.trim(), lastName.trim(), Number(birthDay), Number(birthMonth), currentTurnstileToken || undefined);
           if (result.requiresEmailVerification) {
             setEmailSent(true);
             setSuccess(tr("Реєстрація успішна! Перевірте вашу пошту для підтвердження.", "Registration successful! Check your email to verify."));

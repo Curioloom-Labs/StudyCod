@@ -30,6 +30,7 @@ import playgroundRouter from "./routes/playground";
 import lspRouter from "./routes/lsp";
 import blogRouter from "./routes/blog";
 import notificationsRouter from "./routes/notifications";
+import { learningCatalogRouter } from "./routes/learningCatalog";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { geoBlockMiddleware } from "./middleware/geoBlockMiddleware";
 import { evaluateGeoBlock } from "./services/geoBlockService";
@@ -63,6 +64,7 @@ import { createRedisRateLimitStore } from "./middleware/routeRateLimit";
 import { getRedisClientForStore, getRedisKeyPrefix, getSharedRedisClient, isRedisEnabled } from "./services/redis/sharedRedis";
 import { shutdownRedis } from "./services/redis/sharedRedis";
 import { seedTopicsIfNeeded } from "./utils/seedTopics";
+import { seedLearningCatalogContent } from "./utils/seedLearningCatalog";
 import { checkReadiness, renderPrometheusMetrics } from "./observability/health";
 import { httpMetricsMiddleware } from "./observability/httpMetrics";
 const app = express();
@@ -856,6 +858,7 @@ app.use("/lsp", lspRouter);
 app.use("/blog", blogRouter);
 app.use("/notifications", notificationsRouter);
 app.use("/emails", emailsRouter);
+app.use("/learning", authMiddleware, forbidContestModeUsers, learningCatalogRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/tasks", authMiddleware, forbidContestModeUsers, placementGate, tasksRouter);
@@ -876,6 +879,7 @@ app.use("/api/lsp", lspRouter);
 app.use("/api/blog", blogRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/emails", emailsRouter);
+app.use("/api/learning", authMiddleware, forbidContestModeUsers, learningCatalogRouter);
 app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error("Unhandled error", { err });
 
@@ -1166,6 +1170,7 @@ async function bootstrap(): Promise<void> {
     const shouldSeed = String(process.env.SEED_TOPICS_ON_STARTUP ?? seedDefault).toLowerCase() !== "false";
     if (shouldSeed) {
       await seedTopicsIfNeeded();
+      await seedLearningCatalogContent();
     } else {
       logger.info("[seed-topics] skipped", { reason: process.env.SEED_TOPICS_ON_STARTUP ? "env:false" : "prod-default" });
     }

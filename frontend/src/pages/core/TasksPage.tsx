@@ -301,6 +301,7 @@ function splitTheoryIntoChapters(markdown: string, fallbackTitle: string): Array
 export const TasksPage: React.FC<Props> = ({
   user
 }) => {
+  const runtime = user.activeRuntime || "PYTHON";
   const {
     i18n
   } = useTranslation();
@@ -564,7 +565,7 @@ export const TasksPage: React.FC<Props> = ({
     });
   }, [searchParams, setSearchParams]);
 
-  const entryFile = user.course === "JAVA" ? "Main.java" : user.course === "PYTHON" ? "main.py" : "main.cpp";
+  const entryFile = runtime === "JAVA" ? "Main.java" : runtime === "PYTHON" ? "main.py" : "main.cpp";
   const isWebTask = active?.taskMode === "WEB";
   const isPersonalControlQuizByTask = useCallback((task: Task | null | undefined): boolean => {
     return Boolean(task && task.kind === "CONTROL" && String(task.subtitle ?? "").includes("|QUIZ|"));
@@ -2050,7 +2051,7 @@ export const TasksPage: React.FC<Props> = ({
   }, [canQuickCheck, canQuickRun, canQuickSave, checkFromRail, focusWorkspaceArea, runFromRail, saveFromRail]);
 
   if (!isPersonalControlQuizTask) {
-    const ideLanguage = (active?.language || user.course) as import("../../lib/judgeLanguages").JudgeLanguage;
+    const ideLanguage = (active?.language || runtime) as import("../../lib/judgeLanguages").JudgeLanguage;
     const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
     const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
       verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
@@ -2095,7 +2096,7 @@ export const TasksPage: React.FC<Props> = ({
           }
           language={ideLanguage}
           onLanguageChange={() => undefined}
-          compiler={user.course}
+          compiler={runtime}
           onCompilerChange={() => undefined}
           code={code}
           onCodeChange={setCode}
@@ -2370,7 +2371,7 @@ export const TasksPage: React.FC<Props> = ({
                 </div>
               ) : (
                 <div className="min-h-[480px] flex-1 bg-[#101612]">
-                  {isWebTask ? <div className="grid h-full lg:grid-cols-2"><MultiFileEditor language="html" entryFile="index.html" files={files} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /><WebPreviewPane files={toWebTaskFiles()} title={tr("Превʼю", "Preview")} /></div> : useFiles ? <MultiFileEditor language={user.course} entryFile={entryFile} files={files} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /> : <CodeEditor language={active?.language ?? user.course} value={code} onChange={canEdit ? setCode : undefined} readOnly={!canEdit} />}
+                  {isWebTask ? <div className="grid h-full lg:grid-cols-2"><MultiFileEditor language="html" entryFile="index.html" files={files} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /><WebPreviewPane files={toWebTaskFiles()} title={tr("Превʼю", "Preview")} /></div> : useFiles ? <MultiFileEditor language={runtime} entryFile={entryFile} files={files} onChange={setFiles} readOnly={!canEdit} requestAddToken={mfAddToken} /> : <CodeEditor language={active?.language ?? runtime} value={code} onChange={canEdit ? setCode : undefined} readOnly={!canEdit} />}
                 </div>
               )}
             </section>

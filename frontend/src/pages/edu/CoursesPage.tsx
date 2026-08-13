@@ -16,7 +16,7 @@ interface Org {
 interface Course {
   id: number;
   title: string;
-  language: string;
+  variants?: Array<{ runtime: string; status?: string }>;
   status: "DRAFT" | "PUBLISHED";
 }
 
@@ -32,7 +32,7 @@ export const CoursesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [orgName, setOrgName] = useState("");
   const [title, setTitle] = useState("");
-  const [language, setLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("PYTHON");
+  const [runtime, setRuntime] = useState<"JAVA" | "PYTHON" | "CPP">("PYTHON");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export const CoursesPage: React.FC = () => {
     if (activeOrg == null || !title.trim()) return;
     setBusy(true);
     try {
-      const { data } = await api.post(`/edu/orgs/${activeOrg}/courses`, { title: title.trim(), language });
+      const { data } = await api.post(`/edu/orgs/${activeOrg}/courses`, { title: title.trim(), runtime });
       setCourses(prev => [data.course, ...prev]);
       setTitle("");
       showToast({ message: tr("Курс створено", "Course created"), type: "success" });
@@ -148,7 +148,7 @@ export const CoursesPage: React.FC = () => {
               placeholder={tr("Назва нового курсу", "New course title")}
               className={controlClass + " flex-1"}
             />
-            <select value={language} onChange={e => setLanguage(e.target.value as any)} className={controlClass}>
+            <select value={runtime} onChange={e => setRuntime(e.target.value as "JAVA" | "PYTHON" | "CPP")} className={controlClass}>
               <option value="PYTHON">Python</option>
               <option value="JAVA">Java</option>
               <option value="CPP">C++</option>
@@ -170,7 +170,7 @@ export const CoursesPage: React.FC = () => {
               >
                 <FolderOpen className="w-4 h-4 shrink-0 text-primary" />
                 <span className="font-mono font-semibold text-text-primary truncate">{c.title}</span>
-                <span className="text-xs text-text-muted">{c.language}</span>
+                <span className="text-xs text-text-muted">{c.variants?.[0]?.runtime ?? "COURSE"}</span>
                 <span className="ml-auto text-[11px] font-mono px-2 py-0.5 rounded-full border border-border text-text-secondary">
                   {c.status === "PUBLISHED" ? tr("Опубліковано", "Published") : tr("Чернетка", "Draft")}
                 </span>

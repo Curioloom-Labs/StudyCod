@@ -485,10 +485,9 @@ export class AIResponseValidator {
     if (forbiddenPhrases.test(t)) {
       throw new AIValidationError('generateTheory', emptyZod(), 'Theory generation validation failed: contains forbidden phrases (Практика/Завдання)');
     }
-    const forbiddenImperatives = /\b(виконайте|обчисліть|знайдіть|розв\s*яжіть|напис(ати|іть)\s+програм(у|у)|зчитайте|прочитайте|введіть|input\s*\(|read\s+from\s+stdin)\b/i;
-    if (forbiddenImperatives.test(t)) {
-      throw new AIValidationError('generateTheory', emptyZod(), 'Theory generation validation failed: contains task-like instructions');
-    }
+    // Imperative wording is valid inside an explanation or a code walkthrough.
+    // Keep the purity boundary structural instead of rejecting words such as
+    // “read” or “enter” globally.
   }
   static validateGenerateTask(data: unknown, expectedTopic?: string, topicIndex?: number): AiTaskGenerationResult {
     try {

@@ -17,7 +17,6 @@ import { logger } from "../../utils/logger";
 
 export type CachedUser = {
   id: number;
-  lang: string | null;
   role: UserRole | null;
   userMode: UserMode | null;
 };

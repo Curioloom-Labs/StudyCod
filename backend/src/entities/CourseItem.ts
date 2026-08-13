@@ -39,6 +39,21 @@ export class CourseItem {
   @Column({ type: "int", default: 0 })
   order!: number;
 
+  @Column({ type: "varchar", length: 200, nullable: true, name: "content_key" })
+  contentKey?: string | null;
+
+  @Column({ type: "varchar", length: 64, nullable: true, name: "source_hash" })
+  sourceHash?: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true, name: "source_path" })
+  sourcePath?: string | null;
+
+  @Column({ type: "int", default: 1, name: "content_version" })
+  contentVersion!: number;
+
+  @Column({ type: "boolean", default: true, name: "is_active" })
+  isActive!: boolean;
+
   /** Kind-specific payload (task template + tests, quiz questions, page HTML, …). */
   @Column({ type: "simple-json", nullable: true })
   content?: Record<string, unknown> | null;

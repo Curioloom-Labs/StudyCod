@@ -28,7 +28,7 @@ import { BrandedPageLoader } from "../ui/BrandedPageLoader";
 import { PlatformFooter } from "./PlatformFooter";
 
 type Props = {
-  current: "home" | "tasks" | "grades" | "profile" | "learn" | "library" | "playground" | "blog" | "support";
+  current: "home" | "tasks" | "grades" | "profile" | "learn" | "catalog" | "library" | "playground" | "blog" | "support";
   children: React.ReactNode;
 };
 
@@ -131,12 +131,14 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         { key: "grades", label: ukrainian ? "Журнал" : "Journal", icon: Trophy, path: shellUser.studentId ? "/edu/journal" : "/edu/gradebook" },
         { key: "tasks", label: ukrainian ? "Календар" : "Calendar", icon: Compass, path: "/edu/calendar" },
         { key: "library", label: ukrainian ? "Бібліотека" : "Library", icon: BookOpen, path: "/edu/library" },
+        { key: "catalog", label: ukrainian ? "Курси" : "Courses", icon: Compass, path: "/learning/catalog" },
       ]
     : [
         { key: "home", label: ukrainian ? "Огляд" : "Overview", icon: Home, path: "/" },
         { key: "tasks", label: ukrainian ? "Практика" : "Practice", icon: Code2, path: "/?app=tasks" },
         { key: "grades", label: ukrainian ? "Прогрес" : "Progress", icon: Trophy, path: "/?app=grades" },
         { key: "library", label: ukrainian ? "Бібліотека" : "Library", icon: BookOpen, path: "/library" },
+        { key: "catalog", label: ukrainian ? "Курси" : "Courses", icon: Compass, path: "/learning/catalog" },
         { key: "playground", label: ukrainian ? "Пісочниця" : "Playground", icon: PlaySquare, path: "/playground" },
         ...((shellUser.role === "SUPPORT" || shellUser.role === "SYSTEM_ADMIN") ? [{ key: "support", label: ukrainian ? "Support desk" : "Support desk", icon: HelpCircle, path: "/support/desk" }] : []),
       ];

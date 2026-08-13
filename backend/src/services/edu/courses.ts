@@ -1,23 +1,26 @@
 import { AppDataSource } from "../../data-source";
-import { Course, type CourseLanguage, type CourseStatus } from "../../entities/Course";
+import { Course, type CourseStatus } from "../../entities/Course";
 import { CourseModule } from "../../entities/CourseModule";
 import { CourseItem, type CourseItemKind } from "../../entities/CourseItem";
+import { CourseVariant, type CourseRuntime } from "../../entities/CourseVariant";
 
 /**
  * Course-template authoring (P2.1). Reusable Course → Module → Item tree that is
  * later forked onto Classes (P2.2). Org-scoped: every course belongs to one org.
  */
 const COURSE_ITEM_KINDS: CourseItemKind[] = ["THEORY", "PAGE", "CODE_TASK", "WEB_TASK", "QUIZ", "MANUAL"];
-const COURSE_LANGUAGES: CourseLanguage[] = ["JAVA", "PYTHON", "CPP"];
+const COURSE_RUNTIMES: CourseRuntime[] = ["JAVA", "PYTHON", "CPP"];
 
 export function isCourseItemKind(value: unknown): value is CourseItemKind {
   return typeof value === "string" && (COURSE_ITEM_KINDS as string[]).includes(value);
 }
 
-export function normalizeCourseLanguage(value: unknown): CourseLanguage {
+export function normalizeCourseRuntime(value: unknown): CourseRuntime {
   const v = String(value ?? "").toUpperCase();
-  return (COURSE_LANGUAGES as string[]).includes(v) ? (v as CourseLanguage) : "PYTHON";
+  return (COURSE_RUNTIMES as string[]).includes(v) ? (v as CourseRuntime) : "PYTHON";
 }
+
+/** @deprecated Use normalizeCourseRuntime; retained for older authoring tests. */
 
 export function normalizeCourseStatus(value: unknown): CourseStatus {
   return value === "PUBLISHED" ? "PUBLISHED" : "DRAFT";
@@ -26,30 +29,42 @@ export function normalizeCourseStatus(value: unknown): CourseStatus {
 const courseRepo = () => AppDataSource.getRepository(Course);
 const moduleRepo = () => AppDataSource.getRepository(CourseModule);
 const itemRepo = () => AppDataSource.getRepository(CourseItem);
+const variantRepo = () => AppDataSource.getRepository(CourseVariant);
 
 export async function createCourse(input: {
   orgId: number;
   title: string;
   description?: string | null;
-  language?: unknown;
+  runtime?: unknown;
   createdByUserId: number;
 }): Promise<Course> {
   const title = String(input.title ?? "").trim();
   if (!title) throw new Error("TITLE_REQUIRED");
+  const runtime = normalizeCourseRuntime(input.runtime);
   const course = courseRepo().create({
     organization: { id: input.orgId } as any,
     title,
     description: input.description ?? null,
-    language: normalizeCourseLanguage(input.language),
+    catalogKey: null,
+    level: "FOUNDATION",
+    isBase: false,
     status: "DRAFT",
     createdByUserId: input.createdByUserId
   });
-  return await courseRepo().save(course);
+  const saved = await courseRepo().save(course);
+  await variantRepo().save(variantRepo().create({
+    course: { id: saved.id } as any,
+    runtime,
+    title: runtime === "CPP" ? "C++" : runtime === "JAVA" ? "Java" : "Python",
+    status: "DRAFT"
+  }));
+  return saved;
 }
 
 export async function listCourses(orgId: number): Promise<Course[]> {
   return await courseRepo().find({
     where: { organization: { id: orgId } },
+    relations: ["variants"],
     order: { updatedAt: "DESC" }
   });
 }
@@ -63,6 +78,7 @@ export async function getCourseTree(courseId: number, orgId: number): Promise<Co
     m.items = await itemRepo().find({ where: { module: { id: m.id } }, order: { order: "ASC" } });
   }
   course.modules = modules;
+  course.variants = await variantRepo().find({ where: { course: { id: courseId } }, order: { id: "ASC" } });
   return course;
 }
 

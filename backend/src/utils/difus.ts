@@ -145,7 +145,7 @@ export function setLastProcessedGradeIdForLang(user: User, lang: IadLang, gradeI
 }
 
 export function getUserActiveIad(user: User): number {
-  return getUserIadForLang(user, (user.lang as IadLang) || "JAVA");
+  return getUserIadForLang(user, "PYTHON");
 }
 
 export const getUserActiveDifus = getUserActiveIad;

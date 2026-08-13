@@ -1,0 +1,267 @@
+version: 1
+courses:
+  python-extensions:
+    - key: python-data-pipeline
+      title: Python Data Pipeline
+      description: Побудуйте CLI-пайплайн, який отримує JSON із HTTP-сервісу, нормалізує записи, зберігає CSV і формує короткий звіт. Проєкт перевіряє межі мережі, формат даних, помилки та повторний запуск.
+      estimatedMinutes: 150
+      skills: [requests/httpx, JSON, pathlib, logging, pytest]
+      template: "src/client.py\nsrc/transform.py\nsrc/report.py\ntests/\nREADME.md"
+      milestones:
+        - id: contract
+          title: Контракт джерела
+          description: Опишіть endpoint, timeout, очікувані поля JSON і поведінку при неповній відповіді.
+        - id: transform
+          title: Нормалізація
+          description: Перетворіть зовнішні записи на внутрішню модель без зміни оригінальних даних.
+        - id: report
+          title: CSV і звіт
+          description: Запишіть результат у контрольовану директорію та сформуйте підсумкові метрики.
+        - id: reliability
+          title: Надійність
+          description: Додайте timeout, логування без секретів, обробку помилок і тести з підмінним HTTP-клієнтом.
+      acceptanceCriteria:
+        - Повторний запуск не створює дублікати або пошкоджений CSV.
+        - Невалідна відповідь сервісу не маскується як успішний звіт.
+        - У тестах немає реальних мережевих запитів.
+
+  flask:
+    - key: flask-reading-list
+      title: Flask Reading List
+      description: "Створіть серверний вебзастосунок для списку книжок: сторінка списку, форма додавання, валідація, сесія користувача та безпечні повідомлення про помилки."
+      estimatedMinutes: 180
+      skills: [Flask routes, Jinja2, forms, sessions, SQLite, tests]
+      template: "app/__init__.py\napp/routes.py\napp/templates/\ntests/\nREADME.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/"]
+      milestones:
+        - id: routes
+          title: Маршрути
+          description: Реалізуйте GET для списку та POST для створення книги з чіткими redirect/status правилами.
+        - id: templates
+          title: Шаблони
+          description: Передайте дані в Jinja2 і не вставляйте неперевірений HTML.
+        - id: persistence
+          title: Збереження
+          description: Додайте SQLite-репозиторій із параметризованими запитами та транзакцією.
+        - id: quality
+          title: Перевірка
+          description: Напишіть тести для валідної форми, помилки, порожнього списку та повторного запиту.
+      acceptanceCriteria:
+        - POST із невалідною назвою не змінює базу.
+        - Сесія не містить пароль або зайві персональні дані.
+        - Error page не показує traceback користувачу.
+
+    - key: flask-notes-api
+      title: Flask Notes API
+      description: Побудуйте JSON API нотаток із Blueprints, app factory, token-based authentication, pagination і стабільним error contract.
+      estimatedMinutes: 210
+      skills: [Blueprints, app factory, JSON API, auth, pagination, pytest]
+      template: "app/__init__.py\napp/api/notes.py\napp/services/\napp/repositories/\ntests/"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/api/notes"]
+      milestones:
+        - id: factory
+          title: App factory
+          description: Підготуйте окремі конфігурації для development і тестів.
+        - id: api
+          title: Notes CRUD
+          description: Реалізуйте create/read/update/delete з input/output контрактами.
+        - id: auth
+          title: Доступ
+          description: Користувач бачить і змінює лише власні нотатки.
+        - id: contract-tests
+          title: Контрактні тести
+          description: Перевірте 401, 403, 404, 422 і pagination.
+      acceptanceCriteria:
+        - SQL-запити параметризовані.
+        - Власність ресурсу перевіряється на сервері.
+        - Тести запускаються без production secrets.
+
+  fastapi:
+    - key: fastapi-reading-log
+      title: FastAPI Reading Log
+      description: "Побудуйте повний API журналу читання: книги, записи прогресу, Pydantic-контракти, SQLAlchemy-сесія, pagination, authentication і тести."
+      estimatedMinutes: 240
+      skills: [Pydantic, dependencies, SQLAlchemy, CRUD, auth, TestClient, OpenAPI]
+      template: "app/main.py\napp/routers/books.py\napp/routers/entries.py\napp/schemas.py\napp/services/\napp/repositories/\ntests/\nREADME.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: ["/docs"]
+      milestones:
+        - id: vertical-slice
+          title: Перший вертикальний зріз
+          description: Реалізуйте GET /books і один TestClient-тест від HTTP до response model.
+        - id: persistence
+          title: База і транзакції
+          description: Додайте SQLAlchemy engine, yield dependency, міграційну схему та CRUD.
+        - id: identity
+          title: Користувач і права
+          description: Додайте bearer authentication і перевірку власності журналу.
+        - id: quality
+          title: Якість API
+          description: Додайте pagination, 401/403/404/409/422 тести, OpenAPI metadata та README.
+      acceptanceCriteria:
+        - Жоден route не приймає довільний dict замість описаної моделі.
+        - Сесія БД закривається після кожного request.
+        - Користувач не може читати або змінювати чужий запис.
+        - Тести не роблять реальних зовнішніх HTTP-запитів.
+
+    - key: fastapi-team-library
+      title: FastAPI Team Library
+      description: Створіть командний API бібліотеки з ролями reader/editor/admin, пошуком, фоновим імпортом і статусом job.
+      estimatedMinutes: 270
+      skills: [APIRouter, Depends, roles, background jobs, search, error contract]
+      template: "app/main.py\napp/routers/\napp/dependencies.py\napp/services/\napp/workers/\ntests/\nopenapi-notes.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: ["/docs"]
+      milestones:
+        - id: resources
+          title: Ресурси команди
+          description: Спроєктуйте users, teams, books і membership без дублювання route-логіки.
+        - id: permissions
+          title: Політика доступу
+          description: Відокремте authentication, role та перевірку ownership.
+        - id: import
+          title: Асинхронний імпорт
+          description: Прийміть job, поверніть 202 і зробіть endpoint стану з idempotency.
+        - id: observability
+          title: Спостережуваність
+          description: Додайте request id, структуровані помилки та метрики успіху/відмови.
+      acceptanceCriteria:
+        - Недозволена роль отримує 403 до зміни стану.
+        - Повторне надсилання одного job не створює дубль.
+        - Background task не використовує закриту request session.
+
+    - key: fastapi-production-api
+      title: FastAPI Production API
+      description: "Доведіть сервіс до production-готового стану: settings, lifespan, health/readiness, CORS, rate limits, logs, Docker-запуск і graceful shutdown."
+      estimatedMinutes: 240
+      skills: [Settings, lifespan, middleware, security, health checks, deployment]
+      template: "app/main.py\napp/config.py\napp/observability.py\nDockerfile\ncompose.yml\ntests/\nRUNBOOK.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: ["/docs", "/health"]
+      milestones:
+        - id: config
+          title: Конфігурація
+          description: Винесіть environment і secrets у Settings із fail-fast перевіркою.
+        - id: health
+          title: Health contract
+          description: Розділіть liveness і readiness, додайте timeout для залежностей.
+        - id: safety
+          title: Захист
+          description: Налаштуйте CORS allow-list, rate limiting, security headers і redaction.
+        - id: runbook
+          title: Розгортання
+          description: Опишіть запуск, rollback, міграції, logs і graceful shutdown.
+      acceptanceCriteria:
+        - У репозиторії немає production secret.
+        - Debug вимкнено в production profile.
+        - Readiness не повертає ready при недоступній критичній залежності.
+
+  computer-vision:
+    - key: cv-document-scanner
+      title: Document Scanner
+      description: Побудуйте pipeline, який читає зображення документа, знаходить межі, виправляє перспективу та зберігає контрольований результат.
+      estimatedMinutes: 210
+      skills: [OpenCV, color spaces, edges, contours, perspective transform, evaluation]
+      template: "src/io.py\nsrc/preprocess.py\nsrc/geometry.py\nsrc/pipeline.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: computer-vision
+        files: ["src/io.py", "src/preprocess.py", "src/geometry.py", "src/pipeline.py"]
+      milestones:
+        - id: input
+          title: Надійне введення
+          description: Перевірте decode, shape, dtype, канал і відсутній файл.
+        - id: edges
+          title: Кандидати меж
+          description: Застосуйте grayscale, blur, Canny і поясніть параметри.
+        - id: geometry
+          title: Перспектива
+          description: Знайдіть контур документа, впорядкуйте точки та виконайте warp.
+        - id: evaluation
+          title: Оцінювання
+          description: Перевірте різне освітлення, поворот, шум і невдалий кадр.
+      acceptanceCriteria:
+        - Невдалий decode повертає зрозумілу помилку, а не crash у середині pipeline.
+        - Параметри preprocessing можна змінювати без переписування всього коду.
+        - Результат має контрольовану геометрію та формат.
+
+    - key: cv-color-inspector
+      title: Color Object Inspector
+      description: "Створіть аналізатор кольорових об’єктів: HSV-маска, морфологічне очищення, контури, bounding boxes і звіт про confidence обмежень."
+      estimatedMinutes: 180
+      skills: [HSV, masks, morphology, contours, geometry, false positives]
+      template: "src/load.py\nsrc/mask.py\nsrc/measure.py\nsrc/report.py\ntests/fixtures/\nREADME.md"
+      checkSpec:
+        kind: computer-vision
+        files: ["src/load.py", "src/mask.py", "src/measure.py", "src/report.py"]
+      milestones:
+        - id: mask
+          title: Маска кольору
+          description: Оберіть HSV-діапазон і покажіть, які пікселі потрапляють у маску.
+        - id: cleanup
+          title: Очищення шуму
+          description: Порівняйте opening/closing і зафіксуйте компроміс параметрів.
+        - id: objects
+          title: Геометричні ознаки
+          description: Побудуйте контури, площу та bounding boxes.
+        - id: limits
+          title: Обмеження
+          description: Опишіть false positives, освітлення та межі застосовності.
+      acceptanceCriteria:
+        - Код не плутає RGB і BGR на межі введення.
+        - Звіт відрізняє «об’єкт не знайдено» від помилки читання.
+        - Є мінімум три fixture-зображення з різними сценаріями.
+
+  java-advanced:
+    - key: java-log-analyzer
+      title: Java Log Analyzer
+      description: Побудуйте потоковий аналізатор логів із власними типами подій, фільтрами, статистикою та тестами на malformed records.
+      estimatedMinutes: 180
+      skills: [streams, records, exceptions, files, tests]
+      template: "src/main/java/LogAnalyzer.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: parse
+          title: Парсер
+          description: Перетворіть рядок логу на типізовану подію або контрольовану помилку.
+        - id: aggregate
+          title: Агрегація
+          description: Порахуйте рівні, endpoint і часові діапазони.
+        - id: report
+          title: Звіт
+          description: Сформуйте детермінований текстовий звіт.
+      acceptanceCriteria:
+        - Невалідний рядок не завершує весь аналіз без пояснення.
+        - Тести покривають порожній файл і змішані рівні.
+
+  cpp-advanced:
+    - key: cpp-file-indexer
+      title: C++ File Indexer
+      description: Створіть індексатор файлів із pathlib-подібним обходом, метаданими, пошуком і контрольованою обробкою помилок.
+      estimatedMinutes: 210
+      skills: [filesystem, RAII, STL, algorithms, testing, complexity]
+      template: "src/indexer.hpp\nsrc/indexer.cpp\nsrc/main.cpp\ntests/\nREADME.md"
+      milestones:
+        - id: scan
+          title: Обхід
+          description: Пройдіть директорію без ручного керування пам’яттю та з обробкою permission errors.
+        - id: index
+          title: Індекс
+          description: Збережіть нормалізовані метадані та поясніть структуру пошуку.
+        - id: query
+          title: Пошук
+          description: Реалізуйте фільтр і оцініть складність на різних обсягах.
+      acceptanceCriteria:
+        - Ресурси звільняються автоматично через RAII.
+        - Недоступна папка не викликає невизначену поведінку.
+        - Є тест на порожній каталог і дубльовані імена.

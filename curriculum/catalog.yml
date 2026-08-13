@@ -1,0 +1,66 @@
+version: 1
+projectsSource: curriculum/mini_projects.yml
+courses:
+  - key: python-core
+    title: Python Core
+    description: Повний фундамент Python від синтаксису до стандартної бібліотеки.
+    runtime: PYTHON
+    level: FOUNDATION
+    isBase: true
+    source: theories/python_core_theory.yml
+  - key: java-core
+    title: Java Core
+    description: Фундамент Java від синтаксису до колекцій, винятків і тестування.
+    runtime: JAVA
+    level: FOUNDATION
+    isBase: true
+    source: theories/java_core_theory.yml
+  - key: cpp-core
+    title: C++ Core
+    description: Фундамент C++ від базового синтаксису до пам’яті, STL і налагодження.
+    runtime: CPP
+    level: FOUNDATION
+    isBase: true
+    source: theories/cpp_core_theory.yml
+  - key: python-extensions
+    title: Python Advanced
+    description: Розширені можливості Python після завершення Python Core.
+    runtime: PYTHON
+    level: SPECIALIZATION
+    prerequisites: [python-core]
+    source: theories/python_extensions_theory.yml
+  - key: flask
+    title: Flask
+    description: Побудова вебзастосунків на Flask після завершення Python Core.
+    runtime: PYTHON
+    level: SPECIALIZATION
+    prerequisites: [python-core]
+    source: theories/flask_theory.yml
+  - key: fastapi
+    title: FastAPI
+    description: Побудова типізованих API на FastAPI після завершення Python Core.
+    runtime: PYTHON
+    level: SPECIALIZATION
+    prerequisites: [python-core]
+    source: theories/fastapi_theory.yml
+  - key: computer-vision
+    title: Computer Vision
+    description: Основи комп’ютерного бачення після завершення Python Core.
+    runtime: PYTHON
+    level: ADVANCED
+    prerequisites: [python-core]
+    source: theories/computer_vision_theory.yml
+  - key: java-advanced
+    title: Java Advanced
+    description: Розширена Java після завершення Java Core.
+    runtime: JAVA
+    level: SPECIALIZATION
+    prerequisites: [java-core]
+    source: theories/java_advanced_theory.yml
+  - key: cpp-advanced
+    title: C++ Advanced
+    description: Розширений C++ після завершення C++ Core.
+    runtime: CPP
+    level: SPECIALIZATION
+    prerequisites: [cpp-core]
+    source: theories/cpp_advanced_theory.yml

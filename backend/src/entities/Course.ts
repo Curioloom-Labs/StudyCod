@@ -11,9 +11,11 @@ import {
 } from "typeorm";
 import { Organization } from "./Organization";
 import { CourseModule } from "./CourseModule";
+import { CourseVariant } from "./CourseVariant";
+import { CourseDependency } from "./CourseDependency";
 
-export type CourseLanguage = "JAVA" | "PYTHON" | "CPP";
 export type CourseStatus = "DRAFT" | "PUBLISHED";
+export type CourseLevel = "FOUNDATION" | "SPECIALIZATION" | "ADVANCED";
 
 /**
  * A reusable course template (Phase 2). Authored once, then assigned to many
@@ -38,8 +40,23 @@ export class Course {
   @Column({ type: "text", nullable: true })
   description?: string | null;
 
-  @Column({ type: "enum", enum: ["JAVA", "PYTHON", "CPP"] })
-  language!: CourseLanguage;
+  @Column({ type: "varchar", length: 120, nullable: true, unique: true, name: "catalog_key" })
+  catalogKey?: string | null;
+
+  @Column({ type: "enum", enum: ["FOUNDATION", "SPECIALIZATION", "ADVANCED"], default: "FOUNDATION" })
+  level!: CourseLevel;
+
+  @Column({ type: "boolean", default: false, name: "is_base" })
+  isBase!: boolean;
+
+  @Column({ type: "varchar", length: 64, nullable: true, name: "source_hash" })
+  sourceHash?: string | null;
+
+  @Column({ type: "int", default: 1, name: "content_version" })
+  contentVersion!: number;
+
+  @Column({ type: "timestamp", nullable: true, name: "last_synced_at" })
+  lastSyncedAt?: Date | null;
 
   @Column({ type: "enum", enum: ["DRAFT", "PUBLISHED"], default: "DRAFT" })
   status!: CourseStatus;
@@ -49,6 +66,12 @@ export class Course {
 
   @OneToMany(() => CourseModule, (m) => m.course)
   modules!: CourseModule[];
+
+  @OneToMany(() => CourseVariant, (variant) => variant.course)
+  variants!: CourseVariant[];
+
+  @OneToMany(() => CourseDependency, (dependency) => dependency.course)
+  dependencies!: CourseDependency[];
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;

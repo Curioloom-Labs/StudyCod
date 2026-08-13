@@ -73,7 +73,7 @@ router.post("/orgs/:orgId/courses", authRequired, async (req: AuthRequest, res: 
       .object({
         title: z.string().min(1).max(200),
         description: z.string().max(50_000).optional(),
-        language: z.string().optional()
+        runtime: z.string().optional()
       })
       .safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
@@ -82,7 +82,7 @@ router.post("/orgs/:orgId/courses", authRequired, async (req: AuthRequest, res: 
       orgId,
       title: parsed.data.title,
       description: parsed.data.description ?? null,
-      language: parsed.data.language,
+      runtime: parsed.data.runtime,
       createdByUserId: req.userId!
     });
     await writeAudit({
@@ -95,7 +95,7 @@ router.post("/orgs/:orgId/courses", authRequired, async (req: AuthRequest, res: 
       requestId: req.requestId,
       ip: req.ip
     });
-    return res.status(201).json({ course: { id: course.id, title: course.title, language: course.language, status: course.status } });
+    return res.status(201).json({ course: { id: course.id, title: course.title, status: course.status, variants: (course.variants || []).map((v) => ({ id: v.id, runtime: v.runtime, status: v.status })) } });
   } catch (error: any) {
     logger.error("[edu/courses] create failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -115,8 +115,8 @@ router.get("/orgs/:orgId/courses", authRequired, async (req: AuthRequest, res: R
       courses: courses.map((c) => ({
         id: c.id,
         title: c.title,
-        language: c.language,
         status: c.status,
+        variants: (c.variants || []).map((v) => ({ id: v.id, runtime: v.runtime, status: v.status })),
         updatedAt: c.updatedAt
       }))
     });
@@ -143,8 +143,8 @@ router.get("/courses/:courseId", authRequired, async (req: AuthRequest, res: Res
         id: course.id,
         title: course.title,
         description: course.description ?? null,
-        language: course.language,
         status: course.status,
+        variants: (course.variants || []).map((v) => ({ id: v.id, runtime: v.runtime, title: v.title, status: v.status })),
         modules: course.modules.map((m) => ({
           id: m.id,
           title: m.title,

@@ -6,7 +6,8 @@ import path from "path";
 import multer from "multer";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
-import { User, UserLang } from "../entities/User";
+import { User } from "../entities/User";
+import type { CourseRuntime } from "../entities/CourseVariant";
 import { Class } from "../entities/Class";
 import { Student } from "../entities/Student";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
@@ -108,7 +109,7 @@ function mimeByExt(fileName: string): string {
   if (ext === ".svg") return "image/svg+xml";
   return "application/octet-stream";
 }
-function normalizeLang(input?: string | null): UserLang {
+function normalizeLang(input?: string | null): CourseRuntime {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
   if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
@@ -327,7 +328,6 @@ eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
       username,
       email,
       password: hash,
-      lang: normalizeLang(language),
       userMode: "EDUCATIONAL",
       emailVerified: false,
       emailVerificationToken: verificationToken,
@@ -379,7 +379,7 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
     const cls = classRepo().create({
       teacher: user,
       name,
-      language: normalizeLang(language || user.lang),
+      language: normalizeLang(language || "PYTHON"),
       gradingSystem: gradingSystem || DEFAULT_GRADING_SYSTEM,
       gradeScaleMode: gradeScaleMode || DEFAULT_GRADE_SCALE_MODE
     });

@@ -379,8 +379,8 @@ const GENERATE_COOLDOWN_MAX_MS = (() => {
   return Math.max(GENERATE_COOLDOWN_MIN_MS, bounded);
 })();
 
-const generateCooldownByUserLang = new Map<string, number>();
-const generateInFlightByUserLang = new Set<string>();
+const generateCooldownByRuntime = new Map<string, number>();
+const generateInFlightByRuntime = new Set<string>();
 
 const GENERATE_RESERVE_LUA = `
 local cooldownKey = KEYS[1]
@@ -459,22 +459,22 @@ async function reserveGenerateSlot(params: {
     return { kind: "ok", retryAfterMs: 0 };
   }
 
-  if (generateInFlightByUserLang.has(params.throttleKey)) {
+  if (generateInFlightByRuntime.has(params.throttleKey)) {
     return { kind: "inflight", retryAfterMs: 2000 };
   }
 
-  const notBefore = generateCooldownByUserLang.get(params.throttleKey) ?? 0;
+  const notBefore = generateCooldownByRuntime.get(params.throttleKey) ?? 0;
   if (notBefore > params.nowMs) {
     return { kind: "cooldown", retryAfterMs: Math.max(200, notBefore - params.nowMs) };
   }
 
-  generateInFlightByUserLang.add(params.throttleKey);
-  generateCooldownByUserLang.set(params.throttleKey, params.nowMs + params.cooldownMs);
+  generateInFlightByRuntime.add(params.throttleKey);
+  generateCooldownByRuntime.set(params.throttleKey, params.nowMs + params.cooldownMs);
   return { kind: "ok", retryAfterMs: 0 };
 }
 
 async function releaseGenerateSlot(throttleKey: string): Promise<void> {
-  generateInFlightByUserLang.delete(throttleKey);
+  generateInFlightByRuntime.delete(throttleKey);
 
   const redis = await getSharedRedisClient().catch(() => null);
   if (!redis) return;
@@ -2003,8 +2003,8 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
         user: {
           id: req.userId
         },
-        ...(req.lang && {
-          lang: req.lang as "JAVA" | "PYTHON" | "CPP"
+        ...(req.learningRuntime && {
+          lang: req.learningRuntime as "JAVA" | "PYTHON" | "CPP"
         })
       },
       order: {
@@ -2857,7 +2857,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       return Math.max(15_000, Math.min(120_000, Math.floor(v)));
     })();
     const userId = req.userId!;
-    const rawLang = String(req.lang ?? "").toUpperCase().trim();
+    const rawLang = String(req.learningRuntime ?? "PYTHON").toUpperCase().trim();
     const lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
     const forcePersonalControl = req.body && typeof req.body === "object" && (req.body as any).forceControl === true;
     throttleKey = makeGenerateThrottleKey(userId, lang);
@@ -2892,9 +2892,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }
 
     // Opportunistic cleanup for expired cooldown entries.
-    if (generateCooldownByUserLang.size > 1000) {
-      for (const [k, ts] of generateCooldownByUserLang.entries()) {
-        if (ts <= now) generateCooldownByUserLang.delete(k);
+    if (generateCooldownByRuntime.size > 1000) {
+      for (const [k, ts] of generateCooldownByRuntime.entries()) {
+        if (ts <= now) generateCooldownByRuntime.delete(k);
       }
     }
 

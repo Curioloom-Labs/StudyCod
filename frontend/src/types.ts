@@ -11,7 +11,7 @@ export interface PublicProfilePrivacy {
 export interface User {
   id: number;
   username: string;
-  course: CourseLanguage;
+  activeRuntime?: CourseLanguage;
   difus: number;
   difusByLang?: Record<CourseLanguage, number>;
   avatarUrl: string | null;

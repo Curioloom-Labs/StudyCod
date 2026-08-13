@@ -1,4 +1,4 @@
-import type { UserLang } from "../entities/User";
+import type { CourseRuntime as UserRuntime } from "../entities/CourseVariant";
 
 export type PlacementAssessmentLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
 export type PlacementAssessmentTrack = "INTERMEDIATE" | "ADVANCED" | "UNDECIDED";
@@ -33,14 +33,14 @@ export type PlacementAssessmentTask = {
 
 export type PlacementAssessmentPackInternal = {
   track: PlacementAssessmentTrack;
-  language: UserLang;
+  language: UserRuntime;
   quizQuestions: PlacementQuizQuestion[];
   tasks: PlacementAssessmentTask[];
 };
 
 export type PlacementAssessmentPackPublic = {
   track: PlacementAssessmentTrack;
-  language: UserLang;
+  language: UserRuntime;
   quizQuestions: Array<{
     id: string;
     promptUk: string;
@@ -55,7 +55,7 @@ export type PlacementAssessmentPackPublic = {
     promptUk: string;
     promptEn: string;
     starterCode: string;
-    language: UserLang;
+    language: UserRuntime;
     sampleInput: string;
     sampleOutput: string;
   }>;
@@ -700,7 +700,7 @@ function taskMinWindowAtLeastK(seed: number): PlacementAssessmentTask {
   };
 }
 
-function buildPlacementAssessmentPackUnchecked(track: PlacementAssessmentTrack, language: UserLang, userId: number): PlacementAssessmentPackInternal {
+function buildPlacementAssessmentPackUnchecked(track: PlacementAssessmentTrack, language: UserRuntime, userId: number): PlacementAssessmentPackInternal {
   const seed = seedFor(userId, track);
 
   const tasks = track === "INTERMEDIATE"
@@ -741,7 +741,7 @@ function buildPlacementAssessmentPackUnchecked(track: PlacementAssessmentTrack, 
   };
 }
 
-export function buildPlacementAssessmentPack(track: PlacementAssessmentTrack, language: UserLang, userId: number): PlacementAssessmentPackInternal {
+export function buildPlacementAssessmentPack(track: PlacementAssessmentTrack, language: UserRuntime, userId: number): PlacementAssessmentPackInternal {
   const pack = buildPlacementAssessmentPackUnchecked(track, language, userId);
 
   // Runtime guard: INTERMEDIATE and ADVANCED should be mostly different

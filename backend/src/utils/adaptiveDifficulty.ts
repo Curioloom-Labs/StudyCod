@@ -8,6 +8,9 @@ import {
   setUserIadForLang,
   type IadEvidence,
 } from "./iad";
+import { AppDataSource } from "../data-source";
+import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
+import { LearningEvidence } from "../entities/LearningEvidence";
 
 /**
  * Backward-compatible helper for quick deterministic updates in tests/tools.
@@ -81,6 +84,37 @@ export async function getStableIad(
     (user as any).lastIadChange = new Date();
     (user as any).lastDifusChange = new Date();
     await userRepo().save(user);
+  }
+
+  // New catalog model: mirror the same deterministic result into the active
+  // course enrollment. The legacy user columns above are only a migration
+  // bridge; new UI and prerequisite checks read enrollment.masteryScore.
+  const enrollment = await AppDataSource.getRepository(UserCourseEnrollment).findOne({
+    where: { user: { id: userId }, variant: { runtime: lang } },
+    relations: ["variant"],
+    order: { updatedAt: "DESC" }
+  });
+  if (enrollment && Math.abs(Number(enrollment.masteryScore ?? 0) - rebuilt.value) > 0.0005) {
+    enrollment.masteryScore = rebuilt.value;
+    await AppDataSource.getRepository(UserCourseEnrollment).save(enrollment);
+  }
+
+  const evidenceRepo = AppDataSource.getRepository(LearningEvidence);
+  if (enrollment) {
+    for (const grade of grades) {
+      const sourceId = `grade:${Number(grade?.id ?? 0)}`;
+      if (sourceId === "grade:0") continue;
+      const exists = await evidenceRepo.findOne({ where: { enrollmentId: enrollment.id, sourceId } });
+      if (exists) continue;
+      await evidenceRepo.save(evidenceRepo.create({
+        enrollmentId: enrollment.id,
+        sourceType: "GRADE",
+        sourceId,
+        score: clampIad(Number(grade?.total ?? 0) / 100),
+        difficulty: clampIad(Number(grade?.task?.difus ?? 0) / 100),
+        modelVersion: 2
+      }));
+    }
   }
 
   return rebuilt.value;

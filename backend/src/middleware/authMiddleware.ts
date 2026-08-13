@@ -12,6 +12,8 @@ import { getCachedUser, setCachedUser, type CachedUser } from '../services/auth/
 import { getStudentUiLangMarker, setStudentUiLangMarker } from '../services/auth/studentUiLangCache';
 import { setRequestContextFields } from '../utils/requestContextStore';
 import { AUTH_COOKIE_NAME } from '../utils/authCookie';
+import { UserCourseEnrollment } from '../entities/UserCourseEnrollment';
+import type { CourseRuntime } from '../entities/CourseVariant';
 
 /**
  * Carries the authenticated principal. EDU runs a deliberate dual identity model
@@ -33,7 +35,7 @@ export interface AuthRequest extends Request<ParamsFlatDictionary, any, any, any
   principalId?: number;
   userRole?: UserRole | null;
   userMode?: UserMode | null;
-  lang?: string;
+  learningRuntime?: CourseRuntime;
   uiLanguage?: UiLocale;
   iad?: number;
   difus?: number;
@@ -44,7 +46,7 @@ type JwtPayload = {
   userId?: number;
   studentId?: number;
   type?: "STUDENT" | "USER";
-  lang?: string;
+  runtime?: string;
   role?: UserRole;
   userMode?: UserMode;
   jti?: string;
@@ -103,7 +105,7 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
     req.studentId = payload.studentId;
     req.userType = "STUDENT";
     req.principalId = payload.studentId;
-    req.lang = payload.lang;
+    req.learningRuntime = (payload.runtime === "CPP" || payload.runtime === "PYTHON" || payload.runtime === "JAVA") ? payload.runtime : undefined;
     req.uiLanguage = uiLanguage;
     req.userRole = null;
     req.userMode = "EDUCATIONAL";
@@ -140,12 +142,11 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
   if (!user) {
     const row = await AppDataSource.getRepository(User).findOne({
       where: { id: userId },
-      select: ["id", "lang", "role", "userMode"]
+      select: ["id", "role", "userMode"]
     });
     if (!row) return "not-found";
     user = {
       id: row.id,
-      lang: row.lang ?? null,
       role: row.role ?? null,
       userMode: row.userMode ?? null
     };
@@ -159,7 +160,12 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
     });
   }
 
-  req.lang = user.lang || payload.lang;
+  const activeEnrollment = await AppDataSource.getRepository(UserCourseEnrollment).findOne({
+    where: { user: { id: userId }, status: "IN_PROGRESS" },
+    relations: ["variant"],
+    order: { updatedAt: "DESC" }
+  });
+  req.learningRuntime = activeEnrollment?.variant?.runtime || "PYTHON";
   req.userRole = user.role || null;
   req.userMode = user.userMode || null;
   return "ok";

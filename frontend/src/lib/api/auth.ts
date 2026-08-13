@@ -1,18 +1,17 @@
 import { api } from "./client";
-import type { User, CourseLanguage } from "../../types";
+import type { User } from "../../types";
 export interface RegisterResponse {
   message: string;
   requiresEmailVerification?: boolean;
   token?: string;
   user?: User;
 }
-export async function register(username: string, email: string, password: string, course: CourseLanguage, firstName: string, lastName: string, birthDay: number, birthMonth: number, turnstileToken?: string): Promise<RegisterResponse> {
+export async function register(username: string, email: string, password: string, firstName: string, lastName: string, birthDay: number, birthMonth: number, turnstileToken?: string): Promise<RegisterResponse> {
   const res = await api.post("/auth/register", {
     username,
     email,
     password,
     ...(turnstileToken ? { turnstileToken } : {}),
-    course,
     firstName,
     lastName,
     birthDay,

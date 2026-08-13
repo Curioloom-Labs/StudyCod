@@ -18,7 +18,8 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
   const [selected, setSelected] = useState<TheoryTopic | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const courseLabel = user.course === "JAVA" ? "Java" : user.course === "CPP" ? "C++" : "Python";
+  const runtime = user.activeRuntime || "PYTHON";
+  const courseLabel = runtime === "JAVA" ? "Java" : runtime === "CPP" ? "C++" : "Python";
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +27,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
       setLoading(true);
       setLoadError(null);
       try {
-        const list = await getTheoryTopics(user.course);
+        const list = await getTheoryTopics(runtime);
         if (cancelled) return;
         setTopics(list);
         setSelected(list[0] || null);
@@ -42,7 +43,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
     };
     void load();
     return () => { cancelled = true; };
-  }, [user.course]);
+  }, [runtime]);
 
   return (
     <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-3 sm:p-4 md:p-6">

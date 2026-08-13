@@ -214,7 +214,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   const isStudent = !!user.studentId;
   const isEducational = user.userMode === "EDUCATIONAL";
 
-  const [course, setCourse] = useState<CourseLanguage>(user.course);
+  const [course, setCourse] = useState<CourseLanguage>(user.activeRuntime || "PYTHON");
   const [avatarUrl, setAvatarUrl] = useState<string>(user.avatarUrl ?? "");
   const [avatarData, setAvatarData] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -236,7 +236,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   });
 
   useEffect(() => {
-    setCourse(user.course);
+    setCourse(user.activeRuntime || "PYTHON");
     setPublicProfilePrivacy({
       ...DEFAULT_PUBLIC_PROFILE_PRIVACY,
       ...(user.publicProfilePrivacy ?? {}),

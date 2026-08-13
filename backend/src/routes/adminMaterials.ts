@@ -180,11 +180,9 @@ function assertTheoryContentIsPure(content: string): void {
     throw new Error("THEORY_CONTAINS_PRACTICE");
   }
 
-  const forbiddenImperatives =
-    /\b(виконайте|обчисліть|знайдіть|розв\s*яжіть|напис(ати|іть)\s+програм(у|у)|зчитайте|прочитайте|введіть|input\s*\(|read\s+from\s+stdin)\b/i;
-  if (forbiddenImperatives.test(t)) {
-    throw new Error("THEORY_CONTAINS_TASK_INSTRUCTIONS");
-  }
+  // Imperative wording is valid inside an explanation or a code walkthrough.
+  // A global word regex rejected legitimate theory such as input() lessons;
+  // structural practice headings and explicit I/O sections remain the boundary.
 }
 
 const eduLanguageSchema = z.enum(["JAVA", "PYTHON", "CPP"]);

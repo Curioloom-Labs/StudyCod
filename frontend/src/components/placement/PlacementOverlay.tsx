@@ -62,7 +62,7 @@ export const PlacementOverlay: React.FC<{
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.toLowerCase().startsWith("en") ? "en" : "uk";
 
-  const [pickedCourse, setPickedCourse] = useState<CourseLanguage>(() => user.course || "JAVA");
+  const [pickedCourse, setPickedCourse] = useState<CourseLanguage>(() => user.activeRuntime || "JAVA");
   const [step, setStep] = useState<Step>("pick");
   const [pickedChoice, setPickedChoice] = useState<PlacementChoice>("BEGINNER");
 

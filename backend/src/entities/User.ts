@@ -1,7 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Task } from "./Task";
 import { Grade } from "./Grade";
-export type UserLang = "JAVA" | "PYTHON" | "CPP";
 export type UserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
 export type UserRole = "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
 export type PlacementLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
@@ -96,12 +95,6 @@ export class User {
     name: "role"
   })
   role!: UserRole | null;
-  @Column({
-    type: "varchar",
-    length: 10,
-    default: "JAVA"
-  })
-  lang!: UserLang;
   @Column({
     type: "decimal",
     precision: 6,

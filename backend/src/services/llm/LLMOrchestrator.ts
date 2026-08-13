@@ -112,6 +112,11 @@ function compactPromptText(raw: string, maxLength: number): string {
   return clipped.slice(0, cutAt).trim();
 }
 
+function extractLearningContract(raw: string): string {
+  const match = String(raw ?? '').match(/<!--\s*STUDYCOD_LEARNING_META_START[\s\S]*?STUDYCOD_LEARNING_META_END\s*-->/i);
+  return match ? match[0].trim() : '';
+}
+
 function getDifficultyPrompt(difus: number, isEnglish: boolean = false): string {
   if (isEnglish) {
     if (difus < 0.2) return "Level: BEGINNER (Very easy). The task should be as simple as possible, focus only on syntax. No complex algorithms.";
@@ -701,6 +706,7 @@ CRITICAL: The "topic" field in JSON MUST be equal to "${params.anchor.topic}". D
     const isFoundationalDataTask = /змінн|тип\s+дан|типи|оголош|присво|літерал|variable|data\s+type|declar|literal|primitive/.test(taskSemanticText);
     const compactPreviousTasks = compactPromptText(params.previousTasks ?? '', LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS);
     const compactTheoryContext = compactPromptText(params.theory, LLM_TASK_THEORY_CONTEXT_CHARS);
+    const learningContract = extractLearningContract(params.theory);
 
     let uniquenessBlock = "";
     if (compactPreviousTasks) {
@@ -896,6 +902,12 @@ ${params.prevTopics && params.prevTopics.trim().length > 0 ? `Попередні
 
 Теорія з теми (для контексту):
 ${compactTheoryContext}
+
+КОНТРАКТ НАВЧАННЯ (якщо присутній, він є авторитетним):
+${learningContract || 'Структурований контракт не заданий; спирайся лише на видиму теорію та anchor теми.'}
+- Створи одну повну програму, яка перевіряє exercise_focus.
+- Використовуй objectives як центр вправи й не вимагай нічого з not_yet_taught.
+- Не перетворюй контракт на чекліст і не показуй приховані метадані учневі.
 ${uniquenessBlock}
 
 ШАБЛОН КОДУ (codeTemplate) - ЗАБОРОНЕНО писати реалізацію:
@@ -1003,6 +1015,12 @@ ${params.prevTopics && params.prevTopics.trim().length > 0 ? `Previous topics:\n
 
 Topic theory (for context):
 ${compactTheoryContext}
+
+LEARNING CONTRACT (authoritative when present):
+${learningContract || 'No structured contract was provided; use only the visible theory and the topic anchor.'}
+- Create one complete program that checks the exercise_focus.
+- Use the objectives as the center of the task and do not require anything named in not_yet_taught.
+- Do not turn the contract into a checklist or reveal hidden metadata to the learner.
 ${uniquenessBlock}
 
 CODE TEMPLATE (codeTemplate) - FORBIDDEN to write the implementation:

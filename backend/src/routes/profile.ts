@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../data-source";
-import { User, UserLang } from "../entities/User";
+import { User } from "../entities/User";
+import type { CourseRuntime as UserRuntime } from "../entities/CourseVariant";
 import { Grade } from "../entities/Grade";
 import { Student } from "../entities/Student";
 import { LibraryTaskAttempt } from "../entities/LibraryTaskAttempt";
@@ -33,14 +34,14 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const libraryAttemptRepo = () => AppDataSource.getRepository(LibraryTaskAttempt);
 const contestParticipantRepo = () => AppDataSource.getRepository(ContestParticipant);
 const contestSubmissionRepo = () => AppDataSource.getRepository(ContestSubmission);
-function normalizeLang(input?: string | null): UserLang {
+function normalizeLang(input?: string | null): UserRuntime {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
   if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
 
-type CourseHandleMap = Record<UserLang, string | null>;
+type CourseHandleMap = Record<UserRuntime, string | null>;
 type ContestHandlesByCourse = {
   codeforces: CourseHandleMap;
   atcoder: CourseHandleMap;
@@ -119,7 +120,7 @@ function getContestHandlesByCourse(user: User): ContestHandlesByCourse {
   };
 }
 
-function pickContestHandlesForCourse(all: ContestHandlesByCourse, course: UserLang) {
+function pickContestHandlesForCourse(all: ContestHandlesByCourse, course: UserRuntime) {
   return {
     codeforces: all.codeforces[course] ?? null,
     atcoder: all.atcoder[course] ?? null,
@@ -130,7 +131,7 @@ function pickContestHandlesForCourse(all: ContestHandlesByCourse, course: UserLa
 
 function setCourseContestHandle(
   map: CourseHandleMap,
-  course: UserLang,
+  course: UserRuntime,
   nextRaw: unknown,
   platform: ContestPlatform
 ): CourseHandleMap {
@@ -214,15 +215,14 @@ function serializeUserProfileMeta(meta: {
   return pp.slice(0, 100);
 }
 
-function buildUserDto(user: User) {
-  const iadValue = getUserIadForLang(user, user.lang);
+function buildUserDto(user: User, activeRuntime: UserRuntime = "PYTHON") {
+  const iadValue = getUserIadForLang(user, activeRuntime);
   const handlesByCourse = getContestHandlesByCourse(user);
   const profileMeta = parseUserProfileMeta(user.timezone ?? null);
   return {
     id: user.id,
     username: user.username,
-    course: user.lang,
-    lang: user.lang,
+    activeRuntime,
     iad: iadValue ?? 0,
     difus: iadValue ?? 0,
     iadByLang: {
@@ -236,7 +236,7 @@ function buildUserDto(user: User) {
       CPP: getUserIadForLang(user, "CPP"),
     },
     avatarUrl: user.avatarUrl ?? null,
-    contestHandles: pickContestHandlesForCourse(handlesByCourse, user.lang),
+    contestHandles: pickContestHandlesForCourse(handlesByCourse, activeRuntime),
     contestHandlesByCourse: handlesByCourse,
     publicProfilePrivacy: profileMeta.privacy,
     timezone: profileMeta.timezone,
@@ -367,11 +367,11 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
       id: user.id,
       username: user.username,
       avatarUrl: user.avatarUrl ?? null,
-      lang: user.lang,
-      iad: getUserIadForLang(user, user.lang),
-      difus: getUserIadForLang(user, user.lang),
+      lang: "PYTHON",
+      iad: getUserIadForLang(user, "PYTHON"),
+      difus: getUserIadForLang(user, "PYTHON"),
       joinedAt: user.createdAt,
-      contestHandles: pickContestHandlesForCourse(getContestHandlesByCourse(user), user.lang),
+      contestHandles: pickContestHandlesForCourse(getContestHandlesByCourse(user), "PYTHON"),
       privacy,
       stats: {
         solvedTotal,
@@ -417,7 +417,7 @@ router.get(["/iad", "/difus"], authMiddleware, async (req: AuthRequest, res: Res
       return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
     }
 
-    const lang = user.lang;
+    const lang = req.learningRuntime || "PYTHON";
     const currentIad = await getStableIad(user.id, lang, 0, userRepo, gradeRepo);
     const refreshedUser = await userRepo().findOne({ where: { id: req.userId } });
     const iadUser = refreshedUser ?? user;
@@ -753,7 +753,7 @@ router.get("/placement/coding-challenge", authMiddleware, async (req: AuthReques
 
     const qCourse = (req.query as any)?.course;
     const qLang = (req.query as any)?.lang;
-    const normalizedLang = normalizeLang(qCourse || qLang || user.lang);
+    const normalizedLang = normalizeLang(qCourse || qLang || req.learningRuntime || "PYTHON");
     const { challenge } = buildChallengeFor(level, user.id);
 
     return res.json({
@@ -811,7 +811,7 @@ router.post("/placement/coding-submit", authMiddleware, async (req: AuthRequest,
     if (!normalizedLevel) {
       return res.status(400).json({ message: "LEVEL_REQUIRED" });
     }
-    const normalizedLang = normalizeLang(course || lang || user.lang);
+    const normalizedLang = normalizeLang(course || lang || req.learningRuntime || "PYTHON");
     if (normalizedLang !== "JAVA" && normalizedLang !== "PYTHON") {
       return res.status(400).json({ message: "INVALID_LANGUAGE" });
     }
@@ -897,7 +897,7 @@ router.get("/placement/assessment-pack", authMiddleware, async (req: AuthRequest
     }
 
     const track = normalizePlacementTrack((req.query as any)?.track);
-    const normalizedLang = normalizeLang((req.query as any)?.course || (req.query as any)?.lang || user.lang);
+    const normalizedLang = normalizeLang((req.query as any)?.course || (req.query as any)?.lang || req.learningRuntime || "PYTHON");
     const pack = buildPlacementAssessmentPack(track, normalizedLang, user.id);
     return res.json(toPublicPlacementAssessmentPack(pack));
   } catch (err) {
@@ -939,7 +939,7 @@ router.post("/placement/assessment-submit", authMiddleware, async (req: AuthRequ
     };
 
     const normalizedTrack = normalizePlacementTrack(track);
-    const normalizedLang = normalizeLang(course || lang || user.lang);
+    const normalizedLang = normalizeLang(course || lang || req.learningRuntime || "PYTHON");
     const pack = buildPlacementAssessmentPack(normalizedTrack, normalizedLang, user.id);
 
     const answerById = new Map<string, number>();
@@ -1044,7 +1044,6 @@ router.post("/placement/assessment-submit", authMiddleware, async (req: AuthRequ
     const overallPct = Math.round(quizPct * 0.4 + practicalPct * 0.6);
     const finalLevel = computePlacementLevelFromAssessment(normalizedTrack, quizPct, practicalPassed, practicalTotal);
 
-    user.lang = normalizedLang;
     user.placementDone = true;
     user.placementDoneAt = new Date();
     user.placementLevel = finalLevel;
@@ -1063,7 +1062,7 @@ router.post("/placement/assessment-submit", authMiddleware, async (req: AuthRequ
     await userRepo().save(user);
 
     return res.json({
-      user: buildUserDto(user),
+      user: buildUserDto(user, req.learningRuntime),
       summary: {
         track: normalizedTrack,
         finalLevel,
@@ -1139,7 +1138,7 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         message: "USER_NOT_FOUND"
       });
     }
-    const dto = buildUserDto(user);
+    const dto = buildUserDto(user, req.learningRuntime);
     // A User that owns a roster Student profile (join-code enrolment or a claimed
     // legacy profile) is an EDU student — surface the student view so the
     // frontend gates (`userMode` + `studentId`) render the student experience.
@@ -1245,9 +1244,6 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         showLanguageBreakdown?: boolean;
       };
     };
-    if (course || lang) {
-      user.lang = normalizeLang(course || lang);
-    }
     if (avatarData?.startsWith("data:image/")) {
       user.avatarUrl = avatarData;
     } else if (avatarUrl !== undefined) {
@@ -1255,7 +1251,7 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
     }
 
     if (contestHandles && typeof contestHandles === "object") {
-      const activeCourse = user.lang;
+      const activeCourse = normalizeLang(course || lang || req.learningRuntime || "PYTHON");
       const byCourse = getContestHandlesByCourse(user);
 
       if (Object.prototype.hasOwnProperty.call(contestHandles, "codeforces")) {
@@ -1299,7 +1295,7 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       });
     }
     await userRepo().save(user);
-    const dto = buildUserDto(user);
+    const dto = buildUserDto(user, req.learningRuntime);
     // Keep the student view sticky across profile edits (Track B): a User-backed
     // student must not flip to the personal view after updating their avatar.
     const linkedStudent = await findActiveStudentForUser(user.id);
@@ -1497,8 +1493,8 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
       });
     }
 
-    const prevLang = user.lang;
-    const normalizedLang = normalizeLang(course || lang || user.lang);
+    const prevLang = normalizeLang(req.learningRuntime || "PYTHON");
+    const normalizedLang = normalizeLang(course || lang || req.learningRuntime || "PYTHON");
     // Placement only has Java/Python tracks (no CPP mastered-until field exists).
     // Without this guard a CPP course falls into the Python branch below and
     // silently overwrites the student's Python placement state.
@@ -1506,7 +1502,6 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
       return res.status(400).json({ message: "INVALID_LANGUAGE" });
     }
     if (course !== undefined || lang !== undefined) {
-      user.lang = normalizedLang;
       if (prevLang !== normalizedLang) {
         // language switch invalidates coding challenge result
         user.placementCodingPassed = false;
@@ -1614,7 +1609,7 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
     (user as any).placementDoneAt = new Date();
 
     await userRepo().save(user);
-    return res.json(buildUserDto(user));
+    return res.json(buildUserDto(user, req.learningRuntime));
   } catch (err) {
     logger.error("[profile] PUT /profile/placement error", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({

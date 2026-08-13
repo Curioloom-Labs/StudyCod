@@ -10,7 +10,6 @@ export interface AdminUser {
   lastName: string | null;
   userMode: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
   role: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
-  lang: "JAVA" | "PYTHON" | "CPP";
   iad: number;
   difus?: number;
   avatarUrl: string | null;
@@ -119,7 +118,6 @@ export interface CreateUserData {
   lastName?: string;
   userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
   role?: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
-  lang?: "JAVA" | "PYTHON" | "CPP";
   emailVerified?: boolean;
 }
 export interface UpdateUserData {
@@ -127,7 +125,6 @@ export interface UpdateUserData {
   password?: string;
   firstName?: string;
   lastName?: string;
-  lang?: "JAVA" | "PYTHON" | "CPP";
 }
 export interface UpdateUserRoleData {
   role: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";

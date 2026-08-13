@@ -5,7 +5,8 @@ import crypto from "crypto";
 import passport from "passport";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
-import { User, UserLang } from "../entities/User";
+import { User } from "../entities/User";
+import type { CourseRuntime } from "../entities/CourseVariant";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { emailService } from "../services/emailService";
 import { maintenanceService } from "../services/maintenanceService";
@@ -320,7 +321,6 @@ export const __authGoogleExchangeTestOnly = {
 function signUserToken(user: User): string {
   return jwt.sign({
     userId: user.id,
-    lang: user.lang,
     role: user.role,
     userMode: user.userMode,
     jti: generateJti()
@@ -396,19 +396,18 @@ authRouter.get("/maintenance", async (_req: Request, res: Response) => {
     until: state.until
   });
 });
-function normalizeLang(input?: string | null): UserLang {
+function normalizeLang(input?: string | null): CourseRuntime {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
   if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
 function buildUserDto(user: User) {
-  const iadValue = getUserIadForLang(user, user.lang);
+  const iadValue = getUserIadForLang(user, "PYTHON");
   return {
     id: user.id,
     username: user.username,
-    course: user.lang,
-    lang: user.lang,
+    activeRuntime: "PYTHON" as CourseRuntime,
     iad: iadValue ?? 0,
     difus: iadValue ?? 0,
     avatarUrl: user.avatarUrl ?? null,
@@ -438,8 +437,6 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   turnstileToken: z.string().min(1).max(4096).optional(),
-  course: z.string().optional(),
-  lang: z.string().optional(),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   birthDay: z.number().int().min(1).max(31),
@@ -449,8 +446,6 @@ const googleCompleteSchema = z.object({
   token: z.string().min(1),
   username: z.string().min(3).max(50),
   password: z.string().min(8),
-  course: z.string().optional(),
-  lang: z.string().optional(),
   userMode: z.enum(["PERSONAL", "EDUCATIONAL", "CONTEST"]).optional(),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -477,8 +472,6 @@ authRouter.post("/register", async (req: AuthRequest, res: Response) => {
       username,
       password,
       turnstileToken,
-      course,
-      lang,
       firstName,
       lastName,
       birthDay,
@@ -504,7 +497,6 @@ authRouter.post("/register", async (req: AuthRequest, res: Response) => {
         message: existingUser.username === username ? "USERNAME_ALREADY_EXISTS" : "EMAIL_ALREADY_EXISTS"
       });
     }
-    const normalizedLang = normalizeLang(course || lang || "JAVA");
     const hash = await bcrypt.hash(password, 10);
     const verificationToken = crypto.randomBytes(32).toString("hex");
     const verificationExpires = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
@@ -512,7 +504,6 @@ authRouter.post("/register", async (req: AuthRequest, res: Response) => {
       username,
       email,
       password: hash,
-      lang: normalizedLang,
       iadJava: 0,
       iadPython: 0,
       iadCpp: 0,
@@ -937,8 +928,6 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       token,
       username,
       password,
-      course,
-      lang,
       userMode,
       firstName,
       lastName,
@@ -1010,13 +999,11 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
         message: "USERNAME_ALREADY_EXISTS"
       });
     }
-    const normalizedLang = normalizeLang(course || lang || "JAVA");
     const hash = await bcrypt.hash(password, 10);
     const user = userRepo().create({
       username,
       email,
       password: hash,
-      lang: normalizedLang,
       iadJava: 0,
       iadPython: 0,
       iadCpp: 0,

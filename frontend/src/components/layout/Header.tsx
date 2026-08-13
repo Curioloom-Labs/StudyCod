@@ -24,7 +24,7 @@ export const Header: React.FC<Props> = ({
         </button>
         <div className="h-6 w-px bg-border" />
         <div className="px-3 py-1 border border-secondary/40 bg-secondary/10 text-sm font-mono text-secondary">
-          {user.course === "JAVA" ? "Java" : user.course === "PYTHON" ? "Python" : "C++"}
+          {(user.activeRuntime || "PYTHON") === "JAVA" ? "Java" : (user.activeRuntime || "PYTHON") === "PYTHON" ? "Python" : "C++"}
         </div>
       </div>
       

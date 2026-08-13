@@ -11,7 +11,7 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 type ItemKind = "THEORY" | "PAGE" | "CODE_TASK" | "WEB_TASK" | "QUIZ" | "MANUAL";
 interface Item { id: number; kind: ItemKind; title: string; }
 interface Module { id: number; title: string; items: Item[]; }
-interface CourseTree { id: number; title: string; language: string; status: "DRAFT" | "PUBLISHED"; modules: Module[]; }
+interface CourseTree { id: number; title: string; variants?: Array<{ runtime: string; status?: string }>; status: "DRAFT" | "PUBLISHED"; modules: Module[]; }
 interface ClassOption { id: number; name: string; }
 
 const KIND_ICON: Record<ItemKind, React.ReactNode> = {
@@ -101,7 +101,7 @@ export const CourseDetailPage: React.FC = () => {
         eyebrowClassic="// course"
         eyebrowAurora={tr("Курс", "Course")}
         title={course.title}
-        subtitle={`${course.language} · ${course.status === "PUBLISHED" ? tr("Опубліковано", "Published") : tr("Чернетка", "Draft")}`}
+        subtitle={`${course.variants?.[0]?.runtime ?? "COURSE"} · ${course.status === "PUBLISHED" ? tr("Опубліковано", "Published") : tr("Чернетка", "Draft")}`}
       />
 
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>

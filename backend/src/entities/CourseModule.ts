@@ -34,6 +34,12 @@ export class CourseModule {
   @Column({ type: "int", default: 0 })
   order!: number;
 
+  @Column({ type: "varchar", length: 160, nullable: true, name: "content_key" })
+  contentKey?: string | null;
+
+  @Column({ type: "varchar", length: 64, nullable: true, name: "source_hash" })
+  sourceHash?: string | null;
+
   @OneToMany(() => CourseItem, (i) => i.module)
   items!: CourseItem[];
 

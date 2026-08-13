@@ -51,6 +51,8 @@ const HomePage = React.lazy(() => import("./pages/core/HomePage").then(mod => ({
 const LearningPlanPage = React.lazy(() => import("./pages/core/LearningPlanPage").then(mod => ({ default: mod.LearningPlanPage })));
 const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfilePage").then(mod => ({ default: mod.PublicProfilePage })));
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
+const LearningCatalogPage = React.lazy(() => import("./pages/learning/LearningCatalogPage").then(mod => ({ default: mod.LearningCatalogPage })));
+const LearningCoursePage = React.lazy(() => import("./pages/learning/LearningCoursePage").then(mod => ({ default: mod.LearningCoursePage })));
 const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
 const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherWorkspacePage").then(mod => ({ default: mod.TeacherWorkspacePage })));
 const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassHubPage").then(mod => ({ default: mod.ClassHubPage })));
@@ -123,7 +125,7 @@ const DEV_PREVIEW_USER: User = {
   username: "Oksana",
   firstName: "Оксана",
   lastName: "Мельник",
-  course: "PYTHON",
+  activeRuntime: "PYTHON",
   difus: 72,
   avatarUrl: null,
   userMode: "PERSONAL",
@@ -744,8 +746,9 @@ const AppContent: React.FC = React.memo(() => {
   }, []);
   const courseLabel = useMemo(() => {
     if (!user) return "Java";
-    return user.course === "JAVA" ? "Java" : user.course === "PYTHON" ? "Python" : "C++";
-  }, [user?.course]);
+    const runtime = user.activeRuntime || "PYTHON";
+    return runtime === "JAVA" ? "Java" : runtime === "PYTHON" ? "Python" : "C++";
+  }, [user?.activeRuntime]);
   const userModeLabel = useMemo(() => {
     if (!user) return "Personal";
     if (user.userMode === "EDUCATIONAL") return "EDU";
@@ -1384,6 +1387,24 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
+          <Route path="/learning/catalog" element={<RequireToken>
+                <StandaloneShell current="catalog">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <LearningCatalogPage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
+          <Route path="/learning/course/:courseId" element={<RequireToken>
+                <StandaloneShell current="catalog">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage>
+                      <LearningCoursePage />
+                    </AnimatedPage>
+                  </Suspense>
+                </StandaloneShell>
+              </RequireToken>} />
           <Route path="/invite/:token" element={<RequireToken>
                 <StandaloneShell current="learn">
                   <Suspense fallback={<PageLoader />}>
@@ -1558,7 +1579,7 @@ const ContestRoutes: React.FC = React.memo(() => {
         id: -301,
         username: "contest-preview",
         firstName: "Марко",
-        course: "PYTHON",
+        activeRuntime: "PYTHON",
         difus: 0,
         avatarUrl: null,
         userMode: "CONTEST",
@@ -1578,7 +1599,7 @@ const ContestRoutes: React.FC = React.memo(() => {
     setUser({
       id: payload.userId ?? 0,
       username: "contest-user",
-      course: "JAVA",
+      activeRuntime: "JAVA",
       difus: 0,
       avatarUrl: null,
       userMode: "CONTEST",
@@ -1738,7 +1759,7 @@ const EduRoutes: React.FC = React.memo(() => {
           id: eduPreviewStudent ? -202 : -201,
           username: eduPreviewStudent ? "student-preview" : "teacher-preview",
           firstName: eduPreviewPersona === "student" ? "Софія" : "Ірина",
-          course: "PYTHON",
+          activeRuntime: "PYTHON",
           difus: 74,
           avatarUrl: null,
           userMode: "EDUCATIONAL",

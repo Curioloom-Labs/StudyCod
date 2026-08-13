@@ -2,7 +2,8 @@ import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
-import { User, UserLang, UserRole } from "../entities/User";
+import { User, UserRole } from "../entities/User";
+import type { CourseRuntime } from "../entities/CourseVariant";
 import { Class } from "../entities/Class";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { systemAdminGuard } from "../middleware/rolesGuard";
@@ -31,14 +32,14 @@ adminRouter.use("/mail", adminMailRouter);
 adminRouter.use("/blog", adminBlogRouter);
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
-function normalizeLang(input?: string | null): UserLang {
+function normalizeLang(input?: string | null): CourseRuntime {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
   if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
 }
 function buildUserDto(user: User) {
-  const iadValue = getUserIadForLang(user, user.lang);
+  const iadValue = getUserIadForLang(user, "PYTHON");
   return {
     id: user.id,
     username: user.username,
@@ -48,7 +49,7 @@ function buildUserDto(user: User) {
     lastName: user.lastName || null,
     userMode: user.userMode,
     role: user.role || null,
-    lang: user.lang,
+    activeRuntime: "PYTHON" as CourseRuntime,
     iad: iadValue ?? 0,
     difus: iadValue ?? 0,
     avatarUrl: user.avatarUrl ?? null,
@@ -64,7 +65,6 @@ const createUserSchema = z.object({
   lastName: z.string().optional(),
   userMode: z.enum(["PERSONAL", "EDUCATIONAL", "CONTEST"]).optional(),
   role: z.enum(["USER", "TEACHER", "SUPPORT", "SYSTEM_ADMIN"]).optional(),
-  lang: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   emailVerified: z.boolean().optional()
 });
 const updateUserRoleSchema = z.object({
@@ -127,7 +127,6 @@ adminRouter.post("/users", authRequired, systemAdminGuard, async (req: AuthReque
       lastName: data.lastName || null,
       userMode: data.userMode || "PERSONAL",
       role: role,
-      lang: data.lang || "JAVA",
       emailVerified: data.emailVerified ?? false,
       iadJava: 0,
       iadPython: 0,
@@ -307,7 +306,6 @@ adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: Auth
     }
     if (req.body.firstName !== undefined) user.firstName = req.body.firstName || null;
     if (req.body.lastName !== undefined) user.lastName = req.body.lastName || null;
-    if (req.body.lang) user.lang = normalizeLang(req.body.lang);
     if (req.body.userMode) user.userMode = req.body.userMode;
     if (req.body.emailVerified !== undefined) user.emailVerified = req.body.emailVerified;
     const securityChanged = Boolean(req.body.password || req.body.userMode);
@@ -384,7 +382,7 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
     const cls = classRepo().create({
       teacher: teacher,
       name: data.name,
-      language: normalizeLang(data.language || teacher.lang),
+      language: normalizeLang(data.language || "PYTHON"),
       gradingSystem: data.gradingSystem || DEFAULT_GRADING_SYSTEM
     });
     await classRepo().save(cls);
