@@ -219,15 +219,17 @@ export class MigrateLegacyLearningProgress1752000000000 implements MigrationInte
       }
 
       const requiredCount = items.filter((item) => parseJson(item.content).required !== false).length;
+      const requiredItemIds = items
+        .filter((item) => parseJson(item.content).required !== false)
+        .map((item) => Number(item.id))
+        .filter((itemId) => Number.isInteger(itemId) && itemId > 0);
+      const itemPlaceholders = requiredItemIds.map(() => "?").join(", ");
       const completedRows = await queryRunner.query(
         `SELECT COUNT(*) AS count
            FROM course_item_progress p
-           INNER JOIN course_items i ON i.id = p.item_id
-           INNER JOIN course_modules m ON m.id = i.module_id
           WHERE p.enrollment_id = ? AND p.status = 'COMPLETED'
-            AND i.is_active = 1 AND COALESCE(JSON_EXTRACT(i.content, '$.required'), true) <> false
-            AND m.course_id = ?`,
-        [enrollment.id, base.courseId],
+            AND p.item_id IN (${itemPlaceholders || "NULL"})`,
+        [enrollment.id, ...requiredItemIds],
       ) as Array<{ count: number }>;
       const completedCount = Number(completedRows[0]?.count ?? 0);
       const completionPercent = requiredCount > 0 ? Math.min(100, Math.round((completedCount / requiredCount) * 10000) / 100) : 0;
