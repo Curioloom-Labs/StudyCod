@@ -13,6 +13,7 @@ const classAccess = read("src/services/edu/classAccess.ts");
 const privacy = read("src/services/edu/dataPrivacy.ts");
 const studentEntity = read("src/entities/Student.ts");
 const eraseRoute = read("src/routes/edu/classStudents.ts");
+const learningCatalog = read("src/services/learningCatalogService.ts");
 
 assert(!/return res\.json\(\{\s*token\b/.test(auth), "auth success responses must not expose an access token field");
 assert(!/return res\.json\(\{\s*token\b/.test(studentAuth), "student login must not expose an access token field");
@@ -23,6 +24,7 @@ assert(privacy.includes("studentRepo().restore(student.id)"), "restore must undo
 assert(studentEntity.includes('name: "deleted_at"'), "Student must map deleted_at");
 assert(eraseRoute.includes('router.post("/students/:studentId/restore"'), "restore endpoint must be present");
 assert(eraseRoute.includes('action: "student.data.restore"'), "restore must be audit logged");
+assert(learningCatalog.includes("existing.status = \"IN_PROGRESS\";") && learningCatalog.includes("await enrollments.save(existing);"), "existing AVAILABLE enrollments must persist activation");
 assert(fs.existsSync(path.join(root, "src/migrations/1752500000000-EnforceClassOrgNotNull.ts")), "org_id hardening migration must remain present");
 assert(fs.existsSync(path.join(root, "src/migrations/1752600000000-AddStudentDeletedAt.ts")), "student soft-delete migration must be present");
 assert(read("src/routes/edu/classStudents.ts").includes("writeSensitiveStudentRead"), "sensitive student reads must be audited");

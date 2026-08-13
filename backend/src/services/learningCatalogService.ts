@@ -239,7 +239,13 @@ export async function enrollInCourseVariant(userId: number, variantId: number, e
       .getMany();
     const existing = await enrollments.findOne({ where: { user: { id: userId }, variant: { id: variantId } } });
     if (existing) {
-      if (existing.status === "LOCKED" || existing.status === "AVAILABLE") existing.status = "IN_PROGRESS";
+      if (existing.status === "LOCKED" || existing.status === "AVAILABLE") {
+        existing.status = "IN_PROGRESS";
+        // Existing base enrollments are provisioned as AVAILABLE. Persist the
+        // activation before the follow-up query, otherwise the UI immediately
+        // reloads the stale AVAILABLE row and reports a false activation error.
+        await enrollments.save(existing);
+      }
     } else {
       const created = enrollments.create({
         user: { id: userId } as any,
