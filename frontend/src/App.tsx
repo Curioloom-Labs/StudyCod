@@ -106,7 +106,6 @@ const CollabDemoPage = React.lazy(() => import("./pages/system/CollabDemoPage").
 const OnboardingEntry = React.lazy(() => import("./components/onboarding/OnboardingEntry").then(mod => ({ default: mod.OnboardingEntry })));
 const PlacementEntry = React.lazy(() => import("./components/placement/PlacementEntry").then(mod => ({ default: mod.PlacementEntry })));
 const PlaygroundPage = React.lazy(() => import("./pages/system/PlaygroundPage").then(mod => ({ default: mod.PlaygroundPage })));
-const MyLearningPage = React.lazy(() => import("./pages/edu/StudentPathPages").then(mod => ({ default: mod.LearningProgressWorkspace })));
 const ParentDashboardPage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.ParentWorkspace })));
 const AcceptInvitePage = React.lazy(() => import("./pages/edu/AcceptInvitePage").then(mod => ({ default: mod.AcceptInvitePage })));
 const SolveReplayPage = React.lazy(() => import("./pages/core/SolveReplayPage").then(mod => ({ default: mod.SolveReplayPage })));
@@ -1146,7 +1145,10 @@ const AppContent: React.FC = React.memo(() => {
         return;
       }
       if (target === "learn") {
-        navigate("/learn");
+        // Personal learning now lives in the course catalog. Keep the old URL
+        // as a compatibility redirect so it cannot reopen the legacy skill-tree
+        // workspace.
+        navigate("/learning/catalog");
         return;
       }
       if (target === "continue") {
@@ -1378,15 +1380,7 @@ export const App: React.FC = () => {
                   </AnimatedPage>
                 </Suspense>
               </StandaloneShell>} />
-          <Route path="/learn" element={<RequireToken>
-                <StandaloneShell current="learn">
-                  <Suspense fallback={<PageLoader />}>
-                    <AnimatedPage>
-                      <MyLearningPage />
-                    </AnimatedPage>
-                  </Suspense>
-                </StandaloneShell>
-              </RequireToken>} />
+          <Route path="/learn" element={<RequireToken><Navigate to="/learning/catalog" replace /></RequireToken>} />
           <Route path="/learning/catalog" element={<RequireToken>
                 <StandaloneShell current="catalog">
                   <Suspense fallback={<PageLoader />}>

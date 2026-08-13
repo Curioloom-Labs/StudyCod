@@ -50,12 +50,17 @@ export const LearningCatalogPage: React.FC = () => {
 
   if (loading) return <div className="mx-auto max-w-6xl px-6 py-16 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо каталог…", "Loading catalog…")}</div>;
 
+  const activeVariantId = courses
+    .flatMap((course) => course.variants)
+    .find((variant) => variant.enrollment?.status === "IN_PROGRESS")?.id ?? null;
+
   return <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
     <header className="mb-8 max-w-3xl">
       <p className="text-xs font-bold uppercase tracking-[.16em] text-primary">Study paths</p>
       <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] sm:text-5xl">{tr("Каталог навчання", "Learning catalog")}</h1>
       <p className="mt-4 text-base leading-7 text-text-secondary">{tr("Один акаунт — багато послідовних навчальних шляхів. Поглиблені курси відкриваються лише після завершення необхідної бази.", "One account, many structured learning paths. Advanced courses unlock only after their prerequisites are complete.")}</p>
     </header>
+    {activeVariantId !== null && <div className="mb-6 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-text-secondary">{tr("Активний курс позначено як курс для продовження. Оберіть інший доступний курс, щоб перемкнутися.", "Your active course is marked as Continue. Choose another available course to switch.")}</div>}
     {error && <div className="mb-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
       {courses.map((course) => {
@@ -69,13 +74,16 @@ export const LearningCatalogPage: React.FC = () => {
             const enrollment = variant.enrollment;
             const locked = Boolean(variant.gate) || variant.status !== "PUBLISHED";
             const completed = enrollment?.status === "COMPLETED";
+            const switching = activeVariantId !== null && activeVariantId !== variant.id && !completed && !locked;
             const actionLabel = locked
               ? tr("Закрито", "Locked")
               : completed
                 ? tr("Переглянути курс", "View course")
                 : enrollment?.status === "IN_PROGRESS"
                   ? tr("Продовжити", "Continue")
-                  : tr("Активувати курс", "Activate course");
+                  : switching
+                    ? tr("Перемкнутися", "Switch")
+                    : tr("Активувати курс", "Activate course");
             return <button key={variant.id} type="button" disabled={locked || busyVariant === variant.id} onClick={() => void start(course, variant)} className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${locked ? "cursor-not-allowed border-border bg-bg-code/30 opacity-70" : "border-primary/25 bg-primary/5 hover:bg-primary/10"}`}>
               {locked ? <LockKeyhole className="size-4 text-text-muted" /> : completed ? <CheckCircle2 className="size-4 text-primary" /> : <ChevronRight className="size-4 text-primary" />}
               <span className="flex-1 text-sm font-bold text-text-primary">{variant.title}</span>
