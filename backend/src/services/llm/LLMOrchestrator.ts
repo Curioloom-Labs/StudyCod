@@ -1076,9 +1076,12 @@ ${selfCheckEn}
 Respond ONLY with JSON, without markdown blocks, without explanations.
 `;
 
+    const practicalTaskLengthInstruction = `
+PRACTICAL TASK LENGTH (mandatory): practicalTask must be a connected narrative of at least 180 characters and at least 2 complete sentences for every non-intro topic. It must explicitly state the input (or that the statement provides all values), the required operation, and the exact output. Do not return a one-line summary; expand the statement before returning JSON.
+`;
     const userPrompt = isEnglish
-      ? (userPromptBaseEn + instructionsEn).trim()
-      : (userPromptBaseUa + instructionsUa).trim();
+      ? (userPromptBaseEn + instructionsEn + practicalTaskLengthInstruction).trim()
+      : (userPromptBaseUa + instructionsUa + practicalTaskLengthInstruction).trim();
     const maxRetries = (() => {
       const v = params.semanticRetries;
       if (typeof v !== 'number' || !Number.isFinite(v)) return 2;

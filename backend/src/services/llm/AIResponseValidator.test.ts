@@ -48,6 +48,27 @@ test('AIResponseValidator.validateGenerateTask: allows a concise first Hello Wor
   assert.doesNotThrow(() => AIResponseValidator.validateGenerateTask(data, 'Introduction to Java', 0));
 });
 
+test('AIResponseValidator.validateGenerateTask: expands a short non-intro statement from its contracts', () => {
+  const data = {
+    title: 'Temperature conversion',
+    topic: 'Variables and arithmetic',
+    difficulty: 2,
+    theoryMarkdown: 'Variables store values and arithmetic expressions calculate new values.',
+    practicalTask: 'Write a program that converts a Celsius temperature to Fahrenheit.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'Read one real number c from stdin.',
+    outputFormat: 'Print one real number equal to c * 9 / 5 + 32.',
+    constraints: 'The input value is between -100 and 100.',
+    examples: [{ input: '20', output: '68', explanation: 'Twenty Celsius degrees equal sixty-eight Fahrenheit degrees.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) { } }'
+  };
+
+  const result = AIResponseValidator.validateGenerateTask(data, 'Variables and arithmetic', 1);
+  assert.ok(result.practicalTask.length >= 180);
+  assert.match(result.practicalTask, /converts a Celsius temperature/i);
+  assert.match(result.practicalTask, /input format/i);
+});
+
 test('AIResponseValidator.validateGenerateTask: NO_INPUT_* auto-fixes missing inputFormat no-input wording', () => {
   const data = {
     title: 'Друк привітання',

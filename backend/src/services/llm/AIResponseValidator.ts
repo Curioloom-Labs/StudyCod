@@ -230,6 +230,48 @@ function looksTooShortOrVaguePracticalTask(text: string): boolean {
   return true;
 }
 
+function expandShortPracticalTask(data: {
+  practicalTask: unknown;
+  inputFormat: unknown;
+  outputFormat: unknown;
+  constraints: unknown;
+  ioType: string;
+}): string {
+  const source = String(data.practicalTask ?? '').trim();
+
+  // Do not manufacture a task when the model omitted it completely. That is
+  // still a genuine validation error and should be retried.
+  if (!source || /^default\s+practicaltask$/i.test(source) || !looksTooShortOrVaguePracticalTask(source)) {
+    return source;
+  }
+
+  const inputFormat = String(data.inputFormat ?? '').trim().replace(/\s+/g, ' ');
+  const outputFormat = String(data.outputFormat ?? '').trim().replace(/\s+/g, ' ');
+  const constraints = String(data.constraints ?? '').trim().replace(/\s+/g, ' ');
+  const context = `${source} ${inputFormat} ${outputFormat} ${constraints}`;
+  const isEnglish = !/[А-Яа-яІіЇїЄєҐґ]/.test(context) && /[A-Za-z]/.test(context);
+  const hasInput = data.ioType === 'STDIN_STDOUT';
+
+  const details = isEnglish
+    ? [
+        hasInput
+          ? `The program must read the data described by the input format: ${inputFormat}.`
+          : 'During execution, use only the values and text explicitly specified in this statement.',
+        `After processing the task, print exactly the required result according to this output contract: ${outputFormat}.`,
+        `The solution must be a complete program and must follow these constraints: ${constraints}.`
+      ]
+    : [
+        hasInput
+          ? `Програма має отримати дані у форматі: ${inputFormat}.`
+          : 'Під час запуску використовуйте лише значення й текст, прямо задані в цій умові.',
+        `Після виконання виведіть результат точно за таким форматом: ${outputFormat}.`,
+        `Рішення має бути повною програмою та дотримуватися таких обмежень: ${constraints}.`
+      ];
+
+  const normalizedSource = /[.!?…]$/.test(source) ? source : `${source}.`;
+  return `${normalizedSource} ${details.join(' ')}`.trim();
+}
+
 function looksLikeNumberedChecklistPracticalTask(text: string): boolean {
   const lines = String(text ?? '')
     .split(/\r?\n/)
@@ -651,16 +693,23 @@ export class AIResponseValidator {
       }
     }
 
-    if (typeof fixed.practicalTask === 'string') {
-      fixed.practicalTask = rewriteChecklistPracticalTaskToNarrative(fixed.practicalTask);
-    }
-
     const inputFormat = typeof fixed.inputFormat === 'string' ? fixed.inputFormat.trim() : '';
     const outputFormat = typeof fixed.outputFormat === 'string' ? fixed.outputFormat.trim() : '';
     const constraints = typeof fixed.constraints === 'string' ? fixed.constraints.trim() : '';
     fixed.inputFormat = inputFormat || defaultInputFormatByIo(ioTypeHint);
     fixed.outputFormat = outputFormat || defaultOutputFormatByIo(ioTypeHint);
     fixed.constraints = constraints || defaultConstraintsText();
+
+    if (typeof fixed.practicalTask === 'string') {
+      fixed.practicalTask = rewriteChecklistPracticalTaskToNarrative(fixed.practicalTask);
+      fixed.practicalTask = expandShortPracticalTask({
+        practicalTask: fixed.practicalTask,
+        inputFormat: fixed.inputFormat,
+        outputFormat: fixed.outputFormat,
+        constraints: fixed.constraints,
+        ioType: ioTypeHint
+      });
+    }
 
     if (fixed.topic && typeof fixed.topic === 'string') {
       fixed.topic = fixed.topic.trim();
