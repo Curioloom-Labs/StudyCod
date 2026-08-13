@@ -88,7 +88,7 @@ async function readYamlFile(filePath: string): Promise<any> {
 }
 
 async function loadTopicsFromYaml(lang: "JAVA" | "PYTHON" | "CPP"): Promise<Array<{ title: string; theory: string; index: number }> | null> {
-  const name = lang === "JAVA" ? "java" : lang === "PYTHON" ? "python" : "cpp";
+  const name = lang === "JAVA" ? "java_core" : lang === "PYTHON" ? "python_core" : "cpp_core";
   const parsed = await readYamlFile(`theories/${name}_theory.yml`);
   const topics = parsed && typeof parsed === "object" ? (parsed.topics as any) : null;
   if (!Array.isArray(topics)) return null;
@@ -148,30 +148,12 @@ export async function seedTopicsIfNeeded(): Promise<void> {
       index: number;
     }> = [];
 
-    const appendLegacyJson = async (lang: "JAVA" | "PYTHON") => {
-      const name = lang === "JAVA" ? "java" : "python";
-      const topics = await readJsonFile(`topics/${name}_topics.json`);
-      const theory = await readJsonFile(`theories/${name}_theory.json`);
-      if (!Array.isArray(topics)) return;
-      topics.forEach((title: string, i: number) => {
-        items.push({
-          title,
-          lang,
-          theory: theory && typeof theory === "object" && theory[title] || "",
-          index: i
-        });
-      });
-    };
-
     const langs: Array<"JAVA" | "PYTHON" | "CPP"> = ["JAVA", "PYTHON", "CPP"];
     for (const lang of langs) {
       const yamlTopics = await loadTopicsFromYaml(lang);
       if (yamlTopics) {
         yamlTopics.forEach(t => items.push({ ...t, lang }));
-        continue;
       }
-      if (lang === "CPP") continue;
-      await appendLegacyJson(lang);
     }
 
     if (items.length === 0) {

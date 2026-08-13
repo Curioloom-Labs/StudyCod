@@ -58,7 +58,7 @@ function exerciseDefinition(course: CurriculumCourseDefinition, topic: Curriculu
     total,
     generatedAfterTheory: true,
     theoryItemKey: theoryKey,
-    prompt: extractExerciseFocus(topic.content) || `Виконайте коротку практичну вправу за темою «${topic.title}». Продемонструйте результат у коді та перевірте його на власному прикладі.`,
+    prompt: topic.exerciseFocus || extractExerciseFocus(topic.content) || `Виконайте коротку практичну вправу за темою «${topic.title}». Продемонструйте результат у коді та перевірте його на власному прикладі.`,
     starterCode: starterCode(course.runtime),
     runtime: course.runtime,
     evaluation: { mode: "MANUAL_OR_RUNTIME", solutionNotStoredInClient: true },

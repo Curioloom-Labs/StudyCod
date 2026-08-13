@@ -504,6 +504,14 @@ export const TasksPage: React.FC<Props> = ({
   const latestSubmitRequestSeq = useRef(0);
   const generateRequestRef = useRef(false);
   const autoCourseGenerationRef = useRef<string | null>(null);
+  const [coursePracticeItemId, setCoursePracticeItemId] = useState<number | null>(() => {
+    try {
+      const value = Number(window.sessionStorage.getItem("studycod:active-course-practice-item"));
+      return Number.isInteger(value) && value > 0 ? value : null;
+    } catch {
+      return null;
+    }
+  });
   const latestSubmissionBindingRef = useRef<{
     submissionId?: string;
     codeHash: string;
@@ -558,6 +566,17 @@ export const TasksPage: React.FC<Props> = ({
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
+  const effectiveCourseItemId = requestedCourseItemIdFromUrl ?? coursePracticeItemId;
+
+  useEffect(() => {
+    if (!requestedCourseItemIdFromUrl) return;
+    setCoursePracticeItemId(requestedCourseItemIdFromUrl);
+    try {
+      window.sessionStorage.setItem("studycod:active-course-practice-item", String(requestedCourseItemIdFromUrl));
+    } catch {
+      // Private browsing/storage-disabled environments still work from URL state.
+    }
+  }, [requestedCourseItemIdFromUrl]);
 
   const syncTaskSelectionToUrl = useCallback((taskId: number | null) => {
     const nextSearch = new URLSearchParams(searchParams);
@@ -1500,7 +1519,6 @@ export const TasksPage: React.FC<Props> = ({
     autoCourseGenerationRef.current = key;
     const nextSearch = new URLSearchParams(searchParams);
     nextSearch.delete("generate");
-    nextSearch.delete("courseItemId");
     setSearchParams(nextSearch, { replace: true });
     void handleGenerate({ courseItemId: requestedCourseItemIdFromUrl });
     // handleGenerate is intentionally invoked once per roadmap command; the
@@ -2129,7 +2147,7 @@ export const TasksPage: React.FC<Props> = ({
               <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}>
                 <History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})
               </button>
-              <button type="button" onClick={() => void handleGenerate({ courseItemId: requestedCourseItemIdFromUrl ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
+              <button type="button" onClick={() => void handleGenerate({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
                 <Plus className="size-3.5" />{tr("Нове", "New")}
               </button>
             </>

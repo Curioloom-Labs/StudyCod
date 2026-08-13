@@ -186,7 +186,6 @@ export async function getMe(options?: GetMeOptions): Promise<User> {
 }
 
 export async function updateProfile(data: {
-  course?: CourseLanguage;
   avatarUrl?: string | null;
   avatarData?: string | null;
   contestHandles?: {

@@ -186,33 +186,59 @@ export async function getLearningCatalog(userId: number) {
 }
 
 export async function enrollInCourseVariant(userId: number, variantId: number, expectedCourseId?: number): Promise<UserCourseEnrollment> {
-  const variant = await variantRepo().findOne({ where: { id: variantId }, relations: ["course"] });
-  if (!variant || !variant.course) throw Object.assign(new Error("COURSE_VARIANT_NOT_FOUND"), { statusCode: 404 });
-  if (expectedCourseId != null && variant.courseId !== expectedCourseId) throw Object.assign(new Error("VARIANT_COURSE_MISMATCH"), { statusCode: 400 });
-  if (variant.status !== "PUBLISHED") throw Object.assign(new Error("COURSE_NOT_PUBLISHED"), { statusCode: 409 });
+  // Course activation is a user-level state, not a variant-level toggle. The
+  // serializable transaction prevents two concurrent clicks from leaving two
+  // IN_PROGRESS enrollments behind.
+  return AppDataSource.transaction("SERIALIZABLE", async (manager) => {
+    const variant = await manager.getRepository(CourseVariant).findOne({ where: { id: variantId }, relations: ["course"] });
+    if (!variant || !variant.course) throw Object.assign(new Error("COURSE_VARIANT_NOT_FOUND"), { statusCode: 404 });
+    if (expectedCourseId != null && variant.courseId !== expectedCourseId) throw Object.assign(new Error("VARIANT_COURSE_MISMATCH"), { statusCode: 400 });
+    if (variant.status !== "PUBLISHED") throw Object.assign(new Error("COURSE_NOT_PUBLISHED"), { statusCode: 409 });
 
-  const dependencyState = await getPrerequisiteState(userId, variant.courseId);
-  if (!dependencyState.satisfied) {
-    throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), {
-      statusCode: 423,
-      prerequisites: dependencyState.prerequisites,
-    });
-  }
+    const dependencyState = await getPrerequisiteState(userId, variant.courseId);
+    if (!dependencyState.satisfied) {
+      throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), {
+        statusCode: 423,
+        prerequisites: dependencyState.prerequisites,
+      });
+    }
 
-  const existing = await enrollmentRepo().findOne({ where: { user: { id: userId }, variant: { id: variantId } } });
-  if (existing) {
-    if (existing.status === "LOCKED" || existing.status === "AVAILABLE") existing.status = "IN_PROGRESS";
-    return enrollmentRepo().save(existing);
-  }
-  return enrollmentRepo().save(enrollmentRepo().create({
-    user: { id: userId } as any,
-    course: { id: variant.courseId } as any,
-    variant: { id: variantId } as any,
-    status: "IN_PROGRESS",
-    completionPercent: 0,
-    masteryScore: 0,
-    finalAssessmentPassed: false,
-  }));
+    const enrollments = manager.getRepository(UserCourseEnrollment);
+    // Lock the user's enrollment rows before deciding which one is active.
+    // This also serializes concurrent activation requests on MySQL, where a
+    // plain read followed by an UPDATE could otherwise race.
+    await enrollments.createQueryBuilder("enrollment")
+      .where("enrollment.user_id = :userId", { userId })
+      .setLock("pessimistic_write")
+      .getMany();
+    const existing = await enrollments.findOne({ where: { user: { id: userId }, variant: { id: variantId } } });
+    if (existing) {
+      if (existing.status === "LOCKED" || existing.status === "AVAILABLE") existing.status = "IN_PROGRESS";
+    } else {
+      const created = enrollments.create({
+        user: { id: userId } as any,
+        course: { id: variant.courseId } as any,
+        variant: { id: variantId } as any,
+        status: "IN_PROGRESS",
+        completionPercent: 0,
+        masteryScore: 0,
+        finalAssessmentPassed: false,
+      });
+      await enrollments.save(created);
+    }
+
+    await enrollments.createQueryBuilder()
+      .update(UserCourseEnrollment)
+      .set({ status: "AVAILABLE" })
+      .where("user_id = :userId", { userId })
+      .andWhere("status = :status", { status: "IN_PROGRESS" })
+      .andWhere("variant_id <> :variantId", { variantId })
+      .execute();
+
+    const activated = await enrollments.findOne({ where: { user: { id: userId }, variant: { id: variantId } } });
+    if (!activated) throw new Error("COURSE_ENROLLMENT_CREATE_FAILED");
+    return activated;
+  });
 }
 
 export async function getCourseForUser(userId: number, courseId: number) {

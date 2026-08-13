@@ -27,7 +27,8 @@ test("authored theory has the learner-facing contract and generated exercise foc
   for (const course of result.manifest.courses) {
     for (const topic of result.topics[course.key]) {
       for (const section of requiredSections) assert.match(topic.content, section, `${course.key}/${topic.key}`);
-      assert.match(topic.content, /exercise_focus:\s*[^\n]+/i, `${course.key}/${topic.key}`);
+      assert.ok(topic.exerciseFocus.length >= 20, `${course.key}/${topic.key} exerciseFocus`);
+      assert.doesNotMatch(topic.content, /STUDYCOD_LEARNING_META|exercise_focus:/i, `${course.key}/${topic.key} metadata leaked into theory`);
       assert.ok(topic.content.length >= 1400, `${course.key}/${topic.key} is too short`);
     }
   }
@@ -44,7 +45,7 @@ test("specialised lessons are authored lessons, not padded generic notes", () =>
   const result = validateCurriculum();
   for (const courseKey of ["flask", "fastapi", "computer-vision"]) {
     for (const topic of result.topics[courseKey]) {
-      assert.ok(topic.content.length >= 2800, `${courseKey}/${topic.key}`);
+      assert.ok(topic.content.length >= 2400, `${courseKey}/${topic.key}`);
       assert.ok((topic.content.match(/^### /gm) || []).length >= 10, `${courseKey}/${topic.key}`);
       assert.match(topic.content, /```interactive\s*\n\{"type":"prediction"/i, `${courseKey}/${topic.key}`);
       assert.match(topic.content, /\*\*Навіщо саме(?: це)?/i, `${courseKey}/${topic.key}`);
@@ -52,7 +53,7 @@ test("specialised lessons are authored lessons, not padded generic notes", () =>
     }
   }
   for (const topic of result.topics["python-extensions"]) {
-    assert.ok(topic.content.length >= 3000, `python-extensions/${topic.key}`);
+    assert.ok(topic.content.length >= 2600, `python-extensions/${topic.key}`);
   }
 });
 

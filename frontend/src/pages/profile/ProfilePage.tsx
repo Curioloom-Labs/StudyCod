@@ -406,18 +406,10 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       setMsg(null);
       return;
     }
-    const prevCourse = course;
-    setCourse(next);
-    setMsg(null);
-    try {
-      const updated = await updateProfile({ course: next });
-      onUserChange(updated);
-      setMsg(tr("Профіль перемкнено на іншу мову.", "Profile switched to another language."));
-      await Promise.all([loadGrades(), loadLibraryTasks(next)]);
-    } catch (err: unknown) {
-      setCourse(prevCourse);
-      setMsg(getErrorMessageFromUnknown(err, tr("Не вдалося перемкнути мову профілю", "Failed to switch profile language")));
-    }
+    // A runtime is selected by activating a course in the catalog. The profile
+    // must not mutate a global User.lang/course field or pretend that a click
+    // changed the learning route.
+    window.location.assign("/learning/catalog");
   };
 
   const handleFile = useCallback(
@@ -459,7 +451,6 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     setMsg(null);
     try {
       const updated = await updateProfile({
-        course: isStudent ? undefined : course,
         avatarUrl: avatarData ? undefined : avatarUrl || null,
         avatarData: avatarData ?? null,
         publicProfilePrivacy,

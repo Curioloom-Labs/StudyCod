@@ -1221,15 +1221,11 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       });
     }
     const {
-      course,
-      lang,
       avatarUrl,
       avatarData,
       contestHandles,
       publicProfilePrivacy
     } = req.body as {
-      course?: string;
-      lang?: string;
       avatarUrl?: string | null;
       avatarData?: string | null;
       contestHandles?: {
@@ -1251,7 +1247,7 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
     }
 
     if (contestHandles && typeof contestHandles === "object") {
-      const activeCourse = normalizeLang(course || lang || req.learningRuntime || "PYTHON");
+      const activeCourse = normalizeLang(req.learningRuntime || "PYTHON");
       const byCourse = getContestHandlesByCourse(user);
 
       if (Object.prototype.hasOwnProperty.call(contestHandles, "codeforces")) {

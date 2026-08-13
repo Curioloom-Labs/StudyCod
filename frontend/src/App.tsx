@@ -870,7 +870,7 @@ const AppContent: React.FC = React.memo(() => {
     }
 
     const nextAfterAuth = getSafeNextAfterAuth(searchParams);
-    return <Suspense fallback={<PageLoader />}>
+    return <PublicPageWithFooter><Suspense fallback={<PageLoader />}>
       <AuthPage initialMode={authIntent === "register" ? "register" : "login"} showBackToLanding={location.pathname === "/"} onAuth={(u: User) => {
         setUser(u);
         setBootResumeHandled(true);
@@ -881,14 +881,14 @@ const AppContent: React.FC = React.memo(() => {
           });
         }
       }} />
-      </Suspense>;
+      </Suspense></PublicPageWithFooter>;
   }
   if (maintenance && user.role !== "SYSTEM_ADMIN") {
-    return <Suspense fallback={<PageLoader />}>
+    return <PublicPageWithFooter><Suspense fallback={<PageLoader />}>
       <MaintenancePage state={maintenance} onRetry={() => {
       window.location.reload();
     }} />
-    </Suspense>;
+    </Suspense></PublicPageWithFooter>;
   }
   // EDU users live entirely under /edu — the main app shell only serves them the
   // shared pages (profile/admin). Anything else bounces to /edu so there is a

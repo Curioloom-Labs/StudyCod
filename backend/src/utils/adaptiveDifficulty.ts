@@ -90,7 +90,7 @@ export async function getStableIad(
   // course enrollment. The legacy user columns above are only a migration
   // bridge; new UI and prerequisite checks read enrollment.masteryScore.
   const enrollment = await AppDataSource.getRepository(UserCourseEnrollment).findOne({
-    where: { user: { id: userId }, variant: { runtime: lang } },
+    where: { user: { id: userId }, status: "IN_PROGRESS", variant: { runtime: lang } },
     relations: ["variant"],
     order: { updatedAt: "DESC" }
   });

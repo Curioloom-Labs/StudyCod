@@ -39,6 +39,7 @@ export type CurriculumTopic = {
   key: string;
   title: string;
   description: string;
+  exerciseFocus: string;
   content: string;
   sourcePath: string;
   sourceHash: string;
@@ -156,6 +157,7 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
     const theory = typeof topic?.theory === "string" ? topic.theory : topic?.theory?.content;
     const title = String(topic?.title || "").trim();
     const key = String(topic?.key || slug(title));
+    const exerciseFocus = String(topic?.exerciseFocus || "").trim();
     assert(title, `${course.key}: topic #${index + 1} has no title`);
     assert(key && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key), `${course.key}: invalid topic key at #${index + 1}: ${JSON.stringify(key)}`);
     assert(!keys.has(key), `${course.key}: duplicate topic key ${key}`);
@@ -172,7 +174,7 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
     const hasSummary = /###\s+Підсумок/i.test(content);
     assert(hasIntuition && hasExecution && hasExample && hasExplanation && hasMistakes && hasPractice && hasSummary,
       `${course.key}/${key}: theory must contain intuition, execution, code, explanation, mistakes, practice and summary sections`);
-    assert(/exercise_focus:/i.test(content), `${course.key}/${key}: exercise_focus metadata is required`);
+    assert(exerciseFocus.length >= 20, `${course.key}/${key}: exerciseFocus is required in the curriculum source`);
     const interactiveBlocks = [...content.matchAll(/```interactive\s*\n([\s\S]*?)\n```/gi)];
     assert(interactiveBlocks.length > 0, `${course.key}/${key}: at least one interactive block is required`);
     for (const block of interactiveBlocks) {
@@ -185,7 +187,10 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
       assert(["prediction", "spot-the-bug", "trace", "memory", "dispatch", "quiz"].includes(spec?.type), `${course.key}/${key}: unsupported interactive block type`);
     }
     if (["flask", "fastapi", "computer-vision"].includes(course.key)) {
-      assert(content.length >= 2800, `${course.key}/${key}: specialised theory is too short`);
+      // Authoring metadata is stored next to the topic in YAML, not inside the
+      // learner markdown. Validate the actual lesson rather than rewarding a
+      // hidden comment for length.
+      assert(content.length >= 2400, `${course.key}/${key}: specialised theory is too short`);
       assert((content.match(/^### /gm) || []).length >= 10, `${course.key}/${key}: specialised theory needs a complete lesson structure`);
       assert(content.includes("### На практиці"), `${course.key}/${key}: theory must connect the concept to practice`);
       assert(content.includes('"type":"prediction"'), `${course.key}/${key}: specialised theory needs a prediction check`);
@@ -195,6 +200,7 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
       key,
       title,
       description: String(topic?.description || "").trim(),
+      exerciseFocus,
       content,
       sourcePath: course.source,
       sourceHash: sha256(JSON.stringify(topic)),

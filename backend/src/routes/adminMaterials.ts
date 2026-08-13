@@ -373,7 +373,7 @@ function parseImportYamlPayload(yamlText: string): { language?: MaterialsLanguag
 }
 
 function findRepoTheoryFile(language: MaterialsLanguage): string | null {
-  const fileBase = `${String(language).toLowerCase()}_theory`;
+  const fileBase = `${language === "JAVA" ? "java_core" : language === "PYTHON" ? "python_core" : "cpp_core"}_theory`;
   const exts = [".yml", ".yaml", ".json"];
 
   // backend/ and theories/ are siblings in this repo.
@@ -428,7 +428,7 @@ function findRepoTheoryFile(language: MaterialsLanguage): string | null {
 }
 
 function findRepoTheoryYamlFile(language: MaterialsLanguage): string | null {
-  const fileBase = `${String(language).toLowerCase()}_theory`;
+  const fileBase = `${language === "JAVA" ? "java_core" : language === "PYTHON" ? "python_core" : "cpp_core"}_theory`;
   const exts = [".yml", ".yaml"];
 
   const backendRootFromThisFile = path.resolve(__dirname, "..", "..", "..");

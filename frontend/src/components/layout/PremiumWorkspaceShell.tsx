@@ -84,6 +84,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   ];
 
   const active = (id: Page) => page === id;
+  const routeIsActive = (path: string) => window.location.pathname === path || window.location.pathname.startsWith(`${path}/`);
   const displayName = user.firstName || user.username;
   const modeLabel = user.userMode || "PERSONAL";
   const initial = displayName.slice(0, 1).toUpperCase();
@@ -129,19 +130,19 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 {label}
               </button>
             ))}
-            <button type="button" onClick={onLibrary} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
+            <button type="button" onClick={onLibrary} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/library") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
               <BookOpen className="h-4 w-4" />
               {uk ? "Бібліотека" : "Library"}
             </button>
-            <button type="button" onClick={onCourses} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
+            <button type="button" onClick={onCourses} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/learning") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
               <BookOpen className="h-4 w-4" />
               {uk ? "Курси" : "Courses"}
             </button>
-            <button type="button" onClick={onPlayground} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
+            <button type="button" onClick={onPlayground} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/playground") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
               <PlaySquare className="h-4 w-4" />
               {uk ? "Пісочниця" : "Playground"}
             </button>
-            {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
+            {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/support/desk") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
               <HelpCircle className="h-4 w-4" />
               Support desk
             </button> : null}
