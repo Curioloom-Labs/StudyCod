@@ -900,8 +900,8 @@ export const TaskLibraryPage: React.FC = () => {
         return;
       }
       const nMem = limits.memoryLimitMb;
-      if (nMem !== undefined && (!Number.isFinite(nMem) || nMem < 16 || nMem > 2048)) {
-        showToast({ type: "error", message: tr("Пам'ять має бути в діапазоні 16..2048 MB", "Memory must be in range 16..2048 MB") });
+      if (nMem !== undefined && (!Number.isFinite(nMem) || nMem < 32 || nMem > 1024)) {
+        showToast({ type: "error", message: tr("Пам'ять має бути в діапазоні 32..1024 MB", "Memory must be in range 32..1024 MB") });
         return;
       }
       const nOut = limits.outputLimitKb;
@@ -2330,8 +2330,8 @@ export const TaskLibraryPage: React.FC = () => {
                 <label className="block text-sm font-mono text-text-secondary mb-2">{tr("Пам'ять (MB)", "Memory (MB)")}</label>
                 <input
                   type="number"
-                  min={16}
-                  max={2048}
+                  min={32}
+                  max={1024}
                   value={editor.memoryLimitMb}
                   onChange={(e) => setEditor((s) => ({ ...s, memoryLimitMb: e.target.value === "" ? "" : Number(e.target.value) }))}
                   className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none"

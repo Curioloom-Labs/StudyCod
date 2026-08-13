@@ -15,6 +15,7 @@ import { Class } from "../entities/Class";
 import { LibraryTask } from "../entities/LibraryTask";
 import { TestData } from "../entities/TestData";
 import { judgeWithSemaphore } from "../services/judgeWorker";
+import { normalizeJudgeMemoryMb } from "../services/judgeWorker/limits";
 import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath } from "../utils/multiFileSubmission";
@@ -2707,7 +2708,11 @@ contestsRouter.post(
       const defaultLimitsByLang = DEFAULT_LIMITS_BY_LANG;
       const effectiveLimits = {
         time_limit_ms: taskLimits.time_limit_ms ?? defaultLimitsByLang[judgeLang].time_limit_ms,
-        memory_limit_mb: taskLimits.memory_limit_mb ?? defaultLimitsByLang[judgeLang].memory_limit_mb,
+        memory_limit_mb: normalizeJudgeMemoryMb(
+          judgeLang,
+          taskLimits.memory_limit_mb,
+          defaultLimitsByLang[judgeLang].memory_limit_mb,
+        ),
         output_limit_kb: taskLimits.output_limit_kb ?? defaultLimitsByLang[judgeLang].output_limit_kb,
       };
 
@@ -2905,7 +2910,11 @@ contestsRouter.post(
       const defaultLimitsByLang = DEFAULT_LIMITS_BY_LANG;
       const effectiveLimits = {
         time_limit_ms: taskLimits.time_limit_ms ?? defaultLimitsByLang[judgeLang].time_limit_ms,
-        memory_limit_mb: taskLimits.memory_limit_mb ?? defaultLimitsByLang[judgeLang].memory_limit_mb,
+        memory_limit_mb: normalizeJudgeMemoryMb(
+          judgeLang,
+          taskLimits.memory_limit_mb,
+          defaultLimitsByLang[judgeLang].memory_limit_mb,
+        ),
         output_limit_kb: taskLimits.output_limit_kb ?? defaultLimitsByLang[judgeLang].output_limit_kb,
       };
 

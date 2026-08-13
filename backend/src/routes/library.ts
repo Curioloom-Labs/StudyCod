@@ -20,6 +20,7 @@ import { TopicNew } from "../entities/TopicNew";
 import { TopicTask } from "../entities/TopicTask";
 import { executeCodeWithInput, filterStderrWithLang } from "../services/codeExecutionService";
 import { judgeWithSemaphore } from "../services/judgeWorker";
+import { normalizeJudgeMemoryMb } from "../services/judgeWorker/limits";
 import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeLanguage, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { In, Not } from "typeorm";
@@ -782,7 +783,7 @@ const createLibraryTaskSchema = z.object({
   lang: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   maxAttempts: z.number().int().min(1).max(100).optional(),
   timeLimitMs: z.number().int().min(100).max(60000).optional(),
-  memoryLimitMb: z.number().int().min(16).max(2048).optional(),
+  memoryLimitMb: z.number().int().min(32).max(1024).optional(),
   outputLimitKb: z.number().int().min(4).max(1024).optional(),
   checkerSpec: z
     .discriminatedUnion("type", [
@@ -1508,10 +1509,11 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
       ],
       limits: {
         time_limit_ms: Number.isFinite((task as any).timeLimitMs) && (task as any).timeLimitMs > 0 ? (task as any).timeLimitMs : 5000,
-        memory_limit_mb:
-          Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0
-            ? (task as any).memoryLimitMb
-            : DEFAULT_LIMITS_BY_LANG[selectedLang].memory_limit_mb,
+        memory_limit_mb: normalizeJudgeMemoryMb(
+          selectedLang,
+          (task as any).memoryLimitMb,
+          DEFAULT_LIMITS_BY_LANG[selectedLang].memory_limit_mb,
+        ),
         output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : 256,
       },
       checker: { type: "exact" },
@@ -1623,7 +1625,11 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     };
     const effectiveLimits = {
       time_limit_ms: taskLimits.time_limit_ms ?? DEFAULT_LIMITS_BY_LANG[judgeLang].time_limit_ms,
-      memory_limit_mb: taskLimits.memory_limit_mb ?? DEFAULT_LIMITS_BY_LANG[judgeLang].memory_limit_mb,
+      memory_limit_mb: normalizeJudgeMemoryMb(
+        judgeLang,
+        taskLimits.memory_limit_mb,
+        DEFAULT_LIMITS_BY_LANG[judgeLang].memory_limit_mb,
+      ),
       output_limit_kb: taskLimits.output_limit_kb ?? DEFAULT_LIMITS_BY_LANG[judgeLang].output_limit_kb,
     };
 
@@ -2486,7 +2492,7 @@ async function importSingleLibraryArchive(params: {
     section: z.string().min(1).max(80).optional(),
     maxAttempts: z.coerce.number().int().min(1).max(100).optional(),
     timeLimitMs: z.coerce.number().int().min(100).max(60000).optional(),
-    memoryLimitMb: z.coerce.number().int().min(16).max(2048).optional(),
+    memoryLimitMb: z.coerce.number().int().min(32).max(1024).optional(),
     outputLimitKb: z.coerce.number().int().min(4).max(1024).optional(),
     checkerSpec: z
       .discriminatedUnion("type", [
