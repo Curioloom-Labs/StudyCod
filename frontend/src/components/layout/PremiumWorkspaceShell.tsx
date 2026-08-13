@@ -105,21 +105,21 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   return (
     <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
       <header className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/82 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/82">
-        <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-10">
           <button type="button" onClick={() => onNavigate("home")} className="flex shrink-0 items-center gap-2.5 text-left">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#153321]">
               <Logo size={19} />
             </span>
-            <span className="font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em]">StudyCod</span>
+            <span className="hidden font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em] xl:inline">StudyCod</span>
           </button>
 
-          <nav className="hidden items-center gap-1 rounded-xl bg-[#edf1ed] p-1 dark:bg-white/[.055] lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
+          <nav className="hidden min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto rounded-xl bg-[#edf1ed] p-1 whitespace-nowrap dark:bg-white/[.055] lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
             {nav.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => onNavigate(id)}
-                className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${
+                className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${
                   active(id)
                     ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]"
                     : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"
@@ -129,25 +129,25 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 {label}
               </button>
             ))}
-            <button type="button" onClick={onLibrary} className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]">
+            <button type="button" onClick={onLibrary} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
               <BookOpen className="h-4 w-4" />
               {uk ? "Бібліотека" : "Library"}
             </button>
-            <button type="button" onClick={onCourses} className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]">
+            <button type="button" onClick={onCourses} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
               <BookOpen className="h-4 w-4" />
               {uk ? "Курси" : "Courses"}
             </button>
-            <button type="button" onClick={onPlayground} className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]">
+            <button type="button" onClick={onPlayground} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
               <PlaySquare className="h-4 w-4" />
               {uk ? "Пісочниця" : "Playground"}
             </button>
-            {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]">
+            {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#657368] transition hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef] xl:px-3.5 xl:text-sm">
               <HelpCircle className="h-4 w-4" />
               Support desk
             </button> : null}
           </nav>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <button type="button" onClick={onToggleTheme} className="flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-semibold text-[#637166] transition hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07]">
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               <span className="hidden sm:inline">{theme === "dark" ? (uk ? "Світла" : "Light") : (uk ? "Темна" : "Dark")}</span>

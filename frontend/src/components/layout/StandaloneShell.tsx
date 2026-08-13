@@ -157,24 +157,24 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   return (
     <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
       <header className="sticky top-0 z-50 border-b border-[#16281b]/10 bg-[#f5f7f4]/86 backdrop-blur-xl dark:border-white/[.08] dark:bg-[#09100c]/84">
-        <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-9">
+        <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-9">
           <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex shrink-0 items-center gap-2.5 text-left">
             <span className="grid size-10 place-items-center rounded-[14px] bg-[#183524] shadow-[0_8px_20px_rgba(14,41,26,.12)]">
               <Logo size={20} />
             </span>
-            <span className="font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-.055em]">StudyCod</span>
+            <span className="hidden font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-.055em] xl:inline">StudyCod</span>
           </button>
 
-          <nav aria-label={ukrainian ? "Основна навігація" : "Primary navigation"} className="hidden items-center gap-1 rounded-2xl border border-[#152219]/8 bg-white/70 p-1.5 shadow-[0_10px_28px_rgba(23,45,29,.04)] dark:border-white/[.08] dark:bg-white/[.035] lg:flex">
+          <nav aria-label={ukrainian ? "Основна навігація" : "Primary navigation"} className="hidden min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto rounded-2xl border border-[#152219]/8 bg-white/70 p-1.5 whitespace-nowrap shadow-[0_10px_28px_rgba(23,45,29,.04)] dark:border-white/[.08] dark:bg-white/[.035] lg:flex">
             {nav.map(({ key, label, icon: Icon, path }) => (
-              <button key={key} type="button" onClick={() => navigateTo(path)} className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${current === key ? "bg-[#18291e] text-white shadow-sm dark:bg-[#eaf2eb] dark:text-[#0c140f]" : "text-[#637267] hover:bg-[#edf2ed] hover:text-[#152219] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
+              <button key={key} type="button" onClick={() => navigateTo(path)} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${current === key ? "bg-[#18291e] text-white shadow-sm dark:bg-[#eaf2eb] dark:text-[#0c140f]" : "text-[#637267] hover:bg-[#edf2ed] hover:text-[#152219] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
                 <Icon className="size-4" />
                 {label}
               </button>
             ))}
           </nav>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             {!education ? (
               <button type="button" onClick={() => void i18n.changeLanguage(ukrainian ? "en" : "uk")} className="hidden h-10 rounded-xl px-3 text-xs font-semibold text-[#627166] transition hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] dark:hover:text-white sm:block">
                 {ukrainian ? "EN" : "UA"}
