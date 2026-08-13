@@ -43,7 +43,6 @@ export type SubmissionMeta = {
   codeHash: string;
 };
 export interface StudentLoginResponse {
-  token: string;
   student: {
     id: number;
     firstName: string;
@@ -62,10 +61,12 @@ export async function studentLogin(username: string, password: string, turnstile
     password,
     ...(turnstileToken ? { turnstileToken } : {}),
   });
-  if (res.data.token) {
-    localStorage.setItem("token", res.data.token);
-    localStorage.setItem("userType", "STUDENT");
-  }
+  localStorage.setItem("userType", "STUDENT");
+  return res.data;
+}
+
+export async function restoreEduStudent(studentId: number): Promise<{ ok: boolean }> {
+  const res = await api.post(`/edu/students/${studentId}/restore`, { confirm: true });
   return res.data;
 }
 export interface Class {
@@ -366,7 +367,6 @@ export interface LearningAttemptSummary {
   solvedAfterFailure?: boolean;
 }
 export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP", turnstileToken?: string): Promise<{
-  token?: string;
   user?: EduUserPayload;
   requiresEmailVerification?: boolean;
 }> {
@@ -377,9 +377,6 @@ export async function registerTeacher(username: string, email: string, password:
     language,
     ...(turnstileToken ? { turnstileToken } : {}),
   });
-  if (res.data.token) {
-    localStorage.setItem("token", res.data.token);
-  }
   return res.data;
 }
 export async function createClass(name: string, language: "JAVA" | "PYTHON" | "CPP", gradingSystem?: ClassGradingSystem, gradeScaleMode?: GradeScaleMode): Promise<Class> {

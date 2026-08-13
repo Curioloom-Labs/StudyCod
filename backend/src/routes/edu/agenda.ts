@@ -1,9 +1,12 @@
 import { Router, Response } from "express";
+import { In } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
+import { Membership } from "../../entities/Membership";
 import { getDeadlinesForClasses, classifyAgenda, summarizeAgenda } from "../../services/edu/agenda";
+import { roleCan } from "../../services/edu/rbac";
 import { logger } from "../../utils/logger";
 
 /**
@@ -13,6 +16,7 @@ import { logger } from "../../utils/logger";
 const router = Router();
 const classRepo = () => AppDataSource.getRepository(Class);
 const studentRepo = () => AppDataSource.getRepository(Student);
+const membershipRepo = () => AppDataSource.getRepository(Membership);
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -34,13 +38,29 @@ router.get("/agenda", authRequired, async (req: AuthRequest, res: Response) => {
       const s = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
       if (s?.class) classIds = [s.class.id];
     } else if (req.userId) {
-      const [taught, enrolled] = await Promise.all([
+      const [taught, enrolled, memberships] = await Promise.all([
         classRepo().find({ where: { teacher: { id: req.userId } }, select: ["id"] }),
-        studentRepo().find({ where: { user: { id: req.userId } }, relations: ["class"] })
+        studentRepo().find({ where: { user: { id: req.userId } }, relations: ["class"] }),
+        membershipRepo().find({ where: { user: { id: req.userId } } })
       ]);
       const ids = new Set<number>();
       for (const c of taught) ids.add(c.id);
       for (const s of enrolled) if (s.class) ids.add(s.class.id);
+      const viewableOrgIds = memberships
+        .filter((membership) => roleCan(membership.role, "CLASS_VIEW"))
+        .map((membership) => membership.organizationId)
+        .filter((orgId): orgId is number => Number.isFinite(orgId));
+      if (viewableOrgIds.length > 0) {
+        const orgClasses = await classRepo().find({
+          where: { organization: { id: In(viewableOrgIds) } },
+          select: ["id"]
+        });
+        for (const c of orgClasses) ids.add(c.id);
+      }
+      if (req.userRole === "SYSTEM_ADMIN") {
+        const allClasses = await classRepo().find({ select: ["id"] });
+        for (const c of allClasses) ids.add(c.id);
+      }
       classIds = Array.from(ids);
     }
 

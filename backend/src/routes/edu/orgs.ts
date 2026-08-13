@@ -5,7 +5,7 @@ import { Student } from "../../entities/Student";
 import { Class } from "../../entities/Class";
 import { Organization } from "../../entities/Organization";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { createOrganization, listUserMemberships, listOrgMembers, getUserOrgRole, setMembershipRole, removeMembership } from "../../services/edu/membership";
+import { createOrganization, listUserMemberships, listOrgMembers, setMembershipRole, removeMembership } from "../../services/edu/membership";
 import {
   createInvitation,
   acceptInvitation,
@@ -14,6 +14,7 @@ import {
 } from "../../services/edu/invitations";
 import { listChildren } from "../../services/edu/parentLinks";
 import { roleCan } from "../../services/edu/rbac";
+import { authorizeOrgAction } from "../../services/edu/classAccess";
 import { normalizeOrgRole } from "../../types/OrgRole";
 import { writeAudit } from "../../services/audit/auditLog";
 import { emailService } from "../../services/emailService";
@@ -60,8 +61,10 @@ async function requireOrgCapability(
   orgId: number,
   capability: Parameters<typeof roleCan>[1]
 ): Promise<boolean> {
-  const role = await getUserOrgRole(req.userId!, orgId);
-  if (!role || !roleCan(role, capability)) {
+  const access = await authorizeOrgAction(req.userId!, orgId, capability, {
+    isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+  });
+  if (!access || !access.allowed) {
     res.status(403).json({ message: "FORBIDDEN" });
     return false;
   }

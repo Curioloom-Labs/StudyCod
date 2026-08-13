@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { authorizeClassForReq } from "../../middleware/orgContext";
+import { writeSensitiveStudentRead } from "../../services/audit/auditLog";
 import { authorizeClassAction } from "../../services/edu/classAccess";
 import { User } from "../../entities/User";
 import { Student } from "../../entities/Student";
@@ -509,6 +510,17 @@ router.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, async 
     if (!workAccess || !workAccess.allowed) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
+    await writeSensitiveStudentRead({
+      actorType: "USER",
+      actorId: req.userId,
+      action: "student-data.read.work",
+      studentId,
+      classId: student.class.id,
+      orgId: student.class.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip,
+      metadata: { taskId }
+    });
 
     const submissionsQb = gradeRepo()
       .createQueryBuilder("grade")

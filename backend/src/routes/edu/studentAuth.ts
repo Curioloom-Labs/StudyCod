@@ -61,7 +61,6 @@ router.post("/student-login", async (req: Request, res: Response) => {
     setSharedAuthCookie(res, token);
 
     return res.json({
-      token,
       student: {
         id: student.id,
         username: student.generatedUsername,

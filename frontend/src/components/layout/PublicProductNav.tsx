@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowRight, Languages, Menu, Moon, Sun, X } from "lucide-react";
 import { BrandLockup } from "../BrandLockup";
 import { applyTheme, getCurrentTheme } from "../../theme";
+import { getCachedMeUser } from "../../lib/api/profile";
 
 type ActivePage = "home" | "pricing" | "docs" | "support" | "blog" | "none";
 
@@ -15,13 +16,7 @@ export const PublicProductNav: React.FC<Props> = ({ active = "none", homeMode = 
   const { i18n } = useTranslation();
   const [theme, setTheme] = React.useState<"dark" | "light">(() => getCurrentTheme());
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const authenticated = React.useMemo(() => {
-    try {
-      return Boolean(localStorage.getItem("token"));
-    } catch {
-      return false;
-    }
-  }, []);
+  const authenticated = Boolean(getCachedMeUser());
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const supportPath = import.meta.env.DEV ? "/support?preview=true" : "/support";
   const blogPath = import.meta.env.DEV ? "/blog?preview=true" : "/blog";

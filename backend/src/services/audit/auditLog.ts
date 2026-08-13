@@ -43,6 +43,41 @@ export async function writeAudit(input: AuditInput): Promise<void> {
   }
 }
 
+/**
+ * Policy wrapper for successful student-data reads. Callers provide only
+ * resource metadata; payloads, source code, filenames and grades are never
+ * copied into the audit trail.
+ */
+export interface SensitiveStudentReadInput {
+  actorType: AuditActorType;
+  actorId?: number | null;
+  action: "student-data.read.roster" | "student-data.read.gradebook" | "student-data.read.work" | "student-data.read.file" | "student-data.read.export";
+  studentId?: number | null;
+  classId?: number | null;
+  orgId?: number | null;
+  requestId?: string | null;
+  ip?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export async function writeSensitiveStudentRead(input: SensitiveStudentReadInput): Promise<void> {
+  await writeAudit({
+    actorType: input.actorType,
+    actorId: input.actorId ?? null,
+    action: input.action,
+    targetType: input.studentId != null ? "student" : input.classId != null ? "class" : "student-data",
+    targetId: input.studentId ?? input.classId ?? null,
+    orgId: input.orgId ?? null,
+    metadata: {
+      resource: input.action.replace("student-data.read.", ""),
+      classId: input.classId ?? null,
+      ...input.metadata
+    },
+    requestId: input.requestId,
+    ip: input.ip
+  });
+}
+
 export interface AuditQuery {
   targetType?: string;
   targetId?: number;

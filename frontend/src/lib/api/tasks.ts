@@ -148,15 +148,7 @@ export type PersonalControlQuizSubmitResponse = {
   } | null;
 };
 
-function requireToken(): string {
-  const token = localStorage.getItem("token");
-  if (!token) {
-    throw new Error("UNAUTHORIZED");
-  }
-  return token;
-}
 export async function listTasks(uiLang?: UiLanguage): Promise<Task[]> {
-  requireToken();
   const res = await api.get("/tasks", {
     params: uiLang ? { uiLang } : undefined
   });
@@ -174,7 +166,6 @@ export async function getTask(id: number, uiLang?: UiLanguage): Promise<Task> {
   return res.data as Task;
 }
 export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean; courseItemId?: number }): Promise<unknown> {
-  requireToken();
   try {
     const res = await api.post("/tasks/generate", {
       ...(language ? { language } : {}),
@@ -188,7 +179,6 @@ export async function generateTask(language?: UiLanguage, options?: { forceContr
     const response = error && typeof error === "object" ? Reflect.get(error, "response") : null;
     const status = response && typeof response === "object" ? Reflect.get(response, "status") : null;
     if (status === 401) {
-      localStorage.removeItem("token");
       throw new Error("Сесія закінчилась. Будь ласка, увійдіть в систему знову.");
     }
     throw error;

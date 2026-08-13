@@ -184,14 +184,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
   const navigate = useNavigate();
   const location = useLocation();
-  const hasToken = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return !!localStorage.getItem("token");
-    } catch {
-      return false;
-    }
-  }, []);
+  // The route is protected by the cookie-backed RequireToken guard.
+  const hasToken = true;
   // Privacy-respecting proctoring capture for the solve session (aggregate
   // behavioural signals only — see useProctoring).
   const proctoring = useProctoring(hasToken);

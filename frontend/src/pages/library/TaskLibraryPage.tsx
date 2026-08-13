@@ -466,11 +466,6 @@ export const TaskLibraryPage: React.FC = () => {
   useEffect(() => {
     // This page is read-only for student tokens.
     // For regular authenticated users we enable "Mine"/create/import/edit/submit.
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    if (!token) {
-      setCanManage(false);
-      return;
-    }
     getMe()
       .then((u) => {
         setCanManage(!u.studentId);

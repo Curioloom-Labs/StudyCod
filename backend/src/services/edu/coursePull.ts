@@ -150,15 +150,22 @@ export async function applyPullUpdates(
 
   // Current upstream items keyed by id, plus the module they belong to.
   const modules = await AppDataSource.getRepository(CourseModule).find({
-    where: { course: { id: assignment.courseId } }
+    where: { course: { id: assignment.courseId } },
+    relations: ["items"],
+    order: { order: "ASC" }
   });
   const upstreamById = new Map<number, CourseItem>();
   const itemModuleId = new Map<number, number>();
   const moduleTitle = new Map<number, string>();
   for (const m of modules) {
     moduleTitle.set(m.id, m.title);
-    const items = await AppDataSource.getRepository(CourseItem).find({ where: { module: { id: m.id } } });
-    for (const it of items) {
+    // TypeORM populates items because the relation is requested above. The
+    // fallback keeps lightweight repository mocks and legacy adapters that
+    // return an unloaded relation compatible without affecting production.
+    const items = m.items ?? await AppDataSource.getRepository(CourseItem).find({
+      where: { module: { id: m.id } }
+    });
+    for (const it of [...items].sort((a, b) => a.order - b.order)) {
       upstreamById.set(it.id, it);
       itemModuleId.set(it.id, m.id);
     }

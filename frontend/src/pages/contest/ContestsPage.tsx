@@ -50,26 +50,8 @@ export const ContestsPage: React.FC = () => {
   const prefersReducedMotion = useReducedMotion();
   const isAurora = useUIMode().mode === "aurora";
 
-  const hasToken = React.useMemo(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return !!localStorage.getItem("token");
-    } catch {
-      return false;
-    }
-  }, []);
-  const canCreateContest = React.useMemo(() => {
-    if (!hasToken || typeof window === "undefined") return false;
-    try {
-      const token = localStorage.getItem("token") || "";
-      const raw = token.split(".")[1];
-      if (!raw) return false;
-      const payload = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(raw.length / 4) * 4, "="))) as Record<string, unknown>;
-      return payload.type === "USER" && !payload.studentId;
-    } catch {
-      return false;
-    }
-  }, [hasToken]);
+  const hasToken = true;
+  const canCreateContest = true;
 
   const [loading, setLoading] = React.useState(true);
   const [contests, setContests] = React.useState<ContestListItem[]>([]);

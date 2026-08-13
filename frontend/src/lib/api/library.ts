@@ -1,5 +1,6 @@
 import { api } from "./client";
 import { scopedStorageKey } from "../storageScope";
+import { getCachedMeUser } from "./profile";
 import i18n from "../../i18n";
 
 export type LibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
@@ -68,11 +69,6 @@ export type WebTaskRule = {
   pattern?: string;
   flags?: string;
 };
-type JwtPayload = {
-  type?: string;
-  studentId?: number;
-};
-
 type StudentAttemptLangState = {
   draft?: { code?: string; files?: CodeFile[] };
   last?: {
@@ -203,25 +199,8 @@ function safeJsonParse<T>(raw: string | null): T | null {
   }
 }
 
-function decodeJwtPayload(token: string | null): JwtPayload | null {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
-  try {
-    const json = atob(b64 + pad);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
 function isStudentToken(): boolean {
-  if (typeof window === "undefined") return false;
-  const token = localStorage.getItem("token");
-  const p = decodeJwtPayload(token);
-  return p?.type === "STUDENT" || typeof p?.studentId === "number";
+  return Boolean(getCachedMeUser()?.studentId);
 }
 
 function studentAttemptKey(taskId: number): string {

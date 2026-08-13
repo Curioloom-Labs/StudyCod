@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { In } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { authorizeClassForReq } from "../../middleware/orgContext";
@@ -217,6 +218,22 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       relations: ["class", "tasks", "tasks.testData"],
       order: { createdAt: "ASC" }
     });
+    const courseTaskIds = courseLessons.flatMap((lesson) => (lesson.tasks || []).map((task) => task.id));
+    const courseGrades = courseTaskIds.length > 0
+      ? await gradeRepo().find({
+        where: { student: { id: req.studentId }, task: { id: In(courseTaskIds) } },
+        relations: ["task"],
+        order: { createdAt: "DESC" }
+      })
+      : [];
+    const latestCourseGradeByTaskId = new Map<number, EduGrade>();
+    const courseAttemptsByTaskId = new Map<number, number>();
+    for (const grade of courseGrades) {
+      const taskId = (grade.task as any)?.id ?? (grade as any).taskId;
+      if (!Number.isFinite(Number(taskId))) continue;
+      if (!latestCourseGradeByTaskId.has(Number(taskId))) latestCourseGradeByTaskId.set(Number(taskId), grade);
+      courseAttemptsByTaskId.set(Number(taskId), (courseAttemptsByTaskId.get(Number(taskId)) || 0) + 1);
+    }
     const courseLessonsMapped = await Promise.all(courseLessons.map(async (lesson, lessonIndex) => ({
       id: lesson.id,
       title: lesson.title,
@@ -234,11 +251,8 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       controlHasPractice: lesson.controlHasPractice,
       quizJson: lesson.quizJson || null,
       tasks: await Promise.all((lesson.tasks || []).map(async (task, taskIndex) => {
-        const grade = await gradeRepo().findOne({
-          where: { task: { id: task.id }, student: { id: req.studentId } },
-          order: { createdAt: "DESC" }
-        });
-        const attemptsUsed = await gradeRepo().count({ where: { task: { id: task.id }, student: { id: req.studentId } } });
+        const grade = latestCourseGradeByTaskId.get(task.id) ?? null;
+        const attemptsUsed = courseAttemptsByTaskId.get(task.id) || 0;
         return {
         id: task.id,
         title: task.title,

@@ -18,7 +18,8 @@ import {
 } from "../services/placementAssessmentService";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
-import { findActiveStudentForUser, applyStudentViewToUserDto } from "../services/edu/studentLink";
+import { listStudentsForUser, applyStudentViewToUserDto } from "../services/edu/studentLink";
+import { listUserMemberships } from "../services/edu/membership";
 import {
   getIadCeilingForTopic,
   getIadDeltaByGrade,
@@ -255,6 +256,31 @@ function buildUserDto(user: User, activeRuntime: UserRuntime = "PYTHON") {
     placementCodingTaskId: (user as any).placementCodingTaskId ?? null,
     placementCodingScore: (user as any).placementCodingScore ?? null,
     placementCodingDoneAt: (user as any).placementCodingDoneAt ?? null
+  };
+}
+
+async function buildEduContexts(userId: number) {
+  const [students, memberships] = await Promise.all([
+    listStudentsForUser(userId),
+    listUserMemberships(userId)
+  ]);
+  return {
+    students: students
+      .filter((student) => Boolean(student.class))
+      .map((student) => ({
+        studentId: student.id,
+        classId: student.class.id,
+        className: student.class.name,
+        language: student.class.language,
+        firstName: student.firstName,
+        lastName: student.lastName
+      })),
+    organizations: memberships.map((membership) => ({
+      orgId: membership.organizationId,
+      role: membership.role,
+      name: membership.organization?.name ?? null,
+      slug: membership.organization?.slug ?? null
+    }))
   };
 }
 
@@ -1138,12 +1164,17 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         message: "USER_NOT_FOUND"
       });
     }
-    const dto = buildUserDto(user, req.learningRuntime);
-    // A User that owns a roster Student profile (join-code enrolment or a claimed
-    // legacy profile) is an EDU student — surface the student view so the
-    // frontend gates (`userMode` + `studentId`) render the student experience.
-    const linkedStudent = await findActiveStudentForUser(user.id);
-    return res.json(linkedStudent ? applyStudentViewToUserDto(dto, linkedStudent) : dto);
+    const dto = { ...buildUserDto(user, req.learningRuntime), eduContexts: await buildEduContexts(user.id) };
+    if (req.studentId) {
+      const selected = dto.eduContexts.students.find((student) => student.studentId === req.studentId);
+      if (selected) {
+        return res.json(applyStudentViewToUserDto(dto, {
+          id: selected.studentId,
+          class: { id: selected.classId, name: selected.className, language: selected.language }
+        }));
+      }
+    }
+    return res.json(dto);
   } catch (err) {
     logger.error("[profile] GET /profile/me error", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({
@@ -1291,11 +1322,17 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       });
     }
     await userRepo().save(user);
-    const dto = buildUserDto(user, req.learningRuntime);
-    // Keep the student view sticky across profile edits (Track B): a User-backed
-    // student must not flip to the personal view after updating their avatar.
-    const linkedStudent = await findActiveStudentForUser(user.id);
-    return res.json(linkedStudent ? applyStudentViewToUserDto(dto, linkedStudent) : dto);
+    const dto = { ...buildUserDto(user, req.learningRuntime), eduContexts: await buildEduContexts(user.id) };
+    if (req.studentId) {
+      const selected = dto.eduContexts.students.find((student) => student.studentId === req.studentId);
+      if (selected) {
+        return res.json(applyStudentViewToUserDto(dto, {
+          id: selected.studentId,
+          class: { id: selected.classId, name: selected.className, language: selected.language }
+        }));
+      }
+    }
+    return res.json(dto);
   } catch (err) {
     if (err instanceof HttpError) {
       return res.status(err.statusCode).json({ message: err.message });

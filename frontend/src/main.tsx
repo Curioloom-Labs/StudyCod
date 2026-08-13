@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./public.css";
 import { initTheme } from "./theme";
+import { getMe } from "./lib/api/profile";
 
 const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
 let appStylesPromise: Promise<unknown> | null = null;
@@ -28,15 +29,8 @@ const AppShell = React.lazy(async () => {
   return { default: RoutedApp };
 });
 
-function shouldRenderPublicLanding() {
-  let hasStoredToken = false;
-  try {
-    hasStoredToken = Boolean(localStorage.getItem("token"));
-  } catch {
-    // Browsers with blocked storage should still receive the public shell.
-  }
-
-  return window.location.pathname === "/" && !new URLSearchParams(window.location.search).has("auth") && !hasStoredToken;
+function shouldCheckCookieSession() {
+  return window.location.pathname === "/" && !new URLSearchParams(window.location.search).has("auth");
 }
 
 /**
@@ -44,7 +38,23 @@ function shouldRenderPublicLanding() {
  * workspace is intentionally not imported until the URL needs it.
  */
 const RouteBootstrap: React.FC = () => {
-  return shouldRenderPublicLanding() ? <PublicLandingPage /> : <AppShell />;
+  const [session, setSession] = React.useState<"checking" | "authenticated" | "anonymous">(() => (
+    shouldCheckCookieSession() ? "checking" : "authenticated"
+  ));
+
+  React.useEffect(() => {
+    if (!shouldCheckCookieSession()) return;
+    let active = true;
+    getMe({ force: true, suppressAuthRedirect: true })
+      .then(() => active && setSession("authenticated"))
+      .catch(() => active && setSession("anonymous"));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (session === "checking") return null;
+  return session === "anonymous" ? <PublicLandingPage /> : <AppShell />;
 };
 
 const CHUNK_RELOAD_KEY = "studycod.chunkReloadAttempted";

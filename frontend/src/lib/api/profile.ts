@@ -6,7 +6,7 @@ const GET_ME_STALE_FALLBACK_MS = 5 * 60 * 1000;
 const GET_ME_SNAPSHOT_STORAGE_KEY = "studycod.userSnapshot";
 
 type CachedUser = {
-  token: string | null;
+  session: "cookie";
   fetchedAt: number;
   user: User;
 };
@@ -21,14 +21,7 @@ let cachedGetMeUser: CachedUser | null = null;
 let inFlightGetMeRequest: Promise<User> | null = null;
 let inFlightGetMeToken: string | null = null;
 
-const getCurrentToken = (): string | null => {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem("token");
-  } catch {
-    return null;
-  }
-};
+const currentSession = (): "cookie" => "cookie";
 
 const getErrorStatus = (error: unknown): number | null => {
   if (!error || typeof error !== "object") return null;
@@ -38,9 +31,9 @@ const getErrorStatus = (error: unknown): number | null => {
   return typeof status === "number" ? status : null;
 };
 
-const canUseFreshCache = (entry: CachedUser | null, token: string | null, ttlMs: number): entry is CachedUser => {
+const canUseFreshCache = (entry: CachedUser | null, session: "cookie", ttlMs: number): entry is CachedUser => {
   if (!entry) return false;
-  if (entry.token !== token) return false;
+  if (entry.session !== session) return false;
   return Date.now() - entry.fetchedAt <= ttlMs;
 };
 
@@ -65,14 +58,20 @@ const readUserSnapshot = (): CachedUser | null => {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
 
-    const token = Reflect.get(parsed, "token");
+    // Do not accept snapshots written by the legacy token-based client. They
+    // may contain a bearer credential even if the snapshot itself is stale.
+    if (typeof Reflect.get(parsed, "token") === "string") {
+      clearUserSnapshot();
+      return null;
+    }
+    const session = Reflect.get(parsed, "session");
     const fetchedAt = Number(Reflect.get(parsed, "fetchedAt"));
     const user = Reflect.get(parsed, "user");
     if (typeof fetchedAt !== "number" || !Number.isFinite(fetchedAt)) return null;
     if (!user || typeof user !== "object") return null;
 
     return {
-      token: typeof token === "string" ? token : null,
+      session: session === "cookie" ? "cookie" : "cookie",
       fetchedAt,
       user: user as User,
     };
@@ -92,7 +91,7 @@ const clearUserSnapshot = (): void => {
 
 const rememberUser = (user: User): User => {
   const next: CachedUser = {
-    token: getCurrentToken(),
+    session: currentSession(),
     fetchedAt: Date.now(),
     user,
   };
@@ -101,15 +100,15 @@ const rememberUser = (user: User): User => {
   return user;
 };
 
-const getStaleFallbackUser = (token: string | null): User | null => {
+const getStaleFallbackUser = (session: "cookie"): User | null => {
   const now = Date.now();
 
-  if (cachedGetMeUser && cachedGetMeUser.token === token && now - cachedGetMeUser.fetchedAt <= GET_ME_STALE_FALLBACK_MS) {
+  if (cachedGetMeUser && cachedGetMeUser.session === session && now - cachedGetMeUser.fetchedAt <= GET_ME_STALE_FALLBACK_MS) {
     return cachedGetMeUser.user;
   }
 
   const snapshot = readUserSnapshot();
-  if (snapshot && snapshot.token === token && now - snapshot.fetchedAt <= GET_ME_STALE_FALLBACK_MS) {
+  if (snapshot && snapshot.session === session && now - snapshot.fetchedAt <= GET_ME_STALE_FALLBACK_MS) {
     cachedGetMeUser = snapshot;
     return snapshot.user;
   }
@@ -130,14 +129,19 @@ export function primeGetMeCache(user: User): void {
   rememberUser(user);
 }
 
+/** Returns only the in-memory cookie session, never a credential from storage. */
+export function getCachedMeUser(): User | null {
+  return cachedGetMeUser?.user ?? null;
+}
+
 export async function getMe(options?: GetMeOptions): Promise<User> {
   const force = options?.force === true;
   const cacheTtlMs = Number.isFinite(Number(options?.cacheTtlMs))
     ? Math.max(0, Number(options?.cacheTtlMs))
     : GET_ME_CACHE_TTL_MS;
-  const token = getCurrentToken();
+  const session = currentSession();
 
-  if (!force && canUseFreshCache(cachedGetMeUser, token, cacheTtlMs)) {
+  if (!force && canUseFreshCache(cachedGetMeUser, session, cacheTtlMs)) {
     return cachedGetMeUser.user;
   }
 
@@ -145,13 +149,13 @@ export async function getMe(options?: GetMeOptions): Promise<User> {
     const snapshot = readUserSnapshot();
     if (snapshot) {
       cachedGetMeUser = snapshot;
-      if (canUseFreshCache(snapshot, token, cacheTtlMs)) {
+      if (canUseFreshCache(snapshot, session, cacheTtlMs)) {
         return snapshot.user;
       }
     }
   }
 
-  if (inFlightGetMeRequest && inFlightGetMeToken === token) {
+  if (inFlightGetMeRequest && inFlightGetMeToken === session) {
     return inFlightGetMeRequest;
   }
 
@@ -166,7 +170,7 @@ export async function getMe(options?: GetMeOptions): Promise<User> {
       }
 
       if (!force && isTransientGetMeFailure(status)) {
-        const fallback = getStaleFallbackUser(token);
+        const fallback = getStaleFallbackUser(session);
         if (fallback) return fallback;
       }
 
@@ -180,7 +184,7 @@ export async function getMe(options?: GetMeOptions): Promise<User> {
     });
 
   inFlightGetMeRequest = request;
-  inFlightGetMeToken = token;
+  inFlightGetMeToken = session;
 
   return request;
 }

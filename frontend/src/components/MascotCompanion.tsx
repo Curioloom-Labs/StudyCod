@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, BookOpen, X } from "lucide-react";
 import Mascot, { type MascotVariant } from "./Mascot";
+import { getCachedMeUser } from "../lib/api/profile";
 import "./MascotCompanion.css";
 
 const DISMISSED_STORAGE_PREFIX = "studycod.mascot.dismissed.v2";
@@ -28,38 +29,11 @@ type MascotSignalDetail = {
   open?: boolean;
 };
 
-type MascotTokenPayload = {
-  userId?: unknown;
-  studentId?: unknown;
-  sub?: unknown;
-};
-
-function shortHash(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-}
-
 function getMascotAccountKey(search: string): string {
   try {
-    const token = localStorage.getItem("token");
-    if (token) {
-      const payloadPart = token.split(".")[1];
-      if (payloadPart) {
-        const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
-        const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
-        const payload = JSON.parse(atob(padded)) as MascotTokenPayload;
-        const identity = payload.userId ?? payload.studentId ?? payload.sub;
-        if (typeof identity === "string" || typeof identity === "number") {
-          return `account-${String(identity)}`;
-        }
-      }
-
-      // Keep opaque-token sessions separate too, without storing the token itself.
-      return `session-${shortHash(token)}`;
+    const user = getCachedMeUser();
+    if (user) {
+      return `account-${String(user.studentId ?? user.id)}`;
     }
 
     const previewPersona = new URLSearchParams(search).get("persona") ?? "default";
@@ -138,12 +112,7 @@ function messageForSurface(pathname: string, app: string | null): MascotMessage 
 
 function isAuthenticatedSurface(pathname: string, app: string | null, search: string): boolean {
   const isDevPreview = import.meta.env.DEV && new URLSearchParams(search).get("preview") === "true";
-  let hasSession = false;
-  try {
-    hasSession = Boolean(localStorage.getItem("token"));
-  } catch {
-    hasSession = false;
-  }
+  const hasSession = Boolean(getCachedMeUser());
 
   if (!hasSession && !isDevPreview) return false;
   if (/^\/contest(?:\/|$)/.test(pathname)) return false;

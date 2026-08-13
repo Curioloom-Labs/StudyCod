@@ -1,8 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from "typeorm";
 import { Student } from "./Student";
 import { EduTask } from "./EduTask";
 import { TopicTask } from "./TopicTask";
 @Entity("edu_grades")
+@Index("idx_edu_grades_student_task_created", ["student", "task", "createdAt"])
+@Index("idx_edu_grades_student_topic_created", ["student", "topicTask", "createdAt"])
 export class EduGrade {
   @PrimaryGeneratedColumn()
   id!: number;

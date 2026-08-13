@@ -67,6 +67,15 @@ export async function findActiveStudentForUser(userId: number): Promise<Student 
   });
 }
 
+/** All roster profiles linked to a User, ordered newest first for context pickers. */
+export async function listStudentsForUser(userId: number): Promise<Student[]> {
+  return await studentRepo().find({
+    where: { user: { id: userId } },
+    relations: ["class"],
+    order: { createdAt: "DESC" }
+  });
+}
+
 export interface ClaimResult {
   studentId: number;
   classId: number;

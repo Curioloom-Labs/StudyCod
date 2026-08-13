@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
 import { verifyEmail, resendVerificationEmail } from "../../lib/api/auth";
+import { primeGetMeCache } from "../../lib/api/profile";
 import { Button } from "../../components/ui/Button";
 import { showToast } from "../../lib/toast";
 import type { User } from "../../types";
@@ -44,7 +45,7 @@ export const VerifyEmailPage: React.FC<Props> = ({ onAuth }) => {
       try {
         const result = await verifyEmail(token);
         setSuccess(true);
-        setTimeout(() => { onAuth(result.user); navigate("/"); }, 2000);
+        setTimeout(() => { primeGetMeCache(result.user); onAuth(result.user); navigate("/"); }, 2000);
       } catch (err: unknown) {
         setError(getErrorMessage(err, tr("Помилка підтвердження email", "Email verification failed")));
       } finally {

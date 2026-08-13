@@ -72,11 +72,19 @@ export async function exportStudentData(studentId: number): Promise<StudentExpor
   return buildStudentExport(student, eduGrades, summaryGrades);
 }
 
-/** Right-to-erasure: removes the student (FK cascade drops grades/links). */
+/** Right-to-erasure: hides the student while retaining recoverable academic records. */
 export async function eraseStudentData(studentId: number): Promise<boolean> {
   const student = await studentRepo().findOne({ where: { id: studentId } });
   if (!student) return false;
-  await studentRepo().remove(student);
+  await studentRepo().softRemove(student);
+  return true;
+}
+
+/** Restore a previously erased student; used only by an explicitly authorized admin flow. */
+export async function restoreStudentData(studentId: number): Promise<boolean> {
+  const student = await studentRepo().findOne({ where: { id: studentId }, withDeleted: true });
+  if (!student?.deletedAt) return false;
+  await studentRepo().restore(student.id);
   return true;
 }
 

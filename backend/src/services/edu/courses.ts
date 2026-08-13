@@ -73,9 +73,13 @@ export async function listCourses(orgId: number): Promise<Course[]> {
 export async function getCourseTree(courseId: number, orgId: number): Promise<Course | null> {
   const course = await courseRepo().findOne({ where: { id: courseId }, relations: ["organization"] });
   if (!course || course.organizationId !== orgId) return null;
-  const modules = await moduleRepo().find({ where: { course: { id: courseId } }, order: { order: "ASC" } });
+  const modules = await moduleRepo().find({
+    where: { course: { id: courseId } },
+    relations: ["items"],
+    order: { order: "ASC" }
+  });
   for (const m of modules) {
-    m.items = await itemRepo().find({ where: { module: { id: m.id } }, order: { order: "ASC" } });
+    m.items = [...(m.items ?? [])].sort((a, b) => a.order - b.order);
   }
   course.modules = modules;
   course.variants = await variantRepo().find({ where: { course: { id: courseId } }, order: { id: "ASC" } });

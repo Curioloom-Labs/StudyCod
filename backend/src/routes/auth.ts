@@ -443,7 +443,7 @@ const registerSchema = z.object({
   birthMonth: z.number().int().min(1).max(12)
 });
 const googleCompleteSchema = z.object({
-  token: z.string().min(1),
+  setupToken: z.string().min(1),
   username: z.string().min(3).max(50),
   password: z.string().min(8),
   userMode: z.enum(["PERSONAL", "EDUCATIONAL", "CONTEST"]).optional(),
@@ -586,7 +586,6 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
     const token = signUserToken(user);
     setSharedAuthCookie(res, token);
     return res.json({
-      token,
       user: buildUserDto(user)
     });
   } catch (err) {
@@ -679,7 +678,7 @@ authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Re
 
     const token = signUserToken(user);
     setSharedAuthCookie(res, token);
-    return res.json({ token, user: buildUserDto(user) });
+    return res.json({ user: buildUserDto(user) });
   } catch (err) {
     logger.error("[auth] Contest login error", { requestId: req.requestId, err });
     return res.status(500).json({ message: "INTERNAL_ERROR" });
@@ -823,8 +822,11 @@ authRouter.post("/google/exchange-code", async (req: AuthRequest, res: Response)
       return res.status(400).json({ message: "INVALID_CODE_FLOW" });
     }
     await consumeGoogleExchangeCode(code);
-    if (pending.flow === "success") setSharedAuthCookie(res, pending.token);
-    return res.json({ token: pending.token, flow: pending.flow });
+    if (pending.flow === "success") {
+      setSharedAuthCookie(res, pending.token);
+      return res.json({ flow: pending.flow });
+    }
+    return res.json({ setupToken: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-code error", { requestId: req.requestId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -854,8 +856,11 @@ authRouter.post("/google/exchange-cookie", async (req: AuthRequest, res: Respons
     }
     clearGoogleExchangeCookie(res);
     await consumeGoogleExchangeCode(code);
-    if (pending.flow === "success") setSharedAuthCookie(res, pending.token);
-    return res.json({ token: pending.token, flow: pending.flow });
+    if (pending.flow === "success") {
+      setSharedAuthCookie(res, pending.token);
+      return res.json({ flow: pending.flow });
+    }
+    return res.json({ setupToken: pending.token, flow: pending.flow });
   } catch (err) {
     logger.error("[auth] Google exchange-cookie error", { requestId: req.requestId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -925,7 +930,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       });
     }
     const {
-      token,
+      setupToken,
       username,
       password,
       userMode,
@@ -936,7 +941,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     } = validated.data;
     let payload: any;
     try {
-      payload = jwt.verify(token, JWT_SECRET);
+      payload = jwt.verify(setupToken, JWT_SECRET);
     } catch {
       return res.status(400).json({
         message: "INVALID_TOKEN"
@@ -969,10 +974,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     if (existingByGoogle) {
       const jwtToken = signUserToken(existingByGoogle);
       setSharedAuthCookie(res, jwtToken);
-      return res.json({
-        token: jwtToken,
-        user: buildUserDto(existingByGoogle)
-      });
+      return res.json({ user: buildUserDto(existingByGoogle) });
     }
     const existingByEmail = await userRepo().findOne({
       where: {
@@ -987,7 +989,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       await userRepo().save(existingByEmail);
       const jwtToken = signUserToken(existingByEmail);
       setSharedAuthCookie(res, jwtToken);
-      return res.json({ token: jwtToken, user: buildUserDto(existingByEmail) });
+      return res.json({ user: buildUserDto(existingByEmail) });
     }
     const existingByUsername = await userRepo().findOne({
       where: {
@@ -1021,10 +1023,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     await userRepo().save(user);
     const jwtToken = signUserToken(user);
     setSharedAuthCookie(res, jwtToken);
-    return res.json({
-      token: jwtToken,
-      user: buildUserDto(user)
-    });
+    return res.json({ user: buildUserDto(user) });
   } catch (err) {
     logger.error("[auth] Google complete error", { requestId: req.requestId, err });
     return res.status(500).json({
@@ -1065,7 +1064,6 @@ authRouter.get("/verify-email", async (req: AuthRequest, res: Response) => {
     const jwtToken = signUserToken(user);
     setSharedAuthCookie(res, jwtToken);
     return res.json({
-      token: jwtToken,
       user: buildUserDto(user)
     });
   } catch (err) {

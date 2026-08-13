@@ -39,6 +39,7 @@ import { NotificationsBell } from "./components/blog/NotificationsBell";
 import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
 import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
+import { setActiveEduStudentId } from "./lib/eduContext";
 import { applySeo } from "./lib/seo";
 import { MascotCompanion } from "./components/MascotCompanion";
 const AuthPage = React.lazy(() => import("./pages/auth/AuthPage").then(mod => ({ default: mod.AuthPage })));
@@ -545,11 +546,8 @@ const AppContent: React.FC = React.memo(() => {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    const token = localStorage.getItem("token");
-    if (!token) {
-      if (isDevPreview) {
-        setUser(previewPersona === "admin" ? { ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" } : DEV_PREVIEW_USER);
-      }
+    if (isDevPreview) {
+      setUser(previewPersona === "admin" ? { ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" } : DEV_PREVIEW_USER);
       setBootResumeHandled(true);
       setLoading(false);
       return;
@@ -656,10 +654,7 @@ const AppContent: React.FC = React.memo(() => {
           console.error("Failed to get user:", getErrorMessageFromUnknown(error, "unknown error"));
         }
 
-        if (isAuthErrorStatus(status)) {
-          localStorage.removeItem("token");
-          setUser(null);
-        }
+        if (isAuthErrorStatus(status)) setUser(null);
 
         setBootResumeHandled(true);
       } finally {
@@ -684,7 +679,6 @@ const AppContent: React.FC = React.memo(() => {
     void api.post("/auth/logout", undefined, {
       headers: { "X-Skip-Auth-Redirect": "1" }
     }).catch(() => undefined);
-    localStorage.removeItem("token");
     clearControlExamSession();
     startTransition(() => {
       setUser(null);
@@ -1509,17 +1503,10 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const previewValue = new URLSearchParams(location.search).get("preview");
   const devPreview = import.meta.env.DEV && (previewValue === "1" || previewValue === "true");
   const [cookieSessionStatus, setCookieSessionStatus] = React.useState<"checking" | "valid" | "missing">("checking");
-  const token = (() => {
-    try {
-      return localStorage.getItem("token");
-    } catch {
-      return null;
-    }
-  })();
 
   React.useEffect(() => {
     let cancelled = false;
-    if (token || devPreview) {
+    if (devPreview) {
       setCookieSessionStatus("valid");
       return;
     }
@@ -1534,40 +1521,19 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     return () => {
       cancelled = true;
     };
-  }, [token, devPreview, location.pathname, location.search]);
+  }, [devPreview, location.pathname, location.search]);
 
-  if (!token && !devPreview && cookieSessionStatus === "checking") {
+  if (!devPreview && cookieSessionStatus === "checking") {
     return <PageLoader />;
   }
 
-  if (!token && !devPreview) {
+  if (!devPreview) {
     if (cookieSessionStatus === "valid") return <>{children}</>;
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/?auth=login&next=${next}`} replace />;
   }
   return <>{children}</>;
 };
-
-type JwtUserPayload = {
-  userId?: number;
-  userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
-  type?: "USER" | "STUDENT";
-};
-
-function decodeJwtPayload(token: string | null): JwtUserPayload | null {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
-    const json = atob(padded);
-    const parsed = JSON.parse(json) as JwtUserPayload;
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
 
 const ContestRoutes: React.FC = React.memo(() => {
   const navigate = useNavigate();
@@ -1578,9 +1544,7 @@ const ContestRoutes: React.FC = React.memo(() => {
   const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const payload = decodeJwtPayload(token);
-    if (!token && isDevPreview) {
+    if (isDevPreview) {
       setUser({
         id: -301,
         username: "contest-preview",
@@ -1593,24 +1557,21 @@ const ContestRoutes: React.FC = React.memo(() => {
       setReady(true);
       return;
     }
-    if (!token || !payload || payload.type === "STUDENT") {
-      setUser(null);
-      setReady(true);
-      return;
-    }
-    if (payload.userMode !== "CONTEST") {
-      navigate("/", { replace: true });
-      return;
-    }
-    setUser({
-      id: payload.userId ?? 0,
-      username: "contest-user",
-      activeRuntime: "JAVA",
-      difus: 0,
-      avatarUrl: null,
-      userMode: "CONTEST",
-    });
-    setReady(true);
+    let active = true;
+    getMe({ force: true, suppressAuthRedirect: true })
+      .then((nextUser) => {
+        if (!active) return;
+        if (nextUser.userMode !== "CONTEST") {
+          navigate("/", { replace: true });
+          return;
+        }
+        setUser(nextUser);
+      })
+      .catch(() => active && setUser(null))
+      .finally(() => active && setReady(true));
+    return () => {
+      active = false;
+    };
   }, [navigate, location.search]);
 
   const toggleTheme = useCallback(() => {
@@ -1642,7 +1603,6 @@ const ContestRoutes: React.FC = React.memo(() => {
 
   return <PremiumModuleShell product="CONTEST" user={user} theme={theme} currentPath={location.pathname} onNavigate={navigate} onToggleTheme={toggleTheme} onLogout={() => {
     void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
-    localStorage.removeItem("token");
     clearControlExamSession();
     navigate("/contest", { replace: true });
     window.location.reload();
@@ -1758,29 +1718,26 @@ const EduRoutes: React.FC = React.memo(() => {
   }, [controlExamSession?.controlWorkId, location.pathname, navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      if (isEduDevPreview) {
-        setUser({
-          id: eduPreviewStudent ? -202 : -201,
-          username: eduPreviewStudent ? "student-preview" : "teacher-preview",
-          firstName: eduPreviewPersona === "student" ? "Софія" : "Ірина",
-          activeRuntime: "PYTHON",
-          difus: 74,
-          avatarUrl: null,
-          userMode: "EDUCATIONAL",
-          role: eduPreviewStudent ? "USER" : "TEACHER",
-          ...(eduPreviewStudent ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
-          ...(eduPreviewPersona === "student" ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
-        });
-      }
+    if (isEduDevPreview) {
+      setUser({
+        id: eduPreviewStudent ? -202 : -201,
+        username: eduPreviewStudent ? "student-preview" : "teacher-preview",
+        firstName: eduPreviewPersona === "student" ? "Софія" : "Ірина",
+        activeRuntime: "PYTHON",
+        difus: 74,
+        avatarUrl: null,
+        userMode: "EDUCATIONAL",
+        role: eduPreviewStudent ? "USER" : "TEACHER",
+        ...(eduPreviewStudent ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
+        ...(eduPreviewPersona === "student" ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
+      });
       setLoading(false);
       return;
     }
     let cancelled = false;
     const run = async () => {
       try {
-        const u = await getCurrentUserWithRetry(6);
+        let u = await getCurrentUserWithRetry(6);
         if (cancelled) return;
 
         if (u.userMode !== "EDUCATIONAL") {
@@ -1788,6 +1745,15 @@ const EduRoutes: React.FC = React.memo(() => {
             replace: true
           });
           return;
+        }
+        // A User-backed account with only student memberships should enter its
+        // linked Student context automatically. Accounts that also teach stay
+        // in the staff context until the user explicitly switches context.
+        const hasStaffContext = u.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) ?? false;
+        const firstStudent = u.eduContexts?.students?.[0];
+        if (!u.studentId && !hasStaffContext && firstStudent) {
+          setActiveEduStudentId(firstStudent.studentId);
+          u = await getMe({ force: true, suppressAuthRedirect: true });
         }
         setUser(u);
       } catch (error: unknown) {
@@ -1797,10 +1763,7 @@ const EduRoutes: React.FC = React.memo(() => {
         if (import.meta.env.DEV) {
           console.error("EduRoutes: Failed to get user", error);
         }
-        if (isAuthErrorStatus(status)) {
-          localStorage.removeItem("token");
-          setUser(null);
-        }
+        if (isAuthErrorStatus(status)) setUser(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1815,6 +1778,20 @@ const EduRoutes: React.FC = React.memo(() => {
   const handleAuth = useCallback((u: User) => {
     setUser(u);
   }, []);
+  const handleEduContextChange = useCallback(async (studentId: number | null) => {
+    setActiveEduStudentId(studentId);
+    try {
+      const next = await getMe({ force: true, suppressAuthRedirect: true });
+      if (next.userMode === "EDUCATIONAL") {
+        setUser(next);
+        navigate(studentId == null ? "/edu" : "/edu/lessons", { replace: true });
+      }
+    } catch (error) {
+      // Keep the current screen if a context refresh fails; the next request
+      // still carries the selected context and can recover after retry.
+      if (import.meta.env.DEV) console.error("Edu context switch failed", error);
+    }
+  }, [navigate]);
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
       const next: AppTheme = prev === "dark" ? "light" : "dark";
@@ -1891,9 +1868,10 @@ const EduRoutes: React.FC = React.memo(() => {
       navigationHidden={isControlExamActive}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
+      onEduContextChange={handleEduContextChange}
       onLogout={() => {
         void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
-        localStorage.removeItem("token");
+        setActiveEduStudentId(null);
         clearControlExamSession();
         navigate("/");
       }}
@@ -1929,14 +1907,12 @@ const GoogleAuthSuccessWrapper: React.FC = React.memo(() => {
   const token = searchParams.get("token");
   const code = searchParams.get("code");
   const exchangeAttemptRef = useRef<string | null>(null);
-  const isLikelyJwt = (value: string) => /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
   useEffect(() => {
     const attemptKey = code ? `code:${code}` : token ? `token:${token}` : "cookie:success";
     if (exchangeAttemptRef.current === attemptKey) return;
     exchangeAttemptRef.current = attemptKey;
     let cancelled = false;
-    const finishSuccess = (jwtToken: string) => {
-      localStorage.setItem("token", jwtToken);
+    const finishSuccess = () => {
       sessionStorage.setItem("fromAuth", "true");
       window.location.replace("/");
     };
@@ -1946,36 +1922,32 @@ const GoogleAuthSuccessWrapper: React.FC = React.memo(() => {
         try {
           const exchanged = await exchangeGoogleCode(code, "success");
           if (cancelled) return;
-          if (exchanged.token && isLikelyJwt(exchanged.token)) {
-            finishSuccess(exchanged.token);
+          if (exchanged.flow === "success") {
+            finishSuccess();
             return;
           }
-          localStorage.removeItem("token");
           navigate("/auth/google/error?reason=INVALID_TOKEN", { replace: true });
           return;
         } catch {
           if (cancelled) return;
-          localStorage.removeItem("token");
           navigate("/auth/google/error?reason=EXCHANGE_FAILED", { replace: true });
           return;
         }
       }
 
       if (token) {
-        if (isLikelyJwt(token)) {
-          finishSuccess(token);
-        } else {
-          localStorage.removeItem("token");
-          window.location.replace("/");
-        }
+        // Legacy token-in-query redirects are intentionally rejected. The
+        // current Google flow uses a one-time code and sets the httpOnly cookie
+        // during exchange.
+        window.location.replace("/auth/google/error?reason=LEGACY_TOKEN_FLOW");
         return;
       }
 
       try {
         const exchanged = await exchangeGoogleCookie("success");
         if (cancelled) return;
-        if (exchanged.token && isLikelyJwt(exchanged.token)) {
-          finishSuccess(exchanged.token);
+        if (exchanged.flow === "success") {
+          finishSuccess();
           return;
         }
       } catch {

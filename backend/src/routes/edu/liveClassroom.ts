@@ -20,6 +20,7 @@ import {
 } from "../../services/edu/liveClassroom";
 import { buildLiveSnapshot, type LiveAttempt, type LiveStudent } from "../../services/edu/liveMonitor";
 import { setLiveCode, getLiveCode } from "../../services/edu/liveCode";
+import { isLiveStateReady } from "../../services/edu/liveStateStore";
 import { startChallenge, getChallenge, endChallenge, type LiveChallenge } from "../../services/edu/liveChallenge";
 import { openBreakouts, getBreakouts, findStudentGroup, getGroup, closeBreakouts, type BreakoutState } from "../../services/edu/liveBreakout";
 import { buildLiveSignals, generateLiveBriefing } from "../../services/edu/liveCopilot";
@@ -86,9 +87,13 @@ async function loadTeacherClass(req: AuthRequest, classId: number): Promise<Clas
   return access && access.allowed ? access.cls : null;
 }
 
-function requireEnabled(res: Response): boolean {
+async function requireEnabled(res: Response): Promise<boolean> {
   if (!isLiveClassroomEnabled()) {
     res.status(503).json({ message: "LIVE_CLASSROOM_DISABLED" });
+    return false;
+  }
+  if (!(await isLiveStateReady())) {
+    res.status(503).json({ message: "LIVE_CLASSROOM_STATE_UNAVAILABLE" });
     return false;
   }
   return true;
@@ -144,7 +149,7 @@ function challengeDto(ch: LiveChallenge) {
  */
 router.post("/classes/:classId/live-sessions", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!requireEnabled(res)) return;
+    if (!(await requireEnabled(res))) return;
     if (req.userType === "STUDENT" || req.studentId || !req.userId) {
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_START_LIVE" });
     }
@@ -228,7 +233,7 @@ router.get("/classes/:classId/live-sessions/active", authRequired, async (req: A
     });
 
     disableCache(res);
-    return res.json({ session: session ? sessionDto(session) : null, enabled: isLiveClassroomEnabled() });
+    return res.json({ session: session ? sessionDto(session) : null, enabled: isLiveClassroomEnabled() && await isLiveStateReady() });
   } catch (error: any) {
     logger.error("[edu/live] active lookup failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -241,7 +246,7 @@ router.get("/classes/:classId/live-sessions/active", authRequired, async (req: A
  */
 router.post("/live-sessions/:id/join", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!requireEnabled(res)) return;
+    if (!(await requireEnabled(res))) return;
     const sessionId = parseInt(req.params.id, 10);
     if (isNaN(sessionId)) return res.status(400).json({ message: "INVALID_ID" });
 
@@ -812,7 +817,7 @@ async function buildBreakoutDto(state: BreakoutState) {
  */
 router.post("/classes/:classId/breakouts", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!requireEnabled(res)) return;
+    if (!(await requireEnabled(res))) return;
     if (req.userType === "STUDENT" || req.studentId || !req.userId) {
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_OPEN_BREAKOUTS" });
     }
@@ -864,7 +869,7 @@ router.get("/classes/:classId/breakouts", authRequired, async (req: AuthRequest,
 /** Student fetches a join token for their assigned breakout room (if any). */
 router.get("/classes/:classId/breakouts/my-token", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!requireEnabled(res)) return;
+    if (!(await requireEnabled(res))) return;
     if (req.userType !== "STUDENT" || !req.studentId) {
       return res.status(403).json({ message: "ONLY_STUDENTS" });
     }
@@ -894,7 +899,7 @@ router.get("/classes/:classId/breakouts/my-token", authRequired, async (req: Aut
 /** Teacher fetches a host token to hop into a specific breakout group. */
 router.post("/classes/:classId/breakouts/token/:index", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!requireEnabled(res)) return;
+    if (!(await requireEnabled(res))) return;
     if (req.userType === "STUDENT" || req.studentId || !req.userId) {
       return res.status(403).json({ message: "ONLY_TEACHERS" });
     }

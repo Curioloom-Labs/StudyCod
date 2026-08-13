@@ -3,7 +3,6 @@ import type { User } from "../../types";
 export interface RegisterResponse {
   message: string;
   requiresEmailVerification?: boolean;
-  token?: string;
   user?: User;
 }
 export async function register(username: string, email: string, password: string, firstName: string, lastName: string, birthDay: number, birthMonth: number, turnstileToken?: string): Promise<RegisterResponse> {
@@ -17,9 +16,6 @@ export async function register(username: string, email: string, password: string
     birthDay,
     birthMonth
   });
-  if (res.data.token) {
-    localStorage.setItem("token", res.data.token);
-  }
   return res.data as RegisterResponse;
 }
 export async function login(username: string, password: string, turnstileToken?: string): Promise<User> {
@@ -28,10 +24,6 @@ export async function login(username: string, password: string, turnstileToken?:
     password,
     ...(turnstileToken ? { turnstileToken } : {})
   });
-  if (res.data.token) {
-    localStorage.setItem("token", res.data.token);
-    api.defaults.headers.common.Authorization = `Bearer ${res.data.token}`;
-  }
   return res.data.user as User;
 }
 
@@ -41,30 +33,26 @@ export async function contestLogin(username: string, password: string, turnstile
     password,
     ...(turnstileToken ? { turnstileToken } : {})
   });
-  if (res.data.token) {
-    localStorage.setItem("token", res.data.token);
-    api.defaults.headers.common.Authorization = `Bearer ${res.data.token}`;
-  }
   return res.data.user as User;
 }
 
-export async function exchangeGoogleCode(code: string, flow?: "success" | "complete"): Promise<{ token: string; flow: "success" | "complete" }> {
+export async function exchangeGoogleCode(code: string, flow?: "success" | "complete"): Promise<{ setupToken?: string; flow: "success" | "complete" }> {
   const res = await api.post("/auth/google/exchange-code", {
     code,
     ...(flow ? { flow } : {})
   });
   return {
-    token: String(res.data.token || ""),
+    ...(res.data.setupToken ? { setupToken: String(res.data.setupToken) } : {}),
     flow: res.data.flow === "complete" ? "complete" : "success"
   };
 }
 
-export async function exchangeGoogleCookie(flow?: "success" | "complete"): Promise<{ token: string; flow: "success" | "complete" }> {
+export async function exchangeGoogleCookie(flow?: "success" | "complete"): Promise<{ setupToken?: string; flow: "success" | "complete" }> {
   const res = await api.post("/auth/google/exchange-cookie", {
     ...(flow ? { flow } : {})
   });
   return {
-    token: String(res.data.token || ""),
+    ...(res.data.setupToken ? { setupToken: String(res.data.setupToken) } : {}),
     flow: res.data.flow === "complete" ? "complete" : "success"
   };
 }
@@ -74,7 +62,6 @@ export async function prepareGoogleLinkSession(): Promise<void> {
 }
 
 export async function verifyEmail(token: string): Promise<{
-  token: string;
   user: User;
 }> {
   const res = await api.get("/auth/verify-email", {
@@ -82,9 +69,7 @@ export async function verifyEmail(token: string): Promise<{
       token
     }
   });
-  localStorage.setItem("token", res.data.token);
   return {
-    token: res.data.token,
     user: res.data.user
   };
 }

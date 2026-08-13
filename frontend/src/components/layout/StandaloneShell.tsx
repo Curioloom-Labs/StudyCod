@@ -33,7 +33,7 @@ type Props = {
   children: React.ReactNode;
 };
 
-let cachedSession: { token: string; user: User } | null = null;
+let cachedSession: User | null = null;
 
 async function signOutEverywhere(): Promise<void> {
   try {
@@ -41,32 +41,18 @@ async function signOutEverywhere(): Promise<void> {
   } catch {
     // Local cleanup must still happen when the network is unavailable.
   }
-  try {
-    localStorage.removeItem("token");
-  } catch {
-    // Ignore private-mode/storage errors.
-  }
   clearControlExamSession();
   clearGetMeCache({ clearSnapshot: true });
   cachedSession = null;
 }
-
-const tokenFromStorage = () => {
-  try {
-    return localStorage.getItem("token");
-  } catch {
-    return null;
-  }
-};
 
 export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { i18n } = useTranslation();
   const ukrainian = !i18n.language.toLowerCase().startsWith("en");
-  const token = tokenFromStorage();
-  const [user, setUser] = React.useState<User | null>(() => token && cachedSession?.token === token ? cachedSession.user : null);
-  const [loading, setLoading] = React.useState(Boolean(token) && !user);
+  const [user, setUser] = React.useState<User | null>(() => cachedSession);
+  const [loading, setLoading] = React.useState(!cachedSession);
   const [theme, setTheme] = React.useState<AppTheme>(getCurrentTheme);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [accountOpen, setAccountOpen] = React.useState(false);
@@ -84,11 +70,14 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   } : null);
 
   React.useEffect(() => {
-    if (!token || user) return;
+    if (user || devPreview) {
+      setLoading(false);
+      return;
+    }
     let active = true;
-    getMe()
+    getMe({ suppressAuthRedirect: true })
       .then((nextUser) => {
-        cachedSession = { token, user: nextUser };
+        cachedSession = nextUser;
         if (active) setUser(nextUser);
       })
       .catch(() => active && setUser(null))
@@ -96,7 +85,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     return () => {
       active = false;
     };
-  }, [token, user]);
+  }, [user]);
 
   React.useEffect(() => {
     if (!accountOpen) return;
@@ -121,7 +110,6 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     return next;
   });
 
-  if (!token && !devPreview) return <>{children}</>;
   if (loading) return <BrandedPageLoader />;
   if (!shellUser) return <>{children}</>;
 

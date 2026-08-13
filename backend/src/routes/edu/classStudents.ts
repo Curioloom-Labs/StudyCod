@@ -9,8 +9,8 @@ import type { Capability } from "../../services/edu/rbac";
 import { Student } from "../../entities/Student";
 import { generatePassword, generateUsername, hashPassword } from "../../services/studentCredentialsService";
 import { provisionStudent } from "../../services/edu/studentProvision";
-import { writeAudit } from "../../services/audit/auditLog";
-import { exportStudentData, eraseStudentData, setStudentConsent } from "../../services/edu/dataPrivacy";
+import { writeAudit, writeSensitiveStudentRead } from "../../services/audit/auditLog";
+import { exportStudentData, eraseStudentData, restoreStudentData, setStudentConsent } from "../../services/edu/dataPrivacy";
 import { logger } from "../../utils/logger";
 
 const router = Router();
@@ -35,6 +35,17 @@ router.get("/classes/:classId/students", authRequired, requireClassCapability("S
         lastName: "ASC",
         firstName: "ASC"
       }
+    });
+
+    await writeSensitiveStudentRead({
+      actorType: req.userType === "STUDENT" ? "STUDENT" : "USER",
+      actorId: req.principalId ?? req.userId ?? req.studentId ?? null,
+      action: "student-data.read.roster",
+      classId,
+      orgId: req.classAccess!.cls.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip,
+      metadata: { studentCount: students.length }
     });
 
     res.json({
@@ -463,9 +474,13 @@ router.get("/students/:studentId/data-export", authRequired, async (req: AuthReq
   }
 });
 
-// Right-to-erasure: delete a student's record (cascade removes grades/links).
+// Right-to-erasure: soft-delete a student's record so academic records remain recoverable.
 router.post("/students/:studentId/erase", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const confirmation = z.object({ confirm: z.literal(true) }).safeParse(req.body ?? {});
+    if (!confirmation.success) {
+      return res.status(400).json({ message: "ERASE_CONFIRMATION_REQUIRED" });
+    }
     const student = await requireStudent(req, res, "STUDENT_MANAGE");
     if (!student) return;
 
@@ -484,6 +499,44 @@ router.post("/students/:studentId/erase", authRequired, async (req: AuthRequest,
     return res.json({ ok });
   } catch (error) {
     logger.error("[edu/classStudents] erase error", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Restore a soft-erased student. This is deliberately a separate, confirmed action.
+router.post("/students/:studentId/restore", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const confirmation = z.object({ confirm: z.literal(true) }).safeParse(req.body ?? {});
+    if (!confirmation.success) {
+      return res.status(400).json({ message: "RESTORE_CONFIRMATION_REQUIRED" });
+    }
+    const studentId = Number(req.params.studentId);
+    if (!Number.isInteger(studentId) || studentId <= 0 || !req.userId) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+
+    const result = await authorizeStudentAction(req.userId, studentId, "STUDENT_MANAGE", {
+      isSystemAdmin: req.userRole === "SYSTEM_ADMIN",
+      withDeleted: true
+    });
+    if (!result) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
+    if (!result.access.allowed) return res.status(403).json({ message: "FORBIDDEN" });
+
+    const ok = await restoreStudentData(studentId);
+    if (!ok) return res.status(409).json({ message: "STUDENT_NOT_ERASED" });
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId,
+      action: "student.data.restore",
+      targetType: "student",
+      targetId: studentId,
+      orgId: result.student.class?.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    logger.error("[edu/classStudents] restore error", { requestId: req.requestId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

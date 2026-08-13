@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, BeforeInsert, BeforeUpdate } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, BeforeInsert, BeforeUpdate, Index } from "typeorm";
 import { Student } from "./Student";
 import { Class } from "./Class";
 import { EduLesson } from "./EduLesson";
@@ -6,6 +6,8 @@ import { ControlWork } from "./ControlWork";
 import { TopicNew } from "./TopicNew";
 import { AssessmentType, validateAssessmentType } from "../types/AssessmentType";
 @Entity("summary_grades")
+@Index("idx_summary_grades_student_created", ["student", "createdAt"])
+@Index("idx_summary_grades_class_student_created", ["class", "student", "createdAt"])
 export class SummaryGrade {
   @PrimaryGeneratedColumn()
   id!: number;

@@ -8,6 +8,7 @@ import { registerTeacher, studentLogin } from "../../lib/api/edu";
 import type { User, CourseLanguage } from "../../types";
 import { applyTheme, getCurrentTheme } from "../../theme";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { primeGetMeCache } from "../../lib/api/profile";
 import { AlertCircle, ArrowLeft, ArrowRight, BarChart3, Check, CheckCircle2, Code2, Globe, GraduationCap, LoaderCircle, Lock, Mail, Moon, School, ShieldCheck, Sun, UserRound } from "lucide-react";
 
 type Mode = "login" | "register";
@@ -110,6 +111,10 @@ export const AuthPage: React.FC<Props> = ({
   const navigate = useNavigate();
   const prefersReducedMotion = useReducedMotion();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
+  const notifyAuth = (user: User) => {
+    primeGetMeCache(user);
+    onAuth(user);
+  };
 
   const fieldInputClass = "h-12 w-full rounded-[14px] border border-[#122017]/10 bg-[#f7f8f5] px-4 text-[14px] text-[#111814] outline-none transition placeholder:text-[#8a948d] focus:border-[#00b963]/60 focus:bg-white focus:ring-4 focus:ring-[#00ff88]/10 dark:border-white/10 dark:bg-[#111713] dark:text-[#f4f7f4] dark:placeholder:text-[#718078] dark:focus:border-[#00e97c]/50 dark:focus:bg-[#151d17]";
   const fieldLabelClass = "mb-2 block text-[12px] font-bold text-[#4e5a52] dark:text-[#b4beb7]";
@@ -263,7 +268,7 @@ export const AuthPage: React.FC<Props> = ({
           if (userMode === "EDUCATIONAL") {
             try {
               const user = await login(username.trim(), password, currentTurnstileToken || undefined);
-              onAuth(user);
+              notifyAuth(user);
               return;
             } catch (teacherErr: unknown) {
               try {
@@ -283,7 +288,7 @@ export const AuthPage: React.FC<Props> = ({
                   middleName: studentResult.student.middleName,
                   email: studentResult.student.email
                 };
-                onAuth(studentUser);
+                notifyAuth(studentUser);
                 return;
               } catch (studentErr: unknown) {
                 setError(formatApiError(studentErr, tr("Невірні облікові дані", "Invalid credentials")));
@@ -292,10 +297,10 @@ export const AuthPage: React.FC<Props> = ({
             }
           } else if (userMode === "CONTEST") {
             const user = await login(username.trim(), password, currentTurnstileToken || undefined);
-            onAuth(user);
+            notifyAuth(user);
           } else {
             const user = await login(username.trim(), password, currentTurnstileToken || undefined);
-            onAuth(user);
+            notifyAuth(user);
           }
         } catch (loginErr: unknown) {
           const loginErrorMessage = formatApiError(loginErr, tr("Помилка авторизації", "Authorization error"));
@@ -323,10 +328,10 @@ export const AuthPage: React.FC<Props> = ({
           if (result.requiresEmailVerification) {
             setEmailSent(true);
             setSuccess(tr("Реєстрація вчителя успішна! Перевірте вашу пошту для підтвердження email. Після підтвердження ви зможете увійти.", "Teacher registration successful! Check your email to verify it. After verification you can log in."));
-          } else if (result.user && result.token) {
+          } else if (result.user) {
             const registeredUser = result.user;
             setSuccess(tr("Реєстрація вчителя успішна!", "Teacher registration successful!"));
-            setTimeout(() => { onAuth(registeredUser); }, 1500);
+            setTimeout(() => { notifyAuth(registeredUser); }, 1500);
           }
         } else {
           if (!firstName.trim() || !lastName.trim() || !birthDay || !birthMonth) {
@@ -345,8 +350,8 @@ export const AuthPage: React.FC<Props> = ({
           if (result.requiresEmailVerification) {
             setEmailSent(true);
             setSuccess(tr("Реєстрація успішна! Перевірте вашу пошту для підтвердження.", "Registration successful! Check your email to verify."));
-          } else if (result.user && result.token) {
-            onAuth(result.user);
+          } else if (result.user) {
+            notifyAuth(result.user);
           }
         }
       }

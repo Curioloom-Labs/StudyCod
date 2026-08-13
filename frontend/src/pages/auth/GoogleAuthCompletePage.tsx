@@ -6,6 +6,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, Globe, LoaderC
 import type { User } from "../../types";
 import { tr } from "../../i18n";
 import { api } from "../../lib/api/client";
+import { primeGetMeCache } from "../../lib/api/profile";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "../../lib/api/auth";
 import { Logo } from "../../components/Logo";
@@ -43,7 +44,7 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
   const navigate = useNavigate();
   const legacyToken = searchParams.get("token");
   const code = searchParams.get("code");
-  const [token, setToken] = useState<string | null>(legacyToken);
+  const [setupToken, setSetupToken] = useState<string | null>(legacyToken);
   const [resolvingCode, setResolvingCode] = useState(!legacyToken && !!code);
   const [theme, setTheme] = useState<"dark" | "light">(() => getCurrentTheme());
   const [username, setUsername] = useState("");
@@ -72,11 +73,11 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
     resolvePromise
       .then(result => {
         if (cancelled) return;
-        if (!result.token) {
+        if (!result.setupToken) {
           setError(tr("РљРѕРґ Р°РІС‚РѕСЂРёР·Р°С†С–С— РЅРµРґС–Р№СЃРЅРёР№ Р°Р±Рѕ РїСЂРѕСЃС‚СЂРѕС‡РµРЅРёР№.", "Authorization code is invalid or expired."));
           return;
         }
-        setToken(result.token);
+        setSetupToken(result.setupToken);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(getErrorMessageFromUnknown(err, tr("РљРѕРґ Р°РІС‚РѕСЂРёР·Р°С†С–С— РЅРµРґС–Р№СЃРЅРёР№ Р°Р±Рѕ РїСЂРѕСЃС‚СЂРѕС‡РµРЅРёР№.", "Authorization code is invalid or expired.")));
@@ -86,13 +87,13 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
   }, [legacyToken, code]);
 
   useEffect(() => {
-    if (!token && !resolvingCode) {
+    if (!setupToken && !resolvingCode) {
       setError(tr("РўРѕРєРµРЅ РІС–РґСЃСѓС‚РЅС–Р№. Р‘СѓРґСЊ Р»Р°СЃРєР°, СЃРїСЂРѕР±СѓР№С‚Рµ С‰Рµ СЂР°Р·.", "Token is missing. Please try again."));
       return;
     }
-    if (!token) return;
+    if (!setupToken) return;
     try {
-      const payload = readTokenPayload(token);
+      const payload = readTokenPayload(setupToken);
       if (payload.firstName) setFirstName(payload.firstName);
       if (payload.lastName) setLastName(payload.lastName);
       if (payload.birthDay) setBirthDay(Number(payload.birthDay));
@@ -104,7 +105,7 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
       setGoogleData(null);
       setError(getErrorMessageFromUnknown(err, tr("РќРµ РІРґР°Р»РѕСЃСЏ РѕР±СЂРѕР±РёС‚Рё Google-РїСЂРѕС„С–Р»СЊ. РЎРїСЂРѕР±СѓР№С‚Рµ С‰Рµ СЂР°Р·.", "Failed to process the Google profile. Please try again.")));
     }
-  }, [token, resolvingCode]);
+  }, [setupToken, resolvingCode]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -114,12 +115,12 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
     if (password !== confirmPassword) return setError(tr("РџР°СЂРѕР»С– РЅРµ Р·Р±С–РіР°СЋС‚СЊСЃСЏ", "Passwords do not match"));
     if (!firstName.trim() || !lastName.trim()) return setError(tr("Р†Рј'СЏ С‚Р° РїСЂС–Р·РІРёС‰Рµ РѕР±РѕРІ'СЏР·РєРѕРІС–", "First name and last name are required"));
     if (!birthDay || !birthMonth || birthDay < 1 || birthDay > 31 || birthMonth < 1 || birthMonth > 12) return setError(tr("Р’РєР°Р¶С–С‚СЊ РєРѕСЂРµРєС‚РЅРёР№ РґРµРЅСЊ С– РјС–СЃСЏС†СЊ РЅР°СЂРѕРґР¶РµРЅРЅСЏ", "Enter a valid birth day and month"));
-    if (!token) return setError(tr("РЎРµСЃС–СЏ Google Р·Р°РІРµСЂС€РёР»Р°СЃСЏ. РЎРїСЂРѕР±СѓР№С‚Рµ СѓРІС–Р№С‚Рё С‰Рµ СЂР°Р·.", "The Google session has expired. Please sign in again."));
+    if (!setupToken) return setError(tr("РЎРµСЃС–СЏ Google Р·Р°РІРµСЂС€РёР»Р°СЃСЏ. РЎРїСЂРѕР±СѓР№С‚Рµ СѓРІС–Р№С‚Рё С‰Рµ СЂР°Р·.", "The Google session has expired. Please sign in again."));
 
     setLoading(true);
     try {
       const response = await api.post("/auth/google/complete", {
-        token,
+        setupToken,
         username: username.trim(),
         password,
         userMode,
@@ -128,10 +129,9 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
         birthDay: Number(birthDay),
         birthMonth: Number(birthMonth)
       });
-      const data = response.data as { token?: string; user?: User };
-      if (data.token && data.user) {
-        localStorage.setItem("token", data.token);
-        api.defaults.headers.common.Authorization = `Bearer ${data.token}`;
+      const data = response.data as { user?: User };
+      if (data.user) {
+        primeGetMeCache(data.user);
         onAuth(data.user);
       } else {
         setError(tr("РќРµ РІРґР°Р»РѕСЃСЏ Р·Р°РІРµСЂС€РёС‚Рё СЂРµС”СЃС‚СЂР°С†С–СЋ.", "Failed to complete registration."));
@@ -150,7 +150,7 @@ export const GoogleAuthCompletePage: React.FC<Props> = ({ onAuth }) => {
     return <div className="grid min-h-[100dvh] place-items-center bg-[#f7f8f5] text-[#111814] dark:bg-[#0c110e] dark:text-white"><div className="flex items-center gap-3 text-sm font-semibold"><LoaderCircle className="size-5 animate-spin text-[#00b963]" />{tr("РџРµСЂРµРІС–СЂСЏС”РјРѕ РІС…С–Рґ С‡РµСЂРµР· GoogleвЂ¦", "Verifying Google sign-inвЂ¦")}</div></div>;
   }
 
-  if (!token) {
+  if (!setupToken) {
     return <div className="grid min-h-[100dvh] place-items-center bg-[#f7f8f5] px-5 text-[#111814] dark:bg-[#0c110e] dark:text-white"><div className="w-full max-w-[440px] space-y-5"><span className="grid size-12 place-items-center rounded-2xl bg-[#00ff88] text-[#07140d]"><AlertCircle className="size-5" /></span><h1 className="text-3xl font-bold tracking-[-.05em]">{tr("РќРµ РІРґР°Р»РѕСЃСЏ РїСЂРѕРґРѕРІР¶РёС‚Рё", "Unable to continue")}</h1><p className="text-sm leading-6 text-[#667169] dark:text-[#9faba3]">{error}</p><button onClick={() => navigate("/", { replace: true })} className={primaryButtonClass}>{tr("РџРѕРІРµСЂРЅСѓС‚РёСЃСЏ РЅР° РіРѕР»РѕРІРЅСѓ", "Back to home")}<ArrowRight className="size-4" /></button></div></div>;
   }
 

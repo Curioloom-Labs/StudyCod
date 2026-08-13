@@ -26,6 +26,7 @@ import { Workspace } from "../../components/contest-workspace/Workspace";
 import { createSupportChatConversation } from "../../lib/api/support";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
+import { getCachedMeUser } from "../../lib/api/profile";
 
 type TurnstileRenderOptions = {
   sitekey: string;
@@ -55,16 +56,6 @@ type ContestMeta = {
   endsAt: string | null;
 };
 
-type JwtPayload = {
-  userId?: number;
-  studentId?: number;
-  type?: string;
-  username?: string;
-  name?: string;
-  email?: string;
-  sub?: string;
-};
-
 type ContestAnnouncementEvent = {
   id: number;
   text: string;
@@ -91,31 +82,14 @@ function safeJsonParse<T>(raw: string | null): T | null {
   }
 }
 
-function decodeJwtPayload(token: string | null): JwtPayload | null {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
-  try {
-    const json = atob(b64 + pad);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function draftScopeFromToken(token: string | null): string {
-  const p = decodeJwtPayload(token);
-  if (typeof p?.userId === "number") return `user:${p.userId}`;
-  if (typeof p?.studentId === "number") return `student:${p.studentId}`;
-  if (typeof p?.type === "string" && p.type.trim()) return `type:${String(p.type).trim().toUpperCase()}`;
+function draftScopeFromUser(user: ReturnType<typeof getCachedMeUser>): string {
+  if (user?.studentId != null) return `student:${user.studentId}`;
+  if (user?.id != null) return `user:${user.id}`;
   return "anon";
 }
 
-function userLabelFromToken(token: string | null): string | null {
-  const p = decodeJwtPayload(token);
-  const candidates = [p?.username, p?.name, p?.email, p?.sub];
+function userLabelFromUser(user: ReturnType<typeof getCachedMeUser>): string | null {
+  const candidates = [user?.username, user?.firstName, user?.email, user?.id != null ? String(user.id) : null];
   for (const c of candidates) {
     if (typeof c === "string" && c.trim()) return c.trim();
   }
@@ -147,23 +121,8 @@ export const ContestProblemSolvePage: React.FC = () => {
     return Number.isFinite(v) ? v : null;
   }, [params]);
 
-  const hasToken = React.useMemo(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return !!localStorage.getItem("token");
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const token = React.useMemo(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return localStorage.getItem("token");
-    } catch {
-      return null;
-    }
-  }, []);
+  const hasToken = true;
+  const sessionUser = getCachedMeUser();
   const turnstileSiteKey = React.useMemo(() => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(), []);
   // Live updates (SSE) are on by default; can be disabled explicitly.
   const liveUpdatesEnabled = React.useMemo(() => {
@@ -215,10 +174,10 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const storageBase = React.useMemo(() => {
     if (!contestId || !problemId) return null;
-    return `contest:${contestId}:problem:${problemId}:${draftScopeFromToken(token)}`;
-  }, [contestId, problemId, token]);
+    return `contest:${contestId}:problem:${problemId}:${draftScopeFromUser(sessionUser)}`;
+  }, [contestId, problemId, sessionUser]);
 
-  const currentUserLabel = React.useMemo(() => userLabelFromToken(token), [token]);
+  const currentUserLabel = React.useMemo(() => userLabelFromUser(sessionUser), [sessionUser]);
 
   const loadSubmissions = React.useCallback(async (opts?: { silent?: boolean }) => {
     if (!contestId || !problemId || !hasToken) return;
@@ -436,8 +395,7 @@ export const ContestProblemSolvePage: React.FC = () => {
     let closed = false;
     setWsStatus("connecting");
 
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
-    const url = `${apiHttpBase()}/contests/${contestId}/events${tokenParam}`;
+    const url = `${apiHttpBase()}/contests/${contestId}/events`;
     const es = new EventSource(url);
 
     es.addEventListener("ready", () => {
@@ -480,7 +438,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         // ignore
       }
     };
-  }, [liveUpdatesEnabled, contestId, hasToken, token, syncLiveData]);
+  }, [liveUpdatesEnabled, contestId, hasToken, syncLiveData]);
 
   React.useEffect(() => {
     const id = window.setInterval(() => {

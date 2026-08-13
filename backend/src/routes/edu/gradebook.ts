@@ -21,6 +21,7 @@ import { buildLiveSnapshot, type LiveAttempt, type LiveStudent } from "../../ser
 import { buildSkillTree, type SkillTopicInput } from "../../services/learning/skillTree";
 import { buildProgressReportModel, renderProgressReportHtml } from "../../services/reports/progressReport";
 import { renderHtmlToPdf } from "../../services/certificates/CertificateRenderer";
+import { writeSensitiveStudentRead } from "../../services/audit/auditLog";
 
 const router = Router();
 
@@ -87,6 +88,16 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
     }
 
     const students = cls.students || [];
+    await writeSensitiveStudentRead({
+      actorType: req.userType === "STUDENT" ? "STUDENT" : "USER",
+      actorId: req.principalId ?? req.userId ?? req.studentId ?? null,
+      action: "student-data.read.gradebook",
+      classId: cls.id,
+      orgId: cls.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip,
+      metadata: { studentCount: students.length }
+    });
     const topics = await topicRepo()
       .createQueryBuilder("topic")
       .leftJoinAndSelect("topic.tasks", "task")

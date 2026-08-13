@@ -13,6 +13,7 @@ import { getStudentUiLangMarker, setStudentUiLangMarker } from '../services/auth
 import { setRequestContextFields } from '../utils/requestContextStore';
 import { AUTH_COOKIE_NAME } from '../utils/authCookie';
 import { UserCourseEnrollment } from '../entities/UserCourseEnrollment';
+import { Student } from '../entities/Student';
 import type { CourseRuntime } from '../entities/CourseVariant';
 
 /**
@@ -168,6 +169,23 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
   req.learningRuntime = activeEnrollment?.variant?.runtime || "PYTHON";
   req.userRole = user.role || null;
   req.userMode = user.userMode || null;
+
+  // A User-backed student is selected explicitly by the browser context
+  // header. Only a Student linked to this same User can activate it; never
+  // trust a raw student id from the client as an authorization decision.
+  const requestedStudentId = Number(req.headers["x-studycod-edu-student"] ?? 0);
+  if (Number.isInteger(requestedStudentId) && requestedStudentId > 0) {
+    const linkedStudent = await AppDataSource.getRepository(Student).findOne({
+      where: { id: requestedStudentId, user: { id: userId } },
+      relations: ["class"]
+    });
+    if (linkedStudent?.class) {
+      req.studentId = linkedStudent.id;
+      req.userType = "STUDENT";
+      req.userMode = "EDUCATIONAL";
+      req.learningRuntime = linkedStudent.class.language;
+    }
+  }
   return "ok";
 }
 

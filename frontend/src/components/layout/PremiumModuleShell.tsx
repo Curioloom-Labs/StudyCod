@@ -15,6 +15,7 @@ type Props = {
   onNavigate: (path: string) => void;
   onToggleTheme: () => void;
   onLogout: () => void;
+  onEduContextChange?: (studentId: number | null) => void | Promise<void>;
   children: React.ReactNode;
 };
 
@@ -27,6 +28,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
   onNavigate,
   onToggleTheme,
   onLogout,
+  onEduContextChange,
   children,
 }) => {
   const { i18n } = useTranslation();
@@ -126,6 +128,15 @@ export const PremiumModuleShell: React.FC<Props> = ({
                     <div className="break-words text-sm font-semibold text-[#142017] dark:text-[#edf3ef]">{displayName}</div>
                     <div className="mt-0.5 break-all text-xs text-[#6b7a70] dark:text-[#a4b2a7]">@{user.username}</div>
                   </div>
+                  {product === "EDU" && onEduContextChange && (user.eduContexts?.students?.length || user.eduContexts?.organizations?.length) ? <div className="border-y border-[#152219]/10 px-2 py-2 dark:border-white/10">
+                    <div className="px-1 pb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a4b2a7]">{uk ? "Контекст EDU" : "EDU context"}</div>
+                    {user.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) && <button type="button" onClick={() => { setAccountOpen(false); void onEduContextChange(null); }} className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${!user.studentId ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]"}`} role="menuitem">
+                      <GraduationCap className="size-4" />{uk ? "Викладач / команда" : "Teacher / staff"}
+                    </button>}
+                    {user.eduContexts?.students?.map((student) => <button key={student.studentId} type="button" onClick={() => { setAccountOpen(false); void onEduContextChange(student.studentId); }} className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${user.studentId === student.studentId ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]"}`} role="menuitem">
+                      <BookOpen className="size-4" /><span className="min-w-0 truncate">{uk ? "Учень" : "Student"}: {student.className}</span>
+                    </button>)}
+                  </div> : null}
                   <button type="button" onClick={() => { setAccountOpen(false); onNavigate(product === "EDU" ? "/edu/profile" : "/profile"); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]" role="menuitem">
                     <UserRound className="size-4" />
                     {uk ? "Профіль" : "Profile"}

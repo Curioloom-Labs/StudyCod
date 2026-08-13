@@ -3,6 +3,7 @@ import { AppDataSource } from "../../data-source";
 import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { Membership } from "../../entities/Membership";
+import { Organization } from "../../entities/Organization";
 import { higherRole, type OrgRole } from "../../types/OrgRole";
 import { roleCan, type Capability } from "./rbac";
 
@@ -82,6 +83,45 @@ export interface AuthorizeClassOptions {
   manager?: EntityManager;
   /** Global platform super-admin (`User.role === "SYSTEM_ADMIN"`) — bypasses org/owner checks. */
   isSystemAdmin?: boolean;
+  /** Include soft-erased students when resolving a restore action. */
+  withDeleted?: boolean;
+}
+
+export interface OrgAccessResult {
+  org: Organization;
+  role: OrgRole | null;
+  effectiveRole: OrgRole | null;
+  allowed: boolean;
+}
+
+/**
+ * Resolve organization-scoped authorization through the same policy used by
+ * class resources. Keeping this here prevents org/course routers from growing
+ * a second membership-only authorization implementation.
+ */
+export async function authorizeOrgAction(
+  userId: number,
+  orgId: number,
+  capability: Capability,
+  opts: AuthorizeClassOptions = {}
+): Promise<OrgAccessResult | null> {
+  const { manager, isSystemAdmin = false } = opts;
+  const repo = manager ? manager.getRepository(Organization) : AppDataSource.getRepository(Organization);
+  const membershipRepoForOrg = membershipRepo(manager);
+  const org = await repo.findOne({ where: { id: orgId } });
+  if (!org) return null;
+
+  const membership = await membershipRepoForOrg.findOne({
+    where: { user: { id: userId }, organization: { id: orgId } }
+  });
+  const role = membership?.role ?? null;
+  const allowed = isSystemAdmin || (role != null && roleCan(role, capability));
+  return {
+    org,
+    role,
+    effectiveRole: isSystemAdmin ? "ORG_ADMIN" : role,
+    allowed
+  };
 }
 
 /**
@@ -137,11 +177,12 @@ export async function authorizeStudentAction(
   capability: Capability,
   opts: AuthorizeClassOptions = {}
 ): Promise<StudentAccessResult | null> {
-  const { manager } = opts;
+  const { manager, withDeleted = false } = opts;
   const studentRepo = manager ? manager.getRepository(Student) : AppDataSource.getRepository(Student);
   const student = await studentRepo.findOne({
     where: { id: studentId },
-    relations: ["class", "class.teacher"]
+    relations: ["class", "class.teacher"],
+    withDeleted
   });
   if (!student || !student.class) return null;
 

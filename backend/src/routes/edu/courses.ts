@@ -1,8 +1,8 @@
 import { Router, Response } from "express";
 import { z } from "zod";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { getUserOrgRole } from "../../services/edu/membership";
-import { roleCan, type Capability } from "../../services/edu/rbac";
+import { authorizeOrgAction } from "../../services/edu/classAccess";
+import type { Capability } from "../../services/edu/rbac";
 import {
   createCourse,
   listCourses,
@@ -39,8 +39,10 @@ async function requireOrgCapability(
   orgId: number,
   capability: Capability
 ): Promise<boolean> {
-  const role = await getUserOrgRole(req.userId!, orgId);
-  if (!role || !roleCan(role, capability)) {
+  const access = await authorizeOrgAction(req.userId!, orgId, capability, {
+    isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+  });
+  if (!access || !access.allowed) {
     res.status(403).json({ message: "FORBIDDEN" });
     return false;
   }

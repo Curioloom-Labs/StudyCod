@@ -7,6 +7,7 @@ import { In } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { authorizeClassForReq } from "../../middleware/orgContext";
+import { writeSensitiveStudentRead } from "../../services/audit/auditLog";
 import { EduTask } from "../../entities/EduTask";
 import { EduGrade } from "../../entities/EduGrade";
 import { Student } from "../../entities/Student";
@@ -159,6 +160,16 @@ router.get("/manual-tasks/:taskId/submissions", authRequired, async (req: AuthRe
     }
 
     const submissions = await listSubmissionsForTask(task.id);
+    await writeSensitiveStudentRead({
+      actorType: "USER",
+      actorId: req.principalId ?? req.userId ?? req.studentId ?? null,
+      action: "student-data.read.work",
+      classId: taskClassId ?? null,
+      orgId: access.cls.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip,
+      metadata: { taskId: task.id, studentCount: submissions.length }
+    });
     const studentIds = submissions.map((submission) => submission.studentId);
     const grades = studentIds.length
       ? await gradeRepo().find({ where: { task: { id: task.id }, student: { id: In(studentIds) } }, relations: ["student"] })
@@ -241,6 +252,17 @@ router.get("/manual-tasks/:taskId/submissions/:studentId/file", authRequired, as
     }
     const submission = await getSubmission(taskId, studentId);
     if (!submission?.fileStorageKey) return res.status(404).json({ message: "FILE_NOT_FOUND" });
+    await writeSensitiveStudentRead({
+      actorType: req.userType === "STUDENT" ? "STUDENT" : "USER",
+      actorId: req.principalId ?? req.userId ?? req.studentId ?? null,
+      action: "student-data.read.file",
+      studentId,
+      classId: task.lesson.class.id,
+      orgId: task.lesson.class.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip,
+      metadata: { taskId }
+    });
     const relative = submission.fileStorageKey.replace(/^manual-submissions[\\/]/, "");
     const root = path.resolve(MANUAL_DIR);
     const filePath = path.resolve(root, relative);

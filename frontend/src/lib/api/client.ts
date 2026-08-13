@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosHeaders, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import { getRetryDelayMs, sleep, getRetryCount, setRetryCount } from "./retry";
+import { getActiveEduStudentId } from "../eduContext";
 type MaintenancePayload = {
   maintenance: true;
   title: string;
@@ -122,9 +123,12 @@ export const api = axios.create({
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN"
 });
-const savedToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-if (savedToken) {
-  api.defaults.headers.common.Authorization = `Bearer ${savedToken}`;
+// Authentication is cookie-only. Clear the pre-cookie legacy token once so an
+// upgrade cannot leave a bearer credential exposed to any page script.
+try {
+  if (typeof window !== "undefined") localStorage.removeItem("token");
+} catch {
+  // Ignore private-mode/storage errors.
 }
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const method = String(config.method || "get").toLowerCase();
@@ -135,8 +139,6 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     await csrfBootstrap;
   }
 
-  const token = localStorage.getItem("token");
-  (config as InternalAxiosRequestConfig & { __authToken?: string }).__authToken = token || undefined;
   const uiLanguage = localStorage.getItem("studycod_language") || "en";
   if (typeof document !== "undefined") {
     const csrf = readCsrfCookie();
@@ -151,30 +153,17 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
       }
     }
   }
-  if (token) {
-    if (config.headers && typeof config.headers.set === "function") {
-      config.headers.set("Authorization", `Bearer ${token}`);
-      config.headers.set("X-UI-Language", uiLanguage);
-      config.headers.set("Accept-Language", uiLanguage);
-    } else {
-      config.headers = AxiosHeaders.from({
-        ...(config.headers || {}),
-        Authorization: `Bearer ${token}`,
-        "X-UI-Language": uiLanguage,
-        "Accept-Language": uiLanguage
-      });
-    }
-    return config;
-  }
-
   if (config.headers && typeof config.headers.set === "function") {
     config.headers.set("X-UI-Language", uiLanguage);
     config.headers.set("Accept-Language", uiLanguage);
+    const studentId = getActiveEduStudentId();
+    if (studentId != null) config.headers.set("X-StudyCod-Edu-Student", String(studentId));
   } else {
     config.headers = AxiosHeaders.from({
       ...(config.headers || {}),
       "X-UI-Language": uiLanguage,
-      "Accept-Language": uiLanguage
+      "Accept-Language": uiLanguage,
+      ...(getActiveEduStudentId() != null ? { "X-StudyCod-Edu-Student": String(getActiveEduStudentId()) } : {})
     });
   }
   return config;
@@ -191,12 +180,8 @@ api.interceptors.response.use((response: AxiosResponse) => {
   }
   return response;
 }, (error: AxiosError<MaintenanceErrorData>) => {
-  const requestConfig = error.config as (InternalAxiosRequestConfig & { __authToken?: string }) | undefined;
-  const requestToken = requestConfig?.__authToken;
-  const currentToken = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const isCurrentSession = !requestToken || requestToken === currentToken;
-  if (error.response?.status === 401 && isCurrentSession && !shouldSkipAuthRedirect(requestConfig)) {
-    localStorage.removeItem("token");
+  const requestConfig = error.config as InternalAxiosRequestConfig | undefined;
+  if (error.response?.status === 401 && !shouldSkipAuthRedirect(requestConfig)) {
     if (typeof window !== "undefined") {
       window.location.href = buildLoginRedirectTarget();
     }

@@ -50,6 +50,22 @@ export interface User {
   placementCodingTaskId?: string | null;
   placementCodingScore?: number | null;
   placementCodingDoneAt?: string | null;
+  eduContexts?: {
+    students: Array<{
+      studentId: number;
+      classId: number;
+      className: string;
+      language: CourseLanguage;
+      firstName: string;
+      lastName: string;
+    }>;
+    organizations: Array<{
+      orgId: number;
+      role: string;
+      name: string | null;
+      slug: string | null;
+    }>;
+  };
 }
 
 export interface PublicProfile {

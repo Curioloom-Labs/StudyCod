@@ -1095,14 +1095,7 @@ export const ContestPage: React.FC = () => {
     return Number.isFinite(v) ? v : null;
   }, [params]);
 
-  const hasToken = React.useMemo(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return !!localStorage.getItem("token");
-    } catch {
-      return false;
-    }
-  }, []);
+  const hasToken = true;
 
   const [loading, setLoading] = React.useState(true);
   const [data, setData] = React.useState<ContestDetails | null>(null);

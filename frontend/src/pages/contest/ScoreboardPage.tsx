@@ -13,30 +13,12 @@ import {
   type ScoreboardRow,
 } from "../../lib/api/contests";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
-
-type JwtPayload = { username?: string; name?: string; email?: string; sub?: string };
-
-function decodeJwtPayload(token: string | null): JwtPayload | null {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
-  try {
-    return JSON.parse(atob(b64 + pad));
-  } catch {
-    return null;
-  }
-}
+import { getCachedMeUser } from "../../lib/api/profile";
 
 function currentUserLabel(): string | null {
-  try {
-    const p = decodeJwtPayload(localStorage.getItem("token"));
-    for (const c of [p?.username, p?.name, p?.email, p?.sub]) {
-      if (typeof c === "string" && c.trim()) return c.trim().toLowerCase();
-    }
-  } catch {
-    // ignore
+  const user = getCachedMeUser();
+  for (const c of [user?.username, user?.firstName, user?.email, user?.id != null ? String(user.id) : null]) {
+    if (typeof c === "string" && c.trim()) return c.trim().toLowerCase();
   }
   return null;
 }
@@ -95,11 +77,9 @@ export const ScoreboardPage: React.FC = () => {
     let es: EventSource | null = null;
     if (live && typeof EventSource !== "undefined") {
       try {
-        let apiToken = "";
-        try { apiToken = localStorage.getItem("token") ?? ""; } catch { /* ignore */ }
         const raw = String(import.meta.env.VITE_API_URL || window.location.origin).trim();
         const base = raw.replace(/\/+$/, "").replace(/\/api\/?$/i, "");
-        const url = `${base}/api/contests/${contestId}/events${apiToken ? `?token=${encodeURIComponent(apiToken)}` : ""}`;
+        const url = `${base}/api/contests/${contestId}/events`;
         es = new EventSource(url);
         es.addEventListener("scoreboard", () => { void tick(); });
       } catch {

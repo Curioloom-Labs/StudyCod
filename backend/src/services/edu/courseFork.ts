@@ -188,13 +188,11 @@ export async function assignCourseToClass(input: {
 
   const modules = await AppDataSource.getRepository(CourseModule).find({
     where: { course: { id: input.courseId } },
+    relations: ["items"],
     order: { order: "ASC" }
   });
   for (const m of modules) {
-    m.items = await AppDataSource.getRepository(CourseItem).find({
-      where: { module: { id: m.id } },
-      order: { order: "ASC" }
-    });
+    m.items = [...(m.items ?? [])].sort((a, b) => a.order - b.order);
   }
   course.modules = modules;
 

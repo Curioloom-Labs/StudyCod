@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn, DeleteDateColumn } from "typeorm";
 import { Class } from "./Class";
 import { User } from "./User";
 import { EduGrade } from "./EduGrade";
@@ -115,4 +115,10 @@ export class Student {
     name: "updated_at"
   })
   updatedAt!: Date;
+  @DeleteDateColumn({
+    name: "deleted_at",
+    type: "timestamp",
+    nullable: true
+  })
+  deletedAt?: Date | null;
 }

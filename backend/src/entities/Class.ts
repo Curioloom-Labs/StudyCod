@@ -17,18 +17,19 @@ export class Class {
     name: "teacher_id"
   })
   teacher!: User;
-  // Owning organization (SaaS tenant). Nullable during/after the Phase 1
-  // backfill; org-scoping is enforced only within the EDU subsystem.
+  // Every EDU class belongs to exactly one tenant. The migration that enforces
+  // this fails closed if an orphan row remains, so no class silently escapes
+  // org authorization.
   @ManyToOne(() => Organization, {
-    nullable: true,
-    onDelete: "SET NULL"
+    nullable: false,
+    onDelete: "RESTRICT"
   })
   @JoinColumn({
     name: "org_id"
   })
-  organization?: Organization | null;
+  organization!: Organization;
   @RelationId((c: Class) => c.organization)
-  organizationId?: number | null;
+  organizationId!: number;
   @Column({ type: "varchar" })
   name!: string;
   @Column({
