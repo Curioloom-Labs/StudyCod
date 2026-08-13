@@ -52,10 +52,36 @@ function projectProgressOrDefault(progress?: CourseItemProgress | null): CourseP
   } : { milestoneIds: [], draft: "", readme: "", status: "DRAFT", submittedAt: null };
 }
 
+function enrollmentPriority(status: EnrollmentStatus): number {
+  if (status === "IN_PROGRESS") return 0;
+  if (status === "COMPLETED") return 1;
+  if (status === "AVAILABLE") return 2;
+  return 3;
+}
+
+/**
+ * A user can have legacy duplicate enrollments for one course (for example,
+ * after changing runtime variants). Every course-scoped operation must use
+ * the active enrollment first, otherwise activation can succeed on one row
+ * while the UI reads another AVAILABLE row.
+ */
+async function findBestCourseEnrollment(userId: number, courseId: number, relations: string[] = []) {
+  const enrollments = await enrollmentRepo().find({
+    where: { user: { id: userId }, course: { id: courseId } },
+    relations,
+  });
+  return enrollments.sort((left, right) => {
+    const priority = enrollmentPriority(left.status) - enrollmentPriority(right.status);
+    if (priority !== 0) return priority;
+    const updated = (right.updatedAt?.getTime?.() || 0) - (left.updatedAt?.getTime?.() || 0);
+    return updated !== 0 ? updated : right.id - left.id;
+  })[0] || null;
+}
+
 async function getEnrolledItemContext(userId: number, itemId: number) {
   const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
   if (!item?.module?.course || !isMiniProject(item)) throw Object.assign(new Error("COURSE_PROJECT_NOT_FOUND"), { statusCode: 404 });
-  const enrollment = await enrollmentRepo().findOne({ where: { user: { id: userId }, course: { id: item.module.course.id } } });
+  const enrollment = await findBestCourseEnrollment(userId, item.module.course.id);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
@@ -248,10 +274,7 @@ export async function getCourseForUser(userId: number, courseId: number) {
   });
   if (!course) throw Object.assign(new Error("COURSE_NOT_FOUND"), { statusCode: 404 });
 
-  const enrollment = await enrollmentRepo().findOne({
-    where: { user: { id: userId }, course: { id: course.id } },
-    relations: ["variant"],
-  });
+  const enrollment = await findBestCourseEnrollment(userId, course.id, ["variant"]);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
 
   const dependencyState = await getPrerequisiteState(userId, course.id);
@@ -312,10 +335,7 @@ export async function getCoursePracticeContext(userId: number, itemId: number) {
     throw Object.assign(new Error("COURSE_ITEM_NOT_GENERATABLE"), { statusCode: 409 });
   }
 
-  const enrollment = await enrollmentRepo().findOne({
-    where: { user: { id: userId }, course: { id: item.module.course.id } },
-    relations: ["variant"],
-  });
+  const enrollment = await findBestCourseEnrollment(userId, item.module.course.id, ["variant"]);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
@@ -354,7 +374,7 @@ export async function getCoursePracticeContext(userId: number, itemId: number) {
 export async function completeCourseItem(userId: number, itemId: number, score?: number): Promise<UserCourseEnrollment> {
   const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
   if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
-  const enrollment = await enrollmentRepo().findOne({ where: { user: { id: userId }, course: { id: item.module.course.id } } });
+  const enrollment = await findBestCourseEnrollment(userId, item.module.course.id);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });

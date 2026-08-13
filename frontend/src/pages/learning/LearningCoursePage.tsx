@@ -61,8 +61,8 @@ export const LearningCoursePage: React.FC = () => {
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
-    if (!courseId) return;
+  const load = React.useCallback(async (): Promise<LearningCourse | null> => {
+    if (!courseId) return null;
     setLoading(true);
     try {
       const loaded = await getLearningCourse(Number(courseId));
@@ -77,6 +77,7 @@ export const LearningCoursePage: React.FC = () => {
       }));
       setProjects(Object.fromEntries(entries.filter((entry): entry is readonly [number, LearningProject] => Boolean(entry))));
       setError(null);
+      return loaded;
     } catch (caught: any) {
       const code = caught?.response?.data?.message;
       setError(code === "PREREQUISITES_INCOMPLETE"
@@ -84,6 +85,7 @@ export const LearningCoursePage: React.FC = () => {
         : code === "COURSE_NOT_ENROLLED"
           ? tr("Спочатку відкрий курс із каталогу.", "Open the course from the catalog first.")
           : tr("Не вдалося завантажити курс.", "Could not load the course."));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -104,7 +106,10 @@ export const LearningCoursePage: React.FC = () => {
     setMessage(null);
     try {
       await enrollInCatalogCourse(course.id, course.enrollment.variantId);
-      await load();
+      const refreshed = await load();
+      if (!refreshed || (refreshed.enrollment.status !== "IN_PROGRESS" && refreshed.enrollment.status !== "COMPLETED")) {
+        throw new Error("COURSE_ACTIVATION_NOT_CONFIRMED");
+      }
       setMessage(tr("Курс активовано. Тепер можна рухатися roadmap і генерувати практику.", "Course activated. You can now follow the roadmap and generate practice."));
     } catch (caught: any) {
       setError(caught?.response?.data?.message === "PREREQUISITES_INCOMPLETE"
