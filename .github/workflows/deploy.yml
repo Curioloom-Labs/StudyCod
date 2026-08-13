@@ -122,4 +122,4 @@ jobs:
 
       - name: Run deploy script
         run: |
-          ssh ${{ secrets.USER }}@${{ secrets.HOST }} "BUILD_BACKEND=${{ steps.scope.outputs.backend }} BUILD_JUDGE=${{ steps.scope.outputs.judge }} BUILD_AI_SERVICE=${{ steps.scope.outputs.ai_service }} BUILD_FRONTEND=${{ steps.scope.outputs.frontend }} /var/www/studycod/restart-all.sh"
+          ssh ${{ secrets.USER }}@${{ secrets.HOST }} "pm2 stop all || true; BUILD_BACKEND=${{ steps.scope.outputs.backend }} BUILD_JUDGE=${{ steps.scope.outputs.judge }} BUILD_AI_SERVICE=${{ steps.scope.outputs.ai_service }} BUILD_FRONTEND=${{ steps.scope.outputs.frontend }} /var/www/studycod/restart-all.sh"
