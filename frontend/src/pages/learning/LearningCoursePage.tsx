@@ -341,18 +341,19 @@ export const LearningCoursePage: React.FC = () => {
             const completed = nodeCompleted(node);
             const locked = !courseIsActive || !roadmapNodes.slice(0, index).every(nodeCompleted);
             const doneCount = items.filter((item) => item.progress.status === "COMPLETED").length;
-            const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
             const started = items.some((item) => item.progress.status === "IN_PROGRESS");
+            const touchedCount = items.filter((item) => item.progress.status !== "NOT_STARTED").length;
+            const progress = items.length ? Math.round((touchedCount / items.length) * 100) : 0;
             const isSelected = selectedNodeId === node.id;
             const Icon = completed ? CheckCircle2 : locked ? LockKeyhole : node.kind === "PROJECT" ? Rocket : node.kind === "MILESTONE" ? FileCheck2 : node.theory?.progress.status === "COMPLETED" ? Play : BookOpen;
             const status = completed
               ? tr("Завершено", "Completed")
               : locked
                 ? tr("Заверши попередній вузол", "Complete the previous node")
-              : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
-                  ? tr("Прочитати теорію", "Read the theory")
-                  : started
-                    ? tr("Продовжити практику", "Continue practice")
+              : started
+                  ? tr("Продовжити практику", "Continue practice")
+                  : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
+                    ? tr("Прочитати теорію", "Read the theory")
                   : node.kind === "PROJECT"
                     ? tr("Відкрити мініпроєкт", "Open mini-project")
                     : tr("Відкрити практику", "Open practice");

@@ -5,6 +5,7 @@ import { CourseItem } from "../entities/CourseItem";
 import { CourseItemProgress, type CourseProjectProgressData } from "../entities/CourseItemProgress";
 import { CourseVariant } from "../entities/CourseVariant";
 import { EnrollmentStatus, UserCourseEnrollment } from "../entities/UserCourseEnrollment";
+import { Task } from "../entities/Task";
 import { IsNull } from "typeorm";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeFile, JudgeRequest } from "./judgeWorker/types";
@@ -15,6 +16,7 @@ const dependencyRepo = () => AppDataSource.getRepository(CourseDependency);
 const enrollmentRepo = () => AppDataSource.getRepository(UserCourseEnrollment);
 const itemRepo = () => AppDataSource.getRepository(CourseItem);
 const progressRepo = () => AppDataSource.getRepository(CourseItemProgress);
+const taskRepo = () => AppDataSource.getRepository(Task);
 
 function percent(value: unknown): number {
   const n = Number(value ?? 0);
@@ -57,6 +59,130 @@ function enrollmentPriority(status: EnrollmentStatus): number {
   if (status === "COMPLETED") return 1;
   if (status === "AVAILABLE") return 2;
   return 3;
+}
+
+function normalizedTitle(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("uk-UA");
+}
+
+function jsonContent(value: unknown): Record<string, any> {
+  if (!value) return {};
+  if (typeof value === "object") return value as Record<string, any>;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Keep the catalog roadmap in sync with tasks created before the course-aware
+ * Practice route existed. The migration covers existing rows once, but users
+ * can create legacy tasks after that migration, so the bridge must also run on
+ * the read path. It only moves progress forward and never overwrites a course
+ * task that is already completed.
+ */
+async function syncLegacyPersonalProgress(userId: number, course: Course, enrollment: UserCourseEnrollment): Promise<void> {
+  if (!course.isBase) return;
+  const runtime = String(enrollment.variant?.runtime ?? "").toUpperCase();
+  if (runtime !== "PYTHON" && runtime !== "JAVA" && runtime !== "CPP") return;
+
+  const items = await itemRepo().find({
+    where: { module: { course: { id: course.id } }, isActive: true },
+    order: { id: "ASC" },
+  });
+  const theoryByTitle = new Map(items.filter((item) => item.kind === "THEORY").map((item) => [normalizedTitle(item.title), item]));
+  const theoryByIndex = new Map<number, CourseItem>();
+  const practicesByTheory = new Map<number, CourseItem[]>();
+  for (const item of items) {
+    const content = jsonContent(item.content);
+    if (item.kind === "THEORY") {
+      const sourceKey = String(content.sourceKey ?? content.sourcePath ?? "");
+      const match = sourceKey.match(/(?:^|\.)(?:topic|lesson)[.-]?(\d+)\./i);
+      if (match) theoryByIndex.set(Number(match[1]), item);
+    }
+    if (item.kind === "CODE_TASK") {
+      const theoryId = Number(content.theoryItemId ?? 0);
+      if (theoryId > 0) {
+        const group = practicesByTheory.get(theoryId) ?? [];
+        group.push(item);
+        practicesByTheory.set(theoryId, group);
+      }
+    }
+  }
+  for (const group of practicesByTheory.values()) {
+    group.sort((left, right) => Number(jsonContent(left.content).exercise?.sequence ?? 0) - Number(jsonContent(right.content).exercise?.sequence ?? 0) || left.id - right.id);
+  }
+  if (!theoryByTitle.size && !theoryByIndex.size) return;
+
+  const rows = await taskRepo().createQueryBuilder("task")
+    .leftJoin("task.topic", "topic")
+    .leftJoin("task.grades", "grade")
+    .where("task.user_id = :userId", { userId })
+    .andWhere("task.lang = :runtime", { runtime })
+    .andWhere("task.topic_id IS NOT NULL")
+    .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :catalogPrefix)", { catalogPrefix: "CATALOG_ITEM:%" })
+    .andWhere("task.type IN (:...types)", { types: ["INTRO", "TOPIC"] })
+    .select("task.id", "id")
+    .addSelect("task.topic_index", "topicIndex")
+    .addSelect("task.num_in_topic", "numInTopic")
+    .addSelect("task.completed", "completed")
+    .addSelect("task.created_at", "createdAt")
+    .addSelect("task.title", "title")
+    .addSelect("topic.title", "topicTitle")
+    .addSelect("COALESCE(MAX(grade.total), -1)", "bestScore")
+    .groupBy("task.id")
+    .addGroupBy("task.topic_index")
+    .addGroupBy("task.num_in_topic")
+    .addGroupBy("task.completed")
+    .addGroupBy("task.created_at")
+    .addGroupBy("task.title")
+    .addGroupBy("topic.title")
+    .orderBy("task.created_at", "ASC")
+    .addOrderBy("task.id", "ASC")
+    .getRawMany<{ topicIndex: string | number; numInTopic: string | number; completed: string | number; createdAt: Date; topicTitle?: string | null; bestScore: string | number }>();
+  if (!rows.length) return;
+
+  const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
+  const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
+  let changed = false;
+  for (const row of rows) {
+    const topicIndex = Number(row.topicIndex);
+    const theory = theoryByTitle.get(normalizedTitle(row.topicTitle)) || theoryByIndex.get(topicIndex);
+    if (!theory) continue;
+    const bestScore = Number(row.bestScore);
+    const passed = Number(row.completed) === 1 || (Number.isFinite(bestScore) && bestScore >= 60);
+    const score = Number.isFinite(bestScore) && bestScore >= 0 ? Math.max(0, Math.min(100, bestScore)) : passed ? 100 : null;
+    const practiceGroup = practicesByTheory.get(theory.id) ?? [];
+    const sequence = Math.max(1, Math.floor(Number(row.numInTopic) || 1));
+    const practice = practiceGroup[sequence - 1] || practiceGroup[0];
+    const targets = passed ? [theory, practice].filter(Boolean) as CourseItem[] : practice ? [practice] : [];
+
+    for (const item of targets) {
+      const existing = progressByItem.get(item.id) || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
+      if (passed) {
+        if (existing.status === "COMPLETED" && Number(existing.score ?? -1) >= Number(score ?? -1)) continue;
+        existing.status = "COMPLETED";
+        existing.score = score;
+        existing.completedAt = existing.completedAt || new Date(row.createdAt);
+      } else {
+        if (existing.status !== "NOT_STARTED") continue;
+        existing.status = "IN_PROGRESS";
+      }
+      await progressRepo().save(existing);
+      progressByItem.set(item.id, existing);
+      changed = true;
+    }
+  }
+  if (changed) {
+    if (enrollment.status === "AVAILABLE") enrollment.status = "IN_PROGRESS";
+    await recalculateEnrollmentProgress(enrollment);
+  }
 }
 
 /**
@@ -290,6 +416,8 @@ export async function getCourseForUser(userId: number, courseId: number) {
       prerequisites: dependencyState.prerequisites,
     });
   }
+
+  await syncLegacyPersonalProgress(userId, course, enrollment);
 
   const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
   const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
