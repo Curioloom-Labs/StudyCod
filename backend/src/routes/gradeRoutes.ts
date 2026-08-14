@@ -3,6 +3,7 @@ import { AppDataSource } from "../data-source";
 import { Grade } from "../entities/Grade";
 import { Task } from "../entities/Task";
 import { Topic } from "../entities/Topic";
+import { CourseItem } from "../entities/CourseItem";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { logger } from "../utils/logger";
 import { parseGradeComparisonFeedback } from "../utils/gradeComparisonFeedback";
@@ -52,6 +53,23 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
         id: req.userId
       }
     };
+    const rawCourseId = Array.isArray(req.query.courseId) ? req.query.courseId[0] : req.query.courseId;
+    const courseId = rawCourseId == null || rawCourseId === "" ? null : Number(rawCourseId);
+    if (courseId != null && (!Number.isInteger(courseId) || courseId <= 0)) {
+      return res.status(400).json({ message: "INVALID_COURSE_ID" });
+    }
+
+    let courseItemIds: number[] | null = null;
+    if (courseId != null) {
+      const courseItems = await AppDataSource.getRepository(CourseItem)
+        .createQueryBuilder("item")
+        .innerJoin("item.module", "module")
+        .where("module.course_id = :courseId", { courseId })
+        .andWhere("item.is_active = 1")
+        .select(["item.id"])
+        .getMany();
+      courseItemIds = courseItems.map((item) => item.id);
+    }
     const grades = await gradeRepo().find({
       where,
       order: {
@@ -61,6 +79,11 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
     });
     const data = grades
       .filter(g => !isPersonalControlQuizTask(g.task))
+      .filter((grade) => {
+        if (courseItemIds == null) return true;
+        const subtitle = String(grade.task?.subtitle ?? "");
+        return courseItemIds.some((itemId) => subtitle.startsWith(`CATALOG_ITEM:${itemId}|`));
+      })
       .map(g => {
       const parsedComparison = parseGradeComparisonFeedback(g.comparisonFeedback);
       const isIntro = g.task?.type === "INTRO";

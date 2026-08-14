@@ -6,7 +6,7 @@ import { AppDataSource } from "../data-source";
 import { Task, TaskType } from "../entities/Task";
 import type { TaskIoType, TaskLang } from "../entities/Task";
 import { Topic } from "../entities/Topic";
-import { getCoursePracticeContext, completeCourseItem } from "../services/learningCatalogService";
+import { getCoursePracticeContext, startCourseItem, completeCourseItem } from "../services/learningCatalogService";
 import { getPersonalMiniProjectDefinition, PERSONAL_MINI_PROJECT_INTERVAL } from "../data/personalMiniProjects";
 import {
   getPersonalThematicStartTopicIndex,
@@ -3191,6 +3191,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         saved.template = exercise.starterCode;
         await taskRepo().save(saved);
       }
+      await startCourseItem(userId, requestedCourseItemId);
       const hydrated = await taskRepo().findOne({ where: { id: saved.id }, relations: ["topic", "topic.theoryBlock"] });
       return res.json({
         status: "ok",

@@ -1,6 +1,6 @@
-﻿import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { listTasks, generateTask, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
 import { Modal } from "../../components/ui/Modal";
@@ -19,6 +19,7 @@ import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/i
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
+import { getLearningCourse, type LearningCourse } from "../../lib/api/learningCatalog";
 interface Props {
   user: User;
 }
@@ -301,6 +302,7 @@ function splitTheoryIntoChapters(markdown: string, fallbackTitle: string): Array
 export const TasksPage: React.FC<Props> = ({
   user
 }) => {
+  const navigate = useNavigate();
   const runtime = user.activeRuntime || "PYTHON";
   const {
     i18n
@@ -512,6 +514,7 @@ export const TasksPage: React.FC<Props> = ({
       return null;
     }
   });
+  const [courseContext, setCourseContext] = useState<{ courseId: number; courseTitle: string; itemTitle: string } | null>(null);
   const latestSubmissionBindingRef = useRef<{
     submissionId?: string;
     codeHash: string;
@@ -566,6 +569,11 @@ export const TasksPage: React.FC<Props> = ({
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
+  const requestedCourseIdFromUrl = useMemo(() => {
+    const raw = searchParams.get("courseId");
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
   const effectiveCourseItemId = requestedCourseItemIdFromUrl ?? coursePracticeItemId;
 
   useEffect(() => {
@@ -577,6 +585,24 @@ export const TasksPage: React.FC<Props> = ({
       // Private browsing/storage-disabled environments still work from URL state.
     }
   }, [requestedCourseItemIdFromUrl]);
+
+  useEffect(() => {
+    if (!requestedCourseIdFromUrl || !effectiveCourseItemId) {
+      setCourseContext(null);
+      return;
+    }
+    let cancelled = false;
+    void getLearningCourse(requestedCourseIdFromUrl)
+      .then((course: LearningCourse) => {
+        if (cancelled) return;
+        const item = course.modules.flatMap((module) => module.items).find((candidate) => candidate.id === effectiveCourseItemId);
+        setCourseContext(item ? { courseId: course.id, courseTitle: course.title, itemTitle: item.title } : null);
+      })
+      .catch(() => {
+        if (!cancelled) setCourseContext(null);
+      });
+    return () => { cancelled = true; };
+  }, [requestedCourseIdFromUrl, effectiveCourseItemId]);
 
   const syncTaskSelectionToUrl = useCallback((taskId: number | null) => {
     const nextSearch = new URLSearchParams(searchParams);
@@ -1085,6 +1111,22 @@ export const TasksPage: React.FC<Props> = ({
       setTheoryAcknowledged(theoryIsAcknowledged(task));
     });
   }, [deriveEditorFromTask, isCompactViewport, syncTaskSelectionToUrl, theoryIsAcknowledged]);
+
+  useEffect(() => {
+    if (!requestedCourseItemIdFromUrl || searchParams.get("generate") === "1" || !tasks.length) return;
+    const prefix = `CATALOG_ITEM:${requestedCourseItemIdFromUrl}|`;
+    const requested = tasks.find((task) => String(task.subtitle ?? "").startsWith(prefix));
+    if (!requested || active?.id === requested.id) return;
+    setActive(requested);
+    const next = deriveEditorFromTask(requested);
+    setUseFiles(next.useFiles);
+    setFiles(next.files);
+    setCode(next.code);
+    setAiResult(null);
+    setConsoleOutput("");
+    setUIState("idle");
+    setTheoryAcknowledged(theoryIsAcknowledged(requested));
+  }, [requestedCourseItemIdFromUrl, searchParams, tasks, active?.id, deriveEditorFromTask, theoryIsAcknowledged]);
 
   useEffect(() => {
     if (!requestedTaskIdFromUrl) return;
@@ -2188,87 +2230,14 @@ export const TasksPage: React.FC<Props> = ({
                 <span className="min-w-0"><span className="block truncate text-sm font-semibold">{item.renderTitle}</span><span className="mt-1 block text-xs text-[#718075]">{item.sectionTitle}</span></span>
                 <span className={`shrink-0 text-xs font-semibold ${item.openTask.status === "GRADED" ? "text-[#00a75a]" : "text-[#d78000]"}`}>{item.openTask.status === "GRADED" ? tr("Завершено", "Done") : tr("В роботі", "Open")}</span>
               </button>
-            )) : <p className="py-6 text-center text-sm text-[#718075]">{tr("Історія поки порожня.", "No tasks yet.")}</p>}
+            )) : <p role="status" className="py-6 text-center text-sm text-[#718075]">{tr("Історія поки порожня.", "No tasks yet.")}</p>}
           </div>
         </Modal>
       </div>
     );
   }
 
-  /* Removed legacy rail metadata and console status card; the live workspace renders these directly.
-  const railItems: Array<{ id: WorkspaceArea; label: string; Icon: LucideIcon }> = [
-    { id: "mission", label: tr("Місія", "Mission"), Icon: LayoutDashboard },
-    { id: "tasks", label: tr("Задачі", "Tasks"), Icon: FolderCode },
-    { id: "output", label: tr("Вивід", "Output"), Icon: TerminalSquare },
-    { id: "live", label: tr("Активність", "Activity"), Icon: Activity }
-  ];
-  const centerTabItems: Array<[CenterTab, string, LucideIcon]> = [
-    ["mission", tr("Місія", "Mission"), FolderCode],
-    ["hints", tr("Хінти", "Hints"), Sparkles],
-    ["notes", tr("Нотатки", "Notes"), NotebookPen],
-    ["activity", tr("Активність", "Activity"), ListTodo]
-  ];
-  const practiceTabItems: Array<[PracticeSegment, string]> = [
-    ["task", tr("Завдання", "Task")],
-    ["io", tr("Ввід/Вивід", "Input/Output")],
-    ["constraints", tr("Обмеження", "Constraints")],
-    ["examples", tr("Приклади", "Examples")],
-    ["notes", tr("Нотатки", "Notes")]
-  ];
-  const consoleStatusCard = (() => {
-    if (uiState === "idle" || uiState === "success") return null;
-
-    if (uiState === "evaluating") {
-      const waitingTitle = submitting
-        ? tr("Перевірка триває", "Check in progress")
-        : loading
-          ? tr("Генеруємо завдання", "Generating task")
-          : quizLoading || quizSubmitting
-            ? tr("Опрацьовуємо тест", "Processing quiz")
-            : tr("Виконуємо дію", "Working");
-      const waitingDetails = submitting
-        ? tr("Оновлюємо результат у цій консолі. Зазвичай це займає до 30 секунд.", "Results will appear in this console. This usually takes up to 30 seconds.")
-        : tr("Зачекай завершення операції. Статус оновиться автоматично.", "Wait for the operation to finish. Status updates automatically.");
-      return (
-        <div className="border border-primary/35 bg-bg-code p-2">
-          <div className="text-[11px] font-mono text-primary">{waitingTitle}</div>
-          <div className="mt-1 text-xs font-mono text-text-secondary">
-            {waitingDetails}
-          </div>
-          <div className="mt-1 text-[10px] font-mono text-text-muted">
-            {tr("Якщо очікування затягнулось, збережи чернетку й повтори дію.", "If this takes unusually long, save your draft and retry.")}
-          </div>
-        </div>
-      );
-    }
-
-    if (uiState === "error") {
-      return (
-        <div className="border border-accent-error/40 bg-bg-code p-2">
-          <div className="text-[11px] font-mono text-accent-error">{tr("Є помилка, потрібне відновлення", "Error detected, recovery needed")}</div>
-          <div className="mt-1 text-xs font-mono text-text-secondary">
-            {tr("Прочитай останній рядок у консолі, виправ проблему та повтори «Перевірити».", "Read the latest console line, fix the issue, then run Check again.")}
-          </div>
-          {canQuickSave && (
-            <div className="mt-2">
-              <Button variant="ghost" onClick={handleSaveDraft} className="text-xs">
-                {tr("Зберегти перед повтором", "Save before retry")}
-              </Button>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className="border border-accent-logic-warning/40 bg-bg-code p-2">
-        <div className="text-[11px] font-mono text-accent-logic-warning">{tr("Потрібна дія перед продовженням", "Action required before continuing")}</div>
-        <div className="mt-1 text-xs font-mono text-text-secondary">
-          {tr("Це не системна помилка. Виконай підказку в консолі та повтори дію.", "This is not a system failure. Follow the console hint and retry the action.")}
-        </div>
-      </div>
-    );
-  })(); */
+  /* Legacy workspace metadata removed; the live IDE owns this surface. */
 
   const previewPractice = active ? getPracticeText(active) : "";
   const routeTiles = sidebarSections.flatMap((section) =>
@@ -2295,9 +2264,9 @@ export const TasksPage: React.FC<Props> = ({
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-bold text-[#718077] dark:text-[#93a199]">
-                <span>{tr("Особиста практика", "Personal practice")}</span>
+                {courseContext ? <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}`)} className="truncate text-[#16834d] transition hover:underline dark:text-[#72edb0]">{tr("Курс", "Course")}: {courseContext.courseTitle}</button> : <span>{tr("Особиста практика", "Personal practice")}</span>}
                 <ChevronRight className="size-3" />
-                <span className="truncate">{active?.topicTitle ?? tr("Новий маршрут", "New route")}</span>
+                <span className="truncate">{courseContext?.itemTitle ?? active?.topicTitle ?? tr("Новий маршрут", "New route")}</span>
               </div>
               <h1 className="truncate text-sm font-black tracking-[-.02em] sm:text-base">{active?.title ?? tr("Обери завдання", "Choose a task")}</h1>
             </div>
@@ -2352,7 +2321,7 @@ export const TasksPage: React.FC<Props> = ({
                   </React.Fragment>
                 );
               })}
-              {!routeTiles.length && <p className="p-4 text-sm text-[#718077]">{tr("Завдань поки немає.", "No tasks yet.")}</p>}
+              {!routeTiles.length && <p role="status" className="p-4 text-sm text-[#718077]">{tr("Завдань поки немає.", "No tasks yet.")}</p>}
             </nav>
 
             <div className="hidden border-t border-[#15231a]/10 p-4 dark:border-white/[.08] lg:block">
@@ -2445,6 +2414,7 @@ export const TasksPage: React.FC<Props> = ({
                 {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ {isPreviewMode ? 12 : 100}</span></div>}
                 {aiResult?.aiFeedback && <p className="mt-3 text-sm leading-6 text-[#4f5f55] dark:text-[#b8c4bb]">{aiResult.aiFeedback}</p>}
                 <pre className="mt-4 max-h-52 overflow-auto whitespace-pre-wrap rounded-xl bg-[#111713] p-4 font-mono text-xs leading-6 text-[#cfe0d3]">{consoleOutput || tr("Результат запуску з’явиться тут.", "Run output will appear here.")}</pre>
+                {courseContext && aiResult && <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}`)} className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-[#16834d]/25 bg-[#e8f7ed] px-4 py-3 text-xs font-black text-[#147447] transition hover:bg-[#d9f2e3] dark:border-[#72edb0]/25 dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tr("Повернутися до курсу", "Back to course")}</button>}
               </div>
 
               <div className="border-t border-[#15231a]/10 p-5 dark:border-white/[.08]">

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { listGrades } from "../../lib/api/grades";
+import { getLearningCatalog, type CatalogCourse } from "../../lib/api/learningCatalog";
 import { resetTopic } from "../../lib/api/tasks";
 import type { Grade } from "../../types";
 import { tr } from "../../i18n";
@@ -35,14 +36,76 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
   const isDesignPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 
   const [grades, setGrades] = useState<Grade[]>(() => isDesignPreview ? PREVIEW_GRADES : []);
+  const [courses, setCourses] = useState<CatalogCourse[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listGrades()
-      .then((data) => setGrades(Array.isArray(data) ? data : []))
-      .catch(() => setGrades(isDesignPreview ? PREVIEW_GRADES : []))
-      .finally(() => setLoading(false));
+    if (isDesignPreview) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void getLearningCatalog()
+      .then(async (catalog) => {
+        if (cancelled) return;
+        setCourses(Array.isArray(catalog) ? catalog : []);
+        const ordered = (Array.isArray(catalog) ? catalog : []).map((course) => ({
+          course,
+          enrollment: course.variants
+            .map((variant) => variant.enrollment)
+            .filter(Boolean)
+            .sort((left, right) => {
+              const rank = (status: string) => status === "IN_PROGRESS" ? 0 : status === "COMPLETED" ? 1 : 2;
+              return rank(left!.status) - rank(right!.status);
+            })[0] ?? null,
+        }));
+        const current = ordered.find((entry) => entry.enrollment?.status === "IN_PROGRESS")
+          ?? ordered.find((entry) => entry.enrollment?.status === "COMPLETED")
+          ?? ordered.find((entry) => entry.enrollment);
+        const courseId = current?.course.id ?? null;
+        setSelectedCourseId(courseId);
+        if (courseId == null) {
+          setGrades([]);
+          return;
+        }
+        const data = await listGrades(courseId);
+        if (!cancelled) setGrades(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCourses([]);
+          setGrades([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [isDesignPreview]);
+
+  const selectCourse = async (value: string) => {
+    const courseId = Number(value);
+    if (!Number.isInteger(courseId) || courseId <= 0 || courseId === selectedCourseId) return;
+    setSelectedCourseId(courseId);
+    setLoading(true);
+    try {
+      const data = await listGrades(courseId);
+      setGrades(Array.isArray(data) ? data : []);
+    } catch {
+      setGrades([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const courseOptions = useMemo(() => courses
+    .map((course) => ({
+      id: course.id,
+      title: course.title,
+      hasEnrollment: course.variants.some((variant) => Boolean(variant.enrollment)),
+    }))
+    .filter((course) => course.hasEnrollment), [courses]);
 
   const validGrades = useMemo(() => grades.filter((g) => Number.isFinite(Number(g.total))), [grades]);
 
@@ -127,10 +190,27 @@ export const GradesPage: React.FC<Props> = ({ onNavigate }) => {
     return <PageSkeleton variant="table" />;
   }
 
-  return <PremiumProgress
-    stats={stats}
-    topics={topicHeatmap}
-    recent={recentGrades}
-    onRetry={handleRetryTopic}
-  />;
+  return <div>
+    {!isDesignPreview && <div className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-10">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-bg-surface px-4 py-3 shadow-sm">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Журнал курсу", "Course journal")}</p>
+          <p className="mt-1 text-sm text-text-secondary">{tr("Тут показані оцінки лише обраного курсу.", "Only grades from the selected course are shown here.")}</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm font-bold text-text-primary">
+          <span className="sr-only">{tr("Обрати курс", "Choose course")}</span>
+          <select value={selectedCourseId ?? ""} onChange={(event) => void selectCourse(event.target.value)} className="max-w-[min(80vw,22rem)] rounded-xl border border-border bg-bg-base px-3 py-2 text-sm font-semibold text-text-primary outline-none focus:border-primary">
+            {courseOptions.length === 0 && <option value="">{tr("Курси недоступні", "No courses available")}</option>}
+            {courseOptions.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
+          </select>
+        </label>
+      </div>
+    </div>}
+    {loading ? <PageSkeleton variant="table" /> : <PremiumProgress
+      stats={stats}
+      topics={topicHeatmap}
+      recent={recentGrades}
+      onRetry={handleRetryTopic}
+    />}
+  </div>;
 };

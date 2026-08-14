@@ -55,6 +55,7 @@ export const LearningCoursePage: React.FC = () => {
   const [projectFiles, setProjectFiles] = React.useState<Record<number, string>>({});
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [projectLoadingId, setProjectLoadingId] = React.useState<number | null>(null);
   const [busyItem, setBusyItem] = React.useState<number | null>(null);
   const [activating, setActivating] = React.useState(false);
   const [assessmentScore, setAssessmentScore] = React.useState("80");
@@ -67,15 +68,7 @@ export const LearningCoursePage: React.FC = () => {
     try {
       const loaded = await getLearningCourse(Number(courseId));
       setCourse(loaded);
-      const projectItems = loaded.modules.flatMap((module) => module.items).filter(isProject);
-      const entries = await Promise.all(projectItems.map(async (item) => {
-        try {
-          return [item.id, await getCatalogProject(item.id)] as const;
-        } catch {
-          return null;
-        }
-      }));
-      setProjects(Object.fromEntries(entries.filter((entry): entry is readonly [number, LearningProject] => Boolean(entry))));
+      setProjects({});
       setError(null);
       return loaded;
     } catch (caught: any) {
@@ -274,7 +267,8 @@ export const LearningCoursePage: React.FC = () => {
       }
       const nextPractice = node.practices.find((item) => item.progress.status !== "COMPLETED");
       if (nextPractice && course) {
-        navigate(`/tasks?courseId=${course.id}&courseItemId=${nextPractice.id}&generate=1`);
+        const command = nextPractice.progress.status === "IN_PROGRESS" ? "" : "&generate=1";
+        navigate(`/tasks?courseId=${course.id}&courseItemId=${nextPractice.id}${command}`);
         return;
       }
     }
@@ -282,17 +276,42 @@ export const LearningCoursePage: React.FC = () => {
     if (node.kind === "PROJECT" || node.kind === "MILESTONE") setSelectedNodeId(node.id);
   };
 
-  if (loading) return <div className="mx-auto max-w-5xl px-6 py-16 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо курс…", "Loading course…")}</div>;
-  if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate("/learning/catalog")} className="mb-8 text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div className="rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div></main>;
-  if (!course) return null;
-
   const selectedNode = roadmapNodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedTheory = selectedNode?.kind === "TOPIC" ? selectedNode.theory : undefined;
   const selectedItem = selectedNode?.kind !== "TOPIC" ? selectedNode?.item : undefined;
   const selectedProject = selectedNode?.kind === "PROJECT" && selectedNode.item ? projects[selectedNode.item.id] : undefined;
 
+  React.useEffect(() => {
+    const projectId = selectedNode?.kind === "PROJECT" ? selectedNode.item?.id : undefined;
+    if (!projectId || projects[projectId]) return;
+    let cancelled = false;
+    setProjectLoadingId(projectId);
+    void getCatalogProject(projectId)
+      .then((project) => {
+        if (!cancelled) setProjects((current) => ({ ...current, [projectId]: project }));
+      })
+      .catch(() => {
+        if (!cancelled) setError(tr("Не вдалося завантажити дані мініпроєкту.", "Could not load the mini-project details."));
+      })
+      .finally(() => {
+        if (!cancelled) setProjectLoadingId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projects, selectedNode?.kind, selectedNode?.item?.id]);
+
+  if (loading) return <div role="status" aria-live="polite" className="mx-auto max-w-5xl px-6 py-16 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо курс…", "Loading course…")}</div>;
+  if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate("/learning/catalog")} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
+  if (!course) return null;
+
   return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-    <button type="button" onClick={() => navigate("/learning/catalog")} className="mb-7 text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button>
+    <nav aria-label={tr("Навігація курсу", "Course navigation")} className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold text-text-secondary">
+      <button type="button" onClick={() => navigate("/learning/catalog")} className="rounded-lg px-2 py-1 transition hover:bg-bg-hover hover:text-text-primary">{tr("Каталог", "Catalog")}</button>
+      <span aria-hidden="true">/</span>
+      <span className="max-w-[min(70vw,32rem)] truncate text-text-primary">{course.title}</span>
+    </nav>
+    <button type="button" onClick={() => navigate("/learning/catalog")} className="mb-7 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button>
 
     <header className="mb-8 rounded-[28px] border border-border bg-bg-surface p-6 shadow-sm sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-6">
@@ -304,8 +323,8 @@ export const LearningCoursePage: React.FC = () => {
         </div>
       </div>
       {!courseIsActive ? <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/10 p-4"><div><p className="font-bold text-text-primary">{tr("Цей курс ще не активовано", "This course is not active yet")}</p><p className="mt-1 text-sm text-text-secondary">{tr("Активація відкриє теорію, послідовний roadmap і контекстну практику.", "Activation unlocks theory, the ordered roadmap, and course-scoped practice.")}</p></div><button type="button" disabled={activating} onClick={() => void activateCourse()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{activating ? tr("Активуємо…", "Activating…") : tr("Активувати курс", "Activate course")}</button></div> : null}
-      {message && <div className="mt-6 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</div>}
-      {error && <div className="mt-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
+      {message && <div role="status" aria-live="polite" className="mt-6 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</div>}
+      {error && <div role="alert" className="mt-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
     </header>
 
     <section className="mb-6 rounded-[26px] border border-border bg-bg-surface p-5 shadow-sm sm:p-7">
@@ -323,14 +342,17 @@ export const LearningCoursePage: React.FC = () => {
             const locked = !courseIsActive || !roadmapNodes.slice(0, index).every(nodeCompleted);
             const doneCount = items.filter((item) => item.progress.status === "COMPLETED").length;
             const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+            const started = items.some((item) => item.progress.status === "IN_PROGRESS");
             const isSelected = selectedNodeId === node.id;
             const Icon = completed ? CheckCircle2 : locked ? LockKeyhole : node.kind === "PROJECT" ? Rocket : node.kind === "MILESTONE" ? FileCheck2 : node.theory?.progress.status === "COMPLETED" ? Play : BookOpen;
             const status = completed
               ? tr("Завершено", "Completed")
               : locked
                 ? tr("Заверши попередній вузол", "Complete the previous node")
-                : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
+              : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
                   ? tr("Прочитати теорію", "Read the theory")
+                  : started
+                    ? tr("Продовжити практику", "Continue practice")
                   : node.kind === "PROJECT"
                     ? tr("Відкрити мініпроєкт", "Open mini-project")
                     : tr("Відкрити практику", "Open practice");
@@ -358,7 +380,7 @@ export const LearningCoursePage: React.FC = () => {
 
       {selectedItem && selectedNode.kind === "MILESTONE" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}<div className="mt-5 flex items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedItem.progress.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("Цей етап ще потрібно зарахувати.", "This milestone still needs to be completed.")}</span><button type="button" disabled={selectedItem.progress.status === "COMPLETED" || busyItem === selectedItem.id} onClick={() => void completeItem(selectedItem)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45">{selectedItem.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити етап", "Complete milestone")}</button></div></div>}
 
-      {selectedItem && selectedNode.kind === "PROJECT" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}{selectedProject?.projectSpec ? <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 sm:p-6"><div className="space-y-3">{selectedProject.projectSpec.milestones.map((milestone) => <label key={milestone.id} className="flex items-start gap-3 rounded-xl border border-border bg-bg-surface p-3"><input type="checkbox" checked={selectedProject.progress.milestoneIds.includes(milestone.id)} onChange={(event) => updateProject(selectedItem.id, { milestoneIds: event.target.checked ? [...selectedProject.progress.milestoneIds, milestone.id] : selectedProject.progress.milestoneIds.filter((id) => id !== milestone.id) })} className="mt-1 size-4 accent-primary" /><span className="text-sm"><b className="block text-text-primary">{milestone.title}</b><span className="text-text-secondary">{milestone.description}</span></span></label>)}</div><label className="mt-4 block text-sm font-bold text-text-primary">{tr("Нотатки реалізації", "Implementation notes")}<textarea value={selectedProject.progress.draft} onChange={(event) => updateProject(selectedItem.id, { draft: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label><label className="mt-4 block text-sm font-bold text-text-primary">README<textarea value={selectedProject.progress.readme} onChange={(event) => updateProject(selectedItem.id, { readme: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label>{selectedProject.projectSpec.checkSpec && <><label className="mt-4 block text-sm font-bold text-text-primary">Files JSON<textarea value={projectFiles[selectedItem.id] || ""} onChange={(event) => setProjectFiles((current) => ({ ...current, [selectedItem.id]: event.target.value }))} className="mt-2 min-h-28 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-xs font-normal text-text-primary" /></label><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void checkProject(selectedItem)} className="rounded-xl border border-primary px-4 py-2 text-sm font-bold text-primary disabled:opacity-45">{tr("Запустити перевірку", "Run check")}</button></>}<div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, false)} className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-text-primary disabled:opacity-45"><Save className="mr-2 inline size-4" />{tr("Зберегти", "Save")}</button><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-45"><Send className="mr-2 inline size-4" />{tr("Подати", "Submit")}</button></div></div> : <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary">{tr("Дані проєкту ще завантажуються або недоступні.", "Project details are still loading or unavailable.")}</div>}</div>}
+      {selectedItem && selectedNode.kind === "PROJECT" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}{projectLoadingId === selectedItem.id ? <div role="status" className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо дані проєкту…", "Loading project details…")}</div> : selectedProject?.projectSpec ? <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 sm:p-6"><div className="space-y-3">{selectedProject.projectSpec.milestones.map((milestone) => <label key={milestone.id} className="flex items-start gap-3 rounded-xl border border-border bg-bg-surface p-3"><input type="checkbox" checked={selectedProject.progress.milestoneIds.includes(milestone.id)} onChange={(event) => updateProject(selectedItem.id, { milestoneIds: event.target.checked ? [...selectedProject.progress.milestoneIds, milestone.id] : selectedProject.progress.milestoneIds.filter((id) => id !== milestone.id) })} className="mt-1 size-4 accent-primary" /><span className="text-sm"><b className="block text-text-primary">{milestone.title}</b><span className="text-text-secondary">{milestone.description}</span></span></label>)}</div><label className="mt-4 block text-sm font-bold text-text-primary">{tr("Нотатки реалізації", "Implementation notes")}<textarea value={selectedProject.progress.draft} onChange={(event) => updateProject(selectedItem.id, { draft: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label><label className="mt-4 block text-sm font-bold text-text-primary">README<textarea value={selectedProject.progress.readme} onChange={(event) => updateProject(selectedItem.id, { readme: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label>{selectedProject.projectSpec.checkSpec && <><label className="mt-4 block text-sm font-bold text-text-primary">Files JSON<textarea value={projectFiles[selectedItem.id] || ""} onChange={(event) => setProjectFiles((current) => ({ ...current, [selectedItem.id]: event.target.value }))} className="mt-2 min-h-28 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-xs font-normal text-text-primary" /></label><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void checkProject(selectedItem)} className="rounded-xl border border-primary px-4 py-2 text-sm font-bold text-primary disabled:opacity-45">{tr("Запустити перевірку", "Run check")}</button></>}<div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, false)} className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-text-primary disabled:opacity-45"><Save className="mr-2 inline size-4" />{tr("Зберегти", "Save")}</button><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-45"><Send className="mr-2 inline size-4" />{tr("Подати", "Submit")}</button></div></div> : <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary">{tr("Дані проєкту ще завантажуються або недоступні.", "Project details are still loading or unavailable.")}</div>}</div>}
     </section>}
 
     <section className="mt-6 rounded-[26px] border border-border bg-bg-surface p-6 shadow-sm"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна перевірка", "Final assessment")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{canAssess ? tr("Усі обов'язкові елементи завершено. Для завершення курсу потрібно щонайменше 70%.", "All required items are complete. You need at least 70% to finish the course.") : `${completedItems} / ${requiredItems.length} ${tr("обов'язкових елементів завершено", "required items completed")}.`}</p>{canAssess && <div className="mt-5 flex flex-wrap gap-3"><input type="number" min="0" max="100" value={assessmentScore} onChange={(event) => setAssessmentScore(event.target.value)} className="w-28 rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm text-text-primary" /><button type="button" onClick={() => void finishAssessment()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">{tr("Завершити курс", "Complete course")}</button></div>}</div></div></section>

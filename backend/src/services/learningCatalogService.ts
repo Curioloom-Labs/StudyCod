@@ -377,6 +377,18 @@ export async function getCoursePracticeContext(userId: number, itemId: number) {
   };
 }
 
+/** Mark a catalog practice as started as soon as its workspace is opened. */
+export async function startCourseItem(userId: number, itemId: number): Promise<void> {
+  const context = await getCoursePracticeContext(userId, itemId);
+  if (context.progress?.status === "COMPLETED") return;
+  const progress = context.progress || progressRepo().create({
+    enrollment: { id: context.enrollment.id } as any,
+    item: { id: context.item.id } as any,
+  });
+  progress.status = "IN_PROGRESS";
+  await progressRepo().save(progress);
+}
+
 export async function completeCourseItem(userId: number, itemId: number, score?: number): Promise<UserCourseEnrollment> {
   const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
   if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
