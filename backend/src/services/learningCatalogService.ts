@@ -87,15 +87,26 @@ function jsonContent(value: unknown): Record<string, any> {
  * the read path. It only moves progress forward and never overwrites a course
  * task that is already completed.
  */
-async function syncLegacyPersonalProgress(userId: number, course: Course, enrollment: UserCourseEnrollment): Promise<void> {
-  if (!course.isBase) return;
+type LegacyProgressSyncReport = {
+  runtime: string;
+  catalogItems: number;
+  loadedTasks: number;
+  legacyRows: number;
+  matchedTopics: number;
+  matchedPractices: number;
+  changed: number;
+};
+
+async function syncLegacyPersonalProgress(userId: number, course: Course, enrollment: UserCourseEnrollment): Promise<LegacyProgressSyncReport> {
   const runtime = String(enrollment.variant?.runtime ?? "").toUpperCase();
-  if (runtime !== "PYTHON" && runtime !== "JAVA" && runtime !== "CPP") return;
+  const report: LegacyProgressSyncReport = { runtime, catalogItems: 0, loadedTasks: 0, legacyRows: 0, matchedTopics: 0, matchedPractices: 0, changed: 0 };
+  if (!course.isBase || !["PYTHON", "JAVA", "CPP"].includes(runtime)) return report;
 
   const items = await itemRepo().find({
     where: { module: { course: { id: course.id } }, isActive: true },
     order: { id: "ASC" },
   });
+  report.catalogItems = items.length;
   const theoryByTitle = new Map(items.filter((item) => item.kind === "THEORY").map((item) => [normalizedTitle(item.title), item]));
   const theoryByKey = new Map(items
     .filter((item) => item.kind === "THEORY")
@@ -128,7 +139,7 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
   for (const group of practicesByTheory.values()) {
     group.sort((left, right) => Number(jsonContent(left.content).exercise?.sequence ?? 0) - Number(jsonContent(right.content).exercise?.sequence ?? 0) || left.id - right.id);
   }
-  if (!theoryByTitle.size && !theoryByIndex.size) return;
+  if (!theoryByTitle.size && !theoryByIndex.size) return report;
 
   const legacyTasks = await taskRepo().find({
     // Keep the database predicate deliberately small. Some production MySQL
@@ -139,6 +150,7 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
     relations: ["topic", "grades"],
     order: { createdAt: "ASC", id: "ASC" },
   });
+  report.loadedTasks = legacyTasks.length;
   const rows = legacyTasks
     .filter((task) => task.topic
       && String(task.lang).toUpperCase() === runtime
@@ -154,7 +166,8 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
       topicTitle: task.topic?.title ?? null,
       bestScore: Math.max(-1, ...(task.grades ?? []).map((grade) => Number(grade.total ?? -1))),
     }));
-  if (!rows.length) return;
+  report.legacyRows = rows.length;
+  if (!rows.length) return report;
 
   const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
   const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
@@ -163,12 +176,14 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
     const topicIndex = Number(row.topicIndex);
     const theory = theoryByTitle.get(normalizedTitle(row.topicTitle)) || theoryByIndex.get(topicIndex);
     if (!theory) continue;
+    report.matchedTopics += 1;
     const bestScore = Number(row.bestScore);
     const passed = Number(row.completed) === 1 || (Number.isFinite(bestScore) && bestScore >= 60);
     const score = Number.isFinite(bestScore) && bestScore >= 0 ? Math.max(0, Math.min(100, bestScore)) : passed ? 100 : null;
     const practiceGroup = practicesByTheory.get(theory.id) ?? [];
     const sequence = Math.max(1, Math.floor(Number(row.numInTopic) || 1));
     const practice = practiceGroup[sequence - 1] || practiceGroup[0];
+    if (practice) report.matchedPractices += 1;
     // Older generated practice items may not have a usable theoryItemId, and
     // a legacy task can exist before the catalog practice row is generated.
     // In both cases the topic is already touched, so retain that signal on
@@ -191,12 +206,14 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
       await progressRepo().save(existing);
       progressByItem.set(item.id, existing);
       changed = true;
+      report.changed += 1;
     }
   }
   if (changed) {
     if (enrollment.status === "AVAILABLE") enrollment.status = "IN_PROGRESS";
     await recalculateEnrollmentProgress(enrollment);
   }
+  return report;
 }
 
 /**
@@ -431,7 +448,7 @@ export async function getCourseForUser(userId: number, courseId: number) {
     });
   }
 
-  await syncLegacyPersonalProgress(userId, course, enrollment);
+  const legacySync = await syncLegacyPersonalProgress(userId, course, enrollment);
 
   const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
   const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
@@ -452,6 +469,7 @@ export async function getCourseForUser(userId: number, courseId: number) {
       masteryScore: Number(enrollment.masteryScore ?? 0),
       finalAssessmentPassed: Boolean(enrollment.finalAssessmentPassed),
     },
+    legacySync,
     modules: modules.map((module) => ({
       id: module.id,
       title: module.title,
