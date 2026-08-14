@@ -6,7 +6,7 @@ import { CourseItemProgress, type CourseProjectProgressData } from "../entities/
 import { CourseVariant } from "../entities/CourseVariant";
 import { EnrollmentStatus, UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { Task } from "../entities/Task";
-import { IsNull } from "typeorm";
+import { In, IsNull } from "typeorm";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeFile, JudgeRequest } from "./judgeWorker/types";
 
@@ -130,32 +130,23 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
   }
   if (!theoryByTitle.size && !theoryByIndex.size) return;
 
-  const rows = await taskRepo().createQueryBuilder("task")
-    .leftJoin("task.topic", "topic")
-    .leftJoin("task.grades", "grade")
-    .where("task.user_id = :userId", { userId })
-    .andWhere("task.lang = :runtime", { runtime })
-    .andWhere("task.topic_id IS NOT NULL")
-    .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :catalogPrefix)", { catalogPrefix: "CATALOG_ITEM:%" })
-    .andWhere("task.type IN (:...types)", { types: ["INTRO", "TOPIC"] })
-    .select("task.id", "id")
-    .addSelect("task.topic_index", "topicIndex")
-    .addSelect("task.num_in_topic", "numInTopic")
-    .addSelect("task.completed", "completed")
-    .addSelect("task.created_at", "createdAt")
-    .addSelect("task.title", "title")
-    .addSelect("topic.title", "topicTitle")
-    .addSelect("COALESCE(MAX(grade.total), -1)", "bestScore")
-    .groupBy("task.id")
-    .addGroupBy("task.topic_index")
-    .addGroupBy("task.num_in_topic")
-    .addGroupBy("task.completed")
-    .addGroupBy("task.created_at")
-    .addGroupBy("task.title")
-    .addGroupBy("topic.title")
-    .orderBy("task.created_at", "ASC")
-    .addOrderBy("task.id", "ASC")
-    .getRawMany<{ topicIndex: string | number; numInTopic: string | number; completed: string | number; createdAt: Date; topicTitle?: string | null; bestScore: string | number }>();
+  const legacyTasks = await taskRepo().find({
+    where: { user: { id: userId }, lang: runtime as any, type: In(["INTRO", "TOPIC"]) as any },
+    relations: ["topic", "grades"],
+    order: { createdAt: "ASC", id: "ASC" },
+  });
+  const rows = legacyTasks
+    .filter((task) => task.topic && !String(task.subtitle ?? "").startsWith("CATALOG_ITEM:"))
+    .map((task) => ({
+      id: task.id,
+      topicIndex: task.topicIndex,
+      numInTopic: task.numInTopic,
+      completed: task.completed,
+      createdAt: task.createdAt,
+      title: task.title,
+      topicTitle: task.topic?.title ?? null,
+      bestScore: Math.max(-1, ...(task.grades ?? []).map((grade) => Number(grade.total ?? -1))),
+    }));
   if (!rows.length) return;
 
   const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
