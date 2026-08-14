@@ -1933,6 +1933,19 @@ export const TaskLibraryPage: React.FC = () => {
                       ) : null}
 
                       <div className="mt-auto pt-5">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="w-full"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId(task.id);
+                          }}
+                        >
+                          <Play className="mr-2 h-3 w-3" />
+                          {tr("Переглянути preview", "Preview task")}
+                        </Button>
                         {progress != null ? (
                           <div>
                             <div className="flex items-center justify-between text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">

@@ -1660,6 +1660,134 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   })();
   const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
+  const createProviderFallback = async (): Promise<Task> => {
+    const fallbackUsesInput = stdinAllowed;
+    const fallbackTitle = i18nText(
+      params.userLanguage,
+      "Резервна практика: сума двох чисел",
+      "Fallback practice: sum of two numbers"
+    );
+    const fallbackStatement = fallbackUsesInput
+      ? i18nText(
+          params.userLanguage,
+          [
+            "### Завдання",
+            "Прочитайте два цілих числа `a` і `b` та виведіть їхню суму.",
+            "",
+            "### Вхідні дані",
+            "В одному рядку подано два цілих числа `a` і `b`.",
+            "",
+            "### Вихідні дані",
+            "Виведіть одне ціле число — `a + b`.",
+          ].join("\n"),
+          [
+            "### Task",
+            "Read two integers `a` and `b` and print their sum.",
+            "",
+            "### Input",
+            "One line contains two integers `a` and `b`.",
+            "",
+            "### Output",
+            "Print one integer — `a + b`.",
+          ].join("\n")
+        )
+      : i18nText(
+          params.userLanguage,
+          [
+            "### Завдання",
+            "Виведіть число `8`.",
+            "",
+            "Вхідних даних немає.",
+          ].join("\n"),
+          [
+            "### Task",
+            "Print the number `8`.",
+            "",
+            "There is no input.",
+          ].join("\n")
+        );
+    const fallbackTemplate = params.lang === "PYTHON"
+      ? fallbackUsesInput
+        ? [
+            "import sys",
+            "",
+            "def main():",
+            "    a, b = map(int, sys.stdin.read().split())",
+            "    print(a + b)",
+            "",
+            "if __name__ == \"__main__\":",
+            "    main()",
+          ].join("\n")
+        : "print(8)"
+      : params.lang === "CPP"
+        ? fallbackUsesInput
+          ? [
+              "#include <bits/stdc++.h>",
+              "using namespace std;",
+              "int main() {",
+              "    long long a, b;",
+              "    cin >> a >> b;",
+              "    cout << a + b << '\\n';",
+              "    return 0;",
+              "}",
+            ].join("\n")
+          : "#include <iostream>\nint main() { std::cout << 8 << '\\n'; }"
+        : fallbackUsesInput
+          ? [
+              "import java.util.*;",
+              "public class Main {",
+              "  public static void main(String[] args) {",
+              "    Scanner in = new Scanner(System.in);",
+              "    long a = in.nextLong(), b = in.nextLong();",
+              "    System.out.println(a + b);",
+              "  }",
+              "}",
+            ].join("\n")
+          : "public class Main { public static void main(String[] args) { System.out.println(8); } }";
+    const fallback = taskRepo().create({
+      user: { id: params.userId } as any,
+      topic: params.topic ? ({ id: params.topic.id } as any) : null,
+      title: `${params.requiredTasksInThisGroup > 1 ? `(${params.numInTopic}/${params.requiredTasksInThisGroup}) ` : ""}${fallbackTitle}`.trim(),
+      subtitle: typeof params.subtitle === "string" ? params.subtitle : "AI_FALLBACK:PROVIDER_UNAVAILABLE",
+      description: fallbackStatement,
+      descriptionMarkdown: fallbackStatement,
+      template: fallbackTemplate,
+      draftCode: "",
+      finalCode: "",
+      completed: 0,
+      lang: params.lang,
+      difus: params.difus,
+      numInTopic: params.numInTopic,
+      topicIndex: params.topicIndex,
+      type: params.type,
+      ioType: fallbackUsesInput ? "STDIN_STDOUT" : "NO_INPUT_FIXED_OUTPUT",
+    });
+    const saved = await taskRepo().save(fallback);
+    const examples = fallbackUsesInput
+      ? [
+          ["1 2", "3"],
+          ["10 25", "35"],
+          ["-4 9", "5"],
+          ["0 0", "0"],
+          ["1000000000 2000000000", "3000000000"],
+        ]
+      : [["", "8"]];
+    const points = examples.map((_, index) => Math.floor(100 / examples.length) + (index < 100 % examples.length ? 1 : 0));
+    await testDataRepo().save(examples.map(([input, output], index) => testDataRepo().create({
+      input,
+      expectedOutput: output,
+      points: points[index] ?? 1,
+      personalTask: { id: saved.id } as any,
+    })));
+    logger.warn("[tasks] generated deterministic fallback task after AI provider failure", {
+      requestId: params.requestId,
+      userId: params.userId,
+      lang: params.lang,
+      topicIndex: params.topicIndex,
+    });
+    return saved;
+  };
+
   const aiTaskResult = await safeAICall('generateTask', {
     topicTitle: params.topicTitleForAi,
     theory: String(params.theoryForAi || i18nText(params.userLanguage, "Контрольна робота. Теорії не потрібно.", "Control work. No theory is required.")).trim()
@@ -1684,8 +1812,9 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     ...(disableDeadlines ? {} : { totalTimeoutMs: taskBudgetMs })
   });
   if (!aiTaskResult.success) {
-    // Let caller translate to HTTP.
-    throw aiTaskResult.error;
+    // Keep the authenticated practice flow usable during provider outages.
+    // The fallback is deliberately tiny, deterministic, and has server-side tests.
+    return createProviderFallback();
   }
   const aiTask = aiTaskResult.data;
   const practicalOnly = String((aiTask as any).practicalTask ?? "").trim();
