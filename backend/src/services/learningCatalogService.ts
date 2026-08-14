@@ -97,6 +97,13 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
     order: { id: "ASC" },
   });
   const theoryByTitle = new Map(items.filter((item) => item.kind === "THEORY").map((item) => [normalizedTitle(item.title), item]));
+  const theoryByKey = new Map(items
+    .filter((item) => item.kind === "THEORY")
+    .map((item) => {
+      const content = jsonContent(item.content);
+      return [String(content.sourceKey ?? content.sourcePath ?? item.contentKey ?? ""), item] as const;
+    })
+    .filter(([key]) => key));
   const theoryByIndex = new Map<number, CourseItem>();
   const practicesByTheory = new Map<number, CourseItem[]>();
   for (const item of items) {
@@ -108,10 +115,13 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
     }
     if (item.kind === "CODE_TASK") {
       const theoryId = Number(content.theoryItemId ?? 0);
-      if (theoryId > 0) {
-        const group = practicesByTheory.get(theoryId) ?? [];
+      const theory = theoryId > 0
+        ? items.find((candidate) => candidate.kind === "THEORY" && candidate.id === theoryId)
+        : theoryByKey.get(String(content.theoryItemKey ?? ""));
+      if (theory) {
+        const group = practicesByTheory.get(theory.id) ?? [];
         group.push(item);
-        practicesByTheory.set(theoryId, group);
+        practicesByTheory.set(theory.id, group);
       }
     }
   }
@@ -161,7 +171,13 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
     const practiceGroup = practicesByTheory.get(theory.id) ?? [];
     const sequence = Math.max(1, Math.floor(Number(row.numInTopic) || 1));
     const practice = practiceGroup[sequence - 1] || practiceGroup[0];
-    const targets = passed ? [theory, practice].filter(Boolean) as CourseItem[] : practice ? [practice] : [];
+    // Older generated practice items may not have a usable theoryItemId, and
+    // a legacy task can exist before the catalog practice row is generated.
+    // In both cases the topic is already touched, so retain that signal on
+    // the theory node instead of leaving the roadmap at 0%.
+    const targets = passed
+      ? [theory, practice].filter(Boolean) as CourseItem[]
+      : practice ? [practice] : [theory];
 
     for (const item of targets) {
       const existing = progressByItem.get(item.id) || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
