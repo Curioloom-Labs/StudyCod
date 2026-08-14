@@ -6,7 +6,7 @@ import { CourseItemProgress, type CourseProjectProgressData } from "../entities/
 import { CourseVariant } from "../entities/CourseVariant";
 import { EnrollmentStatus, UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { Task } from "../entities/Task";
-import { In, IsNull } from "typeorm";
+import { IsNull } from "typeorm";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeFile, JudgeRequest } from "./judgeWorker/types";
 
@@ -131,12 +131,19 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
   if (!theoryByTitle.size && !theoryByIndex.size) return;
 
   const legacyTasks = await taskRepo().find({
-    where: { user: { id: userId }, lang: runtime as any, type: In(["INTRO", "TOPIC"]) as any },
+    // Keep the database predicate deliberately small. Some production MySQL
+    // versions have returned enum/relation combinations differently through
+    // TypeORM; filtering the already user-scoped rows in memory keeps this
+    // compatibility bridge from silently missing an active task.
+    where: { user: { id: userId } },
     relations: ["topic", "grades"],
     order: { createdAt: "ASC", id: "ASC" },
   });
   const rows = legacyTasks
-    .filter((task) => task.topic && !String(task.subtitle ?? "").startsWith("CATALOG_ITEM:"))
+    .filter((task) => task.topic
+      && String(task.lang).toUpperCase() === runtime
+      && (task.type === "INTRO" || task.type === "TOPIC")
+      && !String(task.subtitle ?? "").startsWith("CATALOG_ITEM:"))
     .map((task) => ({
       id: task.id,
       topicIndex: task.topicIndex,
