@@ -258,7 +258,7 @@ export const PlacementOverlay: React.FC<{
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               {(["BEGINNER", "INTERMEDIATE", "ADVANCED", "UNDECIDED"] as PlacementChoice[]).map((l) => (
-                <button
+                <button type="button"
                   key={l}
                   onClick={() => setPickedChoice(l)}
                   className={
@@ -318,7 +318,7 @@ export const PlacementOverlay: React.FC<{
                       <div className="text-sm font-mono text-text-primary mb-2">{prompt}</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {opts.map((o, oi) => (
-                          <button
+                          <button type="button"
                             key={`${q.id}-${oi}`}
                             onClick={() => setAssessmentQuizAnswers((prev) => ({ ...prev, [q.id]: oi }))}
                             className={
@@ -345,7 +345,7 @@ export const PlacementOverlay: React.FC<{
                   const report = taskReportMap.get(task.id);
                   const isActive = activeTaskId === task.id;
                   return (
-                    <button
+                    <button type="button"
                       key={task.id}
                       onClick={() => setActiveTaskId(task.id)}
                       className={

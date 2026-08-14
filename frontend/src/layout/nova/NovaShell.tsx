@@ -1004,6 +1004,7 @@ export const NovaShell: React.FC<NovaShellProps> = ({
                       ? "bg-primary/10 text-primary"
                       : "text-text-secondary hover:text-text-primary hover:bg-bg-hover")
                   }
+                  aria-current={active ? "page" : undefined}
                   aria-label={it.label}
                   aria-pressed={active}
                 >

@@ -74,7 +74,7 @@ const Overlay: React.FC<{
 }> = ({ title, sub, children, onClose }) => (
   <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#07100a]/45 p-4 backdrop-blur-sm">
     <section className="mx-auto mt-8 max-w-xl rounded-[30px] bg-[#fbfdfb] p-6 shadow-2xl dark:bg-[#101a13] sm:p-8">
-      <button
+      <button type="button"
         onClick={onClose}
         className="float-right grid h-10 w-10 place-items-center rounded-full bg-[#edf2ed] text-xl dark:bg-white/[.07]"
       >
@@ -257,7 +257,7 @@ const LessonTeacherStudio: React.FC = () => {
     lesson.type === "CONTROL" || Boolean(lesson.timeLimitMinutes);
   return (
     <div className={shell}>
-      <button
+      <button type="button"
         onClick={() => {
           const back = (location.state as { from?: string } | null)?.from;
           navigate(back || "/edu/lessons");
@@ -283,14 +283,14 @@ const LessonTeacherStudio: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
+            <button type="button"
               onClick={() => void begin()}
               className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"
             >
               <Play className="mr-2 inline h-4 w-4" />
               Почати
             </button>
-            <button
+            <button type="button"
               onClick={() => setModal("task")}
               className="rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold text-[#32443a] dark:border-white/10 dark:text-white"
             >
@@ -376,7 +376,7 @@ const LessonTeacherStudio: React.FC = () => {
               Практика одразу після пояснення допомагає зрозуміти, де саме
               потрібна ще одна спроба.
             </p>
-            <button
+            <button type="button"
               onClick={() =>
                 tasks[0] &&
                 navigate(`/edu/tasks/${tasks[0].id}`, {
@@ -401,7 +401,7 @@ const LessonTeacherStudio: React.FC = () => {
               <ClipboardCheck className="h-5 w-5 text-[#e17800]" />
             </div>
             {quiz.length ? (
-              <button
+              <button type="button"
                 onClick={() =>
                   document
                     .getElementById("lesson-quiz")
@@ -412,7 +412,7 @@ const LessonTeacherStudio: React.FC = () => {
                 {quiz.length} запитань →
               </button>
             ) : (
-              <button
+              <button type="button"
                 onClick={() => setModal("quiz")}
                 className="mt-4 text-sm font-bold text-[#16834d] dark:text-[#72edb0]"
               >
@@ -432,7 +432,7 @@ const LessonTeacherStudio: React.FC = () => {
               Вправи на сьогодні
             </h2>
           </div>
-          <button
+          <button type="button"
             onClick={() => setModal("task")}
             className="text-sm font-bold text-[#16834d] dark:text-[#72edb0]"
           >
@@ -441,7 +441,7 @@ const LessonTeacherStudio: React.FC = () => {
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {tasks.map((entry, index) => (
-            <button
+            <button type="button"
               key={entry.id}
               onClick={() =>
                 navigate(`/edu/tasks/${entry.id}`, {
@@ -466,7 +466,7 @@ const LessonTeacherStudio: React.FC = () => {
             </button>
           ))}
           {!tasks.length && (
-            <button
+            <button type="button"
               onClick={() => setModal("task")}
               className="rounded-[24px] border border-dashed border-[#19291d]/15 px-5 py-12 text-center text-sm font-bold text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]"
             >
@@ -529,7 +529,7 @@ const LessonTeacherStudio: React.FC = () => {
               </fieldset>
             ))}
           </div>
-          <button
+          <button type="button"
             disabled={busy || quizState === "done"}
             onClick={() => void submit()}
             className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
@@ -581,7 +581,7 @@ const LessonTeacherStudio: React.FC = () => {
               spellCheck={false}
               className="w-full resize-none rounded-xl border border-[#16834d]/25 bg-[#f3f8f3] px-4 py-3 font-mono text-xs dark:border-[#00d978]/25 dark:bg-[#0d1710]"
             />
-            <button
+            <button type="button"
               disabled={busy || !task.title.trim()}
               onClick={() => void create()}
               className="w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
@@ -604,7 +604,7 @@ const LessonTeacherStudio: React.FC = () => {
               переглянути у цьому самому уроці.
             </p>
           </div>
-          <button
+          <button type="button"
             disabled={busy}
             onClick={() => void createQuiz()}
             className="mt-5 w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"

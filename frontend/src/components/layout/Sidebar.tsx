@@ -47,7 +47,7 @@ export const Sidebar: React.FC<Props> = ({
         </div>
       </div>
       <nav className="flex-1 py-4 space-y-1">
-        {items.map(item => <button key={item.id} onClick={() => onChange(item.id)} className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-mono transition-fast ${current === item.id ? "bg-bg-hover text-primary font-semibold" : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+        {items.map(item => <button type="button" key={item.id} onClick={() => onChange(item.id)} className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-mono transition-fast ${current === item.id ? "bg-bg-hover text-primary font-semibold" : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
             {item.icon}
             <span>{item.label}</span>
           </button>)}
@@ -64,7 +64,7 @@ export const Sidebar: React.FC<Props> = ({
             </div>
           </div>
         </div>
-        <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center text-accent-error hover:opacity-80 transition-fast" aria-label={t("logout")} title={t("logout")}>
+        <button type="button" onClick={onLogout} className="w-11 h-11 flex items-center justify-center text-accent-error hover:opacity-80 transition-fast" aria-label={t("logout")} title={t("logout")}>
           <LogOut className="w-4 h-4" />
         </button>
       </div>

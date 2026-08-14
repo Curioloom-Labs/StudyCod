@@ -163,7 +163,7 @@ export const CoursesPage: React.FC = () => {
               <p className="text-sm text-text-muted">{tr("Ще немає курсів.", "No courses yet.")}</p>
             )}
             {courses.map(c => (
-              <button
+              <button type="button"
                 key={c.id}
                 onClick={() => navigate(`/edu/courses/${c.id}`)}
                 className="flex items-center gap-3 px-4 py-3 text-left rounded-[var(--ui-card-radius)] border border-border bg-bg-surface transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"

@@ -423,7 +423,7 @@ export const HomePage: React.FC<Props> = ({
               </h1>
               <p className="mt-1 text-sm font-mono text-text-secondary">{sessionLabel}</p>
             </div>
-            <button
+            <button type="button"
               onClick={openResume}
               className="inline-flex items-center justify-center gap-2 border border-border bg-bg-surface px-4 py-2 text-sm font-mono text-text-primary hover:border-primary/60 hover:bg-bg-hover transition-fast"
             >
@@ -454,7 +454,7 @@ export const HomePage: React.FC<Props> = ({
                 </p>
 
                 <div className="mt-5 flex flex-wrap items-center gap-2">
-                  <button
+                  <button type="button"
                     onClick={openNext}
                     disabled={loading}
                     className="px-4 py-2 text-sm font-mono border border-primary bg-primary text-bg-base hover:opacity-90 transition-fast disabled:opacity-50 inline-flex items-center gap-2"
@@ -462,7 +462,7 @@ export const HomePage: React.FC<Props> = ({
                     {tr("Відкрити далі", "Open next")}
                     <ArrowRight className="w-4 h-4" />
                   </button>
-                  <button
+                  <button type="button"
                     onClick={openResume}
                     className="px-4 py-2 text-sm font-mono border border-border bg-bg-base text-text-secondary hover:text-text-primary hover:border-primary/50 transition-fast inline-flex items-center gap-2"
                   >
@@ -681,7 +681,7 @@ export const HomePage: React.FC<Props> = ({
                         {isStudent ? (
                           <>
                             {averageGrade !== null && hasControlInAverage ? (
-                              <button onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")} className="text-left group">
+                              <button type="button" onClick={() => setShowAverageBreakdown(true)} title={tr("Показати, з яких оцінок рахується середній бал", "Show which grades are included in the average")} className="text-left group">
                                 <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Середній бал", "Average")}</div>
                                 <div className="mt-1 text-3xl font-mono font-semibold text-text-primary group-hover:text-primary transition-fast"><CountUp value={averageGrade} decimals={1} /></div>
                               </button>
@@ -883,13 +883,13 @@ const QueueTasks: React.FC<{
     return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
   }
   if (!tasks.length) {
-    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Немає завдань у черзі.", "No tasks in the queue.")}</div>;
+    return <div role="status" className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Немає завдань у черзі.", "No tasks in the queue.")}</div>;
   }
 
   return (
     <div>
       {tasks.slice(0, 20).map(task => (
-        <button
+        <button type="button"
           key={task.id}
           onClick={() => onOpen(task)}
           className="w-full px-4 py-3 text-left border-b border-border hover:bg-bg-hover transition-fast"
@@ -927,7 +927,7 @@ const QueueLessons: React.FC<{
     return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
   }
   if (!lessons.length) {
-    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Немає уроків.", "No lessons yet.")}</div>;
+    return <div role="status" className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Немає уроків.", "No lessons yet.")}</div>;
   }
 
   const sorted = lessons
@@ -945,7 +945,7 @@ const QueueLessons: React.FC<{
       {sorted.map(lesson => {
         const expired = lesson.deadline ? isDeadlineExpired(lesson.deadline) : false;
         return (
-          <button
+          <button type="button"
             key={lesson.id}
             onClick={() => onOpen(lesson)}
             className="w-full px-4 py-3 text-left border-b border-border hover:bg-bg-hover transition-fast"
@@ -982,13 +982,13 @@ const QueueClasses: React.FC<{
     return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Завантаження…", "Loading…")}</div>;
   }
   if (!classes.length) {
-    return <div className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Поки що немає класів.", "No classes yet.")}</div>;
+    return <div role="status" className="px-4 py-4 text-sm font-mono text-text-secondary">{trLocal("Поки що немає класів.", "No classes yet.")}</div>;
   }
 
   return (
     <div>
       {classes.slice(0, 20).map(cls => (
-        <button
+        <button type="button"
           key={cls.id}
           onClick={onOpen}
           className="w-full px-4 py-3 text-left border-b border-border hover:bg-bg-hover transition-fast"

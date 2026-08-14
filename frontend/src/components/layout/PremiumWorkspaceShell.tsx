@@ -200,30 +200,6 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           </div>
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto border-t border-[#152219]/8 px-4 py-2 lg:hidden dark:border-white/8" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
-          {nav.map(({ id, label, Icon }) => (
-            <button key={id} type="button" onClick={() => onNavigate(id)} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${active(id) ? "bg-[#142017] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#69786d] dark:text-[#a4b2a7]"}`}>
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
-          <button type="button" onClick={onLibrary} className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[#69786d] dark:text-[#a4b2a7]">
-            <BookOpen className="h-4 w-4" />
-            {uk ? "Бібліотека" : "Library"}
-          </button>
-          <button type="button" onClick={onCourses} className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[#69786d] dark:text-[#a4b2a7]">
-            <BookOpen className="h-4 w-4" />
-            {uk ? "Курси" : "Courses"}
-          </button>
-          <button type="button" onClick={onPlayground} className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[#69786d] dark:text-[#a4b2a7]">
-            <PlaySquare className="h-4 w-4" />
-            {uk ? "Пісочниця" : "Playground"}
-          </button>
-          {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[#69786d] dark:text-[#a4b2a7]">
-            <HelpCircle className="h-4 w-4" />
-            Support desk
-          </button> : null}
-        </nav>
       </header>
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
         <div className="grid grid-cols-6 gap-1">
@@ -235,7 +211,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             { id: "playground" as const, label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
             { id: "courses" as const, label: uk ? "Курси" : "Courses", Icon: BookOpen, onClick: onCourses },
           ].map(({ id, label, Icon, onClick }) => (
-            <button key={id} type="button" onClick={onClick} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${active(id as Page) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
+            <button key={id} type="button" onClick={onClick} aria-current={active(id as Page) ? "page" : undefined} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${active(id as Page) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
               <Icon className="size-4" />
               <span className="max-w-full truncate leading-none">{label}</span>
             </button>

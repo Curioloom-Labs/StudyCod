@@ -1,9 +1,11 @@
 version: 2
 course: fastapi
+language: PYTHON
 description: "Повний послідовний курс FastAPI: від HTTP та ASGI до типізованих
   API, БД, security, тестів, streaming, WebSockets і production-мініпроєкту."
 topics:
   - title: "Вступ до FastAPI: HTTP, ASGI та контракт API"
+    key: vstup-do-fastapi-http-asgi-ta-kontrakt-api
     description: пояснити шлях HTTP-запиту | відрізнити WSGI та ASGI на інтуїтивному
       рівні | створити перший endpoint
     order: 1
@@ -133,6 +135,7 @@ topics:
         правильний крок — мислити контрактом: метод, URL, вхід, статус і
         JSON-відповідь.
   - title: "Path operations: GET, POST, PUT, PATCH і DELETE"
+    key: path-operations-get-post-put-patch-i-delete
     description: розрізняти HTTP-методи | проєктувати CRUD-маршрути | не плутати дію
       з назвою ресурсу
     order: 2
@@ -212,6 +215,7 @@ topics:
         ### Підсумок
         Методи HTTP є частиною API-контракту. Хороший FastAPI-код робить їхню семантику видимою в декораторах і статусах.
   - title: Path, query, header і cookie параметри
+    key: path-query-header-i-cookie-parametry
     description: розрізняти джерела параметрів HTTP | застосовувати типи та значення
       за замовчуванням | читати заголовки й cookies
     order: 3
@@ -343,6 +347,7 @@ topics:
         метадані, cookie — браузерний стан. Типи FastAPI перетворюють ці правила
         на виконувану валідацію.
   - title: Pydantic-моделі та JSON body
+    key: pydantic-modeli-ta-json-body
     description: описувати request body моделлю | розрізняти body і query | читати
       помилки валідації
     order: 4
@@ -475,6 +480,7 @@ topics:
         Pydantic-модель є виконуваним описом JSON body. Вона робить помилки
         видимими до бізнес-логіки та з’єднує Python-типи з документацією API.
   - title: Валідація Field, обов’язкові поля та власні правила
+    key: validatsiya-field-obov-yazkovi-polya-ta-vlasni-pravyla
     description: обмежувати значення через Field | формулювати інваріанти |
       відрізняти формат від бізнес-правила
     order: 5
@@ -606,6 +612,7 @@ topics:
         Якісна валідація є частиною API-дизайну. Вона повинна бути явною,
         повторюваною, документованою та розташованою на правильному шарі.
   - title: Response models, серіалізація та контроль полів
+    key: response-models-serializatsiya-ta-kontrol-poliv
     description: розділяти input і output моделі | приховувати внутрішні поля |
       формувати стабільну відповідь
     order: 6
@@ -736,6 +743,7 @@ topics:
         Response model — це не косметика, а межа безпеки й стабільності API.
         Публічний контракт має бути меншим і свідомішим за внутрішній об’єкт.
   - title: Статуси, HTTPException та обробка помилок
+    key: statusy-httpexception-ta-obrobka-pomylok
     description: розрізняти 4xx і 5xx | повертати HTTPException | створювати єдиний
       формат помилок
     order: 7
@@ -859,6 +867,7 @@ topics:
         операцію, але не замінює системного логування та єдиного формату
         помилок.
   - title: "Залежності Depends: повторне використання та DI"
+    key: zalezhnosti-depends-povtorne-vykorystannya-ta-di
     description: пояснити dependency injection | створити спільну залежність |
       підготувати код до тестування
     order: 8
@@ -991,6 +1000,7 @@ topics:
         робить route легшим для тестування, якщо залежності не перетворюються на
         приховану магію.
   - title: Залежності з yield і життєвий цикл ресурсів
+    key: zalezhnosti-z-yield-i-zhyttyevyy-tsykl-resursiv
     description: керувати відкриттям і закриттям ресурсу | пояснити yield dependency
       | не залишати сесії відкритими
     order: 9
@@ -1129,6 +1139,7 @@ topics:
         зовнішніх ресурсів cleanup є обов’язковою частиною коректності, а не
         оптимізацією.
   - title: APIRouter і структура великого застосунку
+    key: apirouter-i-struktura-velykoho-zastosunku
     description: розділити API на модулі | застосувати prefix і tags | зберегти
       єдину точку складання
     order: 10
@@ -1272,6 +1283,7 @@ topics:
         APIRouter перетворює FastAPI-застосунок із файлу на структуру. Головне —
         зберегти явні межі між маршрутизацією, сервісами та інфраструктурою.
   - title: OpenAPI, tags, summary та версіювання API
+    key: openapi-tags-summary-ta-versiyuvannya-api
     description: читати автоматичну документацію | налаштовувати OpenAPI metadata |
       проєктувати сумісні версії
     order: 11
@@ -1348,6 +1360,7 @@ topics:
         ### Підсумок
         OpenAPI — сильний контрактний інструмент FastAPI. Він допомагає синхронізувати код, документацію та клієнтів, але не скасовує тести.
   - title: async/await, event loop і блокувальні операції
+    key: async-await-event-loop-i-blokuvalni-operatsii
     description: відрізняти concurrency від parallelism | знати межу async | не
       блокувати event loop синхронним I/O
     order: 12
@@ -1470,6 +1483,7 @@ topics:
         Async FastAPI добре масштабує очікування, якщо код не блокує event loop.
         Правильний вибір ґрунтується на характері операції та бібліотеках.
   - title: "База даних: SQLAlchemy engine і session dependency"
+    key: baza-danykh-sqlalchemy-engine-i-session-dependency
     description: відділити engine, session і dependency | закривати сесію після
       запиту | не ділити session між запитами
     order: 13
@@ -1634,6 +1648,7 @@ topics:
         FastAPI не керує БД за вас. Надійний код явно моделює engine,
         короткоживучу session, транзакцію та cleanup.
   - title: CRUD, транзакції та repository/service шар
+    key: crud-tranzaktsii-ta-repository-service-shar
     description: розділити HTTP і бізнес-логіку | реалізувати create/read |
       виконувати зміни в транзакції
     order: 14
@@ -1785,6 +1800,7 @@ topics:
         CRUD стає підтримуваним, коли HTTP, бізнес-логіка й доступ до даних
         мають окремі відповідальності та єдиний транзакційний контракт.
   - title: Пагінація, сортування та фільтрація
+    key: pahinatsiya-sortuvannya-ta-filtratsiya
     description: проєктувати параметри списку | уникати необмежених вибірок |
       повертати metadata пагінації
     order: 15
@@ -1913,6 +1929,7 @@ topics:
         Пагінація — це контроль ресурсу, а не лише зручність. Її параметри мають
         бути обмежені, перевірені та узгоджені зі стабільністю даних.
   - title: Конфігурація, environment і Settings
+    key: konfihuratsiya-environment-i-settings
     description: відділити код від конфігурації | читати environment типобезпечно |
       не зберігати секрети в репозиторії
     order: 16
@@ -2038,6 +2055,7 @@ topics:
         неправильне середовище помітним, а secret manager — безпечним для
         production.
   - title: "Автентифікація: OAuth2 password і bearer token"
+    key: avtentyfikatsiya-oauth2-password-i-bearer-token
     description: розрізняти authentication та authorization | читати bearer token |
       побудувати базовий current user dependency
     order: 17
@@ -2181,6 +2199,7 @@ topics:
         криптографію та політику доступу. Authentication і authorization мають
         бути різними поняттями й шарами.
   - title: Авторизація, ролі та permission dependencies
+    key: avtoryzatsiya-roli-ta-permission-dependencies
     description: реалізувати рольову перевірку | відрізнити роль від permission | не
       довіряти клієнтським claims
     order: 18
@@ -2325,6 +2344,7 @@ topics:
         Авторизація має бути серверною, явною і близькою до операції. Depends
         добре моделює політики, але не скасовує перевірку власності ресурсу.
   - title: Middleware, CORS і request context
+    key: middleware-cors-i-request-context
     description: пояснити місце middleware | налаштувати обмежений CORS | додати
       request id без витоку даних
     order: 19
@@ -2419,6 +2439,7 @@ topics:
         ### Підсумок
         Middleware підходить для наскрізних технічних правил. CORS керує браузерною взаємодією й не повинен підміняти автентифікацію чи авторизацію.
   - title: BackgroundTasks, черги та довгі операції
+    key: backgroundtasks-cherhy-ta-dovhi-operatsii
     description: відрізняти request task від worker queue | повернути 202 | не
       втрачати критичну роботу
     order: 20
@@ -2549,6 +2570,7 @@ topics:
         BackgroundTasks зручні для малої роботи після response, але не замінюють
         durable queue. Надійність і повторюваність мають бути частиною дизайну.
   - title: Файли, UploadFile та потокові відповіді
+    key: fayly-uploadfile-ta-potokovi-vidpovidi
     description: приймати multipart upload | обмежувати розмір і тип | не читати
       великий файл цілком у пам’ять
     order: 21
@@ -2678,6 +2700,7 @@ topics:
         validation, storage policy та scanning залишаються відповідальністю
         системи.
   - title: Middleware errors, exception handlers і єдиний формат помилки
+    key: middleware-errors-exception-handlers-i-yedynyy-format-pomylky
     description: створити глобальний exception handler | не розкривати внутрішні
       помилки | зберегти однаковий JSON error contract
     order: 22
@@ -2814,6 +2837,7 @@ topics:
         Централізований error contract робить API передбачуваним. Логування й
         зовнішня відповідь мають містити різний рівень деталей.
   - title: Тестування API через TestClient
+    key: testuvannya-api-cherez-testclient
     description: писати контрактні тести endpoint | перевіряти статус, JSON і
       негативні сценарії | не тестувати лише happy path
     order: 23
@@ -2958,6 +2982,7 @@ topics:
         Мінімальний набір має включати нормальний, граничний і помилковий
         сценарії.
   - title: Testing dependencies, БД і async tests
+    key: testing-dependencies-bd-i-async-tests
     description: підміняти dependency через overrides | ізолювати тестову БД |
       тестувати async код без випадкової мережі
     order: 24
@@ -3048,6 +3073,7 @@ topics:
         ### Підсумок
         Dependency overrides — один із ключових інструментів FastAPI для ізольованих тестів. Підміна має бути явною, короткоживучою та повністю очищатися.
   - title: "Lifespan: startup і shutdown без глобальної магії"
+    key: lifespan-startup-i-shutdown-bez-hlobalnoi-mahii
     description: ініціалізувати ресурси при старті | закривати їх при shutdown |
       розрізняти lifespan і request dependency
     order: 25
@@ -3186,6 +3212,7 @@ topics:
         замінює короткоживучі request dependencies і не створює спільну пам’ять
         між workers.
   - title: WebSockets і двосторонній зв’язок
+    key: websockets-i-dvostoronniy-zv-yazok
     description: відрізняти WebSocket від HTTP | приймати та надсилати повідомлення
       | обробляти disconnect
     order: 26
@@ -3318,6 +3345,7 @@ topics:
         спрощує endpoint, але reliability, auth і масштабування треба
         проєктувати явно.
   - title: Streaming, Server-Sent Events і великі відповіді
+    key: streaming-server-sent-events-i-velyki-vidpovidi
     description: відрізняти streaming від WebSocket | повертати дані частинами |
       контролювати backpressure
     order: 27
@@ -3459,6 +3487,7 @@ topics:
         lifecycle відповіді, тому потребують контролю cancellation, buffering і
         ресурсів.
   - title: "Безпека API: CORS, CSRF, injection і rate limits"
+    key: bezpeka-api-cors-csrf-injection-i-rate-limits
     description: назвати основні API-ризики | відрізнити CORS від CSRF | захистити
       вхід і ресурси
     order: 28
@@ -3579,6 +3608,7 @@ topics:
         input, правильний data sink, server-side authorization, транспорт і
         спостережуваність.
   - title: Логування, метрики та спостережуваність
+    key: lohuvannya-metryky-ta-sposterezhuvanist
     description: логувати структуровано | пов’язувати події request id | відрізняти
       log, metric і trace
     order: 29
@@ -3665,6 +3695,7 @@ topics:
         ### Підсумок
         Спостережуваність — частина production-контракту. Логи, метрики й traces доповнюють одне одного, а redaction є обов’язковим.
   - title: Dependency overrides і мініпроєктна архітектура
+    key: dependency-overrides-i-miniproyektna-arkhitektura
     description: зібрати FastAPI-проєкт із шарами | спланувати milestone |
       підготувати API до демонстрації
     order: 30
@@ -3805,6 +3836,7 @@ topics:
         Найкращий спосіб засвоїти FastAPI — завершити вертикальний мініпроєкт із
         явними контрактами, тестами та поясненням архітектурних рішень.
   - title: "Production deployment: ASGI, workers, proxy та health checks"
+    key: production-deployment-asgi-workers-proxy-ta-health-checks
     description: відрізняти dev і production запуск | пояснити ASGI workers |
       підготувати health/readiness перевірки
     order: 31

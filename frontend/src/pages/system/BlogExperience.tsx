@@ -337,7 +337,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                 </p>
               </div>
               {isAdmin && (
-                <button
+                <button type="button"
                   onClick={() => navigate("/blog/admin")}
                   className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[.06] px-4 text-[11px] font-bold text-[#c2ccc5]"
                 >
@@ -362,7 +362,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
             {!tagParam && (
               <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-[#122017]/10 bg-white p-1 dark:border-white/10 dark:bg-[#151c17]">
                 {(["ALL", ...BLOG_CATEGORIES] as const).map((value) => (
-                  <button
+                  <button type="button"
                     key={value}
                     onClick={() => setCategory(value)}
                     className={
@@ -392,7 +392,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
             </div>
           ) : featured ? (
             <>
-          <button
+          <button type="button"
             onClick={() => go("/blog/" + featured.slug)}
                 className="group mt-8 grid w-full overflow-hidden rounded-[27px] border border-[#122017]/10 bg-white text-left shadow-[0_20px_65px_rgba(18,32,23,.055)] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#151c17] md:grid-cols-[1.1fr_.9fr]"
               >
@@ -433,7 +433,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
               </button>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 {remaining.map((post) => (
-                  <button
+                  <button type="button"
                     key={post.slug}
                 onClick={() => go("/blog/" + post.slug)}
                     className="group overflow-hidden rounded-[24px] border border-[#122017]/10 bg-white text-left transition hover:-translate-y-0.5 hover:border-[#00b963]/25 dark:border-white/10 dark:bg-[#151c17]"
@@ -526,7 +526,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
     <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[#0b100d] dark:text-[#edf3ef]">
       <PublicProductNav active="blog" />
       <main className="mx-auto w-[min(1080px,calc(100%_-_32px))] py-10">
-        <button
+        <button type="button"
         onClick={() => go("/blog")}
           className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[11px] font-bold text-[#667169] dark:border-white/10 dark:bg-[#151c17] dark:text-[#a5b0a8]"
         >
@@ -568,7 +568,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
                 {resolved.readingMinutes} {tr("хв читання", "min read")}
               </span>
               {resolved.tags.map((tag) => (
-                <button
+                <button type="button"
                   key={tag.slug}
                     onClick={() => go("/blog/tag/" + tag.slug)}
                   className="rounded-full bg-[#eef2ed] px-2.5 py-1.5 dark:bg-white/[.06]"
@@ -595,7 +595,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
                   </h2>
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     {resolved.related.map((item) => (
-                      <button
+                      <button type="button"
                         key={item.slug}
                             onClick={() => go("/blog/" + item.slug)}
                         className="rounded-[18px] border border-[#122017]/10 bg-[#f7f9f6] p-4 text-left transition hover:border-[#00b963]/25 dark:border-white/10 dark:bg-white/[.035]"

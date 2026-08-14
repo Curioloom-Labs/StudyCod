@@ -933,7 +933,7 @@ export const ClassDetailsPage: React.FC = () => {
                   <input type="text" placeholder={t('firstName')} value={student.firstName} onChange={e => handleStudentChange(index, "firstName", e.target.value)} className="sm:col-span-3 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                   <input type="text" placeholder={t("middleName")} value={student.middleName} onChange={e => handleStudentChange(index, "middleName", e.target.value)} className="sm:col-span-3 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                   <input type="email" placeholder="Email" value={student.email} onChange={e => handleStudentChange(index, "email", e.target.value)} className="sm:col-span-2 px-2 py-1 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
-                  {newStudents.length > 1 && <button onClick={() => handleRemoveStudentRow(index)} className="sm:col-span-1 px-2 py-1 border border-accent-error text-accent-error hover:bg-accent-error hover:text-bg-base transition-fast text-sm h-10">
+                  {newStudents.length > 1 && <button type="button" onClick={() => handleRemoveStudentRow(index)} className="sm:col-span-1 px-2 py-1 border border-accent-error text-accent-error hover:bg-accent-error hover:text-bg-base transition-fast text-sm h-10">
                       ×
                     </button>}
                 </div>)}

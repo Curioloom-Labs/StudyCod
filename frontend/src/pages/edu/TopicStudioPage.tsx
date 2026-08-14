@@ -512,7 +512,7 @@ export const TopicStudioPage: React.FC = () => {
           </div>
         </header>
 
-        {error && <div className="rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/10 px-4 py-3 text-sm font-medium text-[#c4436b]">{error}</div>}
+        {error && <div className="rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/10 px-4 py-3 text-sm font-medium text-[#c4436b]" role="alert">{error}</div>}
 
         <main className="grid gap-6 xl:grid-cols-[1fr_410px]">
           <section className="rounded-[32px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-6">
@@ -664,7 +664,7 @@ export const TopicStudioPage: React.FC = () => {
                   />
                   <p className="mt-2 text-xs leading-5 text-[#718075] dark:text-[#a6b4a9]">Для мініпроєкту додайте тести нижче. Учень побачить етапи в IDE, а submit перевірятиметься judgeʼом.</p>
                 </div>
-                <button disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
+                <button type="button" disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   <ArrowRight className="size-4" />
                   Створити й додати тести
                 </button>
@@ -716,7 +716,7 @@ export const TopicStudioPage: React.FC = () => {
                 <div className="rounded-2xl bg-[#e9f8ef] p-4 text-sm leading-6 text-[#506057] dark:bg-[#12301e] dark:text-[#c1d2c5]">
                   Після створення відкриється control studio — там можна згенерувати квіз, додати практичні задачі та перевірити формулу.
                 </div>
-                <button disabled={busy || !controlForm.title.trim() || (!controlForm.hasTheory && !controlForm.hasPractice)} onClick={() => void createControl()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
+                <button type="button" disabled={busy || !controlForm.title.trim() || (!controlForm.hasTheory && !controlForm.hasPractice)} onClick={() => void createControl()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   <Settings className="size-4" />
                   Створити й налаштувати
                 </button>
@@ -756,7 +756,7 @@ export const TopicStudioPage: React.FC = () => {
                     Прихований
                   </label>
                 </div>
-                <button disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
+                <button type="button" disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   Додати до набору
                 </button>
               </section>

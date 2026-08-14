@@ -178,7 +178,7 @@ export const SummaryGradesPage: React.FC = () => {
                           <div className="text-text-secondary text-xs line-clamp-1 flex-1">
                             {g.studentName}
                           </div>
-                          <button onClick={e => {
+                          <button type="button" onClick={e => {
                     e.stopPropagation();
                     handleDeleteGrade(g.id, g.studentName);
                   }} className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:opacity-85 p-1" title={tr("Видалити оцінку", "Delete grade")}>

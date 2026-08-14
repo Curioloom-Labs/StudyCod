@@ -136,7 +136,7 @@ export const ClassLiveOverview: React.FC<Props> = ({ classId, pollMs = 5000, cla
         </div>
       )}
 
-      {error && <div className="px-3 py-2 text-xs font-mono text-secondary">{error}</div>}
+      {error && <div role="alert" className="px-3 py-2 text-xs font-mono text-secondary">{error}</div>}
 
       {totals && (
         <div className="grid grid-cols-2 gap-1.5 px-3 py-2 border-b border-border">

@@ -77,13 +77,13 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
           </div>
         </section>
 
-        {error && <div className="rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]">{error}</div>}
+        {error && <div role="alert" className="rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]">{error}</div>}
 
         <div className="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">
           <section className="rounded-[26px] border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15]">
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-[#147b47] dark:text-[#62ecaa]">Наступний крок</div>
             {loading ? <div className="mt-5 h-44 animate-pulse rounded-2xl bg-[#edf2ee] dark:bg-white/[.045]" /> : next ? (
-              <button onClick={() => navigate(`/edu/lessons/${next.id}`)} className="mt-4 block w-full rounded-2xl bg-[#17251c] p-5 text-left text-white transition hover:-translate-y-0.5">
+              <button type="button" onClick={() => navigate(`/edu/lessons/${next.id}`)} className="mt-4 block w-full rounded-2xl bg-[#17251c] p-5 text-left text-white transition hover:-translate-y-0.5">
                 <div className="flex justify-between gap-4">
                   <div>
                     <div className="text-xs font-semibold text-[#8eb093]">{next.type === "CONTROL" ? "Контрольна" : next.type === "TOPIC" ? "Тема" : "Урок"}</div>
@@ -142,7 +142,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
           <section className="rounded-[26px] border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15]">
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-[#147b47] dark:text-[#62ecaa]">Активність</div>
             <div className="mt-5 space-y-3">{lessons.slice(0, 4).map((lesson) => (
-              <button key={lesson.id} onClick={() => navigate(`/edu/lessons/${lesson.id}`)} className="flex w-full items-center justify-between rounded-xl bg-[#f5f8f5] p-3 text-left dark:bg-white/[.04]">
+              <button type="button" key={lesson.id} onClick={() => navigate(`/edu/lessons/${lesson.id}`)} className="flex w-full items-center justify-between rounded-xl bg-[#f5f8f5] p-3 text-left dark:bg-white/[.04]">
                 <div>
                   <div className="font-semibold">{lesson.title}</div>
                   <div className="mt-1 text-sm text-[#647369] dark:text-[#a6b4a9]">{lesson.tasksCount} задач</div>

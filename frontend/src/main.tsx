@@ -166,7 +166,7 @@ const ErrorDisplay: React.FC<{
     }}>
           {error.stack}
         </pre>}
-      <button onClick={() => {
+      <button type="button" onClick={() => {
       window.location.reload();
     }} style={{
       padding: "10px 20px",

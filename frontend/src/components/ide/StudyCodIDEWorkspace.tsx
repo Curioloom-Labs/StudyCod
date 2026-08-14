@@ -237,6 +237,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   const [fontSize, setFontSize] = React.useState(14);
   const [wordWrap, setWordWrap] = React.useState(false);
   const [focusMode, setFocusMode] = React.useState(false);
+  const [mobileContextOpen, setMobileContextOpen] = React.useState(true);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [traceStep, setTraceStep] = React.useState(0);
   const [miniProjectTimer, setMiniProjectTimer] = React.useState<{
@@ -863,7 +864,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
   const miniProjectTimerExpired = activeMiniProjectRemainingSeconds === 0;
 
   return (
-    <div className="flex h-[min(1100px,calc(100dvh-2rem))] min-h-[780px] flex-col overflow-hidden rounded-[30px] border border-white/[.1] bg-[#0d130f] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_28px_80px_-44px_rgba(15,35,21,.9)]">
+    <div className="flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-white/[.1] bg-[#0d130f] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_28px_80px_-44px_rgba(15,35,21,.9)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
       <header className="flex min-h-[72px] flex-wrap items-center gap-2 border-b border-white/[.08] bg-[#101913] px-4 py-3 sm:px-5">
         {props.onBack ? (
           <button
@@ -906,7 +907,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             onChange={(event) =>
               props.onLanguageChange(event.target.value as JudgeLanguage)
             }
-            className="h-9 max-w-32 rounded-lg border border-white/10 bg-white/[.06] px-2 text-xs font-semibold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-9 max-w-24 rounded-lg border border-white/10 bg-white/[.06] px-2 text-xs font-semibold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-32"
           >
             <option value={props.language} className="text-black">
               {languageLabel(props.language)}
@@ -973,6 +974,52 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
           <Maximize2 className="size-3.5" />
         </button>
       </header>
+
+      <section className="shrink-0 border-b border-white/10 bg-[#111912] lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileContextOpen((open) => !open)}
+          aria-expanded={mobileContextOpen}
+          aria-controls="mobile-ide-context"
+          className="flex min-h-11 w-full items-center gap-2 px-3 text-left"
+        >
+          <FileText className="size-4 shrink-0 text-[#72edb0]" />
+          <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#dce8df]">
+            {tr("Умова задачі та підказки", "Task context and hints")}
+          </span>
+          <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${mobileContextOpen ? "rotate-180" : ""}`} />
+        </button>
+        {mobileContextOpen ? (
+          <div id="mobile-ide-context" className="max-h-56 overflow-y-auto border-t border-white/10 px-3 py-3">
+            <div className="prose prose-sm max-w-none text-xs leading-5 dark:prose-invert">
+              <MarkdownView content={props.task.description} />
+            </div>
+            {props.hints?.length ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{tr("Підказки", "Hints")}</p>
+                {props.hints.map((hint, index) => {
+                  const open = openHintIndex === index;
+                  return (
+                    <div key={`mobile-hint-${index}`} className="overflow-hidden rounded-xl border border-white/10 bg-white/[.03]">
+                      <button
+                        type="button"
+                        onClick={() => setOpenHintIndex(open ? null : index)}
+                        aria-expanded={open}
+                        className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-[11px] font-semibold text-[#c8d6cc]"
+                      >
+                        <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-[#00d978]/10 text-[#72edb0]">{index + 1}</span>
+                        <span className="flex-1">{tr(`Підказка ${index + 1}`, `Hint ${index + 1}`)}</span>
+                        <ChevronDown className={`size-3.5 text-[#82968a] transition-transform ${open ? "rotate-180" : ""}`} />
+                      </button>
+                      {open ? <p className="border-t border-white/10 px-3 py-2 text-[11px] leading-5 text-[#b9c9bd]">{hint}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
       <div className="flex h-full min-h-0 flex-1">
         {showLeft ? (
@@ -1109,7 +1156,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             </div>
           </div>
           <div
-            className={`h-full min-h-[360px] flex-1 overflow-hidden ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
+            className={`h-full min-h-[220px] flex-1 overflow-hidden lg:min-h-[360px] ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
           >
             <div className="h-full min-h-0 min-w-0 overflow-hidden">
               {props.useFiles ? (
@@ -1475,10 +1522,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       ) : null}
       {showBottom ? (
         <section
-          style={{ height: layout.bottom }}
-          className="shrink-0 border-t border-white/10 bg-[#111912]"
+          style={{ "--ide-bottom-height": `${layout.bottom}px` } as React.CSSProperties}
+          className="h-[var(--ide-bottom-height)] max-lg:h-60 shrink-0 border-t border-white/10 bg-[#111912]"
         >
-          <div className="flex h-10 items-center gap-1 border-b border-white/10 px-2">
+          <div className="flex h-10 items-center gap-1 overflow-x-auto border-b border-white/10 px-2">
             <BottomTabButton
               active={bottomTab === "terminal"}
               onClick={() => setBottomTab("terminal")}
@@ -1516,7 +1563,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             <button
               type="button"
               onClick={() => updateLayout({ bottomCollapsed: true })}
-              className="ml-auto grid size-7 place-items-center rounded text-[#82968a] hover:bg-white/[.06]"
+              className="ml-auto grid size-7 shrink-0 place-items-center rounded text-[#82968a] hover:bg-white/[.06]"
               title={tr("Згорнути", "Collapse")}
             >
               <ChevronDown className="size-3.5" />
@@ -1536,7 +1583,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
         </button>
       )}
       {notice ? (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-[#00d978]/30 bg-[#132018] px-4 py-2 text-xs font-semibold text-[#72edb0] shadow-2xl">
+        <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-[#00d978]/30 bg-[#132018] px-4 py-2 text-xs font-semibold text-[#72edb0] shadow-2xl">
           {notice}
         </div>
       ) : null}
@@ -1569,7 +1616,7 @@ const BottomTabButton: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`inline-flex h-8 items-center gap-1.5 rounded px-2.5 text-[10px] font-semibold ${active ? "bg-white/[.08] text-white" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
+    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[10px] font-semibold ${active ? "bg-white/[.08] text-white" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
   >
     {icon}
     {label}

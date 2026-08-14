@@ -956,61 +956,61 @@ const AppContent: React.FC = React.memo(() => {
               </div>}
             {}
             {user.userMode !== "EDUCATIONAL" && <>
-                <button onClick={handleGoHome} onPointerEnter={() => prefetchNavTarget("continue")} onFocus={() => prefetchNavTarget("continue")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button type="button" onClick={handleGoHome} onPointerEnter={() => prefetchNavTarget("continue")} onFocus={() => prefetchNavTarget("continue")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <Home className="w-4 h-4" />
                   {t('home')}
                 </button>
-                <button onClick={() => handleSetPage("tasks")} onPointerEnter={() => prefetchNavTarget("tasks")} onFocus={() => prefetchNavTarget("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button type="button" onClick={() => handleSetPage("tasks")} onPointerEnter={() => prefetchNavTarget("tasks")} onFocus={() => prefetchNavTarget("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('tasks')}
                 </button>
-                <button onClick={() => handleSetPage("grades")} onPointerEnter={() => prefetchNavTarget("grades")} onFocus={() => prefetchNavTarget("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button type="button" onClick={() => handleSetPage("grades")} onPointerEnter={() => prefetchNavTarget("grades")} onFocus={() => prefetchNavTarget("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <FileText className="w-4 h-4" />
                   {t('grades')}
                 </button>
-                <button onClick={() => navigate("/library")} onPointerEnter={() => prefetchNavTarget("library")} onFocus={() => prefetchNavTarget("library")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+                <button type="button" onClick={() => navigate("/library")} onPointerEnter={() => prefetchNavTarget("library")} onFocus={() => prefetchNavTarget("library")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
                   <Library className="w-4 h-4" />
                   {t("library")}
                 </button>
-                <button onClick={() => navigate("/learning/catalog")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+                <button type="button" onClick={() => navigate("/learning/catalog")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
                   <BookOpen className="w-4 h-4" />
                   {i18n.language?.toLowerCase().startsWith("en") ? "Courses" : "Курси"}
                 </button>
               </>}
 
             {}
-            {user.role === "SYSTEM_ADMIN" && <button onClick={() => handleSetPage("admin")} onPointerEnter={() => prefetchNavTarget("admin")} onFocus={() => prefetchNavTarget("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.role === "SYSTEM_ADMIN" && <button type="button" onClick={() => handleSetPage("admin")} onPointerEnter={() => prefetchNavTarget("admin")} onFocus={() => prefetchNavTarget("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <Shield className="w-4 h-4" />
                 Admin
               </button>}
 
-            {(user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") && <button onClick={() => navigate("/support/desk")} onPointerEnter={() => prefetchPath("/support/desk")} onFocus={() => prefetchPath("/support/desk")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+            {(user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") && <button type="button" onClick={() => navigate("/support/desk")} onPointerEnter={() => prefetchPath("/support/desk")} onFocus={() => prefetchPath("/support/desk")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                 <HelpCircle className="w-4 h-4" />
                 Support desk
               </button>}
 
             {}
-            {user.userMode === "EDUCATIONAL" && !user.studentId && <button onClick={() => handleSetPage("teacher")} onPointerEnter={() => prefetchNavTarget("teacher")} onFocus={() => prefetchNavTarget("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.userMode === "EDUCATIONAL" && !user.studentId && <button type="button" onClick={() => handleSetPage("teacher")} onPointerEnter={() => prefetchNavTarget("teacher")} onFocus={() => prefetchNavTarget("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <GraduationCap className="w-4 h-4" />
                 {t('myClasses')}
               </button>}
 
             {user.userMode === "EDUCATIONAL" && user.studentId && <>
-                <button onClick={() => handleSetPage("student")} onPointerEnter={() => prefetchNavTarget("student")} onFocus={() => prefetchNavTarget("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+                <button type="button" onClick={() => handleSetPage("student")} onPointerEnter={() => prefetchNavTarget("student")} onFocus={() => prefetchNavTarget("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                   <BookOpen className="w-4 h-4" />
                   {t('myJournal')}
                 </button>
-                <button onClick={() => navigate("/edu/library")} onPointerEnter={() => prefetchPath("/edu/library")} onFocus={() => prefetchPath("/edu/library")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
+                <button type="button" onClick={() => navigate("/edu/library")} onPointerEnter={() => prefetchPath("/edu/library")} onFocus={() => prefetchPath("/edu/library")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <Library className="w-4 h-4" />
                   {t("library")}
                 </button>
-                <button onClick={() => {
+                <button type="button" onClick={() => {
               navigate("/edu/appeals");
             }} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <HelpCircle className="w-4 h-4" />
                   {i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції"}
                 </button>
-                <button onClick={() => {
+                <button type="button" onClick={() => {
               navigate("/edu/lessons");
             }} onPointerEnter={() => prefetchNavTarget("lessons")} onFocus={() => prefetchNavTarget("lessons")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
                   <FileText className="w-4 h-4" />
@@ -1023,50 +1023,50 @@ const AppContent: React.FC = React.memo(() => {
             {}
             <div className="flex items-center gap-2">
               {}
-              <button onClick={() => setPaletteOpen(true)} className="shrink-0 px-3 py-2 text-xs font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2" title={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-label={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-haspopup="dialog">
+              <button type="button" onClick={() => setPaletteOpen(true)} className="shrink-0 px-3 py-2 text-xs font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2" title={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-label={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-haspopup="dialog">
                 <Search className="w-4 h-4" />
                 <kbd className="hidden md:inline px-1.5 py-0.5 border border-border text-[10px] font-mono text-text-muted">Ctrl K</kbd>
               </button>
-              <button onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
+              <button type="button" onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
                 {i18n.language === 'uk' ? 'EN' : 'UA'}
               </button>
 
               {}
-              <button onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+              <button type="button" onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
                 {theme === "dark" ? "Light" : "Dark"}
               </button>
               
-              <button onClick={() => handleSetPage("profile")} onPointerEnter={() => prefetchNavTarget("profile")} onFocus={() => prefetchNavTarget("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${resolvedPage === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
+              <button type="button" onClick={() => handleSetPage("profile")} onPointerEnter={() => prefetchNavTarget("profile")} onFocus={() => prefetchNavTarget("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${resolvedPage === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
                 <UserIcon className="w-4 h-4 text-text-secondary" />
               </button>
               <div className="relative" ref={navMenuRef}>
-                <button onClick={handleToggleNav} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" title={t('menu')} aria-label={t('menu')} aria-haspopup="menu" aria-expanded={navOpen}>
+                <button type="button" onClick={handleToggleNav} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" title={t('menu')} aria-label={t('menu')} aria-haspopup="menu" aria-expanded={navOpen}>
                   {navOpen ? <X className="w-4 h-4 text-text-secondary" /> : <Menu className="w-4 h-4 text-text-secondary" />}
                 </button>
                 {navOpen && <>
                     <div className="absolute right-0 top-12 z-40 bg-bg-surface border border-border min-w-[200px]" role="menu" aria-label={t('menu')}>
                       <nav className="flex flex-col">
-                        <button role="menuitem" onClick={() => {
+                        <button type="button" role="menuitem" onClick={() => {
                       setNavOpen(false);
                       navigate("/docs");
                     }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary flex items-center gap-2">
                           <HelpCircle className="w-4 h-4" />
                           {t('help')}
                         </button>
-                        <button role="menuitem" onClick={() => {
+                        <button type="button" role="menuitem" onClick={() => {
                       setNavOpen(false);
                       navigate("/support");
                     }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary flex items-center gap-2">
                           <HelpCircle className="w-4 h-4" />
                           {t('support')}
                         </button>
-                        <button role="menuitem" onClick={() => {
+                        <button type="button" role="menuitem" onClick={() => {
                       setNavOpen(false);
                       ui.setMode(nextUIMode(ui.mode));
                     }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary border-t border-border">
                           {t("interfaceLabel")}: {ui.mode === "classic" ? t("classicUiName") : ui.mode === "focus" ? t("momentumUiName") : ui.mode === "aurora" ? t("auroraUiName", { defaultValue: "Aurora" }) : t("novaUiName", { defaultValue: "Nova" })}
                         </button>
-                        <button role="menuitem" onClick={handleLogout} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-accent-error border-t border-border">
+                        <button type="button" role="menuitem" onClick={handleLogout} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-accent-error border-t border-border">
                           {t('logout')}
                         </button>
                       </nav>
@@ -1187,7 +1187,7 @@ const AppContent: React.FC = React.memo(() => {
       if (pageTarget) {
         handleSetPage(pageTarget);
       }
-        }} onLogout={handleLogout} topRight={<div className="flex items-center gap-2"><NotificationsBell /><button onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
+        }} onLogout={handleLogout} topRight={<div className="flex items-center gap-2"><NotificationsBell /><button type="button" onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
           <SunMoon className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
           </button></div>}>

@@ -410,7 +410,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
         <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface/85 p-3 overflow-auto">
           <div className="flex items-center justify-between gap-2 mb-3">
             <div className="text-sm font-semibold text-text-primary">Submission Stream</div>
-            <button onClick={onRefreshSubmissions} className="h-11 px-3 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-1" aria-label="Refresh submissions stream">
+            <button type="button" onClick={onRefreshSubmissions} className="h-11 px-3 rounded-md border border-border text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-1" aria-label="Refresh submissions stream">
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh
             </button>
@@ -477,7 +477,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
             disabled={!canAskOrganizer || askingOrganizer}
           />
           <div className="mt-2 flex justify-end">
-            <button
+            <button type="button"
               onClick={submitOrganizerQuestion}
               disabled={!canAskOrganizer || askingOrganizer || !discussionText.trim()}
               className="h-11 px-4 rounded-lg border border-border text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast disabled:opacity-50 disabled:cursor-not-allowed"
@@ -526,7 +526,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
               </div>
               <div className="text-text-primary whitespace-pre-wrap break-words line-clamp-3">{latestAnnouncement.text}</div>
             </div>
-            <button
+            <button type="button"
               onClick={() => setDismissedAnnId(latestAnnouncement.id)}
               className="text-text-secondary hover:text-text-primary shrink-0"
               aria-label="Dismiss announcement"
@@ -556,11 +556,11 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
         </div>
 
         <div className="lg:hidden px-2 py-2 border-b border-border/60 bg-bg-surface/55 flex items-center gap-2 overflow-x-auto">
-          <button onClick={() => openTab("problem")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "problem" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Problem</button>
-          <button onClick={() => openTab("contest-overview")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "contest-overview" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Overview</button>
-          <button onClick={() => openTab("submissions")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "submissions" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Submissions</button>
-          <button onClick={() => openTab("leaderboard")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "leaderboard" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Leaderboard</button>
-          <button onClick={() => setMobileDockOpen((v) => !v)} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${mobileDockOpen ? "border-secondary/60 text-secondary bg-secondary/10" : "border-border text-text-secondary"}`}>{mobileDockOpen ? "Hide output" : "Output"}</button>
+          <button type="button" onClick={() => openTab("problem")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "problem" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Problem</button>
+          <button type="button" onClick={() => openTab("contest-overview")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "contest-overview" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Overview</button>
+          <button type="button" onClick={() => openTab("submissions")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "submissions" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Submissions</button>
+          <button type="button" onClick={() => openTab("leaderboard")} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${activeTab.kind === "leaderboard" ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary"}`}>Leaderboard</button>
+          <button type="button" onClick={() => setMobileDockOpen((v) => !v)} className={`h-10 px-3 rounded-lg border text-xs whitespace-nowrap ${mobileDockOpen ? "border-secondary/60 text-secondary bg-secondary/10" : "border-border text-text-secondary"}`}>{mobileDockOpen ? "Hide output" : "Output"}</button>
         </div>
 
         <div className="flex-1 min-h-0 flex">
@@ -569,7 +569,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
             const Icon = item.icon;
             return (
               <div key={item.id} className="group relative">
-                <button
+                <button type="button"
                   className="w-11 h-11 rounded-xl border border-transparent hover:border-border hover:bg-bg-hover/70 text-text-secondary hover:text-text-primary transition-fast flex items-center justify-center"
                   onClick={() => handleRailNavigate(item.id)}
                   aria-label={item.label}
@@ -614,7 +614,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                 >
                   <span>{tab.title}</span>
                   {tab.closable ? (
-                    <button
+                    <button type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         closeTab(tab.id);
@@ -662,11 +662,11 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                 {!dockPopOut ? (
                   <aside style={{ width: dockCollapsed ? 54 : dockWidth }} className="min-h-0 border-l border-border/60 bg-bg-surface/45 relative hidden lg:block">
                     <div className="absolute top-2 right-2 left-2 z-10 flex items-center justify-end gap-1">
-                      <button className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed((v) => !v)} title={dockCollapsed ? "Expand dock" : "Collapse dock"} aria-label={dockCollapsed ? "Expand output dock" : "Collapse output dock"}>
+                      <button type="button" className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed((v) => !v)} title={dockCollapsed ? "Expand dock" : "Collapse dock"} aria-label={dockCollapsed ? "Expand output dock" : "Collapse output dock"}>
                       {dockCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
                       </button>
                       {!dockCollapsed ? (
-                        <button className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockPopOut(true)} title="Pop out dock" aria-label="Open output dock pop out">
+                        <button type="button" className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockPopOut(true)} title="Pop out dock" aria-label="Open output dock pop out">
                         <SquareArrowOutUpRight className="w-3.5 h-3.5" />
                         </button>
                       ) : null}
@@ -674,7 +674,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
 
                     <div className={`h-full min-h-0 pt-11 ${dockCollapsed ? "px-1" : "p-2"}`}>
                       {dockCollapsed ? (
-                        <button className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed(false)} aria-label="Expand output dock">
+                        <button type="button" className="w-full h-12 rounded-xl border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockCollapsed(false)} aria-label="Expand output dock">
                           <FoldHorizontal className="w-4 h-4" />
                         </button>
                       ) : (
@@ -700,7 +700,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
         <div className="fixed right-4 top-20 w-[min(92vw,430px)] h-[min(76vh,700px)] z-40 rounded-2xl border border-border bg-bg-surface shadow-[0_20px_60px_rgba(0,0,0,0.55)] p-2">
           <div className="flex items-center justify-between mb-2 px-1">
             <div className="text-xs text-text-secondary uppercase tracking-widest">Output Dock (Pop-out)</div>
-            <button className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockPopOut(false)} aria-label="Close output dock pop out">
+            <button type="button" className="h-11 w-11 rounded border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center" onClick={() => setDockPopOut(false)} aria-label="Close output dock pop out">
               <PanelRightOpen className="w-3.5 h-3.5" />
             </button>
           </div>

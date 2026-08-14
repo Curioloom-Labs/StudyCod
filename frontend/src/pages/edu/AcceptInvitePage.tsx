@@ -47,7 +47,7 @@ export const AcceptInvitePage: React.FC = () => {
       {status === "error" && (
         <div className="flex flex-col items-center gap-3">
           <p className="font-mono text-[#ef4444]">{message}</p>
-          <button onClick={() => navigate("/edu", { replace: true })} className="text-sm text-primary underline">
+          <button type="button" onClick={() => navigate("/edu", { replace: true })} className="text-sm text-primary underline">
             {tr("На головну", "Go to dashboard")}
           </button>
         </div>

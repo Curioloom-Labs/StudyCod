@@ -257,7 +257,7 @@ export const PracticeCanvasPage: React.FC = () => {
   return (
     <div className={workspace}>
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <button
+        <button type="button"
           onClick={() =>
             navigate(
               (location.state as { from?: string } | null)?.from ||
@@ -281,7 +281,7 @@ export const PracticeCanvasPage: React.FC = () => {
         </div>
       </header>
       {error && (
-        <div className="mb-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">
+        <div role="alert" className="mb-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">
           {error}
         </div>
       )}
@@ -298,7 +298,7 @@ export const PracticeCanvasPage: React.FC = () => {
               {task.description}
             </p>
           </div>
-          <button
+          <button type="button"
             onClick={() => setDetailsOpen(!detailsOpen)}
             className="flex w-full items-center justify-between border-y border-[#19291d]/10 px-6 py-4 text-sm font-bold dark:border-white/[.08] sm:px-8"
           >
@@ -350,7 +350,7 @@ export const PracticeCanvasPage: React.FC = () => {
               <span className="text-sm font-bold">Розв'язок</span>
             </div>
             <div className="flex gap-2">
-              <button
+              <button type="button"
                 onClick={() => void run()}
                 disabled={busy !== null}
                 className="rounded-xl bg-[#edf2ed] px-3 py-2 text-xs font-bold text-[#314239] disabled:opacity-40 dark:bg-white/[.08] dark:text-[#dbe6de]"
@@ -358,7 +358,7 @@ export const PracticeCanvasPage: React.FC = () => {
                 <Play className="mr-1 inline h-3.5 w-3.5" />
                 {busy === "run" ? "Запуск…" : "Запустити"}
               </button>
-              <button
+              <button type="button"
                 onClick={() => void submit()}
                 disabled={busy !== null || task.isClosed}
                 className="rounded-xl bg-[#153321] px-3 py-2 text-xs font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"

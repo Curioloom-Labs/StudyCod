@@ -463,7 +463,7 @@ export const AdminMailWorkspace: React.FC = () => {
           <div className="text-xs font-mono text-text-secondary mb-2">Folders</div>
           <div className="space-y-1">
             {(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox" }]).map((f) => (
-              <button
+              <button type="button"
                 key={f.path}
                 onClick={async () => {
                   setActiveFolder(f.path);
@@ -505,7 +505,7 @@ export const AdminMailWorkspace: React.FC = () => {
             {items.map((m) => {
               const unread = !m.seen;
               return (
-                <button
+                <button type="button"
                   key={m.uid}
                   onClick={() => setSelectedUid(m.uid)}
                   className={`w-full text-left p-2 border rounded-md ${selectedUid === m.uid ? "border-primary bg-bg-hover" : "border-border hover:bg-bg-hover"}`}

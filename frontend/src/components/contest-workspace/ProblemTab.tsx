@@ -88,7 +88,7 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
               ["examples", "Examples"],
               ["notes", "Notes"],
             ] as Array<[StatementSegment, string]>).map(([key, label]) => (
-              <button
+              <button type="button"
                 key={key}
                 onClick={() => setSegment(key)}
                 role="tab"
@@ -108,7 +108,7 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
           {segment === "examples" && examples.length > 0 ? (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
               {examples.map((ex, idx) => (
-                <button
+                <button type="button"
                   key={ex.id}
                   onClick={() => onInjectExampleInput(ex.input)}
                   className="text-left rounded-xl border border-border bg-bg-base/80 hover:bg-bg-hover/70 transition-fast p-3"

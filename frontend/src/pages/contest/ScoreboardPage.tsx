@@ -201,7 +201,7 @@ export const ScoreboardPage: React.FC = () => {
           <div className="text-sm text-text-secondary">{tr("Невірний контест.", "Invalid contest.")}</div>
         ) : (
           <>
-            {error && <div className="text-xs font-mono text-accent-error">{error}</div>}
+            {error && <div role="alert" className="text-xs font-mono text-accent-error">{error}</div>}
             {!board && !error && (
               <div className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

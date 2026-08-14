@@ -38,13 +38,13 @@ export const SwitchToMomentumNudge: React.FC<{ threshold?: number }> = ({ thresh
           </div>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <button
+          <button type="button"
             onClick={() => ui.dismissSwitchSuggestion()}
             className="px-3 py-2 text-xs font-mono border border-border text-text-secondary hover:bg-bg-hover transition-fast"
           >
             {t("notNow")}
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               ui.setMode("focus");
               ui.dismissSwitchSuggestion();

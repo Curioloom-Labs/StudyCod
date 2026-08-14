@@ -237,7 +237,7 @@ export const PlaygroundPage: React.FC = () => {
           <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[#00d978]/15 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <button onClick={() => navigate(-1)} className="mb-3 inline-flex items-center gap-2 text-sm text-text-secondary transition hover:text-text-primary">
+              <button type="button" onClick={() => navigate(-1)} className="mb-3 inline-flex items-center gap-2 text-sm text-text-secondary transition hover:text-text-primary">
                 <ArrowLeft className="h-4 w-4" />
                 {tr("Назад", "Back")}
               </button>
@@ -286,7 +286,7 @@ export const PlaygroundPage: React.FC = () => {
                       <div className="p-3 text-sm text-text-secondary">{tr("Ще немає збережених сніпетів.", "No saved snippets yet.")}</div>
                     ) : (
                       mySnippets.map((snippet) => (
-                        <button
+                        <button type="button"
                           key={snippet.shareId}
                           onClick={() => { setShowHistory(false); navigate(`/playground/${snippet.shareId}`); }}
                           className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-bg-hover"
@@ -416,7 +416,7 @@ export const PlaygroundPage: React.FC = () => {
                 </div>
                 {trace && (
                   <div className="flex items-center gap-2">
-                    <button className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-40" onClick={() => setStepIdx((index) => Math.max(0, index - 1))} disabled={stepIdx <= 0}>◀</button>
+                    <button type="button" className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-40" onClick={() => setStepIdx((index) => Math.max(0, index - 1))} disabled={stepIdx <= 0}>◀</button>
                     <input
                       type="range"
                       min={0}
@@ -425,7 +425,7 @@ export const PlaygroundPage: React.FC = () => {
                       onChange={(event) => setStepIdx(Number(event.target.value))}
                       className="w-28 accent-primary"
                     />
-                    <button className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-40" onClick={() => setStepIdx((index) => Math.min(trace.steps.length - 1, index + 1))} disabled={stepIdx >= trace.steps.length - 1}>▶</button>
+                    <button type="button" className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-40" onClick={() => setStepIdx((index) => Math.min(trace.steps.length - 1, index + 1))} disabled={stepIdx >= trace.steps.length - 1}>▶</button>
                   </div>
                 )}
               </div>

@@ -92,7 +92,7 @@ export const PricingPage: React.FC = () => {
         <section className="relative mx-auto w-[min(1200px,calc(100%_-_40px))] pb-16 pt-24 text-center max-md:pt-16">
           <div className="pointer-events-none absolute left-1/2 top-5 size-[540px] -translate-x-1/2 rounded-full bg-[#00ff88]/[.055] blur-[90px]" />
           <motion.div initial={reduceMotion ? undefined : { opacity: 0, y: 20 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .7, ease: [0.16, 1, .3, 1] }} className="relative mx-auto max-w-[820px]">
-            <button onClick={() => navigate("/")} className="mx-auto mb-6 flex w-fit items-center gap-2 text-[12px] font-bold text-[#667169] dark:text-[#99a59d]"><ArrowLeft className="size-4" />{tr("На головну", "Back home")}</button>
+            <button type="button" onClick={() => navigate("/")} className="mx-auto mb-6 flex w-fit items-center gap-2 text-[12px] font-bold text-[#667169] dark:text-[#99a59d]"><ArrowLeft className="size-4" />{tr("На головну", "Back home")}</button>
             <h1 className="mt-6 text-balance text-[clamp(44px,6vw,76px)] font-bold leading-[1] tracking-[-.055em]">{tr("План для кожного способу навчатися.", "A plan for every way of learning.")}</h1>
             <p className="mx-auto mt-6 max-w-[680px] text-[17px] leading-8 text-[#667169] dark:text-[#a3aea6]">{tr("Починайте безкоштовно, розвивайте власну практику або організуйте навчання для цілого класу.", "Start free, deepen your own practice, or organize learning for an entire class.")}</p>
           </motion.div>
@@ -126,7 +126,7 @@ export const PricingPage: React.FC = () => {
         <section className="bg-[#101713] text-white">
           <motion.div {...reveal} className="mx-auto grid w-[min(1080px,calc(100%_-_40px))] grid-cols-[.8fr_1.2fr] gap-20 py-24 max-md:grid-cols-1 max-md:gap-10 max-md:py-16">
             <div><span className="text-[11px] font-bold uppercase tracking-[.13em] text-[#6befb0]">{tr("Для команд", "For teams")}</span><h2 className="mt-4 text-[clamp(34px,4vw,50px)] font-bold leading-[1.06] tracking-[-.045em]">{tr("Потрібна інша конфігурація?", "Need a different setup?")}</h2></div>
-            <div className="flex flex-col justify-end"><p className="text-[15px] leading-7 text-[#aab5ad]">{tr("Підберемо пілот для вашої школи, ліцею або освітнього проєкту: потрібна кількість учнів, ролі, підтримка й план впровадження.", "We'll shape a pilot for your school, lyceum, or education project: student seats, roles, support, and a rollout plan.")}</p><button onClick={() => navigate("/support")} className="mt-7 inline-flex h-12 w-fit items-center gap-2 rounded-[14px] bg-white px-5 text-[13px] font-bold text-[#111814]">{tr("Зв'язатися з нами", "Contact us")}<ArrowRight className="size-4" /></button></div>
+            <div className="flex flex-col justify-end"><p className="text-[15px] leading-7 text-[#aab5ad]">{tr("Підберемо пілот для вашої школи, ліцею або освітнього проєкту: потрібна кількість учнів, ролі, підтримка й план впровадження.", "We'll shape a pilot for your school, lyceum, or education project: student seats, roles, support, and a rollout plan.")}</p><button type="button" onClick={() => navigate("/support")} className="mt-7 inline-flex h-12 w-fit items-center gap-2 rounded-[14px] bg-white px-5 text-[13px] font-bold text-[#111814]">{tr("Зв'язатися з нами", "Contact us")}<ArrowRight className="size-4" /></button></div>
           </motion.div>
         </section>
       </main>

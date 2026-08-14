@@ -27,8 +27,10 @@ export const TeacherQuizReviewPage: React.FC = () => {
   const [questions, setQuestions] = useState<OpenQuestion[]>([]);
   const [scores, setScores] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadAttempts = async () => {
+    setError(null);
     const { data } = await api.get(`/edu/lessons/${lessonId}/quiz/attempts`);
     setAttempts(data?.attempts ?? []);
   };
@@ -38,6 +40,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
       try {
         await loadAttempts();
       } catch (error) {
+        setError("Failed to load attempts.");
         showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
       } finally {
         setLoading(false);
@@ -57,6 +60,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
       setScores({});
       setOpenFor(studentId);
     } catch (error) {
+      setError("Failed to load answers.");
       showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
     }
   };
@@ -74,13 +78,14 @@ export const TeacherQuizReviewPage: React.FC = () => {
       setOpenFor(null);
       await loadAttempts();
     } catch (error) {
+      setError("Failed to save grade.");
       showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
     } finally {
       setBusy(false);
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px 48px" }}>
@@ -92,6 +97,15 @@ export const TeacherQuizReviewPage: React.FC = () => {
         eyebrowAurora={tr("Перевірка", "Review")}
         title={tr("Спроби вікторини", "Quiz attempts")}
       />
+
+      {error && (
+        <div role="alert" style={{ marginTop: 16, padding: 12, borderRadius: 8, background: "rgba(220, 70, 100, 0.12)" }}>
+          <div>{error}</div>
+          <Button variant="ghost" onClick={() => void loadAttempts()} style={{ marginTop: 8 }}>
+            {tr("Спробувати ще раз", "Try again")}
+          </Button>
+        </div>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
         {attempts.length === 0 && <p style={{ opacity: 0.6 }}>{tr("Ще немає спроб.", "No attempts yet.")}</p>}

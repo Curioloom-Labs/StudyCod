@@ -475,7 +475,7 @@ export const ClassGradebookPage: React.FC = () => {
           {/* Filter */}
           <div className="mt-4 flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono uppercase tracking-[0.08em] text-text-muted">{t("filter")}:</span>
-            <button onClick={() => setSelectedLesson("all")} className={`px-3 py-1 text-xs font-mono rounded-full border transition-fast ${selectedLesson === "all" ? "border-primary bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:border-primary/40"}`}>
+            <button type="button" onClick={() => setSelectedLesson("all")} className={`px-3 py-1 text-xs font-mono rounded-full border transition-fast ${selectedLesson === "all" ? "border-primary bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:border-primary/40"}`}>
               {tr("Всі уроки", "All lessons")}
             </button>
             {(() => {
@@ -498,7 +498,7 @@ export const ClassGradebookPage: React.FC = () => {
                 }
               }
             }
-            return Array.from(topicsMap.values()).map(topic => <button key={`TOPIC-${topic.id}`} onClick={() => setSelectedLesson(topic.id)} className={`px-3 py-1 text-xs font-mono rounded-full border transition-fast ${selectedLesson === topic.id ? "border-primary bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:border-primary/40"}`}>
+            return Array.from(topicsMap.values()).map(topic => <button type="button" key={`TOPIC-${topic.id}`} onClick={() => setSelectedLesson(topic.id)} className={`px-3 py-1 text-xs font-mono rounded-full border transition-fast ${selectedLesson === topic.id ? "border-primary bg-primary/10 text-text-primary" : "border-border text-text-secondary hover:text-text-primary hover:border-primary/40"}`}>
                   {topic.title}
                 </button>);
           })()}
@@ -529,7 +529,7 @@ export const ClassGradebookPage: React.FC = () => {
                             </div>
                           </div>
                           {}
-                          {task.type !== "SUMMARY" && <button onClick={async e => {
+                          {task.type !== "SUMMARY" && <button type="button" onClick={async e => {
                         e.stopPropagation();
                         if (!confirm(tr(`Ви впевнені, що хочете відкликати завдання "${task.title}"? Всі оцінки будуть видалені.`, `Are you sure you want to unassign "${task.title}"? All grades will be deleted.`))) {
                           return;
@@ -550,7 +550,7 @@ export const ClassGradebookPage: React.FC = () => {
                       }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:text-accent-error/80 text-xs font-bold" title={tr("Відкликати завдання", "Unassign task")}>
                               ×
                             </button>}
-                          {task.type === "SUMMARY" && gradebook.students.some(s => s.grades.some(g => g.lessonType === "SUMMARY" && g.taskId === task.id && g.gradeId)) && <button onClick={async e => {
+                          {task.type === "SUMMARY" && gradebook.students.some(s => s.grades.some(g => g.lessonType === "SUMMARY" && g.taskId === task.id && g.gradeId)) && <button type="button" onClick={async e => {
                         e.stopPropagation();
                         if (!classId) return;
                         if (!confirm(tr(`Видалити тематичну для теми "${task.lessonTitle}"? Це прибере оцінки для всіх учнів.`, `Delete thematic for topic "${task.lessonTitle}"? This will remove grades for all students.`))) {
@@ -571,7 +571,7 @@ export const ClassGradebookPage: React.FC = () => {
                       }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-accent-error hover:text-accent-error/80 p-1" title={tr("Видалити тематичну", "Delete thematic")}>
                               <Trash2 className="w-3 h-3" />
                             </button>}
-                          {task.type === "SUMMARY" && <button onClick={e => {
+                          {task.type === "SUMMARY" && <button type="button" onClick={e => {
                         e.stopPropagation();
                         void recalculateThematicForTopic(task.id, task.lessonTitle);
                       }} className="absolute top-1 right-7 opacity-0 group-hover:opacity-100 transition-opacity text-text-muted hover:text-primary p-1" title={tr("Автоматично порахувати тематичну", "Auto-calculate thematic")} disabled={calculatingThematic}>

@@ -1,6 +1,8 @@
 language: PYTHON
+course: computer-vision
 topics:
   - title: Зображення як масив даних
+    key: zobrazhennya-yak-masyv-danykh
     description: читати shape/dtype | пояснювати канали | перевіряти діапазон
     order: 1
     exerciseFocus: "перевірити масив і точно передбачити його властивості"
@@ -112,6 +114,7 @@ topics:
 
         Формат даних важливіший за назву бібліотеки.
   - title: Завантаження і колірні простори
+    key: zavantazhennya-i-kolirni-prostory
     description: перевіряти декодування | розрізняти RGB/BGR | обробляти режими
     order: 2
     exerciseFocus: "перевірити очікуваний формат до pipeline"
@@ -224,6 +227,7 @@ topics:
 
         Завантаження — частина алгоритму, не службовий рядок.
   - title: Resize, crop і нормалізація
+    key: resize-crop-i-normalizatsiya
     description: пояснити resize/crop | нормалізувати без втрат | зберігати aspect ratio
     order: 3
     exerciseFocus: "порівняти властивості до і після підготовки"
@@ -335,6 +339,7 @@ topics:
 
         Preprocessing має бути відтворюваним і узгодженим із навчанням.
   - title: Фільтри і згортка
+    key: filtry-i-zhortka
     description: пояснити згортку | розрізняти blur/sharpen | пов'язати kernel і detail
     order: 4
     exerciseFocus: "змінити один параметр і передбачити ефект"
@@ -441,6 +446,7 @@ topics:
 
         Фільтр — локальне перетворення з компромісом шум/деталі.
   - title: Градієнти і межі
+    key: hradiyenty-i-mezhi
     description: пояснити gradient | застосувати Canny | інтерпретувати пороги
     order: 5
     exerciseFocus: "порівняти дві карти меж із різними порогами"
@@ -547,6 +553,7 @@ topics:
 
         Пошук меж виділяє зміни, але не розпізнає об'єкт.
   - title: Пороги і бінарні маски
+    key: porohy-i-binarni-masky
     description: будувати маску | порівнювати RGB/HSV | оцінювати пороги
     order: 6
     exerciseFocus: "передбачити, чи маска буде порожньою"
@@ -656,6 +663,7 @@ topics:
 
         Маска — гіпотеза про область, яку треба перевіряти на різних даних.
   - title: Контури і геометричні ознаки
+    key: kontury-i-heometrychni-oznaky
     description: знаходити контури | фільтрувати шум | будувати bounding box
     order: 7
     exerciseFocus: "обробити порожню й непорожню маску"
@@ -768,6 +776,7 @@ topics:
 
         Контур дає геометрію, не семантичну назву.
   - title: Ознаки і просте порівняння
+    key: oznaky-i-proste-porivnyannya
     description: визначати ознаки | пояснювати масштаб | помічати нестійкі вимірювання
     order: 8
     exerciseFocus: "порівняти два об'єкти за двома ознаками"
@@ -880,6 +889,7 @@ topics:
 
         Ознаки — вимірювані властивості, а не готові класи.
   - title: Classification, detection і segmentation
+    key: classification-detection-i-segmentation
     description: розрізняти задачі CV | читати confidence | формувати output-контракт
     order: 9
     exerciseFocus: "зіставити три задачі з їхнім output"
@@ -984,6 +994,7 @@ topics:
 
         Постановка задачі визначає модель, output і метрику.
   - title: Оцінювання і відповідальне використання
+    key: otsinyuvannya-i-vidpovidalne-vykorystannya
     description: розрізняти precision/recall | читати помилки | називати обмеження
     order: 10
     exerciseFocus: "знайти слабкий клас у маленькому report"
@@ -1098,6 +1109,7 @@ topics:
         CV — це дані, pipeline, метрики й відповідальність, а не лише виклик
         моделі.
   - title: "CV: NumPy shape, dtype і пам’ять зображення"
+    key: cv-numpy-shape-dtype-i-pam-yat-zobrazhennya
     description: читати shape і dtype | відрізняти HWC від CHW | оцінювати пам’ять масиву
     order: 11
     exerciseFocus: "перевірити shape, dtype і діапазон перед обробкою зображення"
@@ -1161,6 +1173,7 @@ topics:
         ### Підсумок
         Перед CV-алгоритмом перевірте shape, dtype, channel order, діапазон і memory footprint.
   - title: "CV: гістограми та контраст"
+    key: cv-histohramy-ta-kontrast
     description: побудувати гістограму інтенсивностей | відрізнити global і local
       contrast | не плутати histogram із просторовою інформацією
     order: 12
@@ -1272,6 +1285,7 @@ topics:
         Гістограма — сильний інструмент діагностики інтенсивностей, але вона не
         замінює просторові ознаки.
   - title: "CV: морфологічні операції та структурний елемент"
+    key: cv-morfolohichni-operatsii-ta-strukturnyy-element
     description: застосувати erosion і dilation | пояснити kernel | обрати opening
       або closing для шуму
     order: 13
@@ -1388,6 +1402,7 @@ topics:
         Морфологія — це керована зміна геометрії маски; kernel і порядок
         операцій є частиною алгоритмічного контракту.
   - title: "CV: template matching і його обмеження"
+    key: cv-template-matching-i-yoho-obmezhennya
     description: знайти template у зображенні | прочитати score і координати |
       пояснити чутливість до scale та rotation
     order: 14
@@ -1511,6 +1526,7 @@ topics:
         Template matching — прозорий baseline для стабільних шаблонів, але його
         межі потрібно вимірювати на даних.
   - title: "CV: відеопотік, кадри та backpressure"
+    key: cv-videopotik-kadry-ta-backpressure
     description: прочитати відеокадри | коректно обробити кінець потоку | не
       накопичувати необмежену чергу кадрів
     order: 15
@@ -1632,6 +1648,7 @@ topics:
         Відеообробка — це не лише алгоритм кадру, а й lifecycle джерела, темп,
         черга та cleanup.
   - title: "CV: оптичний потік і tracking baseline"
+    key: cv-optychnyy-potik-i-tracking-baseline
     description: відрізнити tracking від detection | пояснити вектори руху | оцінити
       втрату точки
     order: 16
@@ -1746,6 +1763,7 @@ topics:
         Tracking економить обчислення, але потребує контролю валідності та
         відновлення після втрати.
   - title: "CV: camera calibration і distortion"
+    key: cv-camera-calibration-i-distortion
     description: пояснити intrinsic parameters | оцінити distortion | зрозуміти роль
       calibration images
     order: 17
@@ -1856,6 +1874,7 @@ topics:
         Calibration — це оцінювання геометричної моделі камери; різноманітні
         дані та незалежна перевірка критичні.
   - title: "CV: data augmentation і reproducibility"
+    key: cv-data-augmentation-i-reproducibility
     description: створити контрольовані варіації зображень | фіксувати random seed |
       не допустити leakage між train і test
     order: 18
@@ -1966,6 +1985,7 @@ topics:
         Якісна augmentation є контрольованою, відтворюваною та узгодженою з
         labels і реальними умовами.
   - title: "CV: batch processing і pipeline quality gates"
+    key: cv-batch-processing-i-pipeline-quality-gates
     description: обробляти директорію детерміновано | ізолювати помилки одного файлу
       | формувати summary metrics
     order: 19

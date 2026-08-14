@@ -3631,7 +3631,7 @@ export const ContestPage: React.FC = () => {
                 ) : (
                   <div className="divide-y divide-border">
                     {copyItems.map((t) => (
-                      <button
+                      <button type="button"
                         key={t.id}
                         className={`w-full text-left p-2 hover:bg-bg-hover ${String(t.id) === String(copyLibraryTaskId) ? "bg-bg-hover" : ""}`}
                         onClick={() => setCopyLibraryTaskId(String(t.id))}
@@ -4161,7 +4161,7 @@ export const ContestPage: React.FC = () => {
                         return (
                           <tr key={p.id} className={`odd:bg-bg-base even:bg-bg-surface ${isSolved ? "border-l-2 border-l-accent-success" : isAttempted ? "border-l-2 border-l-accent-warn" : ""}`}>
                             <td className="p-2 border-b border-border">
-                              <button
+                              <button type="button"
                                 className="text-primary hover:underline"
                                 disabled={disabled}
                                 onClick={() => navigate(`/contests/${data.contest.id}/problems/${p.id}`)}

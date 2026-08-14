@@ -153,7 +153,7 @@ export const ControlStudioPage: React.FC = () => {
 
   return (
     <div className={root}>
-      <button onClick={() => navigate(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu")} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"><ArrowLeft className="h-4 w-4" />До теми</button>
+      <button type="button" onClick={() => navigate(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu")} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"><ArrowLeft className="h-4 w-4" />До теми</button>
 
       <header className="rounded-[34px] bg-[#fff3e1] p-6 dark:bg-[#302513] sm:p-10">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b76a00] dark:text-[#ffca7e]">Контрольна точка · {control.topic?.title || "EDU"}</p>
@@ -199,7 +199,7 @@ export const ControlStudioPage: React.FC = () => {
               <Sparkles className="h-5 w-5 text-[#e17800]" />
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              <button disabled={busy} onClick={() => void generateQuiz()} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"><Wand2 className="h-4 w-4" />{busy ? "Готуємо…" : hasQuiz ? "Перегенерувати" : "Згенерувати"}</button>
+              <button type="button" disabled={busy} onClick={() => void generateQuiz()} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"><Wand2 className="h-4 w-4" />{busy ? "Готуємо…" : hasQuiz ? "Перегенерувати" : "Згенерувати"}</button>
               <button type="button" onClick={normalizeQuiz} className="rounded-xl border border-[#19291d]/10 px-4 py-3 text-sm font-bold dark:border-white/10">Форматувати JSON</button>
             </div>
             <textarea value={quizText} onChange={(event) => setQuizText(event.target.value)} rows={16} spellCheck={false} className="mt-5 w-full resize-y rounded-2xl border border-[#19291d]/10 bg-[#fbfdfb] p-4 font-mono text-xs leading-6 outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1710]" placeholder={'[{"question":"...","options":{"A":"...","B":"..."},"correct":"A"}]'} />
@@ -217,7 +217,7 @@ export const ControlStudioPage: React.FC = () => {
             <textarea value={formula} onChange={(event) => setFormula(event.target.value)} rows={3} className="mt-3 w-full resize-none rounded-xl border border-[#19291d]/10 bg-white px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
             <p className="mt-2 text-xs leading-5 text-[#708077] dark:text-[#a6b4a9]">Наприклад: <code>0.35 * test + 0.65 * avg(practice)</code></p>
           </div>
-          <button disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"><Save className="h-4 w-4" />{busy ? "Зберігаємо…" : "Зберегти"}</button>
+          <button type="button" disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"><Save className="h-4 w-4" />{busy ? "Зберігаємо…" : "Зберегти"}</button>
         </aside>
       </main>
     </div>

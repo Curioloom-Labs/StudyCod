@@ -95,7 +95,7 @@ export const GradeStudioPage: React.FC = () => {
         : "bg-[#fff0f5] text-[#bd4067] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
   return (
     <div className={root}>
-      <button
+      <button type="button"
         onClick={() => navigate(-1)}
         className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"
       >
@@ -184,7 +184,7 @@ export const GradeStudioPage: React.FC = () => {
               Збереження оновить і оцінку, і коментар у поточній роботі учня.
             </p>
           </div>
-          <button
+          <button type="button"
             disabled={busy}
             onClick={() => void save()}
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"

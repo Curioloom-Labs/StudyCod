@@ -84,7 +84,7 @@ export const DocsExperience: React.FC<Props> = ({
     return <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[#0b100d] dark:text-[#edf3ef]">
       <PublicProductNav active="docs" />
       <main className="mx-auto w-[min(1180px,calc(100%_-_32px))] py-8 sm:py-12">
-        <button onClick={onBack} className="group inline-flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[12px] font-bold text-[#667169] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#151c17] dark:text-[#aab5ad]">
+        <button type="button" onClick={onBack} className="group inline-flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[12px] font-bold text-[#667169] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#151c17] dark:text-[#aab5ad]">
           <ArrowLeft className="size-4 transition group-hover:-translate-x-0.5" />
           {tr("До всіх інструкцій", "Back to all guides")}
         </button>
@@ -96,7 +96,7 @@ export const DocsExperience: React.FC<Props> = ({
               <p className="mt-2 text-[12px] leading-5 text-[#748078] dark:text-[#96a299]">{tr("Продовжити за темою", "Continue this topic")}</p>
             </div>
             <nav className="space-y-1">
-              {sameAudience.map(section => <button key={section.id} onClick={() => open(section.id)} className="w-full rounded-[13px] px-3 py-2.5 text-left text-[12px] font-semibold leading-[1.45] text-[#657269] transition hover:bg-[#f0f3ef] hover:text-[#111814] dark:text-[#9da9a1] dark:hover:bg-white/[.05] dark:hover:text-white">{section.title}</button>)}
+              {sameAudience.map(section => <button type="button" key={section.id} onClick={() => open(section.id)} className="w-full rounded-[13px] px-3 py-2.5 text-left text-[12px] font-semibold leading-[1.45] text-[#657269] transition hover:bg-[#f0f3ef] hover:text-[#111814] dark:text-[#9da9a1] dark:hover:bg-white/[.05] dark:hover:text-white">{section.title}</button>)}
             </nav>
           </aside>
 
@@ -114,7 +114,7 @@ export const DocsExperience: React.FC<Props> = ({
                   <p className="mt-6 max-w-[650px] text-[16px] leading-7 text-[#657269] dark:text-[#a7b2aa]">{sectionDescription(selected.content)}</p>
                   <div className="mt-6 flex flex-wrap gap-2">{selected.tags.slice(0, 4).map(tag => <span key={tag} className="rounded-full bg-[#eef2ed] px-3 py-1.5 text-[10px] font-semibold text-[#718078] dark:bg-white/[.06] dark:text-[#9da9a1]">{tag}</span>)}</div>
                 </div>
-                <button onClick={onCopyLink} className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[#122017]/10 text-[#667169] transition hover:bg-[#f1f4f0] dark:border-white/10 dark:text-[#9da9a1] dark:hover:bg-white/5" title={tr("Копіювати посилання", "Copy link")}><Copy className="size-4" /></button>
+                <button type="button" onClick={onCopyLink} className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[#122017]/10 text-[#667169] transition hover:bg-[#f1f4f0] dark:border-white/10 dark:text-[#9da9a1] dark:hover:bg-white/5" title={tr("Копіювати посилання", "Copy link")}><Copy className="size-4" /></button>
               </div>
             </header>
 
@@ -123,7 +123,7 @@ export const DocsExperience: React.FC<Props> = ({
             </div>
 
             <footer className="border-t border-[#122017]/10 bg-[#f8faf7] p-[clamp(24px,4vw,42px)] dark:border-white/10 dark:bg-[#0e1410]">
-              <button onClick={() => open(next.id)} className="group flex w-full items-center justify-between gap-6 rounded-[20px] border border-[#122017]/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#00b963]/30 dark:border-white/10 dark:bg-[#151c17]">
+              <button type="button" onClick={() => open(next.id)} className="group flex w-full items-center justify-between gap-6 rounded-[20px] border border-[#122017]/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#00b963]/30 dark:border-white/10 dark:bg-[#151c17]">
                 <span><span className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#00884a] dark:text-[#62ecaa]">{tr("Наступний гайд", "Next guide")}</span><strong className="mt-2 block text-[16px] leading-5">{next.title}</strong></span>
                 <ArrowRight className="size-5 shrink-0 text-[#809087] transition group-hover:translate-x-1 group-hover:text-[#00a85c]" />
               </button>
@@ -206,13 +206,13 @@ export const DocsExperience: React.FC<Props> = ({
             <span className="text-[11px] font-extrabold uppercase tracking-[.14em] text-[#00884a] dark:text-[#62ecaa]">{tr("Швидкий старт", "Quick start")}</span>
             <h2 className="mt-2 text-[clamp(30px,4vw,40px)] font-bold tracking-[-.045em]">{tr("Оберіть свій сценарій", "Choose your workflow")}</h2>
           </div>
-          <button onClick={onTour} className="flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[12px] font-bold text-[#667169] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#151c17] dark:text-[#aab5ad]">
+          <button type="button" onClick={onTour} className="flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[12px] font-bold text-[#667169] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#151c17] dark:text-[#aab5ad]">
             <Sparkles className="size-4 text-[#00a85c]" />{tr("Тур інтерфейсом", "Interface tour")}
           </button>
         </div>
 
         <div className="mt-7 grid grid-cols-3 gap-3 max-md:grid-cols-1">
-          {tracks.map(({ Icon, label, title, description, steps, target, accent }) => <button key={label} onClick={() => open(target)} className={`${surface} group rounded-[24px] p-6 text-left shadow-[0_16px_45px_rgba(18,32,23,.045)] transition hover:-translate-y-1 dark:shadow-[0_16px_45px_rgba(0,0,0,.16)]`}>
+          {tracks.map(({ Icon, label, title, description, steps, target, accent }) => <button type="button" key={label} onClick={() => open(target)} className={`${surface} group rounded-[24px] p-6 text-left shadow-[0_16px_45px_rgba(18,32,23,.045)] transition hover:-translate-y-1 dark:shadow-[0_16px_45px_rgba(0,0,0,.16)]`}>
             <span className={`grid size-11 place-items-center rounded-[14px] ${accent}`}><Icon className="size-5" /></span>
             <span className="mt-7 block text-[11px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{label}</span>
             <h3 className="mt-2 text-[19px] font-bold leading-[1.22] tracking-[-.035em]">{title}</h3>
@@ -229,14 +229,14 @@ export const DocsExperience: React.FC<Props> = ({
             <p className="mt-2 text-[14px] text-[#718078] dark:text-[#9da9a1]">{filtered.length} {tr("матеріалів у вибраному розділі", "articles in the selected view")}</p>
           </div>
           <div className="flex gap-1 rounded-2xl border border-[#122017]/10 bg-white p-1 dark:border-white/10 dark:bg-[#151c17]">
-            {(["ALL", "EDU", "PERSONAL"] as DocsAudience[]).map(value => <button key={value} onClick={() => setAudience(value)} className={`rounded-xl px-4 py-2.5 text-[11px] font-extrabold transition ${audience === value ? "bg-[#111814] text-white dark:bg-[#edf3ef] dark:text-[#111814]" : "text-[#718078] hover:text-[#111814] dark:text-[#8e9a92] dark:hover:text-white"}`}>{value === "ALL" ? tr("Усі", "All") : value === "PERSONAL" ? "Personal" : "EDU"}</button>)}
+            {(["ALL", "EDU", "PERSONAL"] as DocsAudience[]).map(value => <button type="button" key={value} onClick={() => setAudience(value)} className={`rounded-xl px-4 py-2.5 text-[11px] font-extrabold transition ${audience === value ? "bg-[#111814] text-white dark:bg-[#edf3ef] dark:text-[#111814]" : "text-[#718078] hover:text-[#111814] dark:text-[#8e9a92] dark:hover:text-white"}`}>{value === "ALL" ? tr("Усі", "All") : value === "PERSONAL" ? "Personal" : "EDU"}</button>)}
           </div>
         </div>
 
         {filtered.length ? <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map(section => {
             const active = selected.id === section.id;
-            return <button key={section.id} onClick={() => open(section.id)} className={`${surface} group min-h-[196px] rounded-[21px] p-5 text-left transition hover:-translate-y-0.5 hover:border-[#00b963]/30 ${active ? "ring-2 ring-[#00b963]/20" : ""}`}>
+            return <button type="button" key={section.id} onClick={() => open(section.id)} className={`${surface} group min-h-[196px] rounded-[21px] p-5 text-left transition hover:-translate-y-0.5 hover:border-[#00b963]/30 ${active ? "ring-2 ring-[#00b963]/20" : ""}`}>
               <div className="flex items-start justify-between gap-3">
                 <span className="rounded-lg bg-[#edf0eb] px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-[.08em] text-[#667169] dark:bg-[#202821] dark:text-[#a0aba3]">{audienceLabel(section.audience, tr)}</span>
                 <ArrowRight className="size-4 text-[#9aa59d] transition group-hover:translate-x-1 group-hover:text-[#00a85c]" />

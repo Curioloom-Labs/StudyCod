@@ -317,7 +317,7 @@ export const MomentumShell: React.FC<Props> = ({
     <div data-ui-mode={ui.mode} className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex">
       <aside className="hidden lg:flex w-[64px] xl:w-[76px] border-r border-border bg-bg-surface flex-col items-stretch">
         <div className="h-[72px] flex items-center justify-center border-b border-border">
-          <button
+          <button type="button"
             onClick={() => onNavigate(primaryHomeId)}
             className="w-11 h-11 rounded-xl border border-border bg-bg-code flex items-center justify-center hover:bg-bg-hover transition-fast"
             title="StudyCod"
@@ -334,7 +334,7 @@ export const MomentumShell: React.FC<Props> = ({
               const Icon = it.icon;
               const active = current === it.id;
               return (
-                <button
+                <button type="button"
                   key={it.id}
                   onClick={() => onNavigate(it.id)}
                   {...prefetchProps(it.id)}
@@ -355,7 +355,7 @@ export const MomentumShell: React.FC<Props> = ({
         </nav>
 
         <div className="py-4 border-t border-border flex flex-col items-stretch gap-2">
-          <button
+          <button type="button"
             onClick={() => navigate("/docs")}
             className="mx-2 h-11 rounded-xl flex items-center justify-center border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
             title={t("help")}
@@ -365,7 +365,7 @@ export const MomentumShell: React.FC<Props> = ({
           </button>
 
           <div className="relative" ref={menuRef}>
-            <button
+            <button type="button"
               onClick={() => setMenuOpen(v => !v)}
               className="mx-2 h-11 w-[calc(100%-16px)] rounded-xl flex items-center justify-center border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
               title={t("menu")}
@@ -381,7 +381,7 @@ export const MomentumShell: React.FC<Props> = ({
                   <div className="px-3 py-2 text-xs font-mono font-medium tracking-[0.03em] text-text-secondary border-b border-border">
                     {t("account")}
                   </div>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setMenuOpen(false);
                       onNavigate("profile");
@@ -390,7 +390,7 @@ export const MomentumShell: React.FC<Props> = ({
                   >
                     {t("profile")}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setMenuOpen(false);
                       navigate("/docs");
@@ -399,7 +399,7 @@ export const MomentumShell: React.FC<Props> = ({
                   >
                     {t("help")}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setMenuOpen(false);
                       cycleUIMode();
@@ -408,7 +408,7 @@ export const MomentumShell: React.FC<Props> = ({
                   >
                     {t("interfaceLabel")}: {currentUIModeName}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setMenuOpen(false);
                       onLogout();
@@ -429,7 +429,7 @@ export const MomentumShell: React.FC<Props> = ({
         <div className="min-h-[58px] py-2 flex items-center justify-between px-3 md:px-4 border-b border-border bg-bg-base">
           <div className="min-w-0 flex items-center gap-2">
             {isCompactViewport ? (
-              <button
+              <button type="button"
                 onClick={() => onNavigate(primaryHomeId)}
                 className="w-11 h-11 rounded-xl border border-border bg-bg-surface flex items-center justify-center hover:bg-bg-hover transition-fast"
                 aria-label={t("goToSession")}
@@ -442,7 +442,7 @@ export const MomentumShell: React.FC<Props> = ({
               <span className="truncate">{currentLabel}</span>
             </div>
             {!isCompactViewport ? (
-              <button
+              <button type="button"
                 onClick={() => setPaletteOpen(true)}
                 className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-bg-surface text-xs font-mono text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast"
                 aria-label={searchLabel}
@@ -457,7 +457,7 @@ export const MomentumShell: React.FC<Props> = ({
           <div className="flex items-center gap-2 sm:gap-3 pl-2">
             {!isCompactViewport ? topRight : null}
             {isCompactViewport ? (
-              <button
+              <button type="button"
                 onClick={() => setPaletteOpen(true)}
                 className="h-11 w-11 rounded-xl border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center justify-center"
                 aria-label={searchLabel}
@@ -467,7 +467,7 @@ export const MomentumShell: React.FC<Props> = ({
                 <Search className="w-4 h-4" />
               </button>
             ) : null}
-            <button
+            <button type="button"
               onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium tracking-[0.03em] border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}
@@ -479,7 +479,7 @@ export const MomentumShell: React.FC<Props> = ({
 
             {isCompactViewport ? (
               <div className="relative" ref={menuRef}>
-                <button
+                <button type="button"
                   onClick={() => setMenuOpen((v) => !v)}
                   className="h-11 w-11 rounded-xl border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center justify-center"
                   aria-label={t("menu")}
@@ -503,7 +503,7 @@ export const MomentumShell: React.FC<Props> = ({
                         {mobileOverflowItems.map((it) => {
                           const Icon = it.icon;
                           return (
-                            <button
+                            <button type="button"
                               key={`mnav-${it.id}`}
                               onClick={() => {
                                 setMenuOpen(false);
@@ -523,7 +523,7 @@ export const MomentumShell: React.FC<Props> = ({
                     <div className="px-3 py-2 text-xs font-mono font-medium tracking-[0.03em] text-text-secondary border-y border-border">
                       {t("account")}
                     </div>
-                    <button
+                    <button type="button"
                       onClick={() => {
                         setMenuOpen(false);
                         onNavigate("profile");
@@ -532,7 +532,7 @@ export const MomentumShell: React.FC<Props> = ({
                     >
                       {t("profile")}
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => {
                         setMenuOpen(false);
                         navigate("/docs");
@@ -541,7 +541,7 @@ export const MomentumShell: React.FC<Props> = ({
                     >
                       {t("help")}
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => {
                         setMenuOpen(false);
                         cycleUIMode();
@@ -550,7 +550,7 @@ export const MomentumShell: React.FC<Props> = ({
                     >
                       {t("interfaceLabel")}: {currentUIModeName}
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => {
                         setMenuOpen(false);
                         onLogout();
@@ -586,10 +586,11 @@ export const MomentumShell: React.FC<Props> = ({
               const Icon = it.icon;
               const active = current === it.id;
               return (
-                <button
+                <button type="button"
                   key={`bottom-${it.id}`}
                   onClick={() => onNavigate(it.id)}
                   {...prefetchProps(it.id)}
+                  aria-current={active ? "page" : undefined}
                   className={`min-h-12 rounded-xl border px-1 py-1.5 flex flex-col items-center justify-center gap-1 transition-fast ${active ? "border-primary bg-primary/12 text-primary" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
                   aria-label={it.label}
                   aria-pressed={active}

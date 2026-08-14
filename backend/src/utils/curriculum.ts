@@ -45,6 +45,199 @@ export type CurriculumTopic = {
   sourceHash: string;
 };
 
+export type CurriculumQualityIssue = {
+  severity: "error" | "warning";
+  courseKey: string;
+  topicKey: string;
+  message: string;
+};
+
+export type CurriculumQualityReport = {
+  ok: boolean;
+  courses: Array<{
+    courseKey: string;
+    topicCount: number;
+    errorCount: number;
+    warningCount: number;
+  }>;
+  issues: CurriculumQualityIssue[];
+};
+
+/**
+ * The learner-facing lesson contract shared by every specialization course.
+ * Core courses are the pedagogical reference, while these headings are the
+ * stable machine-checkable boundary for the newer course family.
+ */
+export const CORE_LESSON_HEADINGS = [
+  "Інтуїтивне пояснення",
+  "Що відбувається під час виконання",
+  "Мінімальний приклад коду",
+  "Пояснення кожного рядка прикладу",
+  "Спробуй передбачити",
+  "Типові помилки новачка",
+  "На практиці",
+  "Підсумок",
+] as const;
+
+const SPECIALIZATION_COURSE_KEYS = new Set([
+  "python-extensions",
+  "flask",
+  "fastapi",
+  "computer-vision",
+  "java-advanced",
+  "cpp-advanced",
+]);
+
+const FORBIDDEN_LESSON_MARKUP_RE = /(?:STUDYCOD_LEARNING_META|exercise_focus:|^###\s+(?:Крок за кроком|Перед вправою|Підготовка до мініпроєкту)\b)/im;
+const PLACEHOLDER_RE = /\b(?:TODO|TBD|FIXME|lorem ipsum)\b/i;
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function headingEntries(content: string): Array<{ title: string; index: number; end: number }> {
+  const entries: Array<{ title: string; index: number; end: number }> = [];
+  const pattern = /^###\s+([^\r\n]+?)\s*$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(content))) {
+    entries.push({ title: match[1].trim(), index: match.index, end: match.index + match[0].length });
+  }
+  return entries;
+}
+
+function sectionText(content: string, entries: Array<{ title: string; index: number; end: number }>, entryIndex: number): string {
+  const entry = entries[entryIndex];
+  const next = entries[entryIndex + 1];
+  return content.slice(entry.end, next ? next.index : content.length).trim();
+}
+
+function interactiveIssues(content: string, courseKey: string, topicKey: string): CurriculumQualityIssue[] {
+  const issues: CurriculumQualityIssue[] = [];
+  const blocks = [...content.matchAll(/```interactive\s*\n([\s\S]*?)\n```/gi)];
+  for (const [index, block] of blocks.entries()) {
+    let spec: any;
+    try {
+      spec = JSON.parse(block[1]);
+    } catch {
+      issues.push({ severity: "error", courseKey, topicKey, message: `interactive block #${index + 1} contains invalid JSON` });
+      continue;
+    }
+
+    const prefix = `interactive block #${index + 1}`;
+    if (!isRecord(spec) || typeof spec.type !== "string") {
+      issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} must be an object with a type` });
+      continue;
+    }
+
+    if (spec.type === "prediction") {
+      if (typeof spec.question !== "string" || !spec.question.trim()) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs a question` });
+      if (!Array.isArray(spec.options) || spec.options.length < 2) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least two options` });
+      if (!Number.isInteger(spec.answer) || spec.answer < 0 || !Array.isArray(spec.options) || spec.answer >= spec.options.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} has an answer outside the option range` });
+      if (typeof spec.explanation !== "string" || !spec.explanation.trim()) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs an explanation` });
+    } else if (spec.type === "spot-the-bug") {
+      if (!Array.isArray(spec.lines) || spec.lines.length < 2) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least two lines` });
+      if (!Number.isInteger(spec.buggyLine) || spec.buggyLine < 1 || !Array.isArray(spec.lines) || spec.buggyLine > spec.lines.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} has an invalid buggyLine` });
+      if (typeof spec.explanation !== "string" || !spec.explanation.trim()) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs an explanation` });
+    } else if (spec.type === "trace") {
+      if (!Array.isArray(spec.code) || !spec.code.length || !Array.isArray(spec.steps) || !spec.steps.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs code and trace steps` });
+      if (Array.isArray(spec.code) && Array.isArray(spec.steps) && spec.steps.some((step: any) => !Number.isInteger(step?.line) || step.line < 1 || step.line > spec.code.length)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} contains a step outside the code range` });
+    } else if (spec.type === "memory") {
+      if (!Array.isArray(spec.stack) && !Array.isArray(spec.heap)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs stack or heap boxes` });
+    } else if (spec.type === "dispatch") {
+      if (typeof spec.call !== "string" || !spec.call.trim() || !Array.isArray(spec.cases) || !spec.cases.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs a call and at least one case` });
+    } else if (spec.type === "quiz") {
+      if (!Array.isArray(spec.questions) || !spec.questions.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least one question` });
+      for (const [questionIndex, question] of (spec.questions || []).entries()) {
+        if (!isRecord(question) || typeof question.question !== "string" || !Array.isArray(question.options) || !Number.isInteger(question.answer) || question.answer < 0 || question.answer >= question.options.length) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} question #${questionIndex + 1} is malformed` });
+        } else if (typeof question.explanation !== "string" || !question.explanation.trim()) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} question #${questionIndex + 1} needs an explanation` });
+        }
+      }
+    } else {
+      issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} uses unsupported type ${JSON.stringify(spec.type)}` });
+    }
+  }
+  return issues;
+}
+
+function topicQualityIssues(courseKey: string, topic: any, index: number): CurriculumQualityIssue[] {
+  const title = String(topic?.title || "").trim();
+  const topicKey = String(topic?.key || slug(title));
+  const issues: CurriculumQualityIssue[] = [];
+  const add = (severity: "error" | "warning", message: string) => issues.push({ severity, courseKey, topicKey, message });
+  const theory = typeof topic?.theory === "string" ? topic.theory : topic?.theory?.content;
+  const content = typeof theory === "string" ? theory.trim() : "";
+
+  if (!title) add("error", `topic #${index + 1} has no title`);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topicKey)) add("error", "topic key is not a stable kebab-case key");
+  if (!Number.isInteger(Number(topic?.order)) || Number(topic.order) < 1) add("error", "order must be a positive integer");
+  if (!String(topic?.description || "").trim()) add("warning", "description is empty");
+  if (String(topic?.exerciseFocus || "").trim().length < 20) add("error", "exerciseFocus must describe a concrete practice outcome");
+  if (content.length < 1400) add("error", "theory is too short");
+  if (FORBIDDEN_LESSON_MARKUP_RE.test(content)) add("error", "theory contains hidden metadata or a removed template section");
+  const entries = headingEntries(content);
+  if (SPECIALIZATION_COURSE_KEYS.has(courseKey)) {
+    const fences = content.match(/^```[^\r\n]*$/gm) || [];
+    if (fences.length < 2 || fences.length % 2 !== 0) add("error", "code fences are unbalanced");
+    if (!content.match(/^```(?:[a-z0-9+#.-]+)?\s*$/im)) add("error", "theory must contain a fenced code example");
+    if (PLACEHOLDER_RE.test(content)) add("error", "theory contains placeholder text");
+    const isDatabaseTopic = /(бд|jdbc|sql|sqlite|orm|database)/i.test(title);
+    if (!isDatabaseTopic && /(cursor\.execute|PreparedStatement\s+.*SELECT\s+name\s+FROM\s+users|SELECT\s+name\s+FROM\s+users)/i.test(content)) {
+      add("error", "lesson contains a database template fragment unrelated to its topic");
+    }
+    let previousIndex = -1;
+    for (const requiredHeading of CORE_LESSON_HEADINGS) {
+      const matches = entries.filter((entry) => entry.title === requiredHeading);
+      if (matches.length !== 1) add("error", `required section ${JSON.stringify(requiredHeading)} must occur exactly once`);
+      const current = matches[0];
+      if (current && current.index <= previousIndex) add("error", `required section ${JSON.stringify(requiredHeading)} is out of order`);
+      if (current) {
+        const body = sectionText(content, entries, entries.indexOf(current));
+        if (body.trim().length < 24 && !body.includes("```")) add("error", `section ${JSON.stringify(requiredHeading)} is empty`);
+        previousIndex = current.index;
+      }
+    }
+    if (entries.some((entry) => entry.title === "Спробуй передбачити") && entries.filter((entry) => entry.title === "Спробуй передбачити").length > 1) add("error", "prediction section is duplicated");
+    if ((content.match(/```interactive\s*\n/gi) || []).length < 1) add("error", "at least one interactive block is required");
+    if (content.length < 2200) add("warning", "lesson is shorter than the smallest Python Core lesson and needs manual review");
+  }
+
+  issues.push(...interactiveIssues(content, courseKey, topicKey));
+  return issues;
+}
+
+export function auditCurriculum(root = repoRoot()): CurriculumQualityReport {
+  const { manifest } = loadCurriculumManifest(root);
+  const issues: CurriculumQualityIssue[] = [];
+  const courses = manifest.courses.map((course) => {
+    const relative = path.normalize(course.source);
+    const filePath = path.join(root, relative);
+    const parsed = YAML.parse(fs.readFileSync(filePath, "utf8")) as any;
+    const topics = Array.isArray(parsed?.topics) ? parsed.topics : [];
+    if (SPECIALIZATION_COURSE_KEYS.has(course.key)) {
+      if (String(parsed?.course || "") !== course.key) issues.push({ severity: "error", courseKey: course.key, topicKey: "_source", message: "source course metadata must match manifest" });
+      if (String(parsed?.language || "") !== course.runtime) issues.push({ severity: "error", courseKey: course.key, topicKey: "_source", message: "source language metadata must match manifest" });
+    }
+    const seenKeys = new Set<string>();
+    for (const [index, topic] of topics.entries()) {
+      const topicIssues = topicQualityIssues(course.key, topic, index);
+      const topicKey = String(topic?.key || slug(String(topic?.title || "").trim()));
+      if (seenKeys.has(topicKey)) issues.push({ severity: "error", courseKey: course.key, topicKey, message: "duplicate topic key" });
+      seenKeys.add(topicKey);
+      issues.push(...topicIssues);
+    }
+    const courseIssues = issues.filter((issue) => issue.courseKey === course.key);
+    return {
+      courseKey: course.key,
+      topicCount: topics.length,
+      errorCount: courseIssues.filter((issue) => issue.severity === "error").length,
+      warningCount: courseIssues.filter((issue) => issue.severity === "warning").length,
+    };
+  });
+  return { ok: !issues.some((issue) => issue.severity === "error"), courses, issues };
+}
+
 function repoRoot(): string {
   const candidates = [process.env.REPO_ROOT, process.env.STUDYCOD_REPO_ROOT, process.cwd(), path.resolve(__dirname, "../../.."), path.resolve(__dirname, "../../../.."), path.resolve(__dirname, "../../../../../")] 
     .filter(Boolean)
@@ -56,7 +249,7 @@ function sha256(value: string): string {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function slug(value: string): string {
+export function slug(value: string): string {
   const transliteration: Record<string, string> = {
     а: "a", б: "b", в: "v", г: "h", ґ: "g", д: "d", е: "e", є: "ye", ж: "zh", з: "z", и: "y", і: "i", ї: "yi", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "shch", ь: "", ю: "yu", я: "ya",
   };
@@ -151,12 +344,20 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
   assert(fs.existsSync(filePath), `${course.key}: source file not found: ${course.source}`);
   const raw = fs.readFileSync(filePath, "utf8");
   const parsed = YAML.parse(raw) as any;
+  if (SPECIALIZATION_COURSE_KEYS.has(course.key)) {
+    assert(String(parsed?.course || "") === course.key, `${course.key}: source course metadata must match manifest`);
+    assert(String(parsed?.language || "") === course.runtime, `${course.key}: source language metadata must match manifest`);
+  }
   assert(Array.isArray(parsed?.topics) && parsed.topics.length > 0, `${course.key}: source has no topics`);
   const keys = new Set<string>();
   return parsed.topics.map((topic: any, index: number) => {
     const theory = typeof topic?.theory === "string" ? topic.theory : topic?.theory?.content;
     const title = String(topic?.title || "").trim();
     const key = String(topic?.key || slug(title));
+    if (SPECIALIZATION_COURSE_KEYS.has(course.key)) {
+      const qualityError = topicQualityIssues(course.key, topic, index).find((issue) => issue.severity === "error");
+      assert(!qualityError, `${course.key}/${key}: ${qualityError?.message || "quality check failed"}`);
+    }
     const exerciseFocus = String(topic?.exerciseFocus || "").trim();
     assert(title, `${course.key}: topic #${index + 1} has no title`);
     assert(key && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key), `${course.key}: invalid topic key at #${index + 1}: ${JSON.stringify(key)}`);

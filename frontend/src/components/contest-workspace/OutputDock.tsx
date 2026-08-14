@@ -138,7 +138,7 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
           ["run", "Run", TerminalSquare],
           ["verdicts", "Verdicts", Activity],
         ] as Array<[DockView, string, LucideIcon]>).map(([id, label, Icon]) => (
-          <button
+          <button type="button"
             key={id}
             onClick={() => setView(id)}
             aria-pressed={view === id}
@@ -155,7 +155,7 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
           <>
             {examples.length === 0 ? <div className="rounded-lg border border-border bg-bg-base/70 p-2.5 text-xs text-text-secondary">No parsed examples found in this statement section yet.</div> : null}
             {examples.map((ex) => (
-              <button
+              <button type="button"
                 key={ex.id}
                 onClick={() => onPickExample(ex.input)}
                 className="w-full text-left rounded-xl border border-border bg-bg-base/80 hover:bg-bg-hover transition-fast p-2.5"

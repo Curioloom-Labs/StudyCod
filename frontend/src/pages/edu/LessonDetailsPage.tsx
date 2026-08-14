@@ -739,7 +739,7 @@ export const LessonDetailsPage: React.FC = () => {
     // kiosk lock with no way out.
     return <div className="h-full flex flex-col items-center justify-center gap-4 text-text-primary font-mono">
         <span>{tr("Урок недоступний або його відкликано", "This lesson is unavailable or was recalled")}</span>
-        <button
+        <button type="button"
           onClick={() => {
             clearControlExamSession();
             navigate(user?.studentId ? "/edu/lessons" : "/edu", { replace: true });
@@ -858,7 +858,7 @@ export const LessonDetailsPage: React.FC = () => {
             return <div className="mb-4 space-y-3 max-h-[500px] overflow-y-auto pr-2">
                     {quiz.map((q: QuizQuestion, index: number) => <div key={index} className="p-3 border border-border bg-bg-base relative">
                         {user?.userMode === "EDUCATIONAL" && !user?.studentId && <div className="absolute top-2 right-2 flex gap-1">
-                            <button onClick={() => {
+                            <button type="button" onClick={() => {
                     const questionText = q.question || q.q || "";
                     const optionsObj: {
                       А: string;
@@ -890,7 +890,7 @@ export const LessonDetailsPage: React.FC = () => {
                   }} className="text-xs p-1 h-6 w-6 border border-border hover:bg-bg-hover flex items-center justify-center" title={t("edit")}>
                               <Edit2 className="w-3 h-3" />
                             </button>
-                            <button onClick={async () => {
+                            <button type="button" onClick={async () => {
                     if (!confirm(tr("Видалити це питання?", "Delete this question?"))) return;
                     try {
                       const updatedQuiz = [...quiz];
@@ -1860,12 +1860,12 @@ export const LessonDetailsPage: React.FC = () => {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => {
+                            <button type="button" onClick={() => {
                   handleStartEditTest(index, test.id);
                 }} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")} aria-label={t("edit")}>
                               <Edit2 className="w-4 h-4 text-primary" />
                             </button>
-                            <button onClick={() => handleDeleteTest(test.id)} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")} aria-label={t("delete")}>
+                            <button type="button" onClick={() => handleDeleteTest(test.id)} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")} aria-label={t("delete")}>
                               <Trash2 className="w-4 h-4 text-accent-error" />
                             </button>
                           </div>

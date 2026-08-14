@@ -1,6 +1,8 @@
 language: PYTHON
+course: flask
 topics:
   - title: "Flask: застосунок і маршрути"
+    key: flask-zastosunok-i-marshruty
     description: пояснити шлях запиту Flask | створити маршрут із параметром |
       відрізняти відповідь від друку
     order: 1
@@ -115,6 +117,7 @@ topics:
 
         Маршрут — це контракт між клієнтом і функцією.
   - title: "Flask: request і response"
+    key: flask-request-i-response
     description: читати query-параметри | повертати JSON і статуси | перевіряти
       відсутні дані
     order: 2
@@ -236,6 +239,7 @@ topics:
 
         Перевіряйте запит на межі застосунку й повертайте точний статус.
   - title: "Flask: шаблони та статичні файли"
+    key: flask-shablony-ta-statychni-fayly
     description: передавати дані в Jinja2 | пояснити templates і static | уникати
       небезпечного HTML
     order: 3
@@ -349,6 +353,7 @@ topics:
 
         Шаблон відповідає за представлення, Python — за дані й рішення.
   - title: "Flask: форми та валідація"
+    key: flask-formy-ta-validatsiya
     description: читати form-data | будувати серверну валідацію | розрізняти 422 і 500
     order: 4
     exerciseFocus: "одне поле форми з перевіркою порожнього та неправильного значення"
@@ -472,6 +477,7 @@ topics:
 
         Валідація є частиною endpoint, а не декоративним JavaScript.
   - title: "Flask: JSON API і серіалізація"
+    key: flask-json-api-i-serializatsiya
     description: формувати JSON-відповідь | серіалізувати дату | пояснити API-контракт
     order: 5
     exerciseFocus: "одна відповідь із датою та явним типом полів"
@@ -588,6 +594,7 @@ topics:
 
         Стабільний JSON-контракт важливіший за зручність внутрішнього об'єкта.
   - title: "Flask: сесії та автентифікація"
+    key: flask-sesii-ta-avtentyfikatsiya
     description: пояснити сесію Flask | зберігати лише ідентифікатор | назвати захист cookie
     order: 6
     exerciseFocus: "показати безпечну мінімальну структуру login без реального пароля"
@@ -705,6 +712,7 @@ topics:
 
         Сесія — механізм стану, а автентифікація — доказ ідентичності.
   - title: "Flask: Blueprints і структура"
+    key: flask-blueprints-i-struktura
     description: групувати маршрути | застосовувати app factory | пояснити ізоляцію тестів
     order: 7
     exerciseFocus: "зібрати один blueprint і перевірити його префікс"
@@ -824,6 +832,7 @@ topics:
         Factory створює застосунок, blueprint групує функціональність, route
         залишається тонким.
   - title: "Flask: база даних і транзакції"
+    key: flask-baza-danykh-i-tranzaktsii
     description: пояснити транзакцію | використовувати параметризований SQL |
       відрізнити ORM від БД
     order: 8
@@ -934,6 +943,7 @@ topics:
 
         ORM не замінює розуміння SQL та гарантій бази.
   - title: "Flask: помилки, логування і тести"
+    key: flask-pomylky-lohuvannya-i-testy
     description: створити error handler | логувати без секретів | тестувати endpoint
     order: 9
     exerciseFocus: "перевірити 404 і JSON-повідомлення тестом"
@@ -1049,6 +1059,7 @@ topics:
         Помилки мають бути стабільними клієнту, деталізованими в логах і
         перевіреними.
   - title: "Flask: безпечний deployment"
+    key: flask-bezpechnyy-deployment
     description: відокремити dev від production | читати environment | назвати
       deployment-ризики
     order: 10
@@ -1166,6 +1177,7 @@ topics:
 
         Надійний deployment — це код плюс процес запуску, секрети, логи й TLS.
   - title: "Flask: конфігурація та application factory"
+    key: flask-konfihuratsiya-ta-application-factory
     description: розділити створення застосунку й запуск | завантажити конфігурацію
       без секретів у коді | підготувати тестовий режим
     order: 11
@@ -1282,6 +1294,7 @@ topics:
         Application factory зменшує прихований глобальний стан і є базою для
         тестованої Flask-архітектури.
   - title: "Flask: контексти застосунку й запиту"
+    key: flask-konteksty-zastosunku-y-zapytu
     description: відрізняти app context від request context | безпечно
       використовувати current_app і g | розуміти межі локальних даних
     order: 12
@@ -1405,6 +1418,7 @@ topics:
         Контексти Flask приховують передачу поточного стану, але цей стан має
         чіткий lifecycle і не є глобальним сховищем.
   - title: "Flask: CSRF і безпечні HTML-форми"
+    key: flask-csrf-i-bezpechni-html-formy
     description: пояснити CSRF-ризик cookie-сесій | додати token до state-changing
       форми | розрізняти CSRF і XSS
     order: 13
@@ -1527,6 +1541,7 @@ topics:
         CSRF — це захист цілісності cookie-authenticated дій; його перевіряють
         на сервері до зміни даних.
   - title: "Flask: authentication, authorization і password hashing"
+    key: flask-authentication-authorization-i-password-hashing
     description: відрізняти identity від permission | не зберігати пароль у
       відкритому вигляді | захистити ресурс server-side
     order: 14
@@ -1652,6 +1667,7 @@ topics:
         Надійна Flask-автентифікація — це hash credential, явна identity,
         server-side permission і стабільні 401/403 контракти.
   - title: "Flask: CLI-команди та керовані операції"
+    key: flask-cli-komandy-ta-kerovani-operatsii
     description: створити Flask CLI command | відокремити операцію від HTTP |
       зробити команду тестованою
     order: 15
@@ -1726,6 +1742,7 @@ topics:
         ### Підсумок
         Flask CLI — окремий, тестований канал для операторських задач; він не замінює HTTP API.
   - title: "Flask: кешування, ETag і conditional requests"
+    key: flask-keshuvannya-etag-i-conditional-requests
     description: пояснити cache headers | сформувати ETag | не віддавати застарілу
       відповідь без перевірки
     order: 16
@@ -1846,6 +1863,7 @@ topics:
         HTTP-кешування — це контракт валідності, а не просто прискорення;
         приватність і інвалідація важливіші за один header.
   - title: "Flask: background jobs і черги"
+    key: flask-background-jobs-i-cherhy
     description: відрізняти коротку background task від черги | повернути 202 для
       довгої операції | зберігати статус job
     order: 17
@@ -1979,6 +1997,7 @@ topics:
         Для довгих операцій Flask endpoint приймає роботу, а окремий worker і
         status endpoint відповідають за lifecycle job.
   - title: "Flask: observability і health checks"
+    key: flask-observability-i-health-checks
     description: відрізняти liveness від readiness | додати request id і
       структуроване логування | не світити секрети
     order: 18

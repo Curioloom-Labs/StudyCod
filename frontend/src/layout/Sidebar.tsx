@@ -71,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <p className="text-xs text-text-muted truncate">{(user.activeRuntime || "PYTHON") === 'JAVA' ? 'Java' : (user.activeRuntime || "PYTHON") === 'CPP' ? 'C++' : 'Python'} course</p>
           </div>
         </div>
-        <button onClick={onLogout} className="w-full flex items-center space-x-3 px-4 py-2 text-accent-error hover:bg-accent-error/10 hover:text-accent-error rounded-none border border-transparent hover:border-accent-error/20 transition-fast">
+        <button type="button" onClick={onLogout} className="w-full flex items-center space-x-3 px-4 py-2 text-accent-error hover:bg-accent-error/10 hover:text-accent-error rounded-none border border-transparent hover:border-accent-error/20 transition-fast">
           <LogOut size={18} />
           <span className="text-xs">{t('logout')}</span>
         </button>

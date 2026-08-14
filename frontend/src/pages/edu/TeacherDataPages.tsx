@@ -324,7 +324,7 @@ export const GradebookWorkspace: React.FC = () => {
         }
       />
 
-      {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]">{error}</div>}
+      {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]" role="alert">{error}</div>}
       {!data ? (
         <div className="h-80 animate-pulse rounded-[28px] bg-[#e8eeea] dark:bg-white/[.05]" />
       ) : (
@@ -452,7 +452,7 @@ export const SummaryGradesWorkspace: React.FC = () => {
         text="Це архів і перегляд. Створення тематичних та семестрових перенесено в журнал класу, щоб оцінювання не дублювалось."
         actions={<button type="button" onClick={() => navigate(`/edu/classes/${classId}/gradebook${preview() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]">Відкрити журнал <ChevronRight className="size-4" /></button>}
       />
-      {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]">{error}</div>}
+      {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]" role="alert">{error}</div>}
       <div className="mb-5 rounded-[24px] border border-[#19291d]/10 bg-white px-5 py-4 text-sm dark:border-white/10 dark:bg-[#111b14]">
         <div className="text-xs font-bold uppercase tracking-[.14em] text-[#718075] dark:text-[#a6b4a9]">Система оцінювання класу</div>
         <div className="mt-1 text-lg font-bold">{gradingSystemLabel(gradingSystem, false)}</div>

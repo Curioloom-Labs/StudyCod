@@ -224,7 +224,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
                 <div className="text-xs font-bold uppercase tracking-[.16em] text-[#72edb0]">Перевірка пристроїв</div>
                 <h1 className="mt-1 text-xl font-bold text-white">{joinInfo.session.title || "Живий урок"}</h1>
               </div>
-              <button onClick={() => void handleLeave()} className="inline-flex items-center gap-2 rounded-xl bg-white/8 px-4 py-2 text-sm font-bold text-white hover:bg-white/12"><ArrowLeft className="size-4" />Назад</button>
+              <button type="button" onClick={() => void handleLeave()} className="inline-flex items-center gap-2 rounded-xl bg-white/8 px-4 py-2 text-sm font-bold text-white hover:bg-white/12"><ArrowLeft className="size-4" />Назад</button>
             </div>
             <div className="min-h-[560px] p-4" data-lk-theme="default">
               <PreJoin
@@ -263,7 +263,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               <Tool active={sidePanel === "board"} onClick={() => setSidePanel("board")} icon={<PenSquare className="size-4" />} label="Дошка" />
               <Tool active={sidePanel === "code"} onClick={() => setSidePanel("code")} icon={<Code2 className="size-4" />} label="Код" />
               {isTeacher && <Tool active={breakoutsOpen} onClick={() => setBreakoutsOpen((value) => !value)} icon={<Users className="size-4" />} label="Групи" />}
-              {isTeacher && <button disabled={busy} onClick={() => void handleEnd()} className="inline-flex items-center gap-2 rounded-xl border border-[#ff6b9d]/35 bg-[#ff6b9d]/12 px-3 py-2 text-sm font-bold text-[#ff9ab8] hover:bg-[#ff6b9d]/18 disabled:opacity-50"><PhoneOff className="size-4" />Завершити</button>}
+              {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="inline-flex items-center gap-2 rounded-xl border border-[#ff6b9d]/35 bg-[#ff6b9d]/12 px-3 py-2 text-sm font-bold text-[#ff9ab8] hover:bg-[#ff6b9d]/18 disabled:opacity-50"><PhoneOff className="size-4" />Завершити</button>}
             </div>
           </header>
 
@@ -309,7 +309,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
                   icon={<WifiOff className="size-6 text-[#ff9ab8]" />}
                   title="Не вдалося підключитися до відеосервера"
                   subtitle={`Сервер ${activeRoom.url} не відповідає. Перевірте LiveKit і мережу.`}
-                  action={<button onClick={() => { setRoomConn("connecting"); setRetryNonce((n) => n + 1); }} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2 text-sm font-bold text-[#062211]"><RotateCcw className="size-4" />Повторити</button>}
+                  action={<button type="button" onClick={() => { setRoomConn("connecting"); setRetryNonce((n) => n + 1); }} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2 text-sm font-bold text-[#062211]"><RotateCcw className="size-4" />Повторити</button>}
                 />
               )}
             </section>
@@ -342,18 +342,18 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
           <div className="p-6">
             {phase === "loading" && <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text="Завантаження…" />}
             {phase === "disabled" && <StatusCard tone="warn" title="LiveKit не налаштовано" text="Відеоуроки вимкнені на цьому сервері. Потрібно налаштувати LiveKit перед запуском кімнат." />}
-            {phase === "error" && <StatusCard tone="danger" title="Помилка live-кімнати" text={error || "Не вдалося завантажити live-сесію."} action={<button onClick={() => void refreshActive()} className="mt-4 rounded-xl bg-[#00d978] px-4 py-2 text-sm font-bold text-[#062211]">Спробувати ще раз</button>} />}
+            {phase === "error" && <StatusCard tone="danger" title="Помилка live-кімнати" text={error || "Не вдалося завантажити live-сесію."} action={<button type="button" onClick={() => void refreshActive()} className="mt-4 rounded-xl bg-[#00d978] px-4 py-2 text-sm font-bold text-[#062211]">Спробувати ще раз</button>} />}
             {phase === "lobby" && (
               session ? (
                 <div className="rounded-2xl border border-[#00ff88]/25 bg-[#00ff88]/8 p-5">
                   <div className="flex items-center gap-2 text-sm font-bold text-[#147b47] dark:text-[#72edb0]"><span className="size-2 rounded-full bg-[#00d978]" />Урок уже триває</div>
                   <div className="mt-2 text-lg font-bold">{session.title || "Без назви"}</div>
-                  <button disabled={busy} onClick={() => void handleJoin()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-bold text-[#062211] disabled:opacity-50"><PlayCircle className="size-4" />Приєднатися</button>
+                  <button type="button" disabled={busy} onClick={() => void handleJoin()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-bold text-[#062211] disabled:opacity-50"><PlayCircle className="size-4" />Приєднатися</button>
                 </div>
               ) : isTeacher ? (
                 <div>
                   <p className="text-sm text-[#647369] dark:text-[#a6b4a9]">Активного уроку зараз немає. Запустіть кімнату, перевірте камеру й запросіть клас.</p>
-                  <button disabled={busy} onClick={() => void handleStart()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-bold text-[#062211] disabled:opacity-50"><PlayCircle className="size-4" />Розпочати урок</button>
+                  <button type="button" disabled={busy} onClick={() => void handleStart()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-bold text-[#062211] disabled:opacity-50"><PlayCircle className="size-4" />Розпочати урок</button>
                 </div>
               ) : (
                 <StatusCard title="Очікуємо викладача" text="Кімната відкриється автоматично, коли викладач розпочне урок." />
@@ -375,7 +375,7 @@ const LiveClassroomPreview: React.FC = () => {
     <LiveShell>
       <div className="flex h-[calc(100dvh-72px)] flex-col gap-3 p-3 sm:p-4">
         <header className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-[#101812]/92 px-4 py-3 text-white">
-          <button onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="inline-flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-sm font-bold hover:bg-white/12"><ArrowLeft className="size-4" />11-А · Python</button>
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="inline-flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-sm font-bold hover:bg-white/12"><ArrowLeft className="size-4" />11-А · Python</button>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-2 rounded-full bg-[#00ff88]/12 px-3 py-1.5 text-xs font-bold text-[#72edb0]"><span className="size-1.5 animate-pulse rounded-full bg-current" />LIVE · 32:14</span>
             <Tool active={panel === "people"} onClick={() => setPanel("people")} icon={<Users className="size-4" />} label="Люди" />
@@ -410,7 +410,7 @@ const LiveClassroomPreview: React.FC = () => {
               <MeetButton icon={<Mic className="size-4" />} label="Мікрофон" />
               <MeetButton icon={<Video className="size-4" />} label="Камера" />
               <MeetButton icon={<MonitorUp className="size-4" />} label="Екран" />
-              <button className="rounded-full bg-[#d94f65] px-4 py-2 text-sm font-bold text-white"><PhoneOff className="mr-2 inline size-4" />Вийти</button>
+              <button type="button" className="rounded-full bg-[#d94f65] px-4 py-2 text-sm font-bold text-white"><PhoneOff className="mr-2 inline size-4" />Вийти</button>
             </div>
           </section>
 
@@ -418,7 +418,7 @@ const LiveClassroomPreview: React.FC = () => {
             <PanelHeader panel={panel} onPanel={setPanel} />
             <div className="min-h-0 overflow-auto p-5">
               {panel === "people" && <StudentSide />}
-              {panel === "materials" && <div className="space-y-4"><h2 className="font-bold">Матеріали уроку</h2><p className="text-sm leading-6 text-[#69796e] dark:text-[#a9b6ac]">Після пояснення учні відкривають практику, виконують задачу й повертаються до обговорення помилок.</p><button className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]">Відкрити задачу</button></div>}
+              {panel === "materials" && <div className="space-y-4"><h2 className="font-bold">Матеріали уроку</h2><p className="text-sm leading-6 text-[#69796e] dark:text-[#a9b6ac]">Після пояснення учні відкривають практику, виконують задачу й повертаються до обговорення помилок.</p><button type="button" className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]">Відкрити задачу</button></div>}
               {panel === "code" && <pre className="rounded-2xl bg-[#101510] p-4 text-xs leading-6 text-[#9af2bf]">{`total = 0\nfor number in values:\n    if number % 2 == 0:\n        total += number\nprint(total)`}</pre>}
             </div>
           </aside>
@@ -429,9 +429,9 @@ const LiveClassroomPreview: React.FC = () => {
 };
 
 const LiveShell: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="min-h-[calc(100dvh-72px)] bg-[#07100a] text-[#edf4ef]">{children}</div>;
-const Tool: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => <button onClick={onClick} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${active ? "bg-[#edf3ef] text-[#0b120e]" : "bg-white/8 text-[#dbe6de] hover:bg-white/12"}`}>{icon}{label}</button>;
-const MeetButton: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, label }) => <button className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15">{icon}{label}</button>;
-const PanelHeader: React.FC<{ panel: SidePanel; onPanel: (panel: SidePanel) => void }> = ({ panel, onPanel }) => <div className="grid grid-cols-4 gap-1 border-b border-[#19291d]/10 p-2 dark:border-white/10">{(["people", "materials", "board", "code"] as SidePanel[]).map((item) => <button key={item} onClick={() => onPanel(item)} className={`rounded-xl px-2 py-2 text-xs font-bold ${panel === item ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "text-[#718075] hover:bg-[#f1f4f1] dark:text-[#a6b4a9] dark:hover:bg-white/[.06]"}`}>{item === "people" ? "Люди" : item === "materials" ? "Матеріали" : item === "board" ? "Дошка" : "Код"}</button>)}</div>;
+const Tool: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => <button type="button" onClick={onClick} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${active ? "bg-[#edf3ef] text-[#0b120e]" : "bg-white/8 text-[#dbe6de] hover:bg-white/12"}`}>{icon}{label}</button>;
+const MeetButton: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, label }) => <button type="button" className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/15">{icon}{label}</button>;
+const PanelHeader: React.FC<{ panel: SidePanel; onPanel: (panel: SidePanel) => void }> = ({ panel, onPanel }) => <div className="grid grid-cols-4 gap-1 border-b border-[#19291d]/10 p-2 dark:border-white/10">{(["people", "materials", "board", "code"] as SidePanel[]).map((item) => <button type="button" key={item} onClick={() => onPanel(item)} className={`rounded-xl px-2 py-2 text-xs font-bold ${panel === item ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "text-[#718075] hover:bg-[#f1f4f1] dark:text-[#a6b4a9] dark:hover:bg-white/[.06]"}`}>{item === "people" ? "Люди" : item === "materials" ? "Матеріали" : item === "board" ? "Дошка" : "Код"}</button>)}</div>;
 const StudentSide: React.FC = () => <div className="space-y-3">{["Олена Кравець", "Марія Бондар", "Андрій Шевченко", "Софія Ткаченко"].map((name, index) => <div key={name} className="flex items-center justify-between rounded-2xl bg-[#f5f8f5] p-3 dark:bg-white/[.045]"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-xl bg-[#153321] text-sm font-bold text-[#72edb0]">{name[0]}</span><span className="text-sm font-semibold">{name}</span></div>{index === 2 ? <span className="rounded-full bg-[#ffd93d] px-2 py-0.5 text-[10px] font-bold text-[#3e3100]">рука</span> : <span className="size-2 rounded-full bg-[#00d978]" />}</div>)}</div>;
 const StatusLine: React.FC<{ icon: React.ReactNode; text: string }> = ({ icon, text }) => <div className="flex items-center gap-2 text-sm font-semibold text-[#647369] dark:text-[#a6b4a9]">{icon}{text}</div>;
 const StatusCard: React.FC<{ tone?: "default" | "warn" | "danger"; title: string; text: string; action?: React.ReactNode }> = ({ tone = "default", title, text, action }) => <div className={`rounded-2xl p-5 ${tone === "danger" ? "bg-[#fff0f4] text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ff9ab8]" : tone === "warn" ? "bg-[#fff8ec] text-[#9a5a00] dark:bg-[#ff8c00]/10 dark:text-[#ffbf72]" : "bg-[#f5f8f5] text-[#647369] dark:bg-white/[.045] dark:text-[#a6b4a9]"}`}><div className="font-bold">{title}</div><p className="mt-2 text-sm leading-6">{text}</p>{action}</div>;

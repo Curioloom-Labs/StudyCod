@@ -1615,12 +1615,12 @@ export const ControlWorkDetailsPage: React.FC = () => {
                               {test.isHidden ? ` • ${tr("прихований", "hidden")}` : ""}
                             </span>
                             <div className="flex gap-2">
-                              <button onClick={() => {
+                              <button type="button" onClick={() => {
                       handleStartEditTestData(index, test.id);
                     }} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-primary transition-fast" title={t("edit")} aria-label={t("edit")}>
                                 <Edit2 className="w-4 h-4 text-primary" />
                               </button>
-                              <button onClick={() => handleDeleteTestData(test.id)} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")} aria-label={t("delete")}>
+                              <button type="button" onClick={() => handleDeleteTestData(test.id)} className="h-11 w-11 flex items-center justify-center border border-border bg-bg-surface hover:bg-bg-hover hover:border-accent-error transition-fast" title={t("delete")} aria-label={t("delete")}>
                                 <Trash2 className="w-4 h-4 text-accent-error" />
                               </button>
                             </div>

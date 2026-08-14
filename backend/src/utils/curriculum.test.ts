@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadCurriculumMiniProjects, loadCurriculumTopics, validateCurriculum } from "./curriculum";
+import { auditCurriculum, CORE_LESSON_HEADINGS, loadCurriculumMiniProjects, loadCurriculumTopics, slug, validateCurriculum } from "./curriculum";
 
 test("curriculum manifest is valid and every course has theory", () => {
   const result = validateCurriculum();
@@ -91,4 +91,48 @@ test("no theory file contains the removed template headings", () => {
       assert.doesNotMatch(topic.content, /^###\s+(?:Крок за кроком|Перед вправою|Підготовка до мініпроєкту)\b/im, topic.title);
     }
   }
+});
+
+test("specialization lessons keep stable keys and the canonical Core section order", () => {
+  const result = validateCurriculum();
+  const specializationKeys = ["python-extensions", "flask", "fastapi", "computer-vision", "java-advanced", "cpp-advanced"];
+  let topicCount = 0;
+
+  for (const courseKey of specializationKeys) {
+    for (const topic of result.topics[courseKey]) {
+      topicCount += 1;
+      assert.equal(topic.key, slug(topic.title), `${courseKey}/${topic.title} key must remain title-derived`);
+      let previous = -1;
+      for (const heading of CORE_LESSON_HEADINGS) {
+        const index = topic.content.indexOf(`### ${heading}`);
+        assert.ok(index >= 0, `${courseKey}/${topic.key} missing ${heading}`);
+        assert.ok(index > previous, `${courseKey}/${topic.key} has ${heading} out of order`);
+        assert.equal(topic.content.indexOf(`### ${heading}`, index + 1), -1, `${courseKey}/${topic.key} duplicates ${heading}`);
+        previous = index;
+      }
+      assert.match(topic.content, /```interactive\s*\n/i, `${courseKey}/${topic.key} needs an interactive check`);
+    }
+  }
+
+  assert.equal(topicCount, 130);
+});
+
+test("curriculum quality report is clean for all courses", () => {
+  const report = auditCurriculum();
+  assert.equal(report.ok, true);
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(
+    report.courses.map((course) => [course.courseKey, course.topicCount, course.errorCount, course.warningCount]),
+    [
+      ["python-core", 30, 0, 0],
+      ["java-core", 29, 0, 0],
+      ["cpp-core", 30, 0, 0],
+      ["python-extensions", 22, 0, 0],
+      ["flask", 18, 0, 0],
+      ["fastapi", 31, 0, 0],
+      ["computer-vision", 19, 0, 0],
+      ["java-advanced", 20, 0, 0],
+      ["cpp-advanced", 20, 0, 0],
+    ],
+  );
 });

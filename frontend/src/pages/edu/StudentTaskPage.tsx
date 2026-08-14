@@ -160,6 +160,7 @@ export const StudentTaskPage: React.FC = () => {
   const [useFiles, setUseFiles] = useState(false);
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [running, setRunning] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState("");
@@ -630,7 +631,7 @@ export const StudentTaskPage: React.FC = () => {
   }, [user?.id, taskIdNum, resumeStep, currentDraftKey]);
   useEffect(() => {
     if (taskId) {
-      loadTask();
+      void loadTask();
     }
   }, [taskId]);
   useEffect(() => {
@@ -757,10 +758,16 @@ export const StudentTaskPage: React.FC = () => {
     }
   }, [task?.id]);
   const loadTask = async (): Promise<TaskWithGrade | null> => {
-    if (!taskId) return null;
+    if (!taskId) {
+      setLoadError(tr("Не знайдено ідентифікатор задачі.", "The task identifier is missing."));
+      setLoading(false);
+      return null;
+    }
+    setLoadError(null);
     try {
       const data = await getTask(parseInt(taskId, 10));
       setTask(data);
+      setLoadError(null);
       setLearningFeedback(null);
       setLearningAttempt(null);
       setLearningFeedbackMeta(null);
@@ -924,6 +931,7 @@ export const StudentTaskPage: React.FC = () => {
         toastInfo(tr("Доступ до цієї задачі контрольної закрито. Повертаємось до контрольної.", "Access to this control-work task is closed. Returning to control work."));
         navigateToLessonPage(true);
       }
+      setLoadError(getErrorMessage(error, tr("Не вдалося завантажити задачу.", "Could not load the task.")));
       return null;
     } finally {
       setLoading(false);
@@ -1445,9 +1453,15 @@ export const StudentTaskPage: React.FC = () => {
     return <PageSkeleton variant="default" />;
   }
   if (!task) {
-    return <div className="h-full flex items-center justify-center text-text-primary font-mono">
-        {t("taskNotFound")}
-      </div>;
+    return <div className="mx-auto flex min-h-[60vh] max-w-xl items-center justify-center px-4 text-center text-text-primary">
+      <div className="w-full rounded-2xl border border-border bg-bg-surface p-6 shadow-sm" role="alert" aria-live="assertive">
+        <p className="font-mono text-sm">{loadError ?? t("taskNotFound")}</p>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <Button variant="primary" onClick={() => void loadTask()}>{tr("Повторити", "Retry")}</Button>
+          <Button variant="ghost" onClick={() => handleBack()}>{t("back")}</Button>
+        </div>
+      </div>
+    </div>;
   }
   const hasTheory = task.lesson.hasTheory && task.lesson.theory && task.lesson.theory.trim().length > 0;
   const showTheory = !theoryAcknowledged && hasTheory;
@@ -1531,6 +1545,11 @@ export const StudentTaskPage: React.FC = () => {
     };
     return <div className="min-h-full bg-[#f7f8f5] px-3 py-4 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-5 lg:px-8">
       <div className="mx-auto max-w-[1800px]">
+        <nav aria-label={tr("Навігація задачі", "Task navigation")} className="mb-3 flex min-w-0 items-center gap-2 overflow-hidden text-xs font-semibold text-[#718075] dark:text-[#9eada1]">
+          <button type="button" onClick={handleBack} className="max-w-[45%] truncate rounded-lg px-2 py-1 text-left hover:bg-white/60 hover:text-[#147b47] dark:hover:bg-white/[.06] dark:hover:text-[#72edb0]">{task.lesson.title}</button>
+          <span aria-hidden="true">/</span>
+          <span className="min-w-0 truncate text-[#1b2820] dark:text-[#edf5ef]">{task.title}</span>
+        </nav>
         <StudyCodIDEWorkspace
           task={ideTask}
           theory={hasTheory ? task.lesson.theory || null : null}
@@ -1611,8 +1630,8 @@ export const StudentTaskPage: React.FC = () => {
             {(timeRemaining !== null && task.lesson.type === "CONTROL") || (deadlineRemaining !== null && !task.isClosed) ? (
               <div className={`flex-shrink-0 items-center ${timeRemaining !== null && task.lesson.type === "CONTROL" ? "flex" : "hidden sm:flex"}`}>
                 {timeRemaining !== null && task.lesson.type === "CONTROL" ? (
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-sm font-semibold border ${timeRemaining <= 5 ? "text-accent-error border-accent-error/40 bg-accent-error/10" : timeRemaining <= 10 ? "text-accent-warning border-accent-warning/40 bg-accent-warning/10" : "text-accent-warn border-accent-warn/40 bg-accent-warn/10"}`}>
-                    <Clock className="w-3.5 h-3.5" />
+                  <span role="status" aria-live="polite" className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-sm font-semibold border ${timeRemaining <= 5 ? "text-accent-error border-accent-error/40 bg-accent-error/10" : timeRemaining <= 10 ? "text-accent-warning border-accent-warning/40 bg-accent-warning/10" : "text-accent-warn border-accent-warn/40 bg-accent-warn/10"}`}>
+                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                     {Math.floor(timeRemaining)} {tr("хв", "min")}
                   </span>
                 ) : deadlineRemaining !== null && !task.isClosed ? (
@@ -1640,7 +1659,7 @@ export const StudentTaskPage: React.FC = () => {
                     <Play className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">{tr("Запустити", "Run")}</span>
                   </Button>}
 
-                <Button variant="primary" size="sm" onClick={handleSubmit} disabled={submitting || !canSubmit} className="px-3">
+                <Button variant="primary" size="sm" onClick={handleSubmit} disabled={submitting || !canSubmit} className="px-3" aria-label={submitting ? tr("Перевірка…", "Checking…") : tr("Відправити рішення", "Submit solution")}>
                   <Send className="w-4 h-4 sm:mr-1.5" />
                   <span className="hidden sm:inline">{submitting ? tr("Перевірка...", "Checking...") : tr("Відправити", "Submit")}</span>
                 </Button>
@@ -1752,7 +1771,7 @@ export const StudentTaskPage: React.FC = () => {
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-bg-base" ref={setTaskPaneEl}>
                 {task.isClosed && (
-                  <div className="mb-4 rounded-[var(--ui-card-radius)] border border-accent-error/40 bg-accent-error/10 p-3">
+                  <div className="mb-4 rounded-[var(--ui-card-radius)] border border-accent-error/40 bg-accent-error/10 p-3" role="alert">
                     <div className="flex items-start gap-2">
                       <Lock className="w-4 h-4 shrink-0 text-accent-error mt-0.5" />
                       <div className="min-w-0">
@@ -1938,7 +1957,7 @@ export const StudentTaskPage: React.FC = () => {
                     {}
                     <div className="flex-1 overflow-y-auto p-4">
                       {}
-                      {isRunningTests && Object.keys(testProgress).length > 0 ? <div className="space-y-2">
+                      {isRunningTests && Object.keys(testProgress).length > 0 ? <div className="space-y-2" role="status" aria-live="polite">
                           <div className="flex items-center gap-2 text-xs font-mono text-text-primary mb-3">
                             <Loader2 className="w-3 h-3 animate-spin text-primary" />
                             <span>{tr("Перевіряємо код...", "Checking code...")}</span>
@@ -1958,7 +1977,7 @@ export const StudentTaskPage: React.FC = () => {
                                     <span className="text-accent-error">{tr("Тест", "Test")} {index + 1}</span>
                                   </>}
                               </div>)}
-                        </div> : consoleOutput ? <pre className="text-xs text-text-secondary whitespace-pre-wrap m-0" style={{
+                        </div> : consoleOutput ? <pre role="status" aria-live="polite" className="text-xs text-text-secondary whitespace-pre-wrap m-0" style={{
                   fontFamily: 'ui-monospace, SFMono-Regular, "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace'
                 }}>
                           {consoleOutput}

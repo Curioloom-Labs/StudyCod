@@ -652,7 +652,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 <div className="space-y-3">
                   <h3 className="text-sm font-mono text-text-primary">{t("programmingLanguage")}</h3>
                   <div className="flex gap-2">
-                    <button
+                    <button type="button"
                       className={`flex-1 py-2 px-4 border font-mono text-xs transition-fast ${
                         course === "JAVA" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"
                       }`}
@@ -660,7 +660,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                     >
                       Java
                     </button>
-                    <button
+                    <button type="button"
                       className={`flex-1 py-2 px-4 border font-mono text-xs transition-fast ${
                         course === "PYTHON" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"
                       }`}
@@ -668,7 +668,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                     >
                       Python
                     </button>
-                    <button
+                    <button type="button"
                       className={`flex-1 py-2 px-4 border font-mono text-xs transition-fast ${
                         course === "CPP" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:border-primary/50"
                       }`}
@@ -750,7 +750,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       <div className="text-xs font-mono text-text-primary">{tr("Отримувати інформаційні листи", "Receive informational emails")}</div>
                       <div className="text-[11px] font-mono text-text-secondary mt-1">{emailPrefEmail}</div>
                     </div>
-                    <button
+                    <button type="button"
                       disabled={emailPrefLoading}
                       onClick={async () => {
                         const next = !emailPrefEnabled;
@@ -803,7 +803,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
               {!user.googleId ? (
                 <div className="space-y-3">
                   <h3 className="text-sm font-mono text-text-primary">{t("googleConnection")}</h3>
-                  <button
+                  <button type="button"
                     onClick={async () => {
                       setLinkingGoogle(true);
                       try {
