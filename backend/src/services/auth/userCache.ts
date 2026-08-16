@@ -19,6 +19,7 @@ export type CachedUser = {
   id: number;
   role: UserRole | null;
   userMode: UserMode | null;
+  currentCourseEnrollmentId?: number | null;
 };
 
 const USER_CACHE_TTL_SECONDS = (() => {

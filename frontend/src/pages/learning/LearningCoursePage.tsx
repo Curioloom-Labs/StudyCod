@@ -22,7 +22,6 @@ import {
   getLearningCourse,
   saveCatalogProject,
   submitCatalogProject,
-  submitFinalAssessment,
   type LearningCourse,
   type LearningCourseItem,
   type LearningProject,
@@ -58,7 +57,6 @@ export const LearningCoursePage: React.FC = () => {
   const [projectLoadingId, setProjectLoadingId] = React.useState<number | null>(null);
   const [busyItem, setBusyItem] = React.useState<number | null>(null);
   const [activating, setActivating] = React.useState(false);
-  const [assessmentScore, setAssessmentScore] = React.useState("80");
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -89,7 +87,10 @@ export const LearningCoursePage: React.FC = () => {
   const allItems = course?.modules.flatMap((module) => module.items) ?? [];
   const requiredItems = allItems.filter((item) => item.content.required !== false);
   const completedItems = requiredItems.filter((item) => item.progress.status === "COMPLETED").length;
-  const canAssess = requiredItems.length > 0 && completedItems === requiredItems.length;
+  const finalWork = requiredItems.find((item) => item.content.finalAssessment === true) ?? null;
+  const learningItems = finalWork ? requiredItems.filter((item) => item.id !== finalWork.id) : requiredItems;
+  const learningItemsCompleted = learningItems.filter((item) => item.progress.status === "COMPLETED").length;
+  const canStartFinalWork = Boolean(finalWork && learningItems.length > 0 && learningItemsCompleted === learningItems.length && finalWork.progress.status !== "COMPLETED");
   const courseIsActive = course?.enrollment.status === "IN_PROGRESS" || course?.enrollment.status === "COMPLETED";
 
   const activateCourse = async () => {
@@ -233,24 +234,6 @@ export const LearningCoursePage: React.FC = () => {
     }
   };
 
-  const finishAssessment = async () => {
-    if (!course) return;
-    const score = Number(assessmentScore);
-    if (!Number.isFinite(score) || score < 0 || score > 100) {
-      setError(tr("Введи результат від 0 до 100.", "Enter a score from 0 to 100."));
-      return;
-    }
-    try {
-      await submitFinalAssessment(course.enrollment.id, score);
-      await load();
-      setMessage(score >= 70 ? tr("Курс завершено.", "Course completed.") : tr("Потрібно щонайменше 70%.", "You need at least 70%."));
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "COURSE_ITEMS_INCOMPLETE"
-        ? tr("Заверши всі обов'язкові елементи курсу.", "Complete all required course items first.")
-        : tr("Не вдалося зберегти результат.", "Could not save the result."));
-    }
-  };
-
   const handleNodeClick = (node: RoadmapNode, index: number) => {
     if (!courseIsActive) {
       setMessage(tr("Активуйте курс, щоб відкрити перший вузол.", "Activate the course to open the first node."));
@@ -384,7 +367,7 @@ export const LearningCoursePage: React.FC = () => {
       {selectedItem && selectedNode.kind === "PROJECT" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}{projectLoadingId === selectedItem.id ? <div role="status" className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо дані проєкту…", "Loading project details…")}</div> : selectedProject?.projectSpec ? <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 sm:p-6"><div className="space-y-3">{selectedProject.projectSpec.milestones.map((milestone) => <label key={milestone.id} className="flex items-start gap-3 rounded-xl border border-border bg-bg-surface p-3"><input type="checkbox" checked={selectedProject.progress.milestoneIds.includes(milestone.id)} onChange={(event) => updateProject(selectedItem.id, { milestoneIds: event.target.checked ? [...selectedProject.progress.milestoneIds, milestone.id] : selectedProject.progress.milestoneIds.filter((id) => id !== milestone.id) })} className="mt-1 size-4 accent-primary" /><span className="text-sm"><b className="block text-text-primary">{milestone.title}</b><span className="text-text-secondary">{milestone.description}</span></span></label>)}</div><label className="mt-4 block text-sm font-bold text-text-primary">{tr("Нотатки реалізації", "Implementation notes")}<textarea value={selectedProject.progress.draft} onChange={(event) => updateProject(selectedItem.id, { draft: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label><label className="mt-4 block text-sm font-bold text-text-primary">README<textarea value={selectedProject.progress.readme} onChange={(event) => updateProject(selectedItem.id, { readme: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label>{selectedProject.projectSpec.checkSpec && <><label className="mt-4 block text-sm font-bold text-text-primary">Files JSON<textarea value={projectFiles[selectedItem.id] || ""} onChange={(event) => setProjectFiles((current) => ({ ...current, [selectedItem.id]: event.target.value }))} className="mt-2 min-h-28 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-xs font-normal text-text-primary" /></label><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void checkProject(selectedItem)} className="rounded-xl border border-primary px-4 py-2 text-sm font-bold text-primary disabled:opacity-45">{tr("Запустити перевірку", "Run check")}</button></>}<div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, false)} className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-text-primary disabled:opacity-45"><Save className="mr-2 inline size-4" />{tr("Зберегти", "Save")}</button><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-45"><Send className="mr-2 inline size-4" />{tr("Подати", "Submit")}</button></div></div> : <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary">{tr("Дані проєкту ще завантажуються або недоступні.", "Project details are still loading or unavailable.")}</div>}</div>}
     </section>}
 
-    <section className="mt-6 rounded-[26px] border border-border bg-bg-surface p-6 shadow-sm"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна перевірка", "Final assessment")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{canAssess ? tr("Усі обов'язкові елементи завершено. Для завершення курсу потрібно щонайменше 70%.", "All required items are complete. You need at least 70% to finish the course.") : `${completedItems} / ${requiredItems.length} ${tr("обов'язкових елементів завершено", "required items completed")}.`}</p>{canAssess && <div className="mt-5 flex flex-wrap gap-3"><input type="number" min="0" max="100" value={assessmentScore} onChange={(event) => setAssessmentScore(event.target.value)} className="w-28 rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm text-text-primary" /><button type="button" onClick={() => void finishAssessment()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">{tr("Завершити курс", "Complete course")}</button></div>}</div></div></section>
+    <section className="mt-6 rounded-[26px] border border-border bg-bg-surface p-6 shadow-sm"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна робота", "Final work")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{finalWork?.progress.status === "COMPLETED" ? tr("Фінальну роботу подано. Курс завершено.", "The final work was submitted. The course is complete.") : `${learningItemsCompleted} / ${learningItems.length} ${tr("навчальних елементів завершено", "learning items completed")}. ${tr("Заверши маршрут, потім подай фінальну роботу з описом рішення та перевіркою.", "Complete the path, then submit the final work with implementation notes and verification.")}`}</p>{finalWork && finalWork.progress.status !== "COMPLETED" && <button type="button" disabled={!canStartFinalWork} onClick={() => { setSelectedNodeId(`project-${finalWork.id}`); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45">{canStartFinalWork ? tr("Відкрити фінальну роботу", "Open final work") : tr("Заверши маршрут спочатку", "Complete the path first")}</button>}</div></div></section>
   </main>;
 };
 

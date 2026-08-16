@@ -1,5 +1,5 @@
 import React from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen,
@@ -114,13 +114,15 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   if (!shellUser) return <>{children}</>;
 
   const education = shellUser.userMode === "EDUCATIONAL";
+  if (education && current === "catalog") {
+    return <Navigate to={shellUser.studentId ? "/edu/lessons" : "/edu"} replace />;
+  }
   const nav = education
     ? [
         { key: "learn", label: shellUser.studentId ? (ukrainian ? "Уроки" : "Lessons") : (ukrainian ? "Класи" : "Classes"), icon: GraduationCap, path: shellUser.studentId ? "/edu/lessons" : "/edu" },
         { key: "grades", label: ukrainian ? "Журнал" : "Journal", icon: Trophy, path: shellUser.studentId ? "/edu/journal" : "/edu/gradebook" },
         { key: "tasks", label: ukrainian ? "Календар" : "Calendar", icon: Compass, path: "/edu/calendar" },
         { key: "library", label: ukrainian ? "Бібліотека" : "Library", icon: BookOpen, path: "/edu/library" },
-        { key: "catalog", label: ukrainian ? "Курси" : "Courses", icon: Compass, path: "/learning/catalog" },
       ]
     : [
         { key: "home", label: ukrainian ? "Огляд" : "Overview", icon: Home, path: "/" },

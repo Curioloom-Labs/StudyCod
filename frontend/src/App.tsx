@@ -54,6 +54,12 @@ const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfileP
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
 const LearningCatalogPage = React.lazy(() => import("./pages/learning/LearningCatalogPage").then(mod => ({ default: mod.LearningCatalogPage })));
 const LearningCoursePage = React.lazy(() => import("./pages/learning/LearningCoursePage").then(mod => ({ default: mod.LearningCoursePage })));
+const LegacyAppPageRedirect: React.FC<{ page: string }> = ({ page }) => {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.set("app", page);
+  return <Navigate to={`/?${params.toString()}`} replace />;
+};
 const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
 const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherWorkspacePage").then(mod => ({ default: mod.TeacherWorkspacePage })));
 const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassHubPage").then(mod => ({ default: mod.ClassHubPage })));
@@ -1422,10 +1428,10 @@ export const App: React.FC = () => {
                 <Navigate to="/?app=profile" replace />
               </RequireToken>} />
           <Route path="/tasks" element={<RequireToken>
-                <Navigate to="/?app=tasks" replace />
+                <LegacyAppPageRedirect page="tasks" />
               </RequireToken>} />
           <Route path="/grades" element={<RequireToken>
-                <Navigate to="/?app=grades" replace />
+                <LegacyAppPageRedirect page="grades" />
               </RequireToken>} />
           <Route path="/admin" element={<RequireToken>
                 <Navigate to="/?app=admin" replace />

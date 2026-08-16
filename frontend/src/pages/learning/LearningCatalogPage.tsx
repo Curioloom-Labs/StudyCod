@@ -1,7 +1,7 @@
 import React from "react";
 import { BookOpen, CheckCircle2, ChevronRight, LoaderCircle, LockKeyhole, RefreshCw, Route } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { getLearningCatalog, enrollInCatalogCourse, type CatalogCourse, type CatalogVariant } from "../../lib/api/learningCatalog";
+import { getLearningCatalog, getLearningMe, enrollInCatalogCourse, type CatalogCourse, type CatalogVariant, type LearningMe } from "../../lib/api/learningCatalog";
 import { tr } from "../../i18n";
 
 function levelLabel(level: CatalogCourse["level"]): string {
@@ -13,6 +13,7 @@ function levelLabel(level: CatalogCourse["level"]): string {
 export const LearningCatalogPage: React.FC = () => {
   const navigate = useNavigate();
   const [courses, setCourses] = React.useState<CatalogCourse[]>([]);
+  const [learningMe, setLearningMe] = React.useState<LearningMe | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [busyVariant, setBusyVariant] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -21,7 +22,9 @@ export const LearningCatalogPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      setCourses(await getLearningCatalog());
+      const [catalog, me] = await Promise.all([getLearningCatalog(), getLearningMe()]);
+      setCourses(catalog);
+      setLearningMe(me);
     } catch {
       setError(tr("Не вдалося завантажити каталог навчання.", "Could not load the learning catalog."));
     } finally {
@@ -57,7 +60,7 @@ export const LearningCatalogPage: React.FC = () => {
 
   const activeVariantId = courses
     .flatMap((course) => course.variants)
-    .find((variant) => variant.enrollment?.status === "IN_PROGRESS")?.id ?? null;
+    .find((variant) => variant.enrollment?.id === learningMe?.currentEnrollmentId)?.id ?? null;
 
   return <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
     <header className="mb-8 max-w-3xl">
@@ -65,7 +68,18 @@ export const LearningCatalogPage: React.FC = () => {
       <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] sm:text-5xl">{tr("Каталог навчання", "Learning catalog")}</h1>
       <p className="mt-4 text-base leading-7 text-text-secondary">{tr("Один акаунт — багато послідовних навчальних шляхів. Поглиблені курси відкриваються лише після завершення необхідної бази.", "One account, many structured learning paths. Advanced courses unlock only after their prerequisites are complete.")}</p>
     </header>
-    {activeVariantId !== null && <div className="mb-6 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-text-secondary">{tr("Активний курс позначено як курс для продовження. Оберіть інший доступний курс, щоб перемкнутися.", "Your active course is marked as Continue. Choose another available course to switch.")}</div>}
+    {learningMe?.current && <section className="mb-7 rounded-[26px] border border-primary/25 bg-primary/10 p-5 shadow-sm sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.15em] text-primary">{tr("Поточний курс", "Current course")}</p>
+          <h2 className="mt-2 text-2xl font-bold text-text-primary">{learningMe.current.title}</h2>
+          <p className="mt-1 text-sm text-text-secondary">{learningMe.current.runtimeLabel} · {Math.round(learningMe.current.completionPercent)}% {tr("завершено", "complete")}</p>
+          <div className="mt-3 h-2 w-[min(30rem,80vw)] overflow-hidden rounded-full bg-bg-base"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, learningMe.current.completionPercent))}%` }} /></div>
+        </div>
+        <button type="button" onClick={() => navigate(`/learning/course/${learningMe.current!.courseId}`)} className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:opacity-90">{tr("Продовжити курс", "Continue course")}</button>
+      </div>
+    </section>}
+    {activeVariantId !== null && <div className="mb-6 rounded-2xl border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary">{tr("Можна мати кілька розпочатих курсів. Поточний курс визначає головний маршрут і кнопку «Продовжити».", "You can have multiple started courses. The current course owns the main route and Continue action.")}</div>}
     {error && <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error" role="alert" aria-live="assertive">
       <span>{error}</span>
       <button type="button" onClick={() => void reload()} className="inline-flex items-center gap-2 rounded-xl border border-accent-error/30 px-3 py-2 text-xs font-bold hover:bg-accent-error/10">

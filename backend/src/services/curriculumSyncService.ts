@@ -175,6 +175,44 @@ function miniProjectItem(course: CurriculumCourseDefinition, project: Curriculum
   };
 }
 
+function finalAssessmentItem(course: CurriculumCourseDefinition, order: number) {
+  const projectKey = `${course.key}.final-assessment`;
+  return {
+    contentKey: projectKey,
+    title: "Фінальна робота курсу",
+    order,
+    sourceHash: hash({ course: course.key, version: 1 }),
+    sourcePath: "curriculum/final-assessment",
+    content: {
+      project: true,
+      finalAssessment: true,
+      projectKey,
+      markdown: [
+        "## Фінальна робота",
+        "",
+        "Збери в одну завершену роботу навички цього курсу. Опиши рішення, покажи ключові сценарії та зафіксуй відомі обмеження.",
+        "",
+        "Ця робота є фінальною перевіркою курсу: після подання вона відкриває завершення курсу.",
+      ].join("\\n"),
+      generated: false,
+      required: true,
+      projectSpec: {
+        version: 1,
+        kind: "FINAL_ASSESSMENT",
+        estimatedMinutes: 120,
+        skills: ["integration", "documentation", "verification"],
+        milestones: [
+          { id: "scope", title: "Сформулювати задачу", description: "Опиши задачу, користувача та очікуваний результат." },
+          { id: "implementation", title: "Реалізувати рішення", description: "Покажи основну реалізацію та ключові технічні рішення." },
+          { id: "verification", title: "Перевірити результат", description: "Додай приклади перевірки, тестування або демонстрації." },
+        ],
+        acceptanceCriteria: ["Усі етапи виконані", "Є короткі нотатки реалізації", "README пояснює запуск і обмеження"],
+        template: "# Фінальна робота\\n\\n## Рішення\\n\\n## Перевірка\\n",
+      },
+    },
+  };
+}
+
 async function saveCourseItem(itemRepo: ReturnType<typeof AppDataSource.getRepository<CourseItem>>, module: CourseModule, input: any, report: CurriculumSyncReport, dryRun: boolean, preserveExisting = false): Promise<CourseItem> {
   let item = await itemRepo.findOne({ where: { module: { id: module.id }, contentKey: input.contentKey } });
   if (!item && input.legacyContentKeys?.length) {
@@ -251,46 +289,86 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
         await txVariantRepo.save(variant);
       }
 
-      const moduleKey = `${definition.key}.main`;
-      let module = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: moduleKey } });
-      if (!module) {
-        const existing = await txModuleRepo.find({ where: { course: { id: course.id } }, order: { order: "ASC" } });
-        module = existing.find((entry) => !entry.contentKey) || null;
-      }
-      if (!module) {
-        module = txModuleRepo.create({ course: { id: course.id } as any, contentKey: moduleKey, title: "Теорія та практика", order: 0, sourceHash });
-        report.modulesCreated += 1;
-      } else {
-        module.contentKey = moduleKey;
-        module.sourceHash = sourceHash;
-        module.title = definition.isBase ? "Теорія та практика" : "Модулі курсу";
-      }
-      module = await txModuleRepo.save(module);
-
+      const legacyMain = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: `${definition.key}.main` } });
       const desiredKeys = new Set<string>();
-      let order = 0;
+      const topicModuleIds = new Set<number>();
       for (const topic of courseTopics) {
+        const topicModuleKey = `${definition.key}.topic.${topic.key}`;
+        let module = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: topicModuleKey } });
+        const wasCreated = !module;
+        if (!module) {
+          module = txModuleRepo.create({ course: { id: course.id } as any, contentKey: topicModuleKey, title: topic.title, order: courseTopics.indexOf(topic), sourceHash: topic.sourceHash });
+          report.modulesCreated += 1;
+        } else {
+          module.title = topic.title;
+          module.order = courseTopics.indexOf(topic);
+          module.sourceHash = topic.sourceHash;
+        }
+        module = await txModuleRepo.save(module);
+        topicModuleIds.add(module.id);
+        // Move legacy flat items into their native topic module once. This
+        // keeps existing progress rows valid because progress references item id.
+        if (wasCreated && legacyMain) {
+          const legacyItems = await txItemRepo.find({ where: { module: { id: legacyMain.id } } });
+          for (const legacyItem of legacyItems) {
+            if (legacyItem.contentKey?.startsWith(`${definition.key}.${topic.key}.`)) {
+              legacyItem.module = module;
+              await txItemRepo.save(legacyItem);
+            }
+          }
+        }
         const pair = topicItems(definition, topic);
-        const theory = await saveCourseItem(txItemRepo, module, { ...pair.theory, kind: "THEORY", order }, report, false);
-        order += 1;
+        const theory = await saveCourseItem(txItemRepo, module, { ...pair.theory, kind: "THEORY", order: 0 }, report, false);
         desiredKeys.add(pair.theory.contentKey);
         if (!theoryOnly) {
           const practices = topicItems(definition, topic, theory.id).practices;
           for (const practice of practices) {
-            await saveCourseItem(txItemRepo, module, { ...practice, kind: "CODE_TASK", order }, report, false, true);
-            order += 1;
+            await saveCourseItem(txItemRepo, module, { ...practice, kind: "CODE_TASK", order: practice.order }, report, false, true);
             desiredKeys.add(practice.contentKey);
           }
         }
       }
+      const projectsModuleKey = `${definition.key}.projects`;
+      let projectsModule = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: projectsModuleKey } });
+      if (!projectsModule) {
+        projectsModule = txModuleRepo.create({ course: { id: course.id } as any, contentKey: projectsModuleKey, title: "Проєкти та фінальна робота", order: courseTopics.length, sourceHash });
+        report.modulesCreated += 1;
+      } else {
+        projectsModule.title = "Проєкти та фінальна робота";
+        projectsModule.order = courseTopics.length;
+        projectsModule.sourceHash = sourceHash;
+      }
+      projectsModule = await txModuleRepo.save(projectsModule);
       const miniProjects = loadCurriculumMiniProjects(definition.key);
-      for (const project of miniProjects) {
-        const item = miniProjectItem(definition, project, order);
-        await saveCourseItem(txItemRepo, module, { ...item, kind: "MANUAL" }, report, false);
-        order += 1;
+      for (const [projectIndex, project] of miniProjects.entries()) {
+        const item = miniProjectItem(definition, project, projectIndex);
+        await saveCourseItem(txItemRepo, projectsModule, { ...item, kind: "MANUAL" }, report, false);
         desiredKeys.add(item.contentKey);
       }
-      const existingItems = await txItemRepo.find({ where: { module: { id: module.id } } });
+      const finalItem = finalAssessmentItem(definition, miniProjects.length);
+      await saveCourseItem(txItemRepo, projectsModule, { ...finalItem, kind: "MANUAL" }, report, false);
+      desiredKeys.add(finalItem.contentKey);
+      const allCourseModules = await txModuleRepo.find({ where: { course: { id: course.id } } });
+      for (const staleModule of allCourseModules) {
+        if (topicModuleIds.has(staleModule.id) || staleModule.id === projectsModule.id) continue;
+        if (staleModule.id === legacyMain?.id) {
+          staleModule.title = "Архівні елементи";
+          staleModule.order = courseTopics.length + 1;
+          await txModuleRepo.save(staleModule);
+        }
+        const existingItems = await txItemRepo.find({ where: { module: { id: staleModule.id } } });
+        for (const item of existingItems) {
+          if (item.kind === "CODE_TASK") continue;
+          if (item.isActive !== false) {
+            item.isActive = false;
+            item.content = { ...(item.content || {}), required: false, archivedBySync: true };
+            await txItemRepo.save(item);
+            report.itemsArchived += 1;
+          }
+        }
+      }
+      for (const moduleId of [...topicModuleIds, projectsModule.id]) {
+        const existingItems = await txItemRepo.find({ where: { module: { id: moduleId } } });
       for (const item of existingItems) {
         if (theoryOnly) {
           // Theory-only releases may retire stale authored theory, but they
@@ -313,6 +391,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
           await txItemRepo.save(item);
           report.itemsArchived += 1;
         }
+      }
       }
     }
 

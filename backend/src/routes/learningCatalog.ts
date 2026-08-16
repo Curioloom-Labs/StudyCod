@@ -1,9 +1,31 @@
 import { Router, Response } from "express";
 import { z } from "zod";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
-import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getEnrollmentIad, getLearningCatalog, passFinalAssessment, saveCourseProject, submitCourseProject } from "../services/learningCatalogService";
+import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject } from "../services/learningCatalogService";
 
 export const learningCatalogRouter = Router();
+
+learningCatalogRouter.get("/me", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  return res.json(await getLearningMe(req.userId));
+});
+
+learningCatalogRouter.put("/me/current-course", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const enrollmentId = Number((req.body as any)?.enrollmentId);
+  if (!Number.isInteger(enrollmentId) || enrollmentId <= 0) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    const enrollment = await setCurrentCourseEnrollment(req.userId, enrollmentId);
+    return res.json({ enrollment: {
+      id: enrollment.id,
+      courseId: enrollment.courseId,
+      variantId: enrollment.variantId,
+      status: enrollment.status,
+    } });
+  } catch (error: any) {
+    return res.status(Number(error?.statusCode) || 500).json({ message: String(error?.message || "INTERNAL_SERVER_ERROR") });
+  }
+});
 
 learningCatalogRouter.get("/catalog", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
@@ -135,10 +157,10 @@ learningCatalogRouter.get("/enrollments/:enrollmentId/iad", authRequired, async 
 learningCatalogRouter.post("/enrollments/:enrollmentId/final-assessment", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
   const enrollmentId = Number(req.params.enrollmentId);
-  const parsed = z.object({ score: z.number().min(0).max(100) }).safeParse(req.body);
+  const parsed = z.object({}).safeParse(req.body ?? {});
   if (!Number.isFinite(enrollmentId) || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
   try {
-    const enrollment = await passFinalAssessment(req.userId, enrollmentId, parsed.data.score);
+    const enrollment = await passFinalAssessment(req.userId, enrollmentId);
     return res.json({ enrollment: { id: enrollment.id, status: enrollment.status, completionPercent: enrollment.completionPercent, finalAssessmentPassed: enrollment.finalAssessmentPassed } });
   } catch (error: any) {
     return res.status(Number(error?.statusCode) || 500).json({ message: String(error?.message || "INTERNAL_SERVER_ERROR") });

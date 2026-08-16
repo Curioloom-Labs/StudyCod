@@ -1368,6 +1368,7 @@ function sanitizeMetaOutputFormatInStatement(
 }
 
 function catalogItemIdFromTask(task: Task): number | null {
+  if (Number.isInteger(Number(task.courseItemId)) && Number(task.courseItemId) > 0) return Number(task.courseItemId);
   const match = /^CATALOG_ITEM:(\d+)\|/.exec(String(task.subtitle ?? ""));
   if (!match) return null;
   const itemId = Number(match[1]);
@@ -3156,8 +3157,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       const existingCourseTasks = await taskRepo()
         .createQueryBuilder("task")
         .where("task.user_id = :userId", { userId })
-        .andWhere("task.lang = :lang", { lang })
-        .andWhere("task.subtitle LIKE :prefix", { prefix: `CATALOG_ITEM:${requestedCourseItemId}|%` })
+        .andWhere("task.course_item_id = :courseItemId", { courseItemId: requestedCourseItemId })
+        .andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: context.enrollment.id })
         .orderBy("task.createdAt", "ASC")
         .select(["task.id", "task.title", "task.description", "task.numInTopic"])
         .getMany();
@@ -3195,8 +3196,12 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
       if (typeof exercise.starterCode === "string" && exercise.starterCode.trim()) {
         saved.template = exercise.starterCode;
-        await taskRepo().save(saved);
       }
+      saved.courseItem = { id: context.item.id } as any;
+      saved.courseItemId = context.item.id;
+      saved.courseEnrollment = { id: context.enrollment.id } as any;
+      saved.courseEnrollmentId = context.enrollment.id;
+      await taskRepo().save(saved);
       await startCourseItem(userId, requestedCourseItemId);
       const hydrated = await taskRepo().findOne({ where: { id: saved.id }, relations: ["topic", "topic.theoryBlock"] });
       return res.json({

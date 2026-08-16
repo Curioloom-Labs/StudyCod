@@ -1,9 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, RelationId, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { User } from "./User";
 import { Grade } from "./Grade";
 import { Topic } from "./Topic";
 import { TestData } from "./TestData";
 import type { LibraryTaskProjectSpec } from "./LibraryTask";
+import { CourseItem } from "./CourseItem";
+import { UserCourseEnrollment } from "./UserCourseEnrollment";
 export type TaskType = "INTRO" | "TOPIC" | "CONTROL";
 export type TaskStatus = "OPEN" | "SUBMITTED" | "GRADED";
 export type TaskLang = "JAVA" | "PYTHON" | "CPP";
@@ -28,6 +30,21 @@ export class Task {
     name: "topic_id"
   })
   topic?: Topic | null;
+
+  /** Nullable for free/lab tasks; set for course-scoped practice. */
+  @ManyToOne(() => CourseItem, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "course_item_id" })
+  courseItem?: CourseItem | null;
+
+  @RelationId((task: Task) => task.courseItem)
+  courseItemId?: number | null;
+
+  @ManyToOne(() => UserCourseEnrollment, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "course_enrollment_id" })
+  courseEnrollment?: UserCourseEnrollment | null;
+
+  @RelationId((task: Task) => task.courseEnrollment)
+  courseEnrollmentId?: number | null;
   @Column({
     type: "enum",
     enum: ["INTRO", "TOPIC", "CONTROL"],

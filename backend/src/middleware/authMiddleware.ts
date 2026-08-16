@@ -143,13 +143,14 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
   if (!user) {
     const row = await AppDataSource.getRepository(User).findOne({
       where: { id: userId },
-      select: ["id", "role", "userMode"]
+      select: ["id", "role", "userMode", "currentCourseEnrollmentId"]
     });
     if (!row) return "not-found";
     user = {
       id: row.id,
       role: row.role ?? null,
-      userMode: row.userMode ?? null
+      userMode: row.userMode ?? null,
+      currentCourseEnrollmentId: row.currentCourseEnrollmentId ?? null,
     };
     // Fire-and-forget — failures to cache must never block a request.
     void setCachedUser(user).catch(err => {
@@ -162,7 +163,9 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
   }
 
   const activeEnrollment = await AppDataSource.getRepository(UserCourseEnrollment).findOne({
-    where: { user: { id: userId }, status: "IN_PROGRESS" },
+    where: user.currentCourseEnrollmentId
+      ? { id: user.currentCourseEnrollmentId, user: { id: userId } }
+      : { user: { id: userId }, status: "IN_PROGRESS" },
     relations: ["variant"],
     order: { updatedAt: "DESC" }
   });

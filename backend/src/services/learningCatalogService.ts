@@ -6,6 +6,7 @@ import { CourseItemProgress, type CourseProjectProgressData } from "../entities/
 import { CourseVariant } from "../entities/CourseVariant";
 import { EnrollmentStatus, UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { Task } from "../entities/Task";
+import { User } from "../entities/User";
 import { IsNull } from "typeorm";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeFile, JudgeRequest } from "./judgeWorker/types";
@@ -59,6 +60,38 @@ function enrollmentPriority(status: EnrollmentStatus): number {
   if (status === "COMPLETED") return 1;
   if (status === "AVAILABLE") return 2;
   return 3;
+}
+
+function requiredItem(item: CourseItem): boolean {
+  return (item.content as any)?.required !== false;
+}
+
+function nextActionForItems(items: CourseItem[], progressByItem: Map<number, CourseItemProgress>) {
+  const next = items.find((item) => requiredItem(item) && progressByItem.get(item.id)?.status !== "COMPLETED");
+  if (!next) return null;
+  const progress = progressByItem.get(next.id);
+  return {
+    itemId: next.id,
+    title: next.title,
+    kind: next.kind,
+    status: progress?.status ?? "NOT_STARTED",
+  };
+}
+
+async function assertSequentialAccess(enrollmentId: number, courseId: number, itemId: number): Promise<void> {
+  const items = await itemRepo().find({
+    where: { module: { course: { id: courseId } }, isActive: true },
+    relations: ["module"],
+  });
+  items.sort((left, right) => left.module.order - right.module.order || left.order - right.order || left.id - right.id);
+  const targetIndex = items.findIndex((item) => item.id === itemId);
+  if (targetIndex < 0) return;
+  const progress = await progressRepo().find({ where: { enrollment: { id: enrollmentId } } });
+  const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
+  const previous = items.slice(0, targetIndex).find((item) => requiredItem(item) && progressByItem.get(item.id)?.status !== "COMPLETED");
+  if (previous) {
+    throw Object.assign(new Error("COURSE_SEQUENCE_LOCKED"), { statusCode: 409, previousItemId: previous.id });
+  }
 }
 
 function normalizedTitle(value: unknown): string {
@@ -223,6 +256,7 @@ async function getEnrolledItemContext(userId: number, itemId: number) {
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
   }
+  await assertSequentialAccess(enrollment.id, item.module.course.id, item.id);
   const dependencyState = await getPrerequisiteState(userId, enrollment.courseId);
   if (!dependencyState.satisfied && !item.module.course.isBase) {
     throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), { statusCode: 423, prerequisites: dependencyState.prerequisites });
@@ -348,6 +382,52 @@ export async function getLearningCatalog(userId: number) {
   }));
 }
 
+/** Lightweight Personal hub payload. EDU never calls this route. */
+export async function getLearningMe(userId: number) {
+  const user = await AppDataSource.getRepository(User).findOne({ where: { id: userId } });
+  const catalog = await getLearningCatalog(userId);
+  const enrollments = catalog.flatMap((course) => course.variants.flatMap((variant) => variant.enrollment
+    ? [{
+        enrollmentId: variant.enrollment.id,
+        courseId: course.id,
+        courseKey: course.key,
+        title: course.title,
+        description: course.description,
+        runtime: variant.runtime,
+        runtimeLabel: variant.runtimeLabel,
+        level: course.level,
+        status: variant.enrollment.status,
+        completionPercent: variant.enrollment.completionPercent,
+        finalAssessmentPassed: variant.enrollment.finalAssessmentPassed,
+        completedAt: variant.enrollment.completedAt,
+        gate: variant.gate,
+      }]
+    : []));
+  const currentEnrollmentId = user?.currentCourseEnrollmentId
+    ?? enrollments.find((entry) => entry.status === "IN_PROGRESS")?.enrollmentId
+    ?? null;
+  const current = enrollments.find((entry) => entry.enrollmentId === currentEnrollmentId) ?? null;
+  return { currentEnrollmentId, current, enrollments };
+}
+
+export async function setCurrentCourseEnrollment(userId: number, enrollmentId: number) {
+  return AppDataSource.transaction("SERIALIZABLE", async (manager) => {
+    const enrollment = await manager.getRepository(UserCourseEnrollment).findOne({
+      where: { id: enrollmentId, user: { id: userId } },
+      relations: ["course", "variant"],
+    });
+    if (!enrollment) throw Object.assign(new Error("ENROLLMENT_NOT_FOUND"), { statusCode: 404 });
+    if (enrollment.course.organizationId != null) throw Object.assign(new Error("PERSONAL_COURSE_REQUIRED"), { statusCode: 403 });
+    if (enrollment.status === "LOCKED") throw Object.assign(new Error("COURSE_LOCKED"), { statusCode: 423 });
+    if (enrollment.status === "AVAILABLE") {
+      enrollment.status = "IN_PROGRESS";
+      await manager.getRepository(UserCourseEnrollment).save(enrollment);
+    }
+    await manager.getRepository(User).update({ id: userId }, { currentCourseEnrollmentId: enrollment.id });
+    return enrollment;
+  });
+}
+
 export async function enrollInCourseVariant(userId: number, variantId: number, expectedCourseId?: number): Promise<UserCourseEnrollment> {
   // Course activation is a user-level state, not a variant-level toggle. The
   // serializable transaction prevents two concurrent clicks from leaving two
@@ -396,16 +476,9 @@ export async function enrollInCourseVariant(userId: number, variantId: number, e
       await enrollments.save(created);
     }
 
-    await enrollments.createQueryBuilder()
-      .update(UserCourseEnrollment)
-      .set({ status: "AVAILABLE" })
-      .where("user_id = :userId", { userId })
-      .andWhere("status = :status", { status: "IN_PROGRESS" })
-      .andWhere("variant_id <> :variantId", { variantId })
-      .execute();
-
     const activated = await enrollments.findOne({ where: { user: { id: userId }, variant: { id: variantId } } });
     if (!activated) throw new Error("COURSE_ENROLLMENT_CREATE_FAILED");
+    await manager.getRepository(User).update({ id: userId }, { currentCourseEnrollmentId: activated.id });
     return activated;
   });
 }
@@ -433,6 +506,9 @@ export async function getCourseForUser(userId: number, courseId: number) {
   const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
   const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
   const modules = [...(course.modules || [])].sort((a, b) => a.order - b.order || a.id - b.id);
+  const orderedItems = modules.flatMap((module) => [...(module.items || [])]
+    .filter((item) => item.isActive !== false)
+    .sort((a, b) => a.order - b.order || a.id - b.id));
   return {
     id: course.id,
     key: course.catalogKey,
@@ -449,6 +525,7 @@ export async function getCourseForUser(userId: number, courseId: number) {
       masteryScore: Number(enrollment.masteryScore ?? 0),
       finalAssessmentPassed: Boolean(enrollment.finalAssessmentPassed),
     },
+    nextAction: nextActionForItems(orderedItems, progressByItem),
     modules: modules.map((module) => ({
       id: module.id,
       title: module.title,
@@ -485,6 +562,7 @@ export async function getCoursePracticeContext(userId: number, itemId: number) {
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
   }
+  await assertSequentialAccess(enrollment.id, item.module.course.id, item.id);
 
   const dependencyState = await getPrerequisiteState(userId, enrollment.courseId);
   if (!dependencyState.satisfied && !item.module.course.isBase) {
@@ -536,6 +614,7 @@ export async function completeCourseItem(userId: number, itemId: number, score?:
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
   }
+  await assertSequentialAccess(enrollment.id, item.module.course.id, item.id);
   if (isMiniProject(item)) {
     throw Object.assign(new Error("PROJECT_SUBMISSION_REQUIRED"), { statusCode: 409 });
   }
@@ -720,6 +799,13 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
   progress.completedAt = submit ? new Date() : null;
   await progressRepo().save(progress);
   const updatedEnrollment = await recalculateEnrollmentProgress(enrollment);
+  if (submit && (item.content as any)?.finalAssessment === true) {
+    updatedEnrollment.finalAssessmentPassed = true;
+    updatedEnrollment.status = "COMPLETED";
+    updatedEnrollment.completionPercent = 100;
+    updatedEnrollment.completedAt = updatedEnrollment.completedAt || new Date();
+    await enrollmentRepo().save(updatedEnrollment);
+  }
   return {
     enrollment: updatedEnrollment,
     project: {
@@ -741,16 +827,23 @@ export async function submitCourseProject(userId: number, itemId: number, input:
   return saveProjectProgress(userId, itemId, input, true);
 }
 
-export async function passFinalAssessment(userId: number, enrollmentId: number, score: number): Promise<UserCourseEnrollment> {
-  const enrollment = await enrollmentRepo().findOne({ where: { id: enrollmentId, user: { id: userId } } });
+export async function passFinalAssessment(userId: number, enrollmentId: number): Promise<UserCourseEnrollment> {
+  const enrollment = await enrollmentRepo().findOne({ where: { id: enrollmentId, user: { id: userId } }, relations: ["course"] });
   if (!enrollment) throw Object.assign(new Error("ENROLLMENT_NOT_FOUND"), { statusCode: 404 });
   if (percent(enrollment.completionPercent) < 100) {
     throw Object.assign(new Error("COURSE_ITEMS_INCOMPLETE"), { statusCode: 409 });
   }
-  if (percent(score) < 70) {
-    enrollment.finalAssessmentPassed = false;
-    enrollment.status = "IN_PROGRESS";
-    return enrollmentRepo().save(enrollment);
+  const finalAssessment = (await itemRepo().find({
+    where: { module: { course: { id: enrollment.courseId } }, isActive: true },
+    relations: ["module"],
+    order: { order: "DESC", id: "DESC" },
+  })).find((item) => Boolean((item.content as any)?.finalAssessment));
+  if (!finalAssessment) {
+    throw Object.assign(new Error("FINAL_WORK_REQUIRED"), { statusCode: 409 });
+  }
+  const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: finalAssessment.id } } });
+  if (!progress || progress.status !== "COMPLETED" || progress.projectData?.status !== "SUBMITTED") {
+    throw Object.assign(new Error("FINAL_WORK_REQUIRED"), { statusCode: 409 });
   }
   enrollment.finalAssessmentPassed = true;
   enrollment.completionPercent = 100;

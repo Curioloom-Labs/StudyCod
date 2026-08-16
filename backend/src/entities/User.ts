@@ -87,6 +87,19 @@ export class User {
     name: "user_mode"
   })
   userMode!: UserMode;
+
+  /**
+   * The learner's selected Personal course. Progress remains stored on every
+   * enrollment; this pointer only answers which course owns the main workspace
+   * and the request-level runtime context.
+   */
+  @Column({
+    type: "int",
+    nullable: true,
+    default: null,
+    name: "current_course_enrollment_id"
+  })
+  currentCourseEnrollmentId?: number | null;
   @Column({
     type: "enum",
     enum: ["USER", "TEACHER", "SUPPORT", "SYSTEM_ADMIN"],

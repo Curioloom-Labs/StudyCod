@@ -94,7 +94,45 @@ export interface LearningCourse {
     masteryScore: number;
     finalAssessmentPassed: boolean;
   };
+  nextAction: {
+    itemId: number;
+    title: string;
+    kind: LearningCourseItem["kind"];
+    status: "NOT_STARTED" | "IN_PROGRESS";
+  } | null;
   modules: Array<{ id: number; title: string; items: LearningCourseItem[] }>;
+}
+
+export interface LearningEnrollmentSummary {
+    enrollmentId: number;
+    courseId: number;
+    courseKey: string | null;
+    title: string;
+    description: string | null;
+    runtime: CatalogRuntime;
+    runtimeLabel: string;
+    level: CatalogCourse["level"];
+    status: CatalogEnrollmentStatus;
+    completionPercent: number;
+    finalAssessmentPassed: boolean;
+    completedAt: string | null;
+    gate: CatalogVariant["gate"];
+}
+
+export interface LearningMe {
+  currentEnrollmentId: number | null;
+  current: LearningEnrollmentSummary | null;
+  enrollments: LearningEnrollmentSummary[];
+}
+
+export async function getLearningMe(): Promise<LearningMe> {
+  const response = await api.get("/learning/me");
+  return response.data;
+}
+
+export async function setCurrentCourse(enrollmentId: number) {
+  const response = await api.put("/learning/me/current-course", { enrollmentId });
+  return response.data?.enrollment;
 }
 
 export async function getLearningCatalog(): Promise<CatalogCourse[]> {
@@ -135,9 +173,4 @@ export async function submitCatalogProject(itemId: number, input: Omit<LearningP
 export async function checkCatalogProject(itemId: number, files: LearningProjectCheckFile[]) {
   const response = await api.post(`/learning/items/${itemId}/project/check`, { files });
   return response.data?.check;
-}
-
-export async function submitFinalAssessment(enrollmentId: number, score: number) {
-  const response = await api.post(`/learning/enrollments/${enrollmentId}/final-assessment`, { score });
-  return response.data?.enrollment;
 }
