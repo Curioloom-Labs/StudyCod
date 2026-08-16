@@ -6,7 +6,7 @@ import type { MigrationInterface, QueryRunner } from "typeorm";
  * old CATALOG_ITEM:<id>|... subtitle convention.
  */
 export class AddPersonalCourseContext1752700000000 implements MigrationInterface {
-  name = "AddPersonalCourseContext1752700000";
+  name = "AddPersonalCourseContext1752700000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const hasColumn = async (table: string, column: string): Promise<boolean> => {
