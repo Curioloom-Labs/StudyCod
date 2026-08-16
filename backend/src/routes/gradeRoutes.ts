@@ -4,6 +4,7 @@ import { Grade } from "../entities/Grade";
 import { Task } from "../entities/Task";
 import { Topic } from "../entities/Topic";
 import { CourseItem } from "../entities/CourseItem";
+import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { logger } from "../utils/logger";
 import { parseGradeComparisonFeedback } from "../utils/gradeComparisonFeedback";
@@ -33,6 +34,8 @@ function mapTaskToDto(task: Task | null | undefined) {
     kind: task.type,
     createdAt: task.createdAt,
     language: task.lang,
+    courseItemId: task.courseItemId ?? null,
+    courseEnrollmentId: task.courseEnrollmentId ?? null,
     topic: topic ? {
       id: topic.id,
       title: topic.title,
@@ -60,7 +63,16 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
     }
 
     let courseItemIds: number[] | null = null;
+    let courseEnrollmentId: number | null = null;
     if (courseId != null) {
+      const enrollment = await AppDataSource.getRepository(UserCourseEnrollment)
+        .createQueryBuilder("enrollment")
+        .where("enrollment.user_id = :userId", { userId: req.userId })
+        .andWhere("enrollment.course_id = :courseId", { courseId })
+        .orderBy("CASE WHEN enrollment.status = 'IN_PROGRESS' THEN 0 WHEN enrollment.status = 'COMPLETED' THEN 1 ELSE 2 END", "ASC")
+        .addOrderBy("enrollment.id", "DESC")
+        .getOne();
+      courseEnrollmentId = enrollment?.id ?? null;
       const courseItems = await AppDataSource.getRepository(CourseItem)
         .createQueryBuilder("item")
         .innerJoin("item.module", "module")
@@ -75,13 +87,17 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
       order: {
         createdAt: "DESC"
       },
-      relations: ["task", "task.topic"]
+      relations: ["task", "task.topic", "task.courseItem", "task.courseEnrollment"]
     });
     const data = grades
       .filter(g => !isPersonalControlQuizTask(g.task))
       .filter((grade) => {
         if (courseItemIds == null) return true;
         const subtitle = String(grade.task?.subtitle ?? "");
+        const explicitEnrollmentId = Number((grade.task as any)?.courseEnrollmentId ?? (grade.task as any)?.courseEnrollment?.id ?? 0);
+        const explicitItemId = Number((grade.task as any)?.courseItemId ?? (grade.task as any)?.courseItem?.id ?? 0);
+        if (courseEnrollmentId != null && explicitEnrollmentId > 0) return explicitEnrollmentId === courseEnrollmentId;
+        if (explicitItemId > 0) return courseItemIds.includes(explicitItemId);
         return courseItemIds.some((itemId) => subtitle.startsWith(`CATALOG_ITEM:${itemId}|`));
       })
       .map(g => {

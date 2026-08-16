@@ -37,7 +37,7 @@ import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezon
 import { useUIMode } from "../../components/interface/UIModeProvider";
 import type { ResumeState } from "../../lib/resumeState";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "../../lib/resumeState";
-import { PremiumDashboard } from "./PremiumPersonalExperience";
+import { PersonalCourseDashboard } from "../learning/PersonalCourseDashboard";
 interface Props {
   user: User;
   onNavigate: (page: "home" | "tasks" | "grades" | "profile" | "teacher" | "student" | "admin") => void;
@@ -327,16 +327,7 @@ export const HomePage: React.FC<Props> = ({
   // inheriting the old terminal home. Educational dashboards keep their
   // specialised flows below.
   if (!isEducational) {
-    return <PremiumDashboard
-      user={user}
-      tasks={allTasks}
-      loading={loading}
-      onNavigate={onNavigate}
-      onOpenTask={(task) => {
-        sessionStorage.setItem("openTaskId", String(task.id));
-        startTransition(() => onNavigate("tasks"));
-      }}
-    />;
+    return <PersonalCourseDashboard />;
   }
 
   if (ui.mode === "focus") {

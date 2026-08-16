@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, startTransition } from "react";
-import { Routes, Route, useLocation, useNavigate, useSearchParams, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
 import { getMe } from "./lib/api/profile";
@@ -11,6 +11,9 @@ import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
 import { PlatformFooter } from "./components/layout/PlatformFooter";
 import { PremiumWorkspaceShell } from "./components/layout/PremiumWorkspaceShell";
+import { PersonalLearningProvider } from "./components/learning/PersonalLearningProvider";
+import { PersonalRouteShell } from "./components/layout/PersonalRouteShell";
+import { getLearningMe } from "./lib/api/learningCatalog";
 import { PremiumModuleShell } from "./components/layout/PremiumModuleShell";
 import { StandaloneShell } from "./components/layout/StandaloneShell";
 import { BrandedPageLoader } from "./components/ui/BrandedPageLoader";
@@ -54,11 +57,32 @@ const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfileP
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
 const LearningCatalogPage = React.lazy(() => import("./pages/learning/LearningCatalogPage").then(mod => ({ default: mod.LearningCatalogPage })));
 const LearningCoursePage = React.lazy(() => import("./pages/learning/LearningCoursePage").then(mod => ({ default: mod.LearningCoursePage })));
+const CoursePracticePage = React.lazy(() => import("./pages/learning/CoursePracticePage").then(mod => ({ default: mod.CoursePracticePage })));
+const CourseProgressPage = React.lazy(() => import("./pages/learning/CourseProgressPage").then(mod => ({ default: mod.CourseProgressPage })));
+const PersonalCourseDashboard = React.lazy(() => import("./pages/learning/PersonalCourseDashboard").then(mod => ({ default: mod.PersonalCourseDashboard })));
+const LabPracticePage = React.lazy(() => import("./pages/core/LabPracticePage").then(mod => ({ default: mod.LabPracticePage })));
 const LegacyAppPageRedirect: React.FC<{ page: string }> = ({ page }) => {
   const location = useLocation();
+  if (page === "tasks") {
+    const params = new URLSearchParams(location.search);
+    const courseId = Number(params.get("courseId"));
+    const itemId = Number(params.get("courseItemId"));
+    if (Number.isInteger(courseId) && courseId > 0 && Number.isInteger(itemId) && itemId > 0) return <Navigate to={`/learning/course/${courseId}/practice/${itemId}`} replace />;
+    return <Navigate to="/lab/practice" replace />;
+  }
+  if (page === "grades") return <LegacyGradesRedirect />;
   const params = new URLSearchParams(location.search);
   params.set("app", page);
   return <Navigate to={`/?${params.toString()}`} replace />;
+};
+const LegacyCourseRouteRedirect: React.FC = () => {
+  const { courseId } = useParams();
+  return <Navigate to={`/learning/course/${courseId}/overview`} replace />;
+};
+const LegacyGradesRedirect: React.FC = () => {
+  const [target, setTarget] = React.useState<string | null>(null);
+  React.useEffect(() => { void getLearningMe().then((me) => setTarget(me.current ? `/learning/course/${me.current.courseId}/progress` : "/learning/catalog")).catch(() => setTarget("/learning/catalog")); }, []);
+  return target ? <Navigate to={target} replace /> : <PageLoader />;
 };
 const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
 const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherWorkspacePage").then(mod => ({ default: mod.TeacherWorkspacePage })));
@@ -414,6 +438,20 @@ const AppContent: React.FC = React.memo(() => {
   useEffect(() => {
     if (!user) return;
     if (location.pathname !== "/") return;
+    if (user.userMode !== "EDUCATIONAL" && requestedAppPage === "tasks") {
+      const courseId = Number(searchParams.get("courseId"));
+      const itemId = Number(searchParams.get("courseItemId"));
+      if (Number.isInteger(courseId) && courseId > 0 && Number.isInteger(itemId) && itemId > 0) {
+        navigate(`/learning/course/${courseId}/practice/${itemId}`, { replace: true });
+      } else {
+        navigate("/lab/practice", { replace: true });
+      }
+      return;
+    }
+    if (user.userMode !== "EDUCATIONAL" && requestedAppPage === "grades") {
+      void getLearningMe().then((me) => navigate(me.current ? `/learning/course/${me.current.courseId}/progress` : "/learning/catalog", { replace: true })).catch(() => navigate("/learning/catalog", { replace: true }));
+      return;
+    }
     if (!requestedAppPage) return;
     if (!isPageAvailableForUser(requestedAppPage, user)) return;
     if (requestedAppPage === page) return;
@@ -695,11 +733,16 @@ const AppContent: React.FC = React.memo(() => {
     navigate("/");
   }, [navigate]);
   const handleSetPage = useCallback((newPage: Page) => {
+    if (user?.userMode !== "EDUCATIONAL") {
+      if (newPage === "home") { navigate("/"); setNavOpen(false); return; }
+      if (newPage === "tasks") { navigate("/lab/practice"); setNavOpen(false); return; }
+      if (newPage === "grades") { navigate("/learning/catalog"); setNavOpen(false); return; }
+    }
     startTransition(() => {
       setPage(newPage);
     });
     setNavOpen(false);
-  }, []);
+  }, [navigate, user?.userMode]);
   const handleGoHome = useCallback(() => {
     startTransition(() => {
       setPage("home");
@@ -917,14 +960,14 @@ const AppContent: React.FC = React.memo(() => {
   // The personal product no longer sits inside any legacy terminal/momentum
   // shell. It owns a single, calm SaaS workspace chrome across every core page.
   if (user.userMode !== "EDUCATIONAL") {
-    return <PremiumWorkspaceShell
+    return <PersonalLearningProvider><PremiumWorkspaceShell
       user={user}
       page={resolvedPage}
       theme={theme}
       onNavigate={handleSetPage}
-      onLibrary={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/library?preview=true" : "/library")}
+      onLibrary={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/lab/library?preview=true" : "/lab/library")}
       onCourses={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/learning/catalog?preview=true" : "/learning/catalog")}
-      onPlayground={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/playground?preview=true" : "/playground")}
+      onPlayground={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/lab/playground?preview=true" : "/lab/playground")}
       onToggleTheme={toggleTheme}
       onToggleLanguage={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
       onSupport={() => navigate("/support")}
@@ -932,7 +975,7 @@ const AppContent: React.FC = React.memo(() => {
       onLogout={handleLogout}
     >
       {content}
-    </PremiumWorkspaceShell>;
+    </PremiumWorkspaceShell></PersonalLearningProvider>;
   }
 
   if (ui.mode === "classic") {
@@ -1360,51 +1403,55 @@ export const App: React.FC = () => {
                   <CertificateVerifyPage />
                 </AnimatedPage>
               </Suspense></PublicPageWithFooter>} />
-          <Route path="/library" element={<RequireToken><StandaloneShell current="library"><Suspense fallback={<PageLoader />}>
+          <Route path="/lab/library" element={<RequireToken><PersonalRouteShell area="lab"><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <TaskLibraryPage />
                 </AnimatedPage>
-              </Suspense></StandaloneShell></RequireToken>} />
-          <Route path="/library/solve/:taskKey" element={<RequireToken><StandaloneShell current="library"><Suspense fallback={<PageLoader />}>
+              </Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/library" element={<Navigate to="/lab/library" replace />} />
+          <Route path="/lab/library/solve/:taskKey" element={<RequireToken><PersonalRouteShell area="lab"><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <LibraryTaskSolvePage />
                 </AnimatedPage>
-              </Suspense></StandaloneShell></RequireToken>} />
+              </Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/library/solve/:taskKey" element={<RequireToken><PersonalRouteShell area="lab"><Suspense fallback={<PageLoader />}><AnimatedPage><LibraryTaskSolvePage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/playground" element={<RequireToken>
-                <StandaloneShell current="playground">
+                <PersonalRouteShell area="lab">
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <PlaygroundPage />
                     </AnimatedPage>
                   </Suspense>
-                </StandaloneShell>
+                </PersonalRouteShell>
               </RequireToken>} />
-          <Route path="/playground/:shareId" element={<StandaloneShell current="playground">
-                <Suspense fallback={<PageLoader />}>
-                  <AnimatedPage>
-                    <PlaygroundPage />
-                  </AnimatedPage>
-                </Suspense>
-              </StandaloneShell>} />
+          <Route path="/lab/playground" element={<RequireToken><PersonalRouteShell area="lab">
+                <Suspense fallback={<PageLoader />}><AnimatedPage><PlaygroundPage /></AnimatedPage></Suspense>
+              </PersonalRouteShell></RequireToken>} />
+          <Route path="/playground/:shareId" element={<RequireToken><PersonalRouteShell area="lab"><Suspense fallback={<PageLoader />}><AnimatedPage><PlaygroundPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/lab/practice" element={<RequireToken><PersonalRouteShell area="lab"><Suspense fallback={<PageLoader />}>
+                <AnimatedPage><LabPracticePage /></AnimatedPage>
+              </Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/learn" element={<RequireToken><Navigate to="/learning/catalog" replace /></RequireToken>} />
           <Route path="/learning/catalog" element={<RequireToken>
-                <StandaloneShell current="catalog">
+                <PersonalRouteShell>
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage>
                       <LearningCatalogPage />
                     </AnimatedPage>
                   </Suspense>
-                </StandaloneShell>
+                </PersonalRouteShell>
               </RequireToken>} />
-          <Route path="/learning/course/:courseId" element={<RequireToken>
-                <StandaloneShell current="catalog">
+          <Route path="/learning/course/:courseId" element={<RequireToken><LegacyCourseRouteRedirect /></RequireToken>} />
+          <Route path="/learning/course/:courseId/overview" element={<RequireToken>
+                <PersonalRouteShell courseTab="overview">
                   <Suspense fallback={<PageLoader />}>
-                    <AnimatedPage>
-                      <LearningCoursePage />
-                    </AnimatedPage>
+                    <AnimatedPage><PersonalCourseDashboard /></AnimatedPage>
                   </Suspense>
-                </StandaloneShell>
+                </PersonalRouteShell>
               </RequireToken>} />
+          <Route path="/learning/course/:courseId/path" element={<RequireToken><PersonalRouteShell courseTab="path"><Suspense fallback={<PageLoader />}><AnimatedPage><LearningCoursePage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/learning/course/:courseId/practice/:courseItemId" element={<RequireToken><PersonalRouteShell courseTab="practice"><Suspense fallback={<PageLoader />}><AnimatedPage><CoursePracticePage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/learning/course/:courseId/progress" element={<RequireToken><PersonalRouteShell courseTab="progress"><Suspense fallback={<PageLoader />}><AnimatedPage><CourseProgressPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/invite/:token" element={<RequireToken>
                 <StandaloneShell current="learn">
                   <Suspense fallback={<PageLoader />}>

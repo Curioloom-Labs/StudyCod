@@ -27,7 +27,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { CourseLanguage, Grade, Task, User } from "../../types";
 import type { LibraryTaskListItem } from "../../lib/api/library";
-import { getLearningMe, type LearningEnrollmentSummary } from "../../lib/api/learningCatalog";
 import {
   countUnlockedPersonalBadges,
   getBadgeLevel,
@@ -174,16 +173,6 @@ export const PremiumDashboard: React.FC<{
   const c = useCopy();
   const { i18n } = useTranslation();
   const en = i18n.language?.toLowerCase().startsWith("en");
-  const [currentCourse, setCurrentCourse] = React.useState<LearningEnrollmentSummary | null>(null);
-  React.useEffect(() => {
-    let active = true;
-    void getLearningMe().then((payload) => {
-      if (active) setCurrentCourse(payload.current);
-    }).catch(() => {
-      if (active) setCurrentCourse(null);
-    });
-    return () => { active = false; };
-  }, []);
   const complete = tasks.filter((task) => task.status === "GRADED").length;
   const actionableTasks = React.useMemo(() => {
     const statusRank: Record<Task["status"], number> = {
@@ -219,7 +208,6 @@ export const PremiumDashboard: React.FC<{
   return (
     <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
       <div className="mx-auto max-w-7xl space-y-6 lg:space-y-8">
-        {currentCourse && <section className="relative overflow-hidden rounded-[26px] border border-[#00a75a]/20 bg-[#e6f5ea] p-5 shadow-[0_18px_45px_-38px_rgba(18,80,42,.55)] dark:border-[#62ecaa]/20 dark:bg-[#132219] sm:p-6"><div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"><div><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-[#00884a] dark:text-[#72edb0]"><Compass className="h-4 w-4" />{en ? "Current course" : "Поточний курс"}</div><h2 className="mt-2 text-2xl font-semibold tracking-tight">{currentCourse.title}</h2><p className="mt-2 text-sm text-[#607065] dark:text-[#a8b6ab]">{currentCourse.runtimeLabel} · {Math.round(currentCourse.completionPercent)}% {en ? "complete" : "завершено"}</p><div className="mt-4 h-2 max-w-xl overflow-hidden rounded-full bg-[#cfe5d5] dark:bg-white/10"><div className="h-full rounded-full bg-[#00b967]" style={{ width: `${Math.min(100, Math.max(0, currentCourse.completionPercent))}%` }} /></div></div><button type="button" onClick={() => window.location.assign(`/learning/course/${currentCourse.courseId}`)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#142017] px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 dark:bg-[#edf3ef] dark:text-[#0b120e]"><Play className="h-4 w-4 fill-current" />{en ? "Continue course" : "Продовжити курс"}<ArrowRight className="h-4 w-4" /></button></div></section>}
         <section className="relative overflow-hidden rounded-[28px] border border-[#152219]/10 bg-[#e9f2ea] px-6 py-7 dark:border-white/10 dark:bg-[#131d16] sm:px-8 sm:py-9">
           <div className="absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[#00ff88]/12 blur-3xl" />
           <div className="absolute right-[18%] top-0 h-full w-px bg-[#152219]/8 dark:bg-white/8" />

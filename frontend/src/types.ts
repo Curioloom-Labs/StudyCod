@@ -216,6 +216,8 @@ export interface Task {
   kind: "INTRO" | "TOPIC" | "CONTROL";
   createdAt: string;
   language?: CourseLanguage;
+  courseItemId?: number | null;
+  courseEnrollmentId?: number | null;
 }
 export interface Grade {
   id: number;

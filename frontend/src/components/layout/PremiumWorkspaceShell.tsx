@@ -18,6 +18,7 @@ import { Logo } from "../Logo";
 import { PlatformFooter } from "./PlatformFooter";
 import type { User } from "../../types";
 import type { AppTheme } from "../../theme";
+import { usePersonalLearning } from "../learning/PersonalLearningProvider";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
 
@@ -35,6 +36,8 @@ type ShellProps = {
   onSupportDesk?: () => void;
   onLogout: () => void;
   children: React.ReactNode;
+  area?: "learning" | "lab";
+  courseTab?: "overview" | "path" | "practice" | "progress";
 };
 
 export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
@@ -51,11 +54,14 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   onSupportDesk,
   onLogout,
   children,
+  area = "learning",
+  courseTab = "overview",
 }) => {
   const { i18n } = useTranslation();
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
+  const learning = usePersonalLearning();
 
   React.useEffect(() => {
     if (!accountOpen) return;
@@ -75,9 +81,8 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   }, [accountOpen]);
 
   const nav: Array<{ id: Page; label: string; Icon: React.ElementType<{ className?: string }> }> = [
-    { id: "home", label: uk ? "Огляд" : "Overview", Icon: Home },
-    { id: "tasks", label: uk ? "Практика" : "Practice", Icon: Code2 },
-    { id: "grades", label: uk ? "Прогрес" : "Progress", Icon: Trophy },
+    { id: "home", label: uk ? "Навчання" : "Learning", Icon: Home },
+    { id: "tasks", label: "Lab", Icon: Code2 },
     ...(user.role === "SYSTEM_ADMIN"
       ? [{ id: "admin" as const, label: uk ? "Адміністрування" : "Admin", Icon: ShieldCheck }]
       : []),
@@ -130,18 +135,6 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 {label}
               </button>
             ))}
-            <button type="button" onClick={onLibrary} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/library") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
-              <BookOpen className="h-4 w-4" />
-              {uk ? "Бібліотека" : "Library"}
-            </button>
-            <button type="button" onClick={onCourses} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/learning") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
-              <BookOpen className="h-4 w-4" />
-              {uk ? "Курси" : "Courses"}
-            </button>
-            <button type="button" onClick={onPlayground} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/playground") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
-              <PlaySquare className="h-4 w-4" />
-              {uk ? "Пісочниця" : "Playground"}
-            </button>
             {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/support/desk") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
               <HelpCircle className="h-4 w-4" />
               Support desk
@@ -201,15 +194,28 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
         </div>
 
       </header>
+      {area === "learning" && learning.currentCourse ? (
+        <div className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92">
+          <div className="mx-auto flex max-w-[1440px] items-center gap-3 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10">
+            <div className="relative shrink-0">
+              <select value={learning.me?.currentEnrollmentId ?? ""} onChange={(event) => { const id = Number(event.target.value); if (id) void learning.selectCourse(id); else if (event.target.value === "catalog") onCourses(); }} className="appearance-none rounded-xl border border-[#00c875]/35 bg-[#e8f6ed] px-3 py-2 pr-8 text-sm font-semibold text-[#153321] outline-none dark:bg-[#00ff88]/10 dark:text-[#bfffd9]">
+                {learning.me?.enrollments.filter((item) => item.status === "IN_PROGRESS" || item.status === "COMPLETED").map((item) => <option key={item.enrollmentId} value={item.enrollmentId}>{item.title}</option>)}
+                <option value="catalog">{uk ? "Додати курс…" : "Add a course…"}</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2" />
+            </div>
+            <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
+            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Маршрут" : "Path", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: learning.currentCourse.nextAction ? `/learning/course/${learning.currentCourse.id}/practice/${learning.currentCourse.nextAction.itemId}` : `/learning/course/${learning.currentCourse.id}/path` }, { id: "progress", label: uk ? "Прогрес" : "Progress", path: `/learning/course/${learning.currentCourse.id}/progress` }].map((tab) => <button key={tab.id} type="button" onClick={() => { if (tab.id === "practice" && !learning.currentCourse?.nextAction) return; window.location.assign(tab.path); }} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
+            <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-[#657368] sm:flex dark:text-[#a5b3a9]"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dce6df] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00d782]" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
+          </div>
+        </div>
+      ) : null}
+      {area === "lab" ? <div className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92"><div className="mx-auto flex max-w-[1440px] items-center gap-2 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10"><span className="mr-2 shrink-0 text-sm font-bold">Lab</span>{[{ label: uk ? "Вільна практика" : "Free practice", path: "/lab/practice" }, { label: uk ? "Бібліотека" : "Library", path: "/lab/library" }, { label: uk ? "Пісочниця" : "Playground", path: "/lab/playground" }].map((tab) => <button key={tab.path} type="button" onClick={() => window.location.assign(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${routeIsActive(tab.path) ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}</div></div> : null}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
-        <div className="grid grid-cols-6 gap-1">
+        <div className="grid grid-cols-3 gap-1">
           {[
             { id: "home" as const, label: nav.find((item) => item.id === "home")?.label ?? "Home", Icon: Home, onClick: () => onNavigate("home") },
             { id: "tasks" as const, label: nav.find((item) => item.id === "tasks")?.label ?? "Practice", Icon: Code2, onClick: () => onNavigate("tasks") },
-            { id: "grades" as const, label: nav.find((item) => item.id === "grades")?.label ?? "Progress", Icon: Trophy, onClick: () => onNavigate("grades") },
-            { id: "library" as const, label: uk ? "Бібліотека" : "Library", Icon: BookOpen, onClick: onLibrary },
-            { id: "playground" as const, label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
-            { id: "courses" as const, label: uk ? "Курси" : "Courses", Icon: BookOpen, onClick: onCourses },
           ].map(({ id, label, Icon, onClick }) => (
             <button key={id} type="button" onClick={onClick} aria-current={active(id as Page) ? "page" : undefined} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${active(id as Page) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
               <Icon className="size-4" />

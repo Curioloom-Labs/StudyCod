@@ -148,9 +148,14 @@ export type PersonalControlQuizSubmitResponse = {
   } | null;
 };
 
-export async function listTasks(uiLang?: UiLanguage): Promise<Task[]> {
+export async function listTasks(uiLang?: UiLanguage, options?: { scope?: "COURSE" | "LAB"; courseEnrollmentId?: number }): Promise<Task[]> {
+  const params = {
+    ...(uiLang ? { uiLang } : {}),
+    ...(options?.scope ? { scope: options.scope } : {}),
+    ...(Number.isInteger(options?.courseEnrollmentId) && Number(options?.courseEnrollmentId) > 0 ? { courseEnrollmentId: Number(options.courseEnrollmentId) } : {})
+  };
   const res = await api.get("/tasks", {
-    params: uiLang ? { uiLang } : undefined
+    params: Object.keys(params).length ? params : undefined
   });
   const data: unknown = res.data;
   if (Array.isArray(data)) return data as Task[];

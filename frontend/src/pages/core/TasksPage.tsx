@@ -9,7 +9,7 @@ import { MultiFileEditor, type CodeFile } from "../../components/MultiFileEditor
 import { MarkdownView } from "../../components/MarkdownView";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import type { Task, User } from "../../types";
-import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save } from "lucide-react";
+import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save, ArrowRight } from "lucide-react";
 import { tr } from "../../i18n";
 import { TaskGenerationOverlay, type TaskGenerationPhase } from "../../components/TaskGenerationOverlay";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
@@ -515,6 +515,7 @@ export const TasksPage: React.FC<Props> = ({
     }
   });
   const [courseContext, setCourseContext] = useState<{ courseId: number; courseTitle: string; itemTitle: string } | null>(null);
+  const [courseEnrollmentId, setCourseEnrollmentId] = useState<number | null>(null);
   const latestSubmissionBindingRef = useRef<{
     submissionId?: string;
     codeHash: string;
@@ -565,16 +566,19 @@ export const TasksPage: React.FC<Props> = ({
   }, [searchParams]);
 
   const requestedCourseItemIdFromUrl = useMemo(() => {
-    const raw = searchParams.get("courseItemId");
+    const pathMatch = window.location.pathname.match(/^\/learning\/course\/\d+\/practice\/(\d+)/);
+    const raw = searchParams.get("courseItemId") ?? pathMatch?.[1];
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
   const requestedCourseIdFromUrl = useMemo(() => {
-    const raw = searchParams.get("courseId");
+    const pathMatch = window.location.pathname.match(/^\/learning\/course\/(\d+)\/practice\//);
+    const raw = searchParams.get("courseId") ?? pathMatch?.[1];
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }, [searchParams]);
   const effectiveCourseItemId = requestedCourseItemIdFromUrl ?? coursePracticeItemId;
+  const courseMode = requestedCourseIdFromUrl != null && effectiveCourseItemId != null;
 
   useEffect(() => {
     if (!requestedCourseItemIdFromUrl) return;
@@ -589,6 +593,7 @@ export const TasksPage: React.FC<Props> = ({
   useEffect(() => {
     if (!requestedCourseIdFromUrl || !effectiveCourseItemId) {
       setCourseContext(null);
+      setCourseEnrollmentId(null);
       return;
     }
     let cancelled = false;
@@ -597,6 +602,7 @@ export const TasksPage: React.FC<Props> = ({
         if (cancelled) return;
         const item = course.modules.flatMap((module) => module.items).find((candidate) => candidate.id === effectiveCourseItemId);
         setCourseContext(item ? { courseId: course.id, courseTitle: course.title, itemTitle: item.title } : null);
+        setCourseEnrollmentId(course.enrollment.id);
       })
       .catch(() => {
         if (!cancelled) setCourseContext(null);
@@ -1205,10 +1211,11 @@ export const TasksPage: React.FC<Props> = ({
     } catch {}
   }, [editorOpen]);
   useEffect(() => {
+    if (requestedCourseIdFromUrl && !courseEnrollmentId) return;
     let mounted = true;
     const load = async () => {
       try {
-        const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage);
+        const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", ...(courseEnrollmentId ? { courseEnrollmentId } : {}) } : { scope: "LAB" });
         if (mounted) {
           const filtered = data;
           setTasks(filtered);
@@ -1247,7 +1254,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode, theoryIsAcknowledged]);
+  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode, theoryIsAcknowledged, requestedCourseIdFromUrl, courseEnrollmentId]);
   useEffect(() => {
     if (tasks.length > 0 && !active) {
       const openTaskId = sessionStorage.getItem("openTaskId");
@@ -1555,8 +1562,11 @@ export const TasksPage: React.FC<Props> = ({
   // Trigger exactly once, then remove the command parameters so refreshing or
   // pressing "New" does not unexpectedly regenerate the same catalog item.
   useEffect(() => {
-    if (isPreviewMode || searchParams.get("generate") !== "1" || !requestedCourseItemIdFromUrl) return;
-    const key = `${requestedCourseItemIdFromUrl}:generate`;
+    if (isPreviewMode || !requestedCourseItemIdFromUrl) return;
+    const canonicalCoursePractice = requestedCourseIdFromUrl != null && !searchParams.get("generate");
+    if (!canonicalCoursePractice && searchParams.get("generate") !== "1") return;
+    if (canonicalCoursePractice && (loading || tasks.length > 0)) return;
+    const key = `${requestedCourseIdFromUrl ?? "legacy"}:${requestedCourseItemIdFromUrl}:generate`;
     if (autoCourseGenerationRef.current === key) return;
     autoCourseGenerationRef.current = key;
     const nextSearch = new URLSearchParams(searchParams);
@@ -1566,10 +1576,11 @@ export const TasksPage: React.FC<Props> = ({
     // handleGenerate is intentionally invoked once per roadmap command; the
     // ref above prevents reruns when its surrounding workspace state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewMode, requestedCourseItemIdFromUrl, searchParams, setSearchParams]);
+  }, [isPreviewMode, requestedCourseIdFromUrl, requestedCourseItemIdFromUrl, searchParams, setSearchParams, loading, tasks.length]);
 
   const handleSubmit = async () => {
     if (!active) return;
+    const notifyCourseProgress = () => { if (courseMode) window.dispatchEvent(new Event("studycod:course-progress-changed")); };
     if (isPreviewMode && !isPersonalControlQuizTask) {
       setSubmitting(true);
       setUIState("evaluating");
@@ -1667,8 +1678,9 @@ export const TasksPage: React.FC<Props> = ({
         setConsoleOutput(result.aiFeedback + autoGenerateHint);
         setUIState(total >= PERSONAL_TASK_PASS_GRADE ? "success" : "error");
 
-        const updatedTasks = await listTasks(uiLanguage);
+        const updatedTasks = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
         setTasks(updatedTasks);
+        notifyCourseProgress();
         if (autoGeneratedPracticeId) {
           const nextPractice = updatedTasks.find(t => t.id === autoGeneratedPracticeId);
           if (nextPractice) {
@@ -1751,8 +1763,9 @@ export const TasksPage: React.FC<Props> = ({
         setAiResult(result);
         setRevealedHints(0);
         setUIState(gradeTotal >= PERSONAL_TASK_PASS_GRADE ? "success" : "error");
-        const updatedTasks = await listTasks(uiLanguage);
-        setTasks(updatedTasks);
+        const updatedTasks = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
+          setTasks(updatedTasks);
+          notifyCourseProgress();
         const updated = updatedTasks.find(t => t.id === active.id);
         if (updated) setActive(updated);
         return;
@@ -1871,7 +1884,7 @@ export const TasksPage: React.FC<Props> = ({
           }
         }
       }
-      const updatedTasks = await listTasks(uiLanguage);
+      const updatedTasks = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
       let effectiveTasks = updatedTasks;
 
       const activeSubtitle = String(active?.subtitle ?? "");
@@ -1887,7 +1900,7 @@ export const TasksPage: React.FC<Props> = ({
             const gen = await generateTask(uiLanguage);
             const payload = asRecord(gen);
             if (String(payload?.status ?? "") === "ok" && payload?.task && typeof payload.task === "object") {
-              const refreshed = await listTasks(uiLanguage);
+              const refreshed = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
               effectiveTasks = refreshed;
             }
           } catch (genErr: unknown) {
@@ -2186,12 +2199,17 @@ export const TasksPage: React.FC<Props> = ({
           languageOptions={[ideLanguage]}
           toolbar={
             <>
-              <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}>
-                <History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})
-              </button>
-              <button type="button" onClick={() => void handleGenerate({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
-                <Plus className="size-3.5" />{tr("Нове", "New")}
-              </button>
+              {courseMode ? <>
+                <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
+                <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211]">{tr("Наступний крок", "Next step")}<ArrowRight className="size-3.5" /></button>
+              </> : <>
+                <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}>
+                  <History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})
+                </button>
+                <button type="button" onClick={() => void handleGenerate({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
+                  <Plus className="size-3.5" />{tr("Нове", "New")}
+                </button>
+              </>}
             </>
           }
           language={ideLanguage}
@@ -2264,7 +2282,7 @@ export const TasksPage: React.FC<Props> = ({
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-bold text-[#718077] dark:text-[#93a199]">
-                {courseContext ? <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}`)} className="truncate text-[#16834d] transition hover:underline dark:text-[#72edb0]">{tr("Курс", "Course")}: {courseContext.courseTitle}</button> : <span>{tr("Особиста практика", "Personal practice")}</span>}
+                {courseContext ? <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}/path`)} className="truncate text-[#16834d] transition hover:underline dark:text-[#72edb0]">{tr("Курс", "Course")}: {courseContext.courseTitle}</button> : <span>{tr("Особиста практика", "Personal practice")}</span>}
                 <ChevronRight className="size-3" />
                 <span className="truncate">{courseContext?.itemTitle ?? active?.topicTitle ?? tr("Новий маршрут", "New route")}</span>
               </div>
@@ -2414,7 +2432,7 @@ export const TasksPage: React.FC<Props> = ({
                 {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ {isPreviewMode ? 12 : 100}</span></div>}
                 {aiResult?.aiFeedback && <p className="mt-3 text-sm leading-6 text-[#4f5f55] dark:text-[#b8c4bb]">{aiResult.aiFeedback}</p>}
                 <pre className="mt-4 max-h-52 overflow-auto whitespace-pre-wrap rounded-xl bg-[#111713] p-4 font-mono text-xs leading-6 text-[#cfe0d3]">{consoleOutput || tr("Результат запуску з’явиться тут.", "Run output will appear here.")}</pre>
-                {courseContext && aiResult && <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}`)} className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-[#16834d]/25 bg-[#e8f7ed] px-4 py-3 text-xs font-black text-[#147447] transition hover:bg-[#d9f2e3] dark:border-[#72edb0]/25 dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tr("Повернутися до курсу", "Back to course")}</button>}
+                {courseContext && aiResult && <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}/path`)} className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-[#16834d]/25 bg-[#e8f7ed] px-4 py-3 text-xs font-black text-[#147447] transition hover:bg-[#d9f2e3] dark:border-[#72edb0]/25 dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tr("Повернутися до курсу", "Back to course")}</button>}
               </div>
 
               <div className="border-t border-[#15231a]/10 p-5 dark:border-white/[.08]">

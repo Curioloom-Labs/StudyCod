@@ -15,6 +15,7 @@ import {
 } from "../utils/personalCurriculumProgress";
 import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
+import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { TestData } from "../entities/TestData";
 import { TheoryBlock } from "../entities/TheoryBlock";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
@@ -1592,7 +1593,9 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     repeatAttempt: 0,
     kind: task.type,
     createdAt: task.createdAt,
-    language: task.lang
+    language: task.lang,
+    courseItemId: task.courseItemId ?? null,
+    courseEnrollmentId: task.courseEnrollmentId ?? null
   };
 }
 
@@ -2168,20 +2171,26 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
     })();
     const uiLanguage = resolveUiLanguage(req);
 
-    const tasks = await taskRepo().find({
-      where: {
-        user: {
-          id: req.userId
-        },
-        ...(req.learningRuntime && {
-          lang: req.learningRuntime as "JAVA" | "PYTHON" | "CPP"
-        })
-      },
-      order: {
-        createdAt: "DESC"
-      },
-      relations: ["user", "topic", "topic.theoryBlock"]
-    });
+    const rawScope = Array.isArray((req.query as any)?.scope) ? (req.query as any).scope[0] : (req.query as any)?.scope;
+    const scope = rawScope == null || rawScope === "" ? null : String(rawScope).toUpperCase();
+    if (scope != null && scope !== "COURSE" && scope !== "LAB") return res.status(400).json({ message: "INVALID_TASK_SCOPE" });
+    const rawEnrollmentId = Array.isArray((req.query as any)?.courseEnrollmentId) ? (req.query as any).courseEnrollmentId[0] : (req.query as any)?.courseEnrollmentId;
+    const requestedEnrollmentId = rawEnrollmentId == null || rawEnrollmentId === "" ? null : Number(rawEnrollmentId);
+    if (scope === "COURSE" && (!Number.isInteger(requestedEnrollmentId) || Number(requestedEnrollmentId) <= 0)) return res.status(400).json({ message: "COURSE_ENROLLMENT_REQUIRED" });
+    if (requestedEnrollmentId != null && (!Number.isInteger(requestedEnrollmentId) || requestedEnrollmentId <= 0)) return res.status(400).json({ message: "INVALID_COURSE_ENROLLMENT_ID" });
+    if (scope === "COURSE") {
+      const enrollment = await AppDataSource.getRepository(UserCourseEnrollment).findOne({ where: { id: requestedEnrollmentId!, user: { id: req.userId } } });
+      if (!enrollment) return res.status(404).json({ message: "COURSE_ENROLLMENT_NOT_FOUND" });
+    }
+    const taskQuery = taskRepo().createQueryBuilder("task")
+      .leftJoinAndSelect("task.user", "user")
+      .leftJoinAndSelect("task.topic", "topic")
+      .leftJoinAndSelect("topic.theoryBlock", "theoryBlock")
+      .where("user.id = :userId", { userId: req.userId });
+    if (req.learningRuntime) taskQuery.andWhere("task.lang = :runtime", { runtime: req.learningRuntime });
+    if (scope === "COURSE") taskQuery.andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: requestedEnrollmentId });
+    if (scope === "LAB") taskQuery.andWhere("task.course_enrollment_id IS NULL");
+    const tasks = await taskQuery.orderBy("task.created_at", "DESC").getMany();
     const ids = tasks.map(t => t.id);
     const gradeTaskIds = new Set<number>();
     const latestGradesByTaskId = new Map<number, Grade>();

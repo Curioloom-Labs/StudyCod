@@ -162,7 +162,7 @@ export const LearningCoursePage: React.FC = () => {
         setError(tr("Спочатку прочитай і заверши теорію цієї теми.", "Read and complete this topic's theory first."));
         return;
       }
-      navigate(`/tasks?courseId=${course?.id ?? ""}&courseItemId=${item.id}&generate=1`);
+      navigate(`/learning/course/${course?.id ?? ""}/practice/${item.id}`);
       return;
     }
     setBusyItem(item.id);
@@ -250,8 +250,7 @@ export const LearningCoursePage: React.FC = () => {
       }
       const nextPractice = node.practices.find((item) => item.progress.status !== "COMPLETED");
       if (nextPractice && course) {
-        const command = nextPractice.progress.status === "IN_PROGRESS" ? "" : "&generate=1";
-        navigate(`/tasks?courseId=${course.id}&courseItemId=${nextPractice.id}${command}`);
+        navigate(`/learning/course/${course.id}/practice/${nextPractice.id}`);
         return;
       }
     }
