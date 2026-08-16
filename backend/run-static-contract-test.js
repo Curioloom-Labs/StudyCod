@@ -14,6 +14,7 @@ const privacy = read("src/services/edu/dataPrivacy.ts");
 const studentEntity = read("src/entities/Student.ts");
 const eraseRoute = read("src/routes/edu/classStudents.ts");
 const learningCatalog = read("src/services/learningCatalogService.ts");
+const tasks = read("src/routes/tasks.ts");
 
 assert(!/return res\.json\(\{\s*token\b/.test(auth), "auth success responses must not expose an access token field");
 assert(!/return res\.json\(\{\s*token\b/.test(studentAuth), "student login must not expose an access token field");
@@ -28,5 +29,8 @@ assert(learningCatalog.includes("existing.status = \"IN_PROGRESS\";") && learnin
 assert(fs.existsSync(path.join(root, "src/migrations/1752500000000-EnforceClassOrgNotNull.ts")), "org_id hardening migration must remain present");
 assert(fs.existsSync(path.join(root, "src/migrations/1752600000000-AddStudentDeletedAt.ts")), "student soft-delete migration must be present");
 assert(read("src/routes/edu/classStudents.ts").includes("writeSensitiveStudentRead"), "sensitive student reads must be audited");
+assert((learningCatalog.match(/where: \{ id: itemId, isActive: true \}/g) || []).length === 3, "all direct course-item lookups must exclude inactive items");
+assert(learningCatalog.includes('.createQueryBuilder("task")') && learningCatalog.includes('task.user_id = :userId') && learningCatalog.includes('task.type IN (:...legacyTypes)'), "legacy progress sync must filter tasks in SQL");
+assert(tasks.includes("COURSE_PRACTICE_GENERATION_UNAVAILABLE") && tasks.includes("shouldUseGenericPersonalFallback(params.subtitle)"), "catalog practice must not use the generic AI fallback");
 
-console.log("STATIC CONTRACT PASS: auth, student erase/restore, org hardening, and sensitive-read guards");
+console.log("STATIC CONTRACT PASS: auth, student erase/restore, org hardening, sensitive-read guards, and course progress contracts");

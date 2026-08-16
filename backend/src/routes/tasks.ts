@@ -30,6 +30,7 @@ import { SubmissionIntegrity } from "../entities/SubmissionIntegrity";
 import { SolveSession } from "../entities/SolveSession";
 import { boundSnapshots, type ReplaySnapshot } from "../services/replay/replaySession";
 import { getStableDifus } from "../utils/adaptiveDifficulty";
+import { shouldUseGenericPersonalFallback } from "../utils/taskGenerationPolicy";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
 import { judgeWithSemaphore } from "../services/judgeWorker";
@@ -1812,8 +1813,13 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     ...(disableDeadlines ? {} : { totalTimeoutMs: taskBudgetMs })
   });
   if (!aiTaskResult.success) {
-    // Keep the authenticated practice flow usable during provider outages.
-    // The fallback is deliberately tiny, deterministic, and has server-side tests.
+    if (!shouldUseGenericPersonalFallback(params.subtitle)) {
+      // Never substitute an unrelated exercise for a catalog item: a passing
+      // submission would otherwise complete the wrong course topic.
+      throw Object.assign(new Error("COURSE_PRACTICE_GENERATION_UNAVAILABLE"), { statusCode: 503 });
+    }
+    // Keep personal practice usable during provider outages. The fallback is
+    // deliberately tiny, deterministic, and covered by server-side tests.
     return createProviderFallback();
   }
   const aiTask = aiTaskResult.data;

@@ -129,20 +129,18 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
   }
   if (!theoryByTitle.size && !theoryByIndex.size) return;
 
-  const legacyTasks = await taskRepo().find({
-    // Keep the database predicate deliberately small. Some production MySQL
-    // versions have returned enum/relation combinations differently through
-    // TypeORM; filtering the already user-scoped rows in memory keeps this
-    // compatibility bridge from silently missing an active task.
-    where: { user: { id: userId } },
-    relations: ["topic", "grades"],
-    order: { createdAt: "ASC", id: "ASC" },
-  });
+  const legacyTasks = await taskRepo()
+    .createQueryBuilder("task")
+    .innerJoinAndSelect("task.topic", "topic")
+    .leftJoinAndSelect("task.grades", "grades")
+    .where("task.user_id = :userId", { userId })
+    .andWhere("task.lang = :runtime", { runtime })
+    .andWhere("task.type IN (:...legacyTypes)", { legacyTypes: ["INTRO", "TOPIC"] })
+    .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :catalogPrefix)", { catalogPrefix: "CATALOG_ITEM:%" })
+    .orderBy("task.created_at", "ASC")
+    .addOrderBy("task.id", "ASC")
+    .getMany();
   const rows = legacyTasks
-    .filter((task) => task.topic
-      && String(task.lang).toUpperCase() === runtime
-      && (task.type === "INTRO" || task.type === "TOPIC")
-      && !String(task.subtitle ?? "").startsWith("CATALOG_ITEM:"))
     .map((task) => ({
       id: task.id,
       topicIndex: task.topicIndex,
@@ -218,7 +216,7 @@ async function findBestCourseEnrollment(userId: number, courseId: number, relati
 }
 
 async function getEnrolledItemContext(userId: number, itemId: number) {
-  const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
+  const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
   if (!item?.module?.course || !isMiniProject(item)) throw Object.assign(new Error("COURSE_PROJECT_NOT_FOUND"), { statusCode: 404 });
   const enrollment = await findBestCourseEnrollment(userId, item.module.course.id);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
@@ -476,7 +474,7 @@ export async function getCourseForUser(userId: number, courseId: number) {
  * prerequisite/theory gates as the roadmap UI.
  */
 export async function getCoursePracticeContext(userId: number, itemId: number) {
-  const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
+  const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
   if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
   if (item.kind !== "CODE_TASK") {
     throw Object.assign(new Error("COURSE_ITEM_NOT_GENERATABLE"), { statusCode: 409 });
@@ -531,7 +529,7 @@ export async function startCourseItem(userId: number, itemId: number): Promise<v
 }
 
 export async function completeCourseItem(userId: number, itemId: number, score?: number): Promise<UserCourseEnrollment> {
-  const item = await itemRepo().findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
+  const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
   if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
   const enrollment = await findBestCourseEnrollment(userId, item.module.course.id);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
