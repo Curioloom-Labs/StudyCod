@@ -105,6 +105,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     else navigate("/support");
   };
   const goSupportDesk = () => {
+    setAccountOpen(false);
     if (onSupportDesk) onSupportDesk();
     else navigate("/support/desk");
   };
@@ -137,10 +138,6 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 {label}
               </button>
             ))}
-            {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${routeIsActive("/support/desk") ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}>
-              <HelpCircle className="h-4 w-4" />
-              Support desk
-            </button> : null}
           </nav>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -181,10 +178,14 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                     <CircleUserRound className="h-4 w-4" />
                     {uk ? "Профіль" : "Profile"}
                   </button>
-                  <button type="button" onClick={goSupport} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#5d6b62] transition hover:bg-[#f1f5f1] dark:text-[#aab7ae] dark:hover:bg-white/[.06]" role="menuitem">
-                    <HelpCircle className="h-4 w-4" />
-                    {uk ? "Підтримка" : "Support"}
-                  </button>
+                   <button type="button" onClick={goSupport} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#5d6b62] transition hover:bg-[#f1f5f1] dark:text-[#aab7ae] dark:hover:bg-white/[.06]" role="menuitem">
+                     <HelpCircle className="h-4 w-4" />
+                     {uk ? "Підтримка" : "Support"}
+                   </button>
+                   {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#5d6b62] transition hover:bg-[#f1f5f1] dark:text-[#aab7ae] dark:hover:bg-white/[.06]" role="menuitem">
+                     <HelpCircle className="h-4 w-4" />
+                     Support desk
+                   </button> : null}
                   <button type="button" onClick={onLogout} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#d34e72] transition hover:bg-[#fff0f4] dark:text-[#ff9aba] dark:hover:bg-[#ff6b9d]/10" role="menuitem">
                     <LogOut className="h-4 w-4" />
                     {uk ? "Вийти" : "Sign out"}
