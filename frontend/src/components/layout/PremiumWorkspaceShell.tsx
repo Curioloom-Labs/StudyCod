@@ -113,7 +113,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
 
   return (
     <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
-      <header className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/82 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/82">
+      <header className="sticky top-0 z-50 bg-[#f7f8f5]/82 backdrop-blur-xl dark:bg-[#0b120e]/82">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-10">
           <button
             type="button"
@@ -235,7 +235,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           </div>
         </div>
       ) : null}
-      {area === "lab" ? <div className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92"><div className="mx-auto flex max-w-[1440px] items-center gap-2 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10"><span className="mr-2 shrink-0 text-sm font-bold">Lab</span>{[{ label: uk ? "Вільна практика" : "Free practice", path: "/lab/practice" }, { label: uk ? "Бібліотека" : "Library", path: "/lab/library" }, { label: uk ? "Пісочниця" : "Playground", path: "/lab/playground" }].map((tab) => <button key={tab.path} type="button" onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${routeIsActive(tab.path) ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}</div></div> : null}
+      {area === "lab" ? <div className="sticky top-[72px] z-40 bg-[#f7f8f5]/92 backdrop-blur-xl dark:bg-[#0b120e]/92"><div className="mx-auto flex max-w-[1440px] items-center gap-2 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10"><span className="mr-2 shrink-0 text-sm font-bold">Lab</span>{[{ label: uk ? "Бібліотека" : "Library", path: "/lab/library", to: "/lab/library", onClick: onLibrary }, { label: uk ? "Особиста практика" : "Personal practice", path: "/lab/practice", to: "/lab/practice?workspace=personal" }, { label: uk ? "Пісочниця" : "Playground", path: "/lab/playground", to: "/lab/playground", onClick: onPlayground }].map((tab) => <button key={tab.path} type="button" onClick={() => tab.onClick ? tab.onClick() : navigate(tab.to)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${routeIsActive(tab.path) ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}</div></div> : null}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
         <div className="grid grid-cols-3 gap-1">
           {[

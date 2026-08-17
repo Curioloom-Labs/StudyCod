@@ -195,7 +195,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const replayStartRef = useRef<number>(Date.now());
   const lastSnapAtRef = useRef<number>(0);
   const params = useParams<{ taskKey?: string; taskId?: string; id?: string }>();
-  const taskKey = useMemo(() => String(params.taskKey ?? params.taskId ?? params.id ?? "").trim(), [params]);
+  const queryTaskKey = useMemo(() => new URLSearchParams(location.search || "").get("task") ?? "", [location.search]);
+  const taskKey = useMemo(() => String(params.taskKey ?? params.taskId ?? params.id ?? queryTaskKey).trim(), [params, queryTaskKey]);
   const taskId = useMemo(() => {
     const v = parseInt(taskKey, 10);
     return taskKey && String(v) === taskKey ? v : null;
@@ -203,7 +204,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const designPreview = import.meta.env.DEV && new URLSearchParams(location.search || "").get("preview") === "true";
   const libraryListPath = useMemo(() => {
-    const path = location.pathname.startsWith("/edu/") ? "/edu/library" : "/library";
+    const path = location.pathname.startsWith("/edu/") ? "/edu/library" : "/lab/library";
     return designPreview ? `${path}?preview=true` : path;
   }, [designPreview, location.pathname]);
   const safeBackPath = useMemo(() => {
@@ -222,7 +223,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   }, [location.search, libraryListPath]);
 
   const goBackToLibrary = () => {
-    const isSolvePath = (p: string) => /^\/(?:edu\/)?library\/solve\//.test(String(p || ""));
+    const isSolvePath = (p: string) => /^\/(?:edu\/)?(?:lab\/)?library\/solve\//.test(String(p || ""));
 
     const primaryTarget = !isSolvePath(safeBackPath) ? safeBackPath : libraryListPath;
     const target = primaryTarget || libraryListPath;

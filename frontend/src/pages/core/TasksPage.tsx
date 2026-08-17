@@ -9,7 +9,7 @@ import { MultiFileEditor, type CodeFile } from "../../components/MultiFileEditor
 import { MarkdownView } from "../../components/MarkdownView";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import type { Task, User } from "../../types";
-import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save, ArrowRight } from "lucide-react";
+import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save, ArrowRight, BookOpen } from "lucide-react";
 import { tr } from "../../i18n";
 import { TaskGenerationOverlay, type TaskGenerationPhase } from "../../components/TaskGenerationOverlay";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
@@ -614,8 +614,10 @@ export const TasksPage: React.FC<Props> = ({
     const nextSearch = new URLSearchParams(searchParams);
     if (taskId && taskId > 0) {
       nextSearch.set("task", String(taskId));
+      nextSearch.set("workspace", "personal");
     } else {
       nextSearch.delete("task");
+      nextSearch.delete("workspace");
     }
 
     if (nextSearch.toString() === searchParams.toString()) return;
@@ -2203,6 +2205,9 @@ export const TasksPage: React.FC<Props> = ({
                 <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
                 <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211]">{tr("Наступний крок", "Next step")}<ArrowRight className="size-3.5" /></button>
               </> : <>
+                <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">
+                  <BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}
+                </button>
                 <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}>
                   <History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})
                 </button>

@@ -68,7 +68,7 @@ const LegacyAppPageRedirect: React.FC<{ page: string }> = ({ page }) => {
     const courseId = Number(params.get("courseId"));
     const itemId = Number(params.get("courseItemId"));
     if (Number.isInteger(courseId) && courseId > 0 && Number.isInteger(itemId) && itemId > 0) return <Navigate to={`/learning/course/${courseId}/practice/${itemId}`} replace />;
-    return <Navigate to="/lab/practice" replace />;
+    return <Navigate to="/lab/library" replace />;
   }
   if (page === "grades") return <LegacyGradesRedirect />;
   const params = new URLSearchParams(location.search);
@@ -457,7 +457,7 @@ const AppContent: React.FC = React.memo(() => {
       if (Number.isInteger(courseId) && courseId > 0 && Number.isInteger(itemId) && itemId > 0) {
         navigate(`/learning/course/${courseId}/practice/${itemId}`, { replace: true });
       } else {
-        navigate("/lab/practice", { replace: true });
+        navigate("/lab/library", { replace: true });
       }
       return;
     }
@@ -748,7 +748,7 @@ const AppContent: React.FC = React.memo(() => {
   const handleSetPage = useCallback((newPage: Page) => {
     if (user?.userMode !== "EDUCATIONAL") {
       if (newPage === "home") { navigate("/"); setNavOpen(false); return; }
-      if (newPage === "tasks") { navigate("/lab/practice"); setNavOpen(false); return; }
+      if (newPage === "tasks") { navigate("/lab/library"); setNavOpen(false); return; }
       if (newPage === "grades") { navigate("/learning/catalog"); setNavOpen(false); return; }
     }
     startTransition(() => {

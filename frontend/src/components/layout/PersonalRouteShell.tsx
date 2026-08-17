@@ -18,7 +18,7 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
   if (!user) return <BrandedPageLoader />;
   const go = (page: string) => {
     if (page === "home") navigate("/");
-    else if (page === "tasks") navigate("/lab/practice");
+    else if (page === "tasks") navigate("/lab/library");
     else if (page === "grades") navigate("/learning/catalog");
     else if (page === "admin") navigate("/?app=admin");
     else if (page === "profile") navigate("/?app=profile");

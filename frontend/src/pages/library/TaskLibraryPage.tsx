@@ -315,7 +315,7 @@ export const TaskLibraryPage: React.FC = () => {
   const location = useLocation();
   const isDesignPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
-  const solvePathPrefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve" : "/library/solve";
+  const solvePathPrefix = location.pathname.startsWith("/edu/") ? "/edu/library/solve" : "/lab/library/solve";
 
   const safeExitPath = useMemo(() => {
     const fallback = location.pathname.startsWith("/edu/") ? "/edu" : "/";
