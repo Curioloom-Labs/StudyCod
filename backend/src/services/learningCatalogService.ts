@@ -606,9 +606,17 @@ export async function startCourseItem(userId: number, itemId: number): Promise<v
   await progressRepo().save(progress);
 }
 
-export async function completeCourseItem(userId: number, itemId: number, score?: number): Promise<UserCourseEnrollment> {
+export async function completeCourseItem(
+  userId: number,
+  itemId: number,
+  score?: number,
+  source: "direct" | "practice" = "direct",
+): Promise<UserCourseEnrollment> {
   const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
   if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
+  if (source === "direct" && ["CODE_TASK", "WEB_TASK", "QUIZ"].includes(item.kind)) {
+    throw Object.assign(new Error("COURSE_ITEM_REQUIRES_SUBMISSION"), { statusCode: 409 });
+  }
   const enrollment = await findBestCourseEnrollment(userId, item.module.course.id);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {

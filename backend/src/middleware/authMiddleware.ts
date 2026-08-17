@@ -102,11 +102,21 @@ async function syncStudentUiLanguage(studentId: number, uiLanguage: UiLocale, re
 
 async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promise<"ok" | "not-found" | "invalid"> {
   if (payload.type === "STUDENT" && payload.studentId) {
+    // Student credentials are long-lived, so the token alone is not enough to
+    // keep an EDU identity alive. TypeORM excludes soft-deleted rows from a
+    // normal lookup; resolving the current row here makes erase/revoke take
+    // effect immediately for both cookie and bearer-token requests.
+    const activeStudent = await AppDataSource.getRepository(Student).findOne({
+      where: { id: payload.studentId },
+      relations: ["class"]
+    });
+    if (!activeStudent?.class) return "not-found";
+
     const uiLanguage = resolveUiLocaleFromHeaders(req.headers, "en");
     req.studentId = payload.studentId;
     req.userType = "STUDENT";
     req.principalId = payload.studentId;
-    req.learningRuntime = (payload.runtime === "CPP" || payload.runtime === "PYTHON" || payload.runtime === "JAVA") ? payload.runtime : undefined;
+    req.learningRuntime = activeStudent.class.language;
     req.uiLanguage = uiLanguage;
     req.userRole = null;
     req.userMode = "EDUCATIONAL";

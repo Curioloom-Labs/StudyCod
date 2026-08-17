@@ -358,6 +358,7 @@ export const AdminMailWorkspace: React.FC = () => {
   };
 
   const doSearch = async () => {
+    if (status?.canRead !== true) return;
     const q = search.trim();
     if (!q) return;
     setSearching(true);
@@ -376,6 +377,7 @@ export const AdminMailWorkspace: React.FC = () => {
   const clearSearch = async () => {
     setSearch("");
     setSearchActive(false);
+    if (status?.canRead !== true) return;
     await loadMessages(activeFolder);
   };
 
@@ -461,26 +463,32 @@ export const AdminMailWorkspace: React.FC = () => {
       <div className="grid grid-cols-12 gap-4 h-[70vh]">
         <Card className="col-span-2 p-3 overflow-auto">
           <div className="text-xs font-mono text-text-secondary mb-2">Folders</div>
-          <div className="space-y-1">
-            {(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox" }]).map((f) => (
-              <button type="button"
-                key={f.path}
-                onClick={async () => {
-                  setActiveFolder(f.path);
-                  setSearch("");
-                  setSearchActive(false);
-                  await loadMessages(f.path);
-                }}
-                className={`w-full text-left px-2 py-1.5 border text-xs font-mono ${activeFolder === f.path ? "border-primary bg-bg-hover text-text-primary" : "border-border text-text-secondary hover:bg-bg-hover"}`}
-              >
-                {f.name}
-              </button>
-            ))}
-          </div>
+          {status?.canRead !== true ? (
+            <div className="text-xs leading-5 text-text-secondary">IMAP mailbox reading is unavailable.</div>
+          ) : (
+            <div className="space-y-1">
+              {(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox" }]).map((f) => (
+                <button type="button"
+                  key={f.path}
+                  onClick={async () => {
+                    setActiveFolder(f.path);
+                    setSearch("");
+                    setSearchActive(false);
+                    await loadMessages(f.path);
+                  }}
+                  className={`w-full text-left px-2 py-1.5 border text-xs font-mono ${activeFolder === f.path ? "border-primary bg-bg-hover text-text-primary" : "border-border text-text-secondary hover:bg-bg-hover"}`}
+                >
+                  {f.name}
+                </button>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card className="col-span-4 p-3 overflow-auto">
-          <div className="text-xs font-mono text-text-secondary mb-2 truncate">{activeFolder}{searchActive ? " · search" : " · Messages"}</div>
+          <div className="text-xs font-mono text-text-secondary mb-2 truncate">
+            {status?.canRead === true ? `${activeFolder}${searchActive ? " · search" : " · Messages"}` : "Mailbox unavailable"}
+          </div>
           <div className="flex items-center gap-1.5 mb-2">
             <div className="flex-1 flex items-center gap-1.5 px-2 border border-border rounded-md bg-bg-code">
               <Search className="w-3.5 h-3.5 text-text-muted shrink-0" />
@@ -489,6 +497,7 @@ export const AdminMailWorkspace: React.FC = () => {
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") doSearch(); }}
                 placeholder="Search mail"
+                disabled={status?.canRead !== true}
                 className="flex-1 bg-transparent text-xs text-text-primary py-1.5 outline-none placeholder:text-text-muted"
               />
               {searchActive ? (
@@ -497,12 +506,14 @@ export const AdminMailWorkspace: React.FC = () => {
                 </button>
               ) : null}
             </div>
-            <Button size="sm" variant="secondary" onClick={doSearch} disabled={searching || !search.trim()}>
+            <Button size="sm" variant="secondary" onClick={doSearch} disabled={status?.canRead !== true || searching || !search.trim()}>
               {searching ? "…" : "Go"}
             </Button>
           </div>
           <div className="space-y-1">
-            {items.map((m) => {
+            {status?.canRead !== true ? (
+              <div className="text-xs leading-5 text-text-secondary">Connect an IMAP mailbox to load messages.</div>
+            ) : items.map((m) => {
               const unread = !m.seen;
               return (
                 <button type="button"
@@ -522,12 +533,14 @@ export const AdminMailWorkspace: React.FC = () => {
                 </button>
               );
             })}
-            {!items.length ? <div className="text-xs text-text-secondary">{searchActive ? "No results." : "No messages."}</div> : null}
+            {status?.canRead === true && !items.length ? <div className="text-xs text-text-secondary">{searchActive ? "No results." : "No messages."}</div> : null}
           </div>
         </Card>
 
         <Card className="col-span-6 p-3 overflow-auto">
-          {!selected ? (
+          {status?.canRead !== true ? (
+            <div className="text-sm text-text-secondary">Message reading is unavailable until an IMAP mailbox is configured.</div>
+          ) : !selected ? (
             <div className="text-sm text-text-secondary">Select a message</div>
           ) : (
             <div className="space-y-3">

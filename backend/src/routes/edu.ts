@@ -11,6 +11,7 @@ import type { CourseRuntime } from "../entities/CourseVariant";
 import { Class } from "../entities/Class";
 import { Student } from "../entities/Student";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
+import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { requireClassCapability, type ClassAccessRequest } from "../middleware/orgContext";
 import { emailService } from "../services/emailService";
 import { EduLesson, LessonType } from "../entities/EduLesson";
@@ -50,6 +51,7 @@ import agendaRouter from "./edu/agenda";
 import attendanceRouter from "./edu/attendance";
 import similarityRouter from "./edu/similarity";
 import tutorRouter from "./edu/tutor";
+import { enforceAuthTurnstile } from "./auth";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -160,7 +162,7 @@ eduRouter.post("/generate-interactive-lesson", authRequired, async (req: AuthReq
     return res.json(result);
   } catch (error: any) {
     logger.error("[edu] generate-interactive-lesson failed", { requestId: req.requestId, err: error });
-    return res.status(502).json({ message: error?.message || "AI_GENERATION_FAILED" });
+    return res.status(502).json({ message: "AI_GENERATION_FAILED" });
   }
 });
 
@@ -168,7 +170,13 @@ const registerTeacherSchema = z.object({
   username: z.string().min(3).max(50),
   email: z.string().email(),
   password: z.string().min(6),
-  language: z.string().optional()
+  language: z.string().optional(),
+  turnstileToken: z.string().min(1).max(4096).optional(),
+});
+const teacherRegistrationLimiter = createRouteLimiter({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: "TOO_MANY_REGISTRATION_ATTEMPTS",
 });
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -294,7 +302,7 @@ eduRouter.get("/statement-images/:fileName", async (req: Request, res: Response)
   }
 });
 
-eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
+eduRouter.post("/register-teacher", teacherRegistrationLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const validated = registerTeacherSchema.safeParse(req.body);
     if (!validated.success) {
@@ -307,8 +315,10 @@ eduRouter.post("/register-teacher", async (req: Request, res: Response) => {
       username,
       email,
       password,
-      language
+      language,
+      turnstileToken,
     } = validated.data;
+    if (!(await enforceAuthTurnstile(req, res, turnstileToken))) return;
     const existingUser = await userRepo().findOne({
       where: [{
         username

@@ -157,7 +157,7 @@ async function verifyTurnstileToken(params: {
   }
 }
 
-async function enforceAuthTurnstile(req: AuthRequest, res: Response, turnstileTokenRaw: unknown): Promise<boolean> {
+export async function enforceAuthTurnstile(req: AuthRequest, res: Response, turnstileTokenRaw: unknown): Promise<boolean> {
   const enforceTurnstileOnAuth = Boolean(env.__turnstileEnforceAuth);
   if (!enforceTurnstileOnAuth) return true;
 

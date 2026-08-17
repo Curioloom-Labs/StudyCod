@@ -5,7 +5,7 @@ import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { User } from "../../entities/User";
 import { TopicTask } from "../../entities/TopicTask";
 import { TestData } from "../../entities/TestData";
-import { safeAICall } from "../../services/ai/safeAICall";
+import { safeAICall, sendAIError } from "../../services/ai/safeAICall";
 import { logger } from "../../utils/logger";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { authorizeClassAction } from "../../services/edu/classAccess";
@@ -544,11 +544,8 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     });
 
     if (!testDataResult.success) {
-      return res.status(testDataResult.error?.statusCode || 500).json({
-        message: testDataResult.error?.message || "TEST_DATA_GENERATION_FAILED",
-        error: testDataResult.error?.error,
-        details: testDataResult.error?.details
-      });
+      sendAIError(res, testDataResult.error);
+      return;
     }
 
     const testData = Array.isArray(testDataResult.data) ? testDataResult.data : [];
@@ -620,12 +617,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     });
   } catch (error: any) {
     logger.error("Error generating test data", { requestId: req.requestId, err: error });
-    res.status(500).json({
-      message: "TEST_DATA_GENERATION_FAILED",
-      error: error?.message,
-      name: error?.name,
-      code: error?.code
-    });
+    res.status(500).json({ message: "TEST_DATA_GENERATION_FAILED" });
   }
 });
 

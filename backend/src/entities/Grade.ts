@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn, BeforeInsert, BeforeUpdate } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn, BeforeInsert, BeforeUpdate, Index } from "typeorm";
 import { User } from "./User";
 import { Task } from "./Task";
+@Index("idx_grades_task_user_total", ["task", "user", "total"])
 @Entity({
   name: "grades"
 })

@@ -332,10 +332,12 @@ export const LearningCoursePage: React.FC = () => {
               ? tr("Завершено", "Completed")
               : locked
                 ? tr("Заверши попередній вузол", "Complete the previous node")
-              : started
+              : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
+                ? started
+                  ? tr("Продовжити теорію", "Continue theory")
+                  : tr("Прочитати теорію", "Read the theory")
+                : started
                   ? tr("Продовжити практику", "Continue practice")
-                  : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
-                    ? tr("Прочитати теорію", "Read the theory")
                   : node.kind === "PROJECT"
                     ? tr("Відкрити мініпроєкт", "Open mini-project")
                     : tr("Відкрити практику", "Open practice");

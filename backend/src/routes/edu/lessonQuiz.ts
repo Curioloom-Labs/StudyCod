@@ -21,6 +21,15 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const attemptRepo = () => AppDataSource.getRepository(QuizAttempt);
 const userRepo = () => AppDataSource.getRepository(User);
 
+function isQuizAttemptDuplicateError(error: unknown): boolean {
+  const code = String((error as any)?.code ?? "").toUpperCase();
+  if (code === "ER_DUP_ENTRY" || code === "23505") return true;
+  const message = String((error as any)?.message ?? "").toLowerCase();
+  return message.includes("uq_quiz_lesson_student")
+    || message.includes("duplicate entry")
+    || message.includes("unique constraint");
+}
+
 function normalizeLegacyQuiz(raw: unknown): Array<{ question: string; options: Record<string, string>; correct: string }> {
   if (!Array.isArray(raw)) return [];
   return raw.map((item: any) => {
@@ -58,7 +67,7 @@ router.post("/lessons/:lessonId/generate-quiz", authRequired, async (req: AuthRe
       count,
       userId: req.userId
     }, { expectedCount: count, language: req.headers["accept-language"]?.toString().includes("en") ? "en" : "uk", requestId: req.requestId, maxAttempts: 2 });
-    if (!result.success) return res.status(502).json({ message: result.error || "AI_GENERATION_FAILED" });
+    if (!result.success) return res.status(502).json({ message: "AI_GENERATION_FAILED" });
     const quiz = normalizeLegacyQuiz(JSON.parse(result.data.quizJson));
     if (!quiz.length) return res.status(502).json({ message: "EMPTY_QUIZ_GENERATED" });
     lesson.quizJson = JSON.stringify(quiz);
@@ -67,7 +76,7 @@ router.post("/lessons/:lessonId/generate-quiz", authRequired, async (req: AuthRe
     return res.json({ count: quiz.length, quiz, quizJson: lesson.quizJson });
   } catch (error: any) {
     logger.error("[edu/lessonQuiz] generate quiz failed", { requestId: req.requestId, err: error });
-    return res.status(502).json({ message: error?.message || "AI_GENERATION_FAILED" });
+    return res.status(502).json({ message: "AI_GENERATION_FAILED" });
   }
 });
 
@@ -201,6 +210,9 @@ router.post("/lessons/:lessonId/quiz/submit", authRequired, async (req: AuthRequ
       }
     });
   } catch (error: any) {
+    if (isQuizAttemptDuplicateError(error)) {
+      return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
+    }
     logger.error("[edu/lessonQuiz] submit failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

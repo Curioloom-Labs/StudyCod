@@ -1282,6 +1282,8 @@ export async function askAiTutor(question: string): Promise<{ tutor: TutorAnswer
 
 export interface PendingReview {
   gradeId: number;
+  classId?: number | null;
+  className?: string | null;
   student: {
     id: number;
     firstName: string;

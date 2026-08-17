@@ -1381,7 +1381,7 @@ async function syncCatalogPracticeProgress(params: { userId: number; task: Task;
   const itemId = catalogItemIdFromTask(params.task);
   if (!itemId) return;
   try {
-    await completeCourseItem(params.userId, itemId, params.score);
+    await completeCourseItem(params.userId, itemId, params.score, "practice");
   } catch (error: any) {
     logger.warn("[learning] catalog practice progress sync failed", {
       requestId: params.requestId,
@@ -3954,9 +3954,16 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       })
     });
   } catch (error: any) {
-    logger.error("[tasks] POST /generate error", { requestId: req.requestId, userId: req.userId, error });
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({
+    const statusCode = Number(error?.statusCode);
+    const isExpectedClientError = Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500;
+    const logMeta = { requestId: req.requestId, userId: req.userId, error };
+    if (isExpectedClientError) {
+      logger.warn("[tasks] POST /generate rejected request", logMeta);
+    } else {
+      logger.error("[tasks] POST /generate error", logMeta);
+    }
+    if (Number.isInteger(statusCode) && statusCode > 0) {
+      return res.status(statusCode).json({
         message: error.message,
         error: error.error
       });

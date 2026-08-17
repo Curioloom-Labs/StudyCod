@@ -881,7 +881,11 @@ app.use("/api/notifications", notificationsRouter);
 app.use("/api/emails", emailsRouter);
 app.use("/api/learning", authMiddleware, forbidContestModeUsers, learningCatalogRouter);
 app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error("Unhandled error", { err });
+  const isCorsError = String(err?.message ?? "").trim() === "CORS_NOT_ALLOWED";
+  const isCsrfError = /csrf\s+token|invalid\s+csrf|csrf.*missing/i.test(String(err?.message ?? ""));
+  if (isCorsError) logger.warn("Rejected request from disallowed CORS origin");
+  else if (isCsrfError) logger.warn("Rejected state-changing request without a valid CSRF token");
+  else logger.error("Unhandled error", { err });
 
   // If response headers/body have already been streamed, we cannot write a
   // JSON error body — doing so throws ERR_HTTP_HEADERS_SENT and masks the
@@ -893,15 +897,18 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 
   const status = Number(err?.statusCode ?? err?.status ?? 500);
   const isHttpError = err instanceof HttpError || err?.name === "HttpError";
-  const isCsrfError = /csrf\s+token|invalid\s+csrf|csrf.*missing/i.test(String(err?.message ?? ""));
 
   // If the judge scheduler is overloaded, tell clients when to retry.
   // This must be present on overload 503 responses.
   setRetryAfterForOverload(err, res);
   const expose = isHttpError ? (err as HttpError).expose !== false : status < 500;
 
-  const responseStatus = isCsrfError ? 403 : (Number.isFinite(status) ? status : 500);
-  const error = isCsrfError
+  const responseStatus = isCorsError || isCsrfError
+    ? 403
+    : (Number.isFinite(status) ? status : 500);
+  const error = isCorsError
+    ? "CORS_NOT_ALLOWED"
+    : isCsrfError
     ? "CSRF_TOKEN_INVALID"
     : expose
     ? String(err?.message || "INTERNAL_SERVER_ERROR")

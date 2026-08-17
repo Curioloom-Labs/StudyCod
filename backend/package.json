@@ -41,7 +41,7 @@
     "express-rate-limit": "^8.6.2",
     "express-session": "^1.19.0",
     "express-validator": "^7.3.1",
-    "geoip-lite": "^2.0.3",
+    "geoip-lite": "^1.4.10",
     "handlebars": "^4.7.9",
     "helmet": "^8.1.0",
     "iconv-lite": "^0.7.2",
@@ -79,5 +79,9 @@
     "cross-env": "^10.1.0",
     "tsx": "^4.23.11",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.1",
+    "ip-address": "10.5.0"
   }
 }

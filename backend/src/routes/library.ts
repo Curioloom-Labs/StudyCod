@@ -2921,7 +2921,7 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
     return res.send(buffer);
   } catch (error: any) {
     logger.error("[library] export archive failed", { requestId: req.requestId, err: error });
-    return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

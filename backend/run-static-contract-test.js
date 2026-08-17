@@ -15,9 +15,14 @@ const studentEntity = read("src/entities/Student.ts");
 const eraseRoute = read("src/routes/edu/classStudents.ts");
 const learningCatalog = read("src/services/learningCatalogService.ts");
 const tasks = read("src/routes/tasks.ts");
+const authMiddleware = read("src/middleware/authMiddleware.ts");
+const courseTasks = read("src/routes/edu/courseTasks.ts");
+const safeAICall = read("src/services/ai/safeAICall.ts");
+const lessonQuiz = read("src/routes/edu/lessonQuiz.ts");
 
 assert(!/return res\.json\(\{\s*token\b/.test(auth), "auth success responses must not expose an access token field");
 assert(!/return res\.json\(\{\s*token\b/.test(studentAuth), "student login must not expose an access token field");
+assert(authMiddleware.includes('getRepository(Student).findOne({') && authMiddleware.includes('if (!activeStudent?.class) return "not-found";'), "student JWTs must resolve an active Student row before authenticating");
 assert(auth.includes("return res.json({ setupToken: pending.token, flow: pending.flow });"), "Google setup flow must retain its one-time setup token contract");
 assert(classAccess.includes("withDeleted"), "student restore authorization must be able to resolve a soft-erased student");
 assert(privacy.includes("softRemove(student)"), "erase must use a recoverable soft delete");
@@ -32,5 +37,11 @@ assert(read("src/routes/edu/classStudents.ts").includes("writeSensitiveStudentRe
 assert((learningCatalog.match(/where: \{ id: itemId, isActive: true \}/g) || []).length === 3, "all direct course-item lookups must exclude inactive items");
 assert(learningCatalog.includes('.createQueryBuilder("task")') && learningCatalog.includes('task.user_id = :userId') && learningCatalog.includes('task.type IN (:...legacyTypes)'), "legacy progress sync must filter tasks in SQL");
 assert(tasks.includes("COURSE_PRACTICE_GENERATION_UNAVAILABLE") && tasks.includes("shouldUseGenericPersonalFallback(params.subtitle)"), "catalog practice must not use the generic AI fallback");
+assert(courseTasks.includes('setLock("pessimistic_write")') && courseTasks.includes('MAX_ATTEMPTS_REACHED'), "materialized EDU submissions must serialize the attempt-limit check");
+assert(courseTasks.includes('if (!grade.isCompleted) return res.status(409).json({ message: "TASK_NOT_PASSED" });'), "materialized EDU completion must not promote a failed grade");
+assert(learningCatalog.includes('source === "direct"') && learningCatalog.includes('COURSE_ITEM_REQUIRES_SUBMISSION'), "direct course completion must not bypass interactive submissions");
+assert(tasks.includes('completeCourseItem(params.userId, itemId, params.score, "practice")'), "passed catalog practice must retain its internal progress-sync path");
+assert(safeAICall.includes("Provider messages/details can contain URLs") && !safeAICall.includes("error: error.error"), "AI provider internals must not be returned to clients");
+assert(lessonQuiz.includes("isQuizAttemptDuplicateError") && lessonQuiz.includes('QUIZ_ALREADY_SUBMITTED'), "quiz duplicate submissions must return the stable conflict contract");
 
-console.log("STATIC CONTRACT PASS: auth, student erase/restore, org hardening, sensitive-read guards, and course progress contracts");
+console.log("STATIC CONTRACT PASS: auth, student erase/restore, org hardening, sensitive-read guards, course progress, and safe AI error contracts");

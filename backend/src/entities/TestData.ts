@@ -1,10 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, Index } from "typeorm";
 import { EduTask } from "./EduTask";
 import { TopicTask } from "./TopicTask";
 import { Task } from "./Task";
 import { LibraryTask } from "./LibraryTask";
 export type TestKind = "SAMPLE" | "JUDGE";
 export type TestSource = "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+@Index("idx_test_data_personal_task", ["personalTask"])
+@Index("idx_test_data_input_sha256", ["inputSha256"])
+@Index("idx_test_data_output_sha256", ["outputSha256"])
 @Entity("test_data")
 export class TestData {
   @PrimaryGeneratedColumn()

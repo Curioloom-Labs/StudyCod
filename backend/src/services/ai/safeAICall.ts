@@ -818,17 +818,26 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
   }
 }
 export function sendAIError(res: Response, error: AIError): void {
-  if (error.statusCode === 429) {
-    const retryAfterMs = Number(error?.details?.retryAfterMs ?? computeDefaultRetryAfterMs(429));
-    const retryAfterSeconds = Math.max(1, Math.ceil((Number.isFinite(retryAfterMs) ? retryAfterMs : 10_000) / 1000));
+  const statusCode = Number.isInteger(error.statusCode) && error.statusCode >= 400 && error.statusCode < 600
+    ? error.statusCode
+    : 502;
+  const retryAfterMs = Number(error?.details?.retryAfterMs);
+
+  if (statusCode === 429) {
+    const normalizedRetryAfterMs = Number.isFinite(retryAfterMs) && retryAfterMs > 0
+      ? retryAfterMs
+      : computeDefaultRetryAfterMs(429);
+    const retryAfterSeconds = Math.max(1, Math.ceil(normalizedRetryAfterMs / 1000));
     // Standard hint for clients/proxies.
     res.setHeader('Retry-After', String(retryAfterSeconds));
   }
-  res.status(error.statusCode).json({
+  // Provider messages/details can contain URLs, quota metadata, stack traces,
+  // or other implementation details. Only expose the stable message and the
+  // retry hint needed by clients.
+  res.status(statusCode).json({
     message: error.message,
-    error: error.error,
-    ...(error.details && {
-      details: error.details
-    })
+    ...(statusCode === 429 && Number.isFinite(retryAfterMs) && retryAfterMs > 0
+      ? { details: { retryAfterMs } }
+      : {})
   });
 }

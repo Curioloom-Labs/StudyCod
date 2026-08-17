@@ -152,7 +152,7 @@ export async function listTasks(uiLang?: UiLanguage, options?: { scope?: "COURSE
   const params = {
     ...(uiLang ? { uiLang } : {}),
     ...(options?.scope ? { scope: options.scope } : {}),
-    ...(Number.isInteger(options?.courseEnrollmentId) && Number(options?.courseEnrollmentId) > 0 ? { courseEnrollmentId: Number(options.courseEnrollmentId) } : {})
+    ...(Number.isInteger(options?.courseEnrollmentId) && Number(options?.courseEnrollmentId) > 0 ? { courseEnrollmentId: Number(options?.courseEnrollmentId) } : {})
   };
   const res = await api.get("/tasks", {
     params: Object.keys(params).length ? params : undefined

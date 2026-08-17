@@ -187,21 +187,10 @@ export async function sweepTestCache(ttlMs?: number): Promise<{ removed: number;
     ? Math.max(60 * 60 * 1000, parseInt(String(process.env.JUDGE_TEST_CACHE_TTL_MS ?? ""), 10) || 14 * 24 * 60 * 60 * 1000)
     : Math.max(0, ttlMs);
   const cutoff = Date.now() - ttl;
-  let removed = 0;
   let scanned = 0;
-  let referencedHashes: Set<string> | null = null;
-  try {
-    const rows = (await AppDataSource.query(
-      `SELECT input_sha256 AS inputHash, output_sha256 AS outputHash
-         FROM test_data
-        WHERE input_sha256 IS NOT NULL OR output_sha256 IS NOT NULL`
-    )) as Array<{ inputHash?: string | null; outputHash?: string | null }>;
-    referencedHashes = new Set(
-      rows.flatMap(row => [row.inputHash, row.outputHash].filter((hash): hash is string => Boolean(hash)))
-    );
-  } catch {
-    // A cache sweep must remain best-effort if the database is unavailable.
-  }
+  let removed = 0;
+  const files: Array<{ full: string; name: string; last: number }> = [];
+
   async function walk(d: string): Promise<void> {
     let entries: fsSync.Dirent[];
     try {
@@ -217,17 +206,57 @@ export async function sweepTestCache(ttlMs?: number): Promise<{ removed: number;
         scanned++;
         try {
           const st = await fs.stat(full);
-          const last = Math.max(st.atimeMs, st.mtimeMs);
-          const isOrphan = referencedHashes !== null && !referencedHashes.has(e.name);
-          if (isOrphan || last < cutoff) {
-            await fs.rm(full, { force: true });
-            removed++;
-          }
+          files.push({
+            full,
+            name: e.name,
+            last: Math.max(st.atimeMs, st.mtimeMs)
+          });
         } catch {}
       }
     }
   }
+
   await walk(dir);
+  let referencedHashes: Set<string> | null = null;
+  if (files.length > 0) {
+    try {
+      referencedHashes = new Set<string>();
+      const validHashes = files
+        .map(file => file.name)
+        .filter(hash => /^[a-f0-9]{64}$/i.test(hash));
+      for (let offset = 0; offset < validHashes.length; offset += 500) {
+        const hashes = validHashes.slice(offset, offset + 500);
+        if (hashes.length === 0) continue;
+        const placeholders = hashes.map(() => "?").join(",");
+        const rows = (await AppDataSource.query(
+          `SELECT input_sha256 AS hash
+             FROM test_data
+            WHERE input_sha256 IN (${placeholders})
+            UNION
+           SELECT output_sha256 AS hash
+             FROM test_data
+            WHERE output_sha256 IN (${placeholders})`,
+          [...hashes, ...hashes]
+        )) as Array<{ hash?: string | null }>;
+        for (const row of rows) {
+          if (row.hash) referencedHashes.add(row.hash);
+        }
+      }
+    } catch {
+      // A cache sweep must remain best-effort if the database is unavailable.
+      referencedHashes = null;
+    }
+  }
+
+  for (const file of files) {
+    try {
+      const isOrphan = referencedHashes !== null && !referencedHashes.has(file.name);
+      if (isOrphan || file.last < cutoff) {
+        await fs.rm(file.full, { force: true });
+        removed++;
+      }
+    } catch {}
+  }
   if (removed > 0) logger.info("[judge] test cache GC", { removed, scanned, dir });
   return { removed, scanned };
 }

@@ -476,6 +476,10 @@ const AppContent: React.FC = React.memo(() => {
     if (location.pathname !== "/") return;
 
     const currentRequested = getRequestedAppPage(searchParams);
+    // A top-level navigation can intentionally remove `app` while React is
+    // still committing the destination page. Do not re-add the stale page
+    // from the previous render during that transition.
+    if (!requestedAppPage && resolvedPage !== "home") return;
     const target = resolvedPage === "home" ? null : resolvedPage;
     if (currentRequested === target) return;
 
@@ -493,7 +497,7 @@ const AppContent: React.FC = React.memo(() => {
     }, {
       replace: true
     });
-  }, [user?.id, location.pathname, resolvedPage, navigate, searchParams]);
+  }, [user?.id, location.pathname, requestedAppPage, resolvedPage, navigate, searchParams]);
   useEffect(() => {
     const handler = (e: Event) => {
       if (!(e instanceof CustomEvent)) return;
@@ -747,7 +751,12 @@ const AppContent: React.FC = React.memo(() => {
   }, [navigate]);
   const handleSetPage = useCallback((newPage: Page) => {
     if (user?.userMode !== "EDUCATIONAL") {
-      if (newPage === "home") { navigate("/"); setNavOpen(false); return; }
+      if (newPage === "home") {
+        startTransition(() => setPage("home"));
+        navigate("/");
+        setNavOpen(false);
+        return;
+      }
       if (newPage === "tasks") { navigate("/lab/library"); setNavOpen(false); return; }
       if (newPage === "grades") { navigate("/learning/catalog"); setNavOpen(false); return; }
     }
@@ -760,8 +769,9 @@ const AppContent: React.FC = React.memo(() => {
     startTransition(() => {
       setPage("home");
     });
+    if (user?.userMode !== "EDUCATIONAL") navigate("/");
     setNavOpen(false);
-  }, []);
+  }, [navigate, user?.userMode]);
 
   const handleToggleNav = useCallback(() => {
     setNavOpen(prev => !prev);

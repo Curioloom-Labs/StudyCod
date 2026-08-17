@@ -13,6 +13,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { logger } from "../utils/logger";
+import { createRouteLimiter } from "../middleware/routeRateLimit";
 const router = Router();
 const supportRepo = () => AppDataSource.getRepository(SupportTicket);
 const convRepo = () => AppDataSource.getRepository(SupportConversation);
@@ -25,7 +26,13 @@ const createTicketSchema = z.object({
   subject: z.string().trim().min(1).max(255),
   message: z.string().trim().min(1).max(10_000)
 });
-router.post("/ticket", async (req, res: Response) => {
+const publicTicketLimiter = createRouteLimiter({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: "TOO_MANY_SUPPORT_TICKETS",
+});
+
+router.post("/ticket", publicTicketLimiter, async (req, res: Response) => {
   const validated = createTicketSchema.safeParse(req.body);
   if (!validated.success) {
     return res.status(400).json({

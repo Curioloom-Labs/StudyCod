@@ -15,7 +15,7 @@ function toDto(s: MaintenanceState): MaintenanceStateDto {
     enabled: !!s.enabled,
     title: String(s.title ?? ""),
     message: String(s.message ?? ""),
-    until: s.until ? s.until.toISOString() : null,
+    until: s.enabled && s.until ? s.until.toISOString() : null,
     updatedAt: s.updatedAt ? s.updatedAt.toISOString() : new Date().toISOString()
   };
 }
@@ -123,6 +123,7 @@ class MaintenanceService {
   async disable(): Promise<MaintenanceStateDto> {
     const row = await this.getOrCreateSingleton();
     row.enabled = false;
+    row.until = null;
     const saved = await this.repo().save(row);
     const dto = toDto(saved);
     this.setLocalCache(dto);

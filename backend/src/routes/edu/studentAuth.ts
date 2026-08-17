@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -10,26 +10,39 @@ import { logger } from "../../utils/logger";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 import { generateJti } from "../../services/auth/jwtRevocation";
 import { setSharedAuthCookie } from "../../utils/authCookie";
+import { createRouteLimiter } from "../../middleware/routeRateLimit";
+import type { AuthRequest } from "../../middleware/authMiddleware";
+import { enforceAuthTurnstile } from "../auth";
 
 const router = Router();
 
 const studentRepo = () => AppDataSource.getRepository(Student);
+
+const studentLoginLimiter = createRouteLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: "TOO_MANY_LOGIN_ATTEMPTS",
+});
 
 const studentLoginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1)
 });
 
-router.post("/student-login", async (req: Request, res: Response) => {
+router.post("/student-login", studentLoginLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    const validated = studentLoginSchema.safeParse(req.body);
+    const validated = studentLoginSchema.extend({
+      turnstileToken: z.string().min(1).max(4096).optional(),
+    }).safeParse(req.body);
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT"
       });
     }
 
-    const { username, password } = validated.data;
+    const { username, password, turnstileToken } = validated.data;
+
+    if (!(await enforceAuthTurnstile(req, res, turnstileToken))) return;
 
     const student = await studentRepo().findOne({
       where: { generatedUsername: username },

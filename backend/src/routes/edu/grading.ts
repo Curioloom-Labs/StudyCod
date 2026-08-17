@@ -298,6 +298,8 @@ router.get("/tasks/pending-review", authRequired, async (req: AuthRequest, res: 
       .createQueryBuilder("grade")
       .leftJoinAndSelect("grade.task", "task")
       .leftJoinAndSelect("grade.topicTask", "topicTask")
+      .leftJoinAndSelect("topicTask.topic", "topicTaskTopic")
+      .leftJoinAndSelect("topicTaskTopic.class", "topicTaskClass")
       .leftJoinAndSelect("task.lesson", "lesson")
       .leftJoinAndSelect("lesson.class", "lessonClass")
       .leftJoinAndSelect("grade.student", "student")
@@ -307,39 +309,46 @@ router.get("/tasks/pending-review", authRequired, async (req: AuthRequest, res: 
       .orderBy("grade.created_at", "DESC")
       .getMany();
 
-    const pendingReviews = pendingGrades.map(grade => ({
-      gradeId: grade.id,
-      student: {
-        id: (grade as any).student.id,
-        firstName: (grade as any).student.firstName,
-        lastName: (grade as any).student.lastName,
-        middleName: (grade as any).student.middleName || undefined,
-        email: (grade as any).student.email
-      },
-      task: (grade as any).task
-        ? {
-            id: (grade as any).task.id,
-            title: (grade as any).task.title,
-            rubric: normalizeRubric((grade as any).task.rubric),
-            lesson: (grade as any).task.lesson
-              ? {
-                  id: (grade as any).task.lesson.id,
-                  title: (grade as any).task.lesson.title,
-                  type: (grade as any).task.lesson.type
-                }
-              : undefined
-          }
-        : (grade as any).topicTask
+    const pendingReviews = pendingGrades.map(grade => {
+      const taskClass = (grade as any).task?.lesson?.class;
+      const topicClass = (grade as any).topicTask?.topic?.class;
+      const reviewClass = taskClass || topicClass || null;
+      return ({
+        gradeId: grade.id,
+        classId: reviewClass?.id ?? null,
+        className: reviewClass?.name ?? null,
+        student: {
+          id: (grade as any).student.id,
+          firstName: (grade as any).student.firstName,
+          lastName: (grade as any).student.lastName,
+          middleName: (grade as any).student.middleName || undefined,
+          email: (grade as any).student.email
+        },
+        task: (grade as any).task
           ? {
-              id: (grade as any).topicTask.id,
-              title: (grade as any).topicTask.title,
-              lesson: undefined
+              id: (grade as any).task.id,
+              title: (grade as any).task.title,
+              rubric: normalizeRubric((grade as any).task.rubric),
+              lesson: (grade as any).task.lesson
+                ? {
+                    id: (grade as any).task.lesson.id,
+                    title: (grade as any).task.lesson.title,
+                    type: (grade as any).task.lesson.type
+                  }
+                : undefined
             }
-          : null,
-      submittedCode: grade.submittedCode,
-      submittedAt: grade.createdAt.toISOString(),
-      system: (grade as any).task ? ("old" as const) : ("new" as const)
-    }));
+          : (grade as any).topicTask
+            ? {
+                id: (grade as any).topicTask.id,
+                title: (grade as any).topicTask.title,
+                lesson: undefined
+              }
+            : null,
+        submittedCode: grade.submittedCode,
+        submittedAt: grade.createdAt.toISOString(),
+        system: (grade as any).task ? ("old" as const) : ("new" as const)
+      });
+    });
 
     res.json({ pendingReviews });
   } catch (error: any) {

@@ -60,6 +60,33 @@ async function latestGrade(taskId: number, studentId: number): Promise<EduGrade 
   return gradeRepo().findOne({ where: { task: { id: taskId }, student: { id: studentId } }, order: { createdAt: "DESC" } });
 }
 
+/**
+ * Persist a course-task attempt while serializing the per-student counter.
+ * The pre-check in the handlers is only a fast path; the lock below is the
+ * authorization boundary that prevents two concurrent requests from both
+ * consuming the final allowed attempt.
+ */
+async function saveCourseGradeWithinAttemptLimit(task: EduTask, student: Student, draft: Partial<EduGrade>): Promise<EduGrade> {
+  const maxAttempts = Math.max(1, Number(task.maxAttempts) || 1);
+  return AppDataSource.transaction("SERIALIZABLE", async manager => {
+    await manager
+      .createQueryBuilder(Student, "student")
+      .setLock("pessimistic_write")
+      .where("student.id = :studentId", { studentId: student.id })
+      .getOne();
+
+    const gradeRepoM = manager.getRepository(EduGrade);
+    const used = await gradeRepoM.count({ where: { task: { id: task.id }, student: { id: student.id } } });
+    if (used >= maxAttempts) {
+      throw Object.assign(new Error("MAX_ATTEMPTS_REACHED"), { statusCode: 403 });
+    }
+
+    const created = gradeRepoM.create({ ...draft, task, student } as any);
+    const saved = await gradeRepoM.save(created);
+    return Array.isArray(saved) ? saved[0] : saved;
+  });
+}
+
 async function handleIfCourseTask(req: AuthRequest, res: Response, next: NextFunction, fn: (ctx: { task: EduTask; student: Student }) => Promise<unknown>) {
   const taskId = Number(req.params.taskId);
   if (!Number.isInteger(taskId)) return next();
@@ -131,7 +158,7 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
       const execution = await executeCodeWithInput(code.data, languageFor(task), "", 10000);
       const passed = execution.success;
       const result = [{ testId: 0, passed, verdict: passed ? "AC" : "RE" }];
-      const grade = await gradeRepo().save(gradeRepo().create({ task, student, total: passed ? 100 : 0, score: passed ? 100 : 0, maxScore: 100, testsPassed: passed ? 1 : 0, testsTotal: 1, submittedCode: code.data, testResults: JSON.stringify(result), isCompleted: passed, isManuallyGraded: false, feedback: "No authored tests; submission was executed successfully." }));
+      const grade = await saveCourseGradeWithinAttemptLimit(task, student, { total: passed ? 100 : 0, score: passed ? 100 : 0, maxScore: 100, testsPassed: passed ? 1 : 0, testsTotal: 1, submittedCode: code.data, testResults: JSON.stringify(result), isCompleted: passed, isManuallyGraded: false, feedback: "No authored tests; submission was executed successfully." });
       const hints = passed ? [] : await generateAlgorithmicHints({
         taskTitle: task.title,
         taskText: task.description,
@@ -151,8 +178,7 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
     }
     const passed = results.filter((item) => item.passed).length;
     const total = Math.round((passed / results.length) * 100);
-    const grade = gradeRepo().create({ task, student, total, score: total, maxScore: 100, testsPassed: passed, testsTotal: results.length, submittedCode: code.data, testResults: JSON.stringify(results), isCompleted: passed === results.length, isManuallyGraded: false, feedback: null });
-    const saved = await gradeRepo().save(grade);
+    const saved = await saveCourseGradeWithinAttemptLimit(task, student, { total, score: total, maxScore: 100, testsPassed: passed, testsTotal: results.length, submittedCode: code.data, testResults: JSON.stringify(results), isCompleted: passed === results.length, isManuallyGraded: false, feedback: null });
     const failures = results.filter((item) => !item.passed).map((item) => {
       const test = tests.find((candidate) => candidate.id === item.testId);
       return { testId: item.testId, input: test?.input || "", expected: test?.expectedOutput || "", actual: "", verdict: item.verdict };
@@ -172,8 +198,11 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
 
 router.post("/tasks/:taskId/complete", authRequired, async (req: AuthRequest, res: Response, next: NextFunction) => {
   await handleIfCourseTask(req, res, next, async ({ task, student }) => {
+    if (task.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
+    if (task.deadline && new Date() > new Date(task.deadline)) return res.status(403).json({ message: "DEADLINE_PASSED" });
     const grade = await latestGrade(task.id, student.id);
     if (!grade) return res.status(400).json({ message: "NO_SUBMISSION" });
+    if (!grade.isCompleted) return res.status(409).json({ message: "TASK_NOT_PASSED" });
     grade.isCompleted = true;
     const saved = await gradeRepo().save(grade);
     return res.json({ grade: { id: saved.id, total: saved.total, testsPassed: saved.testsPassed, testsTotal: saved.testsTotal, isManuallyGraded: saved.isManuallyGraded, isCompleted: true } });
@@ -208,7 +237,7 @@ router.post("/tasks/:taskId/web-submit", authRequired, async (req: AuthRequest, 
     const maxScore = check.maxScore > 0 ? check.maxScore : Math.max(1, check.totalRules);
     const score = check.maxScore > 0 ? check.score : check.passedRules;
     const total = Math.round((score / maxScore) * 100);
-    const grade = await gradeRepo().save(gradeRepo().create({ task, student, total, score, maxScore, testsPassed: check.passedRules, testsTotal: check.totalRules, submittedCode: encodeWebTaskPayload({ mode: "WEB", version: 1, files }), testResults: JSON.stringify(check.results), isCompleted: check.passed, isManuallyGraded: false, feedback: check.passed ? null : "Some validation rules failed." }));
+    const grade = await saveCourseGradeWithinAttemptLimit(task, student, { total, score, maxScore, testsPassed: check.passedRules, testsTotal: check.totalRules, submittedCode: encodeWebTaskPayload({ mode: "WEB", version: 1, files }), testResults: JSON.stringify(check.results), isCompleted: check.passed, isManuallyGraded: false, feedback: check.passed ? null : "Some validation rules failed." });
     return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false }, testResults: check.results, hints: check.passed ? [] : check.results.filter((result: any) => !result.passed).map((result: any) => result.message || "Перевір цю вимогу ще раз.").slice(0, 4), scoring: { score, maxScore }, taskMode: "WEB" });
   });
 });
