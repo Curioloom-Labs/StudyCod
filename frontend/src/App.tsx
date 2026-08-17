@@ -283,7 +283,10 @@ const getCurrentUserWithRetry = async (maxAttempts = 3): Promise<User> => {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      return await getMe();
+      // Boot-time session probing must never trigger the global 401 redirect.
+      // The app needs to render the auth screen when this request is expected
+      // to fail (for example on /?auth=login).
+      return await getMe({ suppressAuthRedirect: true });
     } catch (error: unknown) {
       lastError = error;
 

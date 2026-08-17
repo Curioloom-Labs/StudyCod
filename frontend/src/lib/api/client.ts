@@ -108,6 +108,12 @@ function buildLoginRedirectTarget(): string {
   return `/?auth=login${nextParam}`;
 }
 
+function isSameBrowserLocation(target: string): boolean {
+  if (typeof window === "undefined") return false;
+  const current = `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
+  return target === current;
+}
+
 function shouldSkipAuthRedirect(config: InternalAxiosRequestConfig | undefined): boolean {
   const headers = config?.headers;
   if (!headers) return false;
@@ -191,7 +197,13 @@ api.interceptors.response.use((response: AxiosResponse) => {
   const requestConfig = error.config as InternalAxiosRequestConfig | undefined;
   if (error.response?.status === 401 && !shouldSkipAuthRedirect(requestConfig)) {
     if (typeof window !== "undefined") {
-      window.location.href = buildLoginRedirectTarget();
+      const target = buildLoginRedirectTarget();
+      // An unauthenticated auth page legitimately receives 401 from
+      // /profile/me while it is booting. Never reload the exact same URL;
+      // doing so creates a tight navigation loop instead of rendering login.
+      if (!isSameBrowserLocation(target)) {
+        window.location.replace(target);
+      }
     }
   }
   if (error.response?.status === 503) {
