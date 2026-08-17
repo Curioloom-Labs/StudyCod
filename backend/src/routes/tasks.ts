@@ -1381,7 +1381,7 @@ async function syncCatalogPracticeProgress(params: { userId: number; task: Task;
   const itemId = catalogItemIdFromTask(params.task);
   if (!itemId) return;
   try {
-    await completeCourseItem(params.userId, itemId, params.score, "practice");
+    await completeCourseItem(params.userId, itemId, params.score);
   } catch (error: any) {
     logger.warn("[learning] catalog practice progress sync failed", {
       requestId: params.requestId,

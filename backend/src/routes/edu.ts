@@ -162,7 +162,7 @@ eduRouter.post("/generate-interactive-lesson", authRequired, async (req: AuthReq
     return res.json(result);
   } catch (error: any) {
     logger.error("[edu] generate-interactive-lesson failed", { requestId: req.requestId, err: error });
-    return res.status(502).json({ message: "AI_GENERATION_FAILED" });
+    return res.status(502).json({ message: error?.message || "AI_GENERATION_FAILED" });
   }
 });
 
