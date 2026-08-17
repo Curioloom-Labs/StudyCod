@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen,
@@ -58,6 +59,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   courseTab = "overview",
 }) => {
   const { i18n } = useTranslation();
+  const navigate = useNavigate();
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
@@ -100,11 +102,11 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   const goSupport = () => {
     setAccountOpen(false);
     if (onSupport) onSupport();
-    else window.location.assign("/support");
+    else navigate("/support");
   };
   const goSupportDesk = () => {
     if (onSupportDesk) onSupportDesk();
-    else window.location.assign("/support/desk");
+    else navigate("/support/desk");
   };
   const hasSupportDesk = user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN";
 
@@ -205,12 +207,12 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2" />
             </div>
             <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
-            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Маршрут" : "Path", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: learning.currentCourse.nextAction ? `/learning/course/${learning.currentCourse.id}/practice/${learning.currentCourse.nextAction.itemId}` : `/learning/course/${learning.currentCourse.id}/path` }, { id: "progress", label: uk ? "Прогрес" : "Progress", path: `/learning/course/${learning.currentCourse.id}/progress` }].map((tab) => <button key={tab.id} type="button" onClick={() => { if (tab.id === "practice" && !learning.currentCourse?.nextAction) return; window.location.assign(tab.path); }} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
+             {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Маршрут" : "Path", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: learning.currentCourse.nextAction ? `/learning/course/${learning.currentCourse.id}/practice/${learning.currentCourse.nextAction.itemId}` : `/learning/course/${learning.currentCourse.id}/path` }, { id: "progress", label: uk ? "Прогрес" : "Progress", path: `/learning/course/${learning.currentCourse.id}/progress` }].map((tab) => <button key={tab.id} type="button" onClick={() => { if (tab.id === "practice" && !learning.currentCourse?.nextAction) return; navigate(tab.path); }} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
             <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-[#657368] sm:flex dark:text-[#a5b3a9]"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dce6df] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00d782]" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
           </div>
         </div>
       ) : null}
-      {area === "lab" ? <div className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92"><div className="mx-auto flex max-w-[1440px] items-center gap-2 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10"><span className="mr-2 shrink-0 text-sm font-bold">Lab</span>{[{ label: uk ? "Вільна практика" : "Free practice", path: "/lab/practice" }, { label: uk ? "Бібліотека" : "Library", path: "/lab/library" }, { label: uk ? "Пісочниця" : "Playground", path: "/lab/playground" }].map((tab) => <button key={tab.path} type="button" onClick={() => window.location.assign(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${routeIsActive(tab.path) ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}</div></div> : null}
+      {area === "lab" ? <div className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92"><div className="mx-auto flex max-w-[1440px] items-center gap-2 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10"><span className="mr-2 shrink-0 text-sm font-bold">Lab</span>{[{ label: uk ? "Вільна практика" : "Free practice", path: "/lab/practice" }, { label: uk ? "Бібліотека" : "Library", path: "/lab/library" }, { label: uk ? "Пісочниця" : "Playground", path: "/lab/playground" }].map((tab) => <button key={tab.path} type="button" onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${routeIsActive(tab.path) ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}</div></div> : null}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
         <div className="grid grid-cols-3 gap-1">
           {[

@@ -31,7 +31,6 @@ const CountUp: React.FC<{ value: number; decimals?: number; suffix?: string; cla
   }, [value, decimals, suffix, reduce]);
   return <span ref={ref} className={className}>{value.toFixed(decimals) + suffix}</span>;
 };
-import { listTasks } from "../../lib/api/tasks";
 import { getClasses, getStudentLessons, getStudentGrades, type Class, type Lesson, type Grade, type SummaryGrade } from "../../lib/api/edu";
 import { formatDeadlineForDisplay, isDeadlineExpired } from "../../utils/timezone";
 import { useUIMode } from "../../components/interface/UIModeProvider";
@@ -93,22 +92,13 @@ export const HomePage: React.FC<Props> = ({
     return () => window.removeEventListener("studycod:resumeState", handler as EventListener);
   }, [user.id]);
   useEffect(() => {
+    // Personal Home is course-first. Its data comes from PersonalLearningProvider;
+    // avoid the legacy unscoped request that mixes course and Lab attempts.
     if (!isEducational) {
-      setLoading(true);
-      listTasks()
-        .then(tasks => {
-          setAllTasks(tasks);
-          if (tasks.length) setLastTask(tasks[0]);
-        })
-        .catch(() => {
-          showToast({ type: "error", message: "Не вдалося завантажити практику." });
-          if (isDesignPreview) {
-            setAllTasks(PREVIEW_TASKS);
-            setLastTask(PREVIEW_TASKS[0]);
-          }
-        })
-        .finally(() => setLoading(false));
-    } else if (isTeacher) {
+      setLoading(false);
+      return;
+    }
+    if (isTeacher) {
       setLoading(true);
       getClasses().then(setClasses).catch(() => showToast({ type: "error", message: "Не вдалося завантажити класи." })).finally(() => setLoading(false));
     } else if (isStudent && user.studentId) {
