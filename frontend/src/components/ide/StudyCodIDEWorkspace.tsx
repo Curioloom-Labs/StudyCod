@@ -217,6 +217,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       : uk;
   };
   const taskTheoryKey = scopedStorageKey(IDE_THEORY_COMPLETION_KEY, props.task.id);
+  const isEmptyTask = String(props.task.id) === "empty";
   const languageOptions = props.languageOptions ?? (Object.keys(JUDGE_LANGUAGE_LABELS) as JudgeLanguage[]);
   const [mode, setMode] = React.useState<IdeMode>(() => {
     if (!props.theory) return "practice";
@@ -1096,7 +1097,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             <textarea
               value={props.stdin}
               onChange={(event) => props.onStdinChange(event.target.value)}
-              disabled={props.isWebTask}
+              disabled={props.isWebTask || isEmptyTask}
               rows={4}
               spellCheck={false}
               placeholder={
@@ -1159,7 +1160,21 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
             className={`h-full min-h-[220px] flex-1 overflow-hidden lg:min-h-[360px] ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
           >
             <div className="h-full min-h-0 min-w-0 overflow-hidden">
-              {props.useFiles ? (
+              {isEmptyTask ? (
+                <div className="flex h-full min-h-[220px] items-center justify-center bg-[#0b110d] px-6 py-12 text-center">
+                  <div className="max-w-sm">
+                    <div className="mx-auto grid size-12 place-items-center rounded-2xl border border-[#00d978]/20 bg-[#00d978]/10 text-[#72edb0]">
+                      <FolderCode className="size-5" />
+                    </div>
+                    <h2 className="mt-4 text-base font-bold text-[#edf5ee]">
+                      {tr("Завдання ще не готове", "The task is not ready yet")}
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-[#8fa196]">
+                      {tr("Відкрий активний вузол у маршруті — тут з’явиться редактор, щойно завдання завантажиться.", "Open an active node in the route. The editor will appear here when the task is ready.")}
+                    </p>
+                  </div>
+                </div>
+              ) : props.useFiles ? (
                 <MultiFileEditor
                   language={props.isWebTask ? "html" : props.language}
                   entryFile={props.entryFile}

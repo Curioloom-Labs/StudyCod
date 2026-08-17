@@ -115,7 +115,13 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
       <header className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/82 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/82">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-10">
-          <button type="button" onClick={() => onNavigate("home")} className="flex shrink-0 items-center gap-2.5 text-left">
+          <button
+            type="button"
+            onClick={() => onNavigate("home")}
+            className="flex shrink-0 items-center gap-2.5 text-left"
+            aria-label={uk ? "На головну сторінку StudyCod" : "Go to StudyCod home"}
+            title={uk ? "На головну" : "Home"}
+          >
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#153321]">
               <Logo size={19} />
             </span>
@@ -141,11 +147,25 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           </nav>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <button type="button" onClick={onToggleTheme} className="flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-semibold text-[#637166] transition hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07]">
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              className="flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-semibold text-[#637166] transition hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07]"
+              aria-label={theme === "dark"
+                ? (uk ? "Перемкнути на світлу тему" : "Switch to light theme")
+                : (uk ? "Перемкнути на темну тему" : "Switch to dark theme")}
+              title={theme === "dark" ? (uk ? "Світла тема" : "Light theme") : (uk ? "Темна тема" : "Dark theme")}
+            >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               <span className="hidden sm:inline">{theme === "dark" ? (uk ? "Світла" : "Light") : (uk ? "Темна" : "Dark")}</span>
             </button>
-            <button type="button" onClick={onToggleLanguage} className="hidden h-9 rounded-xl px-2.5 text-xs font-semibold text-[#637166] transition hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07] sm:block">
+            <button
+              type="button"
+              onClick={onToggleLanguage}
+              className="hidden h-9 rounded-xl px-2.5 text-xs font-semibold text-[#637166] transition hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07] sm:block"
+              aria-label={uk ? "Перемкнути на англійську" : "Switch to Ukrainian"}
+              title={uk ? "English" : "Українська"}
+            >
               {uk ? "EN" : "UA"}
             </button>
 
@@ -155,6 +175,8 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 onClick={() => setAccountOpen((open) => !open)}
                 aria-haspopup="menu"
                 aria-expanded={accountOpen}
+                aria-label={uk ? `Відкрити меню акаунта ${displayName}` : `Open account menu for ${displayName}`}
+                title={uk ? "Меню акаунта" : "Account menu"}
                 className={`flex h-10 items-center gap-2 rounded-xl px-1.5 pr-2.5 transition ${
                   active("profile") || accountOpen
                     ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#62ecaa]"
@@ -201,14 +223,14 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
         <div className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92">
           <div className="mx-auto flex max-w-[1440px] items-center gap-3 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10">
             <div className="relative shrink-0">
-              <select value={learning.me?.currentEnrollmentId ?? ""} onChange={(event) => { const id = Number(event.target.value); if (id) void learning.selectCourse(id); else if (event.target.value === "catalog") onCourses(); }} className="appearance-none rounded-xl border border-[#00c875]/35 bg-[#e8f6ed] px-3 py-2 pr-8 text-sm font-semibold text-[#153321] outline-none dark:bg-[#00ff88]/10 dark:text-[#bfffd9]">
+              <select aria-label={uk ? "Поточний курс" : "Current course"} value={learning.me?.currentEnrollmentId ?? ""} onChange={(event) => { const id = Number(event.target.value); if (id) void learning.selectCourse(id); else if (event.target.value === "catalog") onCourses(); }} className="appearance-none rounded-xl border border-[#00c875]/35 bg-[#e8f6ed] px-3 py-2 pr-8 text-sm font-semibold text-[#153321] outline-none dark:bg-[#00ff88]/10 dark:text-[#bfffd9]">
                 {learning.me?.enrollments.filter((item) => item.status === "IN_PROGRESS" || item.status === "COMPLETED").map((item) => <option key={item.enrollmentId} value={item.enrollmentId}>{item.title}</option>)}
                 <option value="catalog">{uk ? "Додати курс…" : "Add a course…"}</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2" />
             </div>
             <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
-             {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Маршрут" : "Path", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: learning.currentCourse.nextAction ? `/learning/course/${learning.currentCourse.id}/practice/${learning.currentCourse.nextAction.itemId}` : `/learning/course/${learning.currentCourse.id}/path` }, { id: "progress", label: uk ? "Прогрес" : "Progress", path: `/learning/course/${learning.currentCourse.id}/progress` }].map((tab) => <button key={tab.id} type="button" onClick={() => { if (tab.id === "practice" && !learning.currentCourse?.nextAction) return; navigate(tab.path); }} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
+            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Маршрут" : "Path", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: learning.currentCourse.nextAction ? `/learning/course/${learning.currentCourse.id}/practice/${learning.currentCourse.nextAction.itemId}` : `/learning/course/${learning.currentCourse.id}/path` }, { id: "progress", label: uk ? "Прогрес" : "Progress", path: `/learning/course/${learning.currentCourse.id}/progress` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => { if (tab.id === "practice" && !learning.currentCourse?.nextAction) return; navigate(tab.path); }} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
             <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-[#657368] sm:flex dark:text-[#a5b3a9]"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dce6df] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00d782]" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
           </div>
         </div>
@@ -227,7 +249,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           ))}
         </div>
       </nav>
-      <main className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
+      <main className="mobile-app-viewport min-w-0 flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
       <PlatformFooter />
     </div>
   );

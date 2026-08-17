@@ -2166,7 +2166,7 @@ export const TasksPage: React.FC<Props> = ({
   if (!isPersonalControlQuizTask) {
     const ideLanguage = (active?.language || runtime) as import("../../lib/judgeLanguages").JudgeLanguage;
     const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
-    const ideCheckResult: StudyCodIdeCheckResult | null = aiResult ? {
+    const ideCheckResult: StudyCodIdeCheckResult | null = active && aiResult ? {
       verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
       testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
       score: Number(aiResult.total || 0), maxScore: isPreviewMode ? 12 : 100,
@@ -2181,7 +2181,7 @@ export const TasksPage: React.FC<Props> = ({
         error: test.error,
       })),
     } : null;
-    const ideRunResult: StudyCodIdeRunResult | null = consoleOutput.trim() ? {
+    const ideRunResult: StudyCodIdeRunResult | null = active && consoleOutput.trim() ? {
       stdout: uiState === "error" ? "" : consoleOutput, stderr: uiState === "error" ? consoleOutput : "",
       exitCode: uiState === "error" ? 1 : 0, success: uiState !== "error",
     } : null;
