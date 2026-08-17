@@ -121,5 +121,22 @@ jobs:
           ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
 
       - name: Run deploy script
+        env:
+          DEPLOY_HOST: ${{ secrets.HOST }}
+          DEPLOY_USER: ${{ secrets.USER }}
+          BUILD_BACKEND: ${{ steps.scope.outputs.backend }}
+          BUILD_JUDGE: ${{ steps.scope.outputs.judge }}
+          BUILD_AI_SERVICE: ${{ steps.scope.outputs.ai_service }}
+          BUILD_FRONTEND: ${{ steps.scope.outputs.frontend }}
         run: |
-          ssh ${{ secrets.USER }}@${{ secrets.HOST }} "pm2 stop all || true; trap 'pm2 restart all --update-env || true' EXIT; BUILD_BACKEND=${{ steps.scope.outputs.backend }} BUILD_JUDGE=${{ steps.scope.outputs.judge }} BUILD_AI_SERVICE=${{ steps.scope.outputs.ai_service }} BUILD_FRONTEND=${{ steps.scope.outputs.frontend }} /var/www/studycod/restart-all.sh"
+          set -euo pipefail
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -e
+            repo=/var/www/studycod
+            if [[ -n \$(git -C \"\$repo\" status --porcelain) ]]; then
+              echo 'Deploy blocked: the server worktree has local changes.'
+              git -C \"\$repo\" status --short
+              exit 3
+            fi
+            pm2 stop all || true
+            trap 'pm2 restart all --update-env || true' EXIT
+            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_FRONTEND=$BUILD_FRONTEND \"\$repo/restart-all.sh\""

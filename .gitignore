@@ -57,6 +57,7 @@ frontend/.env
 .idea/
 .vscode/
 .cursor/
+/AGENT.md
 *.swp
 *.swo
 *~

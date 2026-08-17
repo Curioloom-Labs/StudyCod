@@ -707,6 +707,11 @@ A typical production deployment:
 7. **Scaling:** run N backend replicas with Redis + a global execution cap
    (`MAX_GLOBAL_CONCURRENT_EXECUTIONS`); gate load-balancer traffic on `/ready`.
 
+The GitHub deployment workflow requires the production checkout at
+`/var/www/studycod` to be clean before it stops PM2. If a deploy is blocked for local
+changes, inspect that checkout and explicitly commit, stash, or remove the changes on the
+server before retrying; never overwrite unknown production changes from CI.
+
 ## Security Model
 
 - **AuthN:** JWT Bearer tokens + Passport Google OAuth 2.0; signed, http-only session cookies.
