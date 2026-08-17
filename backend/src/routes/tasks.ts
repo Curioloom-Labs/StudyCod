@@ -1381,7 +1381,10 @@ async function syncCatalogPracticeProgress(params: { userId: number; task: Task;
   const itemId = catalogItemIdFromTask(params.task);
   if (!itemId) return;
   try {
-    await completeCourseItem(params.userId, itemId, params.score);
+    // This completion came from a submitted practice task, so it is allowed
+    // to complete code/quiz catalog items. The default "direct" source is
+    // intentionally rejected for those item kinds.
+    await completeCourseItem(params.userId, itemId, params.score, "practice");
   } catch (error: any) {
     logger.warn("[learning] catalog practice progress sync failed", {
       requestId: params.requestId,

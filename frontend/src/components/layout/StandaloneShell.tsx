@@ -132,7 +132,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         { key: "library", label: ukrainian ? "Бібліотека" : "Library", icon: BookOpen, path: "/library" },
         { key: "catalog", label: ukrainian ? "Курси" : "Courses", icon: Compass, path: "/learning/catalog" },
         { key: "playground", label: ukrainian ? "Пісочниця" : "Playground", icon: PlaySquare, path: "/playground" },
-        ...((shellUser.role === "SUPPORT" || shellUser.role === "SYSTEM_ADMIN") ? [{ key: "support", label: ukrainian ? "Support desk" : "Support desk", icon: HelpCircle, path: "/support/desk" }] : []),
+        ...((shellUser.role === "SUPPORT" || shellUser.role === "SYSTEM_ADMIN") ? [{ key: "support", label: ukrainian ? "Стіл підтримки" : "Support desk", icon: HelpCircle, path: "/support/desk" }] : []),
       ];
 
   const navigateTo = (path: string) => {
@@ -173,7 +173,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
             <button type="button" onClick={() => navigateTo("/support")} className="hidden size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] dark:hover:text-white sm:grid" aria-label={ukrainian ? "Підтримка" : "Support"}>
               <HelpCircle className="size-[18px]" />
             </button>
-            <button type="button" onClick={toggleTheme} className="grid size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] dark:hover:text-white" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+            <button type="button" onClick={toggleTheme} className="grid size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] dark:hover:text-white" aria-label={theme === "dark" ? (ukrainian ? "Увімкнути світлу тему" : "Switch to light theme") : (ukrainian ? "Увімкнути темну тему" : "Switch to dark theme")}>
               {theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
             </button>
             <div className="relative hidden sm:block" ref={accountRef}>
@@ -205,7 +205,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
                 </div>
               ) : null}
             </div>
-            <button type="button" onClick={() => setMobileOpen(true)} className="grid size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] lg:hidden" aria-label="Open navigation">
+            <button type="button" onClick={() => setMobileOpen(true)} className="grid size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-[#e9efea] dark:text-[#a4b3a8] dark:hover:bg-white/[.07] lg:hidden" aria-label={ukrainian ? "Відкрити навігацію" : "Open navigation"}>
               <Menu className="size-5" />
             </button>
           </div>

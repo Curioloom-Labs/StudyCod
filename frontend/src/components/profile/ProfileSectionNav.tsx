@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Award, Gauge, Trophy, UserRound } from "lucide-react";
 
 type ProfileSection = "iad" | "certificates";
@@ -11,7 +12,8 @@ type Props = {
 };
 
 export const ProfileSectionNav: React.FC<Props> = ({ active, className = "", action }) => {
-  const english = typeof navigator !== "undefined" && !navigator.language.toLowerCase().startsWith("uk");
+  const { i18n } = useTranslation();
+  const english = i18n.language.toLowerCase().startsWith("en");
   const copy = (uk: string, en: string) => english ? en : uk;
   const links = [
     { id: "profile", label: copy("Профіль", "Profile"), href: "/?app=profile", Icon: UserRound },

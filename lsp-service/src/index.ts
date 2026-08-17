@@ -49,6 +49,7 @@ interface LspSession {
   diagnosticRevisions: Map<string, number>;
   diagnosticWaiters: Set<DiagnosticWaiter>;
   lastUsedAt: number;
+  closed: boolean;
 }
 
 const sessions = new Map<string, LspSession>();
@@ -127,8 +128,14 @@ function commandFor(language: Language, session: string): { command: string; arg
 
 function sendMessage(session: LspSession, message: JsonObject): void {
   const body = Buffer.from(JSON.stringify(message), "utf8");
-  session.process.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
-  session.process.stdin.write(body);
+  const stdin = session.process.stdin;
+  if (session.closed || session.process.killed || stdin.destroyed || !stdin.writable) {
+    throw new Error("LSP session is closed");
+  }
+  // Write one frame so a child that exits between two writes cannot leave a
+  // half-written message behind. The stream error handler below rejects any
+  // in-flight requests instead of letting EPIPE become an uncaught error.
+  stdin.write(Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, "ascii"), body]));
 }
 
 function rejectPending(session: LspSession, error: Error): void {
@@ -209,11 +216,21 @@ async function startSession(language: Language): Promise<LspSession> {
   await mkdir(workspace, { recursive: true });
   const spec = commandFor(language, id);
   const child = spawn(spec.command, spec.args, { cwd: workspace, stdio: "pipe", env: { ...process.env, HOME: process.env.LSP_HOME || "/tmp" } });
-  const session: LspSession = { id, language, root, workspace, process: child, buffer: Buffer.alloc(0), nextRequestId: 1, pending: new Map(), diagnostics: new Map(), diagnosticRevisions: new Map(), diagnosticWaiters: new Set(), lastUsedAt: Date.now() };
+  const session: LspSession = { id, language, root, workspace, process: child, buffer: Buffer.alloc(0), nextRequestId: 1, pending: new Map(), diagnostics: new Map(), diagnosticRevisions: new Map(), diagnosticWaiters: new Set(), lastUsedAt: Date.now(), closed: false };
   child.stdout.on("data", (chunk: Buffer) => { session.buffer = Buffer.concat([session.buffer, chunk]); consumeMessages(session); });
   child.stderr.on("data", (chunk: Buffer) => { if (process.env.LSP_DEBUG === "1") process.stderr.write(`[lsp:${id}] ${chunk}`); });
-  child.on("error", error => rejectPending(session, error));
-  child.on("exit", (code, signal) => rejectPending(session, new Error(`LSP exited (${code ?? "?"}/${signal ?? "?"})`)));
+  child.stdin.on("error", error => {
+    session.closed = true;
+    rejectPending(session, error);
+  });
+  child.on("error", error => {
+    session.closed = true;
+    rejectPending(session, error);
+  });
+  child.on("exit", (code, signal) => {
+    session.closed = true;
+    rejectPending(session, new Error(`LSP exited (${code ?? "?"}/${signal ?? "?"})`));
+  });
   sessions.set(id, session);
 
   try {
@@ -244,6 +261,7 @@ async function startSession(language: Language): Promise<LspSession> {
 
 async function stopSession(session: LspSession): Promise<void> {
   sessions.delete(session.id);
+  session.closed = true;
   for (const waiter of [...session.diagnosticWaiters]) waiter.done();
   rejectPending(session, new Error("LSP session closed"));
   try { notify(session, "shutdown", null); } catch {}

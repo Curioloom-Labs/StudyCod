@@ -144,6 +144,7 @@ type Props = {
   trace?: StudyCodIdeTrace | null;
   tracing?: boolean;
   onTrace?: () => void;
+  emptyStateMessage?: string | null;
   webPreviewFiles?: WebTaskFile[];
   isWebTask?: boolean;
 };
@@ -1172,6 +1173,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
                     <p className="mt-2 text-sm leading-6 text-[#8fa196]">
                       {tr("Відкрий активний вузол у маршруті — тут з’явиться редактор, щойно завдання завантажиться.", "Open an active node in the route. The editor will appear here when the task is ready.")}
                     </p>
+                    {props.emptyStateMessage ? (
+                      <p className="mt-3 whitespace-pre-wrap rounded-xl border border-[#ffb86b]/20 bg-[#ffb86b]/[.08] px-3 py-2 text-left text-xs leading-5 text-[#ffd5a6]">
+                        {props.emptyStateMessage}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ) : props.useFiles ? (

@@ -110,6 +110,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     else navigate("/support/desk");
   };
   const hasSupportDesk = user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN";
+  const isAdmin = user.role === "SYSTEM_ADMIN";
 
   return (
     <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
@@ -119,8 +120,8 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             type="button"
             onClick={() => onNavigate("home")}
             className="flex shrink-0 items-center gap-2.5 text-left"
-            aria-label={uk ? "На головну сторінку StudyCod" : "Go to StudyCod home"}
-            title={uk ? "На головну" : "Home"}
+            aria-label={isAdmin ? (uk ? "На головну адмінки StudyCod" : "Go to StudyCod admin home") : (uk ? "На головну сторінку StudyCod" : "Go to StudyCod home")}
+            title={isAdmin ? (uk ? "Головна адмінки" : "Admin home") : (uk ? "На головну" : "Home")}
           >
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#153321]">
               <Logo size={19} />

@@ -820,10 +820,20 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
       });
     });
 
+    // This endpoint is intentionally sessionless so load balancers can probe
+    // it. Never expose filesystem paths, chroot names, or worker locations in
+    // that public response; those details are operationally useful only in
+    // server logs and made the endpoint an information-disclosure surface.
     const body = {
-      ...health,
+      status: health?.status === "ok" ? "ok" : "error",
+      service: "studycod-judge",
       version: judgeVersion,
-      backend: { sandboxMode, workerEntry, configPath, limits }
+      sandboxMode,
+      nsjail: { exists: nsjailExists, executable: nsjailExecutable },
+      config: { exists: Boolean(configPath) && fsSync.existsSync(configPath) },
+      productionRequirements: { requireConfigMode: true, satisfied: sandboxMode === "config" },
+      limits,
+      ...(health?.status === "ok" ? {} : { reason: "JUDGE_CHECK_FAILED" })
     };
     judgeHealthCache = { at: Date.now(), status: 200, body };
     res.json(body);

@@ -624,10 +624,18 @@ export const TaskLibraryPage: React.FC = () => {
       .then((d) => setDetails(d))
       .catch((e) => {
         console.error("Failed to load library task", e);
-        setDetails(null);
+        // Keep the optimistic card details visible when the extended preview
+        // endpoint is temporarily unavailable. The user can still read the
+        // statement and use the solve action instead of seeing an empty pane.
       })
       .finally(() => setLoadingDetails(false));
   }, [selectedId]);
+
+  const selectTask = (task: LibraryTaskListItem) => {
+    setSelectedId(task.id);
+    setDetails({ task, theory: null, tests: [] });
+    setLoadingDetails(true);
+  };
 
   useEffect(() => {
     if (autoEditHandledRef.current) return;
@@ -1852,11 +1860,11 @@ export const TaskLibraryPage: React.FC = () => {
                       role="button"
                       tabIndex={0}
                       aria-current={isSelected ? "true" : undefined}
-                      onClick={() => setSelectedId(task.id)}
+                      onClick={() => selectTask(task)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setSelectedId(task.id);
+                          selectTask(task);
                         }
                       }}
                       className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[#00ff88]/15 dark:bg-[#121b15] ${isSelected ? "border-[#00c96d]/55 ring-4 ring-[#00ff88]/10 dark:border-[#00ff88]/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-[#00c96d]/30 dark:border-white/10 dark:hover:border-[#00ff88]/25"}`}
@@ -1940,7 +1948,7 @@ export const TaskLibraryPage: React.FC = () => {
                           className="w-full"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedId(task.id);
+                            selectTask(task);
                           }}
                         >
                           <Play className="mr-2 h-3 w-3" />

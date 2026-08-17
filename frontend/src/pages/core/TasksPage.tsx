@@ -1428,7 +1428,11 @@ export const TasksPage: React.FC<Props> = ({
       setUIState("logic-warning");
       return;
     }
-    if (wantsControl ? !canGenerateNew : !canGenerate) {
+    // A roadmap practice is tied to a concrete catalog item. It must not be
+    // blocked by the generic personal-task cooldown/status gate (for example
+    // when a learner already has an unrelated personal task in progress).
+    const isCourseItemGeneration = Boolean(options?.courseItemId);
+    if (!isCourseItemGeneration && (wantsControl ? !canGenerateNew : !canGenerate)) {
       setConsoleOutput(blockedReason ?? tr("Спочатку заверши поточне завдання.", "Finish the current task first."));
       setUIState("logic-warning");
       return;
@@ -1504,6 +1508,17 @@ export const TasksPage: React.FC<Props> = ({
           message: String(payload?.message ?? "")
         });
         setUIState(status === "blocked" ? "logic-warning" : "logic-warning");
+      } else {
+        // Some backend failures are returned as a JSON 200 with an explicit
+        // error status. Do not leave the course workspace looking empty and
+        // idle in that case; show the actual retryable state to the learner.
+        const message = typeof payload?.message === "string" && payload.message.trim()
+          ? payload.message.trim()
+          : tr("Сервер не повернув готове завдання. Спробуй ще раз.", "The server did not return a ready task. Try again.");
+        setGenerationPhase("error");
+        closeDelayMs = 800;
+        setConsoleOutput(`${tr("Помилка генерації завдання:", "Task generation error:")} ${message}`);
+        setUIState("error");
       }
     } catch (error: unknown) {
       const apiErr = toApiErrorLike(error);
@@ -1567,7 +1582,11 @@ export const TasksPage: React.FC<Props> = ({
     if (isPreviewMode || !requestedCourseItemIdFromUrl) return;
     const canonicalCoursePractice = requestedCourseIdFromUrl != null && !searchParams.get("generate");
     if (!canonicalCoursePractice && searchParams.get("generate") !== "1") return;
-    if (canonicalCoursePractice && (loading || tasks.length > 0)) return;
+    // The general personal-task list may already contain items when a learner
+    // enters a course practice URL. That must not suppress the one required
+    // generation for this specific catalog item; only wait for the initial
+    // workspace load to finish.
+    if (canonicalCoursePractice && loading) return;
     const key = `${requestedCourseIdFromUrl ?? "legacy"}:${requestedCourseItemIdFromUrl}:generate`;
     if (autoCourseGenerationRef.current === key) return;
     autoCourseGenerationRef.current = key;
@@ -1578,7 +1597,7 @@ export const TasksPage: React.FC<Props> = ({
     // handleGenerate is intentionally invoked once per roadmap command; the
     // ref above prevents reruns when its surrounding workspace state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewMode, requestedCourseIdFromUrl, requestedCourseItemIdFromUrl, searchParams, setSearchParams, loading, tasks.length]);
+  }, [isPreviewMode, requestedCourseIdFromUrl, requestedCourseItemIdFromUrl, courseEnrollmentId, searchParams, setSearchParams, loading, tasks.length]);
 
   const handleSubmit = async () => {
     if (!active) return;
@@ -2198,12 +2217,17 @@ export const TasksPage: React.FC<Props> = ({
           task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode, projectSpec: active.projectSpec } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
           theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
           onTheoryComplete={() => setTheoryAcknowledged(true)}
+          emptyStateMessage={consoleOutput || null}
           languageOptions={[ideLanguage]}
           toolbar={
             <>
               {courseMode ? <>
                 <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
-                <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211]">{tr("Наступний крок", "Next step")}<ArrowRight className="size-3.5" /></button>
+                {(uiState === "error" || !active) ? (
+                  <button type="button" onClick={() => void handleGenerate({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
+                ) : (
+                  <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211]">{tr("Наступний крок", "Next step")}<ArrowRight className="size-3.5" /></button>
+                )}
               </> : <>
                 <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">
                   <BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}
