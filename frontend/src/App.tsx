@@ -328,6 +328,16 @@ function getSafeNextAfterAuth(searchParams: URLSearchParams): string | null {
   if (!raw) return null;
   if (!raw.startsWith("/")) return null;
   if (raw.startsWith("//")) return null;
+  try {
+    const target = new URL(raw, window.location.origin);
+    if (target.origin !== window.location.origin) return null;
+    if (target.pathname === "/") {
+      const targetParams = target.searchParams;
+      if (targetParams.has("auth") || targetParams.has("next")) return null;
+    }
+  } catch {
+    return null;
+  }
   return raw;
 }
 

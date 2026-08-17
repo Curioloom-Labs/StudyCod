@@ -94,6 +94,14 @@ function buildLoginRedirectTarget(): string {
   const isContestArea = window.location.pathname.startsWith("/contest");
   if (isContestArea) return "/contest";
 
+  // Never use an auth screen as its own post-login target. A 401 while the
+  // login/register page is booting must stay on a clean auth URL; otherwise
+  // every interceptor pass nests the previous `next` value again.
+  if (window.location.pathname === "/" && (() => {
+    const current = new URLSearchParams(window.location.search);
+    return current.get("auth") === "login" || current.get("auth") === "register";
+  })()) return "/?auth=login";
+
   const nextRaw = `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
   const next = nextRaw.startsWith("/") ? nextRaw : "/";
   const nextParam = next === "/" ? "" : `&next=${encodeURIComponent(next)}`;
