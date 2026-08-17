@@ -707,12 +707,10 @@ A typical production deployment:
 7. **Scaling:** run N backend replicas with Redis + a global execution cap
    (`MAX_GLOBAL_CONCURRENT_EXECUTIONS`); gate load-balancer traffic on `/ready`.
 
-The GitHub deployment workflow fast-forwards the production checkout at
-`/var/www/studycod` while preserving tracked server-local changes through a temporary Git
-stash. Those changes are reapplied after the update; a same-file conflict stops the deploy
-before PM2 is stopped. Untracked files that are absent from `origin/main` remain on the
-server. If an untracked file is newly added by `origin/main`, it is moved to a timestamped
-`/root/studycod-deploy-*` recovery directory before the repository version is installed.
+The GitHub deployment workflow requires the production checkout at
+`/var/www/studycod` to be clean before it stops PM2. If a deploy is blocked for local
+changes, inspect that checkout and explicitly commit, stash, or remove the changes on the
+server before retrying; never overwrite unknown production changes from CI.
 
 ## Security Model
 

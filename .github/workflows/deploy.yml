@@ -131,5 +131,12 @@ jobs:
         run: |
           set -euo pipefail
           ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -e
+            repo=/var/www/studycod
+            if [[ -n \$(git -C \"\$repo\" status --porcelain) ]]; then
+              echo 'Deploy blocked: the server worktree has local changes.'
+              git -C \"\$repo\" status --short
+              exit 3
+            fi
+            pm2 stop all || true
             trap 'pm2 restart all --update-env || true' EXIT
-            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_FRONTEND=$BUILD_FRONTEND /var/www/studycod/restart-all.sh"
+            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_FRONTEND=$BUILD_FRONTEND \"\$repo/restart-all.sh\""
