@@ -11,12 +11,13 @@ import { BrandedPageLoader } from "../../components/ui/BrandedPageLoader";
  *
  * - `/lab/practice?workspace=personal` is the optional generated-task flow.
  * - `/lab/practice?task=...` is a compatibility entry point for a library task.
- * - `/lab/practice` itself belongs to the library and redirects there.
+ * - `/lab/practice` is the Lab landing page for personal practice.
  */
 export const LabPracticePage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const taskKey = String(searchParams.get("task") ?? "").trim();
-  const personalWorkspace = searchParams.get("workspace") === "personal";
+  const personalWorkspace = searchParams.get("workspace") === "personal"
+    || (!taskKey && searchParams.get("workspace") !== "library");
   const [user, setUser] = React.useState<User | null>(null);
 
   React.useEffect(() => {
