@@ -481,6 +481,8 @@ function getConfiguredOpenRouterFallbackModels(): string[] {
     .map(m => resolveTextModel(m));
 }
 
+const OPENROUTER_FREE_ROUTER_MODEL = 'openrouter/free';
+
 function buildModelCandidateChain(params: {
   primaryModel: string;
   mode: 'text' | 'json';
@@ -499,6 +501,15 @@ function buildModelCandidateChain(params: {
     if (configuredTextModel) candidates.push(resolveTextModel(configuredTextModel));
   }
   candidates.push(...explicitFallbacks);
+
+  // The production setup historically used only Gemma free variants. When
+  // those routed providers exhaust their quota, keep generation alive by
+  // handing the request to OpenRouter's free router instead of dropping into
+  // the low-quality deterministic task fallback.
+  const gemmaOnlyChain = isGemmaModel(primary) && candidates.every(isGemmaModel);
+  if (gemmaOnlyChain && !candidates.includes(OPENROUTER_FREE_ROUTER_MODEL)) {
+    candidates.push(OPENROUTER_FREE_ROUTER_MODEL);
+  }
 
   return normalizeAndDeduplicateModels(candidates);
 }

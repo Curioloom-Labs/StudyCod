@@ -522,6 +522,35 @@ test('OpenRouterProvider falls back to configured model when primary model is ra
   process.env.OPENROUTER_URL = old.OPENROUTER_URL;
 });
 
+test('OpenRouterProvider adds the free router after an exhausted Gemma-only chain', () => {
+  const old = {
+    OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
+    OPENROUTER_TEXT_MODEL: process.env.OPENROUTER_TEXT_MODEL,
+    OPENROUTER_JSON_MODEL: process.env.OPENROUTER_JSON_MODEL,
+    OPENROUTER_FALLBACK_MODELS: process.env.OPENROUTER_FALLBACK_MODELS,
+    OPENROUTER_MODEL_FALLBACKS: process.env.OPENROUTER_MODEL_FALLBACKS,
+  };
+
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_TEXT_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_JSON_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_FALLBACK_MODELS = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+
+  const diagnostics = getOpenRouterRuntimeDiagnostics();
+  assert.deepEqual(diagnostics.modelCandidates.json, [
+    'google/gemma-3-27b-it:free',
+    'google/gemma-3-12b-it:free',
+    'openrouter/free',
+  ]);
+
+  process.env.OPENROUTER_MODEL = old.OPENROUTER_MODEL;
+  process.env.OPENROUTER_TEXT_MODEL = old.OPENROUTER_TEXT_MODEL;
+  process.env.OPENROUTER_JSON_MODEL = old.OPENROUTER_JSON_MODEL;
+  process.env.OPENROUTER_FALLBACK_MODELS = old.OPENROUTER_FALLBACK_MODELS;
+  process.env.OPENROUTER_MODEL_FALLBACKS = old.OPENROUTER_MODEL_FALLBACKS;
+});
+
 test('OpenRouterProvider does not fallback to another model on invalid request errors', async () => {
   const old = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
