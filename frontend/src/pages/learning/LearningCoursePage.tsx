@@ -49,7 +49,7 @@ function markdownOf(item: LearningCourseItem | undefined): string {
 export const LearningCoursePage: React.FC = () => {
   const navigate = useNavigate();
   const { courseId } = useParams<{ courseId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [course, setCourse] = React.useState<LearningCourse | null>(null);
   const [projects, setProjects] = React.useState<Record<number, LearningProject>>({});
   const [projectFiles, setProjectFiles] = React.useState<Record<number, string>>({});
@@ -165,10 +165,7 @@ export const LearningCoursePage: React.FC = () => {
         : tr("Спочатку заверши теорію активної теми — після цього відкриється практика.", "Complete the active topic's theory first; practice will open afterward."));
     }
 
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.delete("focus");
-    setSearchParams(nextSearchParams, { replace: true });
-  }, [course, loading, roadmapNodes, searchParams, setSearchParams]);
+  }, [course, loading, roadmapNodes, searchParams]);
 
   const completeItem = async (item: LearningCourseItem) => {
     if (!courseIsActive) {
