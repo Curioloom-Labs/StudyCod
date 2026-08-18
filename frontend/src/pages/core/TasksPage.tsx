@@ -434,6 +434,10 @@ export const TasksPage: React.FC<Props> = ({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [active, setActive] = useState<Task | null>(null);
   const [code, setCode] = useState("");
+  const editorCodeRef = useRef("");
+  useEffect(() => {
+    editorCodeRef.current = code;
+  }, [code]);
   const [useFiles, setUseFiles] = useState(false);
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [mfAddToken, setMfAddToken] = useState(0);
@@ -729,7 +733,7 @@ export const TasksPage: React.FC<Props> = ({
     }
   }, [active?.id, isPersonalControlQuizTask, personalQuiz, quizAnswers, persistQuizDraftAnswers]);
   const toWebTaskFiles = useCallback((): WebTaskFile[] => {
-    const source = useFiles ? files : [{ path: "index.html", content: code } as CodeFile];
+    const source = useFiles ? files : [{ path: "index.html", content: editorCodeRef.current } as CodeFile];
     const byPath = new Map<string, string>();
     for (const f of source || []) {
       byPath.set(String(f.path ?? "").trim(), String(f.content ?? ""));
@@ -744,7 +748,7 @@ export const TasksPage: React.FC<Props> = ({
       { path: "styles.css", content: byPath.get("styles.css") ?? "" },
       { path: "script.js", content: byPath.get("script.js") ?? "" }
     ];
-  }, [active?.webTemplateFiles, useFiles, files, code]);
+  }, [active?.webTemplateFiles, useFiles, files]);
   const entryContentFromFiles = useCallback((fs: CodeFile[]): string => {
     const hit = fs.find(f => f.path === entryFile);
     return hit?.content ?? "";
@@ -772,7 +776,7 @@ export const TasksPage: React.FC<Props> = ({
     return { useFiles: resolvedUseFiles, files: f, code: resolvedCode };
   }, [entryContentFromFiles]);
 
-  const currentCodeText = useFiles ? entryContentFromFiles(files) : code;
+  const currentCodeText = useFiles ? entryContentFromFiles(files) : editorCodeRef.current;
   const segmentedPractice = useMemo(() => splitPracticeByHeadings(getPracticeText(active)), [active?.id, active?.practiceText, active?.descriptionMarkdown]);
   const fullPracticeText = useMemo(() => getPracticeText(active), [active?.id, active?.practiceText, active?.descriptionMarkdown]);
   const firstExampleInput = useMemo(() => {
@@ -1307,21 +1311,22 @@ export const TasksPage: React.FC<Props> = ({
   }, [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, theoryAcknowledged]);
   useEffect(() => {
     if (isPreviewMode) return;
-    if (!active || !theoryAcknowledged || currentCodeText.trim() === "") return;
+    if (!active || !theoryAcknowledged) return;
     const isEditable = isPersonalTaskEditable(active, aiResult?.total);
     if (!isEditable) return;
     const interval = setInterval(() => {
-      if (active && currentCodeText.trim() !== "" && isPersonalTaskEditable(active, aiResult?.total)) {
+      const latestCode = useFiles ? entryContentFromFiles(files) : editorCodeRef.current;
+      if (active && latestCode.trim() !== "" && isPersonalTaskEditable(active, aiResult?.total)) {
         if (active.taskMode === "WEB") {
           saveWebTaskDraft(active.id, toWebTaskFiles()).catch(() => undefined);
         } else {
-          const payload = useFiles ? { files } : currentCodeText;
+          const payload = useFiles ? { files } : latestCode;
           saveDraft(active.id, payload).catch(() => undefined);
         }
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [active, currentCodeText, theoryAcknowledged, aiResult, useFiles, files, toWebTaskFiles]);
+  }, [active, theoryAcknowledged, isPreviewMode, aiResult, useFiles, files, toWebTaskFiles, entryContentFromFiles]);
 
   useEffect(() => {
     if (!active || active.taskMode !== "WEB") return;
@@ -1790,9 +1795,10 @@ export const TasksPage: React.FC<Props> = ({
         if (updated) setActive(updated);
         return;
       }
-      const payload = useFiles ? { files } : code;
+      const latestCode = editorCodeRef.current;
+      const payload = useFiles ? { files } : latestCode;
       const clientSubmissionId = createClientSubmissionId();
-      const codeHash = await sha256HexBrowser(useFiles ? JSON.stringify(files) : String(code ?? ""));
+      const codeHash = await sha256HexBrowser(useFiles ? JSON.stringify(files) : latestCode);
       latestSubmissionBindingRef.current = { codeHash, submissionId: undefined };
       const res = await submitTask(active.id, payload, { clientSubmissionId, codeHash });
       if (submitSeq !== latestSubmitRequestSeq.current) {
@@ -1954,7 +1960,8 @@ export const TasksPage: React.FC<Props> = ({
   const canEdit = Boolean(active && theoryAcknowledged && isPersonalTaskEditable(active, aiResult?.total));
 
   const handleSaveDraft = async () => {
-    if (!active || (!isWebTask && !currentCodeText.trim())) return;
+    const latestCode = editorCodeRef.current;
+    if (!active || (!isWebTask && !latestCode.trim())) return;
     if (isPreviewMode) {
       setConsoleOutput(tr("Чернетку локально збережено для preview.", "Draft saved locally for preview."));
       setUIState("success");
@@ -1964,7 +1971,7 @@ export const TasksPage: React.FC<Props> = ({
       if (active.taskMode === "WEB") {
         await saveWebTaskDraft(active.id, toWebTaskFiles());
       } else {
-        const payload = useFiles ? { files } : currentCodeText;
+        const payload = useFiles ? { files } : latestCode;
         await saveDraft(active.id, payload);
       }
       setConsoleOutput(tr("Чернетку збережено", "Draft saved"));
@@ -1974,7 +1981,8 @@ export const TasksPage: React.FC<Props> = ({
     }
   };
   const handleRun = async () => {
-    if (!active || (!isWebTask && !currentCodeText.trim())) return;
+    const latestCode = editorCodeRef.current;
+    if (!active || (!isWebTask && !latestCode.trim())) return;
     if (isPersonalControlQuizTask) {
       setConsoleOutput(tr("Для тесту натисни «Перевірити» після вибору всіх відповідей.", "For quiz tasks, click Check after choosing all answers."));
       setUIState("idle");
@@ -1997,7 +2005,7 @@ export const TasksPage: React.FC<Props> = ({
     setUIState("evaluating");
     setConsoleOutput(tr("Запуск...", "Running..."));
     try {
-      const payload = useFiles ? { files } : currentCodeText;
+      const payload = useFiles ? { files } : latestCode;
       const runInput = normalizeStdinBeforeRun(stdin || "");
       const res = await runTask(active.id, payload, runInput);
       setConsoleOutput(res.output || res.stderr || tr("Вивід відсутній", "No output"));
@@ -2121,9 +2129,12 @@ export const TasksPage: React.FC<Props> = ({
   const onReset = useCallback(() => setCode(active?.starterCode ?? ""), [active?.id, active?.starterCode]);
   const onEnableFiles = useCallback(() => {
     setUseFiles(true);
-    setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]);
+    setFiles(files.length ? files : [{ path: ideEntryFile, content: editorCodeRef.current }]);
     setMfAddToken((value) => value + 1);
-  }, [files, ideEntryFile, code]);
+  }, [files, ideEntryFile]);
+  const onIdeCodeChange = useCallback((nextCode: string) => {
+    editorCodeRef.current = nextCode;
+  }, []);
   const ideWebPreviewFiles = useMemo(() => isWebTask ? toWebTaskFiles() : undefined, [isWebTask, toWebTaskFiles]);
   const canGenerateFromToolbar = !loading && cooldownSecondsLeft <= 0 && canGenerateFromSidebar;
   const ideToolbar = useMemo(() => (
@@ -2290,7 +2301,7 @@ export const TasksPage: React.FC<Props> = ({
           compiler={runtime}
           onCompilerChange={noop}
           code={code}
-          onCodeChange={setCode}
+          onCodeChange={onIdeCodeChange}
           files={ideFiles}
           onFilesChange={setFiles}
           useFiles={useFiles}

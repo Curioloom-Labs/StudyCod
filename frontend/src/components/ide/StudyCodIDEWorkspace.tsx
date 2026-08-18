@@ -211,6 +211,16 @@ function formatMiniProjectCountdown(totalSeconds: number): string {
 }
 
 export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
+  const [localCode, setLocalCode] = React.useState(props.code);
+  React.useEffect(() => {
+    // Keep typing local so the parent practice page does not re-render on each
+    // character. Parent code changes still synchronize task switches/resets.
+    setLocalCode(props.code);
+  }, [props.task.id, props.code]);
+  const handleCodeChange = React.useCallback((nextCode: string) => {
+    setLocalCode(nextCode);
+    props.onCodeChange(nextCode);
+  }, [props.onCodeChange]);
   const tr = (uk: string, en: string) => {
     if (typeof document === "undefined") return uk;
     return document.documentElement.lang?.toLowerCase().startsWith("en")
@@ -268,7 +278,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     start: number;
     value: number;
   } | null>(null);
-  const lastHistoryCode = React.useRef(props.code);
+  const lastHistoryCode = React.useRef(localCode);
 
   React.useEffect(() => writeLayout(layout), [layout]);
   React.useEffect(() => {
@@ -302,13 +312,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     lastHistoryCode.current = props.code;
   }, [props.task.id]);
   React.useEffect(() => {
-    if (!props.code.trim() || props.code === lastHistoryCode.current) return;
+    if (!localCode.trim() || localCode === lastHistoryCode.current) return;
     const timer = window.setTimeout(() => {
       const next = [
-        { at: new Date().toISOString(), code: props.code },
+        { at: new Date().toISOString(), code: localCode },
         ...history,
       ].slice(0, 20);
-      lastHistoryCode.current = props.code;
+      lastHistoryCode.current = localCode;
       setHistory(next);
       try {
         localStorage.setItem(
@@ -320,7 +330,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       }
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [history, props.code, props.task.id]);
+  }, [history, localCode, props.task.id]);
   React.useEffect(() => {
     if (props.files.some((file) => file.path === activeFile)) return;
     setActiveFile(props.entryFile);
@@ -424,10 +434,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       );
     }
   }, [allTestsPassed, props.checkResult?.verdict, props.checkResult?.testsPassed, props.hints?.length]);
-  const lineCount = (props.code || "").split("\n").length;
+  const lineCount = (localCode || "").split("\n").length;
   const fileList = props.useFiles
     ? props.files
-    : [{ path: props.entryFile, content: props.code }];
+    : [{ path: props.entryFile, content: localCode }];
 
   const runWithTab = () => {
     if (props.readOnly) return;
@@ -1198,8 +1208,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 <CodeEditor
                   height="100%"
                   language={props.isWebTask ? "html" : props.language}
-                  value={props.code}
-                  onChange={props.readOnly ? undefined : props.onCodeChange}
+                  value={localCode}
+                  onChange={props.readOnly ? undefined : handleCodeChange}
                   readOnly={props.readOnly}
                   fontSize={fontSize}
                   wordWrap={wordWrap}
@@ -1357,7 +1367,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                         {tr("Теорія", "Theory")}
                       </div>
                       <div className="flex items-center gap-2">
-                        {props.code.trim() ? (
+                        {localCode.trim() ? (
                           <CheckCircle2 className="size-3.5 text-[#72edb0]" />
                         ) : (
                           <span className="size-3.5 rounded-full border border-white/20" />
@@ -1496,7 +1506,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   </div>
                   <DebugMentorChat
                     language={props.language}
-                    code={props.code}
+                    code={localCode}
                     verdict={resultVerdict}
                     stderr={
                       props.runResult?.stderr || props.checkResult?.compileError
@@ -1509,7 +1519,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   !verdictIsAccepted(props.checkResult.verdict) ? (
                     <ErrorExplainButton
                       language={props.language}
-                      code={props.code}
+                      code={localCode}
                       verdict={props.checkResult.verdict}
                       stderr={
                         props.checkResult.compileError ||
