@@ -2052,6 +2052,97 @@ export const TasksPage: React.FC<Props> = ({
     ? tr("WEB-проєкт", "WEB project")
     : tr("Code задача", "Code task");
 
+  // Keep the IDE shell from receiving fresh object/function identities when
+  // unrelated practice state changes. Monaco still receives current code,
+  // while the surrounding workspace can skip avoidable work.
+  const ideLanguage = (active?.language || runtime) as import("../../lib/judgeLanguages").JudgeLanguage;
+  const ideLanguageOptions = useMemo(() => [ideLanguage], [ideLanguage]);
+  const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
+  const ideTask = useMemo(() => active ? {
+    id: active.id,
+    title: active.title,
+    description: getPracticeText(active),
+    section: active.topicTitle,
+    taskMode: active.taskMode,
+    projectSpec: active.projectSpec
+  } : {
+    id: "empty",
+    title: tr("Обери завдання", "Choose a task"),
+    description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."),
+    section: tr("Особиста практика", "Personal practice")
+  }, [active?.id, active?.title, active?.topicTitle, active?.taskMode, active?.projectSpec, active?.practiceText, active?.descriptionMarkdown]);
+  const ideTheory = useMemo(
+    () => active && hasTheoryForActive ? getTheoryMarkdown(active) : null,
+    [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, hasTheoryForActive]
+  );
+  const ideFiles = useMemo(
+    () => files.length ? files : [{ path: ideEntryFile, content: code }],
+    [files, ideEntryFile, code]
+  );
+  const ideCheckResult = useMemo<StudyCodIdeCheckResult | null>(() => active && aiResult ? {
+    verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
+    testsPassed: Number(aiResult.testsPassed || 0),
+    testsTotal: Number(aiResult.testsTotal || 0),
+    score: Number(aiResult.total || 0),
+    maxScore: isPreviewMode ? 12 : 100,
+    compileError: aiResult.testResults?.find((test) => test.verdict === "CE")?.error ?? null,
+    publicTestResults: (aiResult.testResults ?? []).map((test) => ({
+      testId: test.testId,
+      input: test.input,
+      expectedOutput: test.expectedOutput,
+      actualOutput: test.actualOutput,
+      passed: test.passed,
+      verdict: test.verdict,
+      error: test.error,
+    })),
+  } : null, [active?.id, aiResult, isPreviewMode]);
+  const ideRunResult = useMemo<StudyCodIdeRunResult | null>(() => active && consoleOutput.trim() ? {
+    stdout: uiState === "error" ? "" : consoleOutput,
+    stderr: uiState === "error" ? consoleOutput : "",
+    exitCode: uiState === "error" ? 1 : 0,
+    success: uiState !== "error",
+  } : null, [active?.id, consoleOutput, uiState]);
+  const taskHistoryItems = useMemo(() => sidebarSections.flatMap((section) =>
+    section.items.map((item) => ({ ...item, sectionTitle: section.title }))
+  ), [sidebarSections]);
+  const onTheoryComplete = useCallback(() => setTheoryAcknowledged(true), []);
+  const noop = useCallback(() => undefined, []);
+  const handleRunRef = useRef(handleRun);
+  const handleSubmitRef = useRef(handleSubmit);
+  const handleSaveDraftRef = useRef(handleSaveDraft);
+  const handleGenerateRef = useRef(handleGenerate);
+  handleRunRef.current = handleRun;
+  handleSubmitRef.current = handleSubmit;
+  handleSaveDraftRef.current = handleSaveDraft;
+  handleGenerateRef.current = handleGenerate;
+  const onRun = useCallback(() => { if (active) void handleRunRef.current(); }, [active?.id]);
+  const onCheck = useCallback(() => { if (active) void handleSubmitRef.current(); }, [active?.id]);
+  const onSave = useCallback(() => { if (active) void handleSaveDraftRef.current(); }, [active?.id]);
+  const onReset = useCallback(() => setCode(active?.starterCode ?? ""), [active?.id, active?.starterCode]);
+  const onEnableFiles = useCallback(() => {
+    setUseFiles(true);
+    setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]);
+    setMfAddToken((value) => value + 1);
+  }, [files, ideEntryFile, code]);
+  const ideWebPreviewFiles = useMemo(() => isWebTask ? toWebTaskFiles() : undefined, [isWebTask, toWebTaskFiles]);
+  const canGenerateFromToolbar = !loading && cooldownSecondsLeft <= 0 && canGenerateFromSidebar;
+  const ideToolbar = useMemo(() => (
+    <>
+      {courseMode ? <>
+        <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
+        {(uiState === "error" || !active) ? (
+          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
+        ) : (
+          <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211]">{tr("Наступний крок", "Next step")}<ArrowRight className="size-3.5" /></button>
+        )}
+      </> : <>
+        <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]"><BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}</button>
+        <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}><History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})</button>
+        <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="size-3.5" />{tr("Нове", "New")}</button>
+      </>}
+    </>
+  ), [courseMode, requestedCourseIdFromUrl, uiState, active?.id, loading, effectiveCourseItemId, navigate, sidebarStats.completed, sidebarStats.total, canGenerateFromToolbar]);
+
   const consoleStateMeta = useMemo(() => {
     if (uiState === "evaluating") {
       return {
@@ -2184,90 +2275,44 @@ export const TasksPage: React.FC<Props> = ({
   }, [canQuickCheck, canQuickRun, canQuickSave, checkFromRail, focusWorkspaceArea, runFromRail, saveFromRail]);
 
   if (!isPersonalControlQuizTask) {
-    const ideLanguage = (active?.language || runtime) as import("../../lib/judgeLanguages").JudgeLanguage;
-    const ideEntryFile = active?.userEntryFile || active?.starterEntryFile || entryFile;
-    const ideCheckResult: StudyCodIdeCheckResult | null = active && aiResult ? {
-      verdict: Number(aiResult.testsPassed || 0) >= Number(aiResult.testsTotal || 0) ? "AC" : "WA",
-      testsPassed: Number(aiResult.testsPassed || 0), testsTotal: Number(aiResult.testsTotal || 0),
-      score: Number(aiResult.total || 0), maxScore: isPreviewMode ? 12 : 100,
-      compileError: aiResult.testResults?.find((test) => test.verdict === "CE")?.error ?? null,
-      publicTestResults: (aiResult.testResults ?? []).map((test) => ({
-        testId: test.testId,
-        input: test.input,
-        expectedOutput: test.expectedOutput,
-        actualOutput: test.actualOutput,
-        passed: test.passed,
-        verdict: test.verdict,
-        error: test.error,
-      })),
-    } : null;
-    const ideRunResult: StudyCodIdeRunResult | null = active && consoleOutput.trim() ? {
-      stdout: uiState === "error" ? "" : consoleOutput, stderr: uiState === "error" ? consoleOutput : "",
-      exitCode: uiState === "error" ? 1 : 0, success: uiState !== "error",
-    } : null;
-    const taskHistoryItems = sidebarSections.flatMap((section) =>
-      section.items.map((item) => ({ ...item, sectionTitle: section.title }))
-    );
-    const canGenerateFromToolbar = !loading && cooldownSecondsLeft <= 0 && canGenerateFromSidebar;
     return (
       <div className="min-h-full space-y-3 bg-bg-base p-3 text-text-primary sm:p-4">
         <TaskGenerationOverlay open={loading} phase={generationPhase} />
         <StudyCodIDEWorkspace
-          task={active ? { id: active.id, title: active.title, description: getPracticeText(active), section: active.topicTitle, taskMode: active.taskMode, projectSpec: active.projectSpec } : { id: "empty", title: tr("Обери завдання", "Choose a task"), description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."), section: tr("Особиста практика", "Personal practice") }}
-          theory={active && hasTheoryForActive ? getTheoryMarkdown(active) : null}
-          onTheoryComplete={() => setTheoryAcknowledged(true)}
+          task={ideTask}
+          theory={ideTheory}
+          onTheoryComplete={onTheoryComplete}
           emptyStateMessage={consoleOutput || null}
-          languageOptions={[ideLanguage]}
-          toolbar={
-            <>
-              {courseMode ? <>
-                <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
-                {(uiState === "error" || !active) ? (
-                  <button type="button" onClick={() => void handleGenerate({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
-                ) : (
-                  <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211]">{tr("Наступний крок", "Next step")}<ArrowRight className="size-3.5" /></button>
-                )}
-              </> : <>
-                <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">
-                  <BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}
-                </button>
-                <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}>
-                  <History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})
-                </button>
-                <button type="button" onClick={() => void handleGenerate({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40">
-                  <Plus className="size-3.5" />{tr("Нове", "New")}
-                </button>
-              </>}
-            </>
-          }
+          languageOptions={ideLanguageOptions}
+          toolbar={ideToolbar}
           language={ideLanguage}
-          onLanguageChange={() => undefined}
+          onLanguageChange={noop}
           compiler={runtime}
-          onCompilerChange={() => undefined}
+          onCompilerChange={noop}
           code={code}
           onCodeChange={setCode}
-          files={files.length ? files : [{ path: ideEntryFile, content: code }]}
+          files={ideFiles}
           onFilesChange={setFiles}
           useFiles={useFiles}
-          onEnableFiles={() => { setUseFiles(true); setFiles(files.length ? files : [{ path: ideEntryFile, content: code }]); setMfAddToken((value) => value + 1); }}
+          onEnableFiles={onEnableFiles}
           entryFile={ideEntryFile}
           stdin={stdin}
           onStdinChange={setStdin}
           firstExampleInput={undefined}
-          onUseExampleInput={() => undefined}
+          onUseExampleInput={noop}
           running={Boolean(active) && uiState === "evaluating" && !submitting}
           checking={Boolean(active) && submitting}
-          onRun={() => { if (active) void handleRun(); }}
-          onCheck={() => { if (active) void handleSubmit(); }}
-          onSave={() => { if (active) void handleSaveDraft(); }}
-          onReset={() => setCode(active?.starterCode ?? "")}
+          onRun={onRun}
+          onCheck={onCheck}
+          onSave={onSave}
+          onReset={onReset}
           readOnly={!active || !canEdit}
           runResult={ideRunResult}
           checkResult={ideCheckResult}
           hints={aiResult?.hints ?? active?.lastGradeHints ?? []}
           hintsStatus={aiResult?.hintsStatus ?? active?.lastGradeHintsStatus ?? "NOT_REQUESTED"}
           isWebTask={isWebTask}
-          webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
+          webPreviewFiles={ideWebPreviewFiles}
         />
         <Modal open={taskHistoryOpen} onClose={() => setTaskHistoryOpen(false)} title={tr("Історія завдань", "Task history")} description={tr("Відкрий попереднє завдання або створи нове.", "Open a previous task or create a new one.")} panelClassName="max-w-[720px]">
           <div className="max-h-[60vh] space-y-2 overflow-y-auto">

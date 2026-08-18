@@ -210,7 +210,7 @@ function formatMiniProjectCountdown(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
+export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const tr = (uk: string, en: string) => {
     if (typeof document === "undefined") return uk;
     return document.documentElement.lang?.toLowerCase().startsWith("en")
@@ -1626,7 +1626,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = (props) => {
       </footer>
     </div>
   );
-};
+});
+StudyCodIDEWorkspace.displayName = "StudyCodIDEWorkspace";
 
 const BottomTabButton: React.FC<{
   active: boolean;

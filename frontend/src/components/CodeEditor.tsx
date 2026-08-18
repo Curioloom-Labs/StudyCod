@@ -995,7 +995,10 @@ const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false)
   autoClosingQuotes: "always" as const,
   autoIndent: "advanced" as const,
   formatOnPaste: true,
-  formatOnType: true,
+  // Formatting on every keystroke makes the editor compete with diagnostics
+  // and language services for the main thread. Formatting is still available
+  // through paste and the explicit formatter action below.
+  formatOnType: false,
   // Let Monaco surface built-in syntax diagnostics. Type-aware diagnostics
   // still require an LSP; the judge remains the source of truth for those.
   validate: true,
@@ -1267,13 +1270,22 @@ export const CodeEditor: React.FC<Props> = React.memo(({
           const model = editor.getModel();
           if (model) {
             refreshStudyCodMarkers(monaco, model, monacoLang);
-            const markerSubscription = model.onDidChangeContent(() => refreshStudyCodMarkers(monaco, model, monacoLang));
+            let markerTimer: number | null = null;
+            const scheduleMarkers = () => {
+              if (markerTimer !== null) window.clearTimeout(markerTimer);
+              markerTimer = window.setTimeout(() => {
+                markerTimer = null;
+                refreshStudyCodMarkers(monaco, model, monacoLang);
+              }, 120);
+            };
+            const markerSubscription = model.onDidChangeContent(scheduleMarkers);
             // Read-only previews do not need a dedicated language-server process.
             // Starting one for every preview (especially JDTLS) made opening pages
             // compete with the active editor and delayed completions.
             const lspDispose = enableSemanticLsp && !readOnly ? connectStudyCodLsp(monaco, model, monacoLang, filePath || (monacoLang === "python" ? "main.py" : monacoLang === "java" ? "Main.java" : "main.cpp"), readOnly) : () => undefined;
             editor.onDidDispose(() => {
               markerSubscription.dispose();
+              if (markerTimer !== null) window.clearTimeout(markerTimer);
               lspDispose();
             });
           }
