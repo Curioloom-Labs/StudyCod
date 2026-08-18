@@ -11,9 +11,21 @@ type LspRequestOptions = {
 const CHANGE_DEBOUNCE_MS = 180;
 const DIAGNOSTICS_DEBOUNCE_MS = 300;
 const COMPLETION_TIMEOUT_MS = 3000;
+const LSP_RATE_LIMIT_COOLDOWN_MS = 15_000;
 
 const connections = new Map<string, SemanticLspConnection>();
 const providerRegistrations = new Set<string>();
+let lspRateLimitedUntil = 0;
+
+function isRateLimitError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const response = Reflect.get(error, "response");
+  return Number(response && typeof response === "object" ? Reflect.get(response, "status") : 0) === 429;
+}
+
+function markLspRateLimited(error: unknown): void {
+  if (isRateLimitError(error)) lspRateLimitedUntil = Math.max(lspRateLimitedUntil, Date.now() + LSP_RATE_LIMIT_COOLDOWN_MS);
+}
 
 function lspLanguage(language: string): LspLanguage | null {
   const normalized = language.toLowerCase();
@@ -164,6 +176,7 @@ class SemanticLspConnection {
   private changeInFlight = false;
   private requestedVersion = 1;
   private completionAbortController: AbortController | null = null;
+  private startFailed = false;
 
   constructor(
     private readonly monaco: typeof Monaco,
@@ -173,10 +186,20 @@ class SemanticLspConnection {
     private readonly readOnly: boolean
   ) {
     registerProviders(monaco, language);
-    this.ready = this.start();
+    // LSP is an enhancement, not a prerequisite for typing. A rate-limited or
+    // unavailable language server must never create an unhandled rejection or
+    // make Monaco unusable.
+    this.ready = this.start().catch((error) => {
+      markLspRateLimited(error);
+      this.startFailed = true;
+    });
   }
 
   private async start(): Promise<void> {
+    if (Date.now() < lspRateLimitedUntil) {
+      this.startFailed = true;
+      return;
+    }
     const created = await api.post<{ sessionId: string }>("/lsp/session", { language: this.language }, requestConfig());
     if (this.disposed) return;
     this.sessionId = created.data.sessionId;
@@ -201,11 +224,12 @@ class SemanticLspConnection {
 
     try {
       await this.ready;
-      if (this.disposed || !this.sessionId) return null;
+      if (this.disposed || this.startFailed || !this.sessionId) return null;
       const response = await api.post(`/lsp/session/${this.sessionId}/request`, { method, params: { ...params, textDocument: params.textDocument ? { ...params.textDocument, uri: this.serverUri } : params.textDocument }, uri: this.serverUri }, requestConfig({ signal: abortController?.signal, timeout: options.timeout }));
       applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
       return response.data || null;
-    } catch {
+    } catch (error) {
+      markLspRateLimited(error);
       return null;
     } finally {
       if (abortController && this.completionAbortController === abortController) {
@@ -238,7 +262,7 @@ class SemanticLspConnection {
     } catch {
       return;
     }
-    if (this.disposed || !this.sessionId) return;
+    if (this.disposed || this.startFailed || !this.sessionId || Date.now() < lspRateLimitedUntil) return;
 
     const version = this.requestedVersion;
     const text = this.model.getValue();
@@ -250,7 +274,8 @@ class SemanticLspConnection {
         applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
         this.refreshDiagnostics();
       }
-    } catch {
+    } catch (error) {
+      markLspRateLimited(error);
       // A newer change may already be queued; it will retry the latest snapshot.
     } finally {
       this.changeInFlight = false;
@@ -263,11 +288,11 @@ class SemanticLspConnection {
     this.diagnosticsTimer = window.setTimeout(async () => {
       this.diagnosticsTimer = null;
       try {
-        if (!this.sessionId || this.disposed) return;
+        if (!this.sessionId || this.disposed || this.startFailed || Date.now() < lspRateLimitedUntil) return;
         const uri = encodeURIComponent(this.serverUri);
         const response = await api.get(`/lsp/session/${this.sessionId}/diagnostics?uri=${uri}`, requestConfig());
         applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
-      } catch {}
+      } catch (error) { markLspRateLimited(error); }
     }, DIAGNOSTICS_DEBOUNCE_MS);
   }
 
