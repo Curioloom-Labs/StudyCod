@@ -8,6 +8,7 @@ import {
   Code2,
   HelpCircle,
   Home,
+  Library,
   LogOut,
   Moon,
   PlaySquare,
@@ -22,6 +23,8 @@ import type { AppTheme } from "../../theme";
 import { usePersonalLearning } from "../learning/PersonalLearningProvider";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
+type NavId = Page | "library" | "playground";
+type NavItem = { id: NavId; label: string; Icon: React.ElementType<{ className?: string }>; onClick?: () => void };
 
 type ShellProps = {
   user: User;
@@ -82,16 +85,22 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     };
   }, [accountOpen]);
 
-  const nav: Array<{ id: Page; label: string; Icon: React.ElementType<{ className?: string }> }> = [
+  const routeIsActive = (path: string) => window.location.pathname === path || window.location.pathname.startsWith(`${path}/`);
+  const nav: NavItem[] = [
     { id: "home", label: uk ? "Навчання" : "Learning", Icon: Home },
     { id: "tasks", label: "Lab", Icon: Code2 },
+    { id: "library", label: uk ? "Бібліотека" : "Library", Icon: Library, onClick: onLibrary },
+    { id: "playground", label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
     ...(user.role === "SYSTEM_ADMIN"
       ? [{ id: "admin" as const, label: uk ? "Адміністрування" : "Admin", Icon: ShieldCheck }]
       : []),
   ];
 
-  const active = (id: Page) => page === id;
-  const routeIsActive = (path: string) => window.location.pathname === path || window.location.pathname.startsWith(`${path}/`);
+  const active = (id: NavId) => {
+    if (id === "library") return routeIsActive("/lab/library") || routeIsActive("/library");
+    if (id === "playground") return routeIsActive("/lab/playground") || routeIsActive("/playground");
+    return page === id;
+  };
   const displayName = user.firstName || user.username;
   const modeLabel = user.userMode || "PERSONAL";
   const initial = displayName.slice(0, 1).toUpperCase();
@@ -130,19 +139,19 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           </button>
 
           <nav className="mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-none items-center justify-center gap-1 overflow-x-auto rounded-xl bg-[#edf1ed] p-1 whitespace-nowrap dark:bg-white/[.055] lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
-            {nav.map(({ id, label, Icon }) => (
+            {nav.map((item) => (
               <button
-                key={id}
+                key={item.id}
                 type="button"
-                onClick={() => onNavigate(id)}
+                onClick={() => item.onClick ? item.onClick() : onNavigate(item.id as Page)}
                 className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${
-                  active(id)
+                  active(item.id)
                     ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]"
                     : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {label}
+                <item.Icon className="h-4 w-4" />
+                {item.label}
               </button>
             ))}
           </nav>
@@ -236,14 +245,15 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           </div>
         </div>
       ) : null}
-      {area === "lab" ? <div className="sticky top-[72px] z-40 bg-[#f7f8f5]/92 backdrop-blur-xl dark:bg-[#0b120e]/92"><div className="mx-auto flex max-w-[1440px] items-center gap-2 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10"><span className="mr-2 shrink-0 text-sm font-bold">Lab</span>{[{ label: uk ? "Бібліотека" : "Library", path: "/lab/library", to: "/lab/library", onClick: onLibrary }, { label: uk ? "Пісочниця" : "Playground", path: "/lab/playground", to: "/lab/playground", onClick: onPlayground }].map((tab) => <button key={tab.path} type="button" onClick={() => tab.onClick ? tab.onClick() : navigate(tab.to)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${routeIsActive(tab.path) ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}</div></div> : null}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {[
             { id: "home" as const, label: nav.find((item) => item.id === "home")?.label ?? "Home", Icon: Home, onClick: () => onNavigate("home") },
             { id: "tasks" as const, label: nav.find((item) => item.id === "tasks")?.label ?? "Practice", Icon: Code2, onClick: () => onNavigate("tasks") },
+            { id: "library" as const, label: nav.find((item) => item.id === "library")?.label ?? "Library", Icon: Library, onClick: onLibrary },
+            { id: "playground" as const, label: nav.find((item) => item.id === "playground")?.label ?? "Playground", Icon: PlaySquare, onClick: onPlayground },
           ].map(({ id, label, Icon, onClick }) => (
-            <button key={id} type="button" onClick={onClick} aria-current={active(id as Page) ? "page" : undefined} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${active(id as Page) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
+            <button key={id} type="button" onClick={onClick} aria-current={active(id) ? "page" : undefined} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${active(id) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
               <Icon className="size-4" />
               <span className="max-w-full truncate leading-none">{label}</span>
             </button>

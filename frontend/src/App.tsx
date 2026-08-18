@@ -757,7 +757,7 @@ const AppContent: React.FC = React.memo(() => {
         setNavOpen(false);
         return;
       }
-      if (newPage === "tasks") { navigate("/lab/library"); setNavOpen(false); return; }
+      if (newPage === "tasks") { navigate("/lab/practice?workspace=personal"); setNavOpen(false); return; }
       if (newPage === "grades") { navigate("/learning/catalog"); setNavOpen(false); return; }
     }
     startTransition(() => {
