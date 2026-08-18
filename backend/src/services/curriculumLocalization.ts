@@ -98,7 +98,22 @@ export function getLocalizedCurriculum(locale: CurriculumLocale): LocalizedCurri
   const topics = new Map<string, CurriculumTopic>();
   const projects = new Map<string, CurriculumMiniProject>();
   for (const course of manifest.courses) {
-    for (const topic of loadCurriculumTopics(course, root, locale)) topics.set(`${course.key}.${topic.key}`, topic);
+    const localizedTopics = loadCurriculumTopics(course, root, locale);
+    if (locale === "en") {
+      // Course item IDs were created from the Ukrainian curriculum keys. The
+      // English copies may have slugs derived from translated titles, so pair
+      // both catalogs by the stable authoring order and expose the Ukrainian
+      // key as the canonical lookup key used by persisted course items.
+      const ukCourse = loadCurriculumManifest(root, "uk").manifest.courses.find((candidate) => candidate.key === course.key);
+      const ukTopics = ukCourse ? loadCurriculumTopics(ukCourse, root, "uk") : [];
+      for (const [index, topic] of localizedTopics.entries()) {
+        const canonical = ukTopics[index];
+        topics.set(`${course.key}.${canonical?.key ?? topic.key}`, topic);
+        topics.set(`${course.key}.${topic.key}`, topic);
+      }
+    } else {
+      for (const topic of localizedTopics) topics.set(`${course.key}.${topic.key}`, topic);
+    }
     for (const project of loadCurriculumMiniProjects(course.key, root, locale)) projects.set(`${course.key}.${project.key}`, project);
   }
   const value = { courses, topics, projects };
