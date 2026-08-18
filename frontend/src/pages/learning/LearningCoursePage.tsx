@@ -391,6 +391,15 @@ export const LearningCoursePage: React.FC = () => {
             const doneCount = items.filter((item) => item.progress.status === "COMPLETED").length;
             const started = items.some((item) => item.progress.status === "IN_PROGRESS");
             const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+            const previousNode = index > 0 ? roadmapNodes[index - 1] : null;
+            const previousItems = previousNode ? nodeItems(previousNode) : [];
+            const previousProgress = previousNode
+              ? previousItems.length
+                ? Math.round((previousItems.filter((item) => item.progress.status === "COMPLETED").length / previousItems.length) * 100)
+                : nodeCompleted(previousNode) ? 100 : 0
+              : 0;
+            const incomingConnectorWidth = 2 + (previousProgress / 100) * 5;
+            const outgoingConnectorWidth = 2 + (progress / 100) * 5;
             const isSelected = selectedNodeId === node.id;
             const topicNumber = roadmapNodes.slice(0, index + 1).filter((candidate) => candidate.kind === "TOPIC").length;
             const parts = node.kind === "TOPIC" ? topicParts(node) : [];
@@ -411,6 +420,8 @@ export const LearningCoursePage: React.FC = () => {
                     : tr("Відкрити практику", "Open practice");
 
             return <div key={node.id} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
+              {index > 0 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-[2] hidden -translate-x-1/2 rounded-full bg-primary/70 lg:block" style={{ width: `${incomingConnectorWidth}px`, height: "50%" }} />}
+              {index < roadmapNodes.length - 1 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[2] hidden -translate-x-1/2 rounded-full bg-primary/70 lg:block" style={{ width: `${outgoingConnectorWidth}px`, top: "50%", bottom: "-1.75rem" }} />}
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
