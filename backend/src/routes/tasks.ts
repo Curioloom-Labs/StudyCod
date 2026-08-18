@@ -1866,7 +1866,10 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   } as any, {
     language: params.userLanguage,
     requestId: params.requestId,
-    maxAttempts: params.type === "CONTROL" ? 2 : 1,
+    // A single malformed model response must not become a learner-visible
+    // deterministic fallback. Keep validation strict, but give regular
+    // course practice one semantic retry just like control practice.
+    maxAttempts: 2,
     ...(disableDeadlines ? {} : { totalTimeoutMs: taskBudgetMs })
   });
   if (!aiTaskResult.success) {
