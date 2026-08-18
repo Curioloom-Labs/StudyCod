@@ -383,7 +383,6 @@ export const LearningCoursePage: React.FC = () => {
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#102619]/10 pb-5 dark:border-white/10"><div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#147b47] dark:text-[#70edaf]">{tr("Маршрут курсу", "Course roadmap")}</p><h3 className="mt-2 text-2xl font-bold tracking-[-.04em] text-[#17231b] dark:text-[#edf4ef] sm:text-3xl">{tr("Теми, що складаються в навичку", "Topics that become a skill")}</h3><p className="mt-2 max-w-2xl text-sm leading-6 text-[#65746a] dark:text-[#a5b4a9]">{tr("Кожен вузол поєднує пояснення, практику та наступний зрозумілий крок.", "Every node combines explanation, practice, and a clear next step.")}</p></div><span className="rounded-md border border-[#102619]/12 px-3 py-1.5 text-[11px] font-bold text-[#65746a] dark:border-white/10 dark:text-[#a5b4a9]">{completedTopics} / {topicNodes.length} {tr("готово", "complete")}</span></div>
 
       <div className="relative mt-8">
-        <div aria-hidden="true" className="absolute bottom-6 left-5 top-6 w-1 rounded-full bg-primary/15 lg:hidden" />
         <div className="relative space-y-5 lg:space-y-7">
           {roadmapNodes.map((node, index) => {
             const items = nodeItems(node);
@@ -421,8 +420,8 @@ export const LearningCoursePage: React.FC = () => {
                     : tr("Відкрити практику", "Open practice");
 
             return <div key={node.id} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
-              {index > 0 && renderRoadmapWave(incomingThickRatio, "absolute left-1/2 top-0 z-[1] hidden h-1/2 w-24 -translate-x-1/2 lg:block")}
-              {index < roadmapNodes.length - 1 && renderRoadmapWave(outgoingThickRatio, "absolute bottom-[-1.75rem] left-1/2 top-1/2 z-[1] hidden w-24 -translate-x-1/2 lg:block")}
+              {index > 0 && renderRoadmapWave(incomingThickRatio, "absolute left-5 top-0 z-[1] block h-1/2 w-16 -translate-x-1/2 lg:left-1/2 lg:w-24")}
+              {index < roadmapNodes.length - 1 && renderRoadmapWave(outgoingThickRatio, "absolute bottom-[-1.75rem] left-5 top-1/2 z-[1] block w-16 -translate-x-1/2 lg:left-1/2 lg:w-24")}
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
