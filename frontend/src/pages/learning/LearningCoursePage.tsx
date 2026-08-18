@@ -347,6 +347,12 @@ export const LearningCoursePage: React.FC = () => {
   if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate("/learning/catalog")} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
   if (!course) return null;
 
+  const roadmapWavePath = "M50 0 C28 16 28 34 50 50 C72 66 72 84 50 100";
+  const renderRoadmapWave = (ratio: number, className: string) => <svg aria-hidden="true" className={`pointer-events-none ${className}`} viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false">
+    <path d={roadmapWavePath} className="fill-none stroke-primary/30" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+    {ratio > 0 && <path d={roadmapWavePath} className="fill-none stroke-primary" strokeWidth="7" strokeLinecap="round" pathLength={1} strokeDasharray={ratio >= 1 ? undefined : `${ratio} ${1 - ratio}`} vectorEffect="non-scaling-stroke" />}
+  </svg>;
+
   return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
     <nav aria-label={tr("Навігація курсу", "Course navigation")} className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold text-text-secondary">
       <button type="button" onClick={() => navigate("/learning/catalog")} className="rounded-lg px-2 py-1 transition hover:bg-bg-hover hover:text-text-primary">{tr("Каталог", "Catalog")}</button>
@@ -378,11 +384,6 @@ export const LearningCoursePage: React.FC = () => {
 
       <div className="relative mt-8">
         <div aria-hidden="true" className="absolute bottom-6 left-5 top-6 w-1 rounded-full bg-primary/15 lg:hidden" />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 bg-primary/20 lg:block" />
-        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] hidden h-full w-full lg:block" viewBox="0 0 100 1000" preserveAspectRatio="none" focusable="false">
-          <path d="M50 0 C43 7 57 13 50 20 C43 27 57 33 50 40 C43 47 57 53 50 60 C43 67 57 73 50 80 C43 87 57 93 50 100" className="fill-none stroke-primary/35" strokeWidth="0.55" vectorEffect="non-scaling-stroke" />
-          <path d="M50 0 C47 7 53 13 50 20 C47 27 53 33 50 40 C47 47 53 53 50 60 C47 67 53 73 50 80 C47 87 53 93 50 100" className="fill-none stroke-primary/15" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-        </svg>
         <div className="relative space-y-5 lg:space-y-7">
           {roadmapNodes.map((node, index) => {
             const items = nodeItems(node);
@@ -420,8 +421,8 @@ export const LearningCoursePage: React.FC = () => {
                     : tr("Відкрити практику", "Open practice");
 
             return <div key={node.id} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
-              {index > 0 && incomingThickRatio > 0 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-[2] hidden h-1/2 origin-top rounded-full bg-primary/75 lg:block" style={{ width: "7px", transform: `translateX(-50%) scaleY(${incomingThickRatio})` }} />}
-              {index < roadmapNodes.length - 1 && outgoingThickRatio > 0 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 z-[2] hidden origin-top rounded-full bg-primary/75 lg:block" style={{ width: "7px", bottom: "-1.75rem", transform: `translateX(-50%) scaleY(${outgoingThickRatio})` }} />}
+              {index > 0 && renderRoadmapWave(incomingThickRatio, "absolute left-1/2 top-0 z-[1] hidden h-1/2 w-24 -translate-x-1/2 lg:block")}
+              {index < roadmapNodes.length - 1 && renderRoadmapWave(outgoingThickRatio, "absolute bottom-[-1.75rem] left-1/2 top-1/2 z-[1] hidden w-24 -translate-x-1/2 lg:block")}
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
