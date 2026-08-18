@@ -11,6 +11,7 @@ import {
   Rocket,
   Save,
   Send,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -200,6 +201,10 @@ export const LearningCoursePage: React.FC = () => {
     return items.length > 0 && items.every((item) => item.progress.status === "COMPLETED");
   };
 
+  const topicNodes = roadmapNodes.filter((node) => node.kind === "TOPIC");
+  const practiceCount = topicNodes.reduce((total, node) => total + node.practices.length, 0);
+  const completedTopics = topicNodes.filter(nodeCompleted).length;
+
   React.useEffect(() => {
     if (loading || !course || !focusPractice) return;
     if (nextPracticeItem) {
@@ -365,10 +370,20 @@ export const LearningCoursePage: React.FC = () => {
       {error && <div role="alert" className="mt-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
     </header>
 
-    <section className="mb-6 rounded-[26px] border border-border bg-bg-surface p-5 shadow-sm sm:p-7">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Теми курсу", "Course topics")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{tr("Обирай тему для уроку та практики", "Choose a topic for its lesson and practice")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Кожна тема — це послідовний міні-маршрут: коротка теорія, приклади, практика та зрозумілий результат. Натисни активну тему, щоб почати урок.", "Each topic is a focused mini-path: concise theory, examples, practice, and a clear outcome. Choose an active topic to start the lesson.")}</p></div>
-        <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">{completedItems}/{requiredItems.length} {tr("елементів", "items")}</span>
+    <section className="relative mb-6 overflow-hidden rounded-[30px] border border-border bg-bg-surface p-5 shadow-sm sm:p-7">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-primary/10 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 left-1/3 size-56 rounded-full bg-[#7dd3fc]/10 blur-3xl" />
+      <div className="relative">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-primary"><Sparkles className="size-4" />{tr("Твій навчальний маршрут", "Your learning path")}</p><h2 className="mt-2 text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">{tr("Обирай тему для уроку та практики", "Choose a topic for its lesson and practice")}</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Кожна тема — це послідовний міні-маршрут: коротка теорія, приклади, практика та зрозумілий результат. Натисни активну тему, щоб почати урок.", "Each topic is a focused mini-path: concise theory, examples, practice, and a clear outcome. Choose an active topic to start the lesson.")}</p></div>
+          <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">{completedItems}/{requiredItems.length} {tr("елементів", "items")}</span>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-bg-base/70 p-4"><p className="text-[11px] font-bold uppercase tracking-[.14em] text-text-secondary">{tr("Теми", "Topics")}</p><p className="mt-2 text-2xl font-bold text-text-primary">{completedTopics}<span className="ml-1 text-sm font-semibold text-text-muted">/ {topicNodes.length}</span></p><p className="mt-1 text-xs text-text-secondary">{tr("пройдено повністю", "completed fully")}</p></div>
+          <div className="rounded-2xl border border-border bg-bg-base/70 p-4"><p className="text-[11px] font-bold uppercase tracking-[.14em] text-text-secondary">{tr("Практика", "Practice")}</p><p className="mt-2 text-2xl font-bold text-text-primary">{practiceCount}</p><p className="mt-1 text-xs text-text-secondary">{tr("завдань для закріплення", "tasks to reinforce skills")}</p></div>
+          <div className="rounded-2xl border border-primary/20 bg-primary/[.07] p-4"><p className="text-[11px] font-bold uppercase tracking-[.14em] text-primary">{tr("Наступний крок", "Next step")}</p><p className="mt-2 line-clamp-1 text-base font-bold text-text-primary">{course.nextAction?.title || tr("Маршрут завершено", "Path completed")}</p><p className="mt-1 text-xs text-text-secondary">{course.nextAction ? tr("готовий продовжити", "ready to continue") : tr("можна повернутися до практики", "you can revisit practice")}</p></div>
+        </div>
       </div>
 
       <div className="relative mt-8">
@@ -384,6 +399,7 @@ export const LearningCoursePage: React.FC = () => {
             const isSelected = selectedNodeId === node.id;
             const topicNumber = roadmapNodes.slice(0, index + 1).filter((candidate) => candidate.kind === "TOPIC").length;
             const parts = node.kind === "TOPIC" ? topicParts(node) : [];
+            const topicTone = node.kind === "TOPIC" ? ["from-[#effff5] to-[#f8fcf9] dark:from-[#10291c] dark:to-[#111a14]", "from-[#effaff] to-[#f8fcfb] dark:from-[#10252a] dark:to-[#111a14]", "from-[#fff9ed] to-[#fcfbf7] dark:from-[#2a2110] dark:to-[#141811]"][Math.max(0, (topicNumber - 1) % 3)] : "";
             const Icon = completed ? CheckCircle2 : locked ? LockKeyhole : node.kind === "PROJECT" ? Rocket : node.kind === "MILESTONE" ? FileCheck2 : node.theory?.progress.status === "COMPLETED" ? Play : BookOpen;
             const status = completed
               ? tr("Завершено", "Completed")
@@ -403,7 +419,9 @@ export const LearningCoursePage: React.FC = () => {
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary shadow-sm lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
-              <button type="button" disabled={locked || completed} onClick={() => handleNodeClick(node, index)} className={`col-start-2 row-start-1 min-w-0 rounded-[24px] border p-4 text-left transition ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${completed ? "border-primary/30 bg-primary/10" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/10 shadow-[0_12px_28px_-18px_rgba(0,160,91,.65)]" : "border-border bg-bg-base hover:-translate-y-0.5 hover:border-primary/50"}`}>
+              <button type="button" disabled={locked || completed} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-[24px] border p-4 text-left transition duration-300 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-gradient-to-br ${topicTone}` : "bg-bg-base"} ${completed ? "border-primary/30 ring-1 ring-primary/10" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/10 shadow-[0_12px_28px_-18px_rgba(0,160,91,.65)]" : "border-border hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_18px_35px_-24px_rgba(0,160,91,.7)]"}`}>
+                {node.kind === "TOPIC" && <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-[#63e6a3] to-[#7dd3fc] opacity-70 transition group-hover:opacity-100" />}
+                {node.kind === "TOPIC" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-xl bg-bg-surface/80 text-xs font-black text-primary shadow-sm">{String(topicNumber).padStart(2, "0")}</span><span className="rounded-full bg-bg-surface/75 px-2.5 py-1 text-[11px] font-bold text-primary">{completed ? tr("Готово", "Done") : locked ? tr("Попереду", "Ahead") : tr("У фокусі", "In focus")}</span></div>}
                  <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? `${tr("Тема", "Topic")} ${topicNumber}` : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
                  <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.title}</h3>
                  {node.kind === "TOPIC" ? <>
