@@ -1099,7 +1099,12 @@ PRACTICAL TASK LENGTH (mandatory): practicalTask must be a connected narrative o
           temperature: 0.15,
           maxTokens: LLM_TASK_MAX_TOKENS
         });
-        const validated = AIResponseValidator.validateGenerateTask(parsed, params.anchor.topic);
+        const validated = AIResponseValidator.validateGenerateTask(
+          parsed,
+          params.anchor.topic,
+          params.topicIndex,
+          params.allowedIoTypes
+        );
         const practicalTaskLower = validated.practicalTask.toLowerCase();
         const coreOperationLower = params.anchor.coreOperation.toLowerCase();
         const titleLower = validated.title.toLowerCase();

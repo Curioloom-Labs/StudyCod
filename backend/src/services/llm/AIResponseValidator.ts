@@ -67,7 +67,14 @@ function mentionsNoInput(text: string): boolean {
 
 function looksLikeInputRequirement(text: string): boolean {
   const s = String(text ?? '').toLowerCase();
-  return /(?:введі(ть|ть ім)|ввести|вводиться|зчита(?:й|йте)|прочита(?:й|йте)|запита(?:ти|й|йте)|отримати\s+(?:ім['’ʼ`]|дан)|ім['’ʼ`]я\s+.*введ|з\s+(?:консолі|стандартного\s+потоку)|stdin|system\.in|scanner|input\s*\(|read\s+from\s+stdin|enter\s+(?:your|the)|please\s+enter|read\s+input)/i.test(s);
+  // Remove explicit no-input clauses before looking for positive input
+  // requirements. Otherwise the canonical phrase "нічого не вводиться"
+  // falsely matches the bare "вводиться" alternative below.
+  const withoutNoInputClauses = s.replace(
+    /(?:вхідн(?:і|их)\s+дан(?:і|их)\s+(?:нема|відсутн)|не\s+потрібно\s+вводити|нічого\s+не\s+ввод(?:ити|иться)|без\s+введенн(?:я|я\s+даних)|stdin\s*(?:is\s*)?empty|no\s+input|without\s+input|input\s+is\s+not\s+provided|there\s+is\s+no\s+input)/gi,
+    ' '
+  );
+  return /(?:введі(ть|ть ім)|ввести|вводиться|зчита(?:й|йте)|прочита(?:й|йте)|запита(?:ти|й|йте)|отримати\s+(?:ім['’ʼ`]|дан)|ім['’ʼ`]я\s+.*введ|з\s+(?:консолі|стандартного\s+потоку)|stdin|system\.in|scanner|input\s*\(|read\s+from\s+stdin|enter\s+(?:your|the)|please\s+enter|read\s+input)/i.test(withoutNoInputClauses);
 }
 
 function looksLikeInteractiveOutputPrompt(text: string): boolean {
@@ -531,9 +538,14 @@ export class AIResponseValidator {
     // Keep the purity boundary structural instead of rejecting words such as
     // “read” or “enter” globally.
   }
-  static validateGenerateTask(data: unknown, expectedTopic?: string, topicIndex?: number): AiTaskGenerationResult {
+  static validateGenerateTask(
+    data: unknown,
+    expectedTopic?: string,
+    topicIndex?: number,
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">
+  ): AiTaskGenerationResult {
     try {
-      const fixed = this.fixTaskGenerationData(data);
+      const fixed = this.fixTaskGenerationData(data, allowedIoTypes);
       const validated = TaskGenerationSchema.parse(fixed);
 
       // Conditional IO semantics validation.
@@ -544,7 +556,6 @@ export class AIResponseValidator {
 
       const practical = String(validated.practicalTask ?? '').trim();
       const outFmt = String(validated.outputFormat ?? '').trim();
-      const inFmt = String(validated.inputFormat ?? '').trim();
       const constraints = String(validated.constraints ?? '').trim();
 
       // Normalise inputFormat for no-input IO types before rule evaluation:
@@ -554,6 +565,8 @@ export class AIResponseValidator {
         const practicalHasCyrillic = /[а-яіїєґ]/i.test(practical);
         (validated as any).inputFormat = defaultNoInputFormat(practicalHasCyrillic);
       }
+
+      const inFmt = String(validated.inputFormat ?? '').trim();
 
       const ctx: TaskValidationContext = {
         topicTitle: String(expectedTopic ?? '').trim(),
@@ -615,7 +628,10 @@ export class AIResponseValidator {
       throw new AIValidationError('generateTask', emptyZod(), `Task generation validation failed: ${unknownErr(error)}`);
     }
   }
-  private static fixTaskGenerationData(data: any): any {
+  private static fixTaskGenerationData(
+    data: any,
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">
+  ): any {
     if (!data || typeof data !== 'object') return data;
 
     const fixed = { ...data };
@@ -625,6 +641,26 @@ export class AIResponseValidator {
       inputFormat: fixed.inputFormat,
       outputFormat: fixed.outputFormat,
     });
+
+    const allowed = Array.isArray(allowedIoTypes) ? allowedIoTypes : [];
+    let coercedToNoInput = false;
+    if (allowed.length > 0 && !allowed.includes(fixed.ioType)) {
+      const noInputOptions = allowed.filter((value) => value !== 'STDIN_STDOUT');
+      const semanticText = `${String(fixed.practicalTask ?? '')}\n${String(fixed.inputFormat ?? '')}`;
+      const canSafelyUseNoInput = fixed.ioType === 'STDIN_STDOUT'
+        && noInputOptions.length > 0
+        && !looksLikeInputRequirement(semanticText);
+      if (canSafelyUseNoInput) {
+        const outputText = String(fixed.outputFormat ?? '').toLowerCase();
+        const preferFreeOutput = /будь-як|непорожн|any\s+non-?empty|any\s+output|free\s+output/i.test(outputText);
+        fixed.ioType = preferFreeOutput && noInputOptions.includes('NO_INPUT_FREE_OUTPUT')
+          ? 'NO_INPUT_FREE_OUTPUT'
+          : noInputOptions.includes('NO_INPUT_FIXED_OUTPUT')
+            ? 'NO_INPUT_FIXED_OUTPUT'
+            : noInputOptions[0];
+        coercedToNoInput = true;
+      }
+    }
 
     const ioTypeHint = typeof fixed.ioType === 'string' ? String(fixed.ioType).trim() : '';
     const isNoInputIoType = ioTypeHint === 'NO_INPUT_FIXED_OUTPUT' || ioTypeHint === 'NO_INPUT_FREE_OUTPUT';
@@ -659,6 +695,10 @@ export class AIResponseValidator {
           output: String(ex.output || '').trim(),
           explanation: String(ex.explanation || '').trim() || 'Example',
         }));
+
+      if (coercedToNoInput) {
+        fixed.examples = fixed.examples.map((ex: any) => ({ ...ex, input: '' }));
+      }
 
       if (fixed.examples.length === 0) {
         fixed.examples = [defaultExample];

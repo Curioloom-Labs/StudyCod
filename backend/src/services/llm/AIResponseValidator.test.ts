@@ -131,6 +131,33 @@ test('AIResponseValidator.validateGenerateTask: rejects function-only tasks', ()
   );
 });
 
+test('AIResponseValidator.validateGenerateTask: coerces a disallowed stdin type when the statement is no-input', () => {
+  const data = {
+    title: 'Variables and types',
+    topic: 'Data types and variables',
+    difficulty: 2,
+    theoryMarkdown: 'Variables store values and have types.',
+    practicalTask:
+      'Write a complete program that assigns the concrete values name = "Ada" and age = 36. ' +
+      'Print the value and type of each variable on its own line, with no user interaction or input.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'There is no input.',
+    outputFormat: 'name: Ada (str)\nage: 36 (int)',
+    constraints: 'Use only the values stated in the task.',
+    examples: [{ input: '', output: 'name: Ada (str)\nage: 36 (int)', explanation: 'The program prints both variables.' }],
+    codeTemplate: 'def main():\n    pass'
+  };
+
+  const result = AIResponseValidator.validateGenerateTask(
+    data,
+    'Data types and variables',
+    1,
+    ['NO_INPUT_FIXED_OUTPUT', 'NO_INPUT_FREE_OUTPUT']
+  );
+  assert.equal(result.ioType, 'NO_INPUT_FIXED_OUTPUT');
+  assert.equal(result.examples[0]?.input, '');
+});
+
 test('AIResponseValidator.validateGenerateTask: allows method-oriented tasks on a methods topic', () => {
   const data = {
     title: 'Overloaded sum methods',

@@ -412,6 +412,12 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               result,
               typeof (sanitizedParams as any).topicTitle === 'string'
                 ? String((sanitizedParams as any).topicTitle)
+                : undefined,
+              typeof (sanitizedParams as any).topicIndex === 'number'
+                ? Number((sanitizedParams as any).topicIndex)
+                : undefined,
+              Array.isArray((sanitizedParams as any).allowedIoTypes)
+                ? (sanitizedParams as any).allowedIoTypes
                 : undefined
             );
 
