@@ -377,7 +377,11 @@ export const LearningCoursePage: React.FC = () => {
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#102619]/10 pb-5 dark:border-white/10"><div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#147b47] dark:text-[#70edaf]">{tr("Маршрут курсу", "Course roadmap")}</p><h3 className="mt-2 text-2xl font-bold tracking-[-.04em] text-[#17231b] dark:text-[#edf4ef] sm:text-3xl">{tr("Теми, що складаються в навичку", "Topics that become a skill")}</h3><p className="mt-2 max-w-2xl text-sm leading-6 text-[#65746a] dark:text-[#a5b4a9]">{tr("Кожен вузол поєднує пояснення, практику та наступний зрозумілий крок.", "Every node combines explanation, practice, and a clear next step.")}</p></div><span className="rounded-md border border-[#102619]/12 px-3 py-1.5 text-[11px] font-bold text-[#65746a] dark:border-white/10 dark:text-[#a5b4a9]">{completedTopics} / {topicNodes.length} {tr("готово", "complete")}</span></div>
 
       <div className="relative mt-8">
-        <div aria-hidden="true" className="absolute bottom-6 left-5 top-6 w-1 rounded-full bg-primary/15 lg:bottom-8 lg:left-1/2 lg:top-8 lg:-translate-x-1/2" />
+        <div aria-hidden="true" className="absolute bottom-6 left-5 top-6 w-1 rounded-full bg-primary/15 lg:hidden" />
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-8 top-8 hidden h-[calc(100%-4rem)] w-full lg:block" viewBox="0 0 100 1000" preserveAspectRatio="none" focusable="false">
+          <path d="M50 0 C43 7 57 13 50 20 C43 27 57 33 50 40 C43 47 57 53 50 60 C43 67 57 73 50 80 C43 87 57 93 50 100" className="fill-none stroke-primary/20" strokeWidth="0.45" vectorEffect="non-scaling-stroke" />
+          <path d="M50 0 C47 7 53 13 50 20 C47 27 53 33 50 40 C47 47 53 53 50 60 C47 67 53 73 50 80 C47 87 53 93 50 100" className="fill-none stroke-primary/10" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        </svg>
         <div className="relative space-y-5 lg:space-y-7">
           {roadmapNodes.map((node, index) => {
             const items = nodeItems(node);
