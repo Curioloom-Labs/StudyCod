@@ -126,6 +126,7 @@ const GeoBlockedPage = React.lazy(() => import("./pages/system/GeoBlockedPage").
 const ProfileCertificatesPage = React.lazy(() => import("./pages/profile/ProfileCertificatesPage").then(mod => ({ default: mod.ProfileCertificatesPage })));
 const CertificateVerifyPage = React.lazy(() => import("./pages/public/CertificateVerifyPage").then(mod => ({ default: mod.CertificateVerifyPage })));
 const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
+const PublicNotFoundPage = React.lazy(() => import("./pages/public/PublicStatusPage").then(mod => ({ default: mod.PublicNotFoundPage })));
 const TaskLibraryPage = React.lazy(() => import("./pages/library/TaskLibraryPage").then(mod => ({ default: mod.TaskLibraryPage })));
 const LibraryTaskSolvePage = React.lazy(() => import("./pages/library/LibraryTaskSolvePage").then(mod => ({ default: mod.LibraryTaskSolvePage })));
 const ContestsPage = React.lazy(() => import("./pages/contest/ContestExperience").then(mod => ({ default: mod.ContestLobbyPage })));
@@ -933,6 +934,11 @@ const AppContent: React.FC = React.memo(() => {
 
   if (user && !bootResumeHandled) {
     return <PageLoader />;
+  }
+  if (location.pathname !== "/") {
+    return <Suspense fallback={<PageLoader />}>
+      <PublicNotFoundPage />
+    </Suspense>;
   }
   if (!user) {
     if (maintenance && !showAdminLogin) {

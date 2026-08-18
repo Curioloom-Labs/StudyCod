@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./public.css";
 import { initTheme } from "./theme";
 import { getMe } from "./lib/api/profile";
+import { PublicErrorPage } from "./pages/public/PublicStatusPage";
 
 const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
 let appStylesPromise: Promise<unknown> | null = null;
@@ -133,53 +134,7 @@ const ErrorDisplay: React.FC<{
 }> = ({
   error
 }) => {
-  return <div style={{
-    padding: "20px",
-    textAlign: "center",
-    fontFamily: "monospace",
-    color: "var(--text-primary, #e8e8f0)",
-    backgroundColor: "var(--bg-surface, #111118)",
-    minHeight: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center"
-  }}>
-      <h1 style={{
-      color: "var(--accent-error, #ef4444)",
-      marginBottom: "20px"
-    }}>Loading Error</h1>
-      <p style={{
-      marginBottom: "10px",
-      color: "var(--accent-warn, #fbbf24)"
-    }}>{error?.message || "Unknown Error"}</p>
-      {error?.stack && <pre style={{
-      textAlign: "left",
-      fontSize: "12px",
-      color: "var(--text-muted, #9ca3af)",
-      maxWidth: "800px",
-      overflow: "auto",
-      marginBottom: "20px",
-      padding: "10px",
-      backgroundColor: "var(--bg-base, #0a0a0f)",
-      borderRadius: "4px"
-    }}>
-          {error.stack}
-        </pre>}
-      <button type="button" onClick={() => {
-      window.location.reload();
-    }} style={{
-      padding: "10px 20px",
-      backgroundColor: "var(--secondary, #3b82f6)",
-      color: "var(--text-primary, #e8e8f0)",
-      border: "1px solid var(--border, #2a2a3a)",
-      borderRadius: "4px",
-      cursor: "pointer",
-      fontFamily: "monospace"
-    }}>
-        Reload
-      </button>
-    </div>;
+  return <PublicErrorPage error={error} />;
 };
 class ErrorBoundary extends React.Component<{
   children: React.ReactNode;

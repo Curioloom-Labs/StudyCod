@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 
 @source "./pages/public/PublicLandingPage.tsx";
+@source "./pages/public/PublicStatusPage.tsx";
 @source "./components/layout/PublicProductNav.tsx";
 @source "./components/Logo.tsx";
 
