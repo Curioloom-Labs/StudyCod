@@ -1575,18 +1575,11 @@ export const TasksPage: React.FC<Props> = ({
     }
   };
 
-  // A roadmap click arrives here as /tasks?courseItemId=...&generate=1.
-  // Trigger exactly once, then remove the command parameters so refreshing or
-  // pressing "New" does not unexpectedly regenerate the same catalog item.
+  // Generation is an explicit action from a roadmap topic. Opening a practice
+  // URL directly must only restore the IDE and never start an AI request.
   useEffect(() => {
-    if (isPreviewMode || !requestedCourseItemIdFromUrl) return;
-    const canonicalCoursePractice = requestedCourseIdFromUrl != null && !searchParams.get("generate");
-    if (!canonicalCoursePractice && searchParams.get("generate") !== "1") return;
-    // The general personal-task list may already contain items when a learner
-    // enters a course practice URL. That must not suppress the one required
-    // generation for this specific catalog item; only wait for the initial
-    // workspace load to finish.
-    if (canonicalCoursePractice && loading) return;
+    if (isPreviewMode || !requestedCourseItemIdFromUrl || searchParams.get("generate") !== "1") return;
+    if (loading) return;
     const key = `${requestedCourseIdFromUrl ?? "legacy"}:${requestedCourseItemIdFromUrl}:generate`;
     if (autoCourseGenerationRef.current === key) return;
     autoCourseGenerationRef.current = key;

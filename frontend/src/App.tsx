@@ -1309,7 +1309,7 @@ export const App: React.FC = () => {
       <UIModeProvider>
         <ToastViewport />
         <MascotCompanion />
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="sync">
           <Routes location={location} key={topLevelRouteKey}>
           {import.meta.env.DEV ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>

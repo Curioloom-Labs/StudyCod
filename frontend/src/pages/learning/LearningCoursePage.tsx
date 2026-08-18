@@ -255,23 +255,19 @@ export const LearningCoursePage: React.FC = () => {
     if (!previousComplete || nodeCompleted(node)) return;
 
     if (node.kind === "TOPIC") {
-      const theoryDone = node.theory?.progress.status === "COMPLETED";
-      if (!theoryDone) {
-        setSelectedNodeId(node.id);
-        return;
-      }
-      const nextPractice = node.practices.find((item) => item.progress.status !== "COMPLETED");
+      const nextPractice = node.practices.find((item) => item.progress.status !== "COMPLETED") ?? node.practices[0];
       if (nextPractice && course) {
-        navigate(`/learning/course/${course.id}/practice/${nextPractice.id}`);
+        navigate(`/learning/course/${course.id}/practice/${nextPractice.id}?generate=1`);
         return;
       }
+      setMessage(tr("Для цієї теми ще не підготовлено практику.", "Practice for this topic is not available yet."));
+      return;
     }
 
     if (node.kind === "PROJECT" || node.kind === "MILESTONE") setSelectedNodeId(node.id);
   };
 
   const selectedNode = roadmapNodes.find((node) => node.id === selectedNodeId) ?? null;
-  const selectedTheory = selectedNode?.kind === "TOPIC" ? selectedNode.theory : undefined;
   const selectedItem = selectedNode?.kind !== "TOPIC" ? selectedNode?.item : undefined;
   const selectedProject = selectedNode?.kind === "PROJECT" && selectedNode.item ? projects[selectedNode.item.id] : undefined;
 
@@ -323,7 +319,7 @@ export const LearningCoursePage: React.FC = () => {
 
     <section className="mb-6 rounded-[26px] border border-border bg-bg-surface p-5 shadow-sm sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Твій маршрут", "Your path")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{tr("Рухайся темами послідовно", "Move through topics in order")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Натискай активний вузол: спочатку відкриється теорія, а після її завершення — точна практика для цієї теми.", "Choose the active node: theory opens first, then Practice generates the exact task for this topic.")}</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Теми курсу", "Course topics")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{tr("Обирай тему для уроку та практики", "Choose a topic for its lesson and practice")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Натисни активну тему — відкриється окрема практика, де StudyCod підготує урок із теорією та робочим завданням.", "Choose an active topic to open its separate practice page, where StudyCod prepares the lesson theory and coding task.")}</p></div>
         <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">{completedItems}/{requiredItems.length} {tr("елементів", "items")}</span>
       </div>
 
@@ -346,8 +342,8 @@ export const LearningCoursePage: React.FC = () => {
                 ? tr("Заверши попередній вузол", "Complete the previous node")
               : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
                 ? started
-                  ? tr("Продовжити теорію", "Continue theory")
-                  : tr("Прочитати теорію", "Read the theory")
+                  ? tr("Продовжити урок", "Continue lesson")
+                  : tr("Відкрити урок", "Open lesson")
                 : started
                   ? tr("Продовжити практику", "Continue practice")
                   : node.kind === "PROJECT"
@@ -370,10 +366,8 @@ export const LearningCoursePage: React.FC = () => {
       </div>
     </section>
 
-    {selectedNode && <section className="mb-6 rounded-[26px] border border-primary/25 bg-bg-surface p-5 shadow-sm sm:p-7">
-      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : selectedNode.kind === "TOPIC" ? tr("Теорія теми", "Topic theory") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>
-
-      {selectedTheory && <div className="mt-6"><div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedTheory)} /></div><div className="mt-5 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedTheory.progress.status === "COMPLETED" ? tr("Теорію завершено", "Theory completed") : tr("Після читання зарахуй теорію, щоб відкрити практику.", "Complete the theory after reading to unlock practice.")}</span><button type="button" disabled={selectedTheory.progress.status === "COMPLETED" || busyItem === selectedTheory.id} onClick={() => void completeItem(selectedTheory)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45">{selectedTheory.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити теорію", "Complete theory")}</button></div></div>}
+    {selectedNode && selectedNode.kind !== "TOPIC" && <section className="mb-6 rounded-[26px] border border-primary/25 bg-bg-surface p-5 shadow-sm sm:p-7">
+      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>
 
       {selectedItem && selectedNode.kind === "MILESTONE" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}<div className="mt-5 flex items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedItem.progress.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("Цей етап ще потрібно зарахувати.", "This milestone still needs to be completed.")}</span><button type="button" disabled={selectedItem.progress.status === "COMPLETED" || busyItem === selectedItem.id} onClick={() => void completeItem(selectedItem)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45">{selectedItem.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити етап", "Complete milestone")}</button></div></div>}
 

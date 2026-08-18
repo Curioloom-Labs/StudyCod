@@ -2,7 +2,7 @@ import type { Variants, Transition } from "framer-motion";
 export const easeOutExpo: Transition["ease"] = [0.16, 1, 0.3, 1];
 export const easeOutQuint: Transition["ease"] = [0.22, 1, 0.36, 1];
 export const pageTransition: Transition = {
-  duration: 0.36,
+  duration: 0.28,
   ease: easeOutQuint
 };
 export const reducedMotionTransition: Transition = {
@@ -12,8 +12,8 @@ export const reducedMotionTransition: Transition = {
 export const pageVariants: Variants = {
   initial: {
     opacity: 0,
-    y: 12,
-    scale: 0.995
+    y: 8,
+    scale: 1
   },
   animate: {
     opacity: 1,
@@ -23,10 +23,10 @@ export const pageVariants: Variants = {
   },
   exit: {
     opacity: 0,
-    y: -8,
-    scale: 0.998,
+    y: -4,
+    scale: 1,
     transition: {
-      duration: 0.22,
+      duration: 0.18,
       ease: easeOutQuint
     }
   }
