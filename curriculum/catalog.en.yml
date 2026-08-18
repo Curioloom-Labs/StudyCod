@@ -1,0 +1,66 @@
+version: 1
+projectsSource: curriculum/mini_projects.en.yml
+courses:
+  - key: python-core
+    title: Python Core
+    description: Complete Python foundation from syntax to standard library.
+    runtime: PYTHON
+    level: FOUNDATION
+    isBase: true
+    source: theories/en/python_core_theory.yml
+  - key: java-core
+    title: Java Core
+    description: Java fundamentals from syntax to collections, exceptions and testing.
+    runtime: JAVA
+    level: FOUNDATION
+    isBase: true
+    source: theories/en/java_core_theory.yml
+  - key: cpp-core
+    title: C++ Core
+    description: C++ fundamentals from basic syntax to memory, STL and debugging.
+    runtime: CPP
+    level: FOUNDATION
+    isBase: true
+    source: theories/en/cpp_core_theory.yml
+  - key: python-extensions
+    title: Python Advanced
+    description: Advanced Python capabilities after completing Python Core.
+    runtime: PYTHON
+    level: SPECIALIZATION
+    prerequisites: [ python-core ]
+    source: theories/en/python_extensions_theory.yml
+  - key: flask
+    title: Flask
+    description: Building web apps on Flask after finishing Python Core.
+    runtime: PYTHON
+    level: SPECIALIZATION
+    prerequisites: [ python-core ]
+    source: theories/en/flask_theory.yml
+  - key: fastapi
+    title: FastAPI
+    description: Building typed APIs on FastAPI after completing Python Core.
+    runtime: PYTHON
+    level: SPECIALIZATION
+    prerequisites: [ python-core ]
+    source: theories/en/fastapi_theory.yml
+  - key: computer-vision
+    title: Computer Vision
+    description: Fundamentals of Computer Vision after completing Python Core.
+    runtime: PYTHON
+    level: ADVANCED
+    prerequisites: [ python-core ]
+    source: theories/en/computer_vision_theory.yml
+  - key: java-advanced
+    title: Java Advanced
+    description: Advanced Java after Java Core is complete.
+    runtime: JAVA
+    level: SPECIALIZATION
+    prerequisites: [ java-core ]
+    source: theories/en/java_advanced_theory.yml
+  - key: cpp-advanced
+    title: C++ Advanced
+    description: Advanced C++ after completing C++ Core.
+    runtime: CPP
+    level: SPECIALIZATION
+    prerequisites: [ cpp-core ]
+    source: theories/en/cpp_advanced_theory.yml

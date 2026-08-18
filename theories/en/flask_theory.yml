@@ -1,0 +1,2161 @@
+language: PYTHON
+course: flask
+topics:
+  - title: "Flask: application and routes"
+    key: flask-zastosunok-i-marshruty
+    description: explain Flask query path | create a route with the parameter |
+      distinguish response from print
+    order: 1
+    exerciseFocus: "one endpoint with a path parameter and a JSON response"
+    theory:
+      title: "Flask: application and routes"
+      content: >-
+        ### Why is this topic needed?
+
+        A route converts a URL and HTTP method into a specific Python action.
+
+        ### Intuitive explanation
+
+        URL - the office, method - the type of request, function - the employee
+        who processes it.
+
+        ### What happens at runtime
+
+        First, Flask creates an application object. The @app.get decorator
+        registers a "method + URL template" pair in the route table. When a GET
+        request arrives to /hello/Ada, Flask finds the entry, retrieves Ada from
+        the path parameter, calls hello, and converts the dictionary to an HTTP
+        response. The function does not print text to the console: its result is
+        visible to the client.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.get('/hello/<name>')
+
+        def hello(name):
+            return {'message': f'Hello, {name}!'}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Flask(__name__) creates the application and gives it a context to
+        search for resources.
+
+        - @app.get registers only the GET route; POST to the same address is not
+        automatically allowed.
+
+        - <name> is the variable part of the URL that Flask passes to the
+        function as a string.
+
+        - The returned dictionary is serialized to JSON, so print is not needed
+        here.
+
+        ### Try to predict
+
+        What response will /hello/Olena get? What happens to /hello without a
+        parameter?
+
+        ### How behavior changes
+
+        Check /hello/Ada, unicode URL, wrong HTTP method and /hello without
+        name. The last case should be a 404, not a "guessed" value. If path
+        accepts arbitrary text, define rules for length, encoding, and
+        normalization separately.
+
+        ### Typical mistakes of a beginner
+
+        Confuse print with a response to the client; duplicate the route; ignore
+        the HTTP method.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.get('/hello/<name>')
+
+        def hello(name):
+            return {'message': f'Hello, {name}!'}
+        ```**Why this is here:** The test via app.test_client() tests the true
+        boundary of HTTP: route selection, parameter passing, and response
+        format. A direct call to hello("Ada") would miss decorator or URL
+        errors.
+
+        **What to change yourself:** The fragment shows the minimum endpoint
+        contract: address, method, parameter and response.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What will be the result
+        of a GET request to /hello/Ada?","code":"@app.get('/hello/<name>')\ndef
+        hello(name):\n    return {'message': f'Hello,
+        {name}!'}\n","options":["JSON with message = 'Hello, Ada!'","The text
+        will be printed only in the terminal","404 because the route contains
+        angle brackets","Error because name must be a
+        number"],"answer":0,"explanation":"The <name> is the variable part of
+        the route, and Flask passes it to the function as a string."}
+
+        ```
+
+
+        ### Summary
+
+        A route is a contract between a client and a function.
+  - title: "Flask: request and response"
+    key: flask-request-i-response
+    description: read query parameters | return JSON and statuses | check for missing data
+    order: 2
+    exerciseFocus: "one query or body check without third-party libraries"
+    theory:
+      title: "Flask: request and response"
+      content: >-
+        ### Why is this topic needed?
+
+        The real endpoint reads the request data and returns the status,
+        headers, and body.
+
+        ### Intuitive explanation
+
+        Request - an addressed envelope and attachments; the answer is an
+        envelope with status and result.
+
+        ### What happens at runtime
+
+        Flask creates a request for the current HTTP request. request.args
+        contains query-parameters, request.form — form-data, request.get_json()
+        — JSON-body, and headers — headers. The Handler reads the data,
+        normalizes it, and returns an error early if the contract is violated.
+        The body, status pair separates a client error from a successful result.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, request
+
+        app = Flask(__name__)
+
+        @app.get('/search')
+
+        def search():
+            query = request.args.get('q', '').strip()
+            if not query:
+                return {'error': 'q is required'}, 400
+            return {'query': query}, 200
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - request.args.get('q', '') does not crash if q is missing: default is
+        used.
+
+        - strip() strips whitespace before validation, so q= and q= have
+        consistent behavior.
+
+        - Verification is based on business logic: incorrect input does not
+        reach the search.
+
+        - The dictionary becomes JSON, and the second element of the tuple sets
+        the HTTP status code.
+
+        ### Try to predict
+
+        What is the difference between a missing q and an empty q=? What should
+        be the error status?
+
+        ### How behavior changes
+
+        Missing q and q= have the same semantics only if the API wants them to.
+        For JSON, check separately for empty body, invalid Content-Type, null,
+        and invalid field type. Don't convert every error to 200: the client and
+        monitoring should distinguish between 4xx and 5xx.
+
+        ### Typical mistakes of a beginner
+
+        Trust input; always return 200; read JSON without type checking.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from flask import Flask, request
+
+        app = Flask(__name__)
+
+        @app.get('/search')
+
+        def search():
+            query = request.args.get('q', '').strip()
+            if not query:
+                return {'error': 'q is required'}, 400
+            return {'query': query}, 200
+        ```**Why this is here:** The read → normalize → validate → execute
+        sequence protects business logic from dirty input. Such an endpoint is
+        easy to check with three queries: without q, with q= and with q=python.
+
+        **What to change yourself:** First we read and normalize the input, then
+        we make a decision — this is boundary validation.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What status should the
+        example return if q is missing or empty?","code":"query =
+        request.args.get('q', '').strip()\nif not query:\n    return {'error':
+        'q is required'}, 400\n","options":["200, because the endpoint
+        technically started","201, because a search is being created","400,
+        because the client did not provide the required parameter","500, because
+        any missing data is a server error"],"answer":2,"explanation":"The
+        request reached the server, but does not contain the data required for
+        the operation; this is a client request error."}
+
+        ```
+
+
+        ### Summary
+
+        Validate the request at the application boundary and return the exact
+        status.
+  - title: "Flask: templates and static files"
+    key: flask-shablony-ta-statychni-fayly
+    description: transfer data to Jinja2 | explain templates and static | avoid unsafe HTML
+    order: 3
+    exerciseFocus: "substitute one variable in the template and explain the limits
+      of autoescape"
+    theory:
+      title: "Flask: templates and static files"
+      content: >-
+        ### Why is this topic needed?
+
+        HTML requires safe data padding, and CSS and JavaScript must be provided
+        separately.
+
+        ### Intuitive explanation
+
+        A template is a form with places for data; the server fills it in, but
+        doesn't mix the logic with the HTML.
+
+        ### What happens at runtime
+
+        render_template finds the file in templates, creates a context from the
+        passed variables and passes it to Jinja2. Jinja2 substitutes values
+        ​​into HTML and by default escapes text that may be markup. CSS,
+        JavaScript, and images live in static; url_for generates the correct URL
+        and does not force the template to know the deployment structure.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, render_template
+
+        app = Flask(__name__)
+
+        @app.get('/profile/<name>')
+
+        def profile(name):
+            return render_template('profile.html', name=name)
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - render_template is responsible for rendering, not for retrieving data
+        from the database.
+
+        - The name value is passed as context data, and not inserted into HTML
+        by f-string.
+
+        - {{ name }} is automatically escaped in HTML context.
+
+        - url_for('static', filename=...) does not break when changing the base
+        URL of the application.
+
+        ### Try to predict
+
+        Why is render_template safer than f-string with HTML? Where should
+        profile.html be located?
+
+        ### How behavior changes
+
+        Check the name with < and & characters, missing template and reference
+        to non-existent static file. Do not use |safe for normal user data. If
+        HTML is indeed allowed, it must first be sanitized according to explicit
+        rules.
+
+        ### Typical mistakes of a beginner
+
+        Mix SQL in template; disable autoescape; hardcode the URL to CSS.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from flask import Flask, render_template
+
+        app = Flask(__name__)
+
+        @app.get('/profile/<name>')
+
+        def profile(name):
+            return render_template('profile.html', name=name)
+        ```**Why this is here:** Template is responsible for the markup and
+        Python is responsible for the data. This separation allows you to change
+        the design without rewriting the route and at the same time reduces the
+        risk of HTML injection.
+
+        **What to change yourself:** Separating data, markup and resources makes
+        the page testable and modifiable.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Where should
+        profile.html lie for render_template('profile.html',
+        ...)?","options":["In the templates directory","In the static
+        directory","In the root of the operating system","In the
+        database"],"answer":0,"explanation":"Flask searches for Jinja templates
+        in templates; static is for unchanged CSS, JS, and media."}
+
+        ```
+
+
+        ### Summary
+
+        The pattern is responsible for the representation, Python for the data
+        and solutions.
+  - title: "Flask: Forms and Validation"
+    key: flask-formy-ta-validatsiya
+    description: read form-data | build server validation | distinguish between 422 and 500
+    order: 4
+    exerciseFocus: "one form field with blank and invalid value checks"
+    theory:
+      title: "Flask: Forms and Validation"
+      content: >-
+        ### Why is this topic needed?
+
+        These forms are not a guarantee of correctness: they must be checked
+        before saving.
+
+        ### Intuitive explanation
+
+        Validation is a turnstile: each field goes through format, bounds, and
+        dependency rules.
+
+        ### What happens at runtime
+
+        A POST request returns form data, but the mere presence of a field does
+        not make it correct. The server retrieves the value, removes extra
+        spaces, normalizes the email and checks the rules that cannot be left to
+        the browser alone. A successful validation leads to a business
+        operation, while an error returns a clear status and does not change the
+        data. CSRF protection is additionally required for cookie-based HTML
+        forms.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, request
+
+        app = Flask(__name__)
+
+        @app.post('/signup')
+
+        def signup():
+            email = request.form.get('email', '').strip().lower()
+            if '@' not in email:
+                return {'error': 'invalid email'}, 422
+            return {'ok': True}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - request.form.get reads the field without an exception if it is not
+        present.
+
+        - Normalization occurs before checking that the form of the value is
+        constant.
+
+        - Validation checks for type, length, format and business constraints.
+
+        - A false result is returned before saving or sending the letter.
+
+        - Client validation improves UX, but server validation remains
+        mandatory.
+
+        ### Try to predict
+
+        What will happen if there is no email? Why is browser verification not
+        enough?
+
+        ### How behavior changes
+
+        Check for missing email, spaces, string too long, Unicode and already
+        occupied value. The "contains @" rule is only an educational example,
+        not a complete email check. Messages to the user should not reveal SQL
+        errors.
+
+        ### Typical mistakes of a beginner
+
+        Do not limit the length; accept None as text; return success to all
+        checks.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from flask import Flask, request
+
+        app = Flask(__name__)
+
+        @app.post('/signup')
+
+        def signup():
+            email = request.form.get('email', '').strip().lower()
+            if '@' not in email:
+                return {'error': 'invalid email'}, 422
+            return {'ok': True}
+        ```**Why it's here:** The snippet shows the line between receiving data
+        and deciding whether it's admissible. In the exercise, you can expand
+        the rule, but the sequence does not change: accept, normalize, check,
+        only then save.
+
+        **What to change yourself:** The get → normalize → check → respond cycle
+        is the basic form pattern.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why is server
+        validation required even after HTML form validation?","options":["The
+        browser always sends data twice","The client code can be bypassed or
+        replaced","Flask can't read forms without it","Validation is only
+        required for beautiful messages"],"answer":1,"explanation":"Anyone can
+        send a request directly, bypassing the browser, so you can only trust
+        the checks on the server."}
+
+        ```
+
+
+        ### Summary
+
+        Validation is part of the endpoint, not decorative JavaScript.
+  - title: "Flask: JSON API and Serialization"
+    key: flask-json-api-i-serializatsiya
+    description: form a JSON response | serialize date | explain the API contract
+    order: 5
+    exerciseFocus: "one response with date and explicit field type"
+    theory:
+      title: "Flask: JSON API and Serialization"
+      content: >-
+        ### Why is this topic needed?
+
+        The API should return a stable format that is understood by the client
+        and the tests alike.
+
+        ### Intuitive explanation
+
+        Serialization — packing an object into a standard JSON packet with known
+        types.
+
+        ### What happens at runtime
+
+        The API transforms internal objects into a stable external contract.
+        Flask's simple dictionary can serialize automatically, but datetime,
+        Decimal, and custom classes require explicit conversion. Before
+        responding, you need to decide which fields are public, how a missing
+        value is indicated, and what date format the client expects. An internal
+        object should not accidentally give out a password or token.
+
+        ### Minimal code example
+
+        ```python
+
+        from datetime import UTC, datetime
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.get('/status')
+
+        def status():
+            return {'ok': True, 'checked_at': datetime.now(UTC).isoformat()}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Boolean and ISO string are self-explanatory parts of public JSON.
+
+        - datetime.now(UTC).isoformat() makes the timezone part of the value.
+
+        - The response scheme should be stable even when the internal model
+        changes.
+
+        - A separate public model does not allow random fields to get outside.
+
+        ### Try to predict
+
+        Why can't datetime be given without conversion? What fields are part of
+        a public contract?
+
+        ### How behavior changes
+
+        Check date, null, empty list and serialization error. Determine if the
+        API returns a missing field, null, or error, and stick to the same rule.
+        Don't solve the problem with a simple str(object) if the client needs a
+        formal format.
+
+        ### Typical mistakes of a beginner
+
+        Return various forms of success; to reveal internal fields; change names
+        without version.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from datetime import UTC, datetime
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.get('/status')
+
+        def status():
+            return {'ok': True, 'checked_at': datetime.now(UTC).isoformat()}
+        ```**Why this is here:** The public payload is generated explicitly, so
+        changing the internal model doesn't accidentally change the API. In the
+        exercise, add a field that cannot be returned and check that it does not
+        appear in the answer.
+
+        **What to change yourself:** First, fix the example response, and then
+        write the endpoint - this is how the API becomes testable.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why is datetime
+        converted to ISO string before JSON response?","options":["JSON has a
+        built-in datetime type","The client needs an unambiguous textual
+        representation of the date","To hide the date from the client","Python
+        does not know how to store datetime"],"answer":1,"explanation":"JSON has
+        a limited set of types; ISO-8601 is a common and explicit datetime
+        contract."}
+
+        ```
+
+
+        ### Summary
+
+        A stable JSON contract is more important than the convenience of the
+        internal object.
+  - title: "Flask: Sessions and Authentication"
+    key: flask-sesii-ta-avtentyfikatsiya
+    description: explain Flask Session | store only ID | name cookie protection
+    order: 6
+    exerciseFocus: "show a secure minimal login structure without a real password"
+    theory:
+      title: "Flask: Sessions and Authentication"
+      content: >-
+        ### Why is this topic needed?
+
+        HTTP does not remember the previous request, but the user needs a secure
+        login state.
+
+        ### Intuitive explanation
+
+        A session is a pass by which the server recognizes the client; it should
+        not contain secrets.
+
+        ### What happens at runtime
+
+        Authentication answers the question "who is this?", and authorization -
+        "what is he allowed to do?". By default, a Flask session stores signed
+        data in a cookie: the client can see the content, but should not be able
+        to change it silently without the secret key. This is not the same as
+        server-side session storage, and a cookie is not a place for passwords
+        or large objects.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, session
+
+        app = Flask(__name__)
+
+        app.config['SECRET_KEY'] = 'dev-only-secret'
+
+        @app.post('/login')
+
+        def login():
+            session['user_id'] = 42
+            return {'logged_in': True}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - The secret key is required to sign the cookie, but does not replace
+        the secret manager.
+
+        - An identifier or minimum claims are entered into the session, not a
+        password.
+
+        - Login creates an authenticated state; permission check resolves a
+        specific action.
+
+        - Logout clears the state and should be protected against fake requests.
+
+        ### Try to predict
+
+        What happens after SECRET_KEY is changed? Why can't the password be
+        stored in the session?
+
+        ### How behavior changes
+
+        Check for missing, expired and fake session, access to someone else's
+        resource and cookie reuse. In production, configure Secure, HttpOnly,
+        SameSite, secret rotation, and CSRF for cookie-based auth. Don't call
+        the presence of a user_id a full authorization.
+
+        ### Typical mistakes of a beginner
+
+        Hardcode the secret; save the password in a cookie; forget logout and
+        CSRF.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from flask import Flask, session
+
+        app = Flask(__name__)
+
+        app.config['SECRET_KEY'] = 'dev-only-secret'
+
+        @app.post('/login')
+
+        def login():
+            session['user_id'] = 42
+            return {'logged_in': True}
+        ```**Why this is here:** In the fragment, the session only transfers
+        identity between requests. Checking the role or ownership of the
+        resource must be a separate step, otherwise the authenticated user will
+        gain redundant rights.
+
+        **What to change yourself:** The example shows the boundary between
+        request state and user identity.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the best thing
+        to keep in a cookie-based session after login?","options":["Password in
+        open form","The entire user object with personal data","Minimum ID or
+        required claims","The result of an SQL query without a size
+        limit"],"answer":2,"explanation":"A session must carry minimal state;
+        secrets and large internal objects should not be stored there."}
+
+        ```
+
+
+        ### Summary
+
+        A session is a state mechanism, and authentication is a proof of
+        identity.
+  - title: "Flask: Blueprints and framework"
+    key: flask-blueprints-i-struktura
+    description: group routes | apply app factory | explain test isolation
+    order: 7
+    exerciseFocus: "assemble one blueprint and check its prefix"
+    theory:
+      title: "Flask: Blueprints and framework"
+      content: >-
+        ### Why is this topic needed?
+
+        When there are many routes, one file ceases to be a system map.
+
+        ### Intuitive explanation
+
+        Blueprint is a separate department with its own routes, which the app
+        connects under a prefix.
+
+        ### What happens at runtime
+
+        A Blueprint is a collection of routes, handlers, and resources that is
+        not yet a stand-alone application. The factory creates the app,
+        downloads the configuration and registers the blueprint with url_prefix.
+        Thanks to this, the users module does not import the global app, and the
+        test can create a separate application with test settings.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Blueprint, Flask
+
+        api = Blueprint('api', __name__, url_prefix='/api')
+
+        @api.get('/ping')
+
+        def ping():
+            return {'pong': True}
+
+        def create_app():
+            app = Flask(__name__)
+            app.register_blueprint(api)
+            return app
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Blueprint describes some of the functionality without running the
+        server.
+
+        - create_app collects dependencies and configuration in one place.
+
+        - register_blueprint connects the module and can add a URL prefix.
+
+        - Separation of app and modules reduces cyclic imports and global state.
+
+        ### Try to predict
+
+        What URL will ping? Why is it better to connect the database through the
+        lifecycle app?
+
+        ### How behavior changes
+
+        Check that the blueprint is not registered twice, the prefixes do not
+        conflict, and the test app does not read production secrets. Don't
+        create dozens of blueprints just for the sake of files: the module
+        should have its own responsibility.
+
+        ### Typical mistakes of a beginner
+
+        Imports are cyclical; mix config and business logic; register the
+        blueprint twice.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from flask import Blueprint, Flask
+
+        api = Blueprint('api', __name__, url_prefix='/api')
+
+        @api.get('/ping')
+
+        def ping():
+            return {'pong': True}
+
+        def create_app():
+            app = Flask(__name__)
+            app.register_blueprint(api)
+            return app
+        ```**Why it's here:** A factory makes configuration explicit and allows
+        you to test the same code in different environments. In the exercise,
+        create a test app with an in-memory database without changing the
+        production configuration.
+
+        **What to change yourself:** Visible module boundaries facilitate
+        navigation, permissions and testing.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is Blueprint's
+        role in Flask?","options":["It replaces Python modules","It groups the
+        functionality for further registration in the application","It
+        automatically creates the database","It runs a separate HTTP server for
+        each route"],"answer":1,"explanation":"Blueprint is a compositional
+        unit; it becomes part of the application after register_blueprint."}
+
+        ```
+
+
+        ### Summary
+
+        Factory creates an application, blueprint groups functionality, route
+        remains subtle.
+  - title: "Flask: Database and Transactions"
+    key: flask-baza-danykh-i-tranzaktsii
+    description: explain the transaction | use parameterized SQL | distinguish ORM from DB
+    order: 8
+    exerciseFocus: "one atomic operation with a parameter and a rollback script"
+    theory:
+      title: "Flask: Database and Transactions"
+      content: >-
+        ### Why is this topic needed?
+
+        A request may fail in the middle of multiple changes, so atomicity is
+        required.
+
+        ### Intuitive explanation
+
+        Transaction - check: either all transactions are completed or the entire
+        check is canceled.
+
+        ### What happens at runtime
+
+        A database connection has a lifecycle tied to a request or an explicit
+        operation. The code reads data, modifies objects and completes the
+        commit transaction; if an error occurs, a rollback is required. A
+        transaction defines an atomic boundary within which multiple changes are
+        either all committed or none.
+
+        ### Minimal code example
+
+        ```python
+
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine('sqlite:///app.db')
+
+        with engine.begin() as connection:
+            connection.execute(text('CREATE TABLE IF NOT EXISTS counter (value INTEGER)'))
+            connection.execute(text('INSERT INTO counter(value) VALUES (:value)'), {'value': 1})
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Session should not be one global variable for all requests.
+
+        - Business rule checks are performed before commit, but critical
+        constraints are duplicated in the DB.
+
+        - commit commits a set of changes as one operation.
+
+        - rollback returns the session to a valid state after an error.
+
+        - After the request, the resource is closed or returned to the pool.
+
+        ### Try to predict
+
+        What happens to the INSERT after the exception? Why is parameter more
+        important than f-string?
+
+        ### How behavior changes
+
+        Check for a conflict between two simultaneous changes, an error in the
+        middle of an operation, and retrying the request. Don't just rely on
+        checking before insert: unique index and correct isolation level are
+        required for races.
+
+        ### Typical mistakes of a beginner
+
+        Connection without closure; SQL concatenation; changes without a
+        transaction.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine('sqlite:///app.db')
+
+        with engine.begin() as connection:
+            connection.execute(text('CREATE TABLE IF NOT EXISTS counter (value INTEGER)'))
+            connection.execute(text('INSERT INTO counter(value) VALUES (:value)'), {'value': 1})
+        ```**Why this is here:** try/except here does not remove the error, but
+        ensures that a failed transaction does not leave the session in an
+        incomplete state. The exception still needs to be turned into a response
+        or logged at the appropriate level.
+
+        **What to change yourself:** Always define the owner connection and the
+        commit/rollback limit.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why do I need a
+        rollback after an error during a transaction?","options":["To
+        automatically repeat any SQL","To return the session to a consistent
+        state and not commit the partial change","To hide the error from the
+        logs","To delete the entire
+        database"],"answer":1,"explanation":"Rollback cancels the pending
+        changes of the current transaction; it does not replace error
+        handling."}
+
+        ```
+
+
+        ### Summary
+
+        ORM is not a substitute for understanding SQL and database guarantees.
+  - title: "Flask: errors, logging and tests"
+    key: flask-pomylky-lohuvannya-i-testy
+    description: create an error handler | log in without secrets | test endpoint
+    order: 9
+    exerciseFocus: "check 404 and JSON messages with a test"
+    theory:
+      title: "Flask: errors, logging and tests"
+      content: >-
+        ### Why is this topic needed?
+
+        A production error should be a useful log, but not a stack trace leak
+        for the client.
+
+        ### Intuitive explanation
+
+        Error handler — dispatcher: a short answer to the user, diagnostics to
+        the team.
+
+        ### What happens at runtime
+
+        An error handler turns the exception or status into a stable contract
+        for the client. Logging captures the technical context for the
+        developer, but should not send a stack trace to the user. The Flask test
+        client goes the browserless route, checking status code, JSON, and side
+        effects. The test should call the script, not repeat the internal
+        implementation.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.errorhandler(404)
+
+        def not_found(error):
+            app.logger.info('not found: %s', error)
+            return {'error': 'not found'}, 404
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - The endpoint code is responsible for expected input errors.
+
+        - Global handler protects external format for unexpected exceptions.
+
+        - The log contains request id, route and exception, but not token or
+        password.
+
+        - Test client executes a real HTTP path inside the application.
+
+        - A negative test proves that an error does not convert to a successful
+        200.
+
+        ### Try to predict
+
+        Should the client receive a traceback? What test will check both status
+        and body?
+
+        ### How behavior changes
+
+        Check 400, 404, 422, and 500 individually, as well as the behavior
+        without a stack trace in production. Don't catch Exception in every
+        function without re-raising: that way errors disappear from monitoring.
+
+        ### Typical mistakes of a beginner
+
+        Catch Exception and return 200; log secrets; check only status.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.errorhandler(404)
+
+        def not_found(error):
+            app.logger.info('not found: %s', error)
+            return {'error': 'not found'}, 404
+        ```**Why this is here:** The test captures the endpoint's external
+        promise: status and error key. It does not depend on whether
+        request.args is read in another helper function tomorrow.
+
+        **What to change yourself:** Handler plus test client turn errors into
+        reproducible behavior.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the endpoint
+        test supposed to check, other than that the function didn't
+        crash?","options":["Only the number of implementation lines","Status,
+        response format, and important side effect","The name of the local
+        variable","IDE startup time only"],"answer":1,"explanation":"The test
+        should protect the external contract that the client sees, not random
+        internal structure."}
+
+        ```
+
+
+        ### Summary
+
+        Errors must be stable to the client, detailed in logs and verified.
+  - title: "Flask: secure deployment"
+    key: flask-bezpechnyy-deployment
+    description: separate dev from production | read environment | name deployment risks
+    order: 10
+    exerciseFocus: "run health without revealing the configuration"
+    theory:
+      title: "Flask: secure deployment"
+      content: >-
+        ### Why is this topic needed?
+
+        Development server is convenient for training, but not for real traffic
+        and secrets.
+
+        ### Intuitive explanation
+
+        Deployment — transfer of the application to the operator: configuration,
+        logs, TLS and access control are required.
+
+        ### What happens at runtime
+
+        In a production Flask application, traffic should not be served by the
+        built-in development server. The WSGI server runs the workers, the
+        reverse proxy terminates TLS and can restrict input, and the
+        configuration comes from the environment or secret manager. Migrations
+        are applied and endpoint health is checked before launch; debug and
+        reload remain disabled.
+
+        ### Minimal code example
+
+        ```python
+
+        import os
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
+
+        @app.get('/health')
+
+        def health():
+            return {'status': 'ok'}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - The code reads the mode and settings from the environment, not from
+        the commit.
+
+        - WSGI server is responsible for processes and graceful shutdown.
+
+        - Reverse proxy accepts HTTPS, limits and headers before Flask.
+
+        - Health endpoint checks health without revealing secrets.
+
+        - Logs and metrics are required for slow or failed queries.
+
+        ### Try to predict
+
+        What happens without SECRET_KEY? Why is debug=True dangerous?
+
+        ### How behavior changes
+
+        Check missing secret, incorrect CORS, large body, timeout and dependency
+        error. Do not return environment in the health response. Separately
+        check that workers do not share dangerous mutable global state.
+
+        ### Typical mistakes of a beginner
+
+        Commit .env; start a dev server on the Internet; give traceback.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        import os
+
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
+
+        @app.get('/health')
+
+        def health():
+            return {'status': 'ok'}
+        ```**Why it's here:** The snippet shows the difference between the
+        application code and how it runs. "Working locally" does not mean that
+        TLS, secrets, timeouts, migrations, and observability are configured.
+
+        **What to change yourself:** Here you can see the production contract:
+        configuration with environment and safe health check.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What should not be
+        enabled in production without a special reason?","options":["Health
+        endpoint","Tests in CI","Debug and automatic reload","HTTPS on reverse
+        proxy"],"answer":2,"explanation":"Debug can reveal internal data, and
+        reload is not a production supervisor."}
+
+        ```
+
+
+        ### Summary
+
+        A secure deployment is code plus a startup process, secrets, logs, and
+        TLS.
+  - title: "Flask: configuration and application factory"
+    key: flask-konfihuratsiya-ta-application-factory
+    description: split application creation and launch | load configuration without
+      secrets in code | prepare a test mode
+    order: 11
+    exerciseFocus: "create_app with separate configuration for test and production"
+    theory:
+      title: "Flask: configuration and application factory"
+      content: >-
+        ### Why is this topic needed?
+
+        One global app is convenient in the first example, but complicates
+        tests, CLI and different environments. Factory turns the configuration
+        into an explicit input.
+
+        ### Intuitive explanation
+
+        Application factory is a kitchen factory: it creates an application with
+        the necessary settings menu every time. A test kitchen can have a
+        temporary database, and production can have an external secret and
+        another level of logging.
+
+        ### What happens at runtime
+
+        create_app gets the config object, creates Flask, loads settings,
+        connects extensions, and registers blueprints. It is important to import
+        the modules after creating the app or register them via a function,
+        otherwise the route may not get into the table.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask
+
+        def create_app(testing=False):
+            app = Flask(__name__)
+            app.config.from_mapping(TESTING=testing, SECRET_KEY="dev-only")
+            @app.get("/health")
+            def health():
+                return {"status": "ok", "testing": app.config["TESTING"]}
+            return app
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The function creates a separate app instance for each call.
+        `from_mapping` makes the mode explicit and the handler reads the
+        configuration through the application object. In real production
+        SECRET_KEY should come from environment or secret manager.
+
+        ### Try to predict
+
+        What value will testing return for `create_app(testing=True)`? Will one
+        app be common for two tests?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the main
+        benefit of application factory?","code":"from flask import Flask\n\ndef
+        create_app(testing=False):\n    app =
+        Flask(__name__)\n    app.config.from_mapping(TESTING=testing,
+        SECRET_KEY=\"dev-only\")\n    @app.get(\"/health\")\n    def
+        health():\n        return {\"status\": \"ok\", \"testing\":
+        app.config[\"TESTING\"]}\n    return app","options":["Build an
+        application with controlled configuration for different
+        environments","Automatically start the server in the browser","Replace
+        all tests with one endpoint"],"answer":0,"explanation":"Factory makes
+        app creation repeatable and allows you to isolate test, development and
+        production configurations."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If factory is called twice, these are two separate apps with independent
+        configuration. If the route is registered outside the factory, it may
+        depend on the global state and isolate poorly in tests.
+
+        ### Typical mistakes of a beginner
+
+        store SECRET_KEY in the repository; mix environment reading with
+        business logic; create a global DB session; import the blueprint so that
+        registration is never performed.
+
+        ### In practice
+
+        ```python
+
+        from flask import Flask
+
+        def create_app(testing=False):
+            app = Flask(__name__)
+            app.config.from_mapping(TESTING=testing, SECRET_KEY="dev-only")
+            @app.get("/health")
+            def health():
+                return {"status": "ok", "testing": app.config["TESTING"]}
+            return app
+        ```**Why this snippet:** this snippet shows the least useful factory
+        contract: the configuration is included in the app creation, and the
+        endpoint only reads the ready state.
+
+        **What to change yourself:** add the `TESTING` configuration and check
+        that the test app does not use the production database URL.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        The application factory reduces hidden global state and is the basis for
+        the tested Flask architecture.
+  - title: "Flask: Application and Request Contexts"
+    key: flask-konteksty-zastosunku-y-zapytu
+    description: distinguish app context from request context | it is safe to use
+      current_app and g | understand local data limits
+    order: 12
+    exerciseFocus: "read current_app and g only inside the active context"
+    theory:
+      title: "Flask: Application and Request Contexts"
+      content: >-
+        ### Why is this topic needed?
+
+        Flask is convenient because `request`, `session`, and `current_app` are
+        available without waking objects in each function. But these objects are
+        valid only during the corresponding context.
+
+        ### Intuitive explanation
+
+        The context is the badge at the entrance to the building. While the
+        request goes through Flask, the worker sees the current visitor's data;
+        after logging out, the same badge can no longer be used.
+
+        ### What happens at runtime
+
+        At the beginning of an HTTP request, Flask creates a request context and
+        an app context. `current_app` refers to app, `g` lives for a single
+        context, and they are cleared when finished. The background thread does
+        not get them automatically.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, current_app, g
+
+        app = Flask(__name__)
+
+        @app.before_request
+
+        def load_request_state():
+            g.request_id = "demo-1"
+
+        @app.get("/meta")
+
+        def meta_view():
+            return {"testing": current_app.testing, "request_id": g.request_id}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `before_request` prepares the data for the handler. `g` is suitable for
+        the short-lived state of a single request, and `current_app` gives
+        access to the configuration of the active app. Do not use `g` as a
+        global DB or inter-query cache.
+
+        ### Try to predict
+
+        Will `current_app.name' work in a regular Python file outside of a
+        request or app context?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the best thing
+        to store in `g`?","code":"from flask import Flask, current_app, g\n\napp
+        = Flask(__name__)\n\n@app.before_request\ndef
+        load_request_state():\n    g.request_id =
+        \"demo-1\"\n\n@app.get(\"/meta\")\ndef meta_view():\n    return
+        {\"testing\": current_app.testing, \"request_id\":
+        g.request_id}","options":["Data required during the current
+        request","Global queue of all users","User passwords for the entire time
+        the server is running"],"answer":0,"explanation":"`g` is bound to the
+        active context and is cleared after a request."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Calling a handler directly without test_request_context can break if the
+        handler reads `request`, `g`, or `current_app`. Test client creates the
+        required context automatically.
+
+        ### Typical mistakes of a beginner
+
+        put the request into a global variable; use g as cache; call a
+        context-dependent function in the background thread; confuse app context
+        with request context.
+
+        ### In practice
+
+        ```python
+
+        from flask import Flask, current_app, g
+
+        app = Flask(__name__)
+
+        @app.before_request
+
+        def load_request_state():
+            g.request_id = "demo-1"
+
+        @app.get("/meta")
+
+        def meta_view():
+            return {"testing": current_app.testing, "request_id": g.request_id}
+        ```**Why this snippet:** a contextual example demonstrates the lifecycle
+        of data and explains why the Flask API can't be tested by just calling a
+        function directly.
+
+        **What to change yourself:** add an `X-Request-ID` header, put it in `g`
+        and check that the missing header gets a new ID.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Flask contexts hide the transfer of current state, but that state has a
+        distinct lifecycle and is not global storage.
+  - title: "Flask: CSRF and secure HTML forms"
+    key: flask-csrf-i-bezpechni-html-formy
+    description: explain the CSRF risk of cookie sessions | add token to
+      state-changing form | distinguish between CSRF and XSS
+    order: 13
+    exerciseFocus: "reject POST without correct CSRF-token before state change"
+    theory:
+      title: "Flask: CSRF and secure HTML forms"
+      content: >-
+        ### Why is this topic needed?
+
+        The browser automatically sends a cookie. If the endpoint modifies data
+        only upon POST, a third-party site can attempt to force the victim's
+        browser to perform an action.
+
+        ### Intuitive explanation
+
+        CSRF is when the courier accepts the package only because it came with
+        your key. Token is an additional feature that a third-party site cannot
+        read from your form.
+
+        ### What happens at runtime
+
+        The server generates a random token, inserts it into the form, and
+        validates it during POST. Verification must be performed prior to a
+        business transaction. The SameSite cookie helps but does not replace a
+        full policy for all scenarios.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, request
+
+        app = Flask(__name__)
+
+        EXPECTED = "form-token"
+
+        @app.post("/settings")
+
+        def settings():
+            if request.form.get("csrf_token") != EXPECTED:
+                return {"error": "csrf"}, 400
+            return {"saved": True}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The code is deliberately minimal: the token comes in the form body, the
+        server compares it with the expected value and only then returns
+        success. A real library should generate a token per session or form, not
+        use a constant.
+
+        ### Try to predict
+
+        What status will the POST receive if the csrf_token field is missing?
+        Why isn't validation in JavaScript enough?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does CSRF-token
+        protect against?","code":"from flask import Flask, request\n\napp =
+        Flask(__name__)\nEXPECTED =
+        \"form-token\"\n\n@app.post(\"/settings\")\ndef settings():\n    if
+        request.form.get(\"csrf_token\") != EXPECTED:\n        return
+        {\"error\": \"csrf\"}, 400\n    return {\"saved\":
+        True}","options":["From a fake state-changing request from someone
+        else's origin","From all SQL injection automatically","From slow CPU
+        code"],"answer":0,"explanation":"CSRF-token confirms that the request
+        comes from the form that the server issued to the user; this is a
+        separate problem from SQL injection and XSS."}
+
+        ```
+
+
+        ### How behavior changes
+
+        GET should not change state, so CSRF is most important for POST, PUT,
+        PATCH and DELETE. For a token-based API without a cookie mechanism, the
+        threat model will be different.
+
+        ### Typical mistakes of a beginner
+
+        rely only on hidden input without server validation; use GET to delete;
+        confuse CSRF with XSS; log token in production.
+
+        ### In practice
+
+        ```python
+
+        from flask import Flask, request
+
+        app = Flask(__name__)
+
+        EXPECTED = "form-token"
+
+        @app.post("/settings")
+
+        def settings():
+            if request.form.get("csrf_token") != EXPECTED:
+                return {"error": "csrf"}, 400
+            return {"saved": True}
+        ```**Why this fragment:** The fragment shows a control point: request
+        can be syntactically correct, but is not allowed to change data without
+        an additional flag.
+
+        **What to change yourself:** replace the constant token with the value
+        stored in session and add a separate test for missing and invalid token.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        CSRF is the integrity protection of cookie-authenticated actions; it is
+        checked on the server before the data changes.
+  - title: "Flask: authentication, authorization and password hashing"
+    key: flask-authentication-authorization-i-password-hashing
+    description: distinguish identity from permission | do not store the password in
+      open form | protect the server-side resource
+    order: 14
+    exerciseFocus: "do not allow a user without permission to read a protected resource"
+    theory:
+      title: "Flask: authentication, authorization and password hashing"
+      content: >-
+        ### Why is this topic needed?
+
+        Login only establishes who the user is. The next endpoint should check
+        what exactly this user is allowed to do.
+
+        ### Intuitive explanation
+
+        Authentication is a passport check, authorization is a room access list
+        check. Having a login does not mean the right to read other people's
+        records.
+
+        ### What happens at runtime
+
+        The system retrieves the credential, compares the password using the
+        password hash, creates a session or token, and the middleware/decorator
+        loads the current user. Handler or service checks ownership/role before
+        requesting or changing a resource.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, g
+
+        app = Flask(__name__)
+
+        def require_editor():
+            user = getattr(g, "user", None)
+            if not user or "editor" not in user["roles"]:
+                return {"error": "forbidden"}, 403
+            return None
+
+        @app.get("/draft")
+
+        def draft():
+            denied = require_editor()
+            if denied: return denied
+            return {"draft": "private"}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `g.user` is the result of the previous auth layer, and `require_editor`
+        returns a response on failure. In production, the password is checked
+        via `werkzeug.security.check_password_hash`, and the rights are checked
+        on the server for each sensitive resource.
+
+        ### Try to predict
+
+        What should happen if a user is logged in but does not have the editor
+        role?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What verification
+        corresponds to authorization?","code":"from flask import Flask, g\n\napp
+        = Flask(__name__)\n\ndef require_editor():\n    user = getattr(g,
+        \"user\", None)\n    if not user or \"editor\" not in
+        user[\"roles\"]:\n        return {\"error\": \"forbidden\"},
+        403\n    return None\n\n@app.get(\"/draft\")\ndef draft():\n    denied =
+        require_editor()\n    if denied: return denied\n    return {\"draft\":
+        \"private\"}","options":["Does the current user have the required role
+        or ownership of the resource","Is the password correct during
+        login?","Is the URL longer than 10
+        characters"],"answer":0,"explanation":"Authorization decides what the
+        user is allowed to do after the identity is set."}
+
+        ```
+
+
+        ### How behavior changes
+
+        401 means that the identity is missing or not confirmed; 403 — identity
+        is known, but permission is insufficient. Do not switch between the two
+        statuses without an agreed contract.
+
+        ### Typical mistakes of a beginner
+
+        save plaintext password; check role only in UI; return someone else's
+        resource by ID without ownership check; confuse 401 and 403.
+
+        ### In practice
+
+        ```python
+
+        from flask import Flask, g
+
+        app = Flask(__name__)
+
+        def require_editor():
+            user = getattr(g, "user", None)
+            if not user or "editor" not in user["roles"]:
+                return {"error": "forbidden"}, 403
+            return None
+
+        @app.get("/draft")
+
+        def draft():
+            denied = require_editor()
+            if denied: return denied
+            return {"draft": "private"}
+        ```**Why this fragment:** the example separates authentication from
+        authorization and shows exactly where the request should stop before
+        reading private data.
+
+        **What to change yourself:** add a document owner check and write tests
+        for anonymous, wrong role and correct owner.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Reliable Flask authentication is a hash credential, explicit identity,
+        server-side permission, and stable 401/403 contracts.
+  - title: "Flask: CLI commands and managed operations"
+    key: flask-cli-komandy-ta-kerovani-operatsii
+    description: create Flask CLI command | separate operation from HTTP | make the
+      team testable
+    order: 15
+    exerciseFocus: "run a CLI command that creates a monitored record and returns the result"
+    theory:
+      title: "Flask: CLI commands and managed operations"
+      content: |-
+        ### Why is this topic needed?
+        Data migrations, imports, and cleanups should not be masked as an HTTP endpoint. The CLI provides an explicit launch, arguments, exit code, and individual access rights.
+
+        ### Intuitive explanation
+        The HTTP endpoint is the registration desk for customers, the CLI is the operator's service console. Both can call service, but have different contexts and access rules.
+
+        ### What happens at runtime
+        `@app.cli.command` registers the Click command. The Flask CLI creates an app context, passes arguments, and the command prints only a short result and an exit code. It is better to put the business operation in a separate function that is called by both the CLI and the test.
+
+        ### Minimal code example
+        ```python
+        import click
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.cli.command("seed-demo")
+        @click.option("--count", default=1, type=int)
+        def seed_demo(count):
+            if count < 1:
+                raise click.ClickException("count must be positive")
+            click.echo(f"created={count}")
+        ```
+
+        ### Explanation of each line of the example
+        The decorator adds a command named `seed-demo`. Click converts the argument to an int, and `ClickException` throws an error for the operator. A real record in the database must be transactional and idempotent.
+
+        ### Try to predict
+        What exit result to expect for `--count 0`? Why shouldn't this transaction be opened as a public GET?
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"What is the Flask CLI for?","code":"import click\nfrom flask import Flask\n\napp = Flask(__name__)\n\n@app.cli.command(\"seed-demo\")\n@click.option(\"--count\", default=1, type=int)\ndef seed_demo(count):\n    if count < 1:\n        raise click.ClickException(\"count must be positive\")\n    click.echo(f\"created={count}\")","options":["For controlled service operations outside of HTTP requests","For automatic protection of all routes","To store passwords in the terminal"],"answer":0,"explanation":"The CLI is suitable for operator-triggered service operations or a deployment pipeline."}
+        ```
+
+        ### How behavior changes
+        The test CLI command does not require an open TCP port. The argument error should be visible via result.exit_code and the rerun should not create uncontrolled duplicates.
+
+        ### Typical mistakes of a beginner
+        mix click.echo with business logic; do not check arguments; run destructive command without confirmation; output secrets to stdout.
+
+        ### In practice
+        ```python
+        import click
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.cli.command("seed-demo")
+        @click.option("--count", default=1, type=int)
+        def seed_demo(count):
+            if count < 1:
+                raise click.ClickException("count must be positive")
+            click.echo(f"created={count}")
+        ```**Why this snippet:** The CLI example shows a secure operating surface and does not bind the service action to a browser or public endpoint.
+
+        **What to change yourself:** add `--dry-run`, a test for the exit code and a rerun that does not duplicate already created entries.
+
+        ### Interactive self-check
+        First, formulate the prediction in words, then run the example. If the result is different, compare the input, the state, and the moment the response is generated.
+
+        ### Summary
+        Flask CLI is a separate, tested channel for operator tasks; it does not replace the HTTP API.
+  - title: "Flask: caching, ETag and conditional requests"
+    key: flask-keshuvannya-etag-i-conditional-requests
+    description: explain cache headers | form ETag | do not give an outdated answer
+      without verification
+    order: 16
+    exerciseFocus: "return 304 if the client already has an up-to-date version of
+      the resource"
+    theory:
+      title: "Flask: caching, ETag and conditional requests"
+      content: >-
+        ### Why is this topic needed?
+
+        Caching reduces the load, but an incorrect cache policy can expose old
+        or private data to the user.
+
+        ### Intuitive explanation
+
+        ETag — resource version imprint. The client shows the print back and the
+        server responds with "nothing new" or sends a new body.
+
+        ### What happens at runtime
+
+        The server calculates a stable ETag from the resource version. If
+        `If-None-Match' matches, 304 without body is returned. For private data,
+        cache-control should consider user scope, not just speed.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, request, make_response
+
+        app = Flask(__name__)
+
+        @app.get("/version")
+
+        def version():
+            tag = '"v1"'
+            if request.headers.get("If-None-Match") == tag:
+                return "", 304
+            response = make_response({"version": 1})
+            response.headers["ETag"] = tag
+            response.headers["Cache-Control"] = "public, max-age=60"
+            return response
+        ```
+
+
+        ### Explanation of each line of the example
+
+        An `If-None-Match` comes from the client, a `304` contains no new JSON,
+        and the ETag is appended to the normal response. In production, the tag
+        must change along with the data or its revision.
+
+        ### Try to predict
+
+        Should the 304 contain full JSON? What happens if the ETag is not
+        changed after the resource is updated?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does 304 Not
+        Modified mean?","code":"from flask import Flask, request,
+        make_response\n\napp = Flask(__name__)\n\n@app.get(\"/version\")\ndef
+        version():\n    tag = '\"v1\"'\n    if
+        request.headers.get(\"If-None-Match\") == tag:\n        return \"\",
+        304\n    response = make_response({\"version\":
+        1})\n    response.headers[\"ETag\"] =
+        tag\n    response.headers[\"Cache-Control\"] = \"public,
+        max-age=60\"\n    return response","options":["The client can use its
+        cached copy","The server has created a new resource","The request was
+        always wrong"],"answer":0,"explanation":"A 304 says that the view has
+        not changed relative to the validator that the client sent."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Cache-Control, ETag and private/public scope must work together. For
+        user-specific data, an error in the cache policy can become a data leak.
+
+        ### Typical mistakes of a beginner
+
+        cache private responses as public; make the ETag random on each request;
+        return 304 from body; do not disable cache after update.
+
+        ### In practice
+
+        ```python
+
+        from flask import Flask, request, make_response
+
+        app = Flask(__name__)
+
+        @app.get("/version")
+
+        def version():
+            tag = '"v1"'
+            if request.headers.get("If-None-Match") == tag:
+                return "", 304
+            response = make_response({"version": 1})
+            response.headers["ETag"] = tag
+            response.headers["Cache-Control"] = "public, max-age=60"
+            return response
+        ```**Why this snippet:** The snippet demonstrates a protocol where
+        header validation can remove the body, but must not change the semantics
+        of the resource.
+
+        **What to change yourself:** make the ETag dependent on the revision and
+        add a test for the first request, the second request and the updated
+        revision.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        HTTP caching is a validity contract, not just a speedup; privacy and
+        disability are more important than one header.
+  - title: "Flask: background jobs and queues"
+    key: flask-background-jobs-i-cherhy
+    description: to distinguish a short background task from a queue | return 202
+      for long operation | save job status
+    order: 17
+    exerciseFocus: "create a job and return the controlled status to the client
+      instead of blocking the request"
+    theory:
+      title: "Flask: background jobs and queues"
+      content: >-
+        ### Why is this topic needed?
+
+        A long file import or processing should not hold the HTTP request and
+        worker indefinitely.
+
+        ### Intuitive explanation
+
+        Endpoint is a cashier who accepts an order and issues a number. Worker
+        is a kitchen that prepares results. The customer checks the number
+        instead of keeping the teller on the line.
+
+        ### What happens at runtime
+
+        Endpoint creates idempotency key, records job with queued status and
+        returns 202. Queue worker takes job, switches to running, executes job,
+        saves succeeded/failed and repeats only safe operations.
+
+        ### Minimal code example
+
+        ```python
+
+        from flask import Flask, jsonify
+
+        from uuid import uuid4
+
+        app = Flask(__name__)
+
+        jobs = {}
+
+        @app.post("/imports")
+
+        def create_import():
+            job_id = str(uuid4())
+            jobs[job_id] = {"status": "queued"}
+            return jsonify({"job_id": job_id, "status": "queued"}), 202
+
+        @app.get("/imports/<job_id>")
+
+        def import_status(job_id):
+            return jobs.get(job_id, {"error": "not found"}), 200 if job_id in jobs else 404
+        ```
+
+
+        ### Explanation of each line of the example
+
+        POST does not perform an inline import, but only creates a job. GET
+        returns state by id. The vocabulary here is demonstrative: production
+        requires DB/queue, TTL, retry policy and protection against
+        re-processing.
+
+        ### Try to predict
+
+        What status should POST return for a job that has been accepted but not
+        yet completed? Why not 200 with the finished result?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"When is 202 Accepted
+        appropriate?","code":"from flask import Flask, jsonify\nfrom uuid import
+        uuid4\n\napp = Flask(__name__)\njobs =
+        {}\n\n@app.post(\"/imports\")\ndef create_import():\n    job_id =
+        str(uuid4())\n    jobs[job_id] = {\"status\": \"queued\"}\n    return
+        jsonify({\"job_id\": job_id, \"status\": \"queued\"}),
+        202\n\n@app.get(\"/imports/<job_id>\")\ndef
+        import_status(job_id):\n    return jobs.get(job_id, {\"error\": \"not
+        found\"}), 200 if job_id in jobs else 404","options":["When the request
+        is accepted, but the result will be ready asynchronously","When the
+        server has already returned the full resource","Only when the query has
+        a syntax error"],"answer":0,"explanation":"202 separates acceptance of
+        work from its completion."}
+
+        ```
+
+
+        ### How behavior changes
+
+        The worker may terminate after the HTTP response has already been
+        returned. Therefore, the job status must be stable and checked by a
+        separate endpoint.
+
+        ### Typical mistakes of a beginner
+
+        run an unlimited thread in the web worker; do not have
+        retry/idempotency; return 200 until actually completed; save job only in
+        memory.
+
+        ### In practice
+
+        ```python
+
+        from flask import Flask, jsonify
+
+        from uuid import uuid4
+
+        app = Flask(__name__)
+
+        jobs = {}
+
+        @app.post("/imports")
+
+        def create_import():
+            job_id = str(uuid4())
+            jobs[job_id] = {"status": "queued"}
+            return jsonify({"job_id": job_id, "status": "queued"}), 202
+
+        @app.get("/imports/<job_id>")
+
+        def import_status(job_id):
+            return jobs.get(job_id, {"error": "not found"}), 200 if job_id in jobs else 404
+        ```**Why this fragment:** the example shows a minimal asynchronous
+        contract that can be scaled by the queue system without changing the
+        client model.
+
+        **What to change yourself:** add `idempotency_key`, failed status and a
+        limited number of retries in the service layer.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        For long operations, the Flask endpoint accepts the job, and a separate
+        worker and status endpoint are responsible for the lifecycle job.
+  - title: "Flask: observability and health checks"
+    key: flask-observability-i-health-checks
+    description: distinguish liveness from readiness | add request id and structured
+      logging | do not divulge secrets
+    order: 18
+    exerciseFocus: "return health/readiness without leaking internal errors"
+    theory:
+      title: "Flask: observability and health checks"
+      content: >-
+        ### Why is this topic needed?
+
+        The server may be running, but not ready to serve traffic due to an
+        unavailable database. Without health signals and correlation id,
+        diagnosis becomes random.
+
+        ### Intuitive explanation
+
+        Liveness asks "is the process alive?", readiness - "can it work for
+        users?". These are different questions, like heart rate and ability to
+        run.
+
+        ### What happens at runtime
+
+        Health endpoint checks the minimum state without severe side effects,
+        readiness checks critical dependencies with timeout. The middleware adds
+        the request id and latency to the structured log, but a safe error is
+        returned to the client.
+
+        ### Minimal code example
+
+        ```python
+
+        import time
+
+        from flask import Flask, g, request
+
+        app = Flask(__name__)
+
+        @app.before_request
+
+        def start_timer():
+            g.started = time.perf_counter()
+
+        @app.after_request
+
+        def add_request_id(response):
+            response.headers["X-Request-ID"] = request.headers.get("X-Request-ID", "generated")
+            return response
+
+        @app.get("/health/live")
+
+        def live():
+            return {"status": "alive"}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Lifecycle hooks measure the request, and the after hook adds the
+        response header. It is better to generate the production request id in a
+        cryptographically safe way and transfer it to the logs. Readiness should
+        not mask a problem with a status of 200.
+
+        ### Try to predict
+
+        Should liveness test all external API? What happens if readiness depends
+        on a slow DB with no timeout?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"How does readiness
+        differ from liveness?","code":"import time\nfrom flask import Flask, g,
+        request\n\napp = Flask(__name__)\n\n@app.before_request\ndef
+        start_timer():\n    g.started =
+        time.perf_counter()\n\n@app.after_request\ndef
+        add_request_id(response):\n    response.headers[\"X-Request-ID\"] =
+        request.headers.get(\"X-Request-ID\", \"generated\")\n    return
+        response\n\n@app.get(\"/health/live\")\ndef live():\n    return
+        {\"status\": \"alive\"}","options":["Readiness shows whether critical
+        dependencies are ready, liveness — whether the process is
+        alive","Readiness always checks the password","These are two names of
+        the same stdout message"],"answer":0,"explanation":"Splitting allows the
+        orchestrator to restart a dead process and not send traffic to an
+        unready one."}
+
+        ```
+
+
+        ### How behavior changes
+
+        A slow or broken dependency should have a short timeout and a clear
+        signal. Logs should contain request id, route, status and latency, but
+        not token/password/body secrets.
+
+        ### Typical mistakes of a beginner
+
+        make health endpoint more difficult than business request; return 200
+        when the database is unavailable; log in Authorization; generate request
+        id from user input without normalization.
+
+        ### In practice
+
+        ```python
+
+        import time
+
+        from flask import Flask, g, request
+
+        app = Flask(__name__)
+
+        @app.before_request
+
+        def start_timer():
+            g.started = time.perf_counter()
+
+        @app.after_request
+
+        def add_request_id(response):
+            response.headers["X-Request-ID"] = request.headers.get("X-Request-ID", "generated")
+            return response
+
+        @app.get("/health/live")
+
+        def live():
+            return {"status": "alive"}
+        ```**Why this snippet:** The snippet shows the observed HTTP limit
+        without being tied to a specific monitor or cloud provider.
+
+        **What to change yourself:** add readiness with a controlled fake
+        dependency and a test that returns an error without a stack trace to the
+        client.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        The reliable Flask service has separate liveness/readiness signals,
+        correlation id, latency and secure logs.

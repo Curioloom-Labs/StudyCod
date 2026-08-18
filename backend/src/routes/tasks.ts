@@ -3156,7 +3156,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const requestedCourseItemId = Number((req.body as any)?.courseItemId ?? 0);
     let courseContext: Awaited<ReturnType<typeof getCoursePracticeContext>> | null = null;
     if (Number.isInteger(requestedCourseItemId) && requestedCourseItemId > 0) {
-      courseContext = await getCoursePracticeContext(userId, requestedCourseItemId);
+      courseContext = await getCoursePracticeContext(userId, requestedCourseItemId, userLanguage);
       const courseRuntime = String(courseContext.enrollment.variant?.runtime ?? "").toUpperCase();
       if (courseRuntime === "JAVA" || courseRuntime === "PYTHON" || courseRuntime === "CPP") {
         lang = courseRuntime;

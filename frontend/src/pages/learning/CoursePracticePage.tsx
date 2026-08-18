@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
@@ -20,6 +21,8 @@ const kindLabel = (kind: LearningCourseItem["kind"]): string => {
 };
 
 export const CoursePracticePage: React.FC = () => {
+  const { i18n } = useTranslation();
+  const locale = i18n.language.startsWith("en") ? "en" : "uk";
   const navigate = useNavigate();
   const { courseId, courseItemId } = useParams<{ courseId: string; courseItemId: string }>();
   const [user, setUser] = React.useState<User | null>(null);
@@ -55,7 +58,7 @@ export const CoursePracticePage: React.FC = () => {
         }
       })
     return () => { cancelled = true; };
-  }, [courseId, courseItemId]);
+  }, [courseId, courseItemId, locale]);
 
   const theoryRequired = Boolean(
     courseItem?.kind === "CODE_TASK"

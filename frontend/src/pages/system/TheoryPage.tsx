@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
 import { BookOpen, ChevronRight } from "lucide-react";
 import type { User } from "../../types";
@@ -13,6 +14,7 @@ interface TheoryPageProps {
 }
 
 export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
+  const { i18n } = useTranslation();
   const prefersReducedMotion = useReducedMotion();
   const [topics, setTopics] = useState<TheoryTopic[]>([]);
   const [selected, setSelected] = useState<TheoryTopic | null>(null);
@@ -43,7 +45,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
     };
     void load();
     return () => { cancelled = true; };
-  }, [runtime]);
+  }, [runtime, i18n.language]);
 
   return (
     <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-3 sm:p-4 md:p-6">

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   BookOpen,
@@ -95,6 +96,8 @@ function topicParts(node: RoadmapNode): TopicPart[] {
 }
 
 export const LearningCoursePage: React.FC = () => {
+  const { i18n } = useTranslation();
+  const locale = i18n.language.startsWith("en") ? "en" : "uk";
   const navigate = useNavigate();
   const { courseId } = useParams<{ courseId: string }>();
   const [searchParams] = useSearchParams();
@@ -129,7 +132,7 @@ export const LearningCoursePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [courseId, locale]);
 
   React.useEffect(() => { void load(); }, [load]);
 

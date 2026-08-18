@@ -2,12 +2,17 @@ import { Router, Response } from "express";
 import { z } from "zod";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject } from "../services/learningCatalogService";
+import { normalizeUiLocale, resolveUiLocaleFromHeaders, type UiLocale } from "../utils/uiLocale";
 
 export const learningCatalogRouter = Router();
 
+function requestLocale(req: AuthRequest): UiLocale {
+  return normalizeUiLocale((req.query as any)?.uiLang, resolveUiLocaleFromHeaders(req.headers, "uk"));
+}
+
 learningCatalogRouter.get("/me", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
-  return res.json(await getLearningMe(req.userId));
+  return res.json(await getLearningMe(req.userId, requestLocale(req)));
 });
 
 learningCatalogRouter.put("/me/current-course", authRequired, async (req: AuthRequest, res: Response) => {
@@ -29,7 +34,7 @@ learningCatalogRouter.put("/me/current-course", authRequired, async (req: AuthRe
 
 learningCatalogRouter.get("/catalog", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
-  return res.json({ courses: await getLearningCatalog(req.userId) });
+  return res.json({ courses: await getLearningCatalog(req.userId, requestLocale(req)) });
 });
 
 learningCatalogRouter.get("/courses/:courseId", authRequired, async (req: AuthRequest, res: Response) => {
@@ -37,7 +42,7 @@ learningCatalogRouter.get("/courses/:courseId", authRequired, async (req: AuthRe
   const courseId = Number(req.params.courseId);
   if (!Number.isFinite(courseId)) return res.status(400).json({ message: "INVALID_INPUT" });
   try {
-    return res.json({ course: await getCourseForUser(req.userId, courseId) });
+    return res.json({ course: await getCourseForUser(req.userId, courseId, requestLocale(req)) });
   } catch (error: any) {
     return res.status(Number(error?.statusCode) || 500).json({ message: String(error?.message || "INTERNAL_SERVER_ERROR"), prerequisites: error?.prerequisites });
   }
@@ -99,7 +104,7 @@ learningCatalogRouter.get("/items/:itemId/project", authRequired, async (req: Au
   const itemId = Number(req.params.itemId);
   if (!Number.isFinite(itemId)) return res.status(400).json({ message: "INVALID_INPUT" });
   try {
-    return res.json({ project: await getCourseProject(req.userId, itemId) });
+    return res.json({ project: await getCourseProject(req.userId, itemId, requestLocale(req)) });
   } catch (error: any) {
     return res.status(Number(error?.statusCode) || 500).json({ message: String(error?.message || "INTERNAL_SERVER_ERROR"), prerequisites: error?.prerequisites });
   }

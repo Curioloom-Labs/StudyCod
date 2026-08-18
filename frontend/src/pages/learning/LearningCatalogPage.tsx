@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { BookOpen, CheckCircle2, ChevronRight, LoaderCircle, LockKeyhole, RefreshCw, Route } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getLearningCatalog, getLearningMe, enrollInCatalogCourse, type CatalogCourse, type CatalogVariant, type LearningMe } from "../../lib/api/learningCatalog";
@@ -11,6 +12,8 @@ function levelLabel(level: CatalogCourse["level"]): string {
 }
 
 export const LearningCatalogPage: React.FC = () => {
+  const { i18n } = useTranslation();
+  const locale = i18n.language.startsWith("en") ? "en" : "uk";
   const navigate = useNavigate();
   const [courses, setCourses] = React.useState<CatalogCourse[]>([]);
   const [learningMe, setLearningMe] = React.useState<LearningMe | null>(null);
@@ -30,7 +33,7 @@ export const LearningCatalogPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   React.useEffect(() => { void reload(); }, [reload]);
 

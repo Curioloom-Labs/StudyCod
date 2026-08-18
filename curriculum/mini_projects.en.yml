@@ -1,0 +1,399 @@
+version: 1
+# English curriculum projects
+courses:
+  python-extensions:
+    - key: python-data-pipeline
+      title: Python Data Pipeline
+      description: Build a CLI pipeline that receives JSON from an HTTP service,
+        normalizes the records, saves a CSV, and generates a summary report. The
+        project checks network boundaries, data format, errors, and restarts.
+      estimatedMinutes: 150
+      skills: [ requests/httpx, JSON, pathlib, logging, pytest ]
+      template: "src/client.py
+
+        src/transform.py
+
+        src/report.py
+
+        tests/
+
+        README.md"
+      milestones:
+        - id: contract
+          title: Source contract
+          description: Describe the endpoint, timeout, expected JSON fields, and
+            incomplete response behavior.
+        - id: transform
+          title: Normalization
+          description: Convert external records to an internal model without changing the
+            original data.
+        - id: report
+          title: CSV and report
+          description: Write the result to a controlled directory and generate summary
+            metrics.
+        - id: reliability
+          title: Reliability
+          description: Add timeout, no-secret logging, error handling, and tests with a
+            fallback HTTP client.
+      acceptanceCriteria:
+        - Restarting does not create duplicate or corrupted CSV.
+        - An invalid service response is not masquerading as a successful report.
+        - There are no real network requests in the tests.
+
+  flask:
+    - key: flask-reading-list
+      title: Flask Reading List
+      description: "Create a backend web application for a book list: list page, add
+        form, validation, user session, and safe error messages."
+      estimatedMinutes: 180
+      skills: [ Flask routes, Jinja2, forms, sessions, SQLite, tests ]
+      template: "app/__init__.py
+
+        app/routes.py
+
+        app/templates/
+
+        tests/
+
+        README.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: [ "/" ]
+      milestones:
+        - id: routes
+          title: Routes
+          description: Implement GET for list and POST to create book with clear
+            redirect/status rules.
+        - id: templates
+          title: Templates
+          description: Pass the data to Jinja2 and don't insert unvalidated HTML.
+        - id: persistence
+          title: Preservation
+          description: Add a SQLite repository with parameterized queries and a transaction.
+        - id: quality
+          title: Audit
+          description: Write tests for valid form, error, empty list, and requery.
+      acceptanceCriteria:
+        - A POST with an invalid name does not change the base.
+        - The session does not contain a password or unnecessary personal data.
+        - Error page does not show traceback to the user.
+
+    - key: flask-notes-api
+      title: Flask Notes API
+      description: Build JSON API notes with Blueprints, app factory, token-based
+        authentication, pagination and stable error contract.
+      estimatedMinutes: 210
+      skills: [ Blueprints, app factory, JSON API, auth, pagination, pytest ]
+      template: "app/__init__.py
+
+        app/api/notes.py
+
+        app/services/
+
+        app/repositories/
+
+        tests/"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: [ "/api/notes" ]
+      milestones:
+        - id: factory
+          title: App factory
+          description: Prepare separate configurations for development and tests.
+        - id: api
+          title: Notes CRUD
+          description: Implement create/read/update/delete with input/output contracts.
+        - id: auth
+          title: Access
+          description: The user can see and change only his own notes.
+        - id: contract-tests
+          title: Contract tests
+          description: Check 401, 403, 404, 422 and pagination.
+      acceptanceCriteria:
+        - SQL queries are parameterized.
+        - The ownership of the resource is checked on the server.
+        - Tests are run without production secrets.
+
+  fastapi:
+    - key: fastapi-reading-log
+      title: FastAPI Reading Log
+      description: "Build a complete reading log API: books, progress records,
+        Pydantic contracts, SQLAlchemy session, pagination, authentication, and
+        tests."
+      estimatedMinutes: 240
+      skills: [ Pydantic, dependencies, SQLAlchemy, CRUD, auth, TestClient, OpenAPI ]
+      template: "app/main.py
+
+        app/routers/books.py
+
+        app/routers/entries.py
+
+        app/schemas.py
+
+        app/services/
+
+        app/repositories/
+
+        tests/
+
+        README.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: [ "/docs" ]
+      milestones:
+        - id: vertical-slice
+          title: The first vertical section
+          description: Implement GET /books and one TestClient test from HTTP to the
+            response model.
+        - id: persistence
+          title: Base and transactions
+          description: Add SQLAlchemy engine, yield dependency, migration scheme and CRUD.
+        - id: identity
+          title: User and rights
+          description: Add bearer authentication and log ownership verification.
+        - id: quality
+          title: API quality
+          description: Add pagination, 401/403/404/409/422 tests, OpenAPI metadata and
+            README.
+      acceptanceCriteria:
+        - No route accepts an arbitrary dict instead of the described model.
+        - The DB session is closed after each request.
+        - The user cannot read or modify someone else's record.
+        - The tests do not make actual external HTTP requests.
+
+    - key: fastapi-team-library
+      title: FastAPI Team Library
+      description: Create a library command API with reader/editor/admin roles,
+        search, background import, and job status.
+      estimatedMinutes: 270
+      skills: [ APIRouter, Depends, roles, background jobs, search, error contract ]
+      template: "app/main.py
+
+        app/routers/
+
+        app/dependencies.py
+
+        app/services/
+
+        app/workers/
+
+        tests/
+
+        openapi-notes.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: [ "/docs" ]
+      milestones:
+        - id: resources
+          title: Team resources
+          description: Design users, teams, books and membership without duplicating route
+            logic.
+        - id: permissions
+          title: Access Policy
+          description: Separate authentication, role and ownership verification.
+        - id: import
+          title: Asynchronous import
+          description: Accept the job, return 202 and make the endpoint state with
+            idempotency.
+        - id: observability
+          title: Observability
+          description: Add request id, structured errors and success/failure metrics.
+      acceptanceCriteria:
+        - Unauthorized role gets 403 before state change.
+        - Resubmitting the same job does not create a duplicate.
+        - Background task does not use a closed request session.
+
+    - key: fastapi-production-api
+      title: FastAPI Production API
+      description: "Bring the service to a production-ready state: settings, lifespan,
+        health/readiness, CORS, rate limits, logs, Docker startup and graceful
+        shutdown."
+      estimatedMinutes: 240
+      skills: [ Settings, lifespan, middleware, security, health checks, deployment ]
+      template: "app/main.py
+
+        app/config.py
+
+        app/observability.py
+
+        Dockerfile
+
+        compose.yml
+
+        tests/
+
+        RUNBOOK.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: [ "/docs", "/health" ]
+      milestones:
+        - id: config
+          title: Configuration
+          description: Bring out environment and secrets in Settings with fail-fast
+            checking.
+        - id: health
+          title: Health contract
+          description: Separate liveness and readiness, add timeout for dependencies.
+        - id: safety
+          title: Protection
+          description: Configure CORS allow-list, rate limiting, security headers and
+            redaction.
+        - id: runbook
+          title: Deployment
+          description: Describe startup, rollback, migrations, logs, and graceful shutdown.
+      acceptanceCriteria:
+        - There is no production secret in the repository.
+        - Debug is disabled in the production profile.
+        - Readiness does not return ready when a critical dependency is not
+          available.
+
+  computer-vision:
+    - key: cv-document-scanner
+      title: Document Scanner
+      description: Build a pipeline that reads a document image, finds boundaries,
+        corrects perspective, and saves a controlled result.
+      estimatedMinutes: 210
+      skills:
+        [
+          OpenCV,
+          color spaces,
+          edges,
+          contours,
+          perspective transform,
+          evaluation
+        ]
+      template: "src/io.py
+
+        src/preprocess.py
+
+        src/geometry.py
+
+        src/pipeline.py
+
+        tests/
+
+        README.md"
+      checkSpec:
+        kind: computer-vision
+        files: [ "src/io.py", "src/preprocess.py", "src/geometry.py", "src/pipeline.py" ]
+      milestones:
+        - id: input
+          title: Reliable input
+          description: Check decode, shape, dtype, channel and missing file.
+        - id: edges
+          title: Candidates of borders
+          description: Apply grayscale, blur, canny and explain the options.
+        - id: geometry
+          title: Prospect
+          description: Find the outline of the document, arrange the points and warp.
+        - id: evaluation
+          title: Assessment
+          description: Check for different lighting, rotation, noise, and failed frame.
+      acceptanceCriteria:
+        - A failed decode returns an understandable error, not a crash in the
+          middle of the pipeline.
+        - Preprocessing parameters can be changed without rewriting the entire
+          code.
+        - The result has a controlled geometry and format.
+
+    - key: cv-color-inspector
+      title: Color Object Inspector
+      description: "Create a color feature analyzer: HSV mask, morphological cleanup,
+        contours, bounding boxes, and confidence constraint report."
+      estimatedMinutes: 180
+      skills: [ HSV, masks, morphology, contours, geometry, false positives ]
+      template: "src/load.py
+
+        src/mask.py
+
+        src/measure.py
+
+        src/report.py
+
+        tests/fixtures/
+
+        README.md"
+      checkSpec:
+        kind: computer-vision
+        files: [ "src/load.py", "src/mask.py", "src/measure.py", "src/report.py" ]
+      milestones:
+        - id: mask
+          title: Color mask
+          description: Choose the HSV range and show which pixels fall into the mask.
+        - id: cleanup
+          title: Noise cleaning
+          description: Compare the opening/closing and record the compromise of parameters.
+        - id: objects
+          title: Geometric signs
+          description: Build contours, area and bounding boxes.
+        - id: limits
+          title: Limitation
+          description: Describe false positives, lighting, and limits of applicability.
+      acceptanceCriteria:
+        - The code does not confuse RGB and BGR at the input boundary.
+        - The report distinguishes "object not found" from a read error.
+        - There are at least three fixture images with different scenarios.
+
+  java-advanced:
+    - key: java-log-analyzer
+      title: Java Log Analyzer
+      description: Build a streaming log analyzer with custom event types, filters,
+        statistics, and tests for malformed records.
+      estimatedMinutes: 180
+      skills: [ streams, records, exceptions, files, tests ]
+      template: "src/main/java/LogAnalyzer.java
+
+        src/test/
+
+        README.md"
+      milestones:
+        - id: parse
+          title: Parser
+          description: Convert the log line to a typed event or controlled error.
+        - id: aggregate
+          title: Aggregation
+          description: Calculate levels, endpoints and time ranges.
+        - id: report
+          title: Report
+          description: Create a deterministic text report.
+      acceptanceCriteria:
+        - An invalid string does not complete the entire analysis without
+          explanation.
+        - Tests cover empty file and mixed levels.
+
+  cpp-advanced:
+    - key: cpp-file-indexer
+      title: C++ File Indexer
+      description: Create a file indexer with pathlib-like traversal, metadata,
+        search, and controlled error handling.
+      estimatedMinutes: 210
+      skills: [ filesystem, RAII, STL, algorithms, testing, complexity ]
+      template: "src/indexer.hpp
+
+        src/indexer.cpp
+
+        src/main.cpp
+
+        tests/
+
+        README.md"
+      milestones:
+        - id: scan
+          title: Bypass
+          description: Traverse the directory without manual memory management and with
+            permission error handling.
+        - id: index
+          title: Index
+          description: Save the normalized metadata and explain the search structure.
+        - id: query
+          title: Search
+          description: Implement a filter and evaluate the complexity on different volumes.
+      acceptanceCriteria:
+        - Resources are released automatically through RAII.
+        - An inaccessible folder does not cause undefined behavior.
+        - There is a test for an empty directory and duplicate names.

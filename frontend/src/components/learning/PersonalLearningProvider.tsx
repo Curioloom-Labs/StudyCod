@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import {
   getLearningCourse,
   getLearningMe,
@@ -19,6 +20,8 @@ type PersonalLearningContextValue = {
 const PersonalLearningContext = React.createContext<PersonalLearningContextValue | null>(null);
 
 export const PersonalLearningProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { i18n } = useTranslation();
+  const locale = i18n.language.startsWith("en") ? "en" : "uk";
   const [me, setMe] = React.useState<LearningMe | null>(null);
   const [currentCourse, setCurrentCourseData] = React.useState<LearningCourse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -40,7 +43,7 @@ export const PersonalLearningProvider: React.FC<{ children: React.ReactNode }> =
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {

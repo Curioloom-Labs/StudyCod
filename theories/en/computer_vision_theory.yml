@@ -1,0 +1,2117 @@
+language: PYTHON
+course: computer-vision
+topics:
+  - title: Image as an array of data
+    key: zobrazhennya-yak-masyv-danykh
+    description: read shape/dtype | explain channels | check the range
+    order: 1
+    exerciseFocus: "examine an array and accurately predict its properties"
+    theory:
+      title: Image as an array of data
+      content: >-
+        ### Why is this topic needed?
+
+        The algorithm starts with shape, dtype and pixel range.
+
+        ### Intuitive explanation
+
+        A pixel is a color measurement in a coordinate, an image is a
+        measurement table with channels.
+
+        ### What happens at runtime
+
+        Once loaded, the image becomes a NumPy array, not an abstract "picture".
+        For grayscale shape has the form (height, width), for color — (height,
+        width, channels). dtype and range define arithmetic, thresholds, and
+        library functions. Changing a single pixel changes a specific element,
+        so indexing and coordinate ordering are critical.
+
+        ### Minimal code example
+
+        ```python
+
+        import numpy as np
+
+        image = np.zeros((2, 3, 3), dtype=np.uint8)
+
+        print(image.shape)
+
+        print(image.dtype)
+
+        print(image.min(), image.max())
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - image.shape shows the height, width and number of channels.
+
+        - image.dtype defines the type and possible range.
+
+        - image[y, x] reads pixel in row, column format.
+
+        - Channels are stored in the last coordinate of a typical color array.
+
+        - Shape check prevents silent broadcasting errors.
+
+        ### Try to predict
+
+        How many pixels? What color will an array filled with 255 be?
+
+        ### How behavior changes
+
+        Compare grayscale, RGB and RGBA; check for empty array, uint8 and
+        float32. Don't multiply uint8 without overflow control and don't assume
+        the two libraries have the same channel order.
+
+        ### Typical mistakes of a beginner
+
+        Confuse width/height; RGB/BGR; divide without checking dtype.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        import numpy as np
+
+        image = np.zeros((2, 3, 3), dtype=np.uint8)
+
+        print(image.shape)
+
+        print(image.dtype)
+
+        print(image.min(), image.max())
+
+        ```**Why this is here:** Checking shape, dtype, and range turns
+        pipeline's invisible assumptions into facts. Before the model, it is
+        useful to fix them with a test, rather than relying on one visual
+        example.
+
+        **What to change yourself:** Before the model, print shape, dtype, min
+        and max - this is a quick sanity check.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What index order does
+        image[y, x] use in NumPy?","options":["First the column, then the
+        row","First row/y, then column/x","Channel number only","The order does
+        not matter"],"answer":1,"explanation":"NumPy indexes the array as row,
+        column, and a channel is added for color."}
+
+        ```
+
+
+        ### Summary
+
+        The data format is more important than the library name.
+  - title: Loading and color spaces
+    key: zavantazhennya-i-kolirni-prostory
+    description: check decoding | distinguish RGB/BGR | process modes
+    order: 2
+    exerciseFocus: "check the expected format before the pipeline"
+    theory:
+      title: Loading and color spaces
+      content: >-
+        ### Why is this topic needed?
+
+        The file is not ready input yet: it must be decoded and have the
+        expected channels.
+
+        ### Intuitive explanation
+
+        The download translates the file format into an array, the color space
+        determines the value of the channels.
+
+        ### What happens at runtime
+
+        The decoder converts the JPEG or PNG bytes into an array, but the file
+        format does not guarantee the same color model. PIL usually works in
+        RGB, OpenCV often reads BGR, and the image can be grayscale or RGBA. If
+        you do not normalize the mode and check the decoding result, the
+        pipeline can work without exception, but give wrong colors and worse
+        signs.
+
+        ### Minimal code example
+
+        ```python
+
+        from PIL import Image
+
+        import numpy as np
+
+        image = np.asarray(Image.open('photo.jpg').convert('RGB'))
+
+        if image.ndim != 3 or image.shape[2] != 3:
+            raise ValueError('expected RGB image')
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Image.open opens the file, but does not guarantee the desired mode.
+
+        - convert('RGB') explicitly selects three channels.
+
+        - np.asarray converts an image into a numeric array.
+
+        - Checking ndim and shape catches grayscale/RGBA before processing.
+
+        - An explicit RGB↔BGR conversion is required when converting to OpenCV.
+
+        ### Try to predict
+
+        Why does grayscale not have a third coordinate? Why is convert better
+        than guess?
+
+        ### How behavior changes
+
+        Check for corrupted path, grayscale, RGBA with transparency and unusual
+        profile file. Don't drop alpha silently if it matters to the task; save
+        the conversion rule in one place.
+
+        ### Typical mistakes of a beginner
+
+        Do not check the corrupted file; mix BGR/RGB; silently losing alpha.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from PIL import Image
+
+        import numpy as np
+
+        image = np.asarray(Image.open('photo.jpg').convert('RGB'))
+
+        if image.ndim != 3 or image.shape[2] != 3:
+            raise ValueError('expected RGB image')
+        ```**Why it's here:** The security check makes the format error obvious
+        right after login. Otherwise, the incorrect color may appear only after
+        training the model or when checking the result.
+
+        **What to change yourself:** Defensive loading makes the format error
+        obvious to complex processing.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why can't RGB and BGR
+        be passed interchangeably between PIL and OpenCV?","options":["They have
+        different number of pixels","They have a different order of
+        channels","One format is not supported by NumPy","BGR stands for
+        grayscale"],"answer":1,"explanation":"The channel values ​​are the same
+        in content, but their order is different; without conversion, red and
+        blue are swapped."}
+
+        ```
+
+
+        ### Summary
+
+        Loading is part of the algorithm, not a service line.
+  - title: Resize, crop and normalization
+    key: resize-crop-i-normalizatsiya
+    description: explain resize/crop | normalize without loss | keep the aspect ratio
+    order: 3
+    exerciseFocus: "compare properties before and after preparation"
+    theory:
+      title: Resize, crop and normalization
+      content: >-
+        ### Why is this topic needed?
+
+        Models expect a fixed size and numerical scale, but stretching distorts
+        the geometry.
+
+        ### Intuitive explanation
+
+        Resize changes the grid, crop selects the area, normalization changes
+        the scale.
+
+        ### What happens at runtime
+
+        Resize changes the spatial size and must choose how to interpolate the
+        new pixels. Simple stretching to the desired shape changes the
+        proportions of objects, so letterbox or crop with a fixed policy is
+        often used. Normalization changes the range and type of values; it
+        should correspond to what the model was trained on.
+
+        ### Minimal code example
+
+        ```python
+
+        import numpy as np
+
+        small = image[:200, :200]
+
+        ready = small.astype(np.float32) / 255.0
+
+        assert 0.0 <= ready.min() <= ready.max() <= 1.0
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - The size of the target tensor is determined by the pipeline, not by a
+        random number.
+
+        - INTER_AREA is often suitable for reduction, INTER_LINEAR for general
+        resize.
+
+        - Crop can remove the object along the edge, so the coordinates must be
+        controlled.
+
+        - Conversion of uint8 [0,255] to float [0,1] must be done once.
+
+        - The same preprocessing is required during training and inference.
+
+        ### Try to predict
+
+        What happens when storing float in uint8? Why is aspect ratio important?
+
+        ### How behavior changes
+
+        Check for very narrow image, smaller than crop, odd dimensions and
+        object near the edge. Compare resize without changing proportions and
+        with padding. Output the image after each step.
+
+        ### Typical mistakes of a beginner
+
+        Normalize twice; change width/height; use a different mean/std.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        import numpy as np
+
+        small = image[:200, :200]
+
+        ready = small.astype(np.float32) / 255.0
+
+        assert 0.0 <= ready.min() <= ready.max() <= 1.0
+
+        ```**Why this is here:** The snippet shows two different operations:
+        changing the geometry and numerical scaling. They need to be tested
+        separately, otherwise it's hard to understand why the model is getting
+        the wrong result.
+
+        **What to change yourself:** Compare shape and min/max after each
+        pipeline step.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why should
+        normalization be the same during training and inference?","options":["So
+        that the file takes up less space","So that the model sees the data in
+        the same numerical scale","Because resize works only with float","To
+        automatically correct RGB/BGR"],"answer":1,"explanation":"The model
+        studied dependencies for a specific distribution of values; another
+        preprocessing modifies its input space."}
+
+        ```
+
+
+        ### Summary
+
+        Preprocessing must be reproducible and consistent with training.
+  - title: Filters and convolution
+    key: filtry-i-zhortka
+    description: explain convolution | distinguish blur/sharpen | link kernel and detail
+    order: 4
+    exerciseFocus: "change one parameter and predict the effect"
+    theory:
+      title: Filters and convolution
+      content: >-
+        ### Why is this topic needed?
+
+        Filters show noise, blur, contrast and local structures.
+
+        ### Intuitive explanation
+
+        Kernel is a small window that moves through the image and calculates a
+        new value.
+
+        ### What happens at runtime
+
+        The convolution moves a small kernel across the image and calculates a
+        weighted sum of neighboring pixels. A blur kernel reduces local noise,
+        while a sharpening kernel enhances differences. At the boundary, the
+        algorithm has to decide where to get the missing neighbors from; border
+        mode gives different borders. The filter does not understand objects -
+        it changes the local structure of the signal.
+
+        ### Minimal code example
+
+        ```python
+
+        import cv2
+
+        blurred = cv2.GaussianBlur(image, (5, 5), 0)
+
+        sharpened = cv2.addWeighted(image, 1.5, blurred, -0.5, 0)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - GaussianBlur sets the size of the kernel and sigma, which determine
+        the strength of the blur.
+
+        - A larger core removes more detail along with noise.
+
+        - Convolution works separately on channels, unless another scheme is
+        specified.
+
+        - Border mode affects the pixels along the edge.
+
+        - A filter before edge detection can reduce false limits.
+
+        ### Try to predict
+
+        Why does a large kernel smooth more? What happens to a small detail?
+
+        ### How behavior changes
+
+        Compare kernel 3×3 and 9×9 on a noisy and detailed image. Check for
+        blurring of the thin border and edge artifacts. Do not choose a kernel
+        based on one example.
+
+        ### Typical mistakes of a beginner
+
+        Do not check the result; confuse kernel and sigma; call sharpen
+        recovery.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        import cv2
+
+        blurred = cv2.GaussianBlur(image, (5, 5), 0)
+
+        sharpened = cv2.addWeighted(image, 1.5, blurred, -0.5, 0)
+
+        ```**Why this is here:** Saving the result after one filter allows you
+        to see what has changed. In the exercise, change the kernel and describe
+        the noise-versus-detail trade-off.
+
+        **What to change yourself:** Compare the original and the result on the
+        same frame.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What usually happens if
+        you increase the GaussianBlur kernel?","options":["The image becomes
+        sharper without loss","Noise is reduced, but fine detail may be
+        lost","Changing the order of RGB to BGR","Pixels become
+        text"],"answer":1,"explanation":"Stronger antialiasing reduces local
+        fluctuations, but may erase fine edges and textures."}
+
+        ```
+
+
+        ### Summary
+
+        The filter is a local transform with a noise/detail trade-off.
+  - title: Gradients and borders
+    key: hradiyenty-i-mezhi
+    description: explain gradient | apply Canny | interpret thresholds
+    order: 5
+    exerciseFocus: "compare two boundary maps with different thresholds"
+    theory:
+      title: Gradients and borders
+      content: >-
+        ### Why is this topic needed?
+
+        A boundary is often discernible by a sharp change in intensity rather
+        than by absolute color.
+
+        ### Intuitive explanation
+
+        Gradient measures the rate of change of the signal in the x or y
+        direction.
+
+        ### What happens at runtime
+
+        The gradient measures how quickly the intensity changes in neighboring
+        pixels. Sobel evaluates changes in X and Y separately, while Canny
+        combines smoothing, gradient, non-maximum suppression and two
+        thresholds. A boundary is a signal of change, not a finished outline of
+        an object: noise, texture, and shadows can also create a strong
+        gradient.
+
+        ### Minimal code example
+
+        ```python
+
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+        edges = cv2.Canny(gray, 80, 160)
+
+        print(edges.shape, edges.dtype)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Switching to grayscale simplifies the assessment of intensity, but may
+        lose the color characteristic.
+
+        - SobelX and SobelY show the direction of change.
+
+        - Magnitude combines components by virtue of a gradient.
+
+        - Canny returns a binary boundary map for the next steps.
+
+        - Thresholds determine the trade-off between missed and false limits.
+
+        ### Try to predict
+
+        Why is Canny often blurred? How will the higher threshold affect?
+
+        ### How behavior changes
+
+        Check for noisy photo, low light and subject with soft transition.
+        Compare one and two Canny thresholds. Don't call every white edge pixel
+        an object without segmentation or geometric analysis.
+
+        ### Typical mistakes of a beginner
+
+        Work with RGB without explanation; consider each border as an object;
+        ignore the noise
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+        edges = cv2.Canny(gray, 80, 160)
+
+        print(edges.shape, edges.dtype)
+
+        ```**Why this is here:** The fragment separates grayscale preparation
+        from edge map construction. This makes it possible to change the
+        thresholds and see how the number and integrity of the boundaries
+        changes.
+
+        **What to change yourself:** Check the edge map on bright, dark and
+        noisy images.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the output of
+        cv2.Canny in a typical pipeline?","options":["Ready list of recognized
+        objects","Binary map of potential boundaries","Table of RGB values ​​in
+        CSV","Coordinates of only one pixel"],"answer":1,"explanation":"Canny
+        finds changes in intensity; additional steps are required to obtain
+        objects."}
+
+        ```
+
+
+        ### Summary
+
+        Boundary search highlights changes, but does not recognize the object.
+  - title: Thresholds and binary masks
+    key: porohy-i-binarni-masky
+    description: build a mask | compare RGB/HSV | estimate thresholds
+    order: 6
+    exerciseFocus: "predict whether the mask will be empty"
+    theory:
+      title: Thresholds and binary masks
+      content: >-
+        ### Why is this topic needed?
+
+        A mask separates the area of interest from the background.
+
+        ### Intuitive explanation
+
+        Threshold is a rule: a pixel passes the condition or becomes zero.
+
+        ### What happens at runtime
+
+        Threshold turns the intensity value into a membership rule: a pixel
+        becomes foreground or background. Fixed threshold is simple, Otsu
+        selects it from the histogram, adaptive threshold takes into account
+        local lighting. The mask is useful for the following operations, but its
+        quality depends on the contrast and correct foreground/background
+        assumption.
+
+        ### Minimal code example
+
+        ```python
+
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+
+        lower = np.array([35, 60, 40])
+
+        upper = np.array([90, 255, 255])
+
+        mask = cv2.inRange(hsv, lower, upper)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Grayscale reduces the problem to one value per pixel.
+
+        - Threshold creates an array with two primary values.
+
+        - Otsu works better when the histogram has separated classes.
+
+        - Opening removes small noise, closing fills small gaps.
+
+        - The mask must be checked visually and by area before searching for
+        objects.
+
+        ### Try to predict
+
+        Why is the mask empty on a dark photo? What is the role of saturation?
+
+        ### How behavior changes
+
+        Compare even and uneven lighting, a textured background, and a very
+        small object. Check that the inversion of the mask did not change the
+        meaning of the following algorithm. A large morphology kernel can erase
+        the necessary details.
+
+        ### Typical mistakes of a beginner
+
+        Select thresholds on one frame; confuse 0 and 255; forget the lighting.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+
+        lower = np.array([35, 60, 40])
+
+        upper = np.array([90, 255, 255])
+
+        mask = cv2.inRange(hsv, lower, upper)
+
+        ```**Why this is here:** foreground_ratio is a simple sanity check: if
+        the mask is almost all black or white, the pipeline needs to be reviewed
+        before contours are found.
+
+        **What to change yourself:** Output the number of non-zero pixels - this
+        is a numerical signal of the quality of the rule.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why do you need a
+        binary mask before finding contours?","options":["To describe the
+        foreground and background in the format for the contour algorithm","To
+        automatically name the object class","To restore a damaged JPEG","To
+        change Python to C++"],"answer":0,"explanation":"Contours are usually
+        searched for in the foreground/background representation, not in an
+        arbitrary color photo."}
+
+        ```
+
+
+        ### Summary
+
+        A mask is a hypothesis about an area that needs to be tested on
+        different data.
+  - title: Contours and geometric features
+    key: kontury-i-heometrychni-oznaky
+    description: find contours | filter noise | build a bounding box
+    order: 7
+    exerciseFocus: "process empty and non-empty mask"
+    theory:
+      title: Contours and geometric features
+      content: >-
+        ### Why is this topic needed?
+
+        After the mask, the pixels can be converted into areas with area,
+        perimeter and box.
+
+        ### Intuitive explanation
+
+        Contour — a line around a connected area; geometry compresses pixels
+        into measurements.
+
+        ### What happens at runtime
+
+        A contour is a sequence of points that describes the boundary of a
+        connected region on a binary mask. findContours returns points and a
+        hierarchy, but does not know which contour is the desired object. Area,
+        Perimeter, Bounding Rectangle, and Approximate Polygon transform a shape
+        into numeric attributes that can be used to filter areas.
+
+        ### Minimal code example
+
+        ```python
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE)
+
+        objects = []
+
+        for contour in contours:
+            if cv2.contourArea(contour) >= 100:
+                x, y, w, h = cv2.boundingRect(contour)
+                objects.append((x, y, w, h))
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - RETR_EXTERNAL takes external contours if internal holes are not
+        needed.
+
+        - CHAIN_APPROX_SIMPLE squeezes extra points on straight lines.
+
+        - contourArea helps discard noisy small areas.
+
+        - boundingRect gives a rough geometry, but not a rotated box.
+
+        - The area threshold depends on the size of the image and the distance
+        to the object.
+
+        ### Try to predict
+
+        Why does RETR_EXTERNAL skip internal contours? Why area filter?
+
+        ### How behavior changes
+
+        Check for tangent objects, holes, contours at the edge of the frame, and
+        noise points. Do not compare areas without an agreed scale. If the
+        objects overlap, one contour can describe several physical objects.
+
+        ### Typical mistakes of a beginner
+
+        Consider contour classifier; do not check an empty list; confuse x/y.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE)
+
+        objects = []
+
+        for contour in contours:
+            if cv2.contourArea(contour) >= 100:
+                x, y, w, h = cv2.boundingRect(contour)
+                objects.append((x, y, w, h))
+        ```**Why this is here:** Area filtering turns a raw set of contours into
+        candidates. In the exercise, change the threshold and check which real
+        objects disappear by mistake.
+
+        **What to change yourself:** Start with geometry and only then add a
+        complex model.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why does the
+        findContours result need to be further filtered?","options":["It always
+        returns exactly one contour","Contours can describe noise or unwanted
+        areas","Contours have no coordinates","To convert them to
+        audio"],"answer":1,"explanation":"The algorithm finds the geometric
+        boundaries of the mask, but does not know the semantics of the desired
+        object."}
+
+        ```
+
+
+        ### Summary
+
+        A contour gives a geometry, not a semantic name.
+  - title: Signs and a simple comparison
+    key: oznaky-i-proste-porivnyannya
+    description: determine the signs | explain scale | notice erratic measurements
+    order: 8
+    exerciseFocus: "compare two objects by two features"
+    theory:
+      title: Signs and a simple comparison
+      content: >-
+        ### Why is this topic needed?
+
+        For a complex model, it is necessary to understand how an object's
+        property becomes a numerical feature.
+
+        ### Intuitive explanation
+
+        Feature is a dimension that helps to compare objects: area, aspect
+        ratio, color.
+
+        ### What happens at runtime
+
+        A feature is a compact representation of an image property: histogram,
+        outline, local descriptor, or embedding. The comparison makes sense only
+        for consistent representations: the same preprocessing, channel order,
+        and distance scale. Histogram distance can be a useful baseline, but
+        does not take into account the spatial arrangement of pixels.
+
+        ### Minimal code example
+
+        ```python
+
+        x, y, w, h = cv2.boundingRect(contour)
+
+        area = float(cv2.contourArea(contour))
+
+        aspect_ratio = w / h if h else 0.0
+
+        features = {'area': area, 'aspect_ratio': aspect_ratio}
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - First, determine what difference the feature should see.
+
+        - Normalization of the histogram removes the dependence on the number of
+        pixels.
+
+        - Selecting distance changes the meaning of the word "similarity".
+
+        - Baseline and threshold tested on examples are required.
+
+        - For more complex problems, a model can be built, but the evaluation
+        remains.
+
+        ### Try to predict
+
+        Why does the same object have a different area from afar? Which sign can
+        be more stable?
+
+        ### How behavior changes
+
+        Check a single object while changing lighting, rotation, scale and
+        background. Measure false positives and false negatives, not just one
+        score. A close histogram is not proof of identity.
+
+        ### Typical mistakes of a beginner
+
+        Compare different scales; select the threshold for the test; confuse
+        feature and class.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        x, y, w, h = cv2.boundingRect(contour)
+
+        area = float(cv2.contourArea(contour))
+
+        aspect_ratio = w / h if h else 0.0
+
+        features = {'area': area, 'aspect_ratio': aspect_ratio}
+
+        ```**Why this is here:** The snippet shows the complete build →
+        normalize → compare path. In the exercise, form positive and negative
+        pairs and select the threshold based on the data.
+
+        **What to change yourself:** Save the feature table and look at the
+        min/max and outliers to the rule.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What must be consistent
+        for comparing histograms?","options":["File name only","Preprocessing,
+        bins and normalization","Python file size only","Client programming
+        language"],"answer":1,"explanation":"Different bins or scales can change
+        the distance even before the actual similarity assessment."}
+
+        ```
+
+
+        ### Summary
+
+        Traits are measurable properties, not ready-made classes.
+  - title: Classification, detection and segmentation
+    key: classification-detection-i-segmentation
+    description: distinguish CV tasks | read confidence | form an output contract
+    order: 9
+    exerciseFocus: "match the three tasks with their output"
+    theory:
+      title: Classification, detection and segmentation
+      content: >-
+        ### Why is this topic needed?
+
+        These tasks answer different questions and have different outputs.
+
+        ### Intuitive explanation
+
+        Classification says what, detection — what and where, segmentation —
+        which pixels.
+
+        ### What happens at runtime
+
+        These problems differ in the form of the answer. Classification
+        corresponds to what is in the whole image; detection adds several
+        bounding boxes and class/score; segmentation returns a pixel-level mask.
+        One frame can go through different pipelines depending on the desired
+        solution. Confidence is an estimate of the model, not the truth.
+
+        ### Minimal code example
+
+        ```python
+
+        prediction = {'label': 'cat', 'confidence': 0.91, 'box': [42, 18, 180,
+        210]}
+
+        if prediction['confidence'] >= 0.8:
+            print(prediction['label'], prediction['box'])
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Define the forecast unit: frame, object or pixel.
+
+        - For detection, the coordinates are tied to the size of the original
+        frame.
+
+        - The confidence threshold changes the number of missed and false
+        objects.
+
+        - NMS removes box duplicates, but does not fix the wrong class.
+
+        - Segmentation needs a clear rule for converting a mask into an action.
+
+        ### Try to predict
+
+        What output is required for the area of the object? Why doesn't 0.51
+        mean 51% correct?
+
+        ### How behavior changes
+
+        Check out an empty scene, multiple objects, overlaps, a small object,
+        and different aspect ratios. Do not compare classification accuracy with
+        IoU without explaining what exactly is being measured. Human review
+        procedure is required for important decisions.
+
+        ### Typical mistakes of a beginner
+
+        Compare only accuracy; ignore false positives; do not fix the threshold.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        prediction = {'label': 'cat', 'confidence': 0.91, 'box': [42, 18, 180,
+        210]}
+
+        if prediction['confidence'] >= 0.8:
+            print(prediction['label'], prediction['box'])
+        ```**Why this is here:** Even a simplified detection result has a class,
+        score and coordinates. The decision to display or act should not be
+        hidden inside the model.
+
+        **What to change yourself:** Describe the desired JSON output before
+        selecting the algorithm.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Which answer best
+        describes segmentation?","options":["One label for the entire
+        frame","Bounding box for each candidate","A mask indicating the
+        ownership of pixels","Average image color
+        only"],"answer":2,"explanation":"Segmentation returns a spatially
+        detailed representation, usually a pixel-level mask."}
+
+        ```
+
+
+        ### Summary
+
+        The statement of the problem defines the model, output and metric.
+  - title: Evaluation and responsible use
+    key: otsinyuvannya-i-vidpovidalne-vykorystannya
+    description: distinguish precision/recall | read errors | name restrictions
+    order: 10
+    exerciseFocus: "find a weak class in a small report"
+    theory:
+      title: Evaluation and responsible use
+      content: >-
+        ### Why is this topic needed?
+
+        An average metric can hide a failure on a rare class or a new light.
+
+        ### Intuitive explanation
+
+        Metric is a measurement on a selected set, not a guarantee of every real
+        situation.
+
+        ### What happens at runtime
+
+        Evaluation begins with identifying the error that is truly important to
+        the problem. Confusion matrix, precision and recall are used for
+        classification; IoU is added for detection, and mask overlap is added
+        for segmentation. The data should be divided so that the test cases are
+        not almost copies of the training ones. The metric does not eliminate
+        bias, privacy, and human control.
+
+        ### Minimal code example
+
+        ```python
+
+        from sklearn.metrics import classification_report
+
+        y_true = ['cat', 'dog', 'cat']
+
+        y_pred = ['cat', 'cat', 'cat']
+
+        print(classification_report(y_true, y_pred, zero_division=0))
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Ground truth is determined before calculating the metric.
+
+        - Precision describes the reliability of positive triggers.
+
+        - Recall shows how many real cases the system missed.
+
+        - IoU compares the intersection and union of the predicted and correct
+        region.
+
+        - The threshold of the model is chosen according to the cost of errors,
+        and not only according to accuracy.
+
+        ### Try to predict
+
+        Why can cat always have high accuracy? When is recall more important
+        than precision?
+
+        ### How behavior changes
+
+        Check for class imbalance, camera change, lighting, subgroups and drift
+        after launch. Do not use test data to select a threshold. For personal
+        images, determine in advance the purpose, storage period, access and the
+        possibility of appeal.
+
+        ### Typical mistakes of a beginner
+
+        Evaluate on train; select threshold on test; hide uncertainty and bias.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from sklearn.metrics import classification_report
+
+        y_true = ['cat', 'dog', 'cat']
+
+        y_pred = ['cat', 'cat', 'cat']
+
+        print(classification_report(y_true, y_pred, zero_division=0))
+
+        ```**Why this is here:** Even a simple precision calculation forces you
+        to call what is considered a false positive. In a real assessment,
+        include recall, subgroup cuts, and error examples, rather than just one
+        number.
+
+        **What to change yourself:** Check the number of metrics and specific
+        false positives/negatives.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does recall
+        measure?","options":["The proportion of found positive cases among all
+        true positives","Image size in bytes","Average frame brightness","The
+        number of model lines"],"answer":0,"explanation":"Recall shows how many
+        real positive cases the system did not miss."}
+
+        ```
+
+
+        ### Summary
+
+        CV is about data, pipeline, metrics and accountability, not just a model
+        call.
+  - title: "CV: NumPy shape, dtype and image memory"
+    key: cv-numpy-shape-dtype-i-pam-yat-zobrazhennya
+    description: read shape and dtype | distinguish HWC from CHW | evaluate array memory
+    order: 11
+    exerciseFocus: "check shape, dtype and range before image processing"
+    theory:
+      title: "CV: NumPy shape, dtype and image memory"
+      content: |-
+        ### Why is this topic needed?
+        OpenCV returns the image as a NumPy array. A mistake in axis order or dtype can mess up the entire pipeline, even if the code is syntactically correct.
+
+        ### Intuitive explanation
+        The image is a table of cells: height, width, and channels. `shape` describes the shelves, `dtype` is the size of each cell, and value is the intensity.
+
+        ### What happens at runtime
+        For a color BGR image, OpenCV typically has shape `(height, width, 3)` and `uint8` in the range 0–255. Converting to float32 changes the memory and allows normalization, but does not change the number of pixels.
+
+        ### Minimal code example
+        ```python
+        import numpy as np
+
+        image = np.zeros((2, 3, 3), dtype=np.uint8)
+        print(image.shape)
+        print(image.dtype)
+        print(int(image.nbytes))
+        ```
+
+        ### Explanation of each line of the example
+        `zeros` produces a 2×3 black image with three channels. `uint8` takes one byte per value, so `nbytes` is 18. Such checks are cheap and immediately catch incorrect input.
+
+        ### Try to predict
+        What shape will be in grayscale `(2, 3)`? What will change in nbytes after `.astype(np.float32)`?
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"What does the third axis `(height, width, 3)` describe?","code":"import numpy as np\n\nimage = np.zeros((2, 3, 3), dtype=np.uint8)\nprint(image.shape)\nprint(image.dtype)\nprint(int(image.nbytes))","options":["Color channels of each pixel","Number of model classes","Number of video frames"],"answer":0,"explanation":"The third axis contains the value of the channels; in BGR, the image has three channels."}
+        ```
+
+        ### How behavior changes
+        Normalization `/ 255.0` usually casts dtype to float. If you pass a float where the API expects a uint8, the algorithm may change the result or fail.
+
+        ### Typical mistakes of a beginner
+        confuse width and height; consider RGB instead of BGR; ignore dtype; normalize twice; copy large arrays without memory estimation.
+
+        ### In practice
+        ```python
+        import numpy as np
+
+        image = np.zeros((2, 3, 3), dtype=np.uint8)
+        print(image.shape)
+        print(image.dtype)
+        print(int(image.nbytes))
+        ```**Why this fragment:** The fragment forms the numeric contract on which all subsequent OpenCV operations rely.
+
+        **What to change yourself:** add shape/dtype checking for grayscale and RGBA and return an understandable error for an empty array.
+
+        ### Interactive self-check
+        First, formulate the prediction in words, then run the example. If the result is different, compare the input, the state, and the moment the response is generated.
+
+        ### Summary
+        Check shape, dtype, channel order, range and memory footprint before CV algorithm.
+  - title: "CV: histograms and contrast"
+    key: cv-histohramy-ta-kontrast
+    description: to build a histogram of intensities | distinguish between global
+      and local contrast | do not confuse histogram with spatial information
+    order: 12
+    exerciseFocus: "compare the distribution of intensities before and after the
+      contrast operation"
+    theory:
+      title: "CV: histograms and contrast"
+      content: >-
+        ### Why is this topic needed?
+
+        Two images can have a similar histogram but different locations of
+        objects. A histogram is useful for diagnosing lighting, but is not a
+        complete description of the scene.
+
+        ### Intuitive explanation
+
+        A histogram is a list of counters: how many pixels each brightness level
+        has. It does not know exactly where the pixel lies.
+
+        ### What happens at runtime
+
+        `cv2.calcHist` or `np.histogram` counts bins. Contrast stretching uses
+        min/max, and equalization changes intensity mapping. Check for noise and
+        glare before choosing an operation.
+
+        ### Minimal code example
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        gray = np.array([[0, 0, 100], [100, 200, 255]], dtype=np.uint8)
+
+        hist, _ = np.histogram(gray, bins=4, range=(0, 256))
+
+        print(hist.tolist())
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The array contains six pixels. Four bins divide the range 0–255 into
+        intervals; the result shows the distribution but not the coordinates. In
+        a real problem, the same bins and preprocessing are needed for a fair
+        comparison.
+
+        ### Try to predict
+
+        Will this histogram distinguish a checkerboard from an image with the
+        same pixels lined up?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does the histogram
+        not store?","code":"import cv2\nimport numpy as np\n\ngray =
+        np.array([[0, 0, 100], [100, 200, 255]], dtype=np.uint8)\nhist, _ =
+        np.histogram(gray, bins=4, range=(0,
+        256))\nprint(hist.tolist())","options":["Spatial arrangement of
+        pixels","Number of pixels in bins","Range of
+        intensities"],"answer":0,"explanation":"Histogram compresses the spatial
+        structure to a distribution of values."}
+
+        ```
+
+
+        ### How behavior changes
+
+        An empty or overexposed frame has a characteristic distribution.
+        Equalization can increase noise, so the result should be evaluated on
+        representative data.
+
+        ### Typical mistakes of a beginner
+
+        compare different bins; draw a conclusion about the form from the
+        histogram; ignore clipping; use a contrast operation without visual and
+        numerical control.
+
+        ### In practice
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        gray = np.array([[0, 0, 100], [100, 200, 255]], dtype=np.uint8)
+
+        hist, _ = np.histogram(gray, bins=4, range=(0, 256))
+
+        print(hist.tolist())
+
+        ```**Why this snippet:** the small array allows you to manually check
+        each bin and understand exactly what is being measured.
+
+        **What to change yourself:** make two matrices with the same histogram,
+        but different geometry, and explain why the histogram does not
+        distinguish between them.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        A histogram is a powerful tool for diagnosing intensities, but it does
+        not replace spatial features.
+  - title: "CV: morphological operations and structural element"
+    key: cv-morfolohichni-operatsii-ta-strukturnyy-element
+    description: apply erosion and dilation | explain kernel | choose opening or
+      closing for noise
+    order: 13
+    exerciseFocus: "change the binary mask to a small kernel and explain the effect"
+    theory:
+      title: "CV: morphological operations and structural element"
+      content: >-
+        ### Why is this topic needed?
+
+        After the threshold, the mask often has small noise or small gaps.
+        Morphology changes the shape of the foreground according to neighborhood
+        rules.
+
+        ### Intuitive explanation
+
+        Kernel is a small window that moves around the mask. Erosion compresses
+        light areas, dilation expands; combinations remove noise or close gaps.
+
+        ### What happens at runtime
+
+        `cv2.erode` leaves the foreground pixel only when the neighborhood
+        matches the rule, `dilate` expands the area. Opening = erosion→dilation,
+        closing = dilation→erosion. The size of the kernel affects the details.
+
+        ### Minimal code example
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        mask = np.array([[0, 255, 0], [255, 255, 255], [0, 255, 0]],
+        dtype=np.uint8)
+
+        kernel = np.ones((3, 3), dtype=np.uint8)
+
+        eroded = cv2.erode(mask, kernel, iterations=1)
+
+        print(int(eroded.sum()))
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The cross has a foreground in the center, but the 3×3 kernel requires a
+        full neighborhood for erosion, so the area is compressed. `iterations`
+        repeats the operation and increases the effect.
+
+        ### Try to predict
+
+        What will happen to the area after dilation? Why can a large kernel
+        erase a fine line?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What combination
+        removes the small light noise?","code":"import cv2\nimport numpy as
+        np\n\nmask = np.array([[0, 255, 0], [255, 255, 255], [0, 255, 0]],
+        dtype=np.uint8)\nkernel = np.ones((3, 3), dtype=np.uint8)\neroded =
+        cv2.erode(mask, kernel,
+        iterations=1)\nprint(int(eroded.sum()))","options":["Opening: erosion
+        then dilation","Only changing the color space","Increase JPEG
+        quality"],"answer":0,"explanation":"Opening first removes small areas of
+        erosion, and then returns the shape of the main dilation objects."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Kernel has the form and anchor; changing 3×3 to 5×5 can remove useful
+        details. Compare the before/after mask and the foreground score.
+
+        ### Typical mistakes of a beginner
+
+        apply morphology to non-binary data for no reason; choose a kernel at
+        random; confuse opening and closing; do not check border behavior.
+
+        ### In practice
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        mask = np.array([[0, 255, 0], [255, 255, 255], [0, 255, 0]],
+        dtype=np.uint8)
+
+        kernel = np.ones((3, 3), dtype=np.uint8)
+
+        eroded = cv2.erode(mask, kernel, iterations=1)
+
+        print(int(eroded.sum()))
+
+        ```**Why this snippet:** a small mask makes the causal relationship
+        between neighborhood and area change visible without a complex model.
+
+        **What to change yourself:** compare the opening and closing on the mask
+        with the hole and a separate noise point.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Morphology is a controlled change in mask geometry; kernel and the order
+        of operations are part of the algorithmic contract.
+  - title: "CV: template matching and its limitations"
+    key: cv-template-matching-i-yoho-obmezhennya
+    description: find the template in the image | read score and coordinates |
+      explain sensitivity to scale and rotation
+    order: 14
+    exerciseFocus: "find a simple pattern on a synthetic image and check the threshold score"
+    theory:
+      title: "CV: template matching and its limitations"
+      content: >-
+        ### Why is this topic needed?
+
+        Template matching is useful for simple stable scenes, but often breaks
+        when scaling, rotating, or lighting.
+
+        ### Intuitive explanation
+
+        The algorithm slides the template over the frame and evaluates how
+        similar the local window is to the template. It's not understanding the
+        object, it's comparing pixels.
+
+        ### What happens at runtime
+
+        `cv2.matchTemplate` returns a score map and `cv2.minMaxLoc` finds the
+        best position. Threshold determines when a score is sufficient, but it
+        needs to be calibrated on positive and negative examples.
+
+        ### Minimal code example
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        image = np.zeros((20, 20), dtype=np.uint8)
+
+        template = np.ones((3, 3), dtype=np.uint8) * 255
+
+        image[8:11, 12:15] = template
+
+        result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
+
+        _, score, _, point = cv2.minMaxLoc(result)
+
+        print(round(float(score), 2), point)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The synthetic frame contains an exact copy of the template. Result has a
+        smaller size, because the template cannot go outside the frame. `point`
+        is the top left corner of the best match, and score is not the class
+        probability.
+
+        ### Try to predict
+
+        How will the score change if the template is increased and the area in
+        the image is left as it is?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is a typical
+        limitation of template matching?","code":"import cv2\nimport numpy as
+        np\n\nimage = np.zeros((20, 20), dtype=np.uint8)\ntemplate = np.ones((3,
+        3), dtype=np.uint8) * 255\nimage[8:11, 12:15] = template\nresult =
+        cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)\n_, score, _,
+        point = cv2.minMaxLoc(result)\nprint(round(float(score), 2),
+        point)","options":["Sensitivity to scale, rotation and
+        lighting","Absence of any numerical score","Unable to work with
+        NumPy"],"answer":0,"explanation":"Pixel-level comparison does not have
+        the invariance of a more complex model."}
+
+        ```
+
+
+        ### How behavior changes
+
+        One threshold does not guarantee quality in different cameras. Multiple
+        matches require local maxima and suppression, and scale changes require
+        an image pyramid or other approach.
+
+        ### Typical mistakes of a beginner
+
+        call score confidence; take the first maximum without threshold; do not
+        check the size of the template; test only the ideal synthetic case.
+
+        ### In practice
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        image = np.zeros((20, 20), dtype=np.uint8)
+
+        template = np.ones((3, 3), dtype=np.uint8) * 255
+
+        image[8:11, 12:15] = template
+
+        result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
+
+        _, score, _, point = cv2.minMaxLoc(result)
+
+        print(round(float(score), 2), point)
+
+        ```**Why this fragment:** synthetic example makes the coordinates and
+        score reproducible, and not dependent on a random photo.
+
+        **What to change yourself:** add a negative frame, change the lighting
+        and fix the threshold along with false positive and false negative.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Template matching is a transparent baseline for stable templates, but
+        its limits must be measured on the data.
+  - title: "CV: video stream, frames and backpressure"
+    key: cv-videopotik-kadry-ta-backpressure
+    description: read video frames | correctly process the end of the stream | do
+      not accumulate an unlimited queue of frames
+    order: 15
+    exerciseFocus: "process every available frame and complete the loop without hanging"
+    theory:
+      title: "CV: video stream, frames and backpressure"
+      content: >-
+        ### Why is this topic needed?
+
+        A video is a sequence of images over time. Errors in lifecycle capture
+        or queuing can lead to resource leaks or lag behind the live stream.
+
+        ### Intuitive explanation
+
+        The camera is a conveyor. If the processor is slower than the source,
+        the queue grows. For live UX, it is sometimes better to skip the old
+        frame than to show the result with a long delay.
+
+        ### What happens at runtime
+
+        `VideoCapture.read()` returns success and frame. The loop should stop at
+        `not ok', the resources should be released, and the writer should be
+        closed. For live processing, the sampling/backpressure policy must be
+        explicit.
+
+        ### Minimal code example
+
+        ```python
+
+        import cv2
+
+        cap = cv2.VideoCapture("sample.mp4")
+
+        frames = 0
+
+        while frames < 3:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frames += 1
+        cap.release()
+
+        print(frames)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Capture may not open or end before three frames, so `ok` is checked
+        before using frame. `release()` releases the native resource even after
+        the loop is finished.
+
+        ### Try to predict
+
+        What happens if you ignore `ok' and pass an empty frame to cvtColor?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is important to
+        complete a video stream?","code":"import cv2\n\ncap =
+        cv2.VideoCapture(\"sample.mp4\")\nframes = 0\nwhile frames < 3:\n    ok,
+        frame = cap.read()\n    if not ok:\n        break\n    frames +=
+        1\ncap.release()\nprint(frames)","options":["Check success/read and
+        release capture","Always wait for an infinite loop","Store all frames in
+        RAM"],"answer":0,"explanation":"Resource state can change, so the loop
+        and resource cleanup must be explicit."}
+
+        ```
+
+
+        ### How behavior changes
+
+        The file has an end, the camera may be unavailable, and the live stream
+        may temporarily lose a frame. In production, timeout, reconnect policy
+        and a limited queue are required.
+
+        ### Typical mistakes of a beginner
+
+        do not check ok; do not cause release; accumulate all frames; block UI
+        with long inference; do not log frame rate and dropped frames.
+
+        ### In practice
+
+        ```python
+
+        import cv2
+
+        cap = cv2.VideoCapture("sample.mp4")
+
+        frames = 0
+
+        while frames < 3:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frames += 1
+        cap.release()
+
+        print(frames)
+
+        ```**Why this fragment:** The fragment with a limit of three frames is
+        deterministic and shows a lifecycle without dependence on an infinite
+        live server.
+
+        **What to change yourself:** add a dropped frames counter and compare
+        "process all" and "take newest frame" policies.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Video processing is not only a frame algorithm, but also source
+        lifecycle, tempo, queue and cleanup.
+  - title: "CV: optical flow and tracking baseline"
+    key: cv-optychnyy-potik-i-tracking-baseline
+    description: distinguish tracking from detection | explain motion vectors |
+      estimate the point loss
+    order: 16
+    exerciseFocus: "track controlled points between two frames and process status"
+    theory:
+      title: "CV: optical flow and tracking baseline"
+      content: >-
+        ### Why is this topic needed?
+
+        Detection looks for objects anew, and tracking transfers information
+        between frames. The choice affects speed, stability, and behavior when
+        an object disappears.
+
+        ### Intuitive explanation
+
+        Imagine putting little flags on the texture points. Optical flow looks
+        for where each flag has moved between adjacent frames.
+
+        ### What happens at runtime
+
+        Lucas–Kanade retrieves the previous points, the new frame, and returns
+        the new coordinates with status/error. Bad points are discarded; if the
+        majority of points are lost, the pipeline can start detection again.
+
+        ### Minimal code example
+
+        ```python
+
+        import numpy as np
+
+        old = np.array([[[10., 10.]], [[20., 10.]]], dtype=np.float32)
+
+        new = old + np.array([[[2., 1.]], [[2., 1.]]], dtype=np.float32)
+
+        status = np.array([[1], [0]], dtype=np.uint8)
+
+        tracked = new[status.ravel() == 1]
+
+        print(tracked.reshape(-1, 2).tolist())
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Arrays simulate the result of tracker without camera. `status` tells
+        which points are acceptable. Working with all new points without a mask
+        is a mistake, because a lost point can spoil the geometry.
+
+        ### Try to predict
+
+        How many points will remain after status `[1, 0]`? Why should a tracker
+        have a re-detection policy?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does the status do
+        in the tracking result?","code":"import numpy as np\n\nold =
+        np.array([[[10., 10.]], [[20., 10.]]], dtype=np.float32)\nnew = old +
+        np.array([[[2., 1.]], [[2., 1.]]], dtype=np.float32)\nstatus =
+        np.array([[1], [0]], dtype=np.uint8)\ntracked = new[status.ravel() ==
+        1]\nprint(tracked.reshape(-1, 2).tolist())","options":["Indicates which
+        motion estimates can be used","Changes BGR to RGB","Describes the object
+        class"],"answer":0,"explanation":"Status is the validity of a single
+        tracked point, not a semantic label."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Loss of texture, blur and occlusion reduce the number of valid points. A
+        robust pipeline controls quality, rather than accumulating false
+        coordinates.
+
+        ### Typical mistakes of a beginner
+
+        confuse tracking with classification; ignore status/error; do not delete
+        lost points; not have re-detection or reset.
+
+        ### In practice
+
+        ```python
+
+        import numpy as np
+
+        old = np.array([[[10., 10.]], [[20., 10.]]], dtype=np.float32)
+
+        new = old + np.array([[[2., 1.]], [[2., 1.]]], dtype=np.float32)
+
+        status = np.array([[1], [0]], dtype=np.uint8)
+
+        tracked = new[status.ravel() == 1]
+
+        print(tracked.reshape(-1, 2).tolist())
+
+        ```**Why this fragment:** artificial coordinates allow you to check the
+        validity mask before connecting real video.
+
+        **What to change yourself:** add a minimum threshold for the number of
+        valid points and a script that restarts the search.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Tracking saves computation, but requires validation and loss recovery.
+  - title: "CV: camera calibration and distortion"
+    key: cv-camera-calibration-i-distortion
+    description: explain intrinsic parameters | estimate distortion | understand the
+      role of calibration images
+    order: 17
+    exerciseFocus: "apply calibration data to correct geometry and check reprojection error"
+    theory:
+      title: "CV: camera calibration and distortion"
+      content: >-
+        ### Why is this topic needed?
+
+        The camera distorts geometry: straight lines can bend, and measurements
+        at the edges of the frame can be wrong. Calibration makes these
+        parameters explicit.
+
+        ### Intuitive explanation
+
+        A camera is a lens with projection rules. Calibration finds the
+        parameters of this rule using a known checkerboard, and undistort
+        corrects the frame.
+
+        ### What happens at runtime
+
+        According to the correspondence between 3D chessboard points and 2D
+        image points, `calibrateCamera` evaluates the camera matrix and
+        distortion coefficients. Quality is checked by reprojection error and a
+        variety of angles.
+
+        ### Minimal code example
+
+        ```python
+
+        import numpy as np
+
+        object_points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+        dtype=np.float32)
+
+        image_points = np.array([[10, 10], [20, 10], [10, 20]],
+        dtype=np.float32)
+
+        print(object_points.shape, image_points.shape)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Three 3D points and three 2D correspondences have different final sizes
+        but the same number of correspondences. Real calibration needs more
+        points and several frames; the example shows the data form.
+
+        ### Try to predict
+
+        Is one perfect frame enough for a stable calibration? What does
+        reprojection error show?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why do you need
+        different angles of the chessboard?","code":"import numpy as
+        np\n\nobject_points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+        dtype=np.float32)\nimage_points = np.array([[10, 10], [20, 10], [10,
+        20]], dtype=np.float32)\nprint(object_points.shape,
+        image_points.shape)","options":["So that the parameters were determined
+        by various geometrical observations","To increase the brightness of the
+        image","To replace distortion with
+        segmentation"],"answer":0,"explanation":"Uniform correspondences give a
+        weakly defined model and are poorly generalizable."}
+
+        ```
+
+
+        ### How behavior changes
+
+        A low error on calibration images does not guarantee quality on other
+        resolutions or focuses. Check individual frames and terms of use.
+
+        ### Typical mistakes of a beginner
+
+        calibrate at one angle; mix resolution; ignore coordinate order;
+        estimate only the average without visual inspection.
+
+        ### In practice
+
+        ```python
+
+        import numpy as np
+
+        object_points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+        dtype=np.float32)
+
+        image_points = np.array([[10, 10], [20, 10], [10, 20]],
+        dtype=np.float32)
+
+        print(object_points.shape, image_points.shape)
+
+        ```**Why exactly this fragment:** controlled arrays form the right
+        thinking about correspondence to the complex OpenCV API.
+
+        **What to change yourself:** generate a synthetic distortion, build an
+        error metric and explain why the data from different angles is better.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Calibration is an evaluation of the camera's geometric model; diverse
+        data and independent verification are critical.
+  - title: "CV: data augmentation and reproducibility"
+    key: cv-data-augmentation-i-reproducibility
+    description: create controlled image variations | fix random seed | prevent
+      leakage between train and test
+    order: 18
+    exerciseFocus: "generate reproducible transformations and save the correct labels"
+    theory:
+      title: "CV: data augmentation and reproducibility"
+      content: >-
+        ### Why is this topic needed?
+
+        A model can learn a random artifact instead of a feature. Augmentation
+        helps generalization only when the transformation corresponds to real
+        variability.
+
+        ### Intuitive explanation
+
+        You show the student the same rules in different settings: if the
+        background has changed, but the object remains, the label is preserved;
+        if the object is returned and it changes the class, the label must be
+        revised.
+
+        ### What happens at runtime
+
+        Pipeline applies deterministic seed in tests, fixes the version of
+        transformations and splits datasets before augmentation. For
+        detection/segmentation, boxes/masks need to be transformed along with
+        the image.
+
+        ### Minimal code example
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        image = np.arange(9, dtype=np.uint8).reshape(3, 3)
+
+        flipped = cv2.flip(image, 1)
+
+        print(flipped.tolist())
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Flip changes the coordinates horizontally, so for the bounding box you
+        need to change the x-coordinates as well. A simple array makes the
+        transformation repeatable and allows you to check the label mapping.
+
+        ### Try to predict
+
+        What part of the box `[x, y, w, h]' changes with a horizontal flip of
+        width W?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What can not be done
+        with the test set?","code":"import cv2\nimport numpy as np\n\nimage =
+        np.arange(9, dtype=np.uint8).reshape(3, 3)\nflipped = cv2.flip(image,
+        1)\nprint(flipped.tolist())","options":["Select augmentation/threshold
+        on his answers and then call the assessment independent","Check the
+        final quality once","Keep it separate from
+        train"],"answer":0,"explanation":"The test set must remain independent
+        for fair evaluation of generalization."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Random augmentation without seed makes it difficult to debug. Excessive
+        augmentation can create unrealistic examples and reduce quality.
+
+        ### Typical mistakes of a beginner
+
+        do augmentation before split; do not transform labels; use test for
+        threshold tuning; do not fix seed in regression tests.
+
+        ### In practice
+
+        ```python
+
+        import cv2
+
+        import numpy as np
+
+        image = np.arange(9, dtype=np.uint8).reshape(3, 3)
+
+        flipped = cv2.flip(image, 1)
+
+        print(flipped.tolist())
+
+        ```**Why this fragment:** flip demonstrates that image transform changes
+        not only pixels, but also geometric labels.
+
+        **What to change yourself:** implement a box transformation for flip and
+        check it for box near the left and right edges.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Quality augmentation is controlled, reproducible and consistent with
+        labels and real conditions.
+  - title: "CV: batch processing and pipeline quality gates"
+    key: cv-batch-processing-i-pipeline-quality-gates
+    description: process the directory deterministically | isolate single file
+      errors | form summary metrics
+    order: 19
+    exerciseFocus: "run the batch without crashing the entire pipeline due to one
+      damaged file"
+    theory:
+      title: "CV: batch processing and pipeline quality gates"
+      content: >-
+        ### Why is this topic needed?
+
+        Miniproject does not process one perfect frame, but a set with gaps,
+        broken files and different sizes. Pipeline reliability is part of the
+        result.
+
+        ### Intuitive explanation
+
+        Batch is a sorting pipeline: one bad letter shouldn't stop all the
+        others, but it should end up in the error report.
+
+        ### What happens at runtime
+
+        The list of files is sorted for stability, each decode is checked, the
+        result is recorded atomically, and the summary counts
+        processed/failed/skipped. Logs should not contain personal data from the
+        image.
+
+        ### Minimal code example
+
+        ```python
+
+        from pathlib import Path
+
+        files = sorted(Path("samples").glob("*.png"))
+
+        summary = {"processed": 0, "failed": 0}
+
+        for path in files:
+            try:
+                if path.stat().st_size == 0:
+                    raise ValueError("empty file")
+                summary["processed"] += 1
+            except (OSError, ValueError):
+                summary["failed"] += 1
+        print(summary)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `sorted` makes the order reproducible. `stat` is just an example of a
+        quality gate; decode via `cv2.imread' should also be checked for `None'.
+        A single file error increments failed, but the cycle continues.
+
+        ### Try to predict
+
+        What happens if `Path.glob` returns a zero size file? Why is summary
+        necessary even with exit code 0?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What should batch do
+        with broken input?","code":"from pathlib import Path\n\nfiles =
+        sorted(Path(\"samples\").glob(\"*.png\"))\nsummary = {\"processed\": 0,
+        \"failed\": 0}\nfor path in files:\n    try:\n        if
+        path.stat().st_size == 0:\n            raise ValueError(\"empty
+        file\")\n        summary[\"processed\"] += 1\n    except (OSError,
+        ValueError):\n        summary[\"failed\"] +=
+        1\nprint(summary)","options":["Record the file as failed and continue if
+        the policy allows it","Silently mark it as processed","Delete all batch
+        results"],"answer":0,"explanation":"Error isolation and an explicit
+        summary make the pipeline manageable."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Policy can require non-zero exit if failed > 0, or allow partial
+        success. This should be fixed in the acceptance criteria and not decided
+        randomly.
+
+        ### Typical mistakes of a beginner
+
+        process files in a non-deterministic order; swallow exception without
+        summary; overwrite output partially; have no input size limit.
+
+        ### In practice
+
+        ```python
+
+        from pathlib import Path
+
+        files = sorted(Path("samples").glob("*.png"))
+
+        summary = {"processed": 0, "failed": 0}
+
+        for path in files:
+            try:
+                if path.stat().st_size == 0:
+                    raise ValueError("empty file")
+                summary["processed"] += 1
+            except (OSError, ValueError):
+                summary["failed"] += 1
+        print(summary)
+
+        ```**Why exactly this fragment:** the example teaches to build a quality
+        gate around the CV, and not to consider the mere fact of the absence of
+        a crash as a success.
+
+        **What to change yourself:** add separate processed/failed/skipped,
+        atomic output and exit code rule for partial failure.
+
+        ### Interactive self-check
+
+        First, formulate the prediction in words, then run the example. If the
+        result is different, compare the input, the state, and the moment the
+        response is generated.
+
+        ### Summary
+
+        Production-like CV batch should be deterministic, fault-tolerant within
+        the policy and measure the processing quality.

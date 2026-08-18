@@ -10,6 +10,13 @@ import { User } from "../entities/User";
 import { IsNull } from "typeorm";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeFile, JudgeRequest } from "./judgeWorker/types";
+import {
+  localizeCourseItem,
+  localizedCourseMetadata,
+  localizedModuleTitle,
+  localizedPrerequisiteTitle,
+  type CurriculumLocale,
+} from "./curriculumLocalization";
 
 const courseRepo = () => AppDataSource.getRepository(Course);
 const variantRepo = () => AppDataSource.getRepository(CourseVariant);
@@ -18,6 +25,8 @@ const enrollmentRepo = () => AppDataSource.getRepository(UserCourseEnrollment);
 const itemRepo = () => AppDataSource.getRepository(CourseItem);
 const progressRepo = () => AppDataSource.getRepository(CourseItemProgress);
 const taskRepo = () => AppDataSource.getRepository(Task);
+
+type LearningLocale = CurriculumLocale;
 
 function percent(value: unknown): number {
   const n = Number(value ?? 0);
@@ -301,7 +310,7 @@ async function ensureBaseEnrollments(userId: number, baseVariants: CourseVariant
   return Array.from(byVariant.values());
 }
 
-async function getPrerequisiteState(userId: number, courseId: number): Promise<{
+async function getPrerequisiteState(userId: number, courseId: number, locale: LearningLocale = "uk"): Promise<{
   satisfied: boolean;
   prerequisites: Array<{ courseId: number; title: string; requiredCompletionPercent: number; completionPercent: number; status: EnrollmentStatus | null }>;
 }> {
@@ -319,7 +328,7 @@ async function getPrerequisiteState(userId: number, courseId: number): Promise<{
     const enrollment = byCourse.get(dependency.prerequisiteCourseId);
     return {
       courseId: dependency.prerequisiteCourseId,
-      title: dependency.prerequisiteCourse.title,
+      title: localizedPrerequisiteTitle(dependency.prerequisiteCourse.catalogKey, locale, dependency.prerequisiteCourse.title),
       requiredCompletionPercent: percent(dependency.requiredCompletionPercent),
       completionPercent: percent(enrollment?.completionPercent),
       status: enrollment?.status ?? null,
@@ -333,7 +342,7 @@ async function getPrerequisiteState(userId: number, courseId: number): Promise<{
   };
 }
 
-export async function getLearningCatalog(userId: number) {
+export async function getLearningCatalog(userId: number, locale: LearningLocale = "uk") {
   const courses = await courseRepo().find({
     where: { organization: IsNull() },
     relations: ["variants"],
@@ -345,12 +354,13 @@ export async function getLearningCatalog(userId: number) {
   const byVariant = new Map(allEnrollments.map((enrollment) => [enrollment.variantId, enrollment]));
 
   return Promise.all(courses.map(async (course) => {
-    const dependencyState = await getPrerequisiteState(userId, course.id);
+    const dependencyState = await getPrerequisiteState(userId, course.id, locale);
+    const localized = localizedCourseMetadata(course.catalogKey, locale);
     return {
       id: course.id,
       key: course.catalogKey,
-      title: course.title,
-      description: course.description,
+      title: localized?.title ?? course.title,
+      description: localized?.description ?? course.description,
       level: course.level,
       isBase: course.isBase,
       status: course.status,
@@ -383,9 +393,9 @@ export async function getLearningCatalog(userId: number) {
 }
 
 /** Lightweight Personal hub payload. EDU never calls this route. */
-export async function getLearningMe(userId: number) {
+export async function getLearningMe(userId: number, locale: LearningLocale = "uk") {
   const user = await AppDataSource.getRepository(User).findOne({ where: { id: userId } });
-  const catalog = await getLearningCatalog(userId);
+  const catalog = await getLearningCatalog(userId, locale);
   const enrollments = catalog.flatMap((course) => course.variants.flatMap((variant) => variant.enrollment
     ? [{
         enrollmentId: variant.enrollment.id,
@@ -483,7 +493,7 @@ export async function enrollInCourseVariant(userId: number, variantId: number, e
   });
 }
 
-export async function getCourseForUser(userId: number, courseId: number) {
+export async function getCourseForUser(userId: number, courseId: number, locale: LearningLocale = "uk") {
   const course = await courseRepo().findOne({
     where: { id: courseId, organization: IsNull() },
     relations: ["modules", "modules.items", "variants"],
@@ -493,7 +503,7 @@ export async function getCourseForUser(userId: number, courseId: number) {
   const enrollment = await findBestCourseEnrollment(userId, course.id, ["variant"]);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
 
-  const dependencyState = await getPrerequisiteState(userId, course.id);
+  const dependencyState = await getPrerequisiteState(userId, course.id, locale);
   if (!dependencyState.satisfied && !course.isBase) {
     throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), {
       statusCode: 423,
@@ -512,8 +522,8 @@ export async function getCourseForUser(userId: number, courseId: number) {
   return {
     id: course.id,
     key: course.catalogKey,
-    title: course.title,
-    description: course.description,
+    title: localizedCourseMetadata(course.catalogKey, locale)?.title ?? course.title,
+    description: localizedCourseMetadata(course.catalogKey, locale)?.description ?? course.description,
     level: course.level,
     isBase: course.isBase,
     runtime: enrollment.variant.runtime,
@@ -525,21 +535,26 @@ export async function getCourseForUser(userId: number, courseId: number) {
       masteryScore: Number(enrollment.masteryScore ?? 0),
       finalAssessmentPassed: Boolean(enrollment.finalAssessmentPassed),
     },
-    nextAction: nextActionForItems(orderedItems, progressByItem),
+    nextAction: nextActionForItems(orderedItems.map((item) => localizeCourseItem(item, locale)), progressByItem),
     modules: modules.map((module) => ({
       id: module.id,
-      title: module.title,
+      title: localizedModuleTitle(module.contentKey, locale, module.title),
       items: [...(module.items || [])].filter((item) => item.isActive !== false).sort((a, b) => a.order - b.order || a.id - b.id).map((item) => ({
+        ...(() => {
+          const localizedItem = localizeCourseItem(item, locale);
+          return {
         id: item.id,
         kind: item.kind,
-        title: item.title,
+        title: localizedItem.title,
         order: item.order,
-        content: item.content || {},
+        content: localizedItem.content || {},
         progress: progressByItem.get(item.id) ? {
           status: progressByItem.get(item.id)!.status,
           score: progressByItem.get(item.id)!.score ?? null,
           completedAt: progressByItem.get(item.id)!.completedAt ?? null,
         } : { status: "NOT_STARTED" as const, score: null, completedAt: null },
+          };
+        })(),
       })),
     })),
   };
@@ -550,7 +565,7 @@ export async function getCourseForUser(userId: number, courseId: number) {
  * Keeping this check in the catalog service makes the API enforce the same
  * prerequisite/theory gates as the roadmap UI.
  */
-export async function getCoursePracticeContext(userId: number, itemId: number) {
+export async function getCoursePracticeContext(userId: number, itemId: number, locale: LearningLocale = "uk") {
   const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
   if (!item?.module?.course) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
   if (item.kind !== "CODE_TASK") {
@@ -564,7 +579,7 @@ export async function getCoursePracticeContext(userId: number, itemId: number) {
   }
   await assertSequentialAccess(enrollment.id, item.module.course.id, item.id);
 
-  const dependencyState = await getPrerequisiteState(userId, enrollment.courseId);
+  const dependencyState = await getPrerequisiteState(userId, enrollment.courseId, locale);
   if (!dependencyState.satisfied && !item.module.course.isBase) {
     throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), { statusCode: 423, prerequisites: dependencyState.prerequisites });
   }
@@ -583,13 +598,14 @@ export async function getCoursePracticeContext(userId: number, itemId: number) {
   }
 
   const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: item.id } } });
+  const localizedTheoryItem = theoryItem ? localizeCourseItem(theoryItem, locale) : null;
   return {
-    item,
+    item: localizeCourseItem(item, locale),
     course: item.module.course,
     enrollment,
     progress,
-    theoryMarkdown: typeof (theoryItem?.content as any)?.markdown === "string"
-      ? String((theoryItem?.content as any).markdown)
+    theoryMarkdown: typeof (localizedTheoryItem?.content as any)?.markdown === "string"
+      ? String((localizedTheoryItem?.content as any).markdown)
       : "",
   };
 }
@@ -649,13 +665,14 @@ export async function completeCourseItem(
   return recalculateEnrollmentProgress(enrollment);
 }
 
-export async function getCourseProject(userId: number, itemId: number) {
+export async function getCourseProject(userId: number, itemId: number, locale: LearningLocale = "uk") {
   const { item, enrollment, progress } = await getEnrolledItemContext(userId, itemId);
+  const localizedItem = localizeCourseItem(item, locale);
   return {
     itemId: item.id,
     enrollmentId: enrollment.id,
-    projectKey: (item.content as any)?.projectKey || null,
-    projectSpec: projectSpecFor(item),
+    projectKey: (localizedItem.content as any)?.projectKey || null,
+    projectSpec: projectSpecFor(localizedItem),
     progress: projectProgressOrDefault(progress),
     itemStatus: progress?.status || "NOT_STARTED",
   };

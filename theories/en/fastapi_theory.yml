@@ -1,0 +1,3976 @@
+version: 2
+course: fastapi
+language: PYTHON
+description: "A complete FastAPI sequential course: from HTTP and ASGI to typed
+  APIs, DB, security, tests, streaming, WebSockets and a production
+  mini-project."
+topics:
+  - title: "Introduction to FastAPI: HTTP, ASGI, and the API contract"
+    key: vstup-do-fastapi-http-asgi-ta-kontrakt-api
+    description: explain HTTP request path | distinguish between WSGI and ASGI on an
+      intuitive level | create the first endpoint
+    order: 1
+    exerciseFocus: "one GET endpoint with a stable JSON response"
+    theory:
+      title: "Introduction to FastAPI: HTTP, ASGI, and the API contract"
+      content: >-
+        ### Intuitive explanation
+
+        FastAPI is not a "function that runs in the browser", but a bridge
+        between the HTTP client and Python code. The client sends a method, URL,
+        headers, and possibly a body. FastAPI finds the appropriate handler,
+        checks the declared parameters, calls the function, and converts its
+        result into an HTTP response. ASGI adds to this a standard way to handle
+        asynchronous requests and long-lived connections.
+
+        ### What happens at runtime
+
+        When importing a module, a `FastAPI` object is created and the
+        `@app.get` decorator registers a route in the application table. An ASGI
+        server, such as Uvicorn, accepts a network connection and passes it to
+        the application as scope, receive, and send. FastAPI maps the method to
+        the path, prepares the function arguments, and generates the response.
+        The dictionary is returned as JSON, not printed to the console.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI
+
+        app = FastAPI(title="Reading API")
+
+        @app.get("/health")
+
+        def health():
+            return {"status": "ok"}
+        ```Output for the control query:
+
+        ```text
+
+        GET /health
+
+        {"status":"ok"}
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `FastAPI(...)` creates an ASGI application and documentation metadata.
+        `@app.get("/health")` logs the operation for GET requests. The name
+        `health` is a regular Python function called by the framework, not your
+        code manually. The returned dictionary is the response data; FastAPI
+        serializes it and adds HTTP headers.
+
+        ### Try to predict
+
+        Before starting, determine whether the client will see text in the
+        console or JSON in the HTTP response.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the result of a
+        GET /health call?","code":"from fastapi import FastAPI\n\napp =
+        FastAPI(title=\"Reading API\")\n\n@app.get(\"/health\")\ndef
+        health():\n    return {\"status\": \"ok\"}","options":["JSON response
+        {status: ok}","The string is printed via stdout","422, because the
+        endpoint does not read stdin","FastAPI itself runs the function only
+        after /docs is opened"],"answer":0,"explanation":"The client receives a
+        JSON response from route. `print()` is not needed here: the endpoint
+        returns the data to the framework."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Sending a POST instead of a GET will fail the route. Changing `/health`
+        to `/status` will make the old address unavailable. This shows that the
+        method and path are parts of the contract, not comments for the reader.
+
+        ### Typical mistakes of a beginner
+
+        Confuse `return` with `print`; run the module not through the ASGI
+        server; register route after starting the process; consider `/docs` as
+        the API itself; do not fix the method and format of the answer.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI
+
+        app = FastAPI(title="Reading API")
+
+        @app.get("/health")
+
+        def health():
+            return {"status": "ok"}
+        ```**Why this is here:** health endpoint provides the least useful
+        contract: monitoring can verify that the process is alive without
+        knowing the internal business logic.
+
+        **What to change yourself:** Add a `service` field and check that the
+        response remains valid JSON.
+
+        ### Practical algorithm for this topic
+
+        1. Name the resource and the HTTP method. 2. Define the exact JSON
+        contract. 3. Register route. 4. Start the ASGI server. 5. Test the
+        request via `/docs` or an HTTP client. 6. Only then add business logic.
+
+        Before starting, formulate the expected result: one GET endpoint with a
+        stable JSON response. Then check the normal, marginal, and error cases.
+
+        ### Summary
+
+        FastAPI converts typed Python functions to HTTP operations. A good first
+        step is to think in terms of a contract: method, URL, login, status, and
+        JSON response.
+  - title: "Path operations: GET, POST, PUT, PATCH and DELETE"
+    key: path-operations-get-post-put-patch-i-delete
+    description: distinguish HTTP methods | design CRUD routes | do not confuse the
+      action with the name of the resource
+    order: 2
+    exerciseFocus: "design a set of routes of the same resource without duplicate URLs"
+    theory:
+      title: "Path operations: GET, POST, PUT, PATCH and DELETE"
+      content: |-
+        ### Intuitive explanation
+        HTTP method is the request verb and path is the resource noun. `/books` describes a collection of books, GET reads it, POST adds an element, and DELETE works with the specific address `/books/{book_id}`. This model makes the API predictable: the client does not have to guess what `/createBook` means.
+
+        ### What happens at runtime
+        FastAPI stores a separate path operation for each method+path pair. Two identical paths with different methods can coexist peacefully. When a client sends a request, an operation is selected first, followed by parameterization, dependencies, validation, and a handler. The method doesn't change the data automatically—that's your function's responsibility.
+
+        ### Minimal code example
+        ```python
+        from fastapi import FastAPI, status
+
+        app = FastAPI()
+
+        @app.get("/books")
+        def list_books():
+            return [{"id": 1, "title": "Dune"}]
+
+        @app.post("/books", status_code=status.HTTP_201_CREATED)
+        def create_book():
+            return {"id": 2, "title": "Solaris"}
+        ```Output for the control query:
+        ```text
+        GET /books → 200; POST /books → 201
+        ```
+
+        ### Explanation of each line of the example
+        One address `/books` has two different operations. `GET` returns a collection and `POST` simulates a creation. `status_code=201` makes the successful creation result explicit in the contract and OpenAPI. A real system would still accept a body, store the object, and return its identifier.
+
+        ### Try to predict
+        What operation will POST /books perform and why shouldn't the response have a default status of 200?
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"What is the most natural method to use to create a new resource?","code":"from fastapi import FastAPI, status\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef list_books():\n    return [{\"id\": 1, \"title\": \"Dune\"}]\n\n@app.post(\"/books\", status_code=status.HTTP_201_CREATED)\ndef create_book():\n    return {\"id\": 2, \"title\": \"Solaris\"}","options":["POST","GET","DELETE","HEAD"],"answer":0,"explanation":"POST adds a new resource to the collection. GET reads, DELETE deletes, and HEAD checks the response metadata."}
+        ```
+
+        ### How behavior changes
+        PUT usually means a complete replacement of a resource, PATCH means a partial change. Using POST for reading will make the API less predictable and perform worse with caches and repeated requests.
+
+        ### Typical mistakes of a beginner
+        Call route an action instead of a resource; use GET to change state; forget status 201/204; make PUT and PATCH interchangeable without a contract description; return various forms of data without documentation.
+
+        ### In practice
+        This snippet shows where the theme construct becomes part of the actual API:
+        ```python
+        from fastapi import FastAPI, status
+
+        app = FastAPI()
+
+        @app.get("/books")
+        def list_books():
+            return [{"id": 1, "title": "Dune"}]
+
+        @app.post("/books", status_code=status.HTTP_201_CREATED)
+        def create_book():
+            return {"id": 2, "title": "Solaris"}
+        ```**Why it's here:** A couple of collection routes show how the framework distinguishes between operations before the Python function is executed.
+
+        **What to change yourself:** Add DELETE /books/{book_id} and define what the API returns after a successful delete.
+
+        ### Practical algorithm for this topic
+        1. Define the resource. 2. Choose a method based on semantics. 3. Record the success status. 4. Describe the errors. 5. Check the requery and the empty collection.
+
+        Before starting, formulate the expected result: design a set of routes of the same resource without duplicate URLs. Then check the normal, marginal, and error cases.
+
+        ### Summary
+        HTTP methods are part of the API contract. Good FastAPI code makes their semantics visible in decorators and statuses.
+  - title: Path, query, header and cookie parameters
+    key: path-query-header-i-cookie-parametry
+    description: distinguish HTTP parameter sources | apply default types and values
+      ​​| read headers and cookies
+    order: 3
+    exerciseFocus: "accept path id and optional query-parameters and return them in
+      the response"
+    theory:
+      title: Path, query, header and cookie parameters
+      content: >-
+        ### Intuitive explanation
+
+        A URL has different "drawers" for data. The Path parameter identifies a
+        specific resource: `/books/42`. Query parameters configure the sample:
+        `/books?limit=10`. The Header is not part of the URL and carries
+        technical metadata, while the cookie usually stores browser state. The
+        data source is important for security and caching.
+
+        ### What happens at runtime
+
+        FastAPI reads the signature of the handler and matches it with the path
+        by the name of the parameter. A parameter that is not in the path is
+        treated as a query by default, unless it is declared via Header, Cookie
+        or Body. A typical annotation triggers the conversion: the string `42`
+        becomes `int`, and a failed conversion results in a 422 before entering
+        the handler.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import Cookie, FastAPI, Header
+
+        app = FastAPI()
+
+        @app.get("/books/{book_id}")
+
+        def read_book(
+            book_id: int,
+            limit: int = 20,
+            user_agent: str | None = Header(default=None),
+            session_id: str | None = Cookie(default=None),
+        ):
+            return {"id": book_id, "limit": limit, "user_agent": user_agent, "session": session_id}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `book_id` is present in the path pattern, so FastAPI takes it from the
+        URL and converts it to `int`. `limit` is not part of the path, so it is
+        read from query and has a value of 20 by default. `Header' looks for an
+        HTTP header and `Cookie' looks for a cookie header. Missing optional
+        values ​​become `None` instead of dummy strings.
+
+        ### Try to predict
+
+        Compare /books/7?limit=5 and /books/seven: the first request will reach
+        the handler, the second will get 422.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Where will FastAPI get
+        the `limit` value from in this example?","code":"from fastapi import
+        Cookie, FastAPI, Header\n\napp =
+        FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef
+        read_book(\n    book_id: int,\n    limit: int = 20,\n    user_agent: str
+        | None = Header(default=None),\n    session_id: str | None =
+        Cookie(default=None),\n):\n    return {\"id\": book_id, \"limit\":
+        limit, \"user_agent\": user_agent, \"session\":
+        session_id}","options":["From the URL query parameter or from the
+        default 20","With body JSON","From the name cookie limit","From process
+        stdin"],"answer":0,"explanation":"The parameter is not part of path and
+        has no special Body/Header/Cookie declaration, so it belongs to query."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If `limit` is set to `int`, the text value `abc` will be rejected
+        automatically. If there is no cookie, `session_id` will be `None`. HTTP
+        header names are case-insensitive, but your API contract should explain
+        exactly which headers are required.
+
+        ### Typical mistakes of a beginner
+
+        Duplicate id in query and path; accept id as a string unnecessarily;
+        trust header as proof of authorization; make cookies the only source of
+        critical rights; do not limit limit.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import Cookie, FastAPI, Header
+
+        app = FastAPI()
+
+        @app.get("/books/{book_id}")
+
+        def read_book(
+            book_id: int,
+            limit: int = 20,
+            user_agent: str | None = Header(default=None),
+            session_id: str | None = Cookie(default=None),
+        ):
+            return {"id": book_id, "limit": limit, "user_agent": user_agent, "session": session_id}
+        ```**Why this is here:** One endpoint exposes four input channels, so
+        the learner can see that FastAPI doesn't mix them into an anonymous
+        dictionary.
+
+        **What to change yourself:** Add an `offset` and limit it to a minimum
+        of 0 and a maximum of 100.
+
+        ### Practical algorithm for this topic
+
+        1. Mark where each field lives. 2. Select a type. 3. Define
+        optional/default. 4. Check for missing, invalid type, and too large
+        value. 5. Don't accept secrets via URL.
+
+        Before starting, formulate the expected result: accept the path id and
+        optional query parameters and return them in the response. Then check
+        the normal, marginal, and error cases.
+
+        ### Summary
+
+        Path identifies the resource, query configures sampling, header
+        transmits metadata, cookie — browser state. FastAPI types translate
+        these rules into executable validation.
+  - title: Pydantic models and JSON body
+    key: pydantic-modeli-ta-json-body
+    description: describe the request body with the model | distinguish body and
+      query | read validation errors
+    order: 4
+    exerciseFocus: "accept structured JSON through the Pydantic model and return a
+      normalized resource"
+    theory:
+      title: Pydantic models and JSON body
+      content: >-
+        ### Intuitive explanation
+
+        The JSON body is the parcel with the structure, and the Pydantic model
+        is the customs description of the parcel. It tells what fields are
+        expected, what types are allowed, and how to name the result inside the
+        program. Instead of a manual `data.get("title")` you get an object with
+        a contract and an understandable error for the client.
+
+        ### What happens at runtime
+
+        FastAPI sees a parameter typed by the `BaseModel` class and expects a
+        JSON body. Pydantic reads the JSON, validates the fields, and
+        instantiates the model. If the body is not JSON or the field is in the
+        wrong format, the handler does not fire and the client receives a 422
+        with details of the error location. A successful model is passed to the
+        function as a ready-made Python object.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI
+
+        from pydantic import BaseModel
+
+        class BookCreate(BaseModel):
+            title: str
+            pages: int
+
+        app = FastAPI()
+
+        @app.post("/books")
+
+        def create_book(book: BookCreate):
+            return {"title": book.title, "pages": book.pages}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `BookCreate` is a separate login contract. `title: str` and `pages: int`
+        become the validation rules. The `book: BookCreate` annotation tells
+        FastAPI that the data should be searched in the body, not in the query.
+        Accessing via `book.title` is safer to read than an arbitrary
+        dictionary, and the response demonstrates the model-to-JSON conversion.
+
+        ### Try to predict
+
+        Expect a response for JSON with title Dune and pages 412 and an error
+        for pages many.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What happens if the
+        `pages` field comes as a `many` string?","code":"from fastapi import
+        FastAPI\nfrom pydantic import BaseModel\n\nclass
+        BookCreate(BaseModel):\n    title: str\n    pages: int\n\napp =
+        FastAPI()\n\n@app.post(\"/books\")\ndef create_book(book:
+        BookCreate):\n    return {\"title\": book.title, \"pages\":
+        book.pages}","options":["FastAPI will reject the request until the
+        handler is executed","Python will silently store many as an int","The
+        field will be deleted","The query will read many from
+        stdin"],"answer":0,"explanation":"Pydantic cannot convert `many` to an
+        integer, so FastAPI returns a 422 validation error."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Pydantic can perform safe conversions, such as numeric string to number,
+        if necessary, but the implicit leniency should not be relied upon.
+        Additional fields and their behavior should be a conscious part of the
+        model, especially before saving to the database.
+
+        ### Typical mistakes of a beginner
+
+        Accept the entire body as `dict[str, object]`; confuse request and
+        response model; trust fields from the client without verification; write
+        business logic in the Pydantic model; to return the password that
+        accidentally came in body.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI
+
+        from pydantic import BaseModel
+
+        class BookCreate(BaseModel):
+            title: str
+            pages: int
+
+        app = FastAPI()
+
+        @app.post("/books")
+
+        def create_book(book: BookCreate):
+            return {"title": book.title, "pages": book.pages}
+        ```**Why this is here:** The model shows the boundary between external
+        JSON and internal Python logic. It reduces rechecking in each route.
+
+        **What to change yourself:** Add an optional `summary` field with a
+        length limit and check 422.
+
+        ### Practical algorithm for this topic
+
+        1. Write a JSON contract. 2. Create an input model. 3. Add types and
+        constraints. 4. Check for valid, incomplete and invalid body. 5.
+        Separately design the output model.
+
+        Before running, formulate the expected result: accept structured JSON
+        through the Pydantic model and return a normalized resource. Then check
+        the normal, marginal, and error cases.
+
+        ### Summary
+
+        A Pydantic model is an executable description of a JSON body. It makes
+        errors visible to business logic and connects Python types to API
+        documentation.
+  - title: Field validation, required fields and custom rules
+    key: validatsiya-field-obov-yazkovi-polya-ta-vlasni-pravyla
+    description: limit values ​​through Field | formulate invariants | distinguish a
+      format from a business rule
+    order: 5
+    exerciseFocus: "set constraints for the model and return the expected validation error"
+    theory:
+      title: Field validation, required fields and custom rules
+      content: >-
+        ### Intuitive explanation
+
+        A type answers the question "what kind of data is this" and a constraint
+        answers the question "what values make sense". `pages: int` does not
+        disallow zero or million, but `Field(gt=0, le=10000)` already describes
+        the limit. The format validation belongs to the model, and the "book is
+        only available to the administrator" rule belongs to the service or
+        authorization dependency.
+
+        ### What happens at runtime
+
+        After decoding the JSON, Pydantic sequentially checks the types and
+        declared constraints. The `Field' field is also included in OpenAPI, so
+        the client sees the minimum and maximum. A custom validator can check
+        the relationship of fields, but must not covertly refer to the database
+        or the network: this makes the model slow and difficult to test.
+
+        ### Minimal code example
+
+        ```python
+
+        from pydantic import BaseModel, Field, field_validator
+
+        class BookCreate(BaseModel):
+            title: str = Field(min_length=1, max_length=200)
+            pages: int = Field(gt=0, le=10000)
+
+            @field_validator("title")
+            @classmethod
+            def title_is_not_blank(cls, value: str) -> str:
+                value = value.strip()
+                if not value:
+                    raise ValueError("title must not be blank")
+                return value
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `Field' describes the boundaries that can be shown in the diagram. The
+        validator normalizes whitespace and rejects an empty header after
+        trimming. It is important to return the cleared value, otherwise the
+        model will check it but keep the old version. The rule is
+        database-independent, so it can be tested in isolation.
+
+        ### Try to predict
+
+        Will the model pass a string of three spaces in the title? Will it get
+        into the handler pages = 0?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What problem does
+        `Field(gt=0)` solve for pages?","code":"from pydantic import BaseModel,
+        Field, field_validator\n\nclass BookCreate(BaseModel):\n    title: str =
+        Field(min_length=1, max_length=200)\n    pages: int = Field(gt=0,
+        le=10000)\n\n    @field_validator(\"title\")\n    @classmethod\n    def
+        title_is_not_blank(cls, value: str) -> str:\n        value =
+        value.strip()\n        if not value:\n            raise
+        ValueError(\"title must not be blank\")\n        return
+        value","options":["Does not allow null and negative values ​​even before
+        the handler","Automatically writes pages to the database","Checks that
+        the user is an administrator","Changes the HTTP method to
+        POST"],"answer":0,"explanation":"gt=0 is the input model constraint.
+        Storage and authorization remain separate layers."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If an error occurs in the model, FastAPI returns a structured 422. If a
+        business rule is violated, such as a duplicate ISBN, it can already be a
+        409 Conflict, because the body format is correct, but the system state
+        does not allow the operation.
+
+        ### Typical mistakes of a beginner
+
+        Put all business rules in the validator; use `assert` to validate user
+        input; forget normalization; give the client different rules in
+        documentation and code; check only the positive case.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from pydantic import BaseModel, Field, field_validator
+
+        class BookCreate(BaseModel):
+            title: str = Field(min_length=1, max_length=200)
+            pages: int = Field(gt=0, le=10000)
+
+            @field_validator("title")
+            @classmethod
+            def title_is_not_blank(cls, value: str) -> str:
+                value = value.strip()
+                if not value:
+                    raise ValueError("title must not be blank")
+                return value
+        ```**Why this is here:** Small Field constraints give the API a precise
+        contract and reduce the number of manual ifs in the route.
+
+        **What to change yourself:** Add `rating` from 0 to 5 and test for 5.1
+        and -1.
+
+        ### Practical algorithm for this topic
+
+        1. Separate format constraints from business rules. 2. Add a Field. 3.
+        Add a validator only for the local relationship of the fields. 4.
+        Determine the error status. 5. Check limits and messages.
+
+        Before running, state the expected result: set constraints for the model
+        and return the expected validation error. Then check the normal,
+        marginal, and error cases.
+
+        ### Summary
+
+        Qualitative validation is part of API design. It should be clear,
+        repeatable, documented and located on the right layer.
+  - title: Response models, serialization and field control
+    key: response-models-serializatsiya-ta-kontrol-poliv
+    description: to separate the input and output of the model | hide internal
+      fields | form a stable response
+    order: 6
+    exerciseFocus: "return a response_model that does not reveal the internal secret"
+    theory:
+      title: Response models, serialization and field control
+      content: >-
+        ### Intuitive explanation
+
+        What can be accepted from the client, can not necessarily be returned to
+        him. A DB object can have `password_hash`, service flags and internal
+        timestamps. The response model is a filter and a promise: the client
+        receives only the fields of the public contract, even if the handler
+        accidentally returned more.
+
+        ### What happens at runtime
+
+        After the execution of the handler, FastAPI passes the result through
+        the response model. Pydantic checks the form of the response, serializes
+        the types, and discards fields that are not part of the model. If the
+        implementation returned an incorrect type, it's a server error, not a
+        422 from the client: the response contract protects the quality of your
+        code.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI
+
+        from pydantic import BaseModel
+
+        class UserOut(BaseModel):
+            id: int
+            email: str
+
+        app = FastAPI()
+
+        @app.get("/users/{user_id}", response_model=UserOut)
+
+        def get_user(user_id: int):
+            return {"id": user_id, "email": "ana@example.com", "password_hash": "never-return"}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `UserOut` describes a public form. `response_model=UserOut` is applied
+        after the function is executed. The extra `password_hash` field should
+        not be exposed to the client. Separate `UserCreate` and `UserOut` models
+        force the command to explicitly decide which fields are in and out.
+
+        ### Try to predict
+
+        Compare the dictionary returned by the handler with the JSON the client
+        should receive.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why is response_model
+        important even if the handler already returns a
+        dictionary?","code":"from fastapi import FastAPI\nfrom pydantic import
+        BaseModel\n\nclass UserOut(BaseModel):\n    id: int\n    email:
+        str\n\napp = FastAPI()\n\n@app.get(\"/users/{user_id}\",
+        response_model=UserOut)\ndef get_user(user_id: int):\n    return
+        {\"id\": user_id, \"email\": \"ana@example.com\", \"password_hash\":
+        \"never-return\"}","options":["It captures and validates the public
+        contract and can filter fields","It runs a SQL query instead of a
+        handler","It encrypts all values","It disables
+        OpenAPI"],"answer":0,"explanation":"Response model controls the form,
+        serialization and data boundary between server and client."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If you add a field to an internal object, the response model will not
+        expand automatically. If you remove a required field from the result, a
+        server error will appear, which must be fixed before production.
+
+        ### Typical mistakes of a beginner
+
+        Return an ORM object without control; use one model for all directions;
+        serialize secrets; consider `response_model` as documentation only; do
+        not test the response form.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI
+
+        from pydantic import BaseModel
+
+        class UserOut(BaseModel):
+            id: int
+            email: str
+
+        app = FastAPI()
+
+        @app.get("/users/{user_id}", response_model=UserOut)
+
+        def get_user(user_id: int):
+            return {"id": user_id, "email": "ana@example.com", "password_hash": "never-return"}
+        ```**Why this is here:** The example shows a safe boundary between the
+        internal user model and the public JSON.
+
+        **What to change yourself:** Add `created_at` to the source model, but
+        leave the internal field out of the response.
+
+        ### Practical algorithm for this topic
+
+        1. Create a public response contract. 2. Separate input/output. 3. Add
+        response_model. 4. Check for redundant and missing fields. 5. Write a
+        test for the absence of secrets.
+
+        Before running, state the expected result: return a response_model that
+        does not reveal the internal secret. Then check the normal, marginal,
+        and error cases.
+
+        ### Summary
+
+        The response model is not a cosmetic, but a safety and stability limit
+        of the API. A public contract should be smaller and more self-conscious
+        than an internal object.
+  - title: Statuses, HTTPException, and error handling
+    key: statusy-httpexception-ta-obrobka-pomylok
+    description: distinguish between 4xx and 5xx | return HTTPException | create a
+      single error format
+    order: 7
+    exerciseFocus: "return a 404 for a missing resource and not mask a 404 server error"
+    theory:
+      title: Statuses, HTTPException, and error handling
+      content: >-
+        ### Intuitive explanation
+
+        Status is a brief diagnosis for the client. 404 means "resource not
+        found", 401 means "no authentication", 403 means "authentication exists
+        but insufficient rights", and 500 means a server problem. If every
+        problem is returned as 200 with `{error: ...}`, clients, monitoring and
+        caches will lose the ability to respond properly.
+
+        ### What happens at runtime
+
+        `raise HTTPException(...)` interrupts the handler and passes control to
+        the built-in FastAPI exception handler. The answer is generated without
+        executing the following lines. An unexpected exception should not turn
+        into a verbose traceback for the user: it is logged with the request id
+        and a safe generic error is returned to the client.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI, HTTPException
+
+        app = FastAPI()
+
+        @app.get("/books/{book_id}")
+
+        def get_book(book_id: int):
+            book = {1: {"id": 1, "title": "Dune"}}.get(book_id)
+            if book is None:
+                raise HTTPException(status_code=404, detail="Book not found")
+            return book
+        ```
+
+
+        ### Explanation of each line of the example
+
+        A dictionary simulates a repository. If the key does not exist, the
+        handler does not return `None` and does not print a message, but raises
+        an HTTPException with a 404. FastAPI will generate a JSON error. In a
+        real system, the `detail` text should not reveal SQL, stack traces, or
+        secrets.
+
+        ### Try to predict
+
+        For `/books/2`, execution will stop at raise; for `/books/1` the client
+        will receive the resource.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What status corresponds
+        to the situation when the resource with the correct id does not
+        exist?","code":"from fastapi import FastAPI, HTTPException\n\napp =
+        FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef get_book(book_id:
+        int):\n    book = {1: {\"id\": 1, \"title\":
+        \"Dune\"}}.get(book_id)\n    if book is None:\n        raise
+        HTTPException(status_code=404, detail=\"Book not found\")\n    return
+        book","options":["404 Not Found","401 Unauthorized","422 Unprocessable
+        Entity","503 always"],"answer":0,"explanation":"The request format is
+        correct, but the resource is missing - it's a 404."}
+
+        ```
+
+
+        ### How behavior changes
+
+        422 describes an error in the structure or type of input, 409 — a
+        conflict with the current state, 429 — exceeding the limit. The choice
+        of status must be stable: the client must be able to write the correct
+        processing branch.
+
+        ### Typical mistakes of a beginner
+
+        Return 200 on error; mix 401 and 403; catch all exceptions and silently
+        return 404; give traceback; duplicate different error formats in each
+        route.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI, HTTPException
+
+        app = FastAPI()
+
+        @app.get("/books/{book_id}")
+
+        def get_book(book_id: int):
+            book = {1: {"id": 1, "title": "Dune"}}.get(book_id)
+            if book is None:
+                raise HTTPException(status_code=404, detail="Book not found")
+            return book
+        ```**Why this is here:** 404 in the simplest route forms the right habit
+        to distinguish a missing resource from an application error.
+
+        **What to change yourself:** Add a 409 for trying to create a book with
+        an already taken ISBN.
+
+        ### Practical algorithm for this topic
+
+        1. Name the reason for the refusal. 2. Select a status. 3. Create a
+        secure detail. 4. Verify that the handler stops. 5. Add logging of the
+        server reason separately from the client response.
+
+        Before running, formulate the expected result: return 404 for missing
+        resource and not mask the server error as 404. Then test the normal,
+        borderline, and error case.
+
+        ### Summary
+
+        Correcting mistakes is part of the contract. An HTTPException helps to
+        abort an operation, but does not replace system logging and a uniform
+        error format.
+  - title: "Dependencies: Reuse and DI"
+    key: zalezhnosti-depends-povtorne-vykorystannya-ta-di
+    description: explain dependency injection | create a shared dependency | prepare
+      the code for testing
+    order: 8
+    exerciseFocus: "transfer common query parameters into a dependency and use it in
+      several routes"
+    theory:
+      title: "Dependencies: Reuse and DI"
+      content: >-
+        ### Intuitive explanation
+
+        A dependency is a provider function. Route does not create the user
+        itself, the DB session or shared parameters, but declares: "I need this
+        resource". FastAPI builds the dependency graph, executes it and passes
+        the results to the handler. This removes duplication and allows you to
+        switch providers in the test.
+
+        ### What happens at runtime
+
+        `Depends(common_parameters)` does not call the function on import.
+        FastAPI calls it for each request, parses its own parameters, and passes
+        the result to `params`. If a dependency has sub-dependencies, they form
+        a tree. Caching within a single request can prevent the same dependency
+        from being executed again.
+
+        ### Minimal code example
+
+        ```python
+
+        from typing import Annotated
+
+        from fastapi import Depends, FastAPI
+
+        app = FastAPI()
+
+        def pagination(limit: int = 20, offset: int = 0):
+            return {"limit": min(limit, 100), "offset": max(offset, 0)}
+
+        Page = Annotated[dict, Depends(pagination)]
+
+        @app.get("/books")
+
+        def list_books(page: Page):
+            return page
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `pagination' is a regular function, but FastAPI also reads its
+        parameters from query. `Annotated` preserves the type and adds a
+        dependency declaration. Route receives an already normalized dictionary
+        and does not repeat the constraints for limit/offset. In larger systems,
+        the dependency returns the repository or the current user.
+
+        ### Try to predict
+
+        What values will go into the handler for `/books?limit=500&offset=-3`?
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does Depends do in
+        this example?","code":"from typing import Annotated\nfrom fastapi import
+        Depends, FastAPI\n\napp = FastAPI()\n\ndef pagination(limit: int = 20,
+        offset: int = 0):\n    return {\"limit\": min(limit, 100), \"offset\":
+        max(offset, 0)}\n\nPage = Annotated[dict,
+        Depends(pagination)]\n\n@app.get(\"/books\")\ndef list_books(page:
+        Page):\n    return page","options":["Asks FastAPI to perform pagination
+        and pass the result to route","Creates a separate HTTP server","Stores
+        page in a global variable","Converts GET to
+        POST"],"answer":0,"explanation":"Depends declares the data provider and
+        the framework calls it on the request and injects the result."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If the same dependency is used in multiple routes, its rules stay in one
+        place. If a dependency is doing heavy work, its lifecycle should be
+        checked and global state should not be created unnecessarily.
+
+        ### Typical mistakes of a beginner
+
+        Write `Depends(pagination())`; hide all business logic in a dependency;
+        use global mutable state; do not typify the result; not knowing that
+        dependencies also take parameters from HTTP.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from typing import Annotated
+
+        from fastapi import Depends, FastAPI
+
+        app = FastAPI()
+
+        def pagination(limit: int = 20, offset: int = 0):
+            return {"limit": min(limit, 100), "offset": max(offset, 0)}
+
+        Page = Annotated[dict, Depends(pagination)]
+
+        @app.get("/books")
+
+        def list_books(page: Page):
+            return page
+        ```**Why this is here:** Pagination is a real recurring need where it's
+        easy to see the benefit of DI without authorization magic.
+
+        **What to change yourself:** Add a `sort` with the allowed set of values
+        ​​and reject the unknown field.
+
+        ### Practical algorithm for this topic
+
+        1. Find a recurring premise. 2. Turn it into a function. 3. Add the
+        result type. 4. Connect Depends. 5. Check the normal and incorrect
+        request. 6. Write an override for the test.
+
+        Before starting, formulate the expected result: transfer common query
+        parameters into a dependency and use it in several routes. Then check
+        the normal, marginal, and error cases.
+
+        ### Summary
+
+        Depends is an explicit resource supply graph. It reduces duplication and
+        makes route easier to test if dependencies don't turn into hidden magic.
+  - title: Dependencies with yield and life cycle of resources
+    key: zalezhnosti-z-yield-i-zhyttyevyy-tsykl-resursiv
+    description: manage the opening and closing of the resource | explain yield
+      dependency | do not leave sessions open
+    order: 9
+    exerciseFocus: "create a dependency that is guaranteed to close the resource
+      after a request"
+    theory:
+      title: Dependencies with yield and life cycle of resources
+      content: >-
+        ### Intuitive explanation
+
+        A resource like a DB session is like a rented room: it must be opened
+        before work and released after, even if an error occurred inside. The
+        `yield' dependency allows you to describe both phases side by side.
+        Before `yield', the resource is prepared, after `yield' it is removed.
+
+        ### What happens at runtime
+
+        FastAPI runs the code to `yield', passes the resulting object to the
+        handler, and then executes the cleanup code. `try/finally' guarantees
+        closure even on exception. After changes in FastAPI versions, you should
+        not rely on the old behavior for background tasks: the resources needed
+        by the background task are better created inside the task itself.
+
+        ### Minimal code example
+
+        ```python
+
+        from collections.abc import Generator
+
+        from fastapi import Depends, FastAPI
+
+        app = FastAPI()
+
+        def get_connection() -> Generator[str, None, None]:
+            connection = "opened-connection"
+            try:
+                yield connection
+            finally:
+                connection = "closed-connection"
+
+        @app.get("/report")
+
+        def report(connection: str = Depends(get_connection)):
+            return {"connection": connection}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The function prepares the connection to `yield'. The value after `yield`
+        becomes the route argument. The `finally' block is the place for
+        `close', `rollback' or release. In the demo, the local variable string
+        is changed, but the real resource must be closed by a method or context
+        manager.
+
+        ### Try to predict
+
+        Even if `report` throws an exception, cleanup in finally must be
+        performed.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What part of the yield
+        dependency is intended to release the resource?","code":"from
+        collections.abc import Generator\nfrom fastapi import Depends,
+        FastAPI\n\napp = FastAPI()\n\ndef get_connection() -> Generator[str,
+        None, None]:\n    connection =
+        \"opened-connection\"\n    try:\n        yield
+        connection\n    finally:\n        connection =
+        \"closed-connection\"\n\n@app.get(\"/report\")\ndef report(connection:
+        str = Depends(get_connection)):\n    return {\"connection\":
+        connection}","options":["Code after yield in finally","Generator
+        type","The app.get decorator","JSON body"],"answer":0,"explanation":"The
+        code after yield is the exit phase of the dependency; finally makes it
+        reliable in case of errors."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If cleanup is skipped, the connection pool will be gradually depleted.
+        Creating a single session globally for all requests leads to races,
+        leaks, and errors with transactions.
+
+        ### Typical mistakes of a beginner
+
+        Write cleanup after return in route; do not use finally; transfer the
+        session to a long background task; open a global connection without a
+        pool; mix commit and cleanup without a defined contract.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from collections.abc import Generator
+
+        from fastapi import Depends, FastAPI
+
+        app = FastAPI()
+
+        def get_connection() -> Generator[str, None, None]:
+            connection = "opened-connection"
+            try:
+                yield connection
+            finally:
+                connection = "closed-connection"
+
+        @app.get("/report")
+
+        def report(connection: str = Depends(get_connection)):
+            return {"connection": connection}
+        ```**Why this is here:** Even the text resource demonstrates a
+        setup/teardown pair that can then be replaced with an actual DB session.
+
+        **What to change yourself:** Instead of a line, use a context manager
+        and add a sign that cleanup was done.
+
+        ### Practical algorithm for this topic
+
+        1. Name the resource and its owner. 2. Create setup. 3. Give the
+        resource via yield. 4. Write finally. 5. Check the normal path and
+        exception. 6. Determine who is responsible for commit/rollback.
+
+        Before starting, formulate the expected result: create a dependency that
+        is guaranteed to close the resource after a request. Then check the
+        normal, marginal, and error cases.
+
+        ### Summary
+
+        Yield dependency connects dependency injection with the lifecycle. For
+        external resources, cleanup is a mandatory part of correctness, not
+        optimization.
+  - title: APIRouter and the structure of a large application
+    key: apirouter-i-struktura-velykoho-zastosunku
+    description: split the API into modules | apply prefix and tags | maintain a
+      single assembly point
+    order: 10
+    exerciseFocus: "export books routes to APIRouter and connect them to the application"
+    theory:
+      title: APIRouter and the structure of a large application
+      content: >-
+        ### Intuitive explanation
+
+        One `main.py` with hundreds of routes is like one closet where all the
+        documents are in one drawer. `APIRouter` is a separate API section: it
+        groups routes, dependencies, prefixes and tags. The main application
+        remains the place of assembly, not the place of all business logic.
+
+        ### What happens at runtime
+
+        `router = APIRouter(...)` accumulates path operations locally.
+        `app.include_router(router)` copies them into the application table with
+        added prefix, tags and global dependencies. Connection order matters for
+        conflicting routes, and imports should be organized so as not to create
+        circular dependencies.
+
+        ### Minimal code example
+
+        ```python
+
+        # routers/books.py
+
+        from fastapi import APIRouter
+
+        router = APIRouter(prefix="/books", tags=["books"])
+
+        @router.get("/{book_id}")
+
+        def read_book(book_id: int):
+            return {"id": book_id}
+
+        # main.py
+
+        from fastapi import FastAPI
+
+        from routers.books import router as books_router
+
+        app = FastAPI()
+
+        app.include_router(books_router)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Router contains `/ {book_id}` without repeating `/books`, because the
+        prefix is added during connection. Tags group operations in OpenAPI.
+        `main.py` imports router and includes it once. In a real project,
+        service/repository should not import `app` back.
+
+        ### Try to predict
+
+        The actual endpoint address is `/books/7`, not `/7`, because the prefix
+        is part of the assembly.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does
+        `include_router` add to the local route `/{book_id}`?","code":"#
+        routers/books.py\nfrom fastapi import APIRouter\n\nrouter =
+        APIRouter(prefix=\"/books\",
+        tags=[\"books\"])\n\n@router.get(\"/{book_id}\")\ndef read_book(book_id:
+        int):\n    return {\"id\": book_id}\n\n# main.py\nfrom fastapi import
+        FastAPI\nfrom routers.books import router as books_router\n\napp =
+        FastAPI()\napp.include_router(books_router)","options":["Prefix /books
+        and registration of the operation in the main application","A new
+        database","Automatic JWT","A separate Uvicorn
+        process"],"answer":0,"explanation":"include_router includes already
+        described operations with general settings."}
+
+        ```
+
+
+        ### How behavior changes
+
+        A shared authorization dependency can be added to the router. If the
+        prefix is ​​changed, the URL of the contract will change, so it should
+        be a conscious versioning decision, not a random edit.
+
+        ### Typical mistakes of a beginner
+
+        Mix app and router in cyclic import; duplicate prefix; create one router
+        for each endpoint; store SQL in router; do not test the actual mounted
+        URLs.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        # routers/books.py
+
+        from fastapi import APIRouter
+
+        router = APIRouter(prefix="/books", tags=["books"])
+
+        @router.get("/{book_id}")
+
+        def read_book(book_id: int):
+            return {"id": book_id}
+
+        # main.py
+
+        from fastapi import FastAPI
+
+        from routers.books import router as books_router
+
+        app = FastAPI()
+
+        app.include_router(books_router)
+
+        ```**Why this is here:** The books router split shows an architectural
+        boundary that is needed already in a small learning API.
+
+        **What to change yourself:** Add `authors_router` with your own prefix
+        and tag, without copying the app assembly.
+
+        ### Practical algorithm for this topic
+
+        1. Group routes by resource. 2. Define prefix/tag. 3. Take out the
+        router. 4. Connect it to main. 5. Check OpenAPI and imports. 6. Add
+        dependencies to the lowest common level.
+
+        Before starting, formulate the expected result: bring out the books
+        routes in APIRouter and connect them to the application. Then check the
+        normal, marginal, and error cases.
+
+        ### Summary
+
+        APIRouter converts a FastAPI application from a file to a structure. The
+        main thing is to keep clear boundaries between routing, services and
+        infrastructure.
+  - title: OpenAPI, tags, summary and API versioning
+    key: openapi-tags-summary-ta-versiyuvannya-api
+    description: read automatic documentation | configure OpenAPI metadata | design
+      compatible versions
+    order: 11
+    exerciseFocus: "describe the endpoint in OpenAPI so that the client understands
+      its contract without reading the code"
+    theory:
+      title: OpenAPI, tags, summary and API versioning
+      content: |-
+        ### Intuitive explanation
+        OpenAPI is a machine-readable API passport. FastAPI collects it from methods, types, models, statuses and metadata. Swagger UI is convenient for manual verification, but the mere fact that an endpoint appears in the documentation does not guarantee that the business logic is correct.
+
+        ### What happens at runtime
+        During the construction of the scheme, FastAPI reads path operations and Pydantic models. `summary`, `description`, `tags` and response_model fall into the JSON schema. Client generators can use it for the SDK, but changing a field or status is a contract change that needs to be versioned and tested.
+
+        ### Minimal code example
+        ```python
+        from fastapi import FastAPI
+
+        app = FastAPI(title="Library API", version="1.0.0")
+
+        @app.get(
+            "/books/{book_id}",
+            tags=["books"],
+            summary="Read one book",
+            response_description="The public book representation",
+        )
+        def read_book(book_id: int):
+            return {"id": book_id, "title": "Dune"}
+        ```
+
+        ### Explanation of each line of the example
+        Application metadata appears in `/openapi.json`. `tags` groups endpoints, `summary` gives a short name, and `response_description` explains the result. For a real contract, add a response_model and explicitly document errors rather than relying on the text in the README.
+
+        ### Try to predict
+        Check which parts of the fragment will affect `/docs` and which will affect runtime JSON values.
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"What is the main benefit of OpenAPI over FastAPI?","code":"from fastapi import FastAPI\n\napp = FastAPI(title=\"Library API\", version=\"1.0.0\")\n\n@app.get(\n    \"/books/{book_id}\",\n    tags=[\"books\"],\n    summary=\"Read one book\",\n    response_description=\"The public book representation\",\n)\ndef read_book(book_id: int):\n    return {\"id\": book_id, \"title\": \"Dune\"}","options":["A single contract description from which to read, test, and generate customers","Automatic correction of business logic","Replacing the database","HTTP encryption without TLS"],"answer":0,"explanation":"OpenAPI describes the interface. It cannot prove that the business rule is implemented correctly."}
+        ```
+
+        ### How behavior changes
+        If you change the field name or status, the documentation will change along with the code. The API version can be issued in `/api/v1` prefix, and breaking change can be developed in `/api/v2` with a client migration plan.
+
+        ### Typical mistakes of a beginner
+        Consider Swagger a test; leave response_model empty; break field names without versioning; describe only happy path; publish internal endpoints in an open schema.
+
+        ### In practice
+        This snippet shows where the theme construct becomes part of the actual API:
+        ```python
+        from fastapi import FastAPI
+
+        app = FastAPI(title="Library API", version="1.0.0")
+
+        @app.get(
+            "/books/{book_id}",
+            tags=["books"],
+            summary="Read one book",
+            response_description="The public book representation",
+        )
+        def read_book(book_id: int):
+            return {"id": book_id, "title": "Dune"}
+        ```**Why this is here:** Metadata forces you to formulate the API as if it will be used by another team.
+
+        **What to change yourself:** Add response_model, 404 response and prefix `/api/v1`.
+
+        ### Practical algorithm for this topic
+        1. Describe the resource. 2. Describe input/output. 3. Add statuses/errors. 4. View `/openapi.json`. 5. Check `/docs`. 6. Define what is breaking change.
+
+        Before launching, formulate the expected result: describe the endpoint in OpenAPI so that the client understands its contract without reading the code. Then check the normal, marginal, and error cases.
+
+        ### Summary
+        OpenAPI is a strong FastAPI contract tool. It helps keep code, documentation, and clients in sync, but doesn't deprecate tests.
+  - title: async/await, event loop and blocking operations
+    key: async-await-event-loop-i-blokuvalni-operatsii
+    description: distinguish concurrency from parallelism | know the limit of async
+      | do not block the event loop with synchronous I/O
+    order: 12
+    exerciseFocus: "choose async or sync handler for a specific operation and
+      explain the consequence"
+    theory:
+      title: async/await, event loop and blocking operations
+      content: >-
+        ### Intuitive explanation
+
+        Async is not a "make it faster" button. This is a convention: when an
+        operation is waiting for a network or other awaitable resource, the
+        event loop can service other requests. If a blocking `time.sleep` or
+        synchronous heavy I/O is called inside the async function, the thread
+        will stop switching and all requests will wait.
+
+        ### What happens at runtime
+
+        `async def` returns a coroutine that the ASGI server executes in an
+        event loop. On `await', the coroutine voluntarily gives up control. A
+        regular `def` FastAPI endpoint can execute in a thread pool, but this
+        does not make CPU-heavy code infinitely parallel. The choice depends on
+        the library: an async HTTP client needs await, a sync client needs a
+        different strategy.
+
+        ### Minimal code example
+
+        ```python
+
+        import asyncio
+
+        from fastapi import FastAPI
+
+        app = FastAPI()
+
+        @app.get("/slow")
+
+        async def slow():
+            await asyncio.sleep(0.01)
+            return {"ready": True}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `asyncio.sleep` does not block the thread: while waiting, the event loop
+        can take over another coroutine. `await` is only allowed inside an async
+        context. If you replace it with `time.sleep`, you lose the competitive
+        I/O advantage. CPU-heavy work requires a separate strategy — processes,
+        a queue, or algorithm optimization.
+
+        ### Try to predict
+
+        Two parallel requests to `/slow` may overlap the wait, but do not make
+        the CPU computation instantaneous.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What happens to the
+        event loop during `await asyncio.sleep(...)`?","code":"import
+        asyncio\nfrom fastapi import FastAPI\n\napp =
+        FastAPI()\n\n@app.get(\"/slow\")\nasync def slow():\n    await
+        asyncio.sleep(0.01)\n    return {\"ready\": True}","options":["It can
+        serve other out-of-the-box tasks","It stops the whole process","It
+        starts a new server for each request","It reads
+        stdin"],"answer":0,"explanation":"Awaitable sleep gives control to the
+        event loop until the wait is complete."}
+
+        ```
+
+
+        ### How behavior changes
+
+        A blocking call to `async def' can increase the latency of all clients.
+        Async makes sense for I/O, but doesn't force a synchronous library to
+        become asynchronous.
+
+        ### Typical mistakes of a beginner
+
+        Add async everywhere; use time.sleep; call sync DB-client without
+        understanding the consequences; confuse concurrency with parallelism;
+        run your own event loop for each request.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        import asyncio
+
+        from fastapi import FastAPI
+
+        app = FastAPI()
+
+        @app.get("/slow")
+
+        async def slow():
+            await asyncio.sleep(0.01)
+            return {"ready": True}
+        ```**Why it's here:** The little awaitable sleep allows you to see a
+        cooperative wait without an external network.
+
+        **What to change yourself:** Compare two endpoints: one with `await
+        asyncio.sleep`, the other with a blocking call, and state the expected
+        difference.
+
+        ### Practical algorithm for this topic
+
+        1. Classify the operation as I/O or CPU. 2. Check if the library async.
+        3. Add await only to awaitable. 4. Check competing requests. 5. Measure
+        latency, not guess.
+
+        Before starting, formulate the expected result: choose an async or sync
+        handler for a specific operation and explain the consequence. Then check
+        the normal, marginal, and error cases.
+
+        ### Summary
+
+        Async FastAPI scales well with waits as long as the code does not block
+        the event loop. The correct choice is based on the nature of the
+        operation and the libraries.
+  - title: "Database: SQLAlchemy engine and session dependency"
+    key: baza-danykh-sqlalchemy-engine-i-session-dependency
+    description: separate engine, session and dependency | close session after
+      request | do not share a session between requests
+    order: 13
+    exerciseFocus: "connect a secure DB session through a dependency without a
+      global session state"
+    theory:
+      title: "Database: SQLAlchemy engine and session dependency"
+      content: >-
+        ### Intuitive explanation
+
+        Engine is a factory and connection pool, Session is a working context of
+        one operation. You should not pass one session to all users: it contains
+        the state of the transaction and is not a universal global container. A
+        FastAPI dependency with `yield' is a natural place to open a session for
+        a request and close it afterwards.
+
+        ### What happens at runtime
+
+        The Engine is created when the application is compiled, but the actual
+        connection can be taken from the pool as needed. Dependency creates
+        `Session`, passes it to route, and in finally executes close. Commit
+        should be explicit after a successful change, rollback on error. In the
+        production engine, it is configured through the environment and
+        migrations, rather than creating tables randomly with each request.
+
+        ### Minimal code example
+
+        ```python
+
+        from collections.abc import Generator
+
+        from fastapi import Depends, FastAPI
+
+        from sqlalchemy import create_engine
+
+        from sqlalchemy.orm import Session, sessionmaker
+
+        engine = create_engine("sqlite:///./app.db",
+        connect_args={"check_same_thread": False})
+
+        SessionLocal = sessionmaker(bind=engine, autoflush=False,
+        autocommit=False)
+
+        app = FastAPI()
+
+        def get_db() -> Generator[Session, None, None]:
+            db = SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        @app.get("/health/db")
+
+        def db_health(db: Session = Depends(get_db)):
+            return {"session_ready": db is not None}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Engine manages connections, `SessionLocal` creates a short-lived
+        session, and `get_db` sets its life cycle. Route receives a session
+        through Depends and does not know how it is created. There is no SQL
+        query in the example, so it only demonstrates wiring, not a database
+        health check.
+
+        ### Try to predict
+
+        For two HTTP requests, two session contexts will be created, which will
+        be closed independently.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why shouldn't session
+        be stored in a global variable and used for all requests?","code":"from
+        collections.abc import Generator\nfrom fastapi import Depends,
+        FastAPI\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.orm
+        import Session, sessionmaker\n\nengine =
+        create_engine(\"sqlite:///./app.db\",
+        connect_args={\"check_same_thread\": False})\nSessionLocal =
+        sessionmaker(bind=engine, autoflush=False, autocommit=False)\napp =
+        FastAPI()\n\ndef get_db() -> Generator[Session, None, None]:\n    db =
+        SessionLocal()\n    try:\n        yield
+        db\n    finally:\n        db.close()\n\n@app.get(\"/health/db\")\ndef
+        db_health(db: Session = Depends(get_db)):\n    return
+        {\"session_ready\": db is not None}","options":["It has a transactional
+        state and is not a secure shared session for different
+        requests","FastAPI disallows global variables of any type","SQLAlchemy
+        only works without a session","Because session reads
+        stdin"],"answer":0,"explanation":"Session has a lifecycle and state. It
+        should be tied to an operation or request, not to the entire process."}
+
+        ```
+
+
+        ### How behavior changes
+
+        SQLite requires separate settings for threads, and production Postgres
+        requires a pool, timeouts, and migrations. It is not enough to close the
+        session if the transaction is left in the wrong state: rollback and
+        commit must be defined.
+
+        ### Typical mistakes of a beginner
+
+        Create an engine inside each route; keep session globally; forget close;
+        commit after each field without a transaction; mix ORM-models and
+        Pydantic-models.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from collections.abc import Generator
+
+        from fastapi import Depends, FastAPI
+
+        from sqlalchemy import create_engine
+
+        from sqlalchemy.orm import Session, sessionmaker
+
+        engine = create_engine("sqlite:///./app.db",
+        connect_args={"check_same_thread": False})
+
+        SessionLocal = sessionmaker(bind=engine, autoflush=False,
+        autocommit=False)
+
+        app = FastAPI()
+
+        def get_db() -> Generator[Session, None, None]:
+            db = SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        @app.get("/health/db")
+
+        def db_health(db: Session = Depends(get_db)):
+            return {"session_ready": db is not None}
+        ```**Why this is here:** Dependency shows the right place for the
+        session lifecycle before complex CRUD comes into play.
+
+        **What to change yourself:** Add a `try/except` with rollback to the
+        service operation and test the error behavior.
+
+        ### Practical algorithm for this topic
+
+        1. Configure the engine. 2. Create a session factory. 3. Write yield
+        dependency. 4. Define commit/rollback. 5. Export SQL to
+        repository/service. 6. Add a test database.
+
+        Before starting, formulate the expected result: connect a secure DB
+        session through a dependency without a global session state. Then check
+        the normal, marginal, and error cases.
+
+        ### Summary
+
+        FastAPI does not manage the database for you. Robust code explicitly
+        models the engine, short-lived session, transaction, and cleanup.
+  - title: CRUD, transactions and repository/service layer
+    key: crud-tranzaktsii-ta-repository-service-shar
+    description: separate HTTP and business logic | implement create/read | make
+      changes to the transaction
+    order: 14
+    exerciseFocus: "build create endpoint through service and return response model"
+    theory:
+      title: CRUD, transactions and repository/service layer
+      content: >-
+        ### Intuitive explanation
+
+        CRUD is not four routes with SQL inside. Route is responsible for the
+        HTTP contract, service — for business decisions, repository — for data
+        access. This limit is easy to test: service can be tested without HTTP,
+        and route can be tested with the replacement service.
+
+        ### What happens at runtime
+
+        The request goes through body validation, dependency session, route and
+        service. Service checks invariants, calls the repository, commits or
+        rollsback. After that, the ORM object is transformed into a response
+        model. If a build has multiple changes, they must be in the same
+        transaction, otherwise part of the transaction may persist.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import APIRouter, Depends, status
+
+        from pydantic import BaseModel
+
+        from sqlalchemy.orm import Session
+
+        router = APIRouter(prefix="/books", tags=["books"])
+
+        class BookCreate(BaseModel):
+            title: str
+
+        class BookOut(BookCreate):
+            id: int
+
+        def create_book_record(db: Session, data: BookCreate) -> BookOut:
+            # У production тут працює repository + commit у транзакції.
+            return BookOut(id=1, title=data.title)
+
+        @router.post("", response_model=BookOut,
+        status_code=status.HTTP_201_CREATED)
+
+        def create_book(data: BookCreate, db: Session = Depends(...)):
+            return create_book_record(db, data)
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Input and output models have different roles. Service receives the
+        already verified data and returns the domain result. `Depends(...)` in
+        the training fragment indicates the connection of the real `get_db`; do
+        not leave ellipsis in working code. Route does not need to know SQL
+        details and commit rules.
+
+        ### Try to predict
+
+        If service raises a uniqueness error, route should convert it to 409
+        instead of returning 201.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Which layer is best
+        responsible for the \"book with this ISBN already exists\"
+        rule?","code":"from fastapi import APIRouter, Depends, status\nfrom
+        pydantic import BaseModel\nfrom sqlalchemy.orm import Session\n\nrouter
+        = APIRouter(prefix=\"/books\", tags=[\"books\"])\n\nclass
+        BookCreate(BaseModel):\n    title: str\n\nclass
+        BookOut(BookCreate):\n    id: int\n\ndef create_book_record(db: Session,
+        data: BookCreate) -> BookOut:\n    # У production тут працює repository
+        + commit у транзакції.\n    return BookOut(id=1,
+        title=data.title)\n\n@router.post(\"\", response_model=BookOut,
+        status_code=status.HTTP_201_CREATED)\ndef create_book(data: BookCreate,
+        db: Session = Depends(...)):\n    return create_book_record(db,
+        data)","options":["Service/domain layer with defined HTTP error
+        conversion","Client CSS only","OpenAPI UI","ASGI
+        server"],"answer":0,"explanation":"Uniqueness is a business/data rule;
+        route can convert a known error to a 409."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If route works directly with the DB, the test becomes slow and tied to
+        the infrastructure. If service does not have a transactional contract,
+        the two tables may diverge on an exception.
+
+        ### Typical mistakes of a beginner
+
+        Write SQL in the decorator handler; return ORM model without output
+        schema; commit after each small action; catch IntegrityError without
+        rollback; mix HTTP status with domain model.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import APIRouter, Depends, status
+
+        from pydantic import BaseModel
+
+        from sqlalchemy.orm import Session
+
+        router = APIRouter(prefix="/books", tags=["books"])
+
+        class BookCreate(BaseModel):
+            title: str
+
+        class BookOut(BookCreate):
+            id: int
+
+        def create_book_record(db: Session, data: BookCreate) -> BookOut:
+            # У production тут працює repository + commit у транзакції.
+            return BookOut(id=1, title=data.title)
+
+        @router.post("", response_model=BookOut,
+        status_code=status.HTTP_201_CREATED)
+
+        def create_book(data: BookCreate, db: Session = Depends(...)):
+            return create_book_record(db, data)
+        ```**Why this is here:** The snippet shows where the endpoint becomes a
+        thin adapter and the logic lives in a separate function.
+
+        **What to change yourself:** Add a service for reading the book and a
+        separate repository-functionality, without copying the SQL in the route.
+
+        ### Practical algorithm for this topic
+
+        1. Describe the input/output. 2. Write a service contract. 3. Add the
+        repository. 4. Define the transaction. 5. Process 404/409. 6. Test
+        service and HTTP separately.
+
+        Before starting, formulate the expected result: build create endpoint
+        through service and return response model. Then check the normal,
+        marginal, and error cases.
+
+        ### Summary
+
+        CRUD becomes supported when HTTP, business logic, and data access have
+        separate responsibilities and a single transactional contract.
+  - title: Pagination, sorting and filtering
+    key: pahinatsiya-sortuvannya-ta-filtratsiya
+    description: project list parameters | avoid unlimited samples | return
+      pagination metadata
+    order: 15
+    exerciseFocus: "implement stable pagination with limit, offset and explicit sorting"
+    theory:
+      title: Pagination, sorting and filtering
+      content: >-
+        ### Intuitive explanation
+
+        Returning all records is easy on demo and dangerous on production.
+        Pagination limits the scope of the response and the time of the request.
+        `limit` is responsible for page size, `offset` is responsible for
+        skipping, and sorting determines whether the page will be stable between
+        requests. For large tables, cursor pagination is often more reliable
+        than offset.
+
+        ### What happens at runtime
+
+        FastAPI checks the query parameters, after which the service transfers
+        them to the repository. The limit should be limited from above, and the
+        sorting field should be taken from the allow-list, and not inserted as a
+        raw string in SQL. The response can contain `items`, `limit`, `offset`
+        and `total`. The total count is a separate query with its own value.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI, Query
+
+        app = FastAPI()
+
+        @app.get("/books")
+
+        def list_books(
+            limit: int = Query(default=20, ge=1, le=100),
+            offset: int = Query(default=0, ge=0),
+            sort: str = Query(default="title", pattern="^(title|created_at)$"),
+        ):
+            return {"items": [], "limit": limit, "offset": offset, "sort": sort}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `Query' converts rules for parameters to validation and OpenAPI. The
+        upper limit limit protects the database from random requests for
+        millions of rows. `pattern` is a simple allow-list for a training
+        example; in more complex code, use Enum. The response contains metadata
+        so that the client can build navigation.
+
+        ### Try to predict
+
+        The `?limit=1000` request should not go into the handler, and
+        `?sort=price` should not go into the handler if price is not allowed.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why limit the maximum
+        limit at the API level?","code":"from fastapi import FastAPI,
+        Query\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef
+        list_books(\n    limit: int = Query(default=20, ge=1,
+        le=100),\n    offset: int = Query(default=0, ge=0),\n    sort: str =
+        Query(default=\"title\",
+        pattern=\"^(title|created_at)$\"),\n):\n    return {\"items\": [],
+        \"limit\": limit, \"offset\": offset, \"sort\": sort}","options":["So
+        that one request does not extract an unlimited amount of data and does
+        not overload the service","So that OpenAPI does not show items","To
+        disable pagination","To convert offset to
+        id"],"answer":0,"explanation":"Throttling is resource protection and
+        part of the API's intended performance."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Offset pagination can skip or duplicate entries when inserting between
+        pages. Cursor pagination uses a stable key and is better suited for
+        ribbons. Which approach to choose - decisions based on the data model
+        and UX.
+
+        ### Typical mistakes of a beginner
+
+        Do not limit the limit; sort by raw SQL string; do not specify stable
+        sorting; return a different structure to an empty list; count total
+        unnecessarily for each request.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI, Query
+
+        app = FastAPI()
+
+        @app.get("/books")
+
+        def list_books(
+            limit: int = Query(default=20, ge=1, le=100),
+            offset: int = Query(default=0, ge=0),
+            sort: str = Query(default="title", pattern="^(title|created_at)$"),
+        ):
+            return {"items": [], "limit": limit, "offset": offset, "sort": sort}
+        ```**Why it's here:** The fragment turns the typical "return a list"
+        problem into an explicit and secure API contract.
+
+        **What to change yourself:** Add a filter by author and write which
+        indexes are needed for the real table.
+
+        ### Practical algorithm for this topic
+
+        1. Determine the UX of the page. 2. Limit the limit. 3. Fix sort
+        allow-list. 4. Add a filter. 5. Define total/next cursor. 6. Check the
+        empty and maximum requests.
+
+        Before starting, formulate the expected result: implement stable
+        pagination with limit, offset and explicit sorting. Then check the
+        normal, marginal, and error cases.
+
+        ### Summary
+
+        Pagination is about resource control, not just convenience. Its
+        parameters must be limited, verified and consistent with data stability.
+  - title: Configuration, environment and Settings
+    key: konfihuratsiya-environment-i-settings
+    description: separate the code from the configuration | read environment
+      type-safe | do not store secrets in the repository
+    order: 16
+    exerciseFocus: "load the URL of the database and the debug mode from the
+      environment through the Settings model"
+    theory:
+      title: Configuration, environment and Settings
+      content: >-
+        ### Intuitive explanation
+
+        The same code should run locally, in test and in production with
+        different DB addresses and keys. The Environment is the external
+        configuration and the Settings model is where it is checked. `.env` is
+        convenient locally, but is not a secret store for production.
+
+        ### What happens at runtime
+
+        Settings reads environment variables, converts them to types, and
+        validates them. The application creates settings once or through a
+        cached provider. The secret should not get into logs, OpenAPI, exception
+        detail or git. For deployment, the value is transmitted by the platform
+        or secret manager.
+
+        ### Minimal code example
+
+        ```python
+
+        from functools import lru_cache
+
+        from pydantic_settings import BaseSettings
+
+        class Settings(BaseSettings):
+            app_name: str = "Library API"
+            debug: bool = False
+            database_url: str
+
+        @lru_cache
+
+        def get_settings() -> Settings:
+            return Settings()
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `BaseSettings` takes values from environment and checks for types. The
+        default values ​​are fine for safe local behavior, but `database_url` is
+        made mandatory. `lru_cache` does not reread the environment for each
+        dependency; in the provider test it is possible to override.
+
+        ### Try to predict
+
+        If the DATABASE_URL is missing, the application should fail on startup
+        rather than crash in the middle of the first request.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Where should the
+        production-secret DATABASE_URL live?","code":"from functools import
+        lru_cache\nfrom pydantic_settings import BaseSettings\n\nclass
+        Settings(BaseSettings):\n    app_name: str = \"Library API\"\n    debug:
+        bool = False\n    database_url: str\n\n@lru_cache\ndef get_settings() ->
+        Settings:\n    return Settings()","options":["In the secret/environment
+        configuration of the platform, not in the code and not in the logs","In
+        response body /health","In the route name","In a git
+        comment"],"answer":0,"explanation":"Secrets are managed by the
+        environment or secret manager; the code only contains the name of the
+        setting."}
+
+        ```
+
+
+        ### How behavior changes
+
+        An invalid configuration can stop the process early, which is better
+        than a silent startup with an incorrect connection. For the health
+        endpoint, show only the secure state, not URLs or keys.
+
+        ### Typical mistakes of a beginner
+
+        Sew a secret in Python; commit `.env`; print Settings; create settings
+        in each route; have different variable names in the local and production
+        environments.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from functools import lru_cache
+
+        from pydantic_settings import BaseSettings
+
+        class Settings(BaseSettings):
+            app_name: str = "Library API"
+            debug: bool = False
+            database_url: str
+
+        @lru_cache
+
+        def get_settings() -> Settings:
+            return Settings()
+        ```**Why this is here:** The Settings model shows how a framework
+        project gets parameters without global constants and secrets in the
+        code.
+
+        **What to change yourself:** Add `cors_origins` as a list or controlled
+        string and explain its safe default value.
+
+        ### Practical algorithm for this topic
+
+        1. Write the configuration. 2. Separate secret/non-secret. 3. Create
+        Settings. 4. Check the start without a mandatory field. 5. Connect the
+        provider. 6. Remove secrets from logs.
+
+        Before starting, formulate the expected result: download the URL of the
+        database and the debug mode from the environment through the Settings
+        model. Then check the normal, marginal, and error cases.
+
+        ### Summary
+
+        Configuration is part of the architecture. Typed Settings makes the
+        wrong environment visible, and the secret manager makes it safe for
+        production.
+  - title: "Authentication: OAuth2 password and bearer token"
+    key: avtentyfikatsiya-oauth2-password-i-bearer-token
+    description: distinguish between authentication and authorization | read bearer
+      token | build a basic current user dependency
+    order: 17
+    exerciseFocus: "protect endpoint bearer token dependency without storing the
+      password in the session"
+    theory:
+      title: "Authentication: OAuth2 password and bearer token"
+      content: >-
+        ### Intuitive explanation
+
+        Authentication corresponds to "who is this?", authorization - "what is
+        he allowed to do?". Bearer token is a pass that the client passes to
+        `Authorization: Bearer ...`. FastAPI can parse the schema and add it to
+        OpenAPI, but signature validation, expiration, rotation, and user
+        storage remain your responsibility.
+
+        ### What happens at runtime
+
+        `OAuth2PasswordBearer` looks for the bearer token in the header.
+        Dependency `get_current_user` passes token to decoder, checks claims and
+        returns user or raises 401 from `WWW-Authenticate`. Next, a separate
+        dependency checks the role/permission and may return a 403. The token
+        should not be logged completely.
+
+        ### Minimal code example
+
+        ```python
+
+        from typing import Annotated
+
+        from fastapi import Depends, FastAPI
+
+        from fastapi.security import OAuth2PasswordBearer
+
+        app = FastAPI()
+
+        oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+        def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+            if token != "demo-token":
+                raise ValueError("invalid token")
+            return {"id": 1, "role": "reader"}
+
+        @app.get("/me")
+
+        def me(user: Annotated[dict, Depends(get_current_user)]):
+            return user
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The scheme knows where to look for the token and adds a security button
+        to Swagger. `get_current_user` is a training stub: cryptographic
+        validation, expiry and issuer/audience handling are required in
+        production. Route receives the already identified user, and does not
+        repeat the header parsing.
+
+        ### Try to predict
+
+        A request without Authorization will not get into get_current_user; a
+        token with an invalid value should return a 401.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What describes
+        authentication dependency?","code":"from typing import Annotated\nfrom
+        fastapi import Depends, FastAPI\nfrom fastapi.security import
+        OAuth2PasswordBearer\n\napp = FastAPI()\noauth2_scheme =
+        OAuth2PasswordBearer(tokenUrl=\"token\")\n\ndef get_current_user(token:
+        Annotated[str, Depends(oauth2_scheme)]):\n    if token !=
+        \"demo-token\":\n        raise ValueError(\"invalid token\")\n    return
+        {\"id\": 1, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user:
+        Annotated[dict, Depends(get_current_user)]):\n    return
+        user","options":["It establishes who the user is after checking the
+        credential","It defines the CSS for /docs","It automatically gives admin
+        rights","It creates database
+        tables"],"answer":0,"explanation":"Authentication establishes identity;
+        permission/role-checking is a separate authorization step."}
+
+        ```
+
+
+        ### How behavior changes
+
+        401 means missing/incorrect authentication, 403 — authenticated user is
+        not authorized. You can compare a token with a simple string only in an
+        educational example.
+
+        ### Typical mistakes of a beginner
+
+        Store password in token; log bearer; confuse 401/403; trust claims
+        without a signature; consider the presence of a header as proof of the
+        right; do not check expiry.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from typing import Annotated
+
+        from fastapi import Depends, FastAPI
+
+        from fastapi.security import OAuth2PasswordBearer
+
+        app = FastAPI()
+
+        oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+        def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+            if token != "demo-token":
+                raise ValueError("invalid token")
+            return {"id": 1, "role": "reader"}
+
+        @app.get("/me")
+
+        def me(user: Annotated[dict, Depends(get_current_user)]):
+            return user
+        ```**Why this is here:** Dependency shows the correct flow of identity
+        across multiple endpoints without duplicating header code.
+
+        **What to change yourself:** Add a separate `require_reader` dependency
+        and separate it from `get_current_user`.
+
+        ### Practical algorithm for this topic
+
+        1. Define the credential scheme. 2. Make the decoder separate. 3. Create
+        current-user dependency. 4. Add authorization. 5. Check 401, 403 and
+        normal access. 6. Do not log the token.
+
+        Before starting, formulate the expected result: protect the endpoint
+        bearer token dependency without storing the password in the session.
+        Then check the normal, marginal, and error cases.
+
+        ### Summary
+
+        FastAPI simplifies wiring security, but does not transfer responsibility
+        for cryptography and access policies. Authentication and authorization
+        should be different concepts and layers.
+  - title: Authorization, roles and permission dependencies
+    key: avtoryzatsiya-roli-ta-permission-dependencies
+    description: implement role verification | distinguish role from permission | do
+      not trust customer claims
+    order: 18
+    exerciseFocus: "prohibit the operation to the user without the required
+      permission and return 403"
+    theory:
+      title: Authorization, roles and permission dependencies
+      content: >-
+        ### Intuitive explanation
+
+        Role is a convenient grouping of permissions, permission is a specific
+        right. A user with the editor role can have `books:write` but not
+        `users:delete`. Validation should be done on the server near the
+        operation, not just hide the button in the frontend.
+
+        ### What happens at runtime
+
+        After the current-user dependency, the next dependency gets the identity
+        and checks the permission. If the right is missing, it raises a 403
+        before running the business handler. The source of roles is a verified
+        database or signed claims; values ​​from body or query cannot determine
+        rights.
+
+        ### Minimal code example
+
+        ```python
+
+        from typing import Annotated
+
+        from fastapi import Depends, FastAPI, HTTPException
+
+        app = FastAPI()
+
+        def current_user():
+            return {"id": 1, "permissions": {"books:read"}}
+
+        def require(permission: str):
+            def checker(user: Annotated[dict, Depends(current_user)]):
+                if permission not in user["permissions"]:
+                    raise HTTPException(status_code=403, detail="Forbidden")
+                return user
+            return checker
+
+        @app.get("/books")
+
+        def books(user: Annotated[dict, Depends(require("books:read"))]):
+            return {"viewer": user["id"], "items": []}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `require' is a dependency factory: it creates a check for a specific
+        permission. The nested dependency first gets the current user, then
+        checks the set of permissions. Route does not need to know how roles are
+        stored. In production, add a tenant/resource ownership check if the
+        right depends on a specific object.
+
+        ### Try to predict
+
+        If permission is missing, the list of books is not generated and 403 is
+        returned.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Where should the book
+        entry ban be checked?","code":"from typing import Annotated\nfrom
+        fastapi import Depends, FastAPI, HTTPException\n\napp = FastAPI()\n\ndef
+        current_user():\n    return {\"id\": 1, \"permissions\":
+        {\"books:read\"}}\n\ndef require(permission: str):\n    def
+        checker(user: Annotated[dict, Depends(current_user)]):\n        if
+        permission not in user[\"permissions\"]:\n            raise
+        HTTPException(status_code=403, detail=\"Forbidden\")\n        return
+        user\n    return checker\n\n@app.get(\"/books\")\ndef books(user:
+        Annotated[dict, Depends(require(\"books:read\"))]):\n    return
+        {\"viewer\": user[\"id\"], \"items\": []}","options":["On the server
+        through dependency/service before data changes","Only in the frontend
+        button","In the name of the JSON field","After a successful
+        commit"],"answer":0,"explanation":"The client UI is not a trusted
+        boundary; the server must reject the forbidden operation before the
+        state changes."}
+
+        ```
+
+
+        ### How behavior changes
+
+        The role check can skip the user, but the service must additionally
+        check if the resource belongs to its organization. Not every permission
+        model can be reduced to a single role line.
+
+        ### Typical mistakes of a beginner
+
+        Trust role with body; check rights only in the frontend; return 401
+        instead of 403; duplicate the check in each route; do not test
+        horizontal access to someone else's resource.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from typing import Annotated
+
+        from fastapi import Depends, FastAPI, HTTPException
+
+        app = FastAPI()
+
+        def current_user():
+            return {"id": 1, "permissions": {"books:read"}}
+
+        def require(permission: str):
+            def checker(user: Annotated[dict, Depends(current_user)]):
+                if permission not in user["permissions"]:
+                    raise HTTPException(status_code=403, detail="Forbidden")
+                return user
+            return checker
+
+        @app.get("/books")
+
+        def books(user: Annotated[dict, Depends(require("books:read"))]):
+            return {"viewer": user["id"], "items": []}
+        ```**Why this is here:** The dependency factory demonstrates how one
+        policy can be parameterized with different permissions.
+
+        **What to change yourself:** Add `books:write` for POST and test for a
+        user that only has `books:read`.
+
+        ### Practical algorithm for this topic
+
+        1. Define identity. 2. Make permissions. 3. Create a reusable checker.
+        4. Connect to route. 5. Check 401/403/200. 6. Add ownership to service.
+
+        Before running, formulate the expected result: deny the operation to the
+        user without the required permission and return 403. Then check the
+        normal, borderline and false cases.
+
+        ### Summary
+
+        Authorization must be server-side, explicit and close to the operation.
+        Depends models policies well, but does not override the resource
+        ownership check.
+  - title: Middleware, CORS and request context
+    key: middleware-cors-i-request-context
+    description: explain the place of middleware | configure restricted CORS | add
+      request id without leaking data
+    order: 19
+    exerciseFocus: "add middleware for request id and configure CORS for known
+      frontend origin"
+    theory:
+      title: Middleware, CORS and request context
+      content: |-
+        ### Intuitive explanation
+        Middleware is the corridor through which every request and response passes. Here it is appropriate to measure time, add correlation id or configure CORS. Here it is inappropriate to implement a specific right to the book: the middleware does not know the business context and easily becomes a hidden global if.
+
+        ### What happens at runtime
+        Middleware receives Request and `call_next`, can execute code before and after the next layer. CORS middleware responds to preflight and adds headers only for allowed origins. The request id must go through context/logging and return as a header. Do not use `allow_origins=["*"]` with credentials.
+
+        ### Minimal code example
+        ```python
+        import time
+        from uuid import uuid4
+        from fastapi import FastAPI, Request
+        from fastapi.middleware.cors import CORSMiddleware
+
+        app = FastAPI()
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["https://app.example.com"],
+            allow_credentials=True,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
+
+        @app.middleware("http")
+        async def request_id(request: Request, call_next):
+            started = time.perf_counter()
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = str(uuid4())
+            response.headers["X-Response-Time"] = f"{time.perf_counter() - started:.4f}"
+            return response
+        ```
+
+        ### Explanation of each line of the example
+        CORS restricts browser-origin and is not a replacement for authentication. The middleware measures the time until `call_next`, transmits the route request, and after returning changes the response headers. In the production request id, it is better to create it once and accept the external one only after validation, so as not to change the trace.
+
+        ### Try to predict
+        CORS will affect browser cross-origin behavior, but will not stop curl with a server request.
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"What does CORS middleware do?","code":"import time\nfrom uuid import uuid4\nfrom fastapi import FastAPI, Request\nfrom fastapi.middleware.cors import CORSMiddleware\n\napp = FastAPI()\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"https://app.example.com\"],\n    allow_credentials=True,\n    allow_methods=[\"GET\", \"POST\"],\n    allow_headers=[\"Authorization\", \"Content-Type\"],\n)\n\n@app.middleware(\"http\")\nasync def request_id(request: Request, call_next):\n    started = time.perf_counter()\n    response = await call_next(request)\n    response.headers[\"X-Request-ID\"] = str(uuid4())\n    response.headers[\"X-Response-Time\"] = f\"{time.perf_counter() - started:.4f}\"\n    return response","options":["Manages allowed browser origins and CORS headers","Encrypts the password in the database","Checks all resource permissions","Starts the background worker"],"answer":0,"explanation":"CORS is a browser access policy for cross-origin response; it does not replace server-side auth."}
+        ```
+
+        ### How behavior changes
+        Preflight OPTIONS may be rejected due to an incomplete list of methods or headers. If the origin is dynamic, use a validated allow-list instead of mirroring any origin.
+
+        ### Typical mistakes of a beginner
+        Allow `*` from credentials; think that CORS protects the API from curl; generate a new request id after logging in; hide business rules in middleware; do not measure the price of middleware.
+
+        ### In practice
+        This snippet shows where the theme construct becomes part of the actual API:
+        ```python
+        import time
+        from uuid import uuid4
+        from fastapi import FastAPI, Request
+        from fastapi.middleware.cors import CORSMiddleware
+
+        app = FastAPI()
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["https://app.example.com"],
+            allow_credentials=True,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
+
+        @app.middleware("http")
+        async def request_id(request: Request, call_next):
+            started = time.perf_counter()
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = str(uuid4())
+            response.headers["X-Response-Time"] = f"{time.perf_counter() - started:.4f}"
+            return response
+        ```**Why it's here:** A fragment exposes global technical policy separate from route and business logic.
+
+        **What to change yourself:** Add secure logging of method, path and status without body and secrets.
+
+        ### Practical algorithm for this topic
+        1. Define global policy. 2. Add middleware. 3. Configure CORS allow-list. 4. Check the preflight. 5. Check the response headers. 6. Measure the overhead.
+
+        Before starting, formulate the expected result: add middleware for the request id and configure CORS for the known frontend origin. Then check the normal, marginal, and error cases.
+
+        ### Summary
+        Middleware is suitable for end-to-end technical rules. CORS manages the browser interaction and should not replace authentication or authorization.
+  - title: BackgroundTasks, queues and long operations
+    key: backgroundtasks-cherhy-ta-dovhi-operatsii
+    description: distinguish request task from worker queue | return 202 | not to
+      lose critical work
+    order: 20
+    exerciseFocus: "choose BackgroundTasks or an external queue for the
+      post-response operation"
+    theory:
+      title: BackgroundTasks, queues and long operations
+      content: >-
+        ### Intuitive explanation
+
+        BackgroundTasks are "do after a response is sent in this process". This
+        is good for a short email or recording telemetry. Celery, RQ, or other
+        queue is "put reliable work in a separate worker" that goes through long
+        processing, retry and scaling. The choice is determined by the
+        consequences of losing the task.
+
+        ### What happens at runtime
+
+        FastAPI accumulates a background task and runs it after the response.
+        The client has already received a response, so a task error cannot
+        change its status. For heavy or critical operations, the endpoint better
+        creates a job, saves its state and returns 202 with the job id; worker
+        processes it separately.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import BackgroundTasks, FastAPI, status
+
+        app = FastAPI()
+
+        def write_audit(event: str) -> None:
+            with open("audit.log", "a", encoding="utf-8") as file:
+                file.write(event + "\n")
+
+        @app.post("/events", status_code=status.HTTP_202_ACCEPTED)
+
+        def create_event(background_tasks: BackgroundTasks):
+            background_tasks.add_task(write_audit, "event-created")
+            return {"accepted": True}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `BackgroundTasks` is received as a custom parameter. `add_task` adds the
+        function and arguments, but does not run it immediately. Response 202
+        means that the work is accepted, not necessarily completed. The file
+        record in the example is not a reliable queue for production — it just
+        demonstrates the limit.
+
+        ### Try to predict
+
+        The client receives a 202 before writing_audit; if the process crashes
+        after response, the record may be lost.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"When should you use an
+        external queue instead of BackgroundTasks?","code":"from fastapi import
+        BackgroundTasks, FastAPI, status\n\napp = FastAPI()\n\ndef
+        write_audit(event: str) -> None:\n    with open(\"audit.log\", \"a\",
+        encoding=\"utf-8\") as file:\n        file.write(event +
+        \"\\n\")\n\n@app.post(\"/events\",
+        status_code=status.HTTP_202_ACCEPTED)\ndef
+        create_event(background_tasks:
+        BackgroundTasks):\n    background_tasks.add_task(write_audit,
+        \"event-created\")\n    return {\"accepted\": True}","options":["When
+        the work is difficult, critical, long or requires a retry and individual
+        workers","When you just need to return JSON","For each if in the
+        handler","For GET only"],"answer":0,"explanation":"Built-in background
+        tasks are not durable distributed queue; critical work requires a
+        separate reliability model."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If the task uses a request-scoped DB session, it may already be closed.
+        Pass simple identifiers and create your own resources inside
+        worker/task.
+
+        ### Typical mistakes of a beginner
+
+        Execute heavy CPU code in BackgroundTasks; consider 202 as proof of
+        completion; transfer a closed session; do not have idempotency/retry;
+        hide critical payment in fire-and-forget.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import BackgroundTasks, FastAPI, status
+
+        app = FastAPI()
+
+        def write_audit(event: str) -> None:
+            with open("audit.log", "a", encoding="utf-8") as file:
+                file.write(event + "\n")
+
+        @app.post("/events", status_code=status.HTTP_202_ACCEPTED)
+
+        def create_event(background_tasks: BackgroundTasks):
+            background_tasks.add_task(write_audit, "event-created")
+            return {"accepted": True}
+        ```**Why it's here:** The snippet shows a small post-match operation and
+        makes you talk about its limitations.
+
+        **What to change yourself:** Design job endpoint with `job_id` and
+        status `/jobs/{job_id}` instead of direct long calculation.
+
+        ### Practical algorithm for this topic
+
+        1. Estimate duration and criticality. 2. Select in-process task or
+        queue. 3. Define job statuses. 4. Add idempotency. 5. Think about retry
+        and observability.
+
+        Before starting, formulate the expected result: choose BackgroundTasks
+        or an external queue for the operation after the response. Then check
+        the normal, marginal, and error cases.
+
+        ### Summary
+
+        BackgroundTasks are convenient for small work after response, but do not
+        replace durable queue. Reliability and repeatability must be part of the
+        design.
+  - title: Files, UploadFile, and Threaded Responses
+    key: fayly-uploadfile-ta-potokovi-vidpovidi
+    description: accept multipart upload | limit the size and type | don't read a
+      large file entirely into memory
+    order: 21
+    exerciseFocus: "accept the UploadFile, check the MIME, and save the controlled fragment"
+    theory:
+      title: Files, UploadFile, and Threaded Responses
+      content: >-
+        ### Intuitive explanation
+
+        A file is not just a string in JSON. It can be large, slow, fake, or
+        malicious. `UploadFile` gives the file object and metadata, but does not
+        do the security check for you. Limits, allow-list types, safe name and
+        scan if risk requires before saving.
+
+        ### What happens at runtime
+
+        Multipart parser reads upload and passes `UploadFile`. The client
+        `content_type` is not proof of the actual format, so bytes inspection
+        and policy are important. Large files are processed in chunks or
+        transferred to object storage. StreamingResponse is useful for sending
+        the result incrementally, but needs lifecycle control.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI, File, HTTPException, UploadFile
+
+        app = FastAPI()
+
+        @app.post("/images")
+
+        async def upload_image(file: UploadFile = File(...)):
+            allowed = {"image/jpeg", "image/png"}
+            if file.content_type not in allowed:
+                raise HTTPException(status_code=415, detail="Unsupported media type")
+            chunk = await file.read(1024)
+            return {"filename": file.filename, "bytes_sampled": len(chunk)}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `File(...)` tells FastAPI that the parameter comes in a multipart.
+        `UploadFile` allows you to read asynchronously and retrieve the
+        filename/content_type. Allow-list filters out obviously unnecessary
+        types, but client-side MIME cannot be considered sufficient protection.
+        `read(1024)` indicates a limited read rather than loading the entire
+        file.
+
+        ### Try to predict
+
+        A file with `text/plain` will get 415; for PNG, only the first
+        controlled chunk will be read.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why can't just
+        `file.content_type` be trusted?","code":"from fastapi import FastAPI,
+        File, HTTPException, UploadFile\n\napp =
+        FastAPI()\n\n@app.post(\"/images\")\nasync def upload_image(file:
+        UploadFile = File(...)):\n    allowed = {\"image/jpeg\",
+        \"image/png\"}\n    if file.content_type not in allowed:\n        raise
+        HTTPException(status_code=415, detail=\"Unsupported media
+        type\")\n    chunk = await file.read(1024)\n    return {\"filename\":
+        file.filename, \"bytes_sampled\": len(chunk)}","options":["Its value is
+        sent by the client and can be faked","FastAPI cannot read
+        MIME","UploadFile is always empty","CORS changes the file
+        type"],"answer":0,"explanation":"Content-Type is a signal from the
+        client. The actual format, size and content must be checked
+        separately."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Filename may contain dangerous segments, so do not use it as a path.
+        Limit the maximum size on the proxy and in the application. For large
+        files, do not keep bytes in the memory of one worker.
+
+        ### Typical mistakes of a beginner
+
+        Store filename as path; read the entire upload in bytes; trust MIME;
+        return a file without access control; do not limit multipart body;
+        include personal data in logs.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI, File, HTTPException, UploadFile
+
+        app = FastAPI()
+
+        @app.post("/images")
+
+        async def upload_image(file: UploadFile = File(...)):
+            allowed = {"image/jpeg", "image/png"}
+            if file.content_type not in allowed:
+                raise HTTPException(status_code=415, detail="Unsupported media type")
+            chunk = await file.read(1024)
+            return {"filename": file.filename, "bytes_sampled": len(chunk)}
+        ```**Why this is here:** Restricted reading demonstrates resource
+        security even before object storage is connected.
+
+        **What to change yourself:** Add size checking via chunk counter and
+        controlled object name.
+
+        ### Practical algorithm for this topic
+
+        1. Determine the allowed formats. 2. Adjust the size limit. 3. Read in
+        chunks. 4. Check the actual format. 5. Save in sandbox/object storage.
+        6. Disable path traversal.
+
+        Before running, state the expected result: accept the UploadFile, check
+        the MIME, and save the controlled fragment. Then check the normal,
+        marginal, and error cases.
+
+        ### Summary
+
+        Upload is a security and resource limit. FastAPI simplifies transport,
+        but validation, storage policy and scanning remain the responsibility of
+        the system.
+  - title: Middleware errors, exception handlers and a unified error format
+    key: middleware-errors-exception-handlers-i-yedynyy-format-pomylky
+    description: create a global exception handler | do not disclose internal errors
+      | keep the same JSON error contract
+    order: 22
+    exerciseFocus: "convert a domain error into a stable JSON response with a request id"
+    theory:
+      title: Middleware errors, exception handlers and a unified error format
+      content: >-
+        ### Intuitive explanation
+
+        It is important for the client to receive the same form of error
+        regardless of which route the problem occurred. The inner exception can
+        contain SQL or a stack trace, but the outer response must contain code,
+        a message to the user, and a correlation id. The global handler is a
+        place for a single external format, not for hiding all defects.
+
+        ### What happens at runtime
+
+        FastAPI looks for a handler for the exception type. The domain
+        `BookAlreadyExists` can be intercepted and turned into a 409. The
+        unknown exception falls into a generic 500 handler, where it is logged
+        with traceback and a safe message is returned to the client. The order
+        of middleware and exception handlers affects what will be visible in the
+        response.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI, Request
+
+        from fastapi.responses import JSONResponse
+
+        class BookAlreadyExists(Exception):
+            pass
+
+        app = FastAPI()
+
+        @app.exception_handler(BookAlreadyExists)
+
+        async def book_conflict(request: Request, exc: BookAlreadyExists):
+            return JSONResponse(
+                status_code=409,
+                content={"code": "BOOK_EXISTS", "message": "Book already exists"},
+            )
+        ```
+
+
+        ### Explanation of each line of the example
+
+        A native exception describes a domain event, not an HTTP one. Decorator
+        registers mapping exception → response. `JSONResponse` sets the status
+        and structure. The actual handler may add the request id, but should not
+        return `str(exc)` without filtering if there is internal data.
+
+        ### Try to predict
+
+        If the service raises BookAlreadyExists, the client will receive a 409
+        with the code BOOK_EXISTS.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why does the domain
+        exception not necessarily create an HTTPException directly in the
+        service?","code":"from fastapi import FastAPI, Request\nfrom
+        fastapi.responses import JSONResponse\n\nclass
+        BookAlreadyExists(Exception):\n    pass\n\napp =
+        FastAPI()\n\n@app.exception_handler(BookAlreadyExists)\nasync def
+        book_conflict(request: Request, exc: BookAlreadyExists):\n    return
+        JSONResponse(\n        status_code=409,\n        content={\"code\":
+        \"BOOK_EXISTS\", \"message\": \"Book already
+        exists\"},\n    )","options":["So service does not depend on HTTP, and
+        route boundary maps the error centrally","Because HTTPException is
+        forbidden in Python","So that errors are ignored","So that there is no
+        status code"],"answer":0,"explanation":"Separating the domain from the
+        transport makes it easier to reuse and test the service."}
+
+        ```
+
+
+        ### How behavior changes
+
+        The error code should be more stable than the text. The client must
+        respond to `BOOK_EXISTS` and the text can be localized or changed
+        without breaking change.
+
+        ### Typical mistakes of a beginner
+
+        Return exception message directly; mix all errors in 200; login password
+        or body; create different JSON shapes; catch BaseException instead of
+        specific classes.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI, Request
+
+        from fastapi.responses import JSONResponse
+
+        class BookAlreadyExists(Exception):
+            pass
+
+        app = FastAPI()
+
+        @app.exception_handler(BookAlreadyExists)
+
+        async def book_conflict(request: Request, exc: BookAlreadyExists):
+            return JSONResponse(
+                status_code=409,
+                content={"code": "BOOK_EXISTS", "message": "Book already exists"},
+            )
+        ```**Why it's here:** The example shows the boundary between a domain
+        event and an HTTP representation, which is required for a large API.
+
+        **What to change yourself:** Add a `RequestValidationError` handler with
+        its own error contract without losing the location field.
+
+        ### Practical algorithm for this topic
+
+        1. Name the domain error. 2. Define HTTP mapping. 3. Create a handler.
+        4. Log the internal cause. 5. Return a secure code/message. 6. Check the
+        customer contract.
+
+        Before starting, formulate the expected result: convert a domain error
+        into a stable JSON response with a request id. Then check the normal,
+        marginal, and error cases.
+
+        ### Summary
+
+        A centralized error contract makes the API predictable. Logging and
+        external response should contain different levels of detail.
+  - title: API testing via TestClient
+    key: testuvannya-api-cherez-testclient
+    description: write endpoint contract tests | check status, JSON and negative
+      scripts | don't test only the happy path
+    order: 23
+    exerciseFocus: "write a test for valid and invalid request of one endpoint"
+    theory:
+      title: API testing via TestClient
+      content: >-
+        ### Intuitive explanation
+
+        A Python function call does not check the route, HTTP method,
+        validation, and serialization. TestClient takes the same external path
+        as the client, but locally and deterministically. The test should
+        capture the contract: URL, status, important fields, error, and no
+        secrets.
+
+        ### What happens at runtime
+
+        TestClient creates a test transport for an ASGI application.
+        `client.get` or `client.post` forms an HTTP request, FastAPI executes
+        dependencies and a handler, and test receives a response. Dependencies
+        can be overridden so as not to use a real database or token provider.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI
+
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+
+        @app.get("/books/{book_id}")
+
+        def read_book(book_id: int):
+            return {"id": book_id}
+
+        client = TestClient(app)
+
+        def test_read_book():
+            response = client.get("/books/7")
+            assert response.status_code == 200
+            assert response.json() == {"id": 7}
+
+        def test_invalid_book_id():
+            response = client.get("/books/not-a-number")
+            assert response.status_code == 422
+        ```
+
+
+        ### Explanation of each line of the example
+
+        TestClient executes the endpoint through an HTTP-like interface. The
+        first test checks exact JSON, the second one checks the path type limit.
+        The test does not run an external Uvicorn and does not require a real
+        network. For async resources, use the appropriate async test strategy.
+
+        ### Try to predict
+
+        `/books/not-a-number` does not reach the function, so 422 is expected.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does TestClient
+        add compared to straight `read_book(7)`?","code":"from fastapi import
+        FastAPI\nfrom fastapi.testclient import TestClient\n\napp =
+        FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef read_book(book_id:
+        int):\n    return {\"id\": book_id}\n\nclient = TestClient(app)\n\ndef
+        test_read_book():\n    response = client.get(\"/books/7\")\n    assert
+        response.status_code == 200\n    assert response.json() == {\"id\":
+        7}\n\ndef test_invalid_book_id():\n    response =
+        client.get(\"/books/not-a-number\")\n    assert response.status_code ==
+        422","options":["Verification of routing, HTTP method, validation and
+        response formation","Execution of production DB","Automatic user
+        creation","CSS validation"],"answer":0,"explanation":"TestClient crosses
+        the ASGI boundary, so it tests more than a pure function call."}
+
+        ```
+
+
+        ### How behavior changes
+
+        One test out of 200 doesn't catch 404, 422, 401, 403, empty collection
+        or duplicate. A good test suite is short but covers contract branching.
+
+        ### Typical mistakes of a beginner
+
+        Check only status 200; compare all volatile JSON unnecessarily; use
+        production DB; do not override the external service; leave flaky
+        time-dependent tests.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI
+
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+
+        @app.get("/books/{book_id}")
+
+        def read_book(book_id: int):
+            return {"id": book_id}
+
+        client = TestClient(app)
+
+        def test_read_book():
+            response = client.get("/books/7")
+            assert response.status_code == 200
+            assert response.json() == {"id": 7}
+
+        def test_invalid_book_id():
+            response = client.get("/books/not-a-number")
+            assert response.status_code == 422
+        ```**Why this is here:** Two tests show that positive and negative
+        behavior is an equally important part of the API.
+
+        **What to change yourself:** Add test for empty/missing workbook and for
+        response schema.
+
+        ### Practical algorithm for this topic
+
+        1. Write the contract. 2. Create a TestClient. 3. Check the happy path.
+        4. Add wrong type/missing. 5. Override dependencies. 6. Run the test in
+        CI.
+
+        Before starting, formulate the expected result: write a test for a valid
+        and invalid request of one endpoint. Then check the normal, marginal,
+        and error cases.
+
+        ### Summary
+
+        TestClient tests the API from the outside, not just the internal
+        function. The minimum set should include normal, marginal, and error
+        scenarios.
+  - title: Testing dependencies, DB and async tests
+    key: testing-dependencies-bd-i-async-tests
+    description: replace dependency through overrides | isolate the test DB | test
+      async code without a random network
+    order: 24
+    exerciseFocus: "replace the auth dependency in the test and check the secure endpoint"
+    theory:
+      title: Testing dependencies, DB and async tests
+      content: |-
+        ### Intuitive explanation
+        The test should not depend on the actual JWT, the payment service or the production DB if it tests the behavior of the route. Dependency override allows you to substitute a controlled user or an in-memory repository. So the test becomes fast and explains exactly what it is testing.
+
+        ### What happens at runtime
+        FastAPI has an `app.dependency_overrides` dictionary. The key is the original dependency, the value is the test function. FastAPI will perform an override during the request. Overrides must be cleared after the test, otherwise subsequent tests will get the wrong context. Async code tests the async HTTP client in the corresponding event loop.
+
+        ### Minimal code example
+        ```python
+        from fastapi import Depends, FastAPI
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+
+        def current_user():
+            return {"id": 99, "role": "reader"}
+
+        @app.get("/me")
+        def me(user = Depends(current_user)):
+            return user
+
+        def test_me_as_fixed_user():
+            app.dependency_overrides[current_user] = lambda: {"id": 1, "role": "tester"}
+            try:
+                response = TestClient(app).get("/me")
+                assert response.json()["role"] == "tester"
+            finally:
+                app.dependency_overrides.clear()
+        ```
+
+        ### Explanation of each line of the example
+        The original current_user doesn't refer to the actual system, but the override shows the mechanics. `try/finally' clears the state after the test. In a real kit, it is better to use named fixture/factory instead of lambda to make the test readable.
+
+        ### Try to predict
+        After clear, the next test will use the real dependency again.
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"Why clear app.dependency_overrides after a test?","code":"from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\ndef current_user():\n    return {\"id\": 99, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user = Depends(current_user)):\n    return user\n\ndef test_me_as_fixed_user():\n    app.dependency_overrides[current_user] = lambda: {\"id\": 1, \"role\": \"tester\"}\n    try:\n        response = TestClient(app).get(\"/me\")\n        assert response.json()[\"role\"] == \"tester\"\n    finally:\n        app.dependency_overrides.clear()","options":["So that the substitution does not flow into other tests","To remove the endpoint","To clear the production DB","To enable CORS"],"answer":0,"explanation":"Overrides are mutable state of the application and must have a limit of one test."}
+        ```
+
+        ### How behavior changes
+        If the override remains, the tests can be run randomly with the test user. The test database should also be created and cleaned in a controlled manner, and migrations should be part of the setup.
+
+        ### Typical mistakes of a beginner
+        Do not clean overrides; connect production URL; check the test database without transactional isolation; create flaky sleep; mix unit and integration setup.
+
+        ### In practice
+        This snippet shows where the theme construct becomes part of the actual API:
+        ```python
+        from fastapi import Depends, FastAPI
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+
+        def current_user():
+            return {"id": 99, "role": "reader"}
+
+        @app.get("/me")
+        def me(user = Depends(current_user)):
+            return user
+
+        def test_me_as_fixed_user():
+            app.dependency_overrides[current_user] = lambda: {"id": 1, "role": "tester"}
+            try:
+                response = TestClient(app).get("/me")
+                assert response.json()["role"] == "tester"
+            finally:
+                app.dependency_overrides.clear()
+        ```**Why this is here:** Fixed user allows you to check route without cryptographic and network noise.
+
+        **What to change yourself:** Create two overrides: reader and admin, and then check the different access statuses.
+
+        ### Practical algorithm for this topic
+        1. Define the external dependency. 2. Create a deterministic override. 3. Start the endpoint. 4. Clear the override. 5. Use a separate test scheme for the database. 6. Separate unit/integration.
+
+        Before starting, formulate the expected result: replace the auth dependency in the test and test the protected endpoint. Then check the normal, marginal, and error cases.
+
+        ### Summary
+        Dependency overrides are one of FastAPI's key tools for isolated tests. The change must be obvious, short-lived, and completely clearable.
+  - title: "Lifespan: startup and shutdown without global magic"
+    key: lifespan-startup-i-shutdown-bez-hlobalnoi-mahii
+    description: initialize resources at startup | close them at shutdown |
+      distinguish between lifespan and request dependency
+    order: 25
+    exerciseFocus: "create a lifespan context manager for the application resource"
+    theory:
+      title: "Lifespan: startup and shutdown without global magic"
+      content: >-
+        ### Intuitive explanation
+
+        Some resources belong to a process and not to a single request:
+        connection pool, machine learning model, external service client. They
+        do not need to be created for each request. Lifespan describes the pair
+        "prepare on start - release on stop" and makes it clear.
+
+        ### What happens at runtime
+
+        FastAPI calls the lifespan context manager before the request service
+        starts and after it finishes. The code before `yield' is startup, after
+        it is shutdown. The resource can be put in `app.state`, but route must
+        get it through controlled access or dependency. Tests should run
+        lifespan if testing this resource.
+
+        ### Minimal code example
+
+        ```python
+
+        from contextlib import asynccontextmanager
+
+        from fastapi import FastAPI, Request
+
+        @asynccontextmanager
+
+        async def lifespan(app: FastAPI):
+            app.state.search_index = {"ready": True}
+            yield
+            app.state.search_index = None
+
+        app = FastAPI(lifespan=lifespan)
+
+        @app.get("/search/status")
+
+        def search_status(request: Request):
+            return request.app.state.search_index
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `asynccontextmanager` guarantees two phases. `app.state` stores the
+        resource within a specific app instance, not in an arbitrary global
+        variable. After `yield`, the index is freed. For a real service, add
+        startup error handling: do not start the process as healthy if the
+        critical resource is not ready.
+
+        ### Try to predict
+
+        Before the first request, the index is ready; after shutdown cleanup
+        should be performed.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the part of
+        lifespan after yield intended for?","code":"from contextlib import
+        asynccontextmanager\nfrom fastapi import FastAPI,
+        Request\n\n@asynccontextmanager\nasync def lifespan(app:
+        FastAPI):\n    app.state.search_index = {\"ready\":
+        True}\n    yield\n    app.state.search_index = None\n\napp =
+        FastAPI(lifespan=lifespan)\n\n@app.get(\"/search/status\")\ndef
+        search_status(request: Request):\n    return
+        request.app.state.search_index","options":["To release the process-level
+        resource during shutdown","To validate each query","To form OpenAPI","To
+        read the request body"],"answer":0,"explanation":"The exit phase of the
+        lifespan closes the resources created during startup."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If only one request needs the resource, use request dependency. If it is
+        common to the process and expensive to create, lifespan is better.
+        Multiple worker processes will have separate copies of the resource.
+
+        ### Typical mistakes of a beginner
+
+        Create a resource during import; do not close the client; mix global
+        state between tests; load a giant model in each route; forget that
+        workers do not share memory.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from contextlib import asynccontextmanager
+
+        from fastapi import FastAPI, Request
+
+        @asynccontextmanager
+
+        async def lifespan(app: FastAPI):
+            app.state.search_index = {"ready": True}
+            yield
+            app.state.search_index = None
+
+        app = FastAPI(lifespan=lifespan)
+
+        @app.get("/search/status")
+
+        def search_status(request: Request):
+            return request.app.state.search_index
+        ```**Why this is here:** Search index is a clear example of an expensive
+        process-level resource without a real ML model.
+
+        **What to change yourself:** Add a dependency that returns the index
+        from app.state and correctly reports if it is not ready.
+
+        ### Practical algorithm for this topic
+
+        1. Define the owner of the resource. 2. Add lifespan. 3. Create a
+        resource to yield. 4. Give it via state/dependency. 5. Close after
+        yield. 6. Check startup failure and shutdown.
+
+        Before starting, formulate the expected result: create a lifespan
+        context manager for the application resource. Then check the normal,
+        marginal, and error cases.
+
+        ### Summary
+
+        Lifespan makes the lifecycle of process-level resources explicit. It
+        does not replace short-lived request dependencies and does not create
+        shared memory between workers.
+  - title: WebSockets and two-way communication
+    key: websockets-i-dvostoronniy-zv-yazok
+    description: distinguish WebSocket from HTTP | receive and send messages |
+      handle disconnect
+    order: 26
+    exerciseFocus: "create a WebSocket endpoint that responds to messages and
+      correctly closes the connection"
+    theory:
+      title: WebSockets and two-way communication
+      content: >-
+        ### Intuitive explanation
+
+        An HTTP request has a request and a response, and a WebSocket after a
+        handshake leaves the channel open for both parties. This is fine for
+        chat, live updates, and a shared editor, but adds complexity: connection
+        manager, backpressure, authorization, heartbeat, and disconnect
+        recovery.
+
+        ### What happens at runtime
+
+        FastAPI accepts a WebSocket and executes `accept`. The coroutine then
+        waits for `receive_text`, constructs a message, and calls `send_text`.
+        When the client closes the channel, a WebSocketDisconnect occurs. In
+        production, do not rely on the memory of one process for broadcast if
+        there are several workers: an external pub/sub is required.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
+        app = FastAPI()
+
+        @app.websocket("/ws")
+
+        async def websocket_endpoint(websocket: WebSocket):
+            await websocket.accept()
+            try:
+                while True:
+                    message = await websocket.receive_text()
+                    await websocket.send_text(f"echo: {message}")
+            except WebSocketDisconnect:
+                pass
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The decorator registers a WebSocket route, not an HTTP GET. `accept`
+        completes the handshake. The loop lives as long as the client sends a
+        message. Disconnect handling is not a business logic error—it's a normal
+        channel life scenario.
+
+        ### Try to predict
+
+        After the hello message, the client will receive echo: hello; when
+        closed, the loop will end via disconnect.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"How is WebSocket
+        fundamentally different from a regular GET endpoint?","code":"from
+        fastapi import FastAPI, WebSocket, WebSocketDisconnect\n\napp =
+        FastAPI()\n\n@app.websocket(\"/ws\")\nasync def
+        websocket_endpoint(websocket: WebSocket):\n    await
+        websocket.accept()\n    try:\n        while True:\n            message =
+        await websocket.receive_text()\n            await
+        websocket.send_text(f\"echo: {message}\")\n    except
+        WebSocketDisconnect:\n        pass","options":["It supports long-lived
+        two-way channel after handshake","It always returns HTML","It is not
+        authorized","It only reads stdin"],"answer":0,"explanation":"WebSocket
+        allows a server and a client to send messages within an open
+        connection."}
+
+        ```
+
+
+        ### How behavior changes
+
+        The client can disconnect at any time. For broadcast, it is necessary to
+        remove dead connections and limit the size of messages. Many workers
+        require coordination via Redis/pub-sub or another system.
+
+        ### Typical mistakes of a beginner
+
+        Do not handle disconnect; keep an unlimited list of sockets; do not
+        authenticate handshake; execute blocking code in a loop; save broadcast
+        state in only one process.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
+        app = FastAPI()
+
+        @app.websocket("/ws")
+
+        async def websocket_endpoint(websocket: WebSocket):
+            await websocket.accept()
+            try:
+                while True:
+                    message = await websocket.receive_text()
+                    await websocket.send_text(f"echo: {message}")
+            except WebSocketDisconnect:
+                pass
+        ```**Why this is here:** Echo endpoint isolates the transport mechanics
+        from the chat business logic.
+
+        **What to change yourself:** Add a JSON message model at the protocol
+        level and a text length limit.
+
+        ### Practical algorithm for this topic
+
+        1. Define channel events. 2. Authenticate the handshake. 3. Accept the
+        connection. 4. Process the message. 5. Process disconnect. 6. Design
+        scaling and backpressure.
+
+        Before starting, formulate the expected result: create a WebSocket
+        endpoint that responds to messages and correctly closes the connection.
+        Then check the normal, marginal, and error cases.
+
+        ### Summary
+
+        WebSocket is a separate type of transport with its own lifecycle.
+        FastAPI simplifies the endpoint, but reliability, auth and scaling must
+        be designed explicitly.
+  - title: Streaming, Server-Sent Events and large responses
+    key: streaming-server-sent-events-i-velyki-vidpovidi
+    description: distinguish streaming from WebSocket | return data in parts |
+      control backpressure
+    order: 27
+    exerciseFocus: "return the text stream in parts with the correct media type"
+    theory:
+      title: Streaming, Server-Sent Events and large responses
+      content: >-
+        ### Intuitive explanation
+
+        Sometimes the client does not need to wait for the whole result.
+        StreamingResponse transmits parts incrementally through one direction
+        server → client. SSE adds an event format on top of HTTP, and WebSocket
+        is needed when the client is also actively sending messages.
+
+        ### What happens at runtime
+
+        Generator or async generator produces chunks. StreamingResponse reads
+        them and sends them to the client without storing the entire result in
+        memory. If the client is slow, the server must account for backpressure
+        and generator cancellation. On the proxy, you must not disable/break
+        buffering for such an endpoint.
+
+        ### Minimal code example
+
+        ```python
+
+        import asyncio
+
+        from collections.abc import AsyncIterator
+
+        from fastapi import FastAPI
+
+        from fastapi.responses import StreamingResponse
+
+        app = FastAPI()
+
+        async def numbers() -> AsyncIterator[str]:
+            for number in range(3):
+                yield f"data: {number}\n\n"
+                await asyncio.sleep(0.01)
+
+        @app.get("/events")
+
+        async def events():
+            return StreamingResponse(numbers(), media_type="text/event-stream")
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Async generator does not generate all the text in advance. The SSE
+        format requires `data:` and a blank line between events. `media_type`
+        tells the client how to read the stream. For real tape, add heartbeat,
+        cancellation handling, and duration limits.
+
+        ### Try to predict
+
+        The client will receive three events incrementally rather than a single
+        JSON array after the loop completes.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"When is
+        StreamingResponse more useful than plain JSON?","code":"import
+        asyncio\nfrom collections.abc import AsyncIterator\nfrom fastapi import
+        FastAPI\nfrom fastapi.responses import StreamingResponse\n\napp =
+        FastAPI()\n\nasync def numbers() -> AsyncIterator[str]:\n    for number
+        in range(3):\n        yield f\"data: {number}\\n\\n\"\n        await
+        asyncio.sleep(0.01)\n\n@app.get(\"/events\")\nasync def
+        events():\n    return StreamingResponse(numbers(),
+        media_type=\"text/event-stream\")","options":["When the result is large
+        or produced gradually","When you want to execute SQL without a
+        transaction","When you need to hide the status code","When the client
+        does not have HTTP"],"answer":0,"explanation":"Streaming reduces the
+        time to the first byte and does not require the entire result to be
+        stored in memory."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Disconnecting the client should cancel the generator. If the proxy
+        buffers the response, the advantage of streaming may disappear. SSE is a
+        one-way channel; for two-way exchange use WebSocket.
+
+        ### Typical mistakes of a beginner
+
+        Return list instead of generator; forget media type; do not close
+        resources; ignore a slow client; send secrets over an unencrypted
+        connection.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        import asyncio
+
+        from collections.abc import AsyncIterator
+
+        from fastapi import FastAPI
+
+        from fastapi.responses import StreamingResponse
+
+        app = FastAPI()
+
+        async def numbers() -> AsyncIterator[str]:
+            for number in range(3):
+                yield f"data: {number}\n\n"
+                await asyncio.sleep(0.01)
+
+        @app.get("/events")
+
+        async def events():
+            return StreamingResponse(numbers(), media_type="text/event-stream")
+        ```**Why it's here:** The SSE example shows a practical format for live
+        updates without the complexity of a two-way WebSocket.
+
+        **What to change yourself:** Add `event:` and `id:` and check the
+        correct format of multiple events.
+
+        ### Practical algorithm for this topic
+
+        1. Define a one-way or two-way channel. 2. Select SSE/WebSocket. 3.
+        Create a generator. 4. Set the media type. 5. Process
+        disconnect/backpressure. 6. Check the proxy.
+
+        Before starting, formulate the expected result: return the text stream
+        in parts with the correct media type. Then check the normal, marginal,
+        and error cases.
+
+        ### Summary
+
+        Streaming and SSE are good for incremental results. They change the
+        lifecycle of responses, so they need control of cancellation, buffering
+        and resources.
+  - title: "API security: CORS, CSRF, injection and rate limits"
+    key: bezpeka-api-cors-csrf-injection-i-rate-limits
+    description: name the main API risks | distinguish CORS from CSRF | protect
+      access and resources
+    order: 28
+    exerciseFocus: "make a short security-checklist for one FastAPI endpoint"
+    theory:
+      title: "API security: CORS, CSRF, injection and rate limits"
+      content: >-
+        ### Intuitive explanation
+
+        FastAPI does not automatically make an application secure. It helps
+        describe input, auth, and middleware, but the threat model remains with
+        the team. The input may contain too long values, SQL/command injection,
+        token abuse, or an attempt to access someone else's resource. Security
+        is a set of layers, not a single decorator.
+
+        ### What happens at runtime
+
+        Validation limits format and size, parameterized queries protect SQL
+        boundary, authorization checks identity + ownership, rate limiting
+        prevents abuse, TLS protects transport. CORS controls browser origin,
+        while CSRF deals with trusted cookie credentials and unwanted
+        actions—these mechanisms are not interchangeable.
+
+        ### Minimal code example
+
+        ```python
+
+        from fastapi import FastAPI, Query
+
+        app = FastAPI()
+
+        @app.get("/search")
+
+        def search(q: str = Query(min_length=1, max_length=100)):
+            # q передається в параметризований repository-запит, не в f-string SQL.
+            return {"query": q.strip()}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        Query limits the length before the value gets into the service. Comment
+        reminds about SQL boundary: `f"...{q}"` should not build SQL. Whitespace
+        is not sanitization for all contexts; each sink has its own
+        escaping/parameterization rule.
+
+        ### Try to predict
+
+        Empty and very long q will be rejected 422; special characters cannot be
+        considered automatically safe without proper sink.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does CORS do and
+        what doesn't it do?","code":"from fastapi import FastAPI, Query\n\napp =
+        FastAPI()\n\n@app.get(\"/search\")\ndef search(q: str =
+        Query(min_length=1, max_length=100)):\n    # q передається в
+        параметризований repository-запит, не в f-string SQL.\n    return
+        {\"query\": q.strip()}","options":["Manages browser origins, but does
+        not replace authentication, authorization, or injection
+        protection","Encrypts all SQL queries","Validates the user's
+        password","Disables curl on the server"],"answer":0,"explanation":"CORS
+        — browser policy. Endpoint security requires separate validation, auth,
+        authorization, TLS and rate limits."}
+
+        ```
+
+
+        ### How behavior changes
+
+        Strict validation reduces the attack area, but does not protect against
+        logical access to someone else's id. The rate limit must be on the
+        correct key—IP, user, or token—and must not block legitimate NAT without
+        analysis.
+
+        ### Typical mistakes of a beginner
+
+        Consider a CORS firewall; insert user input into SQL/command; trust id
+        with URL without ownership; return stack trace; log token; not to have a
+        rate limit for login.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        from fastapi import FastAPI, Query
+
+        app = FastAPI()
+
+        @app.get("/search")
+
+        def search(q: str = Query(min_length=1, max_length=100)):
+            # q передається в параметризований repository-запит, не в f-string SQL.
+            return {"query": q.strip()}
+        ```**Why this is here:** Search endpoint is a small boundary, on which
+        length limits, parameterized repository and various security layers are
+        visible.
+
+        **What to change yourself:** Make a security checklist with input, auth,
+        ownership, rate limit, TLS and logging for your endpoint.
+
+        ### Practical algorithm for this topic
+
+        1. Describe assets and threats. 2. Limit input. 3. Check auth/ownership.
+        4. Use parameterized queries. 5. Add rate limits. 6. Remove secrets from
+        logs/errors. 7. Write negative tests.
+
+        Before starting, formulate the expected result: make a short
+        security-checklist for one FastAPI endpoint. Then check the normal,
+        marginal, and error cases.
+
+        ### Summary
+
+        The secure FastAPI endpoint protects more than just the JSON form. Input
+        boundaries, correct data sink, server-side authorization, transport and
+        observability are required.
+  - title: Logging, metrics and observability
+    key: lohuvannya-metryky-ta-sposterezhuvanist
+    description: log structured | associate events request id | distinguish between
+      log, metric and trace
+    order: 29
+    exerciseFocus: "add a useful request log without recording body and secrets"
+    theory:
+      title: Logging, metrics and observability
+      content: |-
+        ### Intuitive explanation
+        When the API is slow or returns 500, `print` alone is not enough. Log explains a single event, metric shows a trend, trace connects several services. Observability should help answer who, when, which endpoint, what status and how long it lasted — without leaking personal data.
+
+        ### What happens at runtime
+        The middleware sees the request and the response, so it can measure the latency and add the request id. Logger sends a structured event. Metrics aggregate count/error/latency buckets. A route error must have a correlation id to be tracebacked, but the client is not given the internal stack.
+
+        ### Minimal code example
+        ```python
+        import logging
+        import time
+        from fastapi import FastAPI, Request
+
+        logger = logging.getLogger("api")
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def observe(request: Request, call_next):
+            started = time.perf_counter()
+            response = await call_next(request)
+            logger.info(
+                "request_finished",
+                extra={"method": request.method, "path": request.url.path, "status": response.status_code,
+                       "latency_ms": round((time.perf_counter() - started) * 1000, 2)},
+            )
+            return response
+        ```
+
+        ### Explanation of each line of the example
+        The middleware measures the full request path. Path is logged without query secrets, status and latency. `extra` depends on the formatter configuration, so in production check that the fields actually end up in JSON. Do not add body or Authorization header without redaction policy.
+
+        ### Try to predict
+        A slow endpoint will have more latency_ms, but the log must not contain a bearer token.
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"What information is useful for diagnosing request without unnecessary risk?","code":"import logging\nimport time\nfrom fastapi import FastAPI, Request\n\nlogger = logging.getLogger(\"api\")\napp = FastAPI()\n\n@app.middleware(\"http\")\nasync def observe(request: Request, call_next):\n    started = time.perf_counter()\n    response = await call_next(request)\n    logger.info(\n        \"request_finished\",\n        extra={\"method\": request.method, \"path\": request.url.path, \"status\": response.status_code,\n               \"latency_ms\": round((time.perf_counter() - started) * 1000, 2)},\n    )\n    return response","options":["request id, method, normalized path, status and latency","Full Authorization header and password","The whole body without redaction","Only the word error"],"answer":0,"explanation":"These fields provide correlation and latency without recording secrets; personal fields have a separate policy."}
+        ```
+
+        ### How behavior changes
+        Very detailed logs can themselves become a problem: they cost money and contain PII. Sampling and log levels help keep production diagnostics useful.
+
+        ### Typical mistakes of a beginner
+        Log secrets; use only print; do not have a request id; call metric log; do not limit cardinality labels; turn off error logs for "cleanliness".
+
+        ### In practice
+        This snippet shows where the theme construct becomes part of the actual API:
+        ```python
+        import logging
+        import time
+        from fastapi import FastAPI, Request
+
+        logger = logging.getLogger("api")
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def observe(request: Request, call_next):
+            started = time.perf_counter()
+            response = await call_next(request)
+            logger.info(
+                "request_finished",
+                extra={"method": request.method, "path": request.url.path, "status": response.status_code,
+                       "latency_ms": round((time.perf_counter() - started) * 1000, 2)},
+            )
+            return response
+        ```**Why this is here:** Middleware provides a single point for technical telemetry without multiplying code in each handler.
+
+        **What to change yourself:** Add a counter for 5xx and check that the query string does not contain a secret in the log.
+
+        ### Practical algorithm for this topic
+        1. Determine the questions to be answered. 2. Add request id. 3. Log in structured. 4. Define metrics. 5. Redact secrets. 6. Check the alert threshold.
+
+        Before starting, formulate the expected result: add a useful request log without recording body and secrets. Then check the normal, marginal, and error cases.
+
+        ### Summary
+        Observability is part of the production contract. Logs, metrics and traces complement each other, and redaction is mandatory.
+  - title: Dependency overrides and mini-project architecture
+    key: dependency-overrides-i-miniproyektna-arkhitektura
+    description: assemble a FastAPI project with layers | plan milestone | prepare
+      the API for demonstration
+    order: 30
+    exerciseFocus: "design a skeleton of a mini-project with a router, schema,
+      service, repository and tests"
+    theory:
+      title: Dependency overrides and mini-project architecture
+      content: >-
+        ### Intuitive explanation
+
+        A miniproject is not a large number of endpoints, but a completed
+        vertical slice. The user must travel from the HTTP request to the
+        checked state in the database and back. Architecture is not needed for
+        beauty: it helps to add features, test for bugs, and explain solutions.
+
+        ### What happens at runtime
+
+        The request enters the router, goes through dependencies, gets to the
+        service that calls the repository, and is returned through the response
+        model. Tests replace external resources. Milestones should be
+        sequential: skeleton → read → create/update → auth → tests → deployment.
+        Each milestone should have a proof - an endpoint, a test, a schema or a
+        short README.
+
+        ### Minimal code example
+
+        ```python
+
+        # app/main.py
+
+        from fastapi import FastAPI
+
+        from app.routers import books
+
+        app = FastAPI(title="Reading Log API", version="1.0.0")
+
+        app.include_router(books.router, prefix="/api/v1")
+
+        # app/routers/books.py
+
+        # route -> service -> repository -> response model
+
+        # tests/test_books.py
+
+        # TestClient + dependency override + negative cases
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        `main.py` only collects the application and version prefix. Router is
+        responsible for HTTP, service — for script, repository — for data, tests
+        — for proof of behavior. Such a structure does not require hundreds of
+        files: what is important is the separation of responsibilities and the
+        ability to replace the infrastructure.
+
+        ### Try to predict
+
+        If the repository replaces the in-memory fake, the route contract and
+        the tests may remain unchanged.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Which sequence is best
+        for a mini-project?","code":"# app/main.py\nfrom fastapi import
+        FastAPI\nfrom app.routers import books\n\napp = FastAPI(title=\"Reading
+        Log API\", version=\"1.0.0\")\napp.include_router(books.router,
+        prefix=\"/api/v1\")\n\n# app/routers/books.py\n# route -> service ->
+        repository -> response model\n\n# tests/test_books.py\n# TestClient +
+        dependency override + negative cases","options":["First one vertical
+        script, then validation, persistence, auth, tests and
+        deployment","First, 50 endpoints without tests","First, a beautiful
+        frontend without an API contract","First production secrets in
+        git"],"answer":0,"explanation":"A vertical slice quickly provides a
+        working proof, and subsequent milestones add complexity in a controlled
+        manner."}
+
+        ```
+
+
+        ### How behavior changes
+
+        If you add auth to an unstructured route, the code will quickly become
+        duplicated. If you commit the schema and service contract first, it is
+        easier to test the changes.
+
+        ### Typical mistakes of a beginner
+
+        Start with an abstract architecture without a working script; add
+        features without acceptance criteria; do not have 404/422/401 tests;
+        keep secrets; call running code complete without a README.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        # app/main.py
+
+        from fastapi import FastAPI
+
+        from app.routers import books
+
+        app = FastAPI(title="Reading Log API", version="1.0.0")
+
+        app.include_router(books.router, prefix="/api/v1")
+
+        # app/routers/books.py
+
+        # route -> service -> repository -> response model
+
+        # tests/test_books.py
+
+        # TestClient + dependency override + negative cases
+
+        ```**Why it's here:** Skeleton directly prepares for the course
+        miniproject and shows how parts of FastAPI connect into a system.
+
+        **What to change yourself:** Formulate your own resource, three
+        milestone and five contract tests before writing all the code.
+
+        ### Practical algorithm for this topic
+
+        1. Choose one resource and a custom script. 2. Create an OpenAPI
+        contract. 3. Implement read. 4. Add create/update and DB. 5. Add
+        auth/permissions. 6. Cover negative cases. 7. Prepare README and
+        deployment.
+
+        Before starting, formulate the expected result: design the skeleton of a
+        mini-project with router, schema, service, repository and tests. Then
+        check the normal, marginal, and error cases.
+
+        ### Summary
+
+        The best way to learn FastAPI is to complete a vertical mini-project
+        with explicit contracts, tests, and an explanation of the architectural
+        decisions.
+  - title: "Production deployment: ASGI, workers, proxy and health checks"
+    key: production-deployment-asgi-workers-proxy-ta-health-checks
+    description: distinguish dev and production launch | explain ASGI workers |
+      prepare health/readiness checks
+    order: 31
+    exerciseFocus: "make a production checklist for the FastAPI service without
+      dangerous debug"
+    theory:
+      title: "Production deployment: ASGI, workers, proxy and health checks"
+      content: >-
+        ### Intuitive explanation
+
+        `fastapi dev' is convenient for training, but production requires a
+        process manager, TLS/proxy, configuration of workers, logs, health
+        checks and controlled shutdown. A running process does not yet mean a
+        ready service: readiness must check critical dependencies.
+
+        ### What happens at runtime
+
+        ASGI server accepts connection and can have several worker processes.
+        Each worker has its own memory and lifespan. Reverse proxy terminates
+        TLS, routes traffic and applies body/timeouts. Liveness corresponds to
+        "the process is alive", readiness - "you can accept work." Deployment
+        should not enable debug or show stack trace.
+
+        ### Minimal code example
+
+        ```python
+
+        # Приклад команди запуску, не виконувати у навчальному endpoint
+
+        # uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+        from fastapi import FastAPI
+
+        app = FastAPI(debug=False)
+
+        @app.get("/health/live")
+
+        def live():
+            return {"status": "ok"}
+
+        @app.get("/health/ready")
+
+        def ready():
+            # Тут перевіряють критичні залежності з timeout.
+            return {"status": "ready"}
+        ```
+
+
+        ### Explanation of each line of the example
+
+        The command specifies the import path, host, port and number of workers;
+        the exact command depends on the environment. `debug=False` is an
+        explicit production property. Live endpoint should not do expensive SQL.
+        Ready endpoint can check DB or queue, but with timeout and without
+        leaking connection string.
+
+        ### Try to predict
+
+        After a DB crash, liveness may remain at 200, and readiness should
+        become not ready — these are different signals.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What is the difference
+        between liveness and readiness?","code":"# Приклад команди запуску, не
+        виконувати у навчальному endpoint\n# uvicorn app.main:app --host 0.0.0.0
+        --port 8000 --workers 2\n\nfrom fastapi import FastAPI\n\napp =
+        FastAPI(debug=False)\n\n@app.get(\"/health/live\")\ndef
+        live():\n    return {\"status\":
+        \"ok\"}\n\n@app.get(\"/health/ready\")\ndef ready():\n    # Тут
+        перевіряють критичні залежності з timeout.\n    return {\"status\":
+        \"ready\"}","options":["Liveness shows that the process is alive;
+        readiness — that he can accept useful work","Liveness checks the
+        password, readiness checks the CSS","These are two names of the same SQL
+        query","Readiness starts workers"],"answer":0,"explanation":"Signal
+        separation helps the orchestrator not send traffic to an unhealthy but
+        alive process."}
+
+        ```
+
+
+        ### How behavior changes
+
+        More workers does not always mean higher performance: there are limits
+        to the database, CPU and memory. Graceful shutdown should terminate or
+        cancel in-flight requests and release resources.
+
+        ### Typical mistakes of a beginner
+
+        Run the dev server in production; enable debug; do not have timeouts;
+        check the readiness of an external service without timeout; save state
+        in memory with several workers; do not test graceful shutdown.
+
+        ### In practice
+
+        This snippet shows where the theme construct becomes part of the actual
+        API:
+
+        ```python
+
+        # Приклад команди запуску, не виконувати у навчальному endpoint
+
+        # uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+        from fastapi import FastAPI
+
+        app = FastAPI(debug=False)
+
+        @app.get("/health/live")
+
+        def live():
+            return {"status": "ok"}
+
+        @app.get("/health/ready")
+
+        def ready():
+            # Тут перевіряють критичні залежності з timeout.
+            return {"status": "ready"}
+        ```**Why it's here:** Health endpoints and production checklist
+        translate FastAPI knowledge from a local example to a real service
+        context.
+
+        **What to change yourself:** Add readiness dependency with timeout and
+        write what should happen during rolling deploy.
+
+        ### Practical algorithm for this topic
+
+        1. Collect the app in package. 2. Configure environment. 3. Start the
+        ASGI server. 4. Add proxy/TLS. 5. Separate live/ready. 6. Add
+        logs/metrics. 7. Check shutdown and rollback.
+
+        Before starting, formulate the expected result: make a production
+        checklist for the FastAPI service without dangerous debug. Then check
+        the normal, marginal, and error cases.
+
+        ### Summary
+
+        Production FastAPI is an application plus process runtime, network,
+        health signals and operational rules. Deployment must be reproducible
+        and verifiable.

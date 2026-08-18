@@ -1,0 +1,3708 @@
+language: PYTHON
+course: python-extensions
+topics:
+  - title: "HTTP clients: requests/httpx"
+    key: http-kliyenty-requests-httpx
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 31
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: "HTTP clients: requests/httpx"
+      content: >-
+        ### Intuitive explanation
+
+        Almost every modern program communicates with the Internet: it pulls
+        currency rates, weather, data from someone else's service. They do it
+        using the **HTTP** protocol — the same "language" that the browser uses
+        to talk to sites, only instead of a person at the wheel, your code is at
+        the helm.
+
+        The model is as simple as a conversation: you send a **request** to the
+        server ("give the weather in Kyiv"), and it returns a **response** —
+        with a **status code** (is everything OK) and a **body** (the data
+        itself). `200` means ``ok'', `404` means ``not found'', `500` means
+        ``server crashed''. The body usually comes in **JSON** format, which
+        needs to be unpacked into a Python dictionary.
+
+        In real projects, convenient libraries are used for HTTP — **requests**
+        or asynchronous **httpx**: `requests.get(url).json()` is read almost
+        aloud. But the mechanism — request, status, body, JSON parsing — is the
+        same, and it's clearly visible even in the standard library. So the main
+        example below works **without** third-party packages: it brings up the
+        local server and makes a real HTTP request to it via `urllib`.
+
+        ### What happens at runtime
+
+        `urllib.request.urlopen` establishes a connection, sends a request, and
+        waits for a response. The response object has a `.status` (code) and a
+        stream with a **body** that is read via `.read()` which is the "raw"
+        bytes. They must be **decoded** into text (`.decode("utf-8")`), and
+        then, if it is JSON, converted into a dictionary via `json.loads`.
+
+        **Query parameters** are appended to the URL after the `?` as
+        `key=value&key=value`. It is dangerous to compose this string by hand
+        (spaces, special characters), so there is `urllib.parse.urlencode`: it
+        correctly converts the dictionary `{"q": "weather"}` to
+        `q=weather`.Here's how the same logic would look with the **requests**
+        library (for illustration, requests is not set here):
+
+        ```python
+
+        import requests
+
+        r = requests.get("https://api.example.com/weather",
+                         params={"q": "weather", "units": "metric"})
+        print(r.status_code)   # 200
+
+        data = r.json()        # requests сам розбирає JSON у словник
+
+        print(data["city"])
+
+        ```You see: `requests` hides the manual encoding, byte reading, and JSON
+        parsing — but **under the hood** exactly the same thing is happening as
+        you'll see in the working example.
+
+        ### Minimal code example
+
+        ```python
+
+        import json
+
+        import threading
+
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        from urllib.request import urlopen
+
+        from urllib.parse import urlencode
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                body = json.dumps({"city": "Kyiv", "temp": 21}).encode("utf-8")
+                self.wfile.write(body)
+            def log_message(self, *a):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 8731), Handler)
+
+        threading.Thread(target=server.handle_request, daemon=True).start()
+
+        params = urlencode({"q": "weather", "units": "metric"})
+
+        print("рядок запиту:", params)
+
+        with urlopen("http://127.0.0.1:8731/api?" + params) as resp:
+            print("статус:", resp.status)
+            data = json.loads(resp.read().decode("utf-8"))
+
+        print("місто:", data["city"], "темп:", data["temp"])
+
+        server.server_close()
+
+        ```Output:
+
+        ```
+
+        рядок запиту: q=weather&units=metric
+
+        статус: 200
+
+        місто: Kyiv темп: 21
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `class Handler(...)` with `do_GET` is a tiny server that returns JSON
+        with status 200 on any GET.
+
+        - `HTTPServer(("127.0.0.1", 8731), Handler)` — we raise the local server
+        so that the request is **real**, but without the Internet.
+
+        - `urlencode({"q": "weather", ...})` → `q=weather&units=metric` — builds
+        the parameters string correctly.
+
+        - `urlopen("http://.../api?" + params)` - sends a real HTTP request with
+        parameters.
+
+        - `resp.status` → `200` — response status code: everything is fine.
+
+        - `resp.read().decode("utf-8")` — we read the body as bytes and decode
+        it into text.
+
+        - `json.loads(...)` — we convert the JSON text into a dictionary, from
+        where we take `data["city"]`.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"The server returned a
+        response in which resp.read() returned b'{\"ok\": true}'. What happens
+        after data = json.loads(resp.read()); if the body has already been read
+        before by the same resp.read()?","options":["data will become {'ok':
+        True}","data will be empty/error - stream already exhausted","data will
+        be the string '{\"ok\": true}'","will return b'{\"ok\":
+        true}'"],"answer":1,"explanation":"The response body is a ONE TIME
+        stream. The first resp.read() reads all the bytes and the stream is
+        exhausted. The second resp.read() will return the already empty bytes
+        b'' and json.loads(b'') will throw a parsing error. Rule: read the body
+        EXACTLY ONCE and store the result in a variable. This is similar to the
+        one-time use of generators."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Do not check the status code.** The server could have responded
+        with `404` or `500`, and you immediately read the body as data. First
+        make sure the status is `200`.
+
+        2. **Forget `.decode()`.** The body comes in **bytes**, not a string.
+        `json.loads(bytes)` in older versions will fail; decode to `utf-8`.
+
+        3. **Glue parameters by hand.** `url + "?q=" + text` will break on
+        spaces and Cyrillic. Use `urlencode` / `params=`.
+
+        4. **Do not set a timeout.** Without a time limit, a hung server will
+        hang your program as well. Always specify `timeout` in real requests.
+
+        5. **Confuse text and JSON.** Not every response is JSON. Parse via
+        `json.loads` only when the server actually returns JSON (check
+        `Content-Type`).
+
+        ### In practice
+
+
+        A small fragment for constructing HTTP request parameters:
+
+        ```python
+
+        from urllib.parse import urlencode
+
+
+
+        params = urlencode({"q": "python", "page": 1})
+
+        print(params)
+
+        ```**Why it's here:** `urlencode` correctly encodes spaces and special
+        characters before passing parameters to the server.
+
+
+
+        **Note:** In the real client, add a timeout and check the response
+        status before parsing the JSON.
+
+
+
+        ### Summary
+
+        You have understood how a program communicates with the Internet via
+        **HTTP**: it sends a **request** (often with parameters after the `?`),
+        receives a **response** with a **status code** (`200` is ok) and a
+        **body**, which is usually JSON and must be decoded from bytes and
+        parsed via `json.loads`. In the working example, you saw this loop on
+        the pure standard library, and the **requests** library does the same
+        thing in a shorter way (`requests.get(url).json()`), hiding the routine.
+        Remember: check the status code, set timeouts, construct parameters via
+        `urlencode` and read the body only once. Next, how to get data not from
+        JSON-API, but from ordinary web pages: **HTML parsing**.
+      level: 3
+      tags:
+        - systems
+        - python
+  - title: "Parsing HTML: BeautifulSoup"
+    key: parsynh-html-beautifulsoup
+    description: decompose the algorithm into successive checks or steps. explain
+      why this particular branch or iteration is being executed.
+    order: 32
+    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
+      and limiting case"
+    theory:
+      title: "Parsing HTML: BeautifulSoup"
+      content: >-
+        ### Intuitive explanation
+
+        Data on the Internet does not always come in convenient JSON. Often what
+        is needed is right on the web page - news headlines, prices, links -
+        "stitched" in HTML along with markup. Extracting exactly what you need
+        from this mess of tags is called **HTML parsing** (or web scraping).
+
+        The temptation for a beginner is to cut the data "by hand": find `<a
+        href="` via `find`, count the characters... This works right up to the
+        first change on the site and breaks at the slightest trifle (extra
+        space, quotation marks of a different type). HTML has a **structure** -
+        nested tags like branches of a tree - and it should be parsed taking
+        into account this structure, and not as plain text.
+
+        In real projects, the **BeautifulSoup** library is used for this — it
+        makes scraping almost trivial: `soup.find_all("a")` gives all references
+        at once. But to understand what it does under the hood, it's useful to
+        see the mechanism in the standard library: Python has a built-in
+        `html.parser` that reads HTML **eventually** — and that's what the
+        example below runs on.
+
+        ### What happens at runtime
+
+        `HTMLParser` from the standard library is an **event** parser. It reads
+        HTML from left to right and calls the corresponding handler method for
+        each structural unit: the tag opened - `handle_starttag`, the text
+        happened - `handle_data`, the tag closed - `handle_endtag`. You inherit
+        from a class and **override** those methods to fit your task—a familiar
+        technique from the inheritance theme.The "extract link text" logic is
+        built as a small state machine. When the parser sees `<a>`, we check
+        "now inside a link" and remember the `href` from the attributes. The
+        next text (`handle_data`) when the flag is raised is the text of the
+        link, we save it. `</a>` is closed - we lower the flag. Thus, the event
+        model allows you to "catch" exactly what is needed, ignoring the rest.
+
+        Here's how the same task looks like with **BeautifulSoup**
+        (illustratively, the library is not installed here):
+
+        ```python
+
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        for a in soup.find_all("a"):
+            print(a["href"], "->", a.text)
+        ```See the difference in effort: BeautifulSoup builds a tree from HTML
+        and lets you search tags by name, class, attribute in one line. But
+        conceptually, it does the same thing — it dissects the structure, not
+        cutting the text.
+
+        ### Minimal code example
+
+        ```python
+
+        from html.parser import HTMLParser
+
+        html = """
+
+        <html><body>
+          <h1>Новини</h1>
+          <a href="/news/1">Перша</a>
+          <a href="/news/2">Друга</a>
+          <p class="date">2026-07-09</p>
+        </body></html>
+
+        """
+
+        class LinkParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links = []
+                self._grab = False
+                self._href = None
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "a":
+                    self._grab = True
+                    self._href = dict(attrs).get("href")
+
+            def handle_data(self, data):
+                if self._grab:
+                    self.links.append((self._href, data.strip()))
+
+            def handle_endtag(self, tag):
+                if tag == "a":
+                    self._grab = False
+
+        p = LinkParser()
+
+        p.feed(html)
+
+        for href, text in p.links:
+            print(href, "->", text)
+        print("усього посилань:", len(p.links))
+
+        ```Output:
+
+        ```
+
+        /news/1 -> Перша
+
+        /news/2 -> Друга
+
+        усього посилань: 2
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `class LinkParser(HTMLParser)` — we inherit the parser and override
+        its handlers.
+
+        - `super().__init__()` — we must call the constructor of the parent,
+        otherwise the parser will not be configured.
+
+        - `handle_starttag(self, tag, attrs)` — triggers on each open tag; catch
+        `<a>` and its `href`.
+
+        - `dict(attrs).get("href")` — `attrs` comes as a list of pairs; convert
+        to a dictionary and take `href`.
+
+        - `handle_data(self, data)` — text inside tags; save it only when the
+        `_grab` flag is raised.
+
+        - `handle_endtag(self, tag)` — on `</a>` we drop the flag.
+
+        - `p.feed(html)` — we "feed" HTML to the parser, and it calls handlers
+        in turn.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"spot-the-bug","lang":"python","question":"The parser must
+        collect ALL the text of the page, but the text_parts list is always
+        empty. Where is the error?","lines":["class
+        TextParser(HTMLParser):","    def
+        __init__(self):","        self.text_parts = []","    def
+        handle_data(self,
+        data):","        self.text_parts.append(data.strip())","","p =
+        TextParser()","p.feed('<p>привіт</p>')"],"buggyLine":3,"explanation":"Forgot
+        to call super().__init__() in __init__. HTMLParser in its constructor
+        configures the internal state required for parsing. Without
+        super().__init__(), the feed() method will either fail or not call
+        handle_data, so text_parts will be empty. Rule: When overriding __init__
+        in a descendant, always call super().__init__() first."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Cut HTML via `find` and slices.** Fragile to the point of
+        impossible: any markup change breaks the code. Parse structure, not
+        text.
+
+        2. **Forget `super().__init__()`.** Without calling the parent
+        constructor, `HTMLParser` is not initialized and parsing will fail.
+
+        3. **Ignore nesting.** Tags are nested within each other. The flat
+        "found `<a>` - took everything before `</a>`" approach breaks on nested
+        elements.
+
+        4. **Sprinkle where there is an API.** If the site provides data via
+        JSON-API, use the API: it is more stable and allowed. HTML scraping is
+        fragile and often against site rules.
+
+        5. **Disrespect the site.** Aggressive scraping with hundreds of
+        requests per second is a load on someone else's server. Check
+        `robots.txt` and set delays.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        if score >= 60:
+            result = "зараховано"
+        else:
+            result = "ще раз"
+        ```**Why it's here:** The condition selects one branch and the result
+        gets the value in both scenarios.
+
+        **Note:** Check the limit value.
+
+        ### Summary
+
+        You learned how to extract data from web pages — **parse HTML**. The
+        main idea: HTML has a **tree-like structure** of nested tags, and it
+        should be parsed taking into account this structure, and not by cutting
+        the text with `find'. The built-in `html.parser` is **event-driven** —
+        calling your handlers for tag opening, text, and closing — and the
+        **BeautifulSoup** library does the same more conveniently
+        (`soup.find_all("a")`) by building a tree. Remember `super().__init__()`
+        in the descendant, prefer API over scraping when available, and respect
+        other people's servers. Then there are data exchange formats: **JSON,
+        CSV, XML**.
+      level: 3
+      tags:
+        - control
+        - python
+  - title: JSON; CSV; XML
+    key: json-csv-xml
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 33
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: JSON; CSV; XML
+      content: >-
+        ### Intuitive explanation
+
+        Data inside the program live as Python objects — dictionaries, lists.
+        But as soon as they need to be **saved to a file** or **transferred to
+        another program**, the question arises: in what form? You will not give
+        the object in memory to another application - you need a common text
+        format that everyone can understand. This is called **serialization**:
+        converting an object to text and back.
+
+        Three formats rule the world of data exchange. **JSON** is today's
+        standard for web APIs: compact, readable, fits Python dictionaries like
+        a glove. **CSV** — "table in a text file", rows and columns separated by
+        commas; it is understood by any Excel and every database. **XML** is an
+        older, verbose, tag format that is still alive and well in enterprise
+        systems, configurations, and documents.
+
+        The good news is that all three are already in the standard library -
+        `json`, `csv`, `xml`. And everyone has the same mirror pair of actions:
+        **write** the object into the text (dump) and **read** the text back
+        into the object (load). Once you learn this pair for one format, you'll
+        recognize it in the rest.
+
+        ### What happens at runtime
+
+        The json module has four functions that are easy to get confused, so
+        remember the letter **s** = string. `json.dumps(obj)` converts an object
+        **to a string**, `json.loads(text)` - a string back **to an object**.
+        Without `s`, versions for files: `json.dump(obj, file)` and
+        `json.load(file)`. Critical detail for Cyrillic: By default `json.dumps`
+        escapes non-ASCII in `\uXXXX`; to see live Ukrainian letters, add
+        `ensure_ascii=False`. Also note how the types are mapped: a Python
+        dictionary becomes a JSON object, and `True' is `true'
+        (lowercase!).`csv` works with tables. `DictWriter` writes dictionaries
+        as strings, taking column names from `fieldnames`; `writeheader()` puts
+        a row of headers, `writerow()` - data. The subtlety seen in the output:
+        CSV delimits lines with the sequence `\r\n`. Therefore, CSV files
+        **must** be opened with `newline=""`, otherwise extra empty lines will
+        appear on Windows.
+
+        `xml.etree.ElementTree` parses XML into a **tree** of elements.
+        `ET.fromstring(xml)` returns the root element to iterate over (each
+        child is a nested tag), and `.get("attribute")` reads the value of the
+        attribute. The tree structure here is the same idea as in HTML parsing.
+
+        ### Minimal code example
+
+        ```python
+
+        import json, csv, io
+
+        import xml.etree.ElementTree as ET
+
+        user = {"name": "Оля", "langs": ["Python", "SQL"], "active": True}
+
+        text = json.dumps(user, ensure_ascii=False)
+
+        print(text)
+
+        back = json.loads(text)
+
+        print(back["langs"][0], back["active"])
+
+        buf = io.StringIO()
+
+        writer = csv.DictWriter(buf, fieldnames=["name", "age"])
+
+        writer.writeheader()
+
+        writer.writerow({"name": "Оля", "age": 20})
+
+        writer.writerow({"name": "Іван", "age": 25})
+
+        print(repr(buf.getvalue()))
+
+        xml = "<users><user name='Оля'/><user name='Іван'/></users>"
+
+        root = ET.fromstring(xml)
+
+        print([u.get("name") for u in root])
+
+        ```Output:
+
+        ```
+
+        {"name": "Оля", "langs": ["Python", "SQL"], "active": true}
+
+        Python True
+
+        'name,age\r\nОля,20\r\nІван,25\r\n'
+
+        ['Оля', 'Іван']
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `json.dumps(user, ensure_ascii=False)' — an object **in** a JSON
+        string; `ensure_ascii=False` keeps Cyrillic readable.
+
+        - note: Python `True` has become JSON `true` - the formats differ in
+        small details.
+
+        - `json.loads(text)` — JSON string back **to** the dictionary;
+        `back["active"]` is `True' again.
+
+        - `csv.DictWriter(buf, fieldnames=[...])` — writes dictionaries as table
+        rows by named columns.
+
+        - `writeheader()` / `writerow(...)` — row of headers, then rows of data.
+
+        - `buf.getvalue()` shows `\r\n` between lines - this is why CSV files
+        are opened with `newline=""`.
+
+        - `ET.fromstring(xml)` + `u.get("name")` — parse the XML into a tree and
+        read the children's attributes.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What will this code
+        print?\n\nimport json\ndata = json.loads('{\"ok\": true, \"count\":
+        null}')\nprint(data[\"ok\"], data[\"count\"])","options":["true
+        null","True None","1 0","a
+        mistake"],"answer":1,"explanation":"json.loads converts JSON to Python
+        objects by automatically converting types: JSON true becomes Python True
+        (uppercase), and JSON null becomes None. Therefore it prints 'True None'
+        and not 'true null'. This is the point of serialization — the module
+        itself negotiates the difference between JSON and Python types."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Confuse `dump` and `dumps`.** With `s` - work with **line**,
+        without `s` - with **file**. Transfer the file to `dumps` - you will get
+        an error.
+
+        2. **Forget `ensure_ascii=False`.** Ukrainian letters will be converted
+        to `С...`. Technically valid, but unreadable - add a flag.
+
+        3. **CSV without `newline=""`.** On Windows, you will get empty lines
+        between entries. Open the file: `open(path, "w", newline="",
+        encoding="utf-8")`.
+
+        4. **Assume JSON = Python.** JSON `true`/`false`/`null` is lowercase,
+        keys only in double quotes, no tuples. `json` does this by itself, but
+        be aware of the difference.
+
+        5. **Manual parsing instead of a module.** Don't parse JSON/CSV/XML with
+        string operations - commas in the data, escaping and nesting will break
+        your work. Modules can already do this.
+
+        ### In practice
+
+
+        A small snippet to safely pass a JSON value over a string:
+
+        ```python
+
+        import json
+
+
+
+        payload = json.dumps({"ok": True}, ensure_ascii=False)
+
+        data = json.loads(payload)
+
+        print(data["ok"])
+
+        ```**Why it's here:** `dumps` serializes a structure, and `loads`
+        returns it back to a Python value.
+
+
+
+        **Note:** For CSV and XML, apply their separate format rules, don't try
+        to parse them as JSON.
+
+
+
+        ### Summary
+
+        You have mastered the three main data exchange formats and their modules
+        in the standard library. **JSON** (`json`) is a web API standard that
+        fits dictionaries perfectly; remember the pair `dumps`/`loads` (with
+        string) vs `dump`/`load` (with file) and `ensure_ascii=False` for
+        Cyrillic. **CSV** (`csv`) — row-column tables; open files with
+        `newline=""`. **XML** (`xml.etree`) is a tree-like format with tags and
+        attributes. The common principle of all is mirror **serialization**:
+        object to text and back. Never disassemble these formats by hand—modules
+        take all the nitty-gritty details into account. Next is the big topic of
+        concurrency: **asynchrony via asyncio**.
+      level: 3
+      tags:
+        - systems
+        - python
+  - title: "Asynchrony: asyncio (async/await)"
+    key: asynkhronnist-asyncio-async-await
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 34
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: "Asynchrony: asyncio (async/await)"
+      content: >-
+        ### Intuitive explanation
+
+        Imagine that your program downloads 100 pages from the Internet. Each
+        request takes a second, but for most of that time the program is just
+        **waiting** for a response from the server, doing nothing. That's 100
+        seconds of useless idle time in a row. And what, how to send the next
+        request while waiting for one response? Then all 100 will fit in a few
+        seconds. That's what **asynchrony** can do.
+
+        A key analogy is a waiter. A bad waiter takes an order at table #1, goes
+        to the kitchen and **stands** waiting for it to be cooked, and only then
+        approaches table #2. A good waiter passed order #1 to the kitchen and,
+        while they are cooking there, accepts order #2, #3. It doesn't cook
+        faster - it just **doesn't waste time waiting**. `asyncio` makes your
+        program such a good waiter.
+
+        It is important to clearly understand the limit: asynchrony saves where
+        the program **waits** for external (network, disk, base) — these are
+        "I/O-bound" tasks. It will **not** speed up difficult calculations
+        (matrix multiplication) — there is nothing to wait for, the processor is
+        working. Compute requires processes, not asyncio.
+
+        ### What happens at runtime
+
+        A function is declared via `async def' — it's a **coroutine**. The code
+        itself **does not execute** its call; waiting inside is marked with the
+        word ``await''. `await asyncio.sleep(1)' says "I'll wait a second here -
+        take control and do something else, and wake me up when the time is up."
+        At this point, the coroutine **gives** control.Conducts everything
+        **event loop** (event loop), which is launched via
+        `asyncio.run(main())`. He keeps a list of tasks and rotates them in
+        turn: one reaches `await' - the cycle switches to another, ready to
+        continue. Therefore, everything happens in **one stream**, without real
+        parallelism — it is rather a skillful juggling of expectations.
+
+        To run several coroutines **simultaneously** and wait for them all,
+        there is `asyncio.gather(...)`. In the example, three "boots" with
+        different delays start together. Look at the output: all three print
+        "start" in a row, then "done" in **finish** order (B is fastest first),
+        and the total time ≈ 0.3s is the longest of the three, not their sum of
+        0.6s. That's where the magic is: expectations are stacked on top of each
+        other.
+
+        ### Minimal code example
+
+        ```python
+
+        import asyncio, time
+
+        async def fetch(name, delay):
+            print(f"старт {name}")
+            await asyncio.sleep(delay)
+            print(f"готово {name}")
+            return f"{name}: {delay}с"
+
+        async def main():
+            start = time.perf_counter()
+            results = await asyncio.gather(
+                fetch("A", 0.3),
+                fetch("B", 0.1),
+                fetch("C", 0.2),
+            )
+            elapsed = time.perf_counter() - start
+            print("результати:", results)
+            print(f"загалом ~{elapsed:.1f}с (не 0.6с!)")
+
+        asyncio.run(main())
+
+        ```Output:
+
+        ```
+
+        старт A
+
+        старт B
+
+        старт C
+
+        готово B
+
+        готово C
+
+        готово A
+
+        результати: ['A: 0.3с', 'B: 0.1с', 'C: 0.2с']
+
+        загалом ~0.3с (не 0.6с!)
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `async def fetch(...)` — declare the coroutine; her challenge prepares
+        the work, but does not itself perform the body.
+
+        - `await asyncio.sleep(delay)' — simulation of waiting for I/O; here the
+        coroutine **gives** control.
+
+        - all three "starts" are printed in a row — because `gather' launched
+        routines almost simultaneously.
+
+        - "ready" goes in the order of **completion**: B (0.1s) first, then C,
+        then A.
+
+        - `asyncio.gather(...)` — runs coroutines together and waits for all to
+        finish.
+
+        - `results` preserves the order of the **arguments** (A, B, C), not the
+        order of completion.
+
+        - `~0.3s' — the total time is equal to the longest task, not the sum:
+        expectations have overlapped.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"The three coroutines
+        with await asyncio.sleep(2) are each run together via asyncio.gather.
+        How long will it take to complete?","options":["6 seconds","2
+        seconds","0 seconds","3 seconds"],"answer":1,"explanation":"gather runs
+        all three coroutines simultaneously. While one \"sleeps\" for 2 seconds,
+        the cycle of events switches to the others, so all three waits run
+        PARALLEL and overlap. The total time is equal to the longest wait - 2
+        seconds, not the sum of 6. If they were run one at a time (await one at
+        a time), it would be 6 seconds."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Forget `await'.** Calling a coroutine without `await` (`fetch("A",
+        1)`) will return a coroutine object and **will not be executed** —
+        Python will even warn "coroutine was never awaited".
+
+        2. **Call an `async` function as normal.** Coroutine cannot be simply
+        called from outside; it is launched via `asyncio.run` or from another
+        `await`.
+
+        3. **Put asyncio on calculation.** For heavy CPU load, asyncio will not
+        help - there is no waiting. ``multiprocessing'' is required.
+
+        4. **Blocking call inside coroutine.** Normal `time.sleep(1)` (without
+        `await`) will **freeze the entire** cycle of events - all tasks will
+        become. Use `await asyncio.sleep(1)`.
+
+        5. **Run sequentially instead of `gather'.** If you do `await fetch(A)`
+        then `await fetch(B)`, they will go one after the other, and there will
+        be no gain. ``gather'' provides parallelism.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        async def load():
+            await fetch_data()
+            return "готово"
+        ```**Why it's here:** `await` relinquishes control while waiting,
+        allowing other asynchronous tasks to run.
+
+        **Note:** An asynchronous function must be executed or expected.
+
+        ### Summary
+
+        You understand **asynchrony**: a way not to waste time waiting.
+        Coroutines (`async def`) during `await` **relinquish** control, and the
+        **event loop** (`asyncio.run`) juggles them in a single thread,
+        switching to ready tasks. `asyncio.gather` runs multiple coroutines
+        together, and their waits overlap — so three 0.3s requests complete in
+        0.3s, not 0.9s. The main rule: asyncio is a winner for **I/O tasks**
+        (network, disk), not for calculations, and inside coroutines you can't
+        block the loop with a regular `time.sleep`. Next is another approach to
+        concurrency, already with true parallelism: **threads and processes**.
+      level: 3
+      tags:
+        - concurrency
+        - python
+  - title: "Threads and processes: threading; multiprocessing"
+    key: potoky-ta-protsesy-threading-multiprocessing
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 35
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: "Threads and processes: threading; multiprocessing"
+      content: >-
+        ### Intuitive explanation
+
+        Asynchrony, from the previous topic, is one waiter deftly juggling
+        expectations. But what if there is so much work that even one juggler is
+        not enough? Then they hire **several performers** who work at the same
+        time. There are two types of them in Python: **flows** (threading) and
+        **processes** (multiprocessing).
+
+        **Threads** live inside the same program and **share common memory** —
+        like cooks in one kitchen with one refrigerator. This is convenient
+        (easy to share data), but also dangerous: if two people reach for the
+        same shelf at the same time, there is confusion. **Processes** are
+        separate programs with **their** memory, like chefs in different
+        kitchens: they do not interfere with each other, but it is more
+        difficult to share data.
+
+        The main distinguishing feature of Python is that, due to the **GIL**
+        (global locking) mechanism, threads **do not** provide a real speedup
+        for calculations - only one counts at a time. Therefore, the rule is:
+        **threads — for waiting** (network, disk), **processes — for
+        calculations** (to use all processor cores). The confusion of these two
+        is a source of frustration "why not faster?".
+
+        ### What happens at runtime
+
+        A thread is created via `threading.Thread(target=function)`, started by
+        the `.start()` method, and `.join()` tells the main program to "wait for
+        this thread to finish". Several threads start and run allegedly
+        simultaneously.And here arises the most insidious problem of concurrency
+        — **data race** (race condition). It would seem that `counter += 1` is
+        one action. It's actually **three** steps: read value, add unit, write
+        back. If two threads do this at the same time, they can both read the
+        same number, both add 1, and both write - and one increment will be
+        **lost**. Over a million operations, such losses accumulate, and the
+        result is less than expected, and also **different every time**.
+
+        Medicines — **blocking** (`Lock'). This is the "key to the room": the
+        thread takes the lock (`with lock:`), does its thing, and while it has
+        the lock, the others are **waiting** under the door. So the critical
+        section is executed strictly one thread at a time, and no progress is
+        lost. In the example, four threads each make 100,000 increments under
+        lock — and the result is reliably `400,000', not ``almost 400,000''.
+
+        ### Minimal code example
+
+        ```python
+
+        import threading
+
+        counter = 0
+
+        lock = threading.Lock()
+
+        def worker():
+            global counter
+            for _ in range(100000):
+                with lock:
+                    counter += 1
+
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        print("потоків:", len(threads))
+
+        print("очікуємо:", 4 * 100000)
+
+        print("counter:", counter)
+
+        ```Output:
+
+        ```
+
+        потоків: 4
+
+        очікуємо: 400000
+
+        counter: 400000
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `lock = threading.Lock()` — we create a lock to protect the common
+        `counter`.
+
+        - `def worker()` with `global counter` — all threads change **one
+        common** variable.
+
+        - `with lock:` — we enter the critical section; while the lock is taken,
+        other threads are waiting.
+
+        - `counter += 1` — inside the lock, the increment is safe: no increment
+        will be lost.
+
+        - `Thread(target=worker)' — we create a thread that will execute
+        `worker'.
+
+        - `t.start()` — start streams; they run at the same time.
+
+        - `t.join()` - the main program waits for each thread to finish, and
+        only then does `counter` reliably set to `400000`.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Four threads execute
+        counter += 1 100000 times each WITHOUT any Lock. What is the most likely
+        counter at the end?","options":["Exactly 400,000","Less than 400,000 and
+        different every time","More than 400,000","Always
+        0"],"answer":1,"explanation":"Without Lock, there is a data race.
+        counter += 1 is actually three steps (read, add, write). When threads do
+        them at the same time, some of the increments are erased: two threads
+        read the same number and write the same result, so one increment is
+        lost. Losses accumulate, and the total is LESS than 400,000, also
+        different with each run. That is why shared data is protected by
+        blocking."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Wait for acceleration of calculations from threads.** Due to the
+        GIL, threads do not compute in parallel. For calculations on all cores,
+        take `multiprocessing`.
+
+        2. **Don't protect shared data.** Without `Lock`, there is a race around
+        `counter += 1` and the result is smaller and unpredictable.
+
+        3. **Forget `join()`.** Without it, the main program reads `counter`
+        while the threads are still running - and sees an incomplete value.
+
+        4. **Mutual deadlock.** If two threads are waiting for each other's
+        locks, both hang forever. Keep locks as short as possible and in one
+        order.
+
+        5. **Share data between processes as between threads.** Processes have
+        **separate** memory; a normal variable is not shared between them -
+        ``Queue'', ``Pipe'' or shared memory are required.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        async def load():
+            await fetch_data()
+            return "готово"
+        ```**Why it's here:** `await` relinquishes control while waiting,
+        allowing other asynchronous tasks to run.
+
+        **Note:** An asynchronous function must be executed or expected.
+
+        ### Summary
+
+        You have dealt with two types of simultaneity. **Threads** (`threading`)
+        share common memory and are convenient for tasks with **waiting** (I/O),
+        but because of the **GIL** do not speed up calculations. **Processes**
+        (`multiprocessing') have separate memory and provide true parallelism on
+        all cores — for **calculations**. The main danger of shared memory is a
+        **data race**, when `counter += 1` from different threads erases
+        increments; the remedy is **blocking** `Lock', which lets one flow at a
+        time into the critical area. Don't forget `join()` to wait for
+        completion. Rule of the day: streams — wait, processes — count. Next is
+        the practical organization of the project: **virtual environments and
+        package management**.
+      level: 3
+      tags:
+        - concurrency
+        - python
+  - title: "Virtual environments: venv; poetry; pip"
+    key: virtualni-seredovyshcha-venv-poetry-pip
+    description: explain how parts of a program find and use each other. separate
+      application code from environment settings.
+    order: 36
+    exerciseFocus: "work through a single file and stdout if the theme does not have
+      a judgeable API; not require creating files or IDEs"
+    theory:
+      title: "Virtual environments: venv; poetry; pip"
+      content: >-
+        ### Intuitive explanation
+
+        Imagine that project A needs a library version 1.0, and project B needs
+        the same library, but version 2.0, which is not compatible with 1.0. If
+        you install the packages "globally", on the entire computer, these two
+        will immediately clash: updated for B — broken A. This is a famous
+        problem, which is jokingly called "hell of dependencies".
+
+        Rescue — **virtual environment** (venv). It is an isolated "sandbox" for
+        one project: its own copy of Python and its own set of packages, which
+        does not affect the system or other projects in any way. Project A gets
+        its sandbox with version 1.0, project B gets its with 2.0, and they
+        coexist peacefully.
+
+        An analogy is separate kitchens for each dish. You should not keep all
+        the ingredients of all the recipes in one cluttered kitchen, where it is
+        easy to confuse salt with sugar. Each project has its own clean kitchen
+        with exactly the products it needs. **Python's golden rule: every
+        project is its own virtual environment.** This is not a whim, but basic
+        hygiene.
+
+        ### What happens at runtime
+
+        The environment is created with one command: `python -m venv .venv` —
+        the `.venv` folder appears with a separate interpreter. Then it is
+        **activated** (`.venv\Scripts\activate` on Windows, `source
+        .venv/bin/activate` on Linux) - and the term now "looks" exactly in this
+        sandbox. Technically, activation swaps the paths so that `sys.prefix`
+        (the root of the active environment) becomes different from
+        `sys.base_prefix` (the root of the system Python). It is by this
+        difference that the program can find out what is working inside
+        venv.Packages are installed via **pip** — the regular manager: `pip
+        install requests'. It downloads a package from the PyPI repository
+        **into the active environment** without touching others. To fix the
+        entire list of dependencies, `pip freeze > requirements.txt` is done,
+        and on another machine, one plays `pip install -r requirements.txt` -
+        and the colleague gets exactly the same environment.
+
+        Modern tools — **poetry**, **uv**, **pipenv** — go further: they combine
+        environment creation, dependency management, and locking of exact
+        versions (lock file) in one convenient thread. But under the hood, the
+        idea is the same — an isolated environment plus a managed package list.
+
+        The example below is a small program that **asks itself** if it's in
+        venv, how many packages are around, what version of pip.
+
+        ### Minimal code example
+
+        ```python
+
+        import sys
+
+        from importlib import metadata
+
+        # чи ми всередині віртуального середовища?
+
+        in_venv = sys.prefix != sys.base_prefix
+
+        print("у venv:", in_venv)
+
+        # скільки пакетів встановлено в цьому середовищі
+
+        pkgs = sorted(d.metadata["Name"] for d in metadata.distributions())
+
+        print("пакетів встановлено:", len(pkgs))
+
+        # версія конкретного пакета
+
+        try:
+            print("pip:", metadata.version("pip"))
+        except metadata.PackageNotFoundError:
+            print("pip не знайдено")
+        ```Output (in system Python outside of venv):
+
+        ```
+
+        у venv: False
+
+        пакетів встановлено: 2
+
+        pip: 26.1.2
+
+        ```Typical commands in the terminal (not Python code):
+
+        ```
+
+        python -m venv .venv          # створити середовище
+
+        .venv\Scripts\activate        # активувати (Windows)
+
+        pip install requests          # встановити пакет у нього
+
+        pip freeze > requirements.txt # зафіксувати залежності
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `sys.prefix != sys.base_prefix` is the main check: in venv, the root
+        of the active Python is different from the system root.
+
+        - `in_venv` → `False` — the program is run in system Python, outside the
+        sandbox.
+
+        - `metadata.distributions()` - lists all installed packages of the
+        current environment.
+
+        - `len(pkgs)' - their number; there are few packages in pure system
+        Python.
+
+        - `metadata.version("pip")` is the version of a particular installed
+        package.
+
+        - `except PackageNotFoundError` — carefully handle the case when the
+        package is not found.
+
+        - venv/pip commands are **terminal**, not Python; they prepare and fill
+        the medium.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"spot-the-bug","lang":"python","question":"The developer
+        complains: he installed the library via pip, but import in the project
+        fails with ModuleNotFoundError. What did he do wrong?","lines":["# крок
+        1: створив середовище","python -m venv .venv","# крок 2: одразу
+        встановив пакет","pip install requests","# крок 3: запустив
+        проєкт","python app.py  # ModuleNotFoundError:
+        requests"],"buggyLine":4,"explanation":"Environment ACTIVATION was
+        skipped between venv creation and pip install. Without
+        .venv\\Scripts\\activate (or source .venv/bin/activate), the pip install
+        command puts the package in the system Python instead of the newly
+        created sandbox. The project starts... also without activation, so it
+        sees an empty venv. Rule: created → ACTIVATED → then pip install."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Install packages globally.** `pip install` without activated venv
+        clutters the system Python and leads to conflicts between projects.
+        Activate the environment first.
+
+        2. **Forgot to activate venv.** Created `.venv`, but did not activate it
+        - and `pip install` goes into the system again. Check that the terminal
+        is "in the sandbox".
+
+        3. **Commit the `.venv` folder to git.** It is large and machine
+        dependent. `requirements.txt` (or lock file) is placed in the
+        repository, and `.venv` is added to `.gitignore`.
+
+        4. **Do not fix versions.** Without `requirements.txt`, a colleague will
+        install other versions, and "it works for me" will turn into "it doesn't
+        work for me".
+
+        5. **One venv for all projects.** This brings back the same problem of
+        conflicts. Each project has a separate environment.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        python -m venv .venv
+
+        .venv\Scripts\activate
+
+        ```**Why it's here:** An isolated environment or reproducible build
+        system captures dependencies and reduces the difference between
+        computers.
+
+        **Note:** Do not confuse global dependencies with project-specific
+        dependencies.
+
+        ### Summary
+
+        You see why **virtual environments** are needed: they give each project
+        an isolated "sandbox" with its own Python and its own packages, saving
+        you from version conflicts ("dependency hell"). Workflow: `python -m
+        venv .venv` → **activate** → `pip install` → commit dependencies to
+        `requirements.txt`. The most common mistake is to forget activation, and
+        then packets flow into the system. Modern tools (**poetry**, **uv**)
+        combine all this more conveniently, but the essence remains the same.
+        Golden rule: each project is its own environment, and `.venv` is not
+        committed to git. Next, how to see what is happening in the program
+        during operation: **logging**.
+      level: 3
+      tags:
+        - tooling
+        - python
+  - title: Logging in
+    key: lohuvannya
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 37
+    exerciseFocus: "one key idea of ​​Python with short deterministic stdout and
+      boundary case testing"
+    theory:
+      title: Logging in
+      content: |-
+        ### Intuitive explanation
+        When a program does something wrong, the first reflex of a novice is `print("here")`, `print(x)`, `print("got here")`. This works - just as long as the program is small. In a real application, this approach turns into a disaster: `prints' clog the output, they are forgotten to be removed, and there is no way to turn off the "minor" messages, leaving the important ones. And when the program crashes at three o'clock in the morning on the server - where will you see those `prints'?
+
+        The right tool is **logging** (the `logging` module). It's like an airplane logbook: the program keeps a record of what's going on with it, and you then read that logbook to figure out what went wrong. Unlike `print`, logs can be **filtered by importance**, sent to a file, supplemented with time and context - and all this is managed centrally, without editing the code in hundreds of places.
+
+        The main idea is **levels of importance**. Not all messages are the same: `DEBUG' - small details for the developer, `INFO' - the usual course of affairs, `WARNING' - "something suspicious, but we live", `ERROR' - "an error occurred", `CRITICAL' - "everything is bad". Having set the threshold, you decide with one line what to see and what to hide.
+
+        ### What happens at runtime
+        `logging.basicConfig(level=logging.INFO, ...)` configures the system: sets **threshold** importance and **format** string. The `INFO' threshold means "show everything `INFO' level and higher" — i.e. `INFO', `WARNING', `ERROR', `CRITICAL' — but `DEBUG' (lower than the threshold) will be **silently rejected**. That is why there is no `log.debug(...)` line in the example output: it is in the code, but has not passed the filter. This is the superpower of logs — in production, you set the threshold to `WARNING' and see only problems, and during debugging, lower it to `DEBUG' and see everything, **without touching the code**.
+
+        Messages are written through the logger object (`logging.getLogger("shop")`), calling the method of the corresponding level: `log.info(...)`, `log.error(...)`. The format `"%(levelname)s: %(message)s"` tells how the string will look - here is the level and the text; in real projects `%(asctime)s` (time) and `%(name)s` (name of the logger) are added.
+
+        An important detail is **parameters through a comma**, not through the f-line: `log.info("%s bought for %s UAH", item, price)`. The logger will substitute the value itself, and then **only if** the message is actually output. This saves work: a discarded `DEBUG` will not even spend time compiling a line.
+
+        ### Minimal code example
+        ```python
+        import logging
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s: %(message)s",
+        )
+        log = logging.getLogger("shop")
+
+        def buy(item, price):
+            log.debug("деталь: перевіряю ціну %s", price)
+            if price < 0:
+                log.error("від'ємна ціна для %s", item)
+                return
+            log.info("куплено %s за %s грн", item, price)
+
+        buy("книга", 250)
+        buy("ручка", -5)
+        log.warning("залишок на складі малий")
+        ```Output:
+        ```
+        INFO: куплено книга за 250 грн
+        ERROR: від'ємна ціна для ручка
+        WARNING: залишок на складі малий
+        ```
+
+        ### Explanation of each line of the example
+        - `basicConfig(level=logging.INFO, ...)` — set the threshold `INFO` and the format of the log line.
+        - `log = logging.getLogger("shop")` is a named logger; the name helps distinguish sources in the journal.
+        - `log.debug(...)` is below the threshold, so it is **not** (filtered) in the output.
+        - `log.error("negative price for %s", item)` - The `ERROR` level is higher than the threshold, so the line appears.
+        - `log.info("purchased %s for %s hryvnias", item, price)` — parameters separated by commas, the logger substitutes them himself.
+        - `buy("handle", -5)` — the branch with `log.error` works, there is no purchase.
+        - `log.warning(...)` — the warning also passes the threshold and gets into the log.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"python","question":"Logging.basicConfig(level=logging.WARNING) is set. Which of these calls will appear in the output?\n\nlog.debug(\"a\")\nlog.info(\"b\")\nlog.warning(\"c\")\nlog.error(\"d\")","options":["all four","only c and d","only d","only a and b"],"answer":1,"explanation":"The WARNING threshold means \"show WARNING level and ABOVE\". Order of importance: DEBUG < INFO < WARNING < ERROR < CRITICAL. So debug (a) and info (b) are below the threshold and are discarded, and warning (c) and error (d) are above the threshold and therefore are output. By changing one line level=..., you control the granularity without editing the code."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Debug via `print`.** In serious code, `print` does not filter, has no levels, and does not write time. Use `logging` - you don't need to remove it, just change the threshold.
+        2. **Compose messages with an f-string.** `log.debug(f"...{x}")` **always** generates a string, even when the log is discarded. Pass parameters via commas: `log.debug("...%s", x)`.
+        3. **Log everything with `INFO' level.** Then filtering loses its meaning. Sort by importance: details - `DEBUG`, problems - `WARNING`/`ERROR`.
+        4. **Forget `basicConfig`.** Without setting, only `WARNING` and above are shown by default, so your `INFO` will silently disappear and it will be unclear "why nothing is being logged".
+        5. **Log secrets.** Passwords, tokens, personal data in the log is a leak. Carefully monitor what goes into the logs.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```python
+        try:
+            value = int(text)
+        except ValueError:
+            value = 0
+        ```**Why it's here:** The expected format error is handled separately so the program can continue.
+
+        **Note:** Do not use an empty `except`.
+
+        ### Summary
+        You have replaced primitive `print` with full-fledged **logging**. The `logging' module keeps an "on-board log" of the application with the key advantage — **importance levels** (`DEBUG` < `INFO` < `WARNING` < `ERROR` < `CRITICAL`) and a **threshold** that in one line decides what to show: in production - only problems, during debugging - all details, and all this **without code editing**. Remember to pass parameters through commas (`log.info("%s", x)`), not f-string, configure `basicConfig` and do not log secrets. Logs are your eyes on a program running far away on a server. Next, how to make sure the code is correct at all: **testing**.
+      level: 4
+      tags:
+        - practice
+        - python
+  - title: "Testing: unittest; pytest"
+    key: testuvannya-unittest-pytest
+    description: distinguish the cause of the error from its symptom. choose a
+      narrow test or test for a particular risk.
+    order: 38
+    exerciseFocus: "reproduce one defect or verify one contract; the result must be
+      unambiguous for the auto-check"
+    theory:
+      title: "Testing: unittest; pytest"
+      content: >-
+        ### Intuitive explanation
+
+        You wrote a function, ran it once, saw the correct answer, and moved on.
+        In a week, something was fixed in a nearby place and, without noticing
+        it, they broke this function. You will find out about it... when the
+        user sees what is broken. Familiar horror? Manual testing "well, it
+        seems to work" does not scale: it is impossible to run through hundreds
+        of scripts by hand after each change.
+
+        **Tests** are the code that tests your code. You describe once "for
+        these inputs there should be a result like this", and then the machine
+        itself runs through all the checks in a second, anytime. It's like a
+        checklist for a pilot before takeoff: you don't rely on memory and mood,
+        but methodically go through each point.
+
+        The greatest value of tests is not to catch an error today, but to
+        **protect against future failures**. They changed the code, ran the
+        tests - all are green, which means that nothing was broken. This is
+        called **regression protection**, and it gives you the courage to
+        confidently change the code, without fear that everything has fallen
+        quietly somewhere.
+
+        ### What happens at runtime
+
+        There is a `unittest` module in the standard library. Tests are grouped
+        into a descendant class of `unittest.TestCase`, and each test is a
+        method whose name begins with `test_`. Internally, **assertions** are
+        made: `self.assertEqual(a, b)` checks that `a` is equal to `b`. If so,
+        the test is green; if not - `unittest` loudly reports which test failed
+        and why.A good test suite covers more than just the "happy path".
+        `test_normal` tests the normal case, `test_zero` the extreme case (zero
+        percent), and `test_invalid` tests that the function **fails correctly**
+        on invalid input. The latter is done through `with
+        self.assertRaises(ValueError):` — "I expect this code to throw a
+        `ValueError'; if he doesn't quit, the test is failed." Testing error
+        handling is just as important as normal operation.
+
+        `unittest.main()` finds all `test_*` methods, runs each one
+        **independently** and sums up: how many passed, how many failed. The
+        output shows three ``ok'' and the final ``OK'' — all checks are green.
+
+        In real projects, third-party **pytest** is more often used — it is more
+        concise (ordinary `assert' instead of methods) and more powerful. Here
+        is the same test on pytest (illustratively, pytest is not installed
+        here):
+
+        ```python
+
+        import pytest
+
+        def test_normal():
+            assert discount(100, 20) == 80
+        def test_invalid():
+            with pytest.raises(ValueError):
+                discount(100, 150)
+        ```
+
+
+        ### Minimal code example
+
+        ```python
+
+        import unittest
+
+        def discount(price, percent):
+            if not 0 <= percent <= 100:
+                raise ValueError("відсоток має бути 0..100")
+            return price * (1 - percent / 100)
+
+        class TestDiscount(unittest.TestCase):
+            def test_normal(self):
+                self.assertEqual(discount(100, 20), 80)
+
+            def test_zero(self):
+                self.assertEqual(discount(50, 0), 50)
+
+            def test_invalid(self):
+                with self.assertRaises(ValueError):
+                    discount(100, 150)
+
+        if __name__ == "__main__":
+            unittest.main(verbosity=2)
+        ```Output:
+
+        ```
+
+        test_invalid (__main__.TestDiscount.test_invalid) ... ok
+
+        test_normal (__main__.TestDiscount.test_normal) ... ok
+
+        test_zero (__main__.TestDiscount.test_zero) ... ok
+
+        ----------------------------------------------------------------------
+
+        Ran 3 tests in 0.000s
+
+        OK
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `class TestDiscount(unittest.TestCase)` — test container; inheritance
+        gives methods-assertions.
+
+        - `def test_normal(self)` — the name from `test_` tells `unittest` that
+        this is a test; a common case.
+
+        - `self.assertEqual(discount(100, 20), 80)` - Assert: 20% discount from
+        100 should give 80.
+
+        - `def test_zero` — **borderline** case: zero percentage leaves the
+        price unchanged.
+
+        - `with self.assertRaises(ValueError):` - expect an incorrect percentage
+        of 150 to throw an error.
+
+        - `unittest.main(verbosity=2)` — runs all tests and prints a detailed
+        summary.
+
+        - three `ok' + `OK' — all checks have passed; if `discount` were hacked,
+        the corresponding line would become `FAIL`.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"spot-the-bug","lang":"python","question":"The developer added a
+        test, but it never runs - usittest says 'Ran 1 test' instead of 2. Why
+        is the second method being ignored?","lines":["class
+        TestMath(unittest.TestCase):","    def
+        test_add(self):","        self.assertEqual(2 + 2, 4)","    def
+        check_sub(self):","        self.assertEqual(5 - 3,
+        2)"],"buggyLine":4,"explanation":"unittest only runs methods whose name
+        starts with 'test_'. The method is called check_sub, not test_sub, so
+        unittest does NOT consider it a test and silently skips it - hence 'Ran
+        1 test'. The most insidious thing is that there is no error: the test
+        simply does not run, creating a false sense of coverage. Rename to
+        test_sub."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Only test the "happy path".** Check both bounds (null, empty list)
+        and errors. Bugs hide in the corners.
+
+        2. **A test name without `test_`.** A method named otherwise,
+        `unittest`, will **not run** - it will just silently fail and you'll
+        think everything is green.
+
+        3. **Tests are interdependent.** Each test must be self-contained. If
+        one prepares data for the other, the startup order will screw things up.
+
+        4. **Compare `float` via `assertEqual`.** Fractional numbers have an
+        error; `0.1 + 0.2 == 0.3` is `False`. There is `assertAlmostEqual` for
+        them.
+
+        5. **Write tests "sometime later."** The later, the harder. The most
+        useful tests appear with the code, not six months later.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        try:
+            value = int(text)
+        except ValueError:
+            value = 0
+        ```**Why it's here:** The expected format error is handled separately so
+        the program can continue.
+
+        **Note:** Do not use an empty `except`.
+
+        ### Summary
+
+        You learned how to write **tests** — the code that checks your code,
+        freeing you from unreliable manual checks. In `unittest`, the tests are
+        the `test_*` methods in the `TestCase` child class, and inside are the
+        **assertions** of `assertEqual`, `assertRaises`, etc. Cover not only the
+        normal case, but also bounds and error handling. The main value is
+        **regression protection**: the tests were run after the change, all are
+        green, so nothing was broken, and you can confidently move on. In pro,
+        they often take the more concise **pytest** with the usual `assert'.
+        Remember the `test_` prefix — without it, the method will not run. Next,
+        how to find why code is **slow** or crashes: **profiling and
+        debugging**.
+      level: 4
+      tags:
+        - quality
+        - python
+  - title: Profiling and debugging
+    key: profilyuvannya-i-nalahodzhennya
+    description: distinguish the cause of the error from its symptom. choose a
+      narrow test or test for a particular risk.
+    order: 39
+    exerciseFocus: "reproduce one defect or verify one contract; the result must be
+      unambiguous for the auto-check"
+    theory:
+      title: Profiling and debugging
+      content: >-
+        ### Intuitive explanation
+
+        The program works, but **slowly**. Where is the bottleneck? A novice
+        looks at the code and **guess**: "probably, this cycle is slowing down."
+        And very often he makes a mistake - he optimizes what is already fast,
+        and the real "brake" remains unnoticed. The famous engineering wisdom
+        says: **don't guess, but measure**.
+
+        For this, there are two different tools for two different problems.
+        **Profiling** answers the question "*what* is slow?" — it measures the
+        time and shows exactly which parts are eaten by the majority.
+        **Debugging** answers the "*why* wrong?" — allows you to stop the
+        program and look at its insides at a specific moment.
+
+        An analogy: profiling is a track counter that shows you where you're
+        losing seconds. Debugging is a freeze frame on a video of an accident:
+        you pause exactly where something went wrong and look at the details.
+        Both save from the worst - blind guesses.
+
+        ### What happens at runtime
+
+        The simplest measurement tool is the `timeit` module. It runs a piece of
+        code **many times** and returns a cumulative time - this averages out
+        the random fluctuations and makes the comparison fair.
+        `timeit.timeit(lambda: ..., number=1000)` runs the expression a thousand
+        times. In the example, we compare searching for an element in a list and
+        in a set: `x in list` goes through the elements one by one, while `x in
+        set` jumps right through the hashing. The result is telling - the set is
+        ten times faster, and this is not a guess, but a **measured fact**.For
+        more complex programs, there is `cProfile` from the standard library:
+        `python -m cProfile prog.py` will show a table — which function was
+        called how many times and how much time it took. It often turns out that
+        90% of the time goes into one unexpected function. The number of calls
+        is a **deterministic** thing: in the example, the naive `fib(15)` calls
+        itself 1973 times, and this number is the same each time - this
+        redundancy is what explains why the naive Fibonacci recursion is so slow
+        (and why the decorator thread cache saves it).
+
+        For the "why wrong" question, there is a **debugger** `pdb`: the
+        `breakpoint()` line sets a breakpoint, the program freezes, and you step
+        by step look at the values ​​of the variables. It is infinitely more
+        powerful than scattered `prints'.
+
+        ### Minimal code example
+
+        ```python
+
+        import timeit
+
+        data_list = list(range(100000))
+
+        data_set = set(data_list)
+
+        target = 99999
+
+        t_list = timeit.timeit(lambda: target in data_list, number=1000)
+
+        t_set = timeit.timeit(lambda: target in data_set, number=1000)
+
+        print("пошук у list повільніший за set:", t_list > t_set)
+
+        print("прискорення разів (приблизно):", round(t_list / t_set) >= 50)
+
+        # скільки разів викликається функція — детерміновано
+
+        calls = 0
+
+        def fib(n):
+            global calls
+            calls += 1
+            return n if n < 2 else fib(n - 1) + fib(n - 2)
+
+        fib(15)
+
+        print("викликів fib(15):", calls)
+
+        ```Output:
+
+        ```
+
+        пошук у list повільніший за set: True
+
+        прискорення разів (приблизно): True
+
+        викликів fib(15): 1973
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `data_list` / `data_set` - same 100000 numbers in two structures for
+        fair comparison.
+
+        - `timeit.timeit(lambda: target in data_list, number=1000)` — measures
+        the search in the list for 1000 repetitions.
+
+        - `t_list > t_set` → `True` - measured: list search is **slower** than
+        set search.
+
+        - `round(t_list / t_set) >= 50` → `True` — the set is ten times faster
+        (the exact number depends on the machine).
+
+        - `def fib(n)` with `calls` counter — count how many times the function
+        calls itself.
+
+        - `fib(15)` - naive recursion that lists the same values ​​over and
+        over.
+
+        - `calls` → `1973` — **deterministic** number of calls; that's where the
+        slowness that the profile would show is hiding.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why is searching for `x
+        in data` in a set of 100,000 elements ten times faster than in a list of
+        the same length?","options":["many store less data","the set is searched
+        through hashing - jump immediately to the desired place, and the list
+        goes through the elements one by one","the list is compressed and needs
+        to be unpacked","there is no difference, this is a measurement
+        error"],"answer":1,"explanation":"A list stores elements sequentially,
+        so `x in list` in the worst case iterates over ALL 100,000 elements one
+        at a time. The set is built on hashing: it calculates the hash of an
+        element and jumps immediately to the right cell, almost regardless of
+        size. Therefore, the search in set is almost instantaneous, and in list
+        - linear. This is a measurable fact, not a guess—that's the kind of
+        thing profiling detects."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Optimize by guesswork.** Almost always the "suspect" string is not
+        to blame. **measure** the profile first, then only touch the actual
+        bottleneck.
+
+        2. **Measure a single run.** Single time jumps through background
+        processes. `timeit` with many iterations gives a more reliable result.
+
+        3. **Premature optimization.** It's a waste of effort to lick the speed
+        of code that doesn't work properly yet or runs once a day. First
+        correctness, then measurement, and only then optimization.
+
+        4. **Debug only with `prints.** For complex states, `breakpoint()` and
+        step-by-step traversal in `pdb` show everything together, without
+        clogging the code.
+
+        5. **Choose the wrong data structure.** Often the biggest speedup is not
+        "tricky code", but the right container: `set`/`dict` instead of
+        searching in a list.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        try:
+            value = int(text)
+        except ValueError:
+            value = 0
+        ```**Why it's here:** The expected format error is handled separately so
+        the program can continue.
+
+        **Note:** Do not use an empty `except`.
+
+        ### Summary
+
+        You have learned the main principle of optimization: **don't guess, but
+        measure**. **Profiling** answers "what's slow": `timeit` compares chunks
+        of code fairly over many iterations, and `cProfile` shows which function
+        eats time and how many times it's called. **Debugging** answers "what's
+        wrong": `breakpoint()` and `pdb` allow you to stop the program and look
+        at the variables - more powerful than the scattered `print`. You saw in
+        the measurement that searching `set` is ten times faster than `list`,
+        and that the naive `fib(15)` makes almost 2000 calls. Remember:
+        correctness first, and no optimization without measurement. Next, work
+        with databases: **sqlite3 and SQLAlchemy**.
+      level: 4
+      tags:
+        - quality
+        - python
+  - title: "Working with databases: sqlite3; SQLAlchemy"
+    key: robota-z-bd-sqlite3-sqlalchemy
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 40
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: "Working with databases: sqlite3; SQLAlchemy"
+      content: |-
+        ### Intuitive explanation
+        Until now, your data disappeared when the program ended, and files (text, JSON) are only good for small volumes: try to find one user among a million lines in a text file - you have to read the whole file. When there is a lot of data and it is necessary to **quickly search, filter, sort**, use a **database**.
+
+        The database is not just a storage, but a smart card file with its own query language - **SQL**. Instead of "read the entire file and find what you need" you tell the database: `SELECT name FROM users WHERE age >= 20' - "give the names of those who are 20+". The base itself, effectively, with indexes, finds and returns only what is needed. You describe **what** you want, and **how** to find it is the concern of the base.
+
+        The best thing for a beginner is **SQLite**: it is already built into Python (`sqlite3`), does not require a separate server, and stores the entire database in one file. Perfect to learn. And for large projects, they take server databases (PostgreSQL, MySQL), but the SQL language and principles are the same.
+
+        ### What happens at runtime
+        Working with the database is always three steps: **connect**, **execute requests**, **close**. `sqlite3.connect(":memory:")` creates a database directly in memory (the path would be specified for the file). Through the connection, a **cursor** is taken — an object used to execute SQL and read the results.SQL commands are divided into two groups. **Changes** (`CREATE`, `INSERT`, `UPDATE`, `DELETE`) change the data, and after them you need `conn.commit()` - "confirm, save changes". Without `commit`, the changes will remain uncommitted and will be lost. **Readers** (`SELECT`) return strings: `cur.fetchall()` returns all, `cur.fetchone()` returns one.
+
+        The most important security rule is **parameters through `?`**, not string concatenation. The `cur.execute("... WHERE age >= ?", (20,))` statement passes the value separately from the query text. This protects against **SQL injection** — an attack where an attacker slips a piece of SQL into an input field and steals or erases data. Never insert a value into a query via an f-string; always `?`.
+
+        For large applications, **ORM** — SQLAlchemy — is often placed on top of the base, which allows you to work with strings as Python objects (for illustration, the library is not installed here):
+        ```python
+        from sqlalchemy import select
+        users = session.scalars(select(User).where(User.age >= 20)).all()
+        # рядки таблиці приходять як об'єкти User, без ручного SQL
+        ```
+
+        ### Minimal code example
+        ```python
+        import sqlite3
+
+        conn = sqlite3.connect(":memory:")
+        cur = conn.cursor()
+
+        cur.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
+
+        cur.execute("INSERT INTO users (name, age) VALUES (?, ?)", ("Оля", 20))
+        cur.executemany("INSERT INTO users (name, age) VALUES (?, ?)",
+                        [("Іван", 25), ("Ліда", 19)])
+        conn.commit()
+
+        cur.execute("SELECT name, age FROM users WHERE age >= ? ORDER BY age", (20,))
+        for name, age in cur.fetchall():
+            print(name, age)
+
+        cur.execute("SELECT COUNT(*), AVG(age) FROM users")
+        count, avg = cur.fetchone()
+        print("усього:", count, "середній вік:", avg)
+        conn.close()
+        ```Output:
+        ```
+        Оля 20
+        Іван 25
+        усього: 3 середній вік: 21.333333333333332
+        ```
+
+        ### Explanation of each line of the example
+        - `sqlite3.connect(":memory:")` — connection to the database in memory; Cursor is a query tool.
+        - `CREATE TABLE users (...)` — we describe the structure of the table: columns and types.
+        - `INSERT ... VALUES (?, ?)` from `("Olya", 20)` — we add a line, values ​​through `?` (safe).
+        - `cur.executemany(...)` — one request for many rows at once.
+        - `conn.commit()` — we **fix** the changes; without it, the inserts will disappear.
+        - `SELECT ... WHERE age >= ? ORDER BY age` — the database itself filters (20+) and sorts by age.
+        - `SELECT COUNT(*), AVG(age)` — the database counts aggregates; average of 20, 25, 19 = 21.33.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"python","question":"The code works, but is considered unsafe and will be closed for code review. What's the hole?","lines":["name = input('Ім'я для пошуку: ')","query = f\"SELECT * FROM users WHERE name = '{name}'\"","cur.execute(query)","print(cur.fetchall())"],"buggyLine":2,"explanation":"The name value is inserted directly into the SQL text via the f-string — this is a classic SQL INJECTION. If the user enters something like ' OR '1'='1, the query will change and return all users; worse inputs can wipe out the table. It is correct to pass values ​​separately through a placeholder: cur.execute(\"SELECT * FROM users WHERE name = ?\", (name,)). Then the data is never confused with the request code."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Paste values into SQL.** `f"... WHERE name = '{name}'"` opens **SQL injection**. Always pass the value via `?` as a separate argument.
+        2. **Forget `commit()`.** Changes without a commit won't be saved - they won't be there after a restart. Reading (`SELECT`) does not require a commit.
+        3. **Do not close the connection.** An open connection holds resources and may leave the file locked. Close with `conn.close()` (or via `with`).
+        4. **Confuse `fetchone` and `fetchall`.** `fetchall` lists all strings, `fetchone` lists one (or `None`). Call `fetchone` while waiting for all - you will get only the first one.
+        5. **Keep everything in memory instead of querying.** Don't pull the entire table into Python to filter in a loop. `WHERE`, `ORDER BY`, `COUNT` base will make it faster and more efficient.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```python
+        cursor.execute("SELECT name FROM users WHERE id = ?", (user_id,))
+        ```**Why it's here:** External data is separated from the command and the result must be checked before use.
+
+        **Note:** Do not paste SQL or URLs with unvalidated custom text.
+
+        ### Summary
+        You learned how to store data in a **database** and retrieve it using the **SQL** language: you describe **what** you want (`SELECT ... WHERE ... ORDER BY'), and the database effectively searches for itself. Built-in **SQLite** (`sqlite3`) is a perfect start: connection → cursor → queries → `commit` for changes → `close`. The most important security rule is to pass the value through the `?` placeholder, and not paste with an f-string, so as not to open **SQL-injection**. Don't forget to `commit()` after changes and trust the database with filtering and aggregates instead of manual loops. In large projects, **ORM** (SQLAlchemy) is placed on top of the database. Next is the lower level of the network, under HTTP: **sockets**.
+      level: 4
+      tags:
+        - systems
+        - python
+  - title: "Network programming: sockets"
+    key: merezheve-prohramuvannya-sokety
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 41
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: "Network programming: sockets"
+      content: |-
+        ### Intuitive explanation
+        In the topic about HTTP, you used high-level tools: `urlopen`, `requests`. But underneath all of that—underneath every site, chat, online game—lies a foundation, **sockets**. This is the lowest level of network communication, a "raw pipe" through which two computers exchange bytes. HTTP, e-mail, video calls are all extensions on top of sockets.
+
+        The best analogy is a **phone conversation**. One side (**server**) has a known number and is **waiting** for a call. The other side (**client**) dials this number — and a connection is established. Then both can talk and listen until someone hangs up. The "number" here is the IP address plus the **port** (eg `127.0.0.1:9099`): the address points to the computer, the port to the specific program on it.
+
+        Understanding sockets is useful even if you never write directly to them. It removes the magic: you see that the "internet" is not magic, but an orderly exchange of bytes over a connection, and every "connection refused" or "address in use" error after that becomes clear.
+
+        ### What happens at runtime
+        Sockets work according to a clear choreography. The **Server** takes four steps: `bind' — "occupy" the address and port; `listen` - start listening; `accept` — **block** and wait for someone to connect (as soon as the client arrives, `accept` returns a new connection). **The client** takes one step - `connect` to the server address. After that, the connection is established and the dialogue begins.Data exchange is `sendall` (send) and `recv` (receive). Critical detail: **sockets transfer bytes, not text**. Therefore, before sending, the string is encoded (`.encode("utf-8")`), and the received one is decoded (`.decode("utf-8")`). `recv(1024)` says "receive up to 1024 bytes at a time".
+
+        Herein lies the main pitfall for newbies: **the byte stream has no message boundaries**. The network can "glue" your two `sendalls' into one `recv' or, conversely, break one message into several pieces. One `recv` does not guarantee that you received exactly one whole message. Therefore, real protocols (like HTTP) agree on where the message ends - with a length or a delimiter. In the example below, the server and client live in the same program on different threads and exchange short strings, so it doesn't interfere.
+
+        ### Minimal code example
+        ```python
+        import socket
+        import threading
+
+        def server():
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(("127.0.0.1", 9099))
+            srv.listen(1)
+            conn, addr = srv.accept()
+            data = conn.recv(1024)
+            text = data.decode("utf-8")
+            conn.sendall(f"привіт, {text}!".encode("utf-8"))
+            conn.close()
+            srv.close()
+
+        t = threading.Thread(target=server, daemon=True)
+        t.start()
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(("127.0.0.1", 9099))
+        client.sendall("Оля".encode("utf-8"))
+        answer = client.recv(1024).decode("utf-8")
+        print("сервер відповів:", answer)
+        client.close()
+        t.join()
+        ```Output:
+        ```
+        сервер відповів: привіт, Оля!
+        ```
+
+        ### Explanation of each line of the example
+        - `socket.socket(AF_INET, SOCK_STREAM)` — we create a TCP socket (reliable connection over IP).
+        - `srv.bind(("127.0.0.1", 9099))` - the server takes the address and port (its "phone number").
+        - `srv.listen(1)` + `srv.accept()` — listen and **wait** for a call; `accept` is blocked before connecting.
+        - `conn.recv(1024)` — we accept up to 1024 **bytes**; `.decode("utf-8")` converts them to text.
+        - `conn.sendall(...encode("utf-8"))` — the response must be **encoded** in bytes before sending.
+        - `client.connect(("127.0.0.1", 9099))` - the client "dials the number" of the server.
+        - `client.recv(1024).decode(...)` — we receive a response and read ``Hello, Olya!''.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"trace","lang":"python","caption":"Choreography of the client-server connection","code":["srv.bind(('127.0.0.1', 9099))","srv.listen(1)","conn, addr = srv.accept()","client.connect(('127.0.0.1', 9099))","client.sendall(b'Оля')","data = conn.recv(1024)","conn.sendall(b'...')","answer = client.recv(1024)"],"steps":[{"line":1,"vars":{},"note":"the server takes the address and port"},{"line":2,"vars":{},"note":"starts listening"},{"line":3,"vars":{},"note":"accept BLOCKS — waiting for the client"},{"line":4,"vars":{},"note":"the client connects — accept is unlocked"},{"line":5,"vars":{},"note":"the client sends bytes"},{"line":6,"vars":{"data":"b'\\xd0\\x9e\\xd0\\xbb\\xd1\\x8f'"},"note":"the server accepts bytes (this is 'Olya' in utf-8)"},{"line":7,"vars":{},"note":"the server sends a response"},{"line":8,"vars":{"answer":"b'...'"},"note":"the client receives a response; dialogue is complete"}]}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Send text instead of bytes.** `sendall("text")` will fail - the socket only accepts bytes. Always `.encode("utf-8")` before sending and `.decode("utf-8")` after receiving.
+        2. **Assume that one `recv` = one message.** The byte stream has no bounds; messages may stick together or break up. Agree on limits (length/separator).
+        3. **Address already in use.** The port remains busy after the previous start. Saves `setsockopt(..., SO_REUSEADDR, 1)`.
+        4. **Forget `.accept()`.** Without it, the server listens, but does not accept connections. `accept' is a mandatory "pick up the phone" step.
+        5. **Do not close sockets.** Uncapped connections leak and hold ports. Close with `close()` (or use `with`).
+
+        ### In practice
+
+
+        A small snippet converts the text to bytes before sending it over the socket:
+        ```python
+
+        message = "hello"
+
+        wire_data = message.encode("utf-8")
+
+        print(wire_data)
+
+        ```**Why it's here:** The socket transfers bytes, so the text must be explicitly encoded before `sendall`.
+
+
+
+        **Note:** On the other end of the connection, use `decode("utf-8")` and the agreed message format.
+
+
+
+        ### Summary
+        You've looked under the hood of the network — at **sockets**, the "raw pipe" for exchanging bytes on which HTTP, mail, and everything else is built. The model is a telephone conversation: **server** takes address and port (`bind`, `listen`) and waits (`accept`), **client** connects (`connect`), and then both exchange via `sendall`/`recv`. Two key lessons: sockets transfer **bytes**, so text must be encoded/decoded; and the byte stream **has no message boundaries**, so the protocols themselves negotiate where the message ends. Understanding sockets takes the magic out of networking code. Next, we move into the world of calculations and data: **NumPy**.
+      level: 4
+      tags:
+        - systems
+        - python
+  - title: NumPy - the basics
+    key: numpy-osnovy
+    description: transform data into a form that is convenient to work with. read
+      the result of the calculation without confusing it with an arbitrary
+      visualization.
+    order: 42
+    exerciseFocus: "one data transformation with a small deterministic set; explain
+      what exactly is being measured"
+    theory:
+      title: NumPy - the basics
+      content: >-
+        ### Intuitive explanation
+
+        Try adding two lists of numbers element by element: `[1,2,3] +
+        [10,20,30]` should give `[11,22,33]`. But in pure Python, `+` for lists
+        **glues** them (`[1,2,3,10,20,30]`) instead of adding them. To really
+        add, you have to write a loop. And when there are thousands of such
+        operations and the data is huge (millions of numbers, images, matrices),
+        Python loops become **painfully slow**.
+
+        This is where **NumPy** — the number one library for numerical
+        calculations — comes into play. Its heart is the `ndarray' array, and
+        its main superpower is **vectorization**: operations are applied to
+        **the entire array at once**, without an explicit loop. `a + b` adds
+        element by element, `a * 2` multiplies each element. It's written like
+        math, but it's executed lightning fast, because optimized C code is
+        running under the hood, and not a slow Python loop.
+
+        An analogy: pure Python processes numbers "one by one, by hand", like a
+        cashier punching each item separately. NumPy is a pipeline that
+        processes **the entire batch** in one go. For data science, machine
+        learning, and image processing, it's the difference between
+        "inconvenient" and "impossible."
+
+        ### What happens at runtime
+
+        The example below is intentionally **without** NumPy - so you can
+        experience the pain that NumPy takes away. To add two "vectors" element
+        by element, you have to write `[a[i] + b[i] for i in range(len(a))]`. To
+        multiply each element is again a loop. Calculate the scalar product — a
+        loop with a sum. Each simple mathematical operation turns into a manual
+        iteration.This works for four numbers, but imagine a million: each
+        element is run through the Python interpreter separately, and the time
+        increases linearly and slowly. NumPy, on the other hand, stores numbers
+        in a continuous block of memory of the same type and performs an
+        operation on the entire block in compiled code - often tens or hundreds
+        of times faster.
+
+        Here's how this whole example would collapse with NumPy (illustratively,
+        the library is not installed here):
+
+        ```python
+
+        import numpy as np
+
+        a = np.array([1, 2, 3, 4])
+
+        b = np.array([10, 20, 30, 40])
+
+        print(a + b)        # [11 22 33 44] — без циклу
+
+        print(a * 2)        # [2 4 6 8]
+
+        print(a.dot(b))     # 300 — скалярний добуток
+
+        print(b.mean(), b.std())  # 25.0 11.18...
+
+        ```No `for' - array operations are read as formulas. This is
+        **vectorization**: thinking in arrays, not elements.
+
+        ### Minimal code example
+
+        ```python
+
+        import statistics
+
+        a = [1, 2, 3, 4]
+
+        b = [10, 20, 30, 40]
+
+        # поелементне додавання БЕЗ NumPy — треба цикл
+
+        c = [a[i] + b[i] for i in range(len(a))]
+
+        print("сума:", c)
+
+        # множення кожного елемента на число — знову цикл
+
+        doubled = [x * 2 for x in a]
+
+        print("подвоєно:", doubled)
+
+        # статистика через стандартний модуль
+
+        print("середнє:", statistics.mean(b))
+
+        print("ст. відхилення:", round(statistics.pstdev(b), 2))
+
+        # скалярний добуток вручну
+
+        dot = sum(a[i] * b[i] for i in range(len(a)))
+
+        print("скалярний добуток:", dot)
+
+        ```Output:
+
+        ```
+
+        сума: [11, 22, 33, 44]
+
+        подвоєно: [2, 4, 6, 8]
+
+        середнє: 25
+
+        ст. відхилення: 11.18
+
+        скалярний добуток: 300
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `[a[i] + b[i] for i in range(len(a))]` — element-by-element addition
+        **by hand**; NumPy would do this as `a + b`.
+
+        - `[x * 2 for x in a]` — multiplication of each element through a loop;
+        in NumPy it's just `a * 2`.
+
+        - `statistics.mean(b)` → `25` — mean by standard module (without
+        third-party libraries).
+
+        - `statistics.pstdev(b)` → `11.18` — population standard deviation.
+
+        - `sum(a[i] * b[i] for i in range(len(a)))` → `300` — manual scalar
+        product; in NumPy it is `a.dot(b)`.
+
+        - the entire block illustrates **how many** cycles vectorization takes.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"In pure Python (WITHOUT
+        NumPy), what will print([1, 2, 3] + [4, 5, 6]) print?","options":["[5,
+        7, 9]","[1, 2, 3, 4, 5, 6]","a
+        mistake","21"],"answer":1,"explanation":"For regular Python lists, the +
+        operator means CONCATENATION (gluing), not element-by-element addition.
+        Therefore, it turns out [1, 2, 3, 4, 5, 6], and not [5, 7, 9]. To add
+        element-by-element, you need a loop or a NumPy array, where a + b gives
+        exactly [5, 7, 9]. This difference is the main reason why NumPy is used
+        for numerical calculations."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Wait for `+` to add lists.** For Python lists, `+` **glues**.
+        Element-wise math is either a loop or a NumPy array.
+
+        2. **Spin loops on big data.** Manual loops on millions of numbers are
+        slow. This is where NumPy gives a multifold speedup.
+
+        3. **Mix types in an array.** The NumPy array is homogeneous (all
+        elements are of the same type). This is not an ordinary list - don't put
+        a variety in it.
+
+        4. **Confuse `ndarray` with a list.** Many operations look similar, but
+        behave differently: in the `*` array - multiplication by elements, in
+        the list - repetition.
+
+        5. **Pulling NumPy into a trifle.** Pure Python or `statistics' is
+        enough for a few numbers. NumPy pays off on **arrays** of data.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        import numpy as np
+
+        values = np.array([1, 2, 3])
+
+        doubled = values * 2
+
+        ```**Why it's here:** NumPy performs an operation on the entire array
+        without Python's manual loop.
+
+        **Note:** The shape and dtype of the array affect the result.
+
+        ### Summary
+
+        You understand **why** NumPy exists: pure Python processes numbers one
+        by one through slow loops (and `+` lists generally glue, not add), while
+        NumPy-array `ndarray` gives **vectorization** — operations on the entire
+        array at once, written as math (`a + b`, `a * 2`, `a.dot(b)`) and
+        performed by lightning-fast compiled code. You've seen on the stdlib how
+        many manual loops this removes. Rule of thumb: think **arrays, not
+        elements**, keep the data homogeneous in the array, and use NumPy where
+        the data is abundant. This is the foundation of all data science. Next
+        is an extension to NumPy for tables: **Pandas**.
+      level: 4
+      tags:
+        - data
+        - python
+  - title: Pandas - the basics
+    key: pandas-osnovy
+    description: transform data into a form that is convenient to work with. read
+      the result of the calculation without confusing it with an arbitrary
+      visualization.
+    order: 43
+    exerciseFocus: "one data transformation with a small deterministic set; explain
+      what exactly is being measured"
+    theory:
+      title: Pandas - the basics
+      content: >-
+        ### Intuitive explanation
+
+        Imagine a table: rows - people, columns - name, city, salary. Typical
+        questions for her: "show only Kyiv", "what is the average salary in each
+        city", "sort by salary". In pure Python, each such action is a separate
+        loop, manual grouping, accumulation of sums in dictionaries. It works,
+        but it's cumbersome, and on real data with dozens of columns, the code
+        drowns in routine.
+
+        **Pandas** is “Excel inside Python” for the programmer. Its central
+        object is a **DataFrame**, a smart table that can do everything you want
+        from a table in one line: filter, group, aggregate, sort, merge.
+        `df[df.city == "Kyiv"]` - all Kyivans.
+        `df.groupby("city").salary.mean()` — average salary by city. What would
+        have been dozens of lines by hand is compressed into one expressive
+        command.
+
+        Pandas is the main data analysis tool in Python: CSV/Excel reading,
+        cleaning, pivot tables, data preparation for machine learning. It is
+        built on top of NumPy, so it inherits its speed, adding the convenience
+        of working specifically with **named columns**.
+
+        ### What happens at runtime
+
+        The example below implements typical Pandas operations **by hand on the
+        standard library** - so you can see what DataFrame automates.
+        `csv.DictReader` reads CSV into a list of dictionaries (each line is a
+        dictionary `column: value`) - it is a "raw" analogue of a table.
+        Further:**Filtering** — catch rows by condition — is done by including
+        `[r for r in rows if r["city"] == "Kyiv"]`. In Pandas, it is `df[df.city
+        == "Kyiv"]`. **Grouping with aggregation** is the most useful and
+        cumbersome manual operation: you need to start `defaultdict(list)`, go
+        through all the rows, distribute the salaries by city, and then
+        calculate the average for each. In Pandas, this whole block is a single
+        line `df.groupby("city").salary.mean()`.
+
+        Here's how an example would look with Pandas (for illustration purposes,
+        the library is not installed here):
+
+        ```python
+
+        import pandas as pd
+
+        df = pd.read_csv("data.csv")
+
+        print(df[df.city == "Київ"].name.tolist())   # ['Оля', 'Ліда']
+
+        print(df.groupby("city").salary.mean())       # середня по містах
+
+        ```The same result, but instead of manual loops and dictionaries, there
+        are declarative commands that read like a statement of intent.
+
+        ### Minimal code example
+
+        ```python
+
+        import csv, io
+
+        from collections import defaultdict
+
+        from statistics import mean
+
+        raw = """name,city,salary
+
+        Оля,Київ,40000
+
+        Іван,Львів,35000
+
+        Ліда,Київ,50000
+
+        Петро,Львів,45000"""
+
+        rows = list(csv.DictReader(io.StringIO(raw)))
+
+        print("рядків:", len(rows))
+
+        # фільтрація: лише Київ
+
+        kyiv = [r for r in rows if r["city"] == "Київ"]
+
+        print("з Києва:", [r["name"] for r in kyiv])
+
+        # групування середньої зарплати по місту
+
+        by_city = defaultdict(list)
+
+        for r in rows:
+            by_city[r["city"]].append(int(r["salary"]))
+
+        for city, salaries in by_city.items():
+            print(f"{city}: середня {mean(salaries):.0f}")
+        ```Output:
+
+        ```
+
+        рядків: 4
+
+        з Києва: ['Оля', 'Ліда']
+
+        Київ: середня 45000
+
+        Львів: середня 40000
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `csv.DictReader(io.StringIO(raw))` — reads CSV into a list of
+        dictionaries; it is a "raw" analogue of a DataFrame.
+
+        - `[r for r in rows if r["city"] == "Kyiv"]` — **filtering** manually;
+        in Pandas - `df[df.city == "Kyiv"]`.
+
+        - `defaultdict(list)' is a blank for **grouping**: we collect salaries
+        by city.
+
+        - `by_city[r["city"]].append(int(r["salary"]))` — divide each line into
+        its own group.
+
+        - `mean(salaries)' — aggregation: group average; in Pandas, it's all one
+        `groupby(...).mean()`.
+
+        - ``Kyiv: average 45,000'' — (40,000 + 50,000) / 2; the manual result
+        matches what Pandas would give.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"The data from the CSV
+        is read into a list of rows dictionaries, where salary is a string. What
+        happens with sum(r[\"salary\"] for r in rows)?","options":["sum of
+        numbers","concatenated string or TypeError","average
+        value","0"],"answer":1,"explanation":"CSV returns ALL values ​​as
+        strings, so r[\"salary\"] is text like \"40000\". sum tries to add
+        strings: in Python it's either a TypeError (sum starts at 0 and can't
+        add a string to it) or, if you're adding strings together, a splicing.
+        It is correct to convert first: sum(int(r[\"salary\"]) for r in rows).
+        Pandas recognizes numeric columns automatically, but when reading CSV
+        manually, you have to take care of the types yourself."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Do by hand what Pandas can do.** Manual grouping in dictionaries is
+        a ready-made `groupby'. On real data, use Pandas instead of rewriting
+        it.
+
+        2. **Forget types from CSV.** Everything comes from the file **in
+        lines**: `"40000"` is text. Convert (`int`/`float`) before arithmetic -
+        Pandas does this almost automatically when reading.
+
+        3. **DataFrame `for' loop.** In Pandas, iterating through rows
+        row-by-row is slow and unfashionable. Think vectorial: filter,
+        `groupby`, aggregates — over the entire column at once.
+
+        4. **Modify data "in place" is fine.** Confusion of copy and
+        presentation (view/copy) is a frequent source of subtle bugs in Pandas;
+        be careful what you change.
+
+        5. **Pulling Pandas into a trifle.** `csv` and dictionaries are enough
+        for a few lines. Pandas pays off on **tables** of data.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        import pandas as pd
+
+        frame = pd.DataFrame({"score": [10, 20]})
+
+        mean = frame["score"].mean()
+
+        ```**Why it's here:** A DataFrame stores tabular data, and column
+        selection allows you to perform aggregation.
+
+        **Note:** Check gaps and column types before calculation.
+
+        ### Summary
+
+        You understand the role of **Pandas** - "Excel in code" for table
+        analysis. His **DataFrame** in one expression does what loops do
+        manually: filtering (`df[df.city == "Kyiv"]`), grouping with aggregation
+        (`df.groupby("city").salary.mean()`), sorting, merging. You've
+        implemented these operations on the standard library and seen how much
+        routine Pandas cleans up, and the key pitfall is that CSV data comes in
+        **strings** and requires type conversion. Rule of thumb: think in whole
+        columns, not rows, and take Pandas where there's a lot of data. Built on
+        top of NumPy, it is the heart of data mining. Next, how to **see** this
+        data: visualization with Matplotlib.
+      level: 4
+      tags:
+        - data
+        - python
+  - title: "Visualization: Matplotlib; Seaborn"
+    key: vizualizatsiya-matplotlib-seaborn
+    description: transform data into a form that is convenient to work with. read
+      the result of the calculation without confusing it with an arbitrary
+      visualization.
+    order: 44
+    exerciseFocus: "one data transformation with a small deterministic set; explain
+      what exactly is being measured"
+    theory:
+      title: "Visualization: Matplotlib; Seaborn"
+      content: >-
+        ### Intuitive explanation
+
+        A table of twenty numbers - and you no longer see the meaning in it:
+        where is the peak, where is the trough, is there a trend? And the same
+        series in the form of a graph is read in a second. The human brain reads
+        numbers terribly slowly and forms at lightning speed. Therefore, the
+        final step of any data analysis is **visualization**: turning numbers
+        into a picture.
+
+        The main library for this is **Matplotlib**. It draws line graphs, bar
+        graphs, histograms, scatter plots—everything you've seen in reports and
+        scientific papers. On top of that is **Seaborn**, an add-on that makes
+        nice stat graphs in shorter commands and looks nice out of the box.
+
+        At the heart of any visualization lies one simple idea — **displaying
+        data on visual quantities**. A value of 25 becomes a column 25 units
+        tall; a larger number means a longer column. It is this idea that we
+        will now see clearly by drawing a diagram **without any library** - with
+        the text symbols themselves. Having understood the principle on the
+        text, you will easily transfer it to Matplotlib, where instead of `#`
+        there will be real rectangles.
+
+        ### What happens at runtime
+
+        The example below constructs a bar chart from `#` characters. The key is
+        **scaling**: so that the largest value fits within the specified width
+        (20 characters), each value is scaled from the peak. `round(value / peak
+        * 20)` says: "what fraction of the maximum is this number - this
+        fraction of 20 symbols and draw." A value of `25` (peak) gives the full
+        20 characters, `12` gives about half. That's all the math of any chart:
+        data → proportion → length.The second part is **sparkline**, a tiny
+        "spark" graph of block symbols of different heights (` ▂▃▄▅▆▇█`). Here
+        the same logic: each value is normalized to the range `0..7` (character
+        index) according to the formula `(v - lo) / (hi - lo)` — this converts
+        any series into a fraction from 0 (minimum) to 1 (maximum), and then it
+        is multiplied by the number of levels. The result is a compact trend
+        that shows the shape of the data in a single line.
+
+        This is how the bar chart would look in Matplotlib (for illustration
+        purposes, the library is not installed here):
+
+        ```python
+
+        import matplotlib.pyplot as plt
+
+        plt.bar(sales.keys(), sales.values())
+
+        plt.title("Продажі по місяцях")
+
+        plt.ylabel("тис. грн")
+
+        plt.savefig("sales.png")   # зберегти графік у файл
+
+        ```The principle is the same - the values ​​are displayed in the height
+        of the columns - only the library draws them, not the `#' symbols.
+
+        ### Minimal code example
+
+        ```python
+
+        sales = {"Січ": 12, "Лют": 19, "Бер": 7, "Кві": 25, "Тра": 16}
+
+        # текстова стовпчикова діаграма БЕЗ бібліотек
+
+        peak = max(sales.values())
+
+        for month, value in sales.items():
+            bar = "#" * round(value / peak * 20)
+            print(f"{month} | {bar} {value}")
+
+        print()
+
+        # проста «іскра» (sparkline) з блокових символів
+
+        blocks = "▁▂▃▄▅▆▇█"
+
+        series = [3, 7, 2, 8, 5, 9, 4]
+
+        lo, hi = min(series), max(series)
+
+        spark = "".join(blocks[round((v - lo) / (hi - lo) * (len(blocks) - 1))]
+        for v in series)
+
+        print("тренд:", spark)
+
+        ```Output:
+
+        ```
+
+        Січ | #######
+
+
+        ### 12
+
+        Лют | ############
+
+
+        ### 19
+
+        Бер | ###
+
+
+        ### 7
+
+        Кві | #################
+
+
+        ### 25
+
+        Тра | ##########
+
+
+        ### 16
+
+        тренд: ▂▆▁▇▄█▃
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `peak = max(sales.values())` — we find the maximum for scaling (the
+        longest column).
+
+        - `round(value / peak * 20)` — we translate the value into length: the
+        proportion from the peak × width.
+
+        - `"#" * ...` — repetition of the character draws a column of the
+        required length.
+
+        - `Kwi | #
+
+
+        ### 25` — peak `25` gives full 20 characters; the rest are
+        proportionally shorter.
+
+        - `blocks = " ▂▃▄▅▆▇█"` — eight height levels for the thumbnail graph.
+
+        - `(v - lo) / (hi - lo)` — **normalization** of the series in the range
+        0..1 to choose the symbol level.
+
+        - `trend: ▂▆ ▇▄█▃` — the form of the series `[3,7,2,8,5,9,4]' is visible
+        at first glance.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"In the column length
+        formula round(value / peak * 20), value is equal to peak (maximum). How
+        many characters will the column
+        have?","options":["20","1","10","0"],"answer":0,"explanation":"When
+        value is equal to peak, the fraction value / peak = 1. Multiply by the
+        width: 1 * 20 = 20, round(20) = 20. That is, the largest value always
+        occupies the FULL width of the chart, and all others are proportionally
+        smaller. This is the essence of scaling: the peak sets the standard of
+        length, the rest is measured relative to it. This is how any bar chart
+        works, even if it's text, even if it's in Matplotlib."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Do not scale the data.** Without scaling, the columns will either
+        not fit or will be microscopic. Always scale relative to the maximum.
+
+        2. **Division by zero when normalizing.** If all values ​​are the same,
+        `hi - lo == 0` and the formula will fail. Treat this extreme case
+        separately.
+
+        3. **Forget axis labels and headers.** A graph without labels is a
+        mystery: it is not clear what the values ​​and units are. In Matplotlib,
+        always add `title`, `xlabel`, `ylabel`.
+
+        4. **Choose the wrong type of graph.** The line is for the trend over
+        time, the bars are for comparing categories, the points are for the
+        connection of two quantities. Bad type distorts the meaning.
+
+        5. **`plt.show()` on the server.** On a machine without a screen, the
+        window will not open. To save to a file, use `plt.savefig("...")`.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        import matplotlib.pyplot as plt
+
+        plt.plot([1, 2, 3], [2, 4, 3])
+
+        plt.show()
+
+        ```**Why it's here:** A graph shows the relationship between two
+        sequences; the data must be prepared for visualization.
+
+        **Please note:** Visualization does not correct errors in input data.
+
+        ### Summary
+
+        You get the gist of **visualization**: turning numbers into shapes that
+        the brain reads instantly. At the heart of any graph is the **display of
+        data on visual values** through scaling: the values ​​are converted into
+        a proportion from the maximum and the corresponding length or height is
+        drawn. You saw this in action by building a bar chart and sparkline
+        **without libraries**, with the symbols themselves. The main tool in
+        practice is **Matplotlib** (and the **Seaborn** add-on), where real bars
+        are drawn instead of `#`, but the principle remains the same. Don't
+        forget to normalize the data, label the axes, and choose the appropriate
+        graph type. Next is a brief overview of machine learning:
+        **scikit-learn**.
+      level: 4
+      tags:
+        - data
+        - python
+  - title: "ML (overview): scikit-learn - the basics"
+    key: ml-ohlyad-scikit-learn-bazovi-ponyattya
+    description: transform data into a form that is convenient to work with. read
+      the result of the calculation without confusing it with an arbitrary
+      visualization.
+    order: 45
+    exerciseFocus: "one data transformation with a small deterministic set; explain
+      what exactly is being measured"
+    theory:
+      title: "ML (overview): scikit-learn - the basics"
+      content: >-
+        ### Intuitive explanation
+
+        The classic program works according to the rules that **you**
+        prescribed: `if area > 50: ...`. But how to write the rules to
+        distinguish a cat from a dog in a photo? It is impossible to list all
+        `if's for this. **Machine Learning** (ML) reverses the approach: instead
+        of rules, you give the machine **examples** and it infers the pattern
+        itself.
+
+        An analogy is teaching a child: you do not explain with a formula what
+        an apple is, but show a dozen apples, and the child catches the image.
+        ML similarly finds a dependency in input → response pairs and applies it
+        to **new**, unseen examples.
+
+        The work cycle is almost always the same and consists of two actions:
+        **training** (`fit`) — to feed examples and build a model, and
+        **prediction** (`predict`) — to apply the model to new data. The
+        simplest type of ML is **linear regression**: to find the straight line
+        that best describes the relationship "larger area → higher price". We
+        will build it in order to see the essence without magic.
+
+        ### What happens at runtime
+
+        The most important idea of all ML is **separation of training and test
+        data**. The model is trained on one part (`train') and tested on another
+        part (`test'), which it **has not seen**. The goal is not to memorize
+        examples, but to **generalize** and work well on new ones. Testing a
+        model on the same data that was taught is like an exam on pre-known
+        questions: the assessment will not tell you anything about real
+        knowledge.In the example, we take four "area → price" pairs for
+        training, and leave the fifth for testing. **Training** is a
+        `statistics.linear_regression' that finds the `slope' and `intercept' of
+        the line that best passes through the training points. The model is now
+        the formula `price = slope * area + intercept'.
+
+        **Prediction** — substitute the unseen area of ​​90 in the formula: the
+        model gives ≈120.5 against the real 122, **error** only 1.5. A small
+        error on the test data means that the model caught a pattern and did not
+        memorize the answers. Here is the same loop in scikit-learn
+        (illustratively, the library is not installed here):
+
+        ```python
+
+        from sklearn.linear_model import LinearRegression
+
+        model = LinearRegression()
+
+        model.fit(train_X, train_y)          # навчання
+
+        pred = model.predict([[90]])          # передбачення
+
+        # той самий цикл fit/predict, лише над масивами й з десятками алгоритмів
+
+        ```
+
+
+        ### Minimal code example
+
+        ```python
+
+        import statistics
+
+        # дані: площа квартири (кв.м) -> ціна (тис. у.о.)
+
+        area =  [30, 45, 60, 75, 90]
+
+        price = [40, 58, 79, 101, 122]
+
+        # ділимо на навчальні й тестові дані
+
+        train_x, train_y = area[:4], price[:4]
+
+        test_x, test_y = area[4], price[4]
+
+        # "навчання": знаходимо пряму y = slope*x + intercept
+
+        slope, intercept = statistics.linear_regression(train_x, train_y)
+
+        print(f"модель: ціна = {slope:.2f} * площа + {intercept:.2f}")
+
+        # "передбачення" на небаченому прикладі
+
+        predicted = slope * test_x + intercept
+
+        print(f"площа {test_x}: передбачено {predicted:.1f}, реально {test_y}")
+
+        print(f"похибка: {abs(predicted - test_y):.1f}")
+
+        ```Output:
+
+        ```
+
+        модель: ціна = 1.36 * площа + -1.90
+
+        площа 90: передбачено 120.5, реально 122
+
+        похибка: 1.5
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `area`, `price` are examples of "input → response" from which the
+        model should derive a dependency.
+
+        - `train_x, train_y = area[:4], price[:4]` — **training** data: the
+        model learns from them.
+
+        - `test_x, test_y = area[4], price[4]` is a **test** example that the
+        model has not seen.
+
+        - `statistics.linear_regression(train_x, train_y)` — **training**: Finds
+        the slope and offset of a straight line.
+
+        - `slope, intercept' is a "model": a formula describing the relationship
+        between area and price.
+
+        - `slope * test_x + intercept` is the **prediction** for the unseen area
+        of 90.
+
+        - ``error: 1.5'' — the difference between predicted and real; small
+        error = the model generalized well.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"The model showed an
+        error of 0 on the training data, but a huge error on the new test data.
+        What is it called?","options":["perfect model","overfitting — the model
+        learned the training data, not the regularity","insufficient
+        training","error in the code"],"answer":1,"explanation":"Zero error on
+        the training data, along with a large error on the new data, is a
+        classic sign of OVERFITTING. The model did not capture the general
+        regularity, but simply \"remembered\" the answers for training examples
+        (like cramming without understanding), so it is helpless on unseen data.
+        That is why the quality of the model is evaluated ONLY on individual
+        test data, and not on those where it was taught."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Verify on training data.** Evaluating a model on what it was
+        trained on is self-deception. Always keep separate **test** data.
+
+        2. **Overfitting.** An overly complex model "learns" the noise of
+        training data and fails on new ones. A simpler model often generalizes
+        better.
+
+        3. **Expect magic from small/dirty data.** ML is not magic: bad data
+        makes a bad model. "Garbage in, garbage out" works here ruthlessly.
+
+        4. **Confuse correlation with causation.** The model finds a
+        **connection**, not a cause. Just because two quantities go together
+        does not mean that one causes the other.
+
+        5. **Get into complex models right away.** Often a simple linear
+        regression already gives a good result. Start simple and only make it
+        more difficult if necessary.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+
+        ```python
+
+        model.fit(X_train, y_train)
+
+        prediction = model.predict(X_test)
+
+        ```**Why it's here:** The model is trained on train data, and predict is
+        applied to individual test data.
+
+        **Note:** Do not evaluate the model on the same data it was trained on.
+
+        ### Summary
+
+        You have looked into the essence of **machine learning**: instead of
+        prescribing rules, you give the algorithm **examples**, and it itself
+        derives a regularity. The work cycle is **training** (`fit') on one part
+        of the data and **prediction** (`predict') on new ones. The most
+        important principle is **separation between training and test data**:
+        the model is tested only on what it has not seen, otherwise the
+        evaluation is self-deception, and the main danger is **overtraining**,
+        when the model learns the data instead of generalizing. You built the
+        simplest model—linear regression—in the standard library;
+        **scikit-learn** gives the same `fit`/`predict` loop over dozens of
+        powerful algorithms. Next is a practical web: **Flask**.
+      level: 4
+      tags:
+        - data
+        - python
+  - title: "Web: Django - Basics"
+    key: veb-django-osnovy
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 48
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: "Web: Django - Basics"
+      content: >-
+        ### Intuitive explanation
+
+        Flask and FastAPI are minimalists: they provide a core, and you choose
+        the rest (base, admin, forms) yourself. **Django** is the opposite
+        philosophy: **"batteries included"**. This is a web development
+        heavyweight, which already has everything for a large site — working
+        with the database, a ready-made admin panel, a user system, forms, and
+        protection against typical attacks. You don't assemble the application
+        from parts, but get an assembled framework.
+
+        The heart of Django is its **ORM** (Object-Relational Mapping). An idea
+        that makes it easier to breathe: **Python class = table in database,
+        object = string**. You describe the `Post` model as a regular class with
+        fields `title`, `views` - ​​and Django creates the table itself, and to
+        save the record, you write `post.save()` instead of SQL `INSERT`. Get
+        all posts - `Post.objects.all()`, not `SELECT`. SQL does not disappear
+        anywhere, but hides behind understandable Python objects.
+
+        Django is organized according to the **MVT** (Model-View-Template)
+        pattern: **Model** — data (table classes), **View** — query processing
+        logic, **Template** — HTML page template. This division keeps a large
+        project organized when Flask would have become a mess.
+
+        ### What happens at runtime
+
+        The example below is a **tiny ORM in the spirit of Django**, hand-made
+        in `sqlite3` to show the very idea of "class ↔ table". ``Post'' class
+        maintains a connection to the database and creates a ``post'' table when
+        loaded. Each `Post` object is one future string.The `save()` method does
+        ORM magic: it takes the object fields (`self.title`, `self.views`) and
+        forms the SQL `INSERT` itself, and `lastrowid` writes back to `self.id`
+        - just like real Django fills in the `id` after saving. You work with
+        the object, and the SQL is generated under the hood. The class method
+        `all()` does the opposite: performs a `SELECT`, and each row of the
+        database is converted **back** to a `Post` object. Therefore, in the
+        loop, you iterate over convenient objects from `.title` and `.views`,
+        rather than raw tuples.
+
+        Here's how the same model would look in real Django (illustratively, the
+        library is not installed here):
+
+        ```python
+
+        from django.db import models
+
+        class Post(models.Model):
+            title = models.CharField(max_length=200)
+            views = models.IntegerField(default=0)
+
+        Post(title="Хіт", views=150).save()           # INSERT — без SQL
+
+        top = Post.objects.order_by("-views").all()    # SELECT ... ORDER BY
+
+        ```Compare with the example: all the manual SQL machinery in Django
+        disappears - you just declare the fields, and `save()` and `objects` are
+        provided by the framework itself.
+
+        ### Minimal code example
+
+        ```python
+
+        import sqlite3
+
+        class Post:
+            _db = sqlite3.connect(":memory:")
+            _db.execute("CREATE TABLE post (id INTEGER PRIMARY KEY, title TEXT, views INTEGER)")
+
+            def __init__(self, title, views=0):
+                self.title = title
+                self.views = views
+
+            def save(self):
+                cur = Post._db.execute(
+                    "INSERT INTO post (title, views) VALUES (?, ?)", (self.title, self.views))
+                self.id = cur.lastrowid
+
+            @classmethod
+            def all(cls):
+                rows = cls._db.execute("SELECT title, views FROM post ORDER BY views DESC").fetchall()
+                return [cls(t, v) for t, v in rows]
+
+        Post("Перший пост", 10).save()
+
+        Post("Хіт", 150).save()
+
+        Post("Новина", 42).save()
+
+        for p in Post.all():
+            print(f"{p.title}: {p.views} переглядів")
+        ```Output:
+
+        ```
+
+        Хіт: 150 переглядів
+
+        Новина: 42 переглядів
+
+        Перший пост: 10 переглядів
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - `class Post` with the `post` table is an embodiment of the ORM idea
+        "class ↔ table".
+
+        - `def __init__(self, title, views=0)` — object `Post` = one row of the
+        future table.
+
+        - `save()` — creates an `INSERT' from the fields of the object; this is
+        what `.save()` does in Django.
+
+        - `self.id = cur.lastrowid` — after saving, the object receives its
+        `id`, as in a real ORM.
+
+        - `@classmethod all()` — performs `SELECT ... ORDER BY views DESC` and
+        returns objects.
+
+        - `[cls(t, v) for t, v in rows]` — each row of the base is converted
+        **back** to a `Post` object.
+
+        - the output is sorted by views: ``Hit'' (150) is the first - this was
+        done by `ORDER BY' in the database.
+
+        ### Try to predict
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What does
+        Post.objects.all() line conceptually mean in Django
+        ORM?","options":["create a new Post table","do something like SELECT *
+        FROM post and return the rows as Post objects","delete all Post
+        entries","connect to the database"],"answer":1,"explanation":"In Django
+        ORM, the model class corresponds to a table, and Post.objects is the
+        query manager for it. Post.objects.all() under the hood does something
+        like SELECT * FROM post, but returns not raw tuples, but handy Post
+        objects with (.title, .views) attributes. This is the essence of ORM:
+        you work with Python objects, and the SQL is generated automatically -
+        exactly what the all() method does in our example."}
+
+        ```
+
+
+        ### Typical mistakes of a beginner
+
+        1. **Take Django for a tiny service.** For one endpoint or microservice,
+        Django is overkill. Flask/FastAPI are more appropriate there; Django
+        shines on large sites.
+
+        2. **Bypassing ORM with manual SQL is unnecessary.** ORM protects
+        against injections and makes the code readable. Leave raw SQL for rare,
+        complex queries.
+
+        3. **Forget about migrations.** The model has been changed - you need to
+        generate and apply **migration** so that the database catches up with
+        the code. Missed migration = schema discrepancy and crash.
+
+        4. **Problem of N+1 requests.** Naively traversing linked objects in a
+        loop makes a separate request for each — and the page slows down. The
+        ORM should load tools (`select_related`) with one request.
+
+        5. **Don't use ready-made admin.** Newbies often write their own control
+        panel, although Django provides a full-fledged admin almost for free.
+
+        ### In practice
+
+
+        A minimal example view that returns a JSON response in Django:
+
+        ```python
+
+        from django.http import JsonResponse
+
+
+
+        def health(request):
+
+            return JsonResponse({"status": "ok"})
+
+        ```**Why it's here:** View turns an HTTP request into a response; JSON
+        serialization is performed by `JsonResponse`.
+
+
+
+        **Please note:** View needs to be connected to URLconf and running
+        requires an installed Django project.
+
+
+
+        ### Summary
+
+        You've been introduced to **Django**, a "batteries included" framework
+        for large sites that provides database, admin, users, and security out
+        of the box. Its heart is an **ORM** that embodies the idea of ​​**class
+        = table, object = string**: you describe the model with a regular class,
+        and `save()` and `objects.all()` hide the SQL behind self-explanatory
+        objects. You modeled this idea by hand in `sqlite3` and saw how `save`
+        generates an `INSERT` and `all` converts strings back to objects. Django
+        is organized according to the **MVT** pattern and is indispensable when
+        Flask would become chaos - but for tiny services it is overkill.
+        Remember migrations and the N+1 problem. Next are background tasks
+        outside the web: **queues and Celery**.
+      level: 5
+      tags:
+        - systems
+        - python
+  - title: "Turns and tasks: Celery; brokers (review)"
+    key: cherhy-ta-zadachi-celery-brokery-ohlyad
+    description: explain the role of the queue | distinguish producer, broker and
+      worker | choose retry behavior
+    order: 17
+    exerciseFocus: "one deterministic problem with a clear outcome and a false scenario"
+    theory:
+      title: "Turns and tasks: Celery; brokers (review)"
+      content: >-
+        ### Why is this topic needed?
+
+        The queue separates the moment of acceptance of work from the moment of
+        its execution. This is required when the operation is long or can be
+        performed later.
+
+        ### Intuitive explanation
+
+        Imagine coupons in a workshop: the customer leaves the order, the
+        dispatcher stores it, and the worker takes the next available one.
+
+        ### What happens at runtime
+
+        The queue separates the moment of acceptance of work from the moment of
+        its execution. The web request puts a message in the broker and returns
+        the task id, and the worker picks up the task later. This adds eventual
+        consistency, repetitions, deduplication and the need to see the state of
+        the task. Broker is a transport, not a guarantee that a business
+        transaction is safely repeated.
+
+        ### Minimal code example
+
+        ```python
+
+        from queue import Queue
+
+        jobs = Queue()
+
+        jobs.put({"task": "send_email", "attempt": 1})
+
+        job = jobs.get()
+
+        try:
+            print("processing:", job["task"])
+        finally:
+            jobs.task_done()
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - Producer serializes arguments and creates messages.
+
+        - Broker delivers it to the worker.
+
+        - Worker performs a function independently of the HTTP process.
+
+        - Retry can perform the task again, so idempotency is required.
+
+        - Result backend and dead-letter policy define how to parse failures.
+
+        ### Try to predict
+
+        What happens if the worker crashes before task_done? Why can't a message
+        be considered executed immediately after put?
+
+        ### How behavior changes
+
+        Check for worker drop, duplicate delivery, timeout, large payload, and
+        unavailable broker. Do not put secrets or non-transferable objects in
+        the message; pass the ID and version of the contract.
+
+        ### Typical mistakes of a beginner
+
+        Do not do idempotency; repeat the mistake endlessly; put secrets or huge
+        objects in the payload.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        from queue import Queue
+
+        jobs = Queue()
+
+        jobs.put({"task": "send_email", "attempt": 1})
+
+        job = jobs.get()
+
+        try:
+            print("processing:", job["task"])
+        finally:
+            jobs.task_done()
+        ```**Why this is here:** The task accepts an image_id, not the whole
+        file: the message remains small and repetitive. In the exercise, verify
+        that the rerun does not produce two identical final records.
+
+        **What to change yourself:** Start with the task contract: input,
+        output, tolerable error, number of retries and observation method.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why does retry in the
+        background task require idempotency?","options":["Retry always changes
+        the Python type","One logical operation can be performed more than
+        once","Broker cannot transmit numbers","A Worker always runs only
+        once"],"answer":1,"explanation":"A retry after a timeout or crash may
+        occur even when the first attempt partially completed."}
+
+        ```
+
+
+        ### Summary
+
+        The queue changes the execution time, but does not cancel the handling
+        of errors, retries, and duplicates.
+  - title: "Documentation and code style: PEP 8; docstring"
+    key: dokumentatsiya-i-styl-kodu-pep-8-docstring
+    description: explain the role of PEP 8 | write a useful docstring | distinguish
+      style from behavior
+    order: 18
+    exerciseFocus: "one function with a short contract and an example call"
+    theory:
+      title: "Documentation and code style: PEP 8; docstring"
+      content: >-
+        ### Why is this topic needed?
+
+        Style reduces cognitive load, and documentation captures solutions that
+        are not visible from syntax.
+
+        ### Intuitive explanation
+
+        Style is a road marking, docstring is an instruction manual for a
+        device: they don't move the car, but they help to use it.
+
+        ### What happens at runtime
+
+        The style reduces the cost of reading and changing, and the docstring
+        explains the function's public contract: purpose, parameters, result,
+        and important exceptions. Documentation is useful when it describes
+        solutions and limitations, rather than repeating the function name in
+        other words. Linter helps with mechanical styling, but doesn't solve
+        fuzzy architecture.
+
+        ### Minimal code example
+
+        ```python
+
+        def percentage(part: float, total: float) -> float:
+            """Return part as a percentage of total.
+
+            Raises ValueError when total is zero.
+            """
+            if total == 0:
+                raise ValueError("total must not be zero")
+            return part / total * 100
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - The name of the function must inform the action and be consistent in
+        the module.
+
+        - Docstring is written near the public function.
+
+        - Parameter and return types specify the form of the contract.
+
+        - The example in the documentation should match the actual behavior.
+
+        - Documentation and tests must be updated together after API changes.
+
+        ### Try to predict
+
+        What information does the user learn from the docstring but not from the
+        title? What case should be added to the test?
+
+        ### How behavior changes
+
+        Check that the documentation is not out of date, that exceptions are
+        described, and that it does not include example secrets. Don't add a
+        docstring to every local string for no good reason: Public API and
+        complex solutions are the priority.
+
+        ### Typical mistakes of a beginner
+
+        Write a docstring that repeats the code; hide the important exception;
+        change the style in the middle of the module.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        def percentage(part: float, total: float) -> float:
+            """Return part as a percentage of total.
+
+            Raises ValueError when total is zero.
+            """
+            if total == 0:
+                raise ValueError("total must not be zero")
+            return part / total * 100
+        ```**Why this is here:** Docstring captures assumptions that are not
+        apparent from a single formula. In the exercise, change the count or
+        tax_rate contract and verify that the code, documentation, and test
+        describe the same thing.
+
+        **What to change yourself:** Before writing a function, state its
+        contract in one sentence, then check that the code conforms to it.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"What should a useful
+        public function docstring describe?","options":["Just the name of the
+        function","Contract: purpose, entry, result and important
+        exceptions","All operating system code","Passwords to
+        launch"],"answer":1,"explanation":"The documentation should help the
+        user to correctly call the function and understand its limitations."}
+
+        ```
+
+
+        ### Summary
+
+        A style makes the code readable, the documentation explains its
+        contract, and the tests validate the promise.
+  - title: "Packaging and distribution: setuptools"
+    key: paketuvannya-i-dystrybutsiya-setuptools
+    description: explain the role of package metadata | distinguish source and wheel
+      | define dependencies
+    order: 19
+    exerciseFocus: "read the minimum package configuration and predict the artifact name"
+    theory:
+      title: "Packaging and distribution: setuptools"
+      content: >-
+        ### Why is this topic needed?
+
+        Packaging makes the code portable: another developer can install it with
+        the required dependencies.
+
+        ### Intuitive explanation
+
+        A package is a suitcase with code, metadata and a list of things to take
+        with you.
+
+        ### What happens at runtime
+
+        Packaging describes exactly what is installed, how it is assembled, and
+        what runtime dependencies it depends on. Metadata in pyproject.toml
+        separates the identity of the package from the local virtual
+        environment. Wheel is convenient for a finished artifact, source
+        distribution is for reassembly. A version is required for release
+        compatibility and playback.
+
+        ### Minimal code example
+
+        ```python
+
+        [project]
+
+        name = "study-tools"
+
+        version = "0.1.0"
+
+        dependencies = ["requests>=2.0"]
+
+        [build-system]
+
+        requires = ["setuptools>=68"]
+
+        build-backend = "setuptools.build_meta"
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - name and version identify a specific release.
+
+        - dependencies describe what is required at startup.
+
+        - build-system defines the tool that builds the artifact.
+
+        - The package should contain only necessary files and should not include
+        secrets.
+
+        - Clean venv reveals hidden local dependencies.
+
+        ### Try to predict
+
+        What will happen without dependencies? Why is version needed even for a
+        small internal package?
+
+        ### How behavior changes
+
+        Check clean install, missing dependency, version compatibility and wheel
+        content. Don't rely on importing from the repository root: it masks
+        package discovery errors.
+
+        ### Typical mistakes of a beginner
+
+        Depending on the random state of the local environment; do not fix
+        compatibility; include secrets in the archive.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        [project]
+
+        name = "study-tools"
+
+        version = "0.1.0"
+
+        dependencies = ["requests>=2.0"]
+
+        [build-system]
+
+        requires = ["setuptools>=68"]
+
+        build-backend = "setuptools.build_meta"
+
+        ```**Why this is here:** Configuration makes dependencies part of the
+        artifact. In the exercise, assemble the wheel and install it in an empty
+        venv — that's where you can see the difference between declared and
+        random dependencies.
+
+        **What to change yourself:** Compare a package's metadata with its
+        actual imports: this is an easy way to find a hidden dependency.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why is version included
+        in metadata even for a small package?","options":["So that Python knows
+        how to name the variables","To distinguish between releases and control
+        compatibility","To hide dependencies","To replace
+        tests"],"answer":1,"explanation":"The version allows you to reproduce
+        the state of the package and understand whether it is compatible with
+        the consumer."}
+
+        ```
+
+
+        ### Summary
+
+        Packaging describes the identity, dependencies, and how the code is
+        assembled so that the code can be reproducible.
+  - title: "Security: .env secrets"
+    key: bezpeka-sekrety-env
+    description: explain the limit of config/secret | read environment | prevent key leakage
+    order: 20
+    exerciseFocus: "read the secure configuration without outputting the secret value"
+    theory:
+      title: "Security: .env secrets"
+      content: >-
+        ### Why is this topic needed?
+
+        The password, API key and signing secret do not belong to the code.
+        Their leak can give access to data even after changing the program.
+
+        ### Intuitive explanation
+
+        Code is a recipe, environment is the key to the kitchen; the recipe can
+        be published, the key cannot.
+
+        ### What happens at runtime
+
+        The configuration describes the behavior of the application, and the
+        secret gives access to the resource. The code reads the API_KEY from the
+        environment, checks for availability, and exits with an explicit error
+        if the configuration is incomplete. .env is convenient locally, but it
+        is not commented on and is not considered a full-fledged secret manager.
+
+        ### Minimal code example
+
+        ```python
+
+        import os
+
+        api_key = os.environ.get("API_KEY")
+
+        if not api_key:
+            raise RuntimeError("API_KEY is not configured")
+
+        print("API key is configured")
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - os.environ.get reads values outside the code.
+
+        - Check on start makes configuration error early.
+
+        - The error message should not contain the secret itself.
+
+        - .gitignore protects against a commit, but does not heal an already
+        leaked key.
+
+        - Production requires rotation, restriction of rights and controlled
+        storage.
+
+        ### Try to predict
+
+        Why is print(api_key) unsafe even locally? Which is better: to work
+        silently without a key or to complete the startup?
+
+        ### How behavior changes
+
+        Check for missing, empty and too short secret; stdout, exception and
+        logs should not contain it. Do not pass the token in the URL, because
+        the URL ends up in access logs, history and referrer.
+
+        ### Typical mistakes of a beginner
+
+        Commit .env; log token; put one secret in the code; pass secret in URL.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        import os
+
+        api_key = os.environ.get("API_KEY")
+
+        if not api_key:
+            raise RuntimeError("API_KEY is not configured")
+
+        print("API key is configured")
+
+        ```**Why this is here:** The code only reports the fact that the key
+        exists, not its value. In the exercise, find all error paths and verify
+        that none will log secret.
+
+        **What to change yourself:** Search the example for all the places where
+        the secret could get into stdout, exception or telemetry and remove
+        them.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"Why is print(api_key)
+        unsafe even in a local instance?","options":["print does not work with
+        strings","The secret can be found in logs, stdout or CI artifacts","API
+        key must always be a number","This automatically deletes the
+        .env"],"answer":1,"explanation":"Output is often cached or forwarded, so
+        secret can get out of control."}
+
+        ```
+
+
+        ### Summary
+
+        Secrets come from the environment, are checked at the start and are not
+        output to any channel.
+  - title: "Cloud/CLI (overview): boto3"
+    key: khmara-cli-ohlyad-boto3
+    description: explain client/resource model boto3 | do not hardcode credentials |
+      handle an API error
+    order: 21
+    exerciseFocus: "read client configuration without real request and without secrets"
+    theory:
+      title: "Cloud/CLI (overview): boto3"
+      content: >-
+        ### Why is this topic needed?
+
+        The SDK converts the network API of the cloud into Python objects, but
+        does not remove latency, permissions and service errors.
+
+        ### Intuitive explanation
+
+        The SDK is a translator between a Python method and a remote service;
+        the response still comes over the network.
+
+        ### What happens at runtime
+
+        The SDK turns the remote HTTP API into a Python client, but the network,
+        credentials and permissions do not disappear anywhere. boto3 creates a
+        client, looks for credentials on a standard chain, and only makes a
+        network request during an API call. Region is a configuration, not a
+        secret; the operation must have timeout, retry policy and minimum IAM
+        rights.
+
+        ### Minimal code example
+
+        ```python
+
+        import boto3
+
+        client = boto3.client("s3", region_name="eu-central-1")
+
+        print(client.meta.region_name)
+
+        # client.list_buckets() виконує реальний мережевий запит
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - client describes the service and the region, but does not yet mean a
+        successful API call.
+
+        - Credentials are not sewn into the code.
+
+        - The client method creates a network dependency.
+
+        - AccessDenied, timeout and rate limit are different classes of errors.
+
+        - Logs should hide credentials and personal response data.
+
+        ### Try to predict
+
+        Why are client creation and list_buckets execution different steps? What
+        can prevent the request after a correct import?
+
+        ### How behavior changes
+
+        Check missing credentials, wrong region, missing permission and timeout.
+        Don't run an expensive real query in a theory test; use a mock and a
+        separate sandbox test.
+
+        ### Typical mistakes of a beginner
+
+        Hardcode access key; output a response with personal data; do not have a
+        timeout/retry policy.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        import boto3
+
+        client = boto3.client("s3", region_name="eu-central-1")
+
+        print(client.meta.region_name)
+
+        # client.list_buckets() виконує реальний мережевий запит
+
+        ```**Why it's here:** A fragment separates client creation and network
+        operation. This allows you to test the configuration without
+        accidentally reading or changing the actual bucket.
+
+        **What to change yourself:** First, describe the desired operation and
+        permission, and only then choose the SDK method. This protects against
+        accidental expensive requests.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"When does boto3 usually
+        make a real request to AWS?","options":["When importing any Python
+        file","When calling a client method such as list_buckets","When writing
+        the name region","Never, the SDK only works
+        locally"],"answer":1,"explanation":"The client creation prepares the
+        object, and the operation method calls the remote API."}
+
+        ```
+
+
+        ### Summary
+
+        The cloud SDK is a network boundary: credentials, permissions, latency
+        and failures must be planned explicitly.
+  - title: Best practices and patterns
+    key: naykrashchi-praktyky-ta-paterny
+    description: share responsibility | name trade-off abstraction | choose a simple
+      structure
+    order: 22
+    exerciseFocus: "convert a short fragment with duplication into one
+      understandable function"
+    theory:
+      title: Best practices and patterns
+      content: >-
+        ### Why is this topic needed?
+
+        A pattern is only useful when it reduces complexity. The pattern name
+        alone does not make the code better.
+
+        ### Intuitive explanation
+
+        Architecture is the layout of the workshop: each tool lies where it is
+        used, not in the most expensive cabinet.
+
+        ### What happens at runtime
+
+        A pattern is useful when it names a recurring problem and reduces
+        complexity, not when it adds abstraction for abstraction's sake. Start
+        with responsibilities and data boundaries, then choose a simple
+        function, module, or object. Explicit dependencies are easier to test
+        than global state.
+
+        ### Minimal code example
+
+        ```python
+
+        def total_price(items, tax_rate):
+            subtotal = sum(item["price"] * item["count"] for item in items)
+            return subtotal * (1 + tax_rate)
+
+        print(total_price([{"price": 10, "count": 2}], 0.2))
+
+        ```
+
+
+        ### Explanation of each line of the example
+
+        - total_price accepts data explicitly and does not read the hidden
+        global state.
+
+        - One responsibility makes the function clear.
+
+        - Explicit parameters allow testing without a server or database.
+
+        - Abstraction is added after iteration or measured complexity.
+
+        - Refactoring should preserve the behavior that the tests protect.
+
+        ### Try to predict
+
+        What responsibility can be changed independently? What would complicate
+        the test: global items or an explicit parameter?
+
+        ### How behavior changes
+
+        Check for empty list, zero rate, negative values, and malformed item.
+        Don't add a Factory, Singleton, or DI container to two lines without a
+        real problem.
+
+        ### Typical mistakes of a beginner
+
+        Add pattern to simple code; hide addictions; call the long method the
+        principle of single responsibility.
+
+        ### In practice
+
+        This snippet shows exactly where the topic construction is used in the
+        working scenario:
+
+        ```python
+
+        def total_price(items, tax_rate):
+            subtotal = sum(item["price"] * item["count"] for item in items)
+            return subtotal * (1 + tax_rate)
+
+        print(total_price([{"price": 10, "count": 2}], 0.2))
+
+        ```**Why this is here:** A function has explicit parameters and a single
+        result, so it can be tested without a server, DB, or singleton. This is
+        an example of useful simplicity, not a call to make each line a separate
+        class.
+
+        **What to change yourself:** Before refactoring, describe the current
+        behavior with a test, and after - check that the structure has changed,
+        not the result.
+
+        ### Interactive self-check
+
+        Before clicking answer, first formulate the prediction in words.
+
+        ```interactive
+
+
+        {"type":"prediction","lang":"python","question":"When is a pattern or
+        abstraction really justified?","options":["When the name sounds
+        complicated","When they reduce real complexity and have clear
+        accountability","When you can add more files","Always in any
+        function"],"answer":1,"explanation":"Abstraction should compensate for
+        its own complexity and make behavior easier to change or test."}
+
+        ```
+
+
+        ### Summary
+
+        Best practice is to reduce complexity and make behavior visible.
+        Simplicity is also an architectural solution.
+source: "python_theory.yml: advanced topics"

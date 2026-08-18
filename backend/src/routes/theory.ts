@@ -7,6 +7,7 @@ import { logger } from "../utils/logger";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
 import { TheoryBlock } from "../entities/TheoryBlock";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
+import { buildLocalizedTopicTitleEnById } from "../services/translation/topicTitleTranslator";
 
 export const theoryRouter = Router();
 
@@ -34,6 +35,9 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
     // Lazily translate theory blocks for English UI and store once in DB.
     // Translation columns are marked select:false, so we explicitly select them.
     const localizedEnById = new Map<number, TheoryBlock>();
+    const localizedTopicTitleEnById = wantsEn
+      ? await buildLocalizedTopicTitleEnById({ topics, logContext: { requestId: req.requestId, userId: req.userId } })
+      : new Map<number, string>();
     if (wantsEn) {
       const hasCols = await hasTheoryBlockEnTranslationColumns();
       if (hasCols) {
@@ -103,7 +107,7 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
     return res.json({
       topics: topics.map(t => ({
         id: t.id,
-        title: t.title,
+        title: wantsEn ? (localizedTopicTitleEnById.get(t.id) ?? t.title) : t.title,
         order: t.order,
         description: t.description ?? null,
         language: t.language,

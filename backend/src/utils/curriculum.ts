@@ -5,6 +5,7 @@ import YAML from "yaml";
 
 export type CurriculumRuntime = "JAVA" | "PYTHON" | "CPP";
 export type CurriculumLevel = "FOUNDATION" | "SPECIALIZATION" | "ADVANCED";
+export type CurriculumLocale = "uk" | "en";
 
 export type CurriculumCourseDefinition = {
   key: string;
@@ -270,8 +271,8 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`CURRICULUM_INVALID: ${message}`);
 }
 
-export function loadCurriculumManifest(root = repoRoot()): { manifest: CurriculumManifest; hash: string } {
-  const filePath = path.join(root, "curriculum", "catalog.yml");
+export function loadCurriculumManifest(root = repoRoot(), locale: CurriculumLocale = "uk"): { manifest: CurriculumManifest; hash: string } {
+  const filePath = path.join(root, "curriculum", locale === "en" ? "catalog.en.yml" : "catalog.yml");
   const raw = fs.readFileSync(filePath, "utf8");
   const parsed = YAML.parse(raw) as Partial<CurriculumManifest>;
   assert(Number.isInteger(parsed.version) && Number(parsed.version) > 0, "catalog version must be a positive integer");
@@ -297,8 +298,8 @@ export function loadCurriculumManifest(root = repoRoot()): { manifest: Curriculu
   return { manifest: { version: Number(parsed.version), courses, projectsSource }, hash: sha256(raw) };
 }
 
-export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot()): CurriculumMiniProject[] {
-  const { manifest } = loadCurriculumManifest(root);
+export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot(), locale: CurriculumLocale = "uk"): CurriculumMiniProject[] {
+  const { manifest } = loadCurriculumManifest(root, locale);
   if (!manifest.projectsSource) return [];
   const relative = path.normalize(manifest.projectsSource);
   assert(!relative.startsWith("..") && !path.isAbsolute(relative), "unsafe projectsSource path");
@@ -337,7 +338,7 @@ export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot())
   });
 }
 
-export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = repoRoot()): CurriculumTopic[] {
+export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = repoRoot(), locale: CurriculumLocale = "uk"): CurriculumTopic[] {
   const relative = path.normalize(course.source);
   assert(!relative.startsWith("..") && !path.isAbsolute(relative), `${course.key}: unsafe source path`);
   const filePath = path.join(root, relative);
@@ -354,7 +355,7 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
     const theory = typeof topic?.theory === "string" ? topic.theory : topic?.theory?.content;
     const title = String(topic?.title || "").trim();
     const key = String(topic?.key || slug(title));
-    if (SPECIALIZATION_COURSE_KEYS.has(course.key)) {
+    if (locale === "uk" && SPECIALIZATION_COURSE_KEYS.has(course.key)) {
       const qualityError = topicQualityIssues(course.key, topic, index).find((issue) => issue.severity === "error");
       assert(!qualityError, `${course.key}/${key}: ${qualityError?.message || "quality check failed"}`);
     }
@@ -366,15 +367,17 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
     const content = theory.trim();
     assert(!/^###\s+(?:Крок за кроком|Перед вправою|Підготовка до мініпроєкту)\b/im.test(content),
       `${course.key}/${key}: template lesson sections are not allowed`);
-    const hasIntuition = /###\s+(Інтуїтивне пояснення|Інтуїтивна модель)/i.test(content);
-    const hasExecution = /###\s+(Що відбувається під час виконання|Як це працює)/i.test(content);
-    const hasExample = /###\s+Мінімальний приклад коду/i.test(content) && /(```|~~~)/.test(content);
-    const hasExplanation = /###\s+(Пояснення кожного рядка прикладу|Пояснення фрагмента|Пояснення)/i.test(content);
-    const hasMistakes = /###\s+Типові помилки/i.test(content);
-    const hasPractice = /###\s+На практиці/i.test(content);
-    const hasSummary = /###\s+Підсумок/i.test(content);
-    assert(hasIntuition && hasExecution && hasExample && hasExplanation && hasMistakes && hasPractice && hasSummary,
-      `${course.key}/${key}: theory must contain intuition, execution, code, explanation, mistakes, practice and summary sections`);
+    if (locale === "uk") {
+      const hasIntuition = /###\s+(Інтуїтивне пояснення|Інтуїтивна модель)/i.test(content);
+      const hasExecution = /###\s+(Що відбувається під час виконання|Як це працює)/i.test(content);
+      const hasExample = /###\s+Мінімальний приклад коду/i.test(content) && /(```|~~~)/.test(content);
+      const hasExplanation = /###\s+(Пояснення кожного рядка прикладу|Пояснення фрагмента|Пояснення)/i.test(content);
+      const hasMistakes = /###\s+Типові помилки/i.test(content);
+      const hasPractice = /###\s+На практиці/i.test(content);
+      const hasSummary = /###\s+Підсумок/i.test(content);
+      assert(hasIntuition && hasExecution && hasExample && hasExplanation && hasMistakes && hasPractice && hasSummary,
+        `${course.key}/${key}: theory must contain intuition, execution, code, explanation, mistakes, practice and summary sections`);
+    }
     assert(exerciseFocus.length >= 20, `${course.key}/${key}: exerciseFocus is required in the curriculum source`);
     const interactiveBlocks = [...content.matchAll(/```interactive\s*\n([\s\S]*?)\n```/gi)];
     assert(interactiveBlocks.length > 0, `${course.key}/${key}: at least one interactive block is required`);
@@ -387,7 +390,7 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
       }
       assert(["prediction", "spot-the-bug", "trace", "memory", "dispatch", "quiz"].includes(spec?.type), `${course.key}/${key}: unsupported interactive block type`);
     }
-    if (["flask", "fastapi", "computer-vision"].includes(course.key)) {
+    if (locale === "uk" && ["flask", "fastapi", "computer-vision"].includes(course.key)) {
       // Authoring metadata is stored next to the topic in YAML, not inside the
       // learner markdown. Validate the actual lesson rather than rewarding a
       // hidden comment for length.
@@ -409,11 +412,11 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
   });
 }
 
-export function validateCurriculum(root = repoRoot()): { manifest: CurriculumManifest; manifestHash: string; topics: Record<string, CurriculumTopic[]> } {
-  const { manifest, hash: manifestHash } = loadCurriculumManifest(root);
+export function validateCurriculum(root = repoRoot(), locale: CurriculumLocale = "uk"): { manifest: CurriculumManifest; manifestHash: string; topics: Record<string, CurriculumTopic[]> } {
+  const { manifest, hash: manifestHash } = loadCurriculumManifest(root, locale);
   const topics: Record<string, CurriculumTopic[]> = {};
-  for (const course of manifest.courses) topics[course.key] = loadCurriculumTopics(course, root);
-  for (const course of manifest.courses) loadCurriculumMiniProjects(course.key, root);
+  for (const course of manifest.courses) topics[course.key] = loadCurriculumTopics(course, root, locale);
+  for (const course of manifest.courses) loadCurriculumMiniProjects(course.key, root, locale);
   return { manifest, manifestHash, topics };
 }
 

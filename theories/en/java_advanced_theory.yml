@@ -1,0 +1,1900 @@
+language: JAVA
+course: java-advanced
+topics:
+  - title: Reflection and annotations
+    key: refleksiya-ta-anotatsii
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 30
+    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: Reflection and annotations
+      content: |-
+        ### Intuitive explanation
+        Usually you work with a class knowing it in advance: you write `person.getName()` because you see this method in the code. What if the class is **unknown** before launch? That's how frameworks live: JUnit has to somehow find and run your test methods, Spring has to create objects of classes it never heard of when it was written. They need a way to ask the class about its guts while the program is running.
+
+        This method is called **reflection** — the ability of the program to review itself. Through the object `Class` you can ask: what fields do you have? what methods? — and even create an instance or call a method **by name-string** without writing this call in code. It's like an X-ray for the classroom: instead of "using" an object, you're "looking at its structure."
+
+        There are always **annotations** — tags on the code (`@Override`, `@Deprecated`, `@Test`). It is important not to confuse them with comments: a comment is ignored by the machine, and an annotation can be **read** - by the compiler or the same reflection - and acted on. The reflection + annotations pair is the engine that makes Spring, JUnit, and Hibernate run: they scan your classes, see the tags, and behave accordingly.
+
+        ### What happens at runtime
+        Each loaded class has its own "passport" object of type `Class` in memory (it can be obtained as `Person.class` or `obj.getClass()`). Request methods are opened through this passport: `getDeclaredFields()` will return an array of fields, `getDeclaredMethods()` - methods, `getAnnotation(...)` - will read a label. And `getDeclaredConstructor().newInstance()` will create the object, and `method.invoke(obj)` will call the method — all dynamically.Here's an important and not-so-obvious detail about annotations: for a tag to be **visible at runtime**, it must be declared `@Retention(RetentionPolicy.RUNTIME)`. By default, annotations are stored only up to the `CLASS' level and in runtime... they disappear — reflection will not see them. This is a classic "why is my own annotation ignored by the framework" reason. Also: reflection is powerful, but noticeably **slower** than normal calls and bypasses access checks (`setAccessible(true)`), so it's avoided in "hot" code, leaving it for infrastructure.
+
+        ### Minimal code example
+        ```java
+        import java.lang.annotation.*;
+        import java.lang.reflect.*;
+
+        public class Main {
+            @Retention(RetentionPolicy.RUNTIME)   // без цього мітку не видно в рантаймі
+            @interface Info { String value(); }
+
+            @Info("клас про людину")
+            static class Person {
+                String name = "Оля";
+                int age = 15;
+                String greet() { return "Привіт, я " + name; }
+            }
+
+            public static void main(String[] args) throws Exception {
+                Class<?> c = Person.class;                       // паспорт класу
+                System.out.println("Клас: " + c.getSimpleName());
+                System.out.println("@Info: " + c.getAnnotation(Info.class).value());
+
+                for (Field f : c.getDeclaredFields()) {
+                    System.out.println("поле: " + f.getType().getSimpleName() + " " + f.getName());
+                }
+
+                Constructor<?> ctor = c.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                Object obj = ctor.newInstance();                 // об'єкт динамічно
+                Method m = c.getDeclaredMethod("greet");
+                m.setAccessible(true);
+                System.out.println("виклик greet(): " + m.invoke(obj)); // виклик за іменем
+            }
+        }
+        ```Output:
+        ```
+        Клас: Person
+        @Info: клас про людину
+        поле: String name
+        поле: int age
+        виклик greet(): Привіт, я Оля
+        ```
+
+        ### Explanation of each line of the example
+        - `@Retention(RUNTIME)` - Makes `@Info` visible for runtime reflection.
+        - `c.getAnnotation(Info.class).value()` → `class about a person`: we read the label text.
+        - `c.getDeclaredFields()` — iterates through the fields; prints their type and name.
+        - `ctor.newInstance()` — creates a `Person` without an explicit `new`.
+        - `m.invoke(obj)` — calls `greet()` by name-string; returns ``Hello, I'm Olya''.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"A custom @Info annotation is declared WITHOUT @Retention (ie, a typical CLASS). What will c.getAnnotation(Info.class) return at runtime?","options":["the annotation object itself","null","compilation error","exception"],"answer":1,"explanation":"By default, annotations have retention CLASS — they are in the .class file, but are not loaded into memory at runtime. So reflection does not see them and getAnnotation returns null. @Retention(RetentionPolicy.RUNTIME) is required for the tag to be read at runtime."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forget `@Retention(RUNTIME)`** in your own annotation — and reflection "does not see" it.
+        2. **Confuse annotations with comments.** An annotation is part of the code, it can be read.
+        3. **Pull the reflection into a hot code.** It is slow; it's an infrastructure tool.
+        4. **Forget `setAccessible(true)`** when accessing non-public members.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        @Deprecated
+        void oldMethod() {}
+        ```**Why it's here:** An annotation adds metadata that a compiler, framework, or tool can read during analysis.
+
+        **Note:** Reflection is convenient, but reduces transparency and can come at a runtime cost.
+
+        ### Summary
+        So, reflection is an X-ray of the class: through the `Class` object you inspect fields and methods, create objects and call methods by name already at runtime. Annotations are human-readable labels, and `@Retention(RUNTIME)` is required for reflection to see them. Together they power Spring, JUnit, Hibernate. But be aware of the cost: reflection is slow and bypasses encapsulation, so leave it for infrastructure. Next is a nicer topic: lambda expressions that make code shorter and more expressive.
+      level: 3
+      tags:
+        - practice
+        - java
+  - title: Lambda expressions
+    key: lyambda-vyrazy
+    description: recognize basic Java constructs in code. explain how the value
+      changes at runtime.
+    order: 31
+    exerciseFocus: "one main topic operation; simple input or fixed example, no
+      unexplored libraries"
+    theory:
+      title: Lambda expressions
+      content: |-
+        ### Intuitive explanation
+        Remember the anonymous class from previous topics: to pass one "compare by length" rule to sorting, you had to write a whole ritual — `new Comparator<>() { public int compare(...) { return ...; } }`. Four lines of wrapper for one line of substance. The brain sees: there is only one real thought here - "compare the lengths", and the rest is syntactic noise.
+
+        A **lambda expression** cuts this noise to the bone. Instead of an entire class, you only write what really matters: **parameters → body**. `(a, b) -> Integer.compare(a.length(), b.length())` — that's all the comparison logic. The arrow `->` is read as "turns into": "take `a` and `b` → return the result of the comparison".
+
+        The main idea to keep in mind is that lambda allows you to pass **behavior as a value**. Previously, methods could be given numbers, strings, objects — and now the action itself: "here's a piece of code, do what you need with it." That is why lambdas flourished next to lists and streams: "sort **like this**", "for each do **this**".
+
+        ### What happens at runtime
+        Here's the connection that clears things up: a lambda is actually a compact record of the same anonymous class that implements an interface with **one** method (they're called functionals - next topic). The compiler looks at what type is expected at that location (e.g. `Comparator<String>`) and realizes that the body of the lambda is an implementation of its single `compare` method. That is, `list.sort(lambda)` gets a comparator object under the hood, it's just that you didn't write a class for it manually.A nice consequence is **variable capture**: the lambda sees the local variables of the method in which it is written (provided that they are actually immutable, *effectively final*). This makes it really convenient. And `Integer.compare(a, b)` instead of ``naive'' `a - b` is not a quirk: for very large numbers, the difference can **overflow** `int` and give a negative result where it should have been positive, breaking the sort order.
+
+        ### Minimal code example
+        ```java
+        import java.util.*;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<String> words = new ArrayList<>(List.of("груша", "яблуко", "ківі"));
+
+                // правило сортування — лямбда «порівняй за довжиною»
+                words.sort((a, b) -> Integer.compare(a.length(), b.length()));
+                System.out.println(words);
+
+                // дія для кожного елемента — теж лямбда
+                words.forEach(w -> System.out.println(w + " (" + w.length() + ")"));
+            }
+        }
+        ```Output:
+        ```
+        [ківі, груша, яблуко]
+        ківі (4)
+        груша (5)
+        яблуко (6)
+        ```
+
+        ### Explanation of each line of the example
+        - `(a, b) -> Integer.compare(a.length(), b.length())` — lambda comparator: two strings → the result of comparing their lengths.
+        - `words.sort(...)` — applies this rule; the list is arranged from shorter to longer: `kiwi' (4), `pear' (5), `apple' (6).
+        - `w -> System.out.println(...)` is a lambda with one parameter; parentheses around a single parameter can be omitted.
+        - `words.forEach(...)` — performs this action for each element in turn.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"list = [\"pear\", \"apple\", \"kiwi\"]. What will list print after list.sort((a, b) -> Integer.compare(a.length(), b.length()));?","options":["[pear, apple, kiwi]","[kiwi, pear, apple]","[apple, pear, kiwi]","[pear, kiwi, apple]"],"answer":1,"explanation":"Lambda compares strings by length by height: kiwi=4, pear=5, apple=6. So the list is lined up [kiwi, pear, apple]."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Inflate the lambda.** If the body has grown into complex logic, move it to a separate method.
+        2. **Compare through `a - b`.** Risk of overflow; take `Integer.compare`.
+        3. **Modify captured local variable.** Lambda sees only *effectively final* variables.
+        4. **Confuse `->` (lambda) and `::` (method reference).** These are different, though related entries.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        static int doubleValue(int value) {
+            return value * 2;
+        }
+        ```**Why it's here:** A method describes a result type, a parameter, and an action. `return` passes the value back.
+
+        **Note:** A method's signature is part of its contract.
+
+        ### Summary
+        So a lambda is a concise behavior record: `parameters -> body` instead of a bulky anonymous class. It allows you to pass an action as a regular value, which is why it lends itself so naturally to `sort`, `forEach`, and streams. Under the hood, this is the implementation of a functional interface (one method), and the bonus is the capture of *effectively final* variables. Remember `Integer.compare` instead of `a - b`. Next, we will analyze in detail the same functional interfaces - `Function', `Predicate', `Consumer' - under which lambdas are substituted.
+      level: 3
+      tags:
+        - foundations
+        - java
+  - title: Functional interfaces
+    key: funktsionalni-interfeysy
+    description: extract repetitive logic into a comprehensible abstraction. explain
+      data flow through parameters, return, or iteration.
+    order: 32
+    exerciseFocus: "one script with a clear value stream; not to require individual
+      unit tests instead of a complete program"
+    theory:
+      title: Functional interfaces
+      content: |-
+        ### Intuitive explanation
+        In the last thread, we said that a lambda is a single-method interface implementation. This "interface with one method" is called a **functional interface**. He is the socket into which the lambda plug is inserted. The logic is simple: if there is exactly **one** action in the contract, the compiler does not need to guess which method your `param -> body' implements. There is only one method - there is nothing to confuse with.
+
+        Best of all, you almost never have to write such interfaces yourself. Java has already brought in the `java.util.function' package a set of "universal sockets" for all typical cases. Remember the four and you will cover 90% of situations:
+        - **`Predicate<T>`** — "yes or no?": takes `T`, returns `boolean` (method `test`).
+        - **`Function<T,R>`** — "transform": takes `T`, returns `R` (method `apply`).
+        - **`Consumer<T>`** — "consume": takes `T`, returns nothing (method `accept`).
+        - **`Supplier<T>`** - "supply": does not take anything, returns `T` (method `get`).
+
+        Mnemonic by role: Predicate asks, Function transforms, Consumer absorbs, Supplier issues.
+
+        ### What happens at runtime
+        When a method expects, say, a `Predicate<Integer>`, and you pass a lambda `n -> n % 2 == 0`, the compiler "tests" the body of the lambda to a single interface method (`test`) - the types match, so all is well. Next, a call to `predicate.test(4)' executes the body of your lambda and returns the result. That is, a functional interface is a **wrapper type for a behavior**, and a lambda is a specific behavior nested within it.To avoid errors, an interface intended as functional is marked with the **`@FunctionalInterface`** annotation. It is not required, but it is useful: if you accidentally add a second abstract method, the compiler immediately scolds - "this is no longer a functional interface". Subtlety that surprises newcomers: `default` and `static` methods **don't count** because they have a body; the second *abstract* method is prohibited. Therefore `Comparator` with a bunch of `default`-methods is still functional - only `compare` is abstract in it.
+
+        ### Minimal code example
+        ```java
+        import java.util.function.*;
+
+        public class Main {
+            public static void main(String[] args) {
+                Predicate<Integer> isEven = n -> n % 2 == 0;      // T -> boolean
+                Function<String, Integer> length = s -> s.length(); // T -> R
+                Consumer<String> printer = s -> System.out.println("-> " + s); // T -> void
+                Supplier<String> greeting = () -> "Привіт зі StudyCod"; // () -> T
+
+                System.out.println(isEven.test(4));
+                System.out.println(isEven.test(7));
+                System.out.println(length.apply("яблуко"));
+                printer.accept("повідомлення");
+                System.out.println(greeting.get());
+            }
+        }
+        ```Output:
+        ```
+        true
+        false
+        6
+        -> повідомлення
+        Привіт зі StudyCod
+        ```
+
+        ### Explanation of each line of the example
+        - `Predicate<Integer> isEven` is a lambda that returns `boolean`; called via `test`.
+        - `isEven.test(4)` → `true`, `isEven.test(7)` → `false`: parity check.
+        - `Function<String,Integer> length` — transformation "string → its length"; `apply("apple")` → `6`.
+        - `Consumer<String> printer` — accepts a string, prints, returns nothing; `accept(...)` returns `-> message`.
+        - `Supplier<String> greeting` does not take anything, `get()` supplies a ready string.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"Why doesn't this code compile?","lines":["@FunctionalInterface","interface Converter {","    String convert(String s);","    String reverse(String s);","}"],"buggyLine":4,"explanation":"@FunctionalInterface requires exactly ONE abstract method, because that's what the lambda implements. Here there are two of them — convert and reverse — so the compiler does not know which lambda should be implemented, and rejects the code. The second method should either be removed or made default with the body."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Add second abstract method** to `@FunctionalInterface` - compile error.
+        2. **Confuse interface methods.** In `Predicate` - `test`, in `Function` - `apply`, in `Consumer` - `accept`, in `Supplier` - `get`.
+        3. **Write your own interface where it is ready** in `java.util.function`.
+        4. **Think `default' methods break functionality.** No - only abstract ones count.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        static int doubleValue(int value) {
+            return value * 2;
+        }
+        ```**Why it's here:** A method describes a result type, a parameter, and an action. `return` passes the value back.
+
+        **Note:** A method's signature is part of its contract.
+
+        ### Summary
+        So, a functional interface is a "socket" with a single abstract method into which the lambda sticks; `@FunctionalInterface` follows this rule (default/static methods are not counted). Instead of writing such interfaces manually, take ready ones from `java.util.function`: `Predicate` (asks), `Function` (converts), `Consumer` (consumes), `Supplier` (provides). These four are the building blocks of the Stream API, which we move on to next.
+      level: 3
+      tags:
+        - abstraction
+        - java
+  - title: Stream API - the basics
+    key: stream-api-osnovy
+    description: extract repetitive logic into a comprehensible abstraction. explain
+      data flow through parameters, return, or iteration.
+    order: 33
+    exerciseFocus: "one script with a clear value stream; not to require individual
+      unit tests instead of a complete program"
+    theory:
+      title: Stream API - the basics
+      content: |-
+        ### Intuitive explanation
+        Take a look at the usual problem: "take a list of numbers, leave even numbers, multiply each by 10, collect in a new list." A loop is three or four lines with a temporary list, an accumulator variable, and an `if' inside. The code works, but you can't see the forest for the trees: **what** we wanted is drowned in **how** it's done.
+
+        The **Stream API** is eye-opening. Instead of commanding the machine step by step ("start a list, loop, check condition, add"), you **describe the intent** with a chain of operations: `.filter(even).map(×10).collect(to list)`. It's like a conveyor belt in a factory: data enters from one end, passes through the operating stations one after the other, and comes out with a finished result. You set up the stations instead of pushing every detail with your hands.
+
+        It is very important to learn from the first day: **the stream does not change the initial collection**. He only reads it and builds a **new** result. The original list remains intact, making the code predictable and safe.
+
+        ### What happens at runtime
+        Stream operations are of two kinds, and the difference between them is key to understanding. **Intermediates** (`filter`, `map`, `sorted`) do not do the work immediately - they only "schedule" the next step and return a new stream. **Final** (`collect`, `count`, `forEach`) is the "start of the pipeline": only then the plan is executed and produces the result.From here comes the most important and most unobvious trait — **laziness**. As long as you haven't called the final operation, **nothing** is done, even `map` with print inside will be silent. The stream is waiting for the "start" command. A practical consequence: the pipeline processes elements **one-by-one** (everyone goes through the whole chain), not "all filter, then all map" - so junk is not counted, and `findFirst` on a list of millions can stop after the first match. And one more rule: the stream is **one-time**. Passed it once - create a new stream for a new pass.
+
+        ### Minimal code example
+        ```java
+        import java.util.*;
+        import java.util.stream.*;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Integer> nums = List.of(1, 2, 3, 4, 5, 6);
+
+                List<Integer> result = nums.stream()      // джерело
+                    .filter(n -> n % 2 == 0)              // проміжна: лишити парні
+                    .map(n -> n * 10)                    // проміжна: помножити
+                    .collect(Collectors.toList());        // завершальна: зібрати
+
+                System.out.println(result);
+                System.out.println(nums);                 // оригінал НЕ змінився
+
+                long count = nums.stream().filter(n -> n > 3).count();
+                System.out.println("Більших за 3: " + count);
+            }
+        }
+        ```Output:
+        ```
+        [20, 40, 60]
+        [1, 2, 3, 4, 5, 6]
+        Більших за 3: 3
+        ```
+
+        ### Explanation of each line of the example
+        - `nums.stream()` — opens a pipeline over a collection (without copying it).
+        - `.filter(n -> n % 2 == 0)` — passes only `2, 4, 6`.
+        - `.map(n -> n * 10)` — converts them to `20, 40, 60`.
+        - `.collect(Collectors.toList())` - "start": collects `[20, 40, 60]` into a new list.
+        - `System.out.println(nums)` → `[1, 2, 3, 4, 5, 6]`: the original is unchanged.
+        - `.count()` is another final operation; here counts elements greater than 3 → `3`.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"What will this fragment print?\nnums.stream().map(n -> { System.out.println(n); return n * 2; });\nSystem.out.println(\"end\");","options":["all numbers then \"end\"","only \"the end\"","a mistake","\"end\", then all numbers"],"answer":1,"explanation":"map is an intermediate (lazy) operation. Without the final operation (collect/count/forEach), the pipeline doesn't run at all, so no println inside the map is executed. Only \"end\" will be printed."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Wait for the stream to modify the collection.** No - it builds a new result.
+        2. **Forget the final operation.** Without `collect`/`count`/`forEach` the pipeline will not start (laziness).
+        3. **Reuse the stream.** It is disposable; after the final operation - only a new one.
+        4. **Confuse `map` and `filter`.** `map` converts each element, `filter` selects by condition.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        static int doubleValue(int value) {
+            return value * 2;
+        }
+        ```**Why it's here:** A method describes a result type, a parameter, and an action. `return` passes the value back.
+
+        **Note:** A method's signature is part of its contract.
+
+        ### Summary
+        So, the Stream API allows you to describe the intent with a chain of operations instead of a manual loop, without touching the original collection. The key is the division into intermediate (lazy) and final operations: without "starting", the final operation does nothing, and the processing goes piecemeal throughout. Remember the one-time use of the stream. You have mastered the basic `filter → map → collect' pipeline; then there are more powerful collectors (`groupingBy', `joining') and parallel threads.
+      level: 3
+      tags:
+        - abstraction
+        - java
+  - title: Stream API - collectors and parallel streams
+    key: stream-api-kolektory-ta-paralelni-potoky
+    description: extract repetitive logic into a comprehensible abstraction. explain
+      data flow through parameters, return, or iteration.
+    order: 34
+    exerciseFocus: "one script with a clear value stream; not to require individual
+      unit tests instead of a complete program"
+    theory:
+      title: Stream API - collectors and parallel streams
+      content: |-
+        ### Intuitive explanation
+        In the previous thread, the stream always ended with the same `collect(Collectors.toList())`. But "to list" is only one of many forms of summary. You often need something else: glue lines into one text using a comma, **group** products by category, count how many words start with each letter, compile a "key → meaning" dictionary. **collectors** are responsible for all this "what exactly to collect" — ready-made summary recipes from the ``Collectors'' class.
+
+        The most useful ones should be known in person: `joining' glues lines together (with a separator and even framing), `groupingBy' arranges elements in baskets based on a common feature, `counting' counts, `toMap' builds a dictionary. Instead of writing a manual loop with an intermediate ``Map'' and checking whether such a key already exists, you say one word and the collector does everything by itself.
+
+        The second part of the topic is **parallel streams**. One `.parallelStream()` call — and Java itself spreads the processing over several processor cores. Sounds like a free boost, but there are a lot of pitfalls lurking here, so be careful.
+
+        ### What happens at runtime
+        `groupingBy(w -> w.charAt(0))` goes through the elements and calculates the key for each (here, the first letter), putting the elements with the same key into one list in the `Map`. Add an "internal" collector as the second argument — and instead of lists you will get, for example, a count: `groupingBy(..., counting())` gives `Map<Letter, Long>`. Collectors **nest** into each other like nesting dolls - that's why they are so powerful.With parallelism, the main thing is to understand the price and the risk. Price: splitting the work into streams and gathering the results is also work, so on **small** data, a parallel stream is often **slower** than a normal one; gain appears only on large volumes with heavy processing. The risk is much more dangerous: in parallel mode, several threads run **simultaneously**, and if your lambda touches one **shared mutable** structure (a regular `ArrayList`, a counter) - they will trample each other, and you will get corrupted or incomplete data. Golden rule: in streams, don't mutate shared state by hand — entrust the collection of the result to a **collector** that is made safe for concurrency.
+
+        ### Minimal code example
+        ```java
+        import java.util.*;
+        import java.util.stream.*;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<String> words = List.of("яблуко", "банан", "апельсин", "ківі", "аґрус");
+
+                String joined = words.stream()
+                    .collect(Collectors.joining(", ", "[", "]"));   // склеїти
+                System.out.println(joined);
+
+                Map<Character, Long> counts = words.stream()
+                    .collect(Collectors.groupingBy(w -> w.charAt(0), Collectors.counting()));
+                System.out.println(counts);                          // згрупувати й порахувати
+
+                int total = List.of(1, 2, 3, 4, 5).parallelStream()
+                    .mapToInt(Integer::intValue)
+                    .sum();                                          // безпечний паралельний підсумок
+                System.out.println("Сума: " + total);
+            }
+        }
+        ```Output:
+        ```
+        [яблуко, банан, апельсин, ківі, аґрус]
+        {а=2, б=1, к=1, я=1}
+        Сума: 15
+        ```
+
+        ### Explanation of each line of the example
+        - `joining(", ", "[", "]")` — glues words together with commas and surrounds them with brackets.
+        - `groupingBy(w -> w.charAt(0), counting())` — groups by the first letter and counts; "orange" and "gooseberry" give `a=2'.
+        - `{а=2, б=1, к=1, я=1}` is a dictionary result (key order in `HashMap` is not guaranteed).
+        - `parallelStream().mapToInt(...).sum()` — sum on several cores; `sum()` is a safe finalization operation, so the result is reliable `15`.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"Why does this parallel code give an incorrect/incomplete list?","lines":["List<Integer> result = new ArrayList<>();","nums.parallelStream()","    .filter(n -> n % 2 == 0)","    .forEach(n -> result.add(n));"],"buggyLine":4,"explanation":"parallelStream executes forEach on multiple threads at once, and a regular ArrayList is not thread-safe. Multiple threads add to it at the same time — a data race occurs, and elements are lost or corrupted. It is correct not to mutate the shared list, but to collect the result with a collector: .collect(Collectors.toList())."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Mute shared `ArrayList`/Counter in parallel stream.** Data chase - take the collector.
+        2. **Wait for acceleration on small data.** Concurrency overhead eats them up.
+        3. **Confuse collectors.** `toList`, `joining`, `groupingBy`, `toMap` give completely different results.
+        4. **Rely on `HashMap` key order** with `groupingBy`. Order is needed - take `LinkedHashMap`/`TreeMap`.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        static int doubleValue(int value) {
+            return value * 2;
+        }
+        ```**Why it's here:** A method describes a result type, a parameter, and an action. `return` passes the value back.
+
+        **Note:** A method's signature is part of its contract.
+
+        ### Summary
+        So, collectors are ready-made recipes for the summary: `joining` glues together, `groupingBy` distributes in baskets, `counting` counts, and nesting into each other, they close complex tasks with one line. Parallel streams (`parallelStream`) spread the work across cores, but are only useful on big data and require discipline: no mutating shared state - only collectors. Next, we move to the foundation of multithreading — ``Thread'' and ``Runnable''.
+      level: 4
+      tags:
+        - abstraction
+        - java
+  - title: "Competitiveness: Thread; Runnable"
+    key: konkurentnist-thread-runnable
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 35
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: "Competitiveness: Thread; Runnable"
+      content: |-
+        ### Intuitive explanation
+        Imagine a cook who prepares dinner strictly according to the order: he put the water on - and stands, staring blankly until it boils; until then he starts to get vegetables. Absurd, right? In fact, while the water is heating, he cuts, salts, and sets the table at the same time. Your default program is just that weird cook: everything is done in **one thread**, step by step, and a long operation (request to the network, reading a file) makes everything else stand and wait.
+
+        **Competitiveness** gives the program several hands. **Thread** is a separate line of execution that runs supposedly simultaneously with the main one. While one thread waits for the network, the other draws the interface — and the application does not "hang".
+
+        You can start the stream in two ways, and the modern one should be learned right away. The old one is to inherit `Thread` and override `run()`. It is better to describe the task separately through **`Runnable`** (which, as we know, is a functional interface, so a normal lambda will do) and **pass** it to the thread. The second method is more flexible: the task is decoupled from the launch mechanism, it can be assigned to both a thread and a thread pool.
+
+        ### What happens at runtime
+        Here lies the #1 mistake of all beginners, and you should know about it before the first line of code. A new thread is started by the **`start()`** method, not `run()`. Calling `t.run()` looks logical, compiles, and even works — but it's a trap: it just executes the task body **in the current thread**, like a normal method call, without any concurrency. Only `start()` tells the OS scheduler: "create a new execution line and start it".The second thing that breaks the intuition is **the output order is not guaranteed**. As soon as there is more than one thread, the scheduler decides who gets CPU time and when, so rows from different threads can exit in any order from run to run. If you need to **wait** for a thread to finish, there is a `join()` method: it forces the current thread to stop and wait for another thread. It is the `join()` in the example below that makes the output predictable.
+
+        ### Minimal code example
+        ```java
+        public class Main {
+            public static void main(String[] args) throws InterruptedException {
+                Runnable task = () -> System.out.println("потік: рахую...");
+                Thread t = new Thread(task);
+
+                System.out.println("main: запускаю потік");
+                t.start();          // НОВИЙ потік (не run()!)
+                t.join();           // чекаємо, поки він завершиться
+                System.out.println("main: потік завершився");
+            }
+        }
+        ```Output:
+        ```
+        main: запускаю потік
+        потік: рахую...
+        main: потік завершився
+        ```
+
+        ### Explanation of each line of the example
+        - `Runnable task = () -> ...` — we describe the task with a lambda without running it yet.
+        - `new Thread(task)` — wrap the task in a thread, but it is still sleeping.
+        - `System.out.println("main: starting thread")` — prints the main thread; it is always the first line.
+        - `t.start()` — creates and starts a **new** thread; it prints "flow: counting...".
+        - `t.join()` - the main thread waits for `t` to finish, so "main: thread finished" is guaranteed to be the last.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"Why is the \"task\" executed NOT in a new thread, but directly in main?","lines":["Runnable task = () -> System.out.println(Thread.currentThread().getName());","Thread t = new Thread(task);","t.run();"],"buggyLine":3,"explanation":"t.run() simply calls the CURRENT thread's run() method—it's a regular call, with no concurrency (outputs \"main\"). To actually start a separate line of execution, you need t.start(), which delegates the creation of a new thread to the OS scheduler."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Call `run()` instead of `start()`.** There will be no new thread - everything will be executed sequentially.
+        2. **Expect output order.** Without `join'/synchronization, the thread sequence is non-deterministic.
+        3. **Beget a thousand streams.** Each stream is worth a memory; an uncontrolled avalanche will only slow down the program (there are pools for that).
+        4. **Forget `join()` when you need a result.** The main thread can finish before the worker thread.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Future<Integer> result = pool.submit(() -> 2 + 2);
+        ```**Why it's here:** A pool reuses threads, and `Future' represents the result of a future operation.
+
+        **Please note:** Complete the pool after work.
+
+        ### Summary
+        So, a thread (`Thread`) is a separate line of execution that saves the program from "hanging" on long operations, and it is convenient to describe the task through `Runnable` (often just a lambda). Rule of thumb: `start()` starts a new thread, and `run()` is a deceptive no-concurrency trap. The order of thread output is non-deterministic, and `join()` helps to wait for completion. It is unprofitable to manually create hundreds of streams, so let's move on to the pool of streams through ``Executors''.
+      level: 4
+      tags:
+        - concurrency
+        - java
+  - title: Executors; Future; CompletableFuture
+    key: executors-future-completablefuture
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 36
+    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: Executors; Future; CompletableFuture
+      content: |-
+        ### Intuitive explanation
+        In the last thread we did `new Thread(...)` - and that's fine for a single thread. But imagine a server processing a thousand requests: creating a thousand threads is suicide. Each thread eats memory, and their continuous birth and destruction costs more than the work itself. It's like hiring a new courier for each package, and firing them after delivery.
+
+        It is smarter to keep a **pool** — a permanent small brigade of threads waiting for tasks. Work comes - free flow takes it, done - returns to the brigade for the next one. This pool is managed by **`ExecutorService`** — a dispatcher to which you simply "throw" tasks via `submit' without thinking about which thread will execute them.
+
+        But the question arises: if the task runs in the background, how to get its **result**? The answer is **`Future'**, "promise of result". `submit` returns it immediately, even before the task has finished; and when the result is needed, you call `future.get()`. A more modern and powerful brother is **`CompletableFuture`**, which allows you to build chains of "do this → then that" without manual waiting.
+
+        ### What happens at runtime
+        The key property of `submit` is that it **doesn't block**. You threw the task into the pool, got a `Future' and ran on; the task meanwhile runs in a background thread. Blocking occurs only on `future.get()`: if the result is not yet ready, the current thread **stops and waits**. Therefore, `get()` is called as late as possible — when the result is actually needed — so as not to waste the gains from background execution.`CompletableFuture` goes further and removes even this expectation. `thenApply(f)` says "when the previous step completes, apply function `f' to the result and pass on." This is how an asynchronous pipeline is built: `supplyAsync(...) → thenApply(...) → thenApply(...)`, where each link is triggered by itself as soon as the previous one is ready. And a critical hygiene rule: the pool must be **closed** via `shutdown()`, otherwise its threads will remain alive and **prevent the program from terminating** — it will just hang at the end.
+
+        ### Minimal code example
+        ```java
+        import java.util.concurrent.*;
+
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                ExecutorService pool = Executors.newFixedThreadPool(2);  // бригада з 2 потоків
+
+                Future<Integer> f1 = pool.submit(() -> 2 + 3);   // submit не блокує
+                Future<Integer> f2 = pool.submit(() -> 10 * 10);
+
+                System.out.println("f1 = " + f1.get());          // get() чекає результат
+                System.out.println("f2 = " + f2.get());
+
+                CompletableFuture<String> chain = CompletableFuture
+                    .supplyAsync(() -> 21)
+                    .thenApply(n -> n * 2)              // 21 -> 42
+                    .thenApply(n -> "Відповідь: " + n); // 42 -> текст
+
+                System.out.println(chain.get());
+
+                pool.shutdown();                         // обов'язково закрити пул
+            }
+        }
+        ```Output:
+        ```
+        f1 = 5
+        f2 = 100
+        Відповідь: 42
+        ```
+
+        ### Explanation of each line of the example
+        - `Executors.newFixedThreadPool(2)' is a pool with a fixed team of two threads.
+        - `pool.submit(() -> 2 + 3)` — submits the task; returns `Future` **instantly** without waiting for computation.
+        - `f1.get()` → `5`, `f2.get()` → `100`: here the thread is blocked until the result is ready.
+        - `supplyAsync(() -> 21).thenApply(n -> n*2)` - string: `21` becomes `42`.
+        - the second `thenApply` makes `42` the string `Answer: 42`.
+        - `pool.shutdown()` - closes the pool so the program can terminate.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"What will chain.get() print?\nCompletableFuture.supplyAsync(() -> 10).thenApply(n -> n + 5).thenApply(n -> n * 2)","options":["30","20","«105 * 2»","25"],"answer":0,"explanation":"The chain is executed in turn: supplyAsync gives 10, the first thenApply adds 5 (becomes 15), the second multiplies by 2 (becomes 30). Each link receives the result of the previous one. So 30."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forget `shutdown()`.** Live pool threads will not allow the program to terminate - it will hang.
+        2. **Call `get()` immediately after `submit`.** This eliminates the background — the thread just sits and waits.
+        3. **Create a new pool for each task.** The pool exists to be **reused**.
+        4. **Confuse `Future.get()` and `CompletableFuture.thenApply`.** The first blocks, the second builds a non-blocking pipeline.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Future<Integer> result = pool.submit(() -> 2 + 2);
+        ```**Why it's here:** A pool reuses threads, and `Future' represents the result of a future operation.
+
+        **Please note:** Complete the pool after work.
+
+        ### Summary
+        So, instead of spawning threads manually, they take the pool via `ExecutorService`: `submit` non-blockingly submits the task and returns `Future`, and `future.get()` takes the result (blocking until ready). `CompletableFuture` builds asynchronous pipelines via `thenApply` without manual waiting. Don't forget `shutdown()', otherwise the program will freeze. Next, we will analyze in more detail the types of pools and the scheduling of tasks in time.
+      level: 4
+      tags:
+        - practice
+        - java
+  - title: "Synchronization: synchronized; locks; atomics"
+    key: synkhronizatsiya-synchronized-locks-atomics
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 37
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: "Synchronization: synchronized; locks; atomics"
+      content: |-
+        ### Intuitive explanation
+        Imagine a shared notebook in which two people write at the same time. If they don't agree on the turn, one will cross out what the other wrote — and the result will be spoiled. In the program, "people" are **threads** and "notebook" is a shared variable. When two threads change the same data at the same time, a **data race** (race condition) occurs: the result depends on who got there first and becomes unpredictable.
+
+        **Synchronization** are queuing rules: they ensure that only one thread is executing a critical section at a time. Java provides three tools:
+        - `synchronized' is the simplest blocking: while one thread is in the block, others are waiting;
+        - `Lock` (for example `ReentrantLock`) — more flexible locking with manual release;
+        - **atomic** types (`AtomicInteger`) — safe operations without locks.
+
+        ### What happens at runtime
+        The section of code where threads touch shared data is called a **critical section**. The goal of synchronization is to have at most one thread in the critical section at any given time.
+
+        The `value++` operation actually consists of three actions: **read** the value, **add** one, **write** back. If two threads do a "read" at the same time, both will see the same number, both will add 1 - and one increment will be lost. This is the data race.
+
+        `AtomicInteger.incrementAndGet()` performs these three operations as **one indivisible** (atomic) operation: no other thread can "sneak" in between. Therefore, the result is always correct, even without explicit blocking.
+
+        Explicit blocking via `synchronized` gives the same result:
+        ```java
+        public class Main {
+            static class Counter {
+                private int value = 0;
+                synchronized void inc() { value++; }   // лише один потік за раз
+                int get() { return value; }
+            }
+
+            public static void main(String[] args) throws InterruptedException {
+                Counter counter = new Counter();
+                Runnable job = () -> { for (int i = 0; i < 100_000; i++) counter.inc(); };
+
+                Thread t1 = new Thread(job);
+                Thread t2 = new Thread(job);
+                t1.start(); t2.start();
+                t1.join(); t2.join();
+
+                System.out.println(counter.get());   // 200000
+            }
+        }
+        ```The `inc()` method is marked `synchronized`: while one thread is inside, the rest are waiting in the queue. The result is also `200,000`, but at the cost of blocking. A quick comparison of the three tools:
+        - `synchronized' — simple and reliable, but threads are blocked (queued);
+        - `AtomicInteger` is the fastest for simple counters, works without blocking;
+        - `ReentrantLock` is like `synchronized`, but with fine-grained control (`tryLock`, timeouts) and mandatory `unlock()` in the `finally` block.
+
+        ### Minimal code example
+        ```java
+        import java.util.concurrent.atomic.AtomicInteger;
+
+        public class Main {
+            public static void main(String[] args) throws InterruptedException {
+                AtomicInteger counter = new AtomicInteger(0);
+
+                Runnable job = () -> {
+                    for (int i = 0; i < 100_000; i++) {
+                        counter.incrementAndGet();   // атомарний +1 без блокування
+                    }
+                };
+
+                Thread t1 = new Thread(job);
+                Thread t2 = new Thread(job);
+                t1.start();
+                t2.start();
+                t1.join();
+                t2.join();
+
+                System.out.println(counter.get());   // 200000
+            }
+        }
+        ```
+
+        ### Explanation of each line of the example
+        - `AtomicInteger counter = new AtomicInteger(0);` is a multi-thread safe counter.
+        - `counter.incrementAndGet();` — atomic `+1`; this action is indivisible.
+        - `new Thread(job)` — we create two threads executing the same code.
+        - `t1.start(); t2.start();` — we run them in parallel.
+        - `t1.join(); t2.join();` - the main thread waits for both to complete before printing the result.
+
+        Each thread makes 100,000 increments, a total of 200,000. Thanks to atomicity, the program consistently outputs `200,000'.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"If instead of AtomicInteger there was a regular int value and two threads did value++ 100,000 times without synchronization, what would be printed?","options":["Always exactly 200,000","Often less than 200,000, and the number varies each time","Always 100,000","Compilation error"],"answer":1,"explanation":"Without synchronization, value++ (read→add→write) in the two threads overlaps and some of the increments are lost. The result is non-deterministic and usually less than 200000. Synchronized or AtomicInteger solves this problem."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forget synchronization for shared data.** Then `value++` loses increment and the total "floats".
+        2. **Synchronize everything.** Extra locks slow down the program and can cause deadlocks.
+        3. **Confuse `volatile` with synchronization.** `volatile` guarantees visibility of value, but **does not** make `value++` atomic.
+        4. **Forget `join()`.** Then the main thread will print the result before the worker threads finish.
+        5. **Do not release `Lock'.** `unlock()' must be placed in the `finally' block, otherwise the lock will "hang".
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        synchronized (lock) {
+            sharedValue++;
+        }
+        ```**Why it's here:** A sync block prevents multiple threads from changing shared state at the same time.
+
+        **Please note:** Protect all accesses to the same resource with the same lock.
+
+        ### Summary
+        You've seen why multiple threads simultaneously accessing a common **critical section** causes races, and you've seen three ways to fix it: `synchronized`, `Lock`, and atomic types. In real code, synchronization is required for counters, caches, shared queues, and any state that is read and changed by multiple threads (for example, in a parallel web server). The main rule is that any shared mutable state must be protected, otherwise the result becomes unpredictable. Better yet, avoid shared mutable state where possible (immutable objects and local data do not have races).
+      level: 4
+      tags:
+        - concurrency
+        - java
+  - title: Thread pooling and task scheduling
+    key: pul-potokiv-ta-planuvannya-zadach
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 38
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: Thread pooling and task scheduling
+      content: |-
+        ### Intuitive explanation
+        We already know: the thread pool is a permanent brigade that is reused. But the "pool" is not one, but a **family** of tools, and the ``Executors'' factory offers several ready-made ones for different workloads. Choosing the wrong one is like hiring one person for a construction site when ten are needed, or hiring a hundred workers when two are needed.
+
+        Three main varieties should be distinguished by ear:
+        - **`newFixedThreadPool(n)`** — exactly `n` threads; redundant tasks are queued up and waiting. Ideal when you need to limit the load on the system.
+        - **`newCachedThreadPool()`** — creates threads as needed and cleans them; good for many short bursts.
+        - **`newSingleThreadExecutor()`** — one thread, tasks are executed strictly in turn; when order matters.
+
+        The second part of the topic is **planning**. Often the task needs to be run not "now", but **after 5 seconds** or **every minute** (check mail, update the cache, make a backup). There is a special pool for this — **`ScheduledExecutorService'**.
+
+        ### What happens at runtime
+        The scheduler provides two key methods. `schedule(task, delay, unit)` runs the task **once** after the specified delay. `scheduleAtFixedRate(task, initialDelay, period, unit)` - **periodically**: first run at `initialDelay`, then every `period` time units until you stop. Both return a `ScheduledFuture`, for which the task can be **cancelled** by the `cancel` method.And here is the main rule of discipline, the same as with pools in general: the scheduler must be **turned off** via `shutdown()`. Its default threads will prevent the JVM from terminating and the program will hang forever, obediently waiting for the next "tick". Another subtlety of `scheduleAtFixedRate`: if a task runs longer than `period`, subsequent runs do not "stack" on each other - the scheduler will wait until the previous one frees the thread. Therefore, too small a pool for long tasks leads to the accumulation of queues and delays.
+
+        ### Minimal code example
+        ```java
+        import java.util.concurrent.*;
+        import java.util.concurrent.atomic.AtomicInteger;
+
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+                System.out.println("старт");
+
+                scheduler.schedule(                                   // разово, із затримкою
+                    () -> System.out.println("разовий запуск (через затримку)"),
+                    100, TimeUnit.MILLISECONDS);
+
+                AtomicInteger n = new AtomicInteger(0);
+                ScheduledFuture<?>[] h = new ScheduledFuture<?>[1];
+                h[0] = scheduler.scheduleAtFixedRate(() -> {          // періодично
+                    int i = n.incrementAndGet();
+                    System.out.println("тік " + i);
+                    if (i >= 3) h[0].cancel(false);                   // сам себе спиняє
+                }, 200, 50, TimeUnit.MILLISECONDS);
+
+                Thread.sleep(600);
+                scheduler.shutdown();                                 // обов'язково
+                System.out.println("кінець");
+            }
+        }
+        ```Output:
+        ```
+        старт
+        разовий запуск (через затримку)
+        тік 1
+        тік 2
+        тік 3
+        кінець
+        ```
+
+        ### Explanation of each line of the example
+        - `newScheduledThreadPool(1)` is a single thread scheduler pool.
+        - `schedule(..., 100, MILLISECONDS)` — executes the task **once** every 100ms.
+        - `scheduleAtFixedRate(..., 200, 50, ...)` — the first "tick" after 200 ms, then every 50 ms.
+        - `h[0].cancel(false)` — as soon as the counter has reached 3, the task cancels itself; therefore exactly `flow 1..3'.
+        - `scheduler.shutdown()' — turns off the pool so that the program can reach the "end" and not hang.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"5 long tasks were sent to the Executors.newFixedThreadPool(2) pool via submit. How many of them will run SIMULTANEOUSLY?","options":["5","2","1","everyone in turn, one at a time"],"answer":1,"explanation":"newFixedThreadPool(2) has exactly 2 threads, so at most 2 tasks are running at the same time. The remaining 3 queue up and get to work as soon as one of the two streams becomes free."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Do not call `shutdown()`.** The scheduler keeps the JVM alive - the program does not terminate.
+        2. **Take too small a pool for long periodic tasks.** Runs accumulate in the queue and are delayed.
+        3. **Confuse `schedule' and `scheduleAtFixedRate'.** The first is one time, the second is round.
+        4. **Forgetting to cancel** a periodic task when it is no longer needed.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Future<Integer> result = pool.submit(() -> 2 + 2);
+        ```**Why it's here:** A pool reuses threads, and `Future' represents the result of a future operation.
+
+        **Please note:** Complete the pool after work.
+
+        ### Summary
+        So, `Executors` provides different pools for different tasks: `newFixedThreadPool` limits the load, `newCachedThreadPool` flexibly scales, `newSingleThreadExecutor` preserves order. `ScheduledExecutorService` adds time: `schedule` - once with a delay, `scheduleAtFixedRate` - periodically, with the possibility of `cancel`. And the unchanging rule is `shutdown()`, otherwise the program will hang. Next, let's move on to a practical topic — network programming.
+      level: 4
+      tags:
+        - concurrency
+        - java
+  - title: "Network programming: sockets; HTTP client"
+    key: merezheve-prohramuvannya-sokety-http-kliyent
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 39
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: "Network programming: sockets; HTTP client"
+      content: |-
+        ### Intuitive explanation
+        How do two programs on different computers "talk" at all? Through a **socket** — a software analogue of a telephone socket. The model is exactly the same as with a call: the **server** holds the handset on a certain number-**port** and waits (`accept'), and the **client** "dials" the address and port and establishes a connection. Once there is a connection, a pipe runs between them and the parties exchange bytes back and forth like a normal stream (remember `Reader`/`Writer`?).
+
+        A key asymmetry that should be kept in mind: **the client always initiates**. The server does not call first - it only listens and answers. A single server can serve many clients, so each connection is usually given to a separate thread.
+
+        Writing the entire web protocol with "raw" sockets would be hell, so for the most common case — HTTP requests to web services — Java 11 introduced a handy built-in **`HttpClient'**. It hides all the network mechanics behind a few lines: make a request, send it, read the response.
+
+        ### What happens at runtime
+        Let's look at a live example that works **locally**, without the Internet: the server and the client in the same program communicate via loopback (`localhost`). `new ServerSocket(0)` asks the OS to issue any free port and starts listening. `server.accept()` **blocks** the server thread until someone connects. On the client side, `new Socket("localhost", port)` establishes a connection — and `accept()` finally returns a `Socket` object to talk to that particular client.Then everything comes down to familiar streams: `InputStream` (read) and `OutputStream` (write) are taken from each socket, wrapped in convenient `BufferedReader`/`PrintWriter` — and lines are exchanged. Since `accept()` blocks, the server is kept in a separate thread so that the client has time to connect. And, as always with resources, the sockets are closed - here it is done by `try-with-resources`.
+
+        ### Minimal code example
+        ```java
+        import java.io.*;
+        import java.net.*;
+        import java.nio.charset.StandardCharsets;
+
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                ServerSocket server = new ServerSocket(0);      // 0 = будь-який вільний порт
+                int port = server.getLocalPort();
+
+                Thread serverThread = new Thread(() -> {
+                    try (Socket client = server.accept();       // блокує, доки хтось не підключиться
+                         var in = new BufferedReader(new InputStreamReader(
+                                 client.getInputStream(), StandardCharsets.UTF_8));
+                         var out = new PrintWriter(new OutputStreamWriter(
+                                 client.getOutputStream(), StandardCharsets.UTF_8), true)) {
+                        String name = in.readLine();
+                        out.println("Привіт, " + name + "!");
+                    } catch (IOException e) { e.printStackTrace(); }
+                });
+                serverThread.start();
+
+                try (Socket socket = new Socket("localhost", port);   // клієнт ініціює з'єднання
+                     var out = new PrintWriter(new OutputStreamWriter(
+                             socket.getOutputStream(), StandardCharsets.UTF_8), true);
+                     var in = new BufferedReader(new InputStreamReader(
+                             socket.getInputStream(), StandardCharsets.UTF_8))) {
+                    out.println("Оля");
+                    System.out.println("Клієнт отримав: " + in.readLine());
+                }
+                serverThread.join();
+                server.close();
+            }
+        }
+        ```Output:
+        ```
+        Клієнт отримав: Привіт, Оля!
+        ```
+
+        ### Explanation of each line of the example
+        - `new ServerSocket(0)` — the server starts listening on a free port.
+        - `server.accept()` — blocks the server thread until the client connects.
+        - `new Socket("localhost", port)` — the client **initiates** the connection.
+        - `out.println("Olya")` / `in.readLine()` — line exchange through socket streams.
+        - the server reads the name, sends a greeting, the client prints ``The client received: Hello, Olya!''.
+
+        For normal web requests, manual sockets are not required - `HttpClient` (Java 11+) is enough. This is what a GET request looks like (illustrative, because it requires a real server):
+        ```java
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest req = HttpRequest.newBuilder()
+            .uri(URI.create("https://example.com")).build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+        System.out.println(resp.statusCode());   // 200 = успіх
+        System.out.println(resp.body());
+        ```
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"The client \"hangs\" on readLine() and receives nothing. What is wrong on the server side?","lines":["Socket client = server.accept();","var in = new BufferedReader(new InputStreamReader(client.getInputStream()));","var out = new PrintWriter(client.getOutputStream());","String name = in.readLine();","out.println(\"Привіт, \" + name);"],"buggyLine":3,"explanation":"PrintWriter is created without autoflush (autoFlush=false) and flush() is not called anywhere. The data remains in the buffer and does not go to the socket, so clients wait forever for readLine(). We need new PrintWriter(stream, true) (autoFlush) or explicit out.flush()."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Wait for the server to "call" first.** The client always initiates.
+        2. **Keep `accept()` in the main thread.** It blocks - the server is taken to a separate thread.
+        3. **Ignore HTTP response status.** `200` is success, `4xx`/`5xx` is a problem.
+        4. **Don't close sockets** and don't handle `IOException' - the network can always crash.
+
+        ### In practice
+
+
+        Data is passed over the socket as bytes, not as an abstract Java string:
+        ```java
+
+        byte[] payload = "hello".getBytes(StandardCharsets.UTF_8);
+
+        socket.getOutputStream().write(payload);
+
+        ```**Why it's here:** Explicit encoding makes the message format the same for the client and the server.
+
+
+
+        **Note:** Close the socket via try-with-resources and determine how the receiver will understand the message boundary.
+
+
+
+        ### Summary
+        So, sockets are "phone sockets" of the network: the server listens to the port and accepts, the client initiates the connection, and then the parties exchange bytes through the usual streams. You've seen a completely local client↔server example and learned that there is a handy ``HttpClient'' (Java 11+) for web requests that hides all the mechanics. Remember: the client initiates, `accept` blocks, and `PrintWriter` must be reset. Next is working with databases via JDBC.
+      level: 4
+      tags:
+        - systems
+        - java
+  - title: "Working with DB: JDBC"
+    key: robota-z-bd-jdbc
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 40
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: "Working with DB: JDBC"
+      content: |-
+        ### Intuitive explanation
+        Sooner or later, the data of your application will grow into files: there are thousands of users, they need to be searched, sorted, and linked. It works for the **database** — and communicates with it in the SQL language. But there are many databases (PostgreSQL, MySQL, SQLite, Oracle), and each has its own "dialect" of connection. Writing for each one separately would be a disaster.
+
+        **JDBC** (Java Database Connectivity) is a universal translator between Java and any relational database. It specifies a single set of interfaces (`Connection`, `Statement`, `ResultSet`), and a specific DB supplies its **driver** that implements these interfaces. Your code remains the same - only the driver and the connection string change. This is the same idea of ​​a "shared contract" as with interfaces, only at the scale of entire databases.
+
+        The work cycle is always the same, remember its rhythm: **connect → prepare a request → execute → go through the result → close everything**. And over all this there is one safety rule, more important than the rest, about it below.
+
+        ### What happens at runtime
+        `DriverManager.getConnection(url, ...)` opens a connection (it's a resource - it needs to be closed, so `try-with-resources`). Next, you create a `PreparedStatement` with an SQL query, execute it, and get a `ResultSet` - a ``cursor'' to the rows of the response, which you follow in a `while (rs.next())` loop, reading the columns via `getString`, `getInt`, etc.And now for the bottom line, what makes JDBC code either secure or leaky. **Never paste SQL with user data in a string.** Writing `"... WHERE name = '" + input + "'"` opens **SQL-injection**: by inserting a tricky text, an attacker will change the query itself and dump or delete your database. The rescue is `PreparedStatement` with **placeholders** `?`: the values ​​are substituted separately via `ps.setString(1, input)`, and the DB interprets them purely as data, and not as part of the command. Since it requires an external DB driver to run, the live example below **simulates** the query → rows loop in memory to give you a feel for the code shape, while the actual JDBC is shown separately.
+
+        ### Minimal code example
+        ```java
+        import java.util.*;
+
+        public class Main {
+            record User(int id, String name, String city) {}   // «рядок таблиці»
+
+            public static void main(String[] args) {
+                List<User> users = List.of(                     // «таблиця users» у пам'яті
+                    new User(1, "Оля", "Київ"),
+                    new User(2, "Іван", "Львів"),
+                    new User(3, "Марія", "Київ")
+                );
+
+                String cityParam = "Київ";                      // параметр запиту
+                System.out.println("SELECT name FROM users WHERE city = '" + cityParam + "'");
+                for (User u : users) {                          // аналог while (rs.next())
+                    if (u.city().equals(cityParam)) {
+                        System.out.println("  #" + u.id() + " " + u.name());
+                    }
+                }
+            }
+        }
+        ```Output:
+        ```
+        SELECT name FROM users WHERE city = 'Київ'
+          #1 Оля
+          #3 Марія
+        ```And this is how the **same** request looks like a real JDBC (illustrative - requires a DB driver):
+        ```java
+        String sql = "SELECT name FROM users WHERE city = ?";      // ? — плейсхолдер
+        try (Connection conn = DriverManager.getConnection(url, user, pass);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, "Київ");                              // безпечна підстановка
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    System.out.println(rs.getString("name"));
+                }
+            }
+        }
+        ```
+
+        ### Explanation of each line of the example
+        - `record User(...)` — simulates one row of the table; in real JDBC its role is played by `ResultSet`.
+        - `List<User> users` is an in-memory "table" for the example to run without a driver.
+        - the `for' loop with the `city' check is an analogue of `WHERE city = ?' and the `while (rs.next())' loop.
+        - in the JDBC snippet, `?` + `ps.setString(1, "Kyiv")` is exactly the safe substitution method that suppresses SQL injections.
+        - `try (Connection ... PreparedStatement ...)` — both resources will be closed automatically.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"Why is this query vulnerable to SQL injection?","lines":["String name = scanner.nextLine();","String sql = \"SELECT * FROM users WHERE name = '\" + name + \"'\";","Statement st = conn.createStatement();","ResultSet rs = st.executeQuery(sql);"],"buggyLine":2,"explanation":"SQL is glued to user data directly. By entering name like ' OR '1'='1, the attacker changes the request itself and gets all the lines (or worse). We need a PreparedStatement with a placeholder: \"... WHERE name = ?\" and ps.setString(1, name) — then the input is interpreted only as data."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Paste SQL with given string.** The direct way to SQL injection is only `PreparedStatement` with `?`.
+        2. **Do not close `Connection`/`Statement`/`ResultSet`.** Connection leaks will quickly exhaust their limit.
+        3. **Confuse `executeQuery` and `executeUpdate`.** The first is for `SELECT` (returns a `ResultSet`), the second is for `INSERT`/`UPDATE`/`DELETE`.
+        4. **Forget `rs.next()`** before reading — the cursor is first **before** the first line.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        PreparedStatement query = connection.prepareStatement("SELECT name FROM users WHERE id = ?");
+        query.setInt(1, userId);
+        ```**Why it's here:** External data is separated from the command and the result must be checked before use.
+
+        **Note:** Do not paste SQL or URLs with unvalidated custom text.
+
+        ### Summary
+        So, JDBC is a universal bridge between Java and any relational DB: single interfaces (`Connection`, `PreparedStatement`, `ResultSet`) plus a driver of a specific database. The rhythm of work is unchanged: connect → prepare → execute → pass `ResultSet` → close (via try-with-resources). The most important lesson is **always** `PreparedStatement` with `?` instead of string concatenation, as this is SQL injection protection. Writing this code manually is verbose, so let's see how ORM (JPA/Hibernate) hides SQL behind objects.
+      level: 4
+      tags:
+        - systems
+        - java
+  - title: "ORM basics: JPA/Hibernate"
+    key: orm-osnovy-jpa-hibernate
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 41
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: "ORM basics: JPA/Hibernate"
+      content: |-
+        ### Intuitive explanation
+        After JDBC, you are left with an annoying routine: you extracted a row from `ResultSet`, manually translated each column into an object field, and before saving, on the contrary, laid out the object fields in `INSERT`. And so for each table, again and again. This is called "object-relational impedance mismatch" - the Java world thinks in objects, the DB world thinks in tables, and someone has to constantly translate between them.
+
+        **ORM** (Object-Relational Mapping) takes care of this translation. You only **describe** the class-entity — "here is `User' with the fields `id' and `name', it corresponds to the table `users'" — and then you say `save(user)` or `findById(1)`, and the ORM itself will generate the necessary SQL (`INSERT`, `SELECT`) and translate the rows of the table back into objects. You program with objects, and SQL is born under the hood.
+
+        There are two names that must be clearly distinguished. **JPA** is the *standard* (specification with `@Entity`, `@Id` annotations) and **Hibernate** is the most popular *implementation* of it. Again, the same "contract + implementation" pair: write under JPA, and the "engine" works with Hibernate.
+
+        ### What happens at runtime
+        The entity is marked with annotations: `@Entity` says "this class is a row of the table", `@Id` - "this is the primary key", `@GeneratedValue` - "let the database generate the id". When you call `persist(user)`, the ORM sees these labels (through the same reflection!), builds an `INSERT`, executes it, and **writes the generated id back into the object**. Hibernate requires external libraries and databases to run, so the example below **models** an ORM repository with pure Java to demonstrate the very mechanics of "object ↔ table" and auto-id generation.But ORM is not magic without a price, and this is honestly warned. Because SQL hides, it's easy to accidentally spawn an **avalanche** of it. The classic pitfall is the **"N+1 request"** problem: you load a list of N orders, then call `order.getCustomer()` in a loop - and the ORM silently makes N more separate requests for one customer. Instead of two reasonable requests, there are hundreds. So the golden rule is: use an ORM, but **understand what SQL it generates**.
+
+        ### Minimal code example
+        ```java
+        import java.util.*;
+        import java.util.concurrent.atomic.AtomicLong;
+
+        public class Main {
+            static class User {                 // сутність — звичайний об'єкт
+                Long id;
+                String name;
+                User(String name) { this.name = name; }
+                public String toString() { return "User{id=" + id + ", name=" + name + "}"; }
+            }
+
+            static class UserRepository {       // наївний «ORM»: об'єкти <-> таблиця в пам'яті
+                private final Map<Long, User> table = new LinkedHashMap<>();
+                private final AtomicLong seq = new AtomicLong(0);
+
+                User save(User u) {
+                    if (u.id == null) u.id = seq.incrementAndGet();  // генеруємо id
+                    table.put(u.id, u);
+                    return u;
+                }
+                User findById(Long id) { return table.get(id); }
+                Collection<User> findAll() { return table.values(); }
+            }
+
+            public static void main(String[] args) {
+                UserRepository repo = new UserRepository();
+                User u = new User("Оля");
+                System.out.println("id до save: " + u.id);
+                repo.save(u);
+                System.out.println("id після save: " + u.id);
+                repo.save(new User("Іван"));
+                System.out.println("find(1): " + repo.findById(1L));
+                System.out.println("усі: " + repo.findAll());
+            }
+        }
+        ```Output:
+        ```
+        id до save: null
+        id після save: 1
+        find(1): User{id=1, name=Оля}
+        усі: [User{id=1, name=Оля}, User{id=2, name=Іван}]
+        ```And this is how the same entity looks in **real JPA** (illustrative - requires Hibernate and DB):
+        ```java
+        @Entity
+        class User {
+            @Id @GeneratedValue Long id;
+            String name;
+        }
+        em.persist(new User("Оля"));          // Hibernate згенерує INSERT і проставить id
+        User u = em.find(User.class, 1L);     // згенерує SELECT ... WHERE id = 1
+        ```
+
+        ### Explanation of each line of the example
+        - `class User { Long id; String name; }` is an entity; in JPA it would be `@Entity`/`@Id` above it.
+        - `save(u)`: if `id == null`, the repository **generates** it - exactly like `@GeneratedValue`.
+        - `id before save: null` → `id after save: 1` — the ORM itself inserts the key into the object after saving.
+        - `findById(1L)` is an analogue of `em.find(User.class, 1L)`: retrieves an object by key.
+        - `findAll()` — returns all "lines"; order is preserved thanks to `LinkedHashMap`.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"In JPA: User u = new User(\"Olya\"); (id not yet set) em.persist(u); What now in u.getId()?","options":["null","generated DB id (eg 1)","0","error"],"answer":1,"explanation":"@GeneratedValue entrusts the generation of the key to the database. During persist, the ORM performs an INSERT, the DB returns a new id, and the ORM writes it back to the object. So after persist, u.getId() already contains the generated value, not null."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forget `@Entity`/`@Id`** - ORM does not recognize a class as an entity.
+        2. **Ignore the N+1 problem.** Lazy loading of connections in a loop creates an avalanche of requests.
+        3. **Confuse JPA and Hibernate.** JPA is a standard, Hibernate is its implementation.
+        4. **Thinking that an ORM "overrides" SQL.** It only hides it; you still need to know the generated SQL.
+
+        ### In practice
+
+
+        In JPA, reading an object goes through ``EntityManager'' instead of manually composing SQL:
+        ```java
+
+        User user = entityManager.find(User.class, 1L);
+
+        if (user != null) System.out.println(user.getName());
+
+        ```**Why it's here:** The ORM converts a table row to an object and returns `null' if there is no record with that id.
+
+
+
+        **Please note:** The operation must be performed in an active transaction and within the correct persistence context.
+
+
+
+        ### Summary
+        So, the ORM removes the manual translation "object ↔ table": you describe the entity with annotations, and `persist`/`find` generate the SQL themselves and insert the generated ids. JPA is a standard, Hibernate is its implementation. The main caveat is to understand the generated SQL and watch out for the N+1 problem, because convenience easily turns into an avalanche of queries. Next is another infrastructural topic that no serious application can live without: logging.
+      level: 4
+      tags:
+        - systems
+        - java
+  - title: "Login: SLF4J; Logback"
+    key: lohuvannya-slf4j-logback
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 42
+    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: "Login: SLF4J; Logback"
+      content: |-
+        ### Intuitive explanation
+        First, everyone debugs the code via `System.out.println("here!")`. It works - while the project is small. Then the pain begins: how do you temporarily **disable** these lines without deleting them? How to distinguish a critical error from a small note? Where to write all this on the server, where there is no console? `println` can do none of this - it's like a note on a piece of paper.
+
+        **Logging** is an organized "log" of the program instead of scraps. His main idea is **levels of importance**. Each message is given a rank: `TRACE`/`DEBUG` - technical tidbits for the developer, `INFO` - normal events ("user logged in"), `WARN` - alarm bells, `ERROR` - real failures. And then with one setting you say "show everything from `INFO' and above" — and all the `DEBUG' noise disappears **without any code changes**.
+
+        Another elegant idea in the Java world is the **facade**. Your code does not write to a specific library, but to the **SLF4J** universal interface, but which implementation (**Logback**, Log4j2) actually writes to disk is decided separately. Wanted to change the logging system - no need to touch the code.
+
+        ### What happens at runtime
+        Since SLF4J+Logback are external libraries, the live example below uses the **built-in JDK** logger (`java.util.logging`) to show the very essence of **level filtering** at real-time. The logger is set a threshold (`setLevel`) and each message is checked: its level is below the threshold - it is silently discarded; not lower - goes to the handler (`Handler`) which formats the string and writes it where configured.Another practical detail that should be learned specifically on SLF4J is **placeholders `{}`**. Instead of `log.info("User " + id + " is logged in")` write `log.info("User {} is logged in", id)`. The difference is not cosmetic: if the `INFO' level is disabled, then string gluing **doesn't even happen** — the value is substituted only when the message is actually printed. It significantly saves on hot roads. And the golden rule of security: **never log passwords, tokens, or personal data**—logs are often long-lived and accessible to many.
+
+        ### Minimal code example
+        ```java
+        import java.util.logging.*;
+
+        public class Main {
+            private static final Logger log = Logger.getLogger("StudyCod");
+
+            public static void main(String[] args) {
+                // простий формат «РІВЕНЬ: повідомлення» для відтворюваного виводу
+                Handler h = new StreamHandler(System.out, new Formatter() {
+                    public String format(LogRecord r) {
+                        return r.getLevel() + ": " + r.getMessage() + "\n";
+                    }
+                });
+                h.setLevel(Level.ALL);
+                log.setUseParentHandlers(false);
+                log.addHandler(h);
+                log.setLevel(Level.INFO);        // поріг: усе нижче INFO відсіється
+
+                log.fine("Технічна деталь для налагодження");  // FINE < INFO -> відкинуто
+                log.info("Користувач Оля увійшла");
+                log.warning("Місця на диску мало");
+                log.severe("Не вдалося зберегти файл");
+
+                h.flush();
+            }
+        }
+        ```Output:
+        ```
+        INFO: Користувач Оля увійшла
+        WARNING: Місця на диску мало
+        SEVERE: Не вдалося зберегти файл
+        ```
+
+        ### Explanation of each line of the example
+        - `log.setLevel(Level.INFO)` — sets the threshold: showing `INFO` is more important.
+        - `log.fine(...)` - the level of `FINE` (similar to `DEBUG`) is below the threshold, so it is **not** in the output.
+        - `log.info(...)`, `log.warning(...)`, `log.severe(...)` are all not lower than the threshold, so they were printed.
+        - custom `Formatter' removed timestamps to make the output reproducible.
+        - `h.flush()` - flushes the handler's buffer so that the lines get exactly to the output.
+
+        Industrially, this is done through SLF4J (illustrative — requires libraries):
+        ```java
+        private static final Logger log = LoggerFactory.getLogger(MyClass.class);
+        log.info("Користувач {} увійшов", userId);   // {} підставляється лише за потреби
+        log.error("Помилка запиту", exception);       // об'єкт-виняток логер розкриє сам
+        ```
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"Logger threshold — WARNING. Called in turn: log.info(\"A\"); log.warning(\"B\"); log.severe(\"C\"); What will appear in the output?","options":["A, B, C","B and C","only C","nothing"],"answer":1,"explanation":"The WARNING threshold means \"display WARNING and more important\". INFO is below threshold - \"A\" is screened out. WARNING (\"B\") and SEVERE (\"C\") pass. So B and C remain in the conclusion."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Debug via `println`.** No levels, disables, and output control.
+        2. **Do not set the level threshold.** Either you are drowning in `DEBUG'-noise, or you are missing something important.
+        3. **Paste string instead of `{}`.** Useless when level is disabled.
+        4. **Log passwords/personal data.** Long live logs are leaks.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        try {
+            int value = Integer.parseInt(text);
+        } catch (NumberFormatException error) {
+            value = 0;
+        }
+        ```**Why it's here:** `catch` handles a specific type of conversion error.
+
+        **Note:** Intercept the narrowest expected type.
+
+        ### Summary
+        So logging is an ordered log instead of `println`: levels (`DEBUG`→`INFO`→`WARN`→`ERROR`) allow you to filter the importance without changing the code, just a threshold. SLF4J is the facade that your code writes to, and Logback is the implementation that decides where and how. Remember `{}` placeholders for speed and never log secrets. Next is no less important engineering practice: automated code testing through JUnit and Mockito.
+      level: 4
+      tags:
+        - practice
+        - java
+  - title: "Testing: JUnit 5; Mockito"
+    key: testuvannya-junit-5-mockito
+    description: distinguish the cause of the error from its symptom. choose a
+      narrow test or test for a particular risk.
+    order: 43
+    exerciseFocus: "reproduce one defect or verify one contract; the result must be
+      unambiguous for the auto-check"
+    theory:
+      title: "Testing: JUnit 5; Mockito"
+      content: |-
+        ### Intuitive explanation
+        You've just fixed one feature—now how do you make sure you don't break the other three? Checking everything manually after each change is impossible: soon life will not be able to do that. That's why serious code is accompanied by **automatic tests** — small programs that check your program and shout when something stops working. The test is a written answer once and for all to the question "does it calculate correctly?".
+
+        The basis of the test is **verification (assertion)**: "I expect `add(2,3)` to give `5`". If it did, the test is green, if not, red, with the explanation "expected 5, got X". A green set of tests is your insurance: you can safely rewrite the code, because the tests will catch the regression instantly.
+
+        In Java, the de facto standard is **JUnit 5**: it marks test methods with the `@Test` annotation and provides a rich set of `assertEquals`, `assertTrue`, `assertThrows`. Nearby lives **Mockito**, a "mock" tool to test a class in a vacuum, without a real base or network.
+
+        ### What happens at runtime
+        Every good test is built according to the **AAA** rhythm: **Arrange** (prepare data and object), **Act** (perform what is being tested), **Assert** (check the result with the expected). This division makes the test readable: it is immediately clear what was given, what was done, and what should have come out. JUnit under the hood finds all methods with `@Test` through reflection, runs each one in isolation and counts how many passed/failed.Since JUnit and Mockito are external libraries, the example below is **a tiny custom "test runner" in pure Java**: its `assertEquals`, which prints `PASS`/`FAIL`, to show the very mechanics of the checks in real life. **Mockito** solves a separate problem: if your class depends on a slow repository or network, you insert a **stub** — `mock(Repo.class)' — and command `when(repo.find(1)).thenReturn("Olya")'. Now the test does not go to a real database: it is fast, stable and does not depend on the outside world. You are testing **your** logic, not someone else's.
+
+        ### Minimal code example
+        ```java
+        public class Main {
+            static class Calculator {          // код, який тестуємо
+                int add(int a, int b) { return a + b; }
+            }
+
+            static int passed = 0, failed = 0;
+            static void assertEquals(Object expected, Object actual, String test) {
+                if (expected.equals(actual)) {
+                    System.out.println("[PASS] " + test);
+                    passed++;
+                } else {
+                    System.out.println("[FAIL] " + test + ": очікували "
+                            + expected + ", отримали " + actual);
+                    failed++;
+                }
+            }
+
+            public static void main(String[] args) {
+                Calculator c = new Calculator();               // Arrange
+                assertEquals(5, c.add(2, 3), "add(2,3)");      // Act + Assert
+                assertEquals(0, c.add(-1, 1), "add(-1,1)");
+                assertEquals(4, c.add(2, 2), "add(2,2)");
+                System.out.println("Підсумок: " + passed + " passed, " + failed + " failed");
+            }
+        }
+        ```Output:
+        ```
+        [PASS] add(2,3)
+        [PASS] add(-1,1)
+        [PASS] add(2,2)
+        Підсумок: 3 passed, 0 failed
+        ```In real JUnit + Mockito, the same test looks like this (illustrative - requires libraries):
+        ```java
+        @Test
+        void addsNumbers() {
+            Calculator c = new Calculator();          // Arrange
+            int result = c.add(2, 3);                 // Act
+            assertEquals(5, result);                  // Assert
+        }
+        // Mockito — заглушка залежності:
+        Repo repo = mock(Repo.class);
+        when(repo.find(1)).thenReturn("Оля");
+        ```
+
+        ### Explanation of each line of the example
+        - `Calculator c = new Calculator()` — **Arrange** step: we prepare the object.
+        - `c.add(2, 3)` — **Act** step: we perform what we are checking.
+        - `assertEquals(5, c.add(2,3), ...)` — **Assert** step: check with the expected; match → `[PASS]`.
+        - `passed`/`failed` counters are what the framework itself does in JUnit.
+        - in the JUnit snippet `@Test` denotes a test method, `assertEquals` is the same check, only ready.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"java","question":"add(a,b) returns a+b. What happens to the assertEquals(5, calc.add(2, 2)) test?","options":["will pass (green)","will fall: expected 5, got 4","compilation error","will miss"],"answer":1,"explanation":"add(2, 2) returns 4 and the test expects 5. The values ​​don't match, so the test fails - the test is red with the message \"expected 5, got 4\". Here the error is precisely in the test (incorrect expectation), not in the code."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Interdependent tests.** Each should be isolated and repeatable.
+        2. **Go to a real database/network.** For dependencies — mock; the test should be fast and stable.
+        3. **Abusing mocks.** Only external dependencies are mocked, not the object being tested.
+        4. **Confuse the order in `assertEquals`.** The first argument is expected, the second is actual.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        try {
+            int value = Integer.parseInt(text);
+        } catch (NumberFormatException error) {
+            value = 0;
+        }
+        ```**Why it's here:** `catch` handles a specific type of conversion error.
+
+        **Note:** Intercept the narrowest expected type.
+
+        ### Summary
+        So automated tests are regression insurance: checks (`assertEquals`) capture the expected behavior, and the green set allows you to change the code without fear. Build tests in the AAA (Arrange-Act-Assert) rhythm, use JUnit 5 (`@Test`) as a framework, and Mockito to replace external dependencies with stubs and test the class in isolation. Next are the final engineering topics: how to find slow spots and bugs through profiling and debugging.
+      level: 4
+      tags:
+        - quality
+        - java
+  - title: Profiling and debugging
+    key: profilyuvannya-i-nalahodzhennya
+    description: distinguish the cause of the error from its symptom. choose a
+      narrow test or test for a particular risk.
+    order: 44
+    exerciseFocus: "reproduce one defect or verify one contract; the result must be
+      unambiguous for the auto-check"
+    theory:
+      title: Profiling and debugging
+      content: |-
+        ### Intuitive explanation
+        The program behaves strangely - it either gives the wrong result or slows down. There is only one temptation: to stare into the code and **guess** where exactly the problem is. This is the worst strategy and it eats up hours. An experienced engineer does not guess - he **measures**, as a doctor does not prescribe medicine "by eye", but first conducts tests.
+
+        Here it is important to separate two different pains and two different tools. When the code gives a **wrong result**, it is a task for **debugging**: you have to find a *logical* error. When the code gives the correct result, but **too slowly**, it is a challenge for **profiling**: you have to find the *bottleneck*. To confuse them is like treating a fracture with cough drops.
+
+        The **debugger** is a "stop-frame" of your program: you set a breakpoint, execution freezes at the right line, and you look at what values ​​are actually in the variables *at this moment*. **Profiler** (VisualVM, Java Flight Recorder) - on the contrary, looks at the picture from above: how much time and memory is consumed by each method, where the program "gets stuck".
+
+        ### What happens at runtime
+        The debugger under the hood uses a special JVM interface: at a breakpoint it **pauses** the thread, lets you look at the call stack and variables, and then you step further - "step through" (without going into methods) or "step inside". That's how you see the **real** path of execution, not the one you envisioned—and it's the discrepancy between what's imagined and what's real that's usually the bug.The profiler instead collects application-wide timing/memory statistics. And here the **golden rule of optimization: first measure, then optimize** applies. Intuition about the "slow spot" lies surprisingly often: you spend an hour speeding up a function that took 1% of the time, while the real culprit is somewhere else. The example below illustrates the **measurement method** itself — the simplest do-it-yourself profiler via `System.nanoTime()`: we measure two ways to build a string and prove with facts which is faster (remember `String` vs `StringBuilder`?).
+
+        ### Minimal code example
+        ```java
+        public class Main {
+            public static void main(String[] args) {
+                int n = 50000;
+
+                long t1 = System.nanoTime();
+                String s = "";
+                for (int i = 0; i < n; i++) s += i;        // повільно: щоразу новий рядок
+                long naive = System.nanoTime() - t1;
+
+                long t2 = System.nanoTime();
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < n; i++) sb.append(i);  // швидко: один буфер
+                String s2 = sb.toString();
+                long fast = System.nanoTime() - t2;
+
+                System.out.println("StringBuilder швидший за конкатенацію? " + (fast < naive));
+                System.out.println("Результати ідентичні? " + s.equals(s2));
+            }
+        }
+        ```Output:
+        ```
+        StringBuilder швидший за конкатенацію? true
+        Результати ідентичні? true
+        ```(Absolute nanoseconds are machine- and launch-dependent, so we're not outputting them, but the **fact** of who is faster; in practice, the difference here is hundreds of times.)
+
+        ### Explanation of each line of the example
+        - `System.nanoTime()` — snapshot of a high-precision timer; difference of two shots = time spent.
+        - `s += i` in a loop — creates a **new** string each time (String is immutable), therefore quadratically slow.
+        - `sb.append(i)` — appends to one buffer, therefore linearly fast.
+        - `fast < naive` → `true` - a measurement, not a guess, confirms the superiority of `StringBuilder`.
+        - `s.equals(s2)` → `true` — the result is identical: we accelerated without breaking anything.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"The method measures the time, but always shows ~0ms. What's wrong?","lines":["long start = System.nanoTime();","doWork();","long end = System.nanoTime();","long ms = (start - end) / 1_000_000;","System.out.println(ms + \" мс\");"],"buggyLine":4,"explanation":"The difference is calculated in the wrong order: start - end gives a NEGATIVE number (because end is later than start), which after integer division looks like 0 or minus. It is necessary to end - start. Classic sign error when measuring time."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Guess instead of measure.** Profiler gives facts; the intuition about the "bottleneck" often lies.
+        2. **Wrong to optimize.** First find the 20% of the code that consumes 80% of the time.
+        3. **Changing many things at once.** Then not understanding what exactly helped.
+        4. **Confuse tasks.** Wrong result - debugger; slowly - a profiler.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        try {
+            int value = Integer.parseInt(text);
+        } catch (NumberFormatException error) {
+            value = 0;
+        }
+        ```**Why it's here:** `catch` handles a specific type of conversion error.
+
+        **Note:** Intercept the narrowest expected type.
+
+        ### Summary
+        So debugging and profiling are different tools for different pains: the debugger (breakpoints, stepping, variable inspection) looks for *logical* errors, and the profiler (VisualVM, JFR) looks for *slow spots*. The main principle of both is to observe the facts first, and not think: "measure, then optimize." You even built the simplest profiler through `System.nanoTime()` and confirmed the superiority of `StringBuilder` with facts. This completes the engineering unit — the final practical topic is ahead: data exchange via JSON and XML.
+      level: 5
+      tags:
+        - quality
+        - java
+  - title: Memory management and GC
+    key: upravlinnya-pam-yattyu-ta-gc
+    description: explain where the value lives and who is responsible for the
+      resource. recognize copying, sharing, and object lifetime.
+    order: 45
+    exerciseFocus: "a small example with a clear life time; verify a safe state
+      after an operation and not require manual memory inspection"
+    theory:
+      title: Memory management and GC
+      content: |-
+        ### Intuitive explanation
+        Imagine a workshop where you take tools off the shelf and lay them out on the table. When a tool is no longer needed, in some languages ​​you have to take it back yourself. Java has a **cleaner** — a **garbage collector** (Garbage Collector, GC), which itself takes everything from the table that no one uses anymore.
+
+        "Used" means that there is a **reference** to the object - a live arrow from some variable. As soon as there are no live pointers left on an object, it becomes **unreachable** and the GC has the right to free its memory. You don't need to write `delete' like in C++.
+
+        ### What happens at runtime
+        The program memory is divided into two zones. The **stack** (stack) contains local variables and method calls. The objects themselves live in the **heap** (heap); a variable on the stack only stores a reference to an object on the heap.
+
+        An object is considered **reachable** if at least some chain of references from "roots" (local variables, static fields) leads to it. When you write `data = null`, you erase one arrow; but if the object is in, say, a list, it's still held by a reference from the list. The GC only frees what **no** live chain leads to.
+
+        Most objects are short-lived, so HotSpot divides the heap into **generations**: new objects fall into the "younger" generation, and cleaning there is cheap and frequent; those that survive go into the "old". The moment of cleanup is chosen by the JVM itself - you do not control it directly (`System.gc()` is only a request, not an order).
+
+        This is why "zeroing a variable" does not mean "freeing memory":
+        ```java
+        import java.lang.ref.WeakReference;
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) throws InterruptedException {
+                List<Object> cache = new ArrayList<>();
+                Object obj = new Object();
+                cache.add(obj);                       // колекція тримає посилання
+                WeakReference<Object> weak = new WeakReference<>(obj);
+
+                obj = null;                           // локальну змінну обнулили
+                System.gc();
+                Thread.sleep(50);
+                System.out.println("У колекції — живий? " + (weak.get() != null));
+
+                cache.clear();                        // прибрали й з колекції
+                while (weak.get() != null) { System.gc(); Thread.sleep(10); }
+                System.out.println("Після clear — живий? " + (weak.get() != null));
+            }
+        }
+        ```Output:
+        ```
+        У колекції — живий? true
+        Після clear — живий? false
+        ```Although the local variable `obj` is nulled, the object remains alive as long as `cache` points to it. This is how **memory leaks** occur in Java: not because of the lack of `delete', but because of forgotten references in collections, caches, or static fields.
+
+        ### Minimal code example
+        ```java
+        import java.lang.ref.WeakReference;
+
+        public class Main {
+            public static void main(String[] args) throws InterruptedException {
+                Object data = new Object();                 // сильне посилання на об'єкт
+                WeakReference<Object> weak = new WeakReference<>(data);
+
+                System.out.println("Є посилання? " + (weak.get() != null));
+
+                data = null;                                // об'єкт став недосяжним
+                while (weak.get() != null) {                // чекаємо, поки GC його прибере
+                    System.gc();
+                    Thread.sleep(10);
+                }
+
+                System.out.println("Після GC є об'єкт? " + (weak.get() != null));
+            }
+        }
+        ```Output:
+        ```
+        Є посилання? true
+        Після GC є об'єкт? false
+        ```
+
+        ### Explanation of each line of the example
+        - `Object data = new Object();` — we create an object and a **strong** `data' reference to it.
+        - `WeakReference<Object> weak = new WeakReference<>(data);` — A **weak** reference: it sees the object, but does not prevent the GC from removing it.
+        - `data = null;` — remove the only strong link; the object becomes unattainable "for real".
+        - `while (weak.get() != null) { System.gc(); ... }` — we ask the GC to work and wait for the object to disappear.
+        - the second `println` outputs `false` - the object no longer exists, because the GC collected it.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"memory","caption":"State after data = null","stack":[{"name":"data","value":"null"},{"name":"weak","ref":"wr"}],"heap":[{"id":"wr","value":"WeakReference → obj"},{"id":"obj","value":"Object (not reachable by strong reference)"}],"note":"data no longer points to obj. A weak link doesn't save from collection, so obj will be a candidate for GC removal."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Think that `null` frees memory instantly.** `null` only removes the reference; will free GC memory later.
+        2. **Call `System.gc()` in working code.** This does not guarantee a build and usually only hurts performance.
+        3. **Creating redundant objects in loops.** This loads the GC unnecessarily.
+        4. **Accidental memory leak.** If you keep a reference in a static collection and don't clean it up, the objects will remain reachable - the GC won't remove them.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        List<Integer> items = new ArrayList<>();
+        List<Integer> alias = items;
+        alias.add(3);
+        ```**Why it's here:** Two variables refer to the same list object, so shared state is changed.
+
+        **Please note:** An independent copy requires duplicating items.
+
+        ### Summary
+        You learned that Java frees memory automatically: objects live on the heap, the GC cleans up those to which no living reference chain leads, and the heap is divided into generations for speed. So there is no `delete' in Java, but memory leaks are still possible if you accidentally hold unnecessary references (typically in long-lived collections, caches, and static fields). Takeaway: Clean up collections you no longer need, and don't keep redundant links longer than necessary.
+      level: 5
+      tags:
+        - memory
+        - java
+  - title: Design patterns - an overview
+    key: paterny-proyektuvannya-ohlyad
+    description: describe the responsibility of the type or object in simple terms.
+      distinguish composition, imitation and polymorphic behavior.
+    order: 46
+    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
+      and unnecessary boilerplate"
+    theory:
+      title: Design patterns - an overview
+      content: |-
+        ### Intuitive explanation
+        An experienced programmer rarely invents a solution from scratch. He looks at the task and thinks: "stop, I've already seen this somewhere" - and pulls out a proven move from memory. The developers collected such moves for decades, gave them names and compiled them into a kind of catalog. These are **design patterns** — typical solutions to typical problems.
+
+        Let's get the most common pitfall out of the way right away: a pattern is **not** an importable class, and it's not a library. No `import Singleton;`. A pattern is an *idea*, a *form* of a decision, which you reproduce with your own hands every time for your situation. The closest analogy is a chess debut: you know the scheme by heart, but you move the pieces yourself, for a specific game.
+
+        The entire catalog is divided into three families:
+        - **generative** — about *how to create* objects (Singleton, Factory, Builder);
+        - **structural** — about *how to assemble* objects into larger structures (Adapter, Decorator, Facade);
+        - **behavioral** — about *how objects agree* with each other (Strategy, Observer, Iterator).
+
+        ### What happens at runtime
+        The most valuable thing about patterns is not even the code, but the **common language**. When someone in the team says "let's make an Observer here", everyone immediately imagines the same picture, and no one has to explain the mechanism in a whole paragraph. It's like terms in medicine: one word instead of a half-page description.But there is a dark side, and the pattern authors themselves honestly warn about it: a pattern added "because it sounds cool" only does harm. Layering three classes of abstraction over three lines of code isn't engineering, it's simulation. Therefore, the golden rule is as follows: **the simplest solution first; pattern - until real pain appeared** (duplication crept in, dependencies stuck together, it's scary to change something).
+
+        And a pleasant surprise: you already use patterns every day without even naming them. `for-each` silently takes `Iterator`. `StringBuilder` is a pure Builder. `List.of(...)` and `Integer.valueOf(...)` are factory methods. Patterns are not in a textbook under glass somewhere - they are sewn into the very language you use to write.
+
+        Now let's analyze the most famous of them — **Singleton**. His whole idea is contained in one line: "there must be exactly one of this object for the entire program."
+
+        ### Minimal code example
+        And why "exactly one" at all? Imagine the application settings. If each part of the program starts its own copy of the config, they will begin to quietly contradict each other: here it is already a dark theme, and there it is still light, and half the day is spent searching for "why it is different". Singleton nips this class of bugs in the bud — a **one-for-all** config:
+        ```java
+        class Config {
+            private static final Config INSTANCE = new Config();  // єдиний екземпляр
+            private Config() {}                                   // конструктор закритий
+            static Config get() { return INSTANCE; }
+            String url = "localhost";
+        }
+
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(Config.get() == Config.get());  // true — той самий об'єкт
+                System.out.println(Config.get().url);              // localhost
+            }
+        }
+        ```Output:
+        ```
+        true
+        localhost
+        ```Here `true` is the main proof: no matter how many times you ask `Config.get()`, you get the **same** object every time, not a fresh copy.
+
+        ### Explanation of each line of the example
+        - `private static final Config INSTANCE = new Config();` is the same single instance; is created once when the class is first loaded.
+        - `private Config() {}` — and here is the main trick: the constructor is **closed**. It will not work to write `new Config()` from the outside, no matter how hard you try - this is what makes the object unique.
+        - `static Config get()' is the only "door" to the instance; everyone enters only through them.
+        - `Config.get() == Config.get()` → `true` - both calls return the same object, not two different copies.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"Why is this \"Singleton\" not actually one?","lines":["class Config {","    static Config INSTANCE = new Config();","    public Config() {}","    static Config get() { return INSTANCE; }","}"],"buggyLine":3,"explanation":"The constructor is public, so anyone can write new Config() and create a second instance. The \"exactly one\" guarantee is broken. In a Singleton, the constructor must be private."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forgetting to close the constructor.** Leave `Config()` public, and anyone can easily make a second instance and the whole one-of-a-kind guarantee falls apart (catch it in the interactive below).
+        2. **Pushing Singleton everywhere.** The temptation to make a "global variable with a nice name" is great — and it turns the code into a tangle of hidden dependencies that are hellish to test.
+        3. **Confuse pattern with library.** Again: no `import Singleton;`. There is an idea that you write with your hands.
+        4. **Memorize names instead of problems.** The benefit is not to retell the definition of Observer, but to *recognize* the situation where it saves.
+        5. **Pulling a pattern into a tiny problem.** Three lines of code don't require "architecture" — and that's okay.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        interface Strategy {
+            void execute();
+        }
+        ```**Why it's here:** A pattern highlights a repeating pattern of interaction and gives it an understandable name.
+
+        **Please note:** Do not add a pattern if a simpler design is sufficient.
+
+        ### Summary
+        So, patterns are not magic or a library, but a common language of proven solutions, divided into three families: generative, structural, and behavioral. You saw it on Singleton: one idea ("exactly one instance") plus one trick (closed constructor) and the whole program stops spawning conflicting copies. But the most valuable thing here is a sense of proportion: a pattern is added when it relieves real pain, and not for the sake of a tick on the resume. Next, we'll dive into specific patterns and see how another simple idea—"interchangeable objects"—comes to life in Strategy.
+      level: 5
+      tags:
+        - objects
+        - java
+  - title: "Patterns: Singleton; Factory; Strategy; Observer"
+    key: paterny-singleton-factory-strategy-observer
+    description: describe the responsibility of the type or object in simple terms.
+      distinguish composition, imitation and polymorphic behavior.
+    order: 47
+    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
+      and unnecessary boilerplate"
+    theory:
+      title: "Patterns: Singleton; Factory; Strategy; Observer"
+      content: |-
+        ### Intuitive explanation
+        A pattern is a proven "recipe" for a typical task. Let's consider the four most common:
+        - **Singleton** — guarantees exactly one instance for the entire application (for example, a shared config).
+        - **Factory** — creates objects through a separate method, hiding which class is being created.
+        - **Strategy** — brings the algorithm to a separate object to change the behavior "on the fly".
+        - **Observer** — some objects subscribe to the changes of others and receive notifications.
+
+        ### What happens at runtime
+        Let's stop at **Strategy**. The variable has an interface type (`PaymentStrategy`), but it actually contains a specific implementation (`CardPayment` or `CashPayment`). When you call `strategy.pay(...)`, Java looks at the **real** object and executes exactly that version of the method (late binding). By replacing an object, you change the behavior without touching the code that calls it.
+
+        The main advantage is that instead of a long `if/else` for the payment type, you have a set of interchangeable objects. To add a new method (for example, `CryptoPayment`), it is enough to write another class that implements `PaymentStrategy` - no existing code needs to be changed (this is the principle of "openness/closure").
+
+        Strategy is not an abstraction for abstraction's sake: you've already used it in the standard library. `Comparator` in `list.sort(comparator)` is a comparison strategy; The `Runnable` you pass to `new Thread(...)` is the ``what to run'' strategy. Anywhere a method accepts a single-action interface is essentially a Strategy.
+
+        ### Minimal code example
+        ```java
+        interface PaymentStrategy {
+            void pay(int amount);
+        }
+
+        class CardPayment implements PaymentStrategy {
+            public void pay(int amount) {
+                System.out.println("Оплата карткою: " + amount + " грн");
+            }
+        }
+
+        class CashPayment implements PaymentStrategy {
+            public void pay(int amount) {
+                System.out.println("Оплата готівкою: " + amount + " грн");
+            }
+        }
+
+        public class Main {
+            public static void main(String[] args) {
+                PaymentStrategy strategy = new CardPayment();
+                strategy.pay(100);              // Оплата карткою: 100 грн
+
+                strategy = new CashPayment();   // підміна алгоритму на льоту
+                strategy.pay(50);               // Оплата готівкою: 50 грн
+            }
+        }
+        ```
+
+        ### Explanation of each line of the example
+        - `interface PaymentStrategy { void pay(int amount); }` is a common "contract" for all payment methods.
+        - `class CardPayment implements PaymentStrategy' — one strategy (card payment).
+        - `class CashPayment implements PaymentStrategy' — another strategy (cash).
+        - `PaymentStrategy strategy = new CardPayment();` — interface type variable holds a specific strategy.
+        - `strategy = new CashPayment();` — **algorithm replacement on the fly**; the next `pay` already behaves differently.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"dispatch","call":"strategy.pay(amount)","cases":[{"type":"CardPayment","result":"Payment by card: amount UAH"},{"type":"CashPayment","result":"Payment in cash: amount UAH"}],"note":"The variable type is PaymentStrategy, but the method of the real object is called. This is the essence of Strategy: the behavior is set by the substituted implementation."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Put Singleton everywhere.** A global singleton complicates testing and hides dependencies.
+        2. **Don't separate object creation.** When `new` is scattered everywhere, it's hard to change implementations - this is where Factory helps.
+        3. **Confusing a pattern with a library.** A pattern is an idea/structure of code, not a ready-made class that can be imported.
+        4. **Make strategies dependent on each other.** Each strategy should be self-contained by a common interface.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        interface Strategy {
+            void execute();
+        }
+        ```**Why it's here:** A pattern highlights a repeating pattern of interaction and gives it an understandable name.
+
+        **Please note:** Do not add a pattern if a simpler design is sufficient.
+
+        ### Summary
+        You got acquainted with four classic patterns and, using Strategy as an example, you saw how late binding allows you to change the behavior of a program by substituting different implementations of the same interface — without changes in the code that uses them. In real Java code, you come across them every day: `Comparator`/`Runnable` is Strategy, `List.of()`/`Optional.of()` are factory methods (Factory), and UI event listeners and `PropertyChangeListener` are Observer.
+      level: 5
+      tags:
+        - objects
+        - java
+  - title: "Security: Fundamentals of Cryptography in Java"
+    key: bezpeka-osnovy-kryptohrafii-v-java
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 48
+    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: "Security: Fundamentals of Cryptography in Java"
+      content: |-
+        ### Intuitive explanation
+        Cryptography is about protecting data. In day-to-day development, two different things are often needed:
+        - **Hashing** is an irreversible transformation. The original cannot be recovered from the hash. This is how **passwords** are stored.
+        - **Encryption** — reverse conversion. The data can be decrypted back if the key is present. This is how **messages and files** are protected.
+
+        It is dangerous to confuse them: the password is not "encrypted" (because then it can be decrypted) - it is **hashed**.
+
+        ### What happens at runtime
+        Java has a built-in `MessageDigest` class for hashing. You provide bytes as an input, and it returns a **digest** — a set of fixed-length bytes (for SHA-256, it's always 32 bytes, i.e. 64 hex characters, **regardless** of the size of the input). Bytes are usually shown in hexadecimal.
+
+        Two key properties: the same input **always** gives the same hash, and the slightest change in the input completely changes the output (**avalanche effect**). Compare - only a point is different:
+        ```java
+        System.out.println(sha256("пароль"));    // 2dbc574daca52689a24fb60e835f8c19a36400830df7350859dd32d1abaaec5d
+        System.out.println(sha256("пароль."));   // de7e480a9f97aca7fbe061bc520801198f6b2650fb137e5fe5ce913301f02595
+        ```The hashes have nothing in common, even though the inputs are almost identical. That is why it is impossible to "guess" about the original based on the hash, and any change of data is immediately noticeable - this is what checks the integrity and storage of passwords.
+
+        ### Minimal code example
+        ```java
+        import java.security.MessageDigest;
+        import java.security.NoSuchAlgorithmException;
+        import java.nio.charset.StandardCharsets;
+
+        public class Main {
+            public static void main(String[] args) throws NoSuchAlgorithmException {
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] hash = md.digest("пароль".getBytes(StandardCharsets.UTF_8));
+
+                StringBuilder hex = new StringBuilder();
+                for (byte b : hash) {
+                    hex.append(String.format("%02x", b));
+                }
+
+                System.out.println(hex);
+            }
+        }
+        ```Output (same for any run):
+        ```
+        2dbc574daca52689a24fb60e835f8c19a36400830df7350859dd32d1abaaec5d
+        ```
+
+        ### Explanation of each line of the example
+        - `MessageDigest.getInstance("SHA-256")` — we take a ready-made hashing algorithm.
+        - `"password".getBytes(StandardCharsets.UTF_8)` — we convert the text into bytes; coding is set explicitly so that the result is the same on any system.
+        - `md.digest(...)` — we calculate the hash (32 bytes).
+        - a loop with `String.format("%02x", b)` — we convert each byte into two hexadecimal characters.
+        - `System.out.println(hex)` - prints SHA-256 from the word "password".
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"Where is the security of password storage violated?","lines":["String password = user.getPassword();","// зберігаємо користувача у базу","user.setPasswordField(password);","repository.save(user);"],"buggyLine":3,"explanation":"The password is recorded in the database in open form. Instead, a stable hash with a salt should be stored (e.g. via BCrypt), not the password itself."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Keep passwords in public.** Even in your own database, this is a critical vulnerability.
+        2. **"Encrypt" the password instead of hashing it.** If it can be decrypted, so can an attacker with the key.
+        3. **Hash the password without "salt".** The same passwords will give the same hash; salt (a unique addition) makes this impossible. BCrypt/Argon2 is used in practice.
+        4. **Invent your own algorithm.** Reliable cryptography is standards tested over the years, not self-made.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```java
+        String token = System.getenv("API_TOKEN");
+        ```**Why it's here:** The secret is read from the runtime, not stored in the source code.
+
+        **Note:** Do not print the secret in the logs or add it to git.
+
+        ### Summary
+        You learned how hashing differs from encryption, saw the calculation of SHA-256 and its avalanche effect by built-in Java tools, and remembered the main rules: only hash passwords (with salt, via BCrypt/Argon2), use encryption for secret data (AES for data, RSA for keys and signatures), do not invent your own cryptography and rely on proven libraries. In real applications, hashes are still used to check the integrity of files (checksums) and digital signatures.
+      level: 5
+      tags:
+        - practice
+        - java
+  - title: Working with JSON/XML
+    key: robota-z-json-xml
+    description: describe the boundary between the application and an external
+      service or resource. check data format, errors and missing values.
+    order: 49
+    exerciseFocus: "one operation with a format or resource; clearly record the
+      false and empty case"
+    theory:
+      title: Working with JSON/XML
+      content: |-
+        ### Intuitive explanation
+        Two applications want to exchange data — for example, your application asks a weather server for a forecast. But one is written in Java, the other, perhaps, in Python, and their objects are arranged in completely different ways in memory. We need a **common neutral language** - a text format that is understandable to both. That's what JSON and XML are: an agreement on how to write structured data in plain text.
+
+        **JSON** today is the king of exchange on the web, because it is concise and readable by a person almost effortlessly: `{"name":"Olya","age":12}`. Curly brackets — object, `"key":value' pairs, separator comma. **XML** is older and more verbose (`<user><name>Olya</name></user>`), today mostly in corporate and legacy systems and configurations. For new APIs, JSON is almost always taken.
+
+        All work is reduced to two mirror operations. **Serialization** — object → text (to send). **Deserialization** — text → object (to conveniently use it in the code). Just like with object serialization before, only the format is not byte, but text and cross-language.
+
+        ### What happens at runtime
+        To show the essence in a real run **without external libraries**, the example below does both operations manually: it collects a JSON string from the object's fields and pulls the values back with a tiny parser. You will see the exact structure of the format "from the inside".But this is exactly an educational example, and it immediately reveals **why they don't do this in life**. Manual string concatenation is fragile: if the name contains a quote, backslash, or line feed, your JSON becomes **invalid** because you didn't "escape" the special characters. A manual parser is even worse: it will fall apart on nested objects, arrays, numbers, `null`. That's why they really use the proven libraries — **Jackson** or **Gson**: one line `mapper.writeValueAsString(obj)` converts the object to the correct JSON, and `mapper.readValue(json, User.class)` - back, correctly handling escapes, types and UTF-8 encoding. It's your job to describe the class, the library takes care of the rest.
+
+        ### Minimal code example
+        ```java
+        public class Main {
+            record User(String name, int age) {}
+
+            // серіалізація вручну: об'єкт -> JSON
+            static String toJson(User u) {
+                return "{\"name\":\"" + u.name() + "\",\"age\":" + u.age() + "}";
+            }
+
+            // крихітний ручний парс: витягти значення рядкового поля
+            static String extractString(String json, String key) {
+                String marker = "\"" + key + "\":\"";
+                int start = json.indexOf(marker) + marker.length();
+                int end = json.indexOf("\"", start);
+                return json.substring(start, end);
+            }
+
+            public static void main(String[] args) {
+                User u = new User("Оля", 12);
+
+                String json = toJson(u);                    // об'єкт -> текст
+                System.out.println(json);
+
+                String name = extractString(json, "name");  // текст -> значення
+                System.out.println("Витягнуте ім'я: " + name);
+            }
+        }
+        ```Output:
+        ```
+        {"name":"Оля","age":12}
+        Витягнуте ім'я: Оля
+        ```In fact, they take the library (illustratively - it needs Jackson):
+        ```java
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.writeValueAsString(new User("Оля", 12)); // {"name":"Оля","age":12}
+        User u = mapper.readValue(json, User.class);                  // назад в об'єкт
+        ```
+
+        ### Explanation of each line of the example
+        - `record User(String name, int age)` — the data we exchange.
+        - `toJson(u)` — manually composes the string `{"name":"Olya","age":12}`; in life it does `writeValueAsString`.
+        - `extractString(json, "name")` — finds `"name":"` and extracts the value up to the next quote.
+        - output `Extracted name: Olya' — demonstrates deserialization "on the fingers".
+        - in the Jackson-snippet, the same two actions — but reliably, with shielding and types.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"java","question":"Why does this manual JSON fail for name = \"Ol\\\"I?","lines":["String name = \"Ол\\\"я\";","String json = \"{\\\"name\\\":\\\"\" + name + \"\\\"}\";","System.out.println(json);"],"buggyLine":2,"explanation":"The name contains a quotation mark, and manual pasting does not escape it. The output is {\"name\":\"Ol\"ya\"} — an extra quote truncates the value, and the JSON becomes invalid. That's why special characters need to be escaped, and that's why the real code uses a library (Jackson/Gson) that does it itself."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Paste JSON into a string in production.** Special characters break the format — use Jackson/Gson.
+        2. **Ignore encoding.** Cyrillic and emoji require UTF-8.
+        3. **Confuse field types.** A JSON number cannot be read as a string and vice versa - there will be a parsing error.
+        4. **Write your own parser for complex JSON.** Nesting and arrays quickly "break" it.
+
+        ### In practice
+
+
+        The JSON serialization in the example below is performed by the Jackson library:
+        ```java
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        String json = mapper.writeValueAsString(Map.of("ok", true));
+
+        System.out.println(json);
+
+        ```**Why it's here:** The object is converted to a JSON contract that can be passed to an HTTP client or saved to a file.
+
+
+
+        **Note:** Jackson must be added to dependencies; XML requires a separate parser and schema rules.
+
+
+
+        ### Summary
+        So, JSON and XML are textual "mediating languages" for exchanging data between different systems; JSON is concise and dominates the web, XML is more verbose and lives in legacy. Working with them is serialization (object → text) and deserialization (text → object). You've done both by hand and seen why it's fragile: special characters, types, nesting. That's why Jackson or Gson are used in real projects — they do everything reliably from one line. This completes the Java theory course - you have gone from the first `println' to the engineering practices of real production.
+      level: 5
+      tags:
+        - systems
+        - java
+source: "java_theory.yml: advanced topics"

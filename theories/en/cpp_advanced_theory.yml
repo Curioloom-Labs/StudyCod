@@ -1,0 +1,1610 @@
+language: CPP
+course: cpp-advanced
+topics:
+  - title: Work with files
+    key: robota-z-faylamy
+    description: explain how parts of a program find and use each other. separate
+      application code from environment settings.
+    order: 31
+    exerciseFocus: "work through a single file and stdout if the theme does not have
+      a judgeable API; not require creating files or IDEs"
+    theory:
+      title: Work with files
+      content: |-
+        ### Intuitive explanation
+        Anything stored by your variables is gone the moment the program exits—memory is freed and the data evaporates. And how to save the game account, settings, to-do list, so that they survive the closing of the program? Write them to a **file** on disk.
+
+        The best thing: in C++, working with files is almost no different from the usual `cout`/`cin`. You already know how to "push" text with the `<<` arrow and "pull" it with the `>>` arrow - it's the same with files, only the stream is not tied to the console, but to the file on the disk.
+
+        The two main tools from the `<fstream>` header: **`std::ofstream`** — "**o**utput file stream", the output stream for **writing** to a file (like `cout`, but to a file); **`std::ifstream`** - "**i**nput file stream", an input stream for **reading** from a file (like `cin`, but from a file). The letters `o` and `i` at the beginning are your clue as to who is where.
+
+        ### What happens at runtime
+        When you create `std::ofstream out("notes.txt")`, the OS opens (or creates) the file and gives the program a "pipe" to it. Each `out << ...` adds data. And when the stream object leaves the scope — the file **closes itself**. It's **RAII** again: a thread is a wrapper over a resource (a file handle), and its destructor is guaranteed to release the resource. Therefore, a manual `close()` is usually unnecessary.
+
+        Two things beginners forget. The first is to **check if the file has been opened at all**. The disk may be full, the path is incorrect, or the rights are missing. A stream can behave like a boolean value: `if (!in) { /* not opened */ }`. Skip this check — and you'll be reading from a "dead" stream, wondering about empty data.The second is **how to read lines**. The `while (std::getline(in, line))' idiom reads the file line by line until the lines run out: `getline` returns the stream itself, and the one at the end of the file becomes "false" and the loop stops neatly. This is more reliable than reading through `>>` which stumbles on spaces.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <fstream>
+        #include <string>
+
+        int main() {
+            {
+                std::ofstream out("notes.txt");        // відкриваємо на запис
+                out << "Перший рядок" << "\n";
+                out << "Другий рядок" << "\n";
+            }   // тут файл закривається сам (RAII)
+
+            std::ifstream in("notes.txt");             // відкриваємо на читання
+            if (!in) {
+                std::cout << "Не вдалося відкрити файл" << std::endl;
+                return 1;
+            }
+            std::string line;
+            int n = 0;
+            while (std::getline(in, line)) {           // читаємо рядок за рядком
+                ++n;
+                std::cout << n << ": " << line << std::endl;
+            }
+            return 0;
+        }
+        ```Output:
+        ```
+        1: Перший рядок
+        2: Другий рядок
+        ```
+
+        ### Explanation of each line of the example
+        - `std::ofstream out("notes.txt");` — open the file for recording (create it if it does not exist).
+        - `out << "First line" << "\n";` — we write to the file in the same way as in `cout`.
+        - Closing `}` of an inner block - here `out` is destroyed and the file **closes itself** (RAII), the data is guaranteed to be flushed to disk.
+        - `if (!in)` is a mandatory check that the file has actually been opened.
+        - `while (std::getline(in, line))` — read line by line as long as they exist; counter `n` numbers the output.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"std::ifstream in(\"missing.txt\"); (no file) while (std::getline(in, line)) { std::cout << line; } What will be printed?","options":["Compilation error","Program crash","Nothing - the loop will never execute","Empty lines are endless"],"answer":2,"explanation":"If the file has not been opened, the in thread is immediately in the error state. The first std::getline will not read anything and will return a stream, which in the boolean context gives false, so the while condition is false from the beginning - the body will never be executed. The program won't crash, but it won't output anything either. That's why it's important to check if (!in) and report the problem explicitly."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Do not check for opening** (`if (!in)`) — and silently work with a dead thread.
+        2. **Confuse `ifstream` and `ofstream`** - the letters `i`/`o` at the beginning say the direction.
+        3. **Read through `>>` where whole lines are required** — `>>` stops at a space; take `getline`.
+        4. **Keep file open longer than necessary** - Rely on RAII or limit the lifetime of the thread with a `{ }` block.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::ifstream file("notes.txt");
+        std::string line;
+        std::getline(file, line);
+        ```**Why it's here:** `ifstream` opens a file and `getline` reads a line.
+
+        **Note:** Make sure the file is actually opened.
+
+        ### Summary
+        You learned how to save data between runs via files: `std::ofstream` writes to a file, `std::ifstream` reads - both work with familiar `<<`/`>>` arrows like `cout`/`cin`. Thanks to RAII, the file closes itself when the stream exits the scope. Two ironclad rules: **check** if the file is opened (`if (!in)`) and read lines via `while (std::getline(in, line))`. Next, how to organize large code and avoid name conflicts using namespaces.
+      level: 3
+      tags:
+        - tooling
+        - c++
+  - title: Namespaces (namespace)
+    key: prostory-imen-namespace
+    description: explain how parts of a program find and use each other. separate
+      application code from environment settings.
+    order: 32
+    exerciseFocus: "work through a single file and stdout if the theme does not have
+      a judgeable API; not require creating files or IDEs"
+    theory:
+      title: Namespaces (namespace)
+      content: |-
+        ### Intuitive explanation
+        In a large school, there will inevitably be two students named "Oleg". How to distinguish them? By **surname**: Oleg Koval and Oleg Shevchuk. The last name is the "space" that makes the same name unique.
+
+        The code has the same problem. You write the `energy()` function. Your colleague in another library also writes `energy()` - with a different meaning. Connect both — and the compiler is in despair: what `energy' do you mean? This is a **name conflict**, and in a project with hundreds of files, it is inevitable.
+
+        **Namespace** (`namespace`) is a "nickname" for your functions, classes, and constants. We wrapped the code in `namespace physics { ... }` — and now your function is called `physics::energy`, and someone else's is called `finance::energy`. Identical names coexist peacefully, because everyone's full name is different. That is why the entire standard library lives in the `std` space — so that its `string`, `sort`, `map` do not collide with yours.
+
+        ### What happens at runtime
+        More precisely, during **compilation**: namespaces exist only for the compiler, they do not exist in machine code (no costs in runtime). When you write `physics::energy(10)`, the `::` operator tells the compiler: "look for `energy` exactly in `physics` space". Colon-colon `::` is the "scope resolution operator"; you've already seen it in `std::cout`.To avoid writing the prefix every time, there is `using`. `using namespace physics;` "opens" the entire space - and then you can simply write `energy`. Convenient, but here is the main trap. The infamous `using namespace std;` in a **header file** exposes hundreds of std names in every file that will include the header - and returns the very conflicts the spaces were meant to prevent. Rule: ``using namespace'' headers **never** be written; in `.cpp`-files — carefully and locally; and `std::` before names is not unnecessary noise, but useful clarity.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+
+        namespace physics {
+            double energy(double m) { return m * 9.8; }   // потенційна (умовно)
+        }
+
+        namespace finance {
+            double energy(double m) { return m * 1.05; }   // "енергія" грошей — інше значення
+        }
+
+        int main() {
+            std::cout << "physics::energy(10) = " << physics::energy(10) << std::endl;
+            std::cout << "finance::energy(10) = " << finance::energy(10) << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        physics::energy(10) = 98
+        finance::energy(10) = 10.5
+        ```
+
+        ### Explanation of each line of the example
+        - `namespace physics { ... }` is a "nickname" for the first `energy'.
+        - `namespace finance { ... }` is a second space with a function of the **same name** but different content.
+        - `physics::energy(10)` — `::` says to take `energy` exactly from `physics`: `10 * 9.8 = 98`.
+        - `finance::energy(10)` is another function: `10 * 1.05 = 10.5`.
+        - Without spaces, two `energy` of the same name would cause a "redefinition" error.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"There is physics::energy (m*9.8) and finance::energy (m*1.05). What will print std::cout << finance::energy(10); ?","options":["98","10.5","Error: Ambiguity","11.55"],"answer":1,"explanation":"The operator :: explicitly specifies the space: finance::energy is exactly the function from the finance space that returns m * 1.05 = 10 * 1.05 = 10.5. There is no ambiguity, because we accurately named the space. This is how a namespace allows two functions of the same name to coexist peacefully."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **`using namespace std;` in the header** — reveals a bunch of names everywhere and returns conflicts.
+        2. **Confuse functions with the same name** from different spaces — always specify `space::name'.
+        3. **Release everything into the global space** — and sooner or later run into someone else's code.
+        4. **Forget `::`** — write `energy` where the compiler does not know from which space to take it.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::ifstream file("notes.txt");
+        std::string line;
+        std::getline(file, line);
+        ```**Why it's here:** `ifstream` opens a file and `getline` reads a line.
+
+        **Note:** Make sure the file is actually opened.
+
+        ### Summary
+        You learned how to give code "surnames" via `namespace' so that identical names from different parts of the program do not conflict; access is through the `::` operator (`space::name`), and the entire standard library for that lies in `std`. `using` exposes the namespace for convenience, but `using namespace` in headers is a forbidden technique that returns conflicts. Namespaces cost nothing at runtime. Next, you'll take a deeper look at how headers and compilation units are assembled into a single program.
+      level: 3
+      tags:
+        - tooling
+        - c++
+  - title: Headers and Compilation Units
+    key: zaholovky-ta-kompilyatsiyni-odynytsi
+    description: explain how parts of a program find and use each other. separate
+      application code from environment settings.
+    order: 33
+    exerciseFocus: "work through a single file and stdout if the theme does not have
+      a judgeable API; not require creating files or IDEs"
+    theory:
+      title: Headers and Compilation Units
+      content: |-
+        ### Intuitive explanation
+        At the very beginning of the course, you saw the idea of "menu and kitchen": the header (`.h`) is the declaration (what it is), the `.cpp` is the implementation (how it works). Now let's figure out **how exactly** the compiler stitches it into one program, because there are several mysterious errors that all beginners suffer from.
+
+        The key concept is **compilation unit** (translation unit). This is a single `.cpp` file **after** the preprocessor has put all the `#include`s into it. The compiler does not see the project as a whole, but each such unit **separately**, as if it were the only one in the world. Three `.cpp` - three independent compilations, three object files. And only at the end **linker** stitches them together.
+
+        The header itself **doesn't compile** — `#include "math.h"` literally **copies** its text into your `.cpp`. Think of it as "paste text from the clipboard": as many files are connected, as many copies are pasted. Convenience and the main pitfalls of the topic are born from this.
+
+        ### What happens at runtime
+        More precisely, at the **assembly** stage, in three steps. The **Preprocessor** processes the `#include`/`#define` and inserts the header texts. The **compiler** converts each finished unit into a machine code object file. The **linker** links object files by substituting function addresses for declarations.
+
+        Hence, two classic traps. First: if one header is connected twice (directly and through another header), its contents will be inserted **twice** into the same unit - and the compiler will complain about "redefinition". The guard is **include guard** or the shorter `#pragma once` at the beginning of the header: it says "if this file is already included, skip".The second: the rule of **one single implementation** (One Definition Rule). A function can be **declared** as many times as you want (that's why declarations are put in headers that are copied everywhere), but its **body** must be in exactly one place. Put the definition of the function directly in the header - and it will be multiplied by all the units where it was connected, and the linker will indignantly issue "multiple definition". Therefore, the header contains the announcement, the body contains one `.cpp`.
+
+        ### Minimal code example
+        Three files — header, implementation, and `main' — are compiled separately and linked into one program:
+        ```cpp
+        // mathutils.h — інтерфейс
+        #pragma once
+        int add(int a, int b);          // лише оголошення
+
+        // mathutils.cpp — реалізація
+        #include "mathutils.h"
+        int add(int a, int b) { return a + b; }
+
+        // main.cpp — використання
+        #include <iostream>
+        #include "mathutils.h"
+        int main() {
+            std::cout << "add(2, 40) = " << add(2, 40) << std::endl;
+            return 0;
+        }
+        ```Build: `g++ -c mathutils.cpp` and `g++ -c main.cpp` (separate units), then `g++ mathutils.o main.o -o app`. Output:
+        ```
+        add(2, 40) = 42
+        ```
+
+        ### Explanation of each line of the example
+        - `#pragma once` - header protection against double inclusion in one unit.
+        - `int add(int a, int b);` in `.h` is a **declaration** that can be copied into any number of `.cpp`.
+        - `int add(...) { return a + b; }` in `.cpp` is the **single** function body (ODR rule).
+        - `main.cpp` includes the same header - and compiles knowing only the `add` declaration.
+        - The linker stitches `main.o` (where there is a **call** of `add`) with `mathutils.o` (where there is a **body** of `add`) and the program works.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"Put the FULL body in the math.h header: int add(int a,int b){return a+b;}. The header is connected by two different .cpp. What happens during assembly?","options":["Everything is fine","Linking error: multiple definition of add","Compilation error in math.h","The program will crash on startup"],"answer":1,"explanation":"#include copies the header text into each .cpp. Since the add body is in the header, it ends up in TWO compilation units — resulting in two implementations of the same function. This violates the single implementation rule (ODR) and the linker issues a multiple definition. The header should only contain the declaration and the body should be in a single .cpp."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Do not protect header** `#pragma once` is a "redefinition" on double inclusion.
+        2. **Put the body of the function in the header** — "multiple definition" from the linker (violation of ODR).
+        3. **Declare a function, but do not implement it** — "undefined reference" at the linking stage.
+        4. **Global variable in header without `extern'** - each unit will create its own copy and there will be a conflict.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::ifstream file("notes.txt");
+        std::string line;
+        std::getline(file, line);
+        ```**Why it's here:** `ifstream` opens a file and `getline` reads a line.
+
+        **Note:** Make sure the file is actually opened.
+
+        ### Summary
+        You have figured out the C++ assembly model: each `.cpp` after the `#include` becomes a separate **compilation unit**, compiled independently into an object file, and only the **linker** stitches everything together. Headers are copied via `#include`, so they are protected by `#pragma once` from double inclusion, and only **declarations** are placed in them - the body of the function must be unique (ODR rule), otherwise the linker will issue "multiple definition". Distinguish between compilation and linking errors - this will save hours. Next is manual dynamic memory management via `new`/`delete`.
+      level: 3
+      tags:
+        - tooling
+        - c++
+  - title: "Memory: new and delete"
+    key: pam-yat-new-ta-delete
+    description: explain where the value lives and who is responsible for the
+      resource. recognize copying, sharing, and object lifetime.
+    order: 34
+    exerciseFocus: "a small example with a clear life time; verify a safe state
+      after an operation and not require manual memory inspection"
+    theory:
+      title: "Memory: new and delete"
+      content: |-
+        ### Intuitive explanation
+        Until now, all of your variables lived on the **stack**—a clear, automatic area of memory: created when a block is entered, destroyed when it is exited. This is convenient, but has two limitations. First, the stack is **small** (several megabytes) - a huge array will not fit there. Second, lifetime is hardwired to a block: you can't create an object that **outlives** a function.
+
+        For these cases, there is a second area — the heap: a huge storage area where you **manually** take the desired piece and keep it as long as you need. The key to the heap is the **`new`** operator: it allocates memory and returns a **pointer** to it. And since the heap doesn't automatically remove anything, you are **required** to return the memory yourself with the **`delete`** statement when it is no longer needed.
+
+        It's like renting a storage box: `new' - take the key and occupy the box, `delete' - hand over the key and release it. If you forget to submit, the box will remain occupied forever (**memory leak**). Powerful, but dangerous: there's no cleaner here to fix your forgetfulness.
+
+        ### What happens at runtime
+        `int* p = new int(5)` does three things: it finds an empty location on the heap, puts `5` there, and returns the **address** of that location to pointer `p`. `p` itself lies on the stack, but **points** to the heap. Next, you work with the value via `*p` as you would with a normal pointer.`delete p` returns this heap chunk to the system. And here are the three classic deadly sins of manual memory. **Leak**: `delete` not called - memory taken forever. **Double Release**: Called `delete` twice on the same pointer - undefined behavior, often crashes. **Hanging pointer**: after `delete`, `p` itself still keeps the old address, but there is nothing after it; calling `*p` after that is a disaster. Therefore, after `delete`, the pointer is immediately reset: `p = nullptr`.
+
+        A separate rule for arrays: memory for the array is taken via `new[]`, and freed **strictly** via `delete[]` (with square brackets). Confusing `delete` and `delete[]` is also undefined behavior. So many rules - that's why modern C++ replaces manual `new`/`delete` with **smart pointers** (next topic) that clean up themselves.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+
+        int main() {
+            int* p = new int(5);              // виділяємо один int у купі
+            std::cout << "*p = " << *p << std::endl;
+            *p = 42;
+            std::cout << "*p = " << *p << std::endl;
+            delete p;                         // звільняємо
+            p = nullptr;                      // прибираємо висячий вказівник
+
+            int* arr = new int[3]{10, 20, 30};   // масив у купі
+            std::cout << "arr[2] = " << arr[2] << std::endl;
+            delete[] arr;                     // масив звільняють через delete[]
+            return 0;
+        }
+        ```Output:
+        ```
+        *p = 5
+        *p = 42
+        arr[2] = 30
+        ```
+
+        ### Explanation of each line of the example
+        - `int* p = new int(5);` — we take a piece of the heap under `int` with the value 5; `p` holds its address.
+        - `*p = 42;` — we use the pointer to change the value in the heap.
+        - `delete p;` — we return the memory to the system (required, because the heap does not clean itself).
+        - `p = nullptr;` — we neutralize the hanging pointer so as not to accidentally turn to the old address.
+        - `new int[3]{...}` / `delete[] arr;` — the array in the heap is taken and released by **even** operators with `[]`.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"memory","caption":"int* p = new int(5); — the stack points to the pile","stack":[{"name":"p","ref":"h1","id":"0x7ffe...c0"}],"heap":[{"id":"h1","value":"int = 5 (allocated via new)"}],"note":"new allocates memory in the heap and returns the address; the pointer p itself lies on the stack and points there. delete p frees a block on the heap — but p still keeps the old address, so it becomes a hang. If you do not call delete at all, the block will remain occupied until the end of the program (leakage). It is this manual responsibility that smart signposts automate."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forgetting `delete`** is a memory leak: a chunk of the heap is occupied forever.
+        2. **`delete` twice** on the same pointer is undefined behavior.
+        3. **`delete` instead of `delete[]`** (or vice versa) for arrays — also UB.
+        4. **Apply after `delete'** — a hanging pointer; null it to `nullptr`.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::string source = "data";
+        std::string target = std::move(source);
+        ```**Why it's here:** `std::move` allows you to move a resource instead of copying it. The old object is valid, but its value should not be assumed.
+
+        **Please Note:** Once moved, the old value must be reassigned or destroyed.
+
+        ### Summary
+        You learned how to manage dynamic memory manually: `new` allocates a chunk on the **heap** and returns a pointer, `delete` frees it (and `new[]`/`delete[]` for arrays). The heap allows large objects and lifetimes outside of the block, but doesn't clean itself, so you have three dangers: **leak** (forgot `delete`), **double release**, and **hanging pointer** (request after `delete`). Because of this fragility, modern C++ advises not to write `new`/`delete` manually, but to entrust the cleanup to **smart pointers** - it is to them that you go further.
+      level: 4
+      tags:
+        - memory
+        - c++
+  - title: Smart pointers
+    key: rozumni-vkazivnyky
+    description: explain where the value lives and who is responsible for the
+      resource. recognize copying, sharing, and object lifetime.
+    order: 35
+    exerciseFocus: "a small example with a clear life time; verify a safe state
+      after an operation and not require manual memory inspection"
+    theory:
+      title: Smart pointers
+      content: |-
+        ### Intuitive explanation
+        Manual `new`/`delete` is like juggling knives: powerful, but one forgetfulness and you're hurt (leak, double release, hanging pointer). It would be great if the pointer **itself** remembered `delete`. That's what **smart pointers** do—it's RAII applied to memory: a wrapper object holds a resource and releases it in its destructor. You **never write `delete'** anymore — it happens exactly at the right moment.
+
+        Two main varieties differ in **property policy**:
+        - **`std::unique_ptr`** — **unique** owner. Like a personal key to an apartment: it is unique, it cannot be copied. When `unique_ptr` goes out of scope — the object is destroyed. This is a direct and free replacement for `new`/`delete`.
+        - **`std::shared_ptr`** — **shared** ownership with reference counting. Like a key for several family members: as long as at least one person has it, the apartment is not vacated. The memory disappears when the **last** owner disappears.
+
+        They are created via `std::make_unique<T>(...)` and `std::make_shared<T>(...)`, not via `new`.
+
+        ### What happens at runtime
+        `unique_ptr` costs next to nothing: under the hood it's the same raw pointer plus automatic `delete` in the destructor. It **cannot be copied** (no two keys are the same) — only **moved** (transfer ownership). It's a compile-level ban that kills a whole class of bugs.`shared_ptr` is smarter and a bit more expensive: it keeps a **reference counter** next to the object. `shared_ptr' was copied - counter +1; the owner has disappeared - the counter is -1. The object is destroyed exactly when the counter drops to **zero**. In the example, you will see how `use_count()` shows 1 → 2 → 1, and the object `B` itself lives as long as there is at least one owner left.
+
+        One trap of `shared_ptr` is **circular references**: if two objects hold a `shared_ptr` on top of each other, their counters will never fall to zero, and both will **expire**. To break such loops, there is `std::weak_ptr` - an "observer" that sees the object, but does not own it and does not increment the counter. A general rule of thumb in modern C++ is to default to `unique_ptr` and `shared_ptr` only when ownership is truly shared.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <memory>
+        #include <string>
+
+        struct Resource {
+            std::string name;
+            Resource(const std::string& n) : name(n) { std::cout << "створено " << name << std::endl; }
+            ~Resource() { std::cout << "звільнено " << name << std::endl; }
+        };
+
+        int main() {
+            {
+                auto u = std::make_unique<Resource>("A");   // єдиний власник
+                std::cout << "працюємо з " << u->name << std::endl;
+            }   // тут unique_ptr сам викликає delete
+
+            auto s1 = std::make_shared<Resource>("B");
+            std::cout << "лічильник: " << s1.use_count() << std::endl;
+            {
+                auto s2 = s1;                                // другий власник
+                std::cout << "лічильник: " << s1.use_count() << std::endl;
+            }   // s2 зникає, але B живий, бо лишився s1
+            std::cout << "лічильник: " << s1.use_count() << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        створено A
+        працюємо з A
+        звільнено A
+        створено B
+        лічильник: 1
+        лічильник: 2
+        лічильник: 1
+        звільнено B
+        ```
+
+        ### Explanation of each line of the example
+        - `std::make_unique<Resource>("A")` — we create an object in the heap with the **only** owner `u`.
+        - The closing `}` of the block - `u` is destroyed and **itself** frees `A` ("freed A"), without any `delete`.
+        - `std::make_shared<Resource>("B")` — object `B` with shared ownership; counter = 1.
+        - `auto s2 = s1;` — a copy of `shared_ptr` makes a **second** owner; `use_count()` shows 2.
+        - When `s2` disappears, the counter drops to 1, but `B` is **alive**; destroyed only at the end when `s1` disappears.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"memory","caption":"shared_ptr B: two owners s1 and s2 and a shared counter","stack":[{"name":"s1","ref":"obj"},{"name":"s2","ref":"obj"}],"heap":[{"id":"obj","value":"Resource \"B\" (reference counter = 2)"}],"note":"s1 and s2 are two shared_ptr that own ONE object B in the heap; a common link counter lives nearby (here 2). A copy of shared_ptr increases the counter, the disappearance of the owner decreases it. The object is destroyed exactly when the counter drops to 0. So when s2 goes out of scope, the counter becomes 1 — B is still alive, and will only be released with the last owner of s1."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Write `new`/`delete` together with smart pointers** - the point is precisely to forget about `delete`.
+        2. **Copy `unique_ptr`** - does not compile; it can only be **moved** (`std::move`).
+        3. **Cyclic `shared_ptr`** — mutual ownership → counters will not reset → leak; break loop via `weak_ptr`.
+        4. **Making a `shared_ptr` from a raw pointer that already belongs to someone** will lead to double freeing.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::string source = "data";
+        std::string target = std::move(source);
+        ```**Why it's here:** `std::move` allows you to move a resource instead of copying it. The old object is valid, but its value should not be assumed.
+
+        **Please Note:** Once moved, the old value must be reassigned or destroyed.
+
+        ### Summary
+        You've mastered **smart pointers** - RAII for dynamic memory freeing the object **automatically**, so manual `delete` goes away. **`unique_ptr`** - unique owner (not copied, only moved), direct replacement of `new`/`delete`; **`shared_ptr`** - shared ownership with reference counter, object lives as long as there is at least one owner (beware of loops - break them `weak_ptr`). Rule: default to `unique_ptr`, `shared_ptr` only under true shared ownership. Next, you'll learn exactly what it means to "copy" and "move" an object.
+      level: 4
+      tags:
+        - memory
+        - c++
+  - title: Copy and move
+    key: kopiyuvannya-i-peremishchennya
+    description: explain where the value lives and who is responsible for the
+      resource. recognize copying, sharing, and object lifetime.
+    order: 36
+    exerciseFocus: "a small example with a clear life time; verify a safe state
+      after an operation and not require manual memory inspection"
+    theory:
+      title: Copy and move
+      content: |-
+        ### Intuitive explanation
+        Imagine you have a heavy 2 GB file and you want to transfer it to a colleague. Two ways. **Copy** - Make a second duplicate file: now two files, but it takes a long time and takes up twice as much space. Or **move** - just drop the file itself into its folder: no duplication, almost instantly, you no longer have it.
+
+        C++ has exactly these two operations. **Copy** creates an independent duplicate with all resources - safe, but expensive for large objects. **Move** (move) — "steal guts": the new object **takes** an internal resource from the old one (for example, a pointer to data), leaving the old object valid but with an undefined value. The data is not copied anywhere - only the "ownership" is reset. That's why move is often **almost free**.
+
+        Before C++11, there was only copy, and programs wasted time making unnecessary copies of temporary objects. Move semantics is one of the most important innovations of modern C++: it makes returning large objects from functions and growing containers cheap.
+
+        ### What happens at runtime
+        Copying a large string allocates **new** memory and overwrites the entire contents there byte by byte. Moving just **transfers a pointer** to already existing data from the old object to the new one and resets the old object to zero - no copying of content.The **`std::move`** function starts the move. And here is the main misunderstanding of beginners: `std::move` itself **does not move anything**! It only **marks** the object as "temporary to steal from" (technically, results in an rvalue), thereby **allowing** the compiler to choose the move constructor instead of copy. All the work is already done in this constructor.
+
+        After the move, the old object remains in a **valid but undefined** state. This means: you can't use its **value** (for `std::string' it usually becomes empty, but you shouldn't rely on it), but you can **assign a new** value to it. Rule of thumb: after `std::move(x)`, treat `x' as "empty" until you put something new there.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <string>
+        #include <utility>
+
+        int main() {
+            std::string a = "великий рядок даних";
+            std::string b = a;                 // КОПІЯ: тепер дві незалежні пам'яті
+            std::cout << "після copy: a=\"" << a << "\", b=\"" << b << "\"" << std::endl;
+
+            std::string c = std::move(a);      // ПЕРЕМІЩЕННЯ: ресурси a перейшли до c
+            std::cout << "після move: c=\"" << c << "\"" << std::endl;
+            a = "нове значення";
+            std::cout << "a після повторного присвоєння: " << a << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        після copy: a="великий рядок даних", b="великий рядок даних"
+        після move: c="великий рядок даних"
+        a після повторного присвоєння: нове значення
+        ```
+
+        ### Explanation of each line of the example
+        - `std::string b = a;` — **copy**: `b` gets its own memory with duplicate content; `a` remains complete.
+        - After copy both - `a` and `b` - keep the same text **independently**.
+        - `std::string c = std::move(a);` allows you to select a move constructor. It moves the internal resource, but the specific representation of the object after the move is not part of the guarantee for the training code.
+        - `c` now holds the same text and content **wasn't copied** - just ownership exceeded.
+        - `a` after move is still valid, but its value should not be predicted. It can be reassigned or destroyed, but don't use the old text as the expected result.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"memory","caption":"std::string c = std::move(a); — the data pointer moves from a to c","stack":[{"name":"a after move","value":"valid but undefined state"},{"name":"c","ref":"buf"}],"heap":[{"id":"buf","value":"resource that now uses c (implementation details hidden)"}],"note":"Move usually moves a resource without copying its contents. The standard does not guarantee that a will become empty or that its internal pointer will equal nullptr. After move, don't rely on the old value of a: assign a new value or destroy the object."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Read object after `std::move`** — its value is undefined; assign a new one first.
+        2. **Think `std::move` moves** - no, it only allows move; the move constructor does the work.
+        3. **Forget to reset the stolen resource** in your own move-constructor — and get a double release.
+        4. **Copy where it is enough to move** — return/transfer heavy objects with copy instead of move.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::string source = "data";
+        std::string target = std::move(source);
+        ```**Why it's here:** `std::move` allows you to move a resource instead of copying it. The old object is valid, but its value should not be assumed.
+
+        **Please Note:** Once moved, the old value must be reassigned or destroyed.
+
+        ### Summary
+        You've broken down two fundamental operations: **copy** creates an independent duplicate (safe but expensive for large objects), and **move** “steals” an internal resource, leaving the old object valid but of undefined value (almost free). `std::move` itself doesn't move anything — it just **allows** the compiler to choose move instead of copy; after it, the old object is valid, but its value cannot be used. Move semantics make modern C++ fast. If your class manages the resource manually - remember the "rule of five", but it's best to trust `std::vector`/`unique_ptr`. Next are the lvalue and rvalue categories behind this mechanism.
+      level: 4
+      tags:
+        - memory
+        - c++
+  - title: Lvalue/Rvalue and reference
+    key: lvalue-rvalue-ta-posylannya
+    description: explain where the value lives and who is responsible for the
+      resource. recognize copying, sharing, and object lifetime.
+    order: 37
+    exerciseFocus: "a small example with a clear life time; verify a safe state
+      after an operation and not require manual memory inspection"
+    theory:
+      title: Lvalue/Rvalue and reference
+      content: |-
+        ### Intuitive explanation
+        In the last topic, you saw move semantics, but the question remained: **how** does the compiler know when it is safe to steal resources, and when it is necessary to copy? The answer is that every expression in C++ falls into one of two categories—and that's all there is to it.
+
+        - **lvalue** - something that has **name and address** lives longer than one expression. Variable `x`, element `v[0]`. You can take the address (`&x`) from him, you can assign it. Historical hint: the "l" of *left* is something that can stand **to the left** of `=`.
+        - **rvalue** is an unnamed **temporary** value that will disappear at the end of the expression. Result `2 + 3`, `name + "!"`, unnamed `std::string("hi")`. He does not have an address, it is "disposable".
+
+        Why distinguish it? Here's the key idea: it's **dangerous** to steal resources from an **lvalue** — it will still be used later. But in **rvalue**, you can and should: it will die in a moment anyway, so robbing it is impunity and profitable. It is this difference that enables cheap displacement.
+
+        ### What happens at runtime
+        The compiler determines the category at the compilation stage and after it **chooses which function to call**. A new tool appears, the **rvalue-reference** `T&&` (two ampersands), which binds **only to the rvalue**. Now the function can be overloaded with two versions: one accepts `const T&` (lvalue - copy), the other `T&&` (rvalue - steal/move).When you pass a variable with a name - the compiler sees the lvalue and chooses a safe copy version. When you pass a temporary expression, it chooses the cheap move version. Everything is automatic, without your intervention. In the example, the same `reveal` causes different overloads depending on the category of the argument.
+
+        And here `std::move` from the previous topic becomes clear: it **doesn't move anything**, but only **brings lvalue to rvalue** — that is, forces the compiler to treat the named variable as if it were temporary and choose the move version. Therefore, `reveal(std::move(name))' goes into the rvalue overload, even though `name' is a regular variable.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <string>
+
+        void reveal(const std::string& s) { std::cout << "lvalue: " << s << std::endl; }
+        void reveal(std::string&& s)      { std::cout << "rvalue: " << s << std::endl; }
+
+        int main() {
+            std::string name = "Іван";
+            reveal(name);                 // name — lvalue (має ім'я й адресу)
+            reveal("тимчасовий");         // безіменний тимчасовий -> rvalue
+            reveal(name + "!");           // результат виразу -> rvalue
+            reveal(std::move(name));      // std::move робить name rvalue
+            return 0;
+        }
+        ```Output:
+        ```
+        lvalue: Іван
+        rvalue: тимчасовий
+        rvalue: Іван!
+        rvalue: Іван
+        ```
+
+        ### Explanation of each line of the example
+        - `reveal(name)` — `name` has name and address → **lvalue** → `const std::string&` overload selected.
+        - `reveal("temporary")` is an unnamed temporary object → **rvalue** → overload of `std::string&&`.
+        - `reveal(name + "!")` — the result of the expression is also temporary → **rvalue**.
+        - `reveal(std::move(name))` — `std::move` brings lvalue to rvalue → rvalue-version again.
+        - The name `reveal' is the same, but the calls are different - the value category was determined by the compiler.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"There are two overloads reveal(const std::string&) prints \"lvalue\" and reveal(std::string&&) prints \"rvalue\". std::string s = \"hi\"; reveal(s); What will be printed?","options":["rvalue","lvalue","Ambiguity error","Both"],"answer":1,"explanation":"s is a variable with a name and an address, i.e. an lvalue. The compiler chooses an overload for lvalue — reveal(const std::string&) — and prints \"lvalue\". To get into the rvalue version, you need to pass a temporary expression or wrap the variable in std::move(s). It is the category of the value (lvalue vs rvalue), not the type, that decides which overload to call."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Confuse `&` and `&&`** — `&` is an lvalue-reference (normal), `&&` is an rvalue-reference.
+        2. **Think `std::move` moves** - it only converts an lvalue to an rvalue (casting a category).
+        3. **Binding `T&&` to a regular variable** without `std::move` will not work: the variable with the name is an lvalue.
+        4. **Taking `&&` as magic** is just a way of saying "here I accept a temporary to steal from".
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::string source = "data";
+        std::string target = std::move(source);
+        ```**Why it's here:** `std::move` allows you to move a resource instead of copying it. The old object is valid, but its value should not be assumed.
+
+        **Please Note:** Once moved, the old value must be reassigned or destroyed.
+
+        ### Summary
+        You have reached the foundation of move semantics: every expression in C++ is an **lvalue** (has a name and an address, lives on) or an **rvalue** (temporary, one-time). It is safe to steal resources in an rvalue, so the rvalue reference `T&&` allows you to overload the function with a cheap move version for temporary objects and a safe copy version for named ones. `std::move` is simply casting an lvalue to an rvalue, not a move per se. Distinguish between `&` (lvalue reference) and `&&` (rvalue reference). Next are the class members common to all objects: `static`.
+      level: 4
+      tags:
+        - memory
+        - c++
+  - title: Static members and functions
+    key: statychni-chleny-i-funktsii
+    description: extract repetitive logic into a comprehensible abstraction. explain
+      data flow through parameters, return, or iteration.
+    order: 38
+    exerciseFocus: "one script with a clear value stream; not to require individual
+      unit tests instead of a complete program"
+    theory:
+      title: Static members and functions
+      content: |-
+        ### Intuitive explanation
+        Usually, each object of the class has its **own** fields: each bank account has its own balance, each widget has its own `id`. But sometimes you need something **common to all** objects at once. For example: "how many widgets are created in the program?". This number does not belong to any particular widget - it is shared by **the entire class**.
+
+        That's what `static' is for. A **static field** belongs to a **class**, not a single object: it exists in a **single instance**, no matter how many objects you create. Imagine a school journal: each student has their own row of grades (regular field), but the "total students in the class" counter is one for all (static field).
+
+        There are **static methods**. A normal method works with a specific object (has a hidden `this`). And the static method `this` **does not have** — it is not bound to the object and is called via the class name: `Widget::howMany()`. It's logical: to ask "how many widgets are there?", you don't need any specific widget.
+
+        ### What happens at runtime
+        A static field does not live inside objects, but in a separate, single memory location, and exists throughout the program's runtime (as a global variable, but "locked" in a class). Therefore, when any object changes the `static' field, the change **is seen by everyone** - they are looking at the same cell.This is where the infamous rookie trap lurks, which keeps the code from linking. The `static int count;` line in the class is just a **declaration** ("such a field exists"). And the memory itself for it must be **allocated separately**, outside the class: `int Widget::count = 0;`. Without this line, the compiler will skip the file, but the **linker** won't find where `count` actually lives and will issue "undefined reference". This definition is written once, in one `.cpp`.
+
+        A classic use is just such an object counter: the constructor increments the shared `count`, and at any time you can ask how many objects there are. But don't overdo it: `static' is effectively a controlled global variable, and global state makes testing difficult, so use it deliberately.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+
+        class Widget {
+            static int count;      // спільний для всіх об'єктів
+            int id;
+        public:
+            Widget() { id = ++count; }               // кожен новий об'єкт збільшує лічильник
+            int getId() const { return id; }
+            static int howMany() { return count; }   // статичний метод: без this
+        };
+
+        int Widget::count = 0;    // обов'язкове визначення поза класом
+
+        int main() {
+            Widget a, b;
+            std::cout << "a.id = " << a.getId() << ", b.id = " << b.getId() << std::endl;
+            Widget c;
+            std::cout << "Усього віджетів: " << Widget::howMany() << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        a.id = 1, b.id = 2
+        Усього віджетів: 3
+        ```
+
+        ### Explanation of each line of the example
+        - `static int count;` — declaration of a common counter field (one for the entire class).
+        - `int id;` is a regular field: each object has its own.
+        - `Widget() { id = ++count; }` - the constructor first increments the **shared** `count`, then gives the object a unique `id`.
+        - `int Widget::count = 0;` — **required** definition outside the class; without it - a linking error.
+        - `Widget::howMany()` — static method called via **class name**, without an object; returns `3`.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"The widget has a static int count that the constructor increments. We create Widget a, b, c; What will Widget::howMany() return?","options":["1","3","0","each has its own meaning"],"answer":1,"explanation":"count is a static field common to ALL objects, it exists in a single instance. Each of the three constructors (a, b, c) increased the same count, so it is equal to 3. Unlike the usual id field (each has its own), the static field is one for the entire class, and all objects see it."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Do not define a static field outside the class** — "undefined reference" from the linker.
+        2. **Refer to normal field from static method** - it doesn't have `this`, so `id` is not available there.
+        3. **Confuse access** - it is more natural to call a static member via `Widget::` rather than via an object.
+        4. **Abusing `static'** as a global state makes testing difficult and hides dependencies.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        int doubleValue(int value) {
+            return value * 2;
+        }
+        ```**Why it's here:** A function has a result type, a parameter, and a body.
+
+        **Note:** A reference or pointer in a parameter changes the data transfer rules.
+
+        ### Summary
+        You've figured out `static' in classes: a **static field** belongs to a class, not an object, exists in a single instance and is shared by all (a classic example is an object counter), and a **static method** doesn't have a `this' and is called by the class name. The main practical pitfall is that the static field must be **defined outside the class** (`int Widget::count = 0;`), otherwise the program will not be linked. Use `static' deliberately, as it is a form of global state. Next, we will return to enumerations and the safe `enum class`.
+      level: 4
+      tags:
+        - abstraction
+        - c++
+  - title: Enum and enum class
+    key: enum-ta-enum-class
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 39
+    exerciseFocus: "one key idea of ​​C++ with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: Enum and enum class
+      content: |-
+        ### Intuitive explanation
+        You have already met `enum class` in the topic about `switch`. Now let's figure out **why** modern C++ insists on it so much and what caused the old, "simple" `enum'.
+
+        The old `enum` had two hidden mines. First: its values ​​are actually just **masked numbers** that are **implicitly** converted to `int'. So nonsense like `if (color == 5)` or `if (color == direction)` (compare the color with the direction!) was easily compiled - both are "numbers". The second: the names "leaked" into the surrounding area. Declared `enum Color { Red, ... }` and `enum Fruit { Apple, Red, ... }` - conflict: two `Red`.
+
+        **`enum class`** (a strong, "closed" enumeration) cures both ills. Its value is a **separate type** that **does not mix** with numbers automatically, and the names are **locked** inside: they are only accessed via `Color::Red`, so two different enums with the same name coexist peacefully. It is both safer (the compiler catches pointless comparisons) and cleaner. The rule of thumb in modern C++ is simple: almost always take `enum class'.
+
+        ### What happens at runtime
+        The `enum class` only exists for the compiler - under the hood it's still an integer, so no runtime overhead. But the compiler **keeps track of the type**: it **will not** accidentally compare `Direction` to `int` or to another enum, and it will not convert the value to a number "behind the back".Because of this, when you **really** need a numeric value (say, an index or a code to save), you must request the conversion **explicitly** via `static_cast<int>(d)`. This is not unnecessary bureaucracy, but the meaning of the whole structure: the transformation occurs only where you consciously wrote it, and not silently everywhere. Therefore, it is not possible to output `enum class` directly through `std::cout` - either write `static_cast<int>` or your own function that returns text (like `toText` in the example).
+
+        The values ​​are numbered from zero by default (`North` = 0, `East` = 1, ...), but can be set explicitly if necessary: ​​`enum class Code { Ok = 200, NotFound = 404 };`. You can even specify the base type: `enum class Small : char { ... }`.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+
+        enum class Direction { North, East, South, West };
+
+        const char* toText(Direction d) {
+            switch (d) {
+                case Direction::North: return "північ";
+                case Direction::East:  return "схід";
+                case Direction::South: return "південь";
+                case Direction::West:  return "захід";
+            }
+            return "?";
+        }
+
+        int main() {
+            Direction d = Direction::East;
+            std::cout << "Напрямок: " << toText(d) << std::endl;
+
+            int code = static_cast<int>(d);   // явне перетворення на число
+            std::cout << "Код напрямку: " << code << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        Напрямок: схід
+        Код напрямку: 1
+        ```
+
+        ### Explanation of each line of the example
+        - `enum class Direction { ... };` — four named directions as a **separate** type.
+        - `Direction d = Direction::East;` — access to the value must be via `Direction::`.
+        - `switch (d)` in `toText` - safely match values ​​with names and return text.
+        - `static_cast<int>(d)` — we **explicitly** ask for a numeric value; `East' is second in the list, so `1'.
+        - Without `static_cast`, `d` will **not be converted** to `int` itself - this is what protects against errors.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"enum class Direction { North, East, South, West }; Direction d = Direction::East; if (d == 1) { ... } What happens?","options":["The condition is true","The condition is false","Compilation error","d will become 1"],"answer":2,"explanation":"enum class is a separate type that does NOT convert to int implicitly. Therefore, comparing d == 1 (Direction vs. int) does not make sense to the compiler and does not compile. This is how the enum class catches an error at the assembly stage. To compare with a number, you would have to write static_cast<int>(d) == 1 - but then you clearly see what you are doing."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Compare `enum class` to a number** (`d == 1`) - doesn't compile (and that's a good thing - it's often a bug).
+        2. **Output `enum class` directly** via `std::cout` - requires `static_cast<int>` or function-text.
+        3. **Forget the type prefix** — write `East' instead of `Direction::East'.
+        4. **Pull the old `enum'** for no reason — you lose type safety and catch name conflicts.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        enum class Status { Ready, Done };
+        Status status = Status::Ready;
+        ```**Why it's here:** The `enum class` does not pollute the external namespace with implicit integer values.
+
+        **Note:** Use a scoped enum for cleaner type-safe code.
+
+        ### Summary
+        You see why modern C++ chooses the **`enum class'** over the old `enum': its value is a separate type that **doesn't mix** with numbers implicitly, and names are **locked** and only accessible through `Type::Value' (no conflicts and random comparisons). When you want a number, ask for it **explicitly** via `static_cast<int>`, and it is this explicitness that makes the code safe. There are no costs during execution. Then there are the calculations that take place even before launch: `constexpr` and compile-time.
+      level: 4
+      tags:
+        - practice
+        - c++
+  - title: constexpr and compile-time
+    key: constexpr-ta-compile-time
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 40
+    exerciseFocus: "one key idea of ​​C++ with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: constexpr and compile-time
+      content: |-
+        ### Intuitive explanation
+        Imagine that your program has the expression `60 * 60 * 24` (seconds in a day). Each time the processor is launched, it honestly multiplies these numbers - although the answer `86400` is known **in advance** and will never change. Useless work in runtime. And what, how to entrust this multiplication to the **compiler** so that the ready-made `86400' gets into the finished program?
+
+        This is what **`constexpr`** ("constant expression" — a constant expression) turns on. With it, you tell the compiler: "this can be calculated **even before startup**, during compilation." And the compiler calculates itself, and inserts the finished result into the program. It is faster (the work is already done) and safer (the error in the calculation is visible on the compilation).
+
+        The most beautiful thing is `constexpr'-**functions**: the same function can work in two modes. If the arguments are known at compilation, it will be calculated there and will give a constant. If the arguments become known only in the runtime, it will work calmly as a normal function. One code, two worlds.
+
+        ### What happens at runtime
+        The key difference from regular `const` is that `const` says "this value will **not change** after initialization", but it could be computed at runtime. And `constexpr` is a stronger promise: "it can be computed **at compile time**". Every `constexpr` is a `const`, but not vice versa.Practical force is where the value **must** be known to the compiler. The most striking example is **the size of the array on the stack**: `int arr[factorial(4)];`. The size of such an array must be a compile-time constant, and the `constexpr' function gives it. Likewise, `constexpr' is good for precomputed lookup tables and any constants that you don't want to calculate at runtime.
+
+        In the example, one function `factorial` works three times differently: `factorial(5)` and `factorial(4)` are calculated by the compiler **itself** (for the constant and the size of the array), and `factorial(n)`, where `n` came from the input, is executed already **at startup**. This is the same "ambivalence" of constexpr. Historically, `constexpr` was a type-safe, more powerful replacement for the old `#define` macros.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+
+        constexpr long factorial(int n) {     // може рахуватися на компіляції
+            long r = 1;
+            for (int i = 2; i <= n; ++i) r *= i;
+            return r;
+        }
+
+        int main() {
+            constexpr long f5 = factorial(5);   // обчислено ЩЕ до запуску
+            int arr[factorial(4)];              // розмір масиву = 24 (відомий на компіляції)
+
+            std::cout << "5! = " << f5 << std::endl;
+            std::cout << "розмір масиву (4!) = " << sizeof(arr) / sizeof(int) << std::endl;
+
+            int n;
+            std::cin >> n;
+            std::cout << n << "! = " << factorial(n) << std::endl;  // та сама функція, але в рантаймі
+            return 0;
+        }
+        ```Output (for entered `6`):
+        ```
+        5! = 120
+        розмір масиву (4!) = 24
+        6! = 720
+        ```
+
+        ### Explanation of each line of the example
+        - `constexpr long factorial(int n)` is a function that **can** be calculated at compile time.
+        - `constexpr long f5 = factorial(5);` — the compiler calculated `120` itself; became part of the program.
+        - `int arr[factorial(4)];` — array size = `24`; it only works because the value is known at compile time.
+        - `factorial(n)`, where `n` is from `cin` - the same function is already executed **in runtime** (the argument is unknown in advance).
+        - One factorial code serves both worlds: compile-time and runtime.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"constexpr int sq(int x){return x*x;} Which line does NOT compile?","options":["constexpr int a = sq(4);","int arr[sq(3)];","int n; std::cin >> n; int arr2[sq(n)];","std::cout << sq(5);"],"answer":2,"explanation":"The size of the array on the stack must be a compile-time constant. On the third line, n is read from cin — its value is known only at runtime, so sq(n) is not a constexpr expression, and arr2[sq(n)] does not compile. The rest of the lines are correct: sq(4) and sq(3) are calculated on compilation, and sq(5) in cout is just a function call."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Confuse `constexpr` with `const`** - `const` only "will not change", `constexpr` is "known at compilation".
+        2. **Wait for compile-time result from runtime-arguments** — with `cin'-data the function just works as usual.
+        3. **Put side effects in the `constexpr' function** (input/output) - this is not possible, it must be "clean".
+        4. **Set the size of the array with an ordinary variable** - the `constexpr' table is required.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        constexpr int LIMIT = 10;
+        ```**Why it's here:** A constant fixes a value that should not change during program execution.
+
+        **Note:** Compile-time calculation is only possible for expressions that conform to the rules of a specific language.
+
+        ### Summary
+        You learned how to transfer calculations **from runtime to compilation** via `constexpr`: the compiler calculates constant expressions itself and inserts ready-made values - faster and safer. `constexpr` is stronger than `const`: not just "immutable", but "compile-known", so it works even for array sizes. `constexpr' functions are double-edged: with pre-known arguments they are counted on compilation, with runtime arguments they work as usual. This is a type-safe replacement for `#define` macros, which is discussed in the next topic.
+      level: 4
+      tags:
+        - practice
+        - c++
+  - title: Preprocessor and macros
+    key: preprotsesor-i-makrosy
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 41
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: Preprocessor and macros
+      content: |-
+        ### Intuitive explanation
+        Before the compiler sees your code, a **preprocessor** — a simple text editor that executes `#' directives — will work on it. You already use it every day: `#include` is its ``insert header text here'' command. It works **before** compilation and **doesn't understand** anything about C++ - just cut and paste text like "find/replace" in an editor.
+
+        Its main tool is `#define'. `#define PI 3.14159` says: "replace `PI` with `3.14159` everywhere else." It looks comfortable. But here lies the trap that made macros infamous: the preprocessor is **blind to types and meaning**. He does not calculate, does not check - only **stupidly replaces the text**.
+
+        This is most clearly visible on the macro "functions". `#define SQUARE(x) x * x` looks like a function, but it's just a text replacement. The call `SQUARE(2 + 3)` is not expanded into a ``square of five'', but literally into the text `2 + 3 * 2 + 3` - and because of the priority of multiplication gives `11` instead of `25`. The function of such a surprise will never suit.
+
+        ### What happens at runtime
+        More precisely — **before** compilation: the preprocessor works first, substituting `#include` and `#define` texts and processing conditional directives. There are no more macros in the machine code — the result of the substitution remains.Because substitution is **pure text**, macros do not obey any language rules: they have no type, they respect no scope, they ignore operation priorities. Hence two classic traps. The first is **missing parentheses**: the more correct macro `#define SQUARE(x) ((x) * (x))` with parentheses around each `x` and the entire expression saves from the `2 + 3` mess. The second is that macros are **global** and "poison" all names: `#define max ...` will break any `max` method you have.
+
+        That is why modern C++ advises: for constants, take **`constexpr'** (type-safe, respects scope) instead of `#define PI', and instead of macro-functions - regular ``inline'' or template functions. The preprocessor is left for what it does well: `#include`, include-guards (`#pragma once`) and **conditional compilation** (`#ifdef DEBUG ... #endif`) for different platforms or build modes.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+
+        #define SQUARE(x) x * x          // небезпечний макрос без дужок
+
+        int square(int x) { return x * x; }   // безпечна функція
+
+        int main() {
+            std::cout << "SQUARE(2 + 3) = " << SQUARE(2 + 3) << std::endl;  // текст: 2 + 3 * 2 + 3
+            std::cout << "square(2 + 3) = " << square(2 + 3) << std::endl;  // функція: (5)^2
+            return 0;
+        }
+        ```Output:
+        ```
+        SQUARE(2 + 3) = 11
+        square(2 + 3) = 25
+        ```
+
+        ### Explanation of each line of the example
+        - `#define SQUARE(x) x * x` — text replacement; no calculations, just substitution.
+        - `SQUARE(2 + 3)` expands to **text** `2 + 3 * 2 + 3` = `2 + 6 + 3` = `11` - not a square at all!
+        - `int square(int x)` is a real function: the argument `2 + 3 = 5` is evaluated first, then `5 * 5`.
+        - `square(2 + 3)` gives the correct `25`, because the function respects priorities and types.
+        - The difference `11` against `25` is the obvious price of the preprocessor's "blindness".
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"cpp","question":"The macro should count the square, but SQUARE(2 + 3) gives 11 instead of 25. Where is the root of the problem?","lines":["#define SQUARE(x) x * x","// ...","int r = SQUARE(2 + 3);","// препроцесор підставляє: 2 + 3 * 2 + 3","// = 2 + 6 + 3 = 11"],"buggyLine":1,"explanation":"A macro is a pure text substitution without regard to priorities. SQUARE(2 + 3) expands to 2 + 3 * 2 + 3, where the multiplication is done first, resulting in 11. Missing parentheses: correct #define SQUARE(x) ((x) * (x)). Or even better — a normal function or pattern that is not at risk of such a trap at all."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Macro without parentheses** - `#define SQUARE(x) x*x` breaks on compound arguments.
+        2. **`#define` for constants** instead of `constexpr` — you lose types and scope.
+        3. **Macro-functions** instead of `inline`/templates — hidden text substitution with side effects.
+        4. **Global macro names** (`max`, `min`) - conflict with your functions throughout the project.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::lock_guard<std::mutex> lock(mutex);
+        sharedValue++;
+        ```**Why it's here:** `lock_guard` automatically grabs the mutex and releases it at the end of the scope.
+
+        **Note:** Protect shared state with the same rule across all threads.
+
+        ### Summary
+        You have disassembled the **preprocessor** — a text editor that works **before** compilation (`#include`, `#define`, `#ifdef`). Its `#define` does **blind text replacement** regardless of types and precedence, so macro functions without parentheses give sneaky errors (`SQUARE(2 + 3)` → `11`). Modern C++ advises `constexpr` instead of macro-constants and `inline`/template functions instead of macro-functions, and leaves the preprocessor for `#include`, include-guards and conditional compilation. Next, how a finished program is assembled from many files and libraries.
+      level: 4
+      tags:
+        - concurrency
+        - c++
+  - title: Compilation of the project and linking
+    key: skladannya-proyektu-ta-linkuvannya
+    description: explain how parts of a program find and use each other. separate
+      application code from environment settings.
+    order: 42
+    exerciseFocus: "work through a single file and stdout if the theme does not have
+      a judgeable API; not require creating files or IDEs"
+    theory:
+      title: Compilation of the project and linking
+      content: |-
+        ### Intuitive explanation
+        When you hit run, there's a real pipeline going on behind the scenes that turns your text into a working program. Understanding it isn't a quirk, it's a super powerful diagnostic skill: most "obscure" errors become obvious once you know **at what stage** they occurred.
+
+        Imagine assembling a car at a factory. First, each part is manufactured **separately** on its own line (compiling each `.cpp` into its own object file). Then all parts are brought to the **final assembly** and twisted together (linking object files into the executable). These are two **different** workshops with different problems: at the first one they catch a defective cog (an error in one file), at the second one - that the parts do not fit together or that something is missing.
+
+        The key idea is that **each `.cpp` is compiled by itself** without knowing anything about the others. He believes the announcement ("there is such a function somewhere") and moves on. And he sews everything together, substituting the real addresses of the functions, until the end — **linker**.
+
+        ### What happens at runtime
+        More precisely, during **assembly**, in three consecutive steps. **Preprocessor** processes `#include`/`#define` (inserts texts). The **compiler** turns each finished unit into a machine code object file, checking syntax and types. The **linker** combines all object files **and libraries** into a single executable, substituting addresses for declarations.Hence, there are two fundamentally different classes of errors, and the ability to distinguish between them saves hours:
+        - **Compilation errors** - inside one file: typo, unknown type, `std::cot` instead of `std::cout`. The compiler will explicitly specify the string.
+        - **Linking errors** — between files: classic `undefined reference' (the function was **declared**, but its body is nowhere - they forgot to add `.o' or the library) and `multiple definition' (the same body got into two units).
+
+        Separately, about **libraries**: someone else's ready-made code is also connected at the linking stage (with the `-l` flag). Forgot to specify the required library — and again `undefined reference', although your code is flawless. Therefore, multi-file projects are usually compiled not by hand, but by assembly systems (CMake, Make), which themselves monitor the order and dependencies.
+
+        ### Minimal code example
+        The project consists of two files: `greet.cpp` (implementation) and `main.cpp` (call). Manual assembly shows both shops:
+        ```bash
+        # крок 1 — компіляція кожного .cpp окремо в об'єктний файл
+        g++ -std=c++17 -c greet.cpp -o greet.o
+        g++ -std=c++17 -c main.cpp  -o main.o
+
+        # крок 2 — лінкування об'єктних файлів у програму
+        g++ greet.o main.o -o app
+        ```Running `./app` gives:
+        ```
+        Вітаю, команда!
+        ```And if in step 2 **forget** `greet.o` (`g++ main.o -o app`), the linker will issue:
+        ```
+        undefined reference to `greet(std::string const&)'
+        ```
+
+        ### Explanation of each line of the example
+        - `g++ -c greet.cpp -o greet.o` - flag `-c` says "compile only, **not** link"; an object file is output.
+        - `g++ -c main.cpp -o main.o` — `main.o` is compiled **separately**, believing the `greet` declaration.
+        - `g++ greet.o main.o -o app` — the linker stitches together both object files; now `main` finds the body of `greet`.
+        - Launch gives "Congratulations, Team!" — the details collided.
+        - Missed `greet.o` → `undefined reference`: the body of `greet` was nowhere to be found - this is a **linking** error, not a compilation error.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"main.cpp compiles correctly in main.o (everything is declared correctly), but when command g++ main.o -o app (without greet.o) the build crashes. What kind of error is this?","options":["Compilation error - syntax","Linking error — undefined reference to greet","Startup error","Warning, the program will still compile"],"answer":1,"explanation":"main.cpp compiles successfully because it trusts the greet declaration. But the body of greet lies in greet.cpp/greet.o, which was not added to the linking command. So the linker doesn't find the implementation and throws an undefined reference — it's a LINKING error, not a compilation error. Solution: Add greet.o (or the required library) to the g++ command."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forget the `.o` file when linking** — `undefined reference', although the code is correct.
+        2. **Do not specify the library** (`-l...`) is the same as `undefined reference` to functions from the library.
+        3. **Duplicate the function body** in two units — `multiple definition' from the linker.
+        4. **Confuse error classes** — look for a linking error in the syntax of one file (and vice versa).
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::ifstream file("notes.txt");
+        std::string line;
+        std::getline(file, line);
+        ```**Why it's here:** `ifstream` opens a file and `getline` reads a line.
+
+        **Note:** Make sure the file is actually opened.
+
+        ### Summary
+        You have disassembled the C++ build pipeline: **preprocessing** → **compilation** of each `.cpp` into a separate object file → **linking** object files and libraries into an executable. The most valuable practical conclusion is to distinguish between **compilation errors** (within one file: syntax, types) and **linking errors** (`undefined reference' - missing body or library; `multiple definition' - duplicate body). This difference instantly narrows the search for the cause. Large projects are compiled with build systems like CMake. Next, how to make the program do several things at the same time through threads.
+      level: 4
+      tags:
+        - tooling
+        - c++
+  - title: "Concurrency: std::thread"
+    key: paralelnist-std-thread
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 43
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: "Concurrency: std::thread"
+      content: |-
+        ### Intuitive explanation
+        Until now, your programs have done one thing at a time: line by line, top to bottom. But in a computer, several processor cores are several workers that can work **simultaneously**. It is much faster to have one worker move the bricks while the other one mixes the mortar than to do it one at a time.
+
+        **`std::thread`** is "hire one more worker". You give a thread a function, and it starts executing **in parallel** with the rest of the program, on another core. A classic application is to split a large independent task into parts: one thread gets half the array, the other gets half the array, and then sums up the results. Two halves are calculated at the same time - the work is twice as fast.
+
+        But parallelism is a double-edged sword. Along with speed come two fundamentally new classes of problems that didn't exist in sequential code: you have to **wait** for workers (otherwise the program will continue without a result), and you have to **prevent them from colliding** on shared data. The first is the topic of this topic, the second is the next one.
+
+        ### What happens at runtime
+        `std::thread t(func, args...)` **immediately** runs `func` in a new thread and immediately returns control - the main thread flies on without waiting. Therefore, the thread must be **joined** via `t.join()`: this call **blocks** the parent thread until the child has completed. They forgot `join()` (and did not call `detach()`) — and when the `std::thread` object is destroyed, the program will **crash**. This is not advice, but a requirement.The second fundamental thing is **non-determinism**. You do not know in advance the order in which the actions of the various streams will be performed: today the first one has time earlier, tomorrow the second one. Therefore, you cannot rely on order. That is why in the example, each thread writes the result in **its separate** cell `partial[idx]`, and the main thread compiles them **after** `join()` - so the result is deterministic and correct.
+
+        But if two threads wrote to **one** variable **without** protection, a **data race** would occur: an unpredictable, "floating" bug that sometimes gives the correct answer, and sometimes not. To protect shared data, there is a `mutex' (next topic). Rule of thumb: divide work so that threads touch **different** data, and synchronize shared work.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <thread>
+
+        long long partial[2];   // кожен потік пише у власну клітинку — без гонок
+
+        void sumRange(int idx, long long from, long long to) {
+            long long s = 0;
+            for (long long i = from; i <= to; ++i) s += i;
+            partial[idx] = s;
+        }
+
+        int main() {
+            std::thread t1(sumRange, 0, 1, 500000);        // перша половина
+            std::thread t2(sumRange, 1, 500001, 1000000);  // друга половина
+            t1.join();                                     // чекаємо обидва потоки
+            t2.join();
+            std::cout << "Сума 1..1000000 = " << (partial[0] + partial[1]) << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        Сума 1..1000000 = 500000500000
+        ```
+
+        ### Explanation of each line of the example
+        - `long long partial[2];` - two **separate** cells: each thread has its own, so there are no races.
+        - `std::thread t1(sumRange, 0, 1, 500000);` — start the first thread; it counts the amount `1..500000` in parallel.
+        - `std::thread t2(...)` — the second thread counts the second half at the same time.
+        - `t1.join(); t2.join();` — **must** wait for both to complete before reading the results.
+        - `partial[0] + partial[1]` — add parts **after** join; sum `1..1000000` = `500000500000`.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"The main thread runs std::thread t(compute), reads the result immediately, and does NOT call t.join() before reading. What's wrong?","options":["Everything is fine","Race: the main thread can read the result before t counts it; plus without join the program will crash","The compiler will not allow it","t will automatically wait"],"answer":1,"explanation":"std::thread starts in parallel and immediately gives up control - the main thread flies on and can read the result BEFORE the child has calculated it. Need t.join() before reading to wait for completion. In addition, if join() (or detach()) is not called at all, destroying the std::thread object will crash the program."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forget `join()`/`detach()`** - the program will crash when the thread is destroyed.
+        2. **Read the result before `join()`** - the main thread will overtake the child and take the uncounted result.
+        3. **Write to a shared variable without synchronization** - data race, "floating" bugs.
+        4. **Generate thousands of streams** — creation overhead will eat up all the profit; of threads should be close to the number of cores.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::lock_guard<std::mutex> lock(mutex);
+        sharedValue++;
+        ```**Why it's here:** `lock_guard` automatically grabs the mutex and releases it at the end of the scope.
+
+        **Note:** Protect shared state with the same rule across all threads.
+
+        ### Summary
+        You learned how to start parallel execution via **`std::thread`**: you give a thread a function - and it runs concurrently with the rest of the program on another core. Two ironclad rules: be sure to **join** the thread (`join()`) or crash; and be aware of **nondeterminism** - the execution order of the threads is unpredictable, so read results only after `join()`. The safest thing to do is to give streams **different** data (like separate cells in the example). When shared data cannot be avoided, it must be protected - this is the topic of the next topic, `mutex'.
+      level: 4
+      tags:
+        - concurrency
+        - c++
+  - title: "Synchronization: mutex"
+    key: synkhronizatsiya-mutex
+    description: to distinguish sequence, competition and parallelism. explain where
+      an application transfers control or waits for a resource.
+    order: 44
+    exerciseFocus: "show one order/sync property; do not rely on the random order of
+      threads in expected output"
+    theory:
+      title: "Synchronization: mutex"
+      content: |-
+        ### Intuitive explanation
+        In the last thread you saw a hint of the dreaded word "data race". Let's figure out why she is so insidious. Imagine that `counter++` is actually **three** actions: read value, add one, write back. Now two threads do this "simultaneously": both read `5`, both added and wrote `6`. Two increments — and one result! One value is **lost**. And this happens only sometimes, depending on the timing - that's why such bugs are caught for a hell of a long time.
+
+        The reason is that the shared data does not change "instantly", but in several steps, and threads can get **jammed** in the middle of someone else's operation. The solution is to make the critical section **indivisible**: while one thread is working on it, the others are **waiting**.
+
+        This is what gives **`mutex`** (from "mutual exclusion" — mutual exclusion). It's like the key to the one and only toilet cubicle: whoever entered locked it, the rest stand in line, and only when he leaves and gives the key does the next one enter. The cabin (shared data) is occupied by **exactly one** thread at each moment.
+
+        ### What happens at runtime
+        The mechanics are simple: before accessing shared data, a thread **grabs** a mutex (`lock`). If it is free, the stream enters and works; if it is already occupied by another, the thread **blocks and waits** until it frees it. After work, the mutex is **released** (`unlock'), and the next one in line enters. So the critical section is performed strictly in turn — the race disappears.But manual `lock()`/`unlock()` are dangerous: forget to `unlock` (or throw an exception in the middle) — the mutex will remain locked **forever**, and all other threads will hang. A familiar feeling? This is the same problem as with manual `delete`. And the solution is the same - **RAII**: `std::lock_guard` grabs the mutex on creation and **automatically** releases it in its destructor when it goes out of scope. You cannot physically forget `unlock`.
+
+        The main danger of mutexes is **mutual deadlock**: thread A holds mutex 1 and waits for mutex 2, while thread B holds mutex 2 and waits for mutex 1 - both are frozen forever. A classic tip: if you need multiple mutexes, grab them **always in the same order**. And also: keep the critical section **as short as possible** - do everything that does not touch shared data **out** of the lock so as not to slow down other threads.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <thread>
+        #include <mutex>
+
+        std::mutex m;
+        long long counter = 0;
+
+        void addMany() {
+            for (int i = 0; i < 100000; ++i) {
+                std::lock_guard<std::mutex> lock(m);   // лише один потік у цій зоні за раз
+                ++counter;                             // безпечно
+            }   // lock_guard сам відпускає mutex наприкінці кожної ітерації
+        }
+
+        int main() {
+            std::thread t1(addMany);
+            std::thread t2(addMany);
+            t1.join();
+            t2.join();
+            std::cout << "counter = " << counter << " (очікувано 200000)" << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        counter = 200000 (очікувано 200000)
+        ```
+
+        ### Explanation of each line of the example
+        - `std::mutex m;` is the ``key'' that protects the shared `counter`.
+        - `std::lock_guard<std::mutex> lock(m);` — capture the mutex; other threads will wait here.
+        - `++counter;` is a critical section: it is guaranteed **one** thread at a time, so no increment is lost.
+        - The closing `}` of iterations — `lock_guard` is destroyed and **itself** releases the mutex (RAII).
+        - The result is exactly `200000` (2 × 100000) — without mutex, it would almost always be **less** due to lost increments.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"Two threads execute ++counter 100,000 times each WITHOUT mutex (shared counter). What is the most likely outcome?","options":["Exactly 200,000","Often LESS than 200,000 and varies from launch to launch","Always 100,000","Compilation error"],"answer":1,"explanation":"++counter is not atomic: it is a read, +1, and a write. Without a mutex, threads get wedged in the middle of someone else's operation, and some of the increments are lost (both read the same value and wrote the same). So the result is often LESS than 200000 and floats from run to run - a classic data race. It is the mutex (or atomic) that makes the increment indivisible and guarantees exactly 200,000."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Forget `unlock'** during manual control — the mutex hangs locked; so take `lock_guard`.
+        2. **Deadlock** — capture several mutexes in different order in different threads.
+        3. **Block too big chunk** — hold the mutex longer than necessary and lose all concurrency gains.
+        4. **Forget to protect** even one access path to shared data — the race is back.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        std::lock_guard<std::mutex> lock(mutex);
+        sharedValue++;
+        ```**Why it's here:** `lock_guard` automatically grabs the mutex and releases it at the end of the scope.
+
+        **Note:** Protect shared state with the same rule across all threads.
+
+        ### Summary
+        You've learned how to protect thread shared data: A mutex makes a critical section indivisible — as long as one thread is in it, the others are **waiting** and the data race disappears. Manual `unlock` is dangerous (forget it - freezes), so they use the RAII wrapper **`std::lock_guard`**, which releases the mutex itself. Beware of **deadlock** (capture several mutexes in the same order) and keep the critical section as short as possible. This is the foundation of secure multithreading. Next, how to measure time and speed using `std::chrono`.
+      level: 5
+      tags:
+        - concurrency
+        - c++
+  - title: Time and std::chrono
+    key: chas-ta-std-chrono
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 45
+    exerciseFocus: "one key idea of ​​C++ with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: Time and std::chrono
+      content: |-
+        ### Intuitive explanation
+        "My function is slow" - how slow? Without number it is only a feeling. To optimize, you need to **measure**: how many milliseconds a section of code runs. C++ has a `<chrono>` library for this - precise "stopwatches".
+
+        The idea of ​​measurement is simple, as with a real stopwatch: capture the moment **before** work, capture the moment **after** — and subtract. The difference will be the duration.
+
+        But `<chrono>` does it smarter than "magic numbers". It distinguishes between two concepts: **moment of time** (`time_point' - "now") and **duration** (`duration' - "200 milliseconds"). And here is its main advantage: the duration is a **typed** value with units, not a bare number. The compiler knows whether it's milliseconds or seconds and will **not** accidentally add seconds to milliseconds without conversion. No "is it in ms or in μs?" — the guy is responsible for you.
+
+        ### What happens at runtime
+        `steady_clock::now()` captures the current moment. The difference between two moments (`end - start`) is **`duration`**, a typed interval, not a regular number. To get an integer number of the required units, use `duration_cast<milliseconds>(...)` (convert to milliseconds), and then `.count()` gives the number itself.
+
+        The choice of watch is critically important. `std::chrono` has two main ones:
+        - **`steady_clock`** is "monotonous": it only **goes forward** and never jumps. This is a stopwatch.
+        - **`system_clock`** - "wall clock": shows calendar date/time, but can **jump** (time synchronization, daylight saving time, manual transfer).**only `steady_clock'** is taken for **interval measurement**. Imagine: you measured `start`, and in the middle of the operation, the system synchronized the clock back by a second - and `system_clock` will give a **negative** duration. `steady_clock` is immune to this. And `system_clock` is left for what it does well: to find out the current date and time.
+
+        A handy C++14+ bonus: unit literals. `200ms`, `2s`, `500us` are readable and type-safe (requires `using namespace std::chrono` or `std::chrono_literals`).
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <chrono>
+        #include <thread>
+
+        int main() {
+            using namespace std::chrono;
+
+            auto start = steady_clock::now();               // момент "до"
+            std::this_thread::sleep_for(milliseconds(200)); // імітуємо роботу на 200 мс
+            auto end = steady_clock::now();                 // момент "після"
+
+            auto elapsed = duration_cast<milliseconds>(end - start).count();
+            std::cout << "Минуло щонайменше 200 мс: "
+                      << (elapsed >= 200 ? "так" : "ні") << std::endl;
+            std::cout << "Тип різниці — duration, не звичайне число" << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        Минуло щонайменше 200 мс: так
+        Тип різниці — duration, не звичайне число
+        ```
+
+        ### Explanation of each line of the example
+        - `auto start = steady_clock::now();` — we record the moment **before** working with a monotonous clock.
+        - `std::this_thread::sleep_for(milliseconds(200));` is a "job" that lasts about 200ms.
+        - `auto end = steady_clock::now();` — moment **after**.
+        - `duration_cast<milliseconds>(end - start).count()` is the difference (this is `duration`) → an integer number of milliseconds.
+        - `elapsed >= 200` is always true: the sleep lasted at least 200ms, so the monotonic clock guarantees yes.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"You measure the duration of the operation. In the middle of it, the system synchronized the clock back by 1 second. With which watch can the result be NEGATIVE?","options":["steady_clock","system_clock","both are equally reliable","none, it's impossible"],"answer":1,"explanation":"system_clock is a \"wall\" clock that can jump (time synchronization, daylight saving time). If it jumps back between start and end, the difference end - start can become negative. steady_clock is monotonous - it only goes forward and never jumps, so it is taken for measuring intervals."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Take `system_clock` for intervals** — a clock jump can even give a negative duration.
+        2. **Forget `duration_cast`** — `duration` is not an ordinary number; it should also be explicitly translated to `.count()`.
+        3. **Confuse units** — take microseconds for milliseconds; `chrono' types distinguish units for that.
+        4. **Measure too small** — for micro-optimizations, one measurement is not enough; average many reps.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        auto start = std::chrono::steady_clock::now();
+        ```**Why it's here:** `steady_clock` is suitable for measuring duration, because it does not depend on system time changes.
+
+        **Note:** Use a different clock type for calendar time.
+
+        ### Summary
+        You learned how to measure time via `<chrono>`: capture the moment of `steady_clock::now()` before and after work, subtract and convert the difference to the required units via `duration_cast<...>(...).count()`. The key idea is that `chrono' distinguishes between **moment** (`time_point`) and **duration** (`duration`), and typed units save from the confusion of ``ms or μs''. For intervals, take **monotonic `steady_clock`** (it doesn't jump), and `system_clock` for calendar time only. Then there are compact, nameless functions right at the point of use: lambdas.
+      level: 5
+      tags:
+        - practice
+        - c++
+  - title: Lambda functions
+    key: lyambda-funktsii
+    description: extract repetitive logic into a comprehensible abstraction. explain
+      data flow through parameters, return, or iteration.
+    order: 46
+    exerciseFocus: "one script with a clear value stream; not to require individual
+      unit tests instead of a complete program"
+    theory:
+      title: Lambda functions
+      content: |-
+        ### Intuitive explanation
+        In the topic about STL algorithms, you passed `sort' the comparison rule. But declaring a separate named function somewhere at the top of the file for the sake of three lines is inconvenient: you have to come up with a name, jump around with your eyes, and the function is only needed in one place.
+
+        **Lambda** solves this: it's an **unnamed function written right where it's needed** — at the point of the call. Instead of "declare the function at the top, then pass its name" you write the body itself simply in the argument. Short, local, readable.
+
+        Syntax: `[capture](parameters){ body }`. Parameters and body are the same as for a regular function. But the `[ ]` at the beginning is a **capture list**, a unique feature of lambdas that normal functions don't have. It says what variables from the **surrounding code** the lambda "sees" inside itself. It is through capture that the lambda can "remember" the context in which it was created.
+
+        ### What happens at runtime
+        Under the hood, a lambda is not magic, but a little **function object** generated by the compiler: a class with an overloaded `operator()`, and the captured variables become its fields. Therefore, the lambda can be stored in the `auto' variable, transferred, called as a regular function.
+
+        The key is **how** exactly to capture, because this is where the thinnest trap is hidden. Two main ways:
+        - **`[factor]`** - capture **by value**: the lambda makes a **copy** of the variable at creation time. Changed `factor` later - lambda still sees the old copy.
+        - **`[&factor]`** - capture **by reference**: the lambda works with the **original** and can change it.And here is the main danger, familiar to you from the pointers topic: if a lambda grabs something `[&]` by reference, and then **survives** that variable (for example, the lambda is returned from a function, and the local variable is gone) - inside there will be a **hanging reference** to dead data. Therefore, lambdas that live longer than the environment are safer to do with enthusiasm **by value**. Empty `[ ]` do not capture anything — such a lambda is self-sufficient.
+
+        ### Minimal code example
+        ```cpp
+        #include <iostream>
+        #include <vector>
+        #include <algorithm>
+
+        int main() {
+            int factor = 10;
+            auto scale = [factor](int x) { return x * factor; };   // захоплює factor копією
+            std::cout << "scale(5) = " << scale(5) << std::endl;
+
+            std::vector<int> v = {3, 1, 4, 1, 5, 9, 2};
+            std::sort(v.begin(), v.end(), [](int a, int b) { return a > b; });  // за спаданням
+            std::cout << "Відсортовано за спаданням: ";
+            for (int x : v) std::cout << x << " ";
+            std::cout << std::endl;
+
+            int count = 0;
+            std::for_each(v.begin(), v.end(), [&count](int x) { if (x > 3) ++count; }); // & — оригінал
+            std::cout << "Елементів > 3: " << count << std::endl;
+            return 0;
+        }
+        ```Output:
+        ```
+        scale(5) = 50
+        Відсортовано за спаданням: 9 5 4 3 2 1 1
+        Елементів > 3: 3
+        ```
+
+        ### Explanation of each line of the example
+        - `[factor](int x) { return x * factor; }` — lambda captures `factor` with a **copy**; `scale(5)` = `5 * 10` = `50`.
+        - `std::sort(..., [](int a, int b){ return a > b; })` is an unnamed "greater-before" rule right in the call: descending sort.
+        - `[&count](int x){ ... ++count; }` - capturing `count` **by reference** (`&`): the lambda modifies the **original**.
+        - After `for_each`, the external `count` became `3` - precisely because the capture was by reference.
+        - If there was `[count]` (a copy), the external `count` would remain `0`.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"prediction","lang":"cpp","question":"int n = 5; auto f = [n]() { return n; }; n = 100; std::cout << f(); What will be printed?","options":["100","5","0","Compilation error"],"answer":1,"explanation":"The lambda grabbed n BY VALUE ([n]) — that is, it made a copy at creation time when n was 5. The later change to n = 100 only affects the external variable, not the copy inside the lambda. So f() returns 5. If the capture was by reference ([&n]), the lambda would see the original and print 100."}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. **Confuse `[x]` and `[&x]`** - a copy against the original; it depends on whether the external variable will change.
+        2. **Wait for change of external variable without `&`** - capture by value works with copy.
+        3. **Return lambda with `[&]`-grab of local variable** - dangling reference to dead data.
+        4. **Forget that `[factor]` fixes the value at the time of creation** - later changes of `factor` will not be seen by the lambda.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        int doubleValue(int value) {
+            return value * 2;
+        }
+        ```**Why it's here:** A function has a result type, a parameter, and a body.
+
+        **Note:** A reference or pointer in a parameter changes the data transfer rules.
+
+        ### Summary
+        You learned how to write **lambdas** — nameless functions right at the point of use, ideal for short rules in STL algorithms (`sort`, `for_each`, `find_if`). Their unique feature is the **capture list** `[ ]`: `[x]` takes a copy (external changes are not visible), `[&x]` is the original (can be changed), `[ ]` does nothing. The main trap is to capture by reference an object that may die earlier than the lambda (a hanging link). Under the hood, lambda is a regular object-function. Next is a powerful technique where a function calls itself: recursion.
+      level: 5
+      tags:
+        - abstraction
+        - c++
+  - title: Recursion
+    key: rekursiya
+    description: decompose the algorithm into successive checks or steps. explain
+      why this particular branch or iteration is being executed.
+    order: 47
+    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
+      and limiting case"
+    theory:
+      title: Recursion
+      content: |-
+        ### Intuitive explanation
+        Recursion is when a function calls itself. This is convenient for tasks that can be broken down into similar subtasks.
+        But recursion must always have a base case.
+
+        ### What happens at runtime
+        Each call creates a new frame on the stack. If there is no base case, the stack will overflow.
+        For large problems, recursion is sometimes replaced by iterations.
+
+        ### Minimal code example
+        ```cpp
+        int fact(int n){ return n<=1 ? 1 : n*fact(n-1); }
+        ```
+
+        ### Explanation of each line of the example
+        `n<=1` is the base case, stops recursion.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What does recursion need to stop?","options":["cycle","base case (stop condition)","massif"],"answer":1,"explanation":"Without a base case — infinite recursion."},{"question":"Recursion is when a function...","options":["causes itself","is compiled","prints"],"answer":0,"explanation":"The function calls itself."}]}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. The basic condition is missing.
+        2. Too deep recursion.
+        3. Recursion without problem reduction.
+
+        ### Recursion by example
+        ```cpp
+        int factorial(int n) {
+            if (n <= 1) return 1;         // базовий випадок — зупинка
+            return n * factorial(n - 1);  // крок до базового випадку
+        }
+        factorial(4);   // 4*3*2*1 = 24
+        ```Recursion is when a function calls itself. Two parts are required: the **base case** (stopping condition) and the **step** that approaches it. Without a base case, there will be infinite recursion and stack overflow. Each call adds a frame to the stack, so deep recursion is expensive—sometimes a loop is more efficient. But for "tree-like" problems, recursion is more natural and understandable.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        int factorial(int n) {
+            return n <= 1 ? 1 : n * factorial(n - 1);
+        }
+
+        std::cout << factorial(4); // 24
+        ```**Why it's here:** The `factorial(4)` call breaks down into smaller calls and ends with the base case `n <= 1`.
+
+        **Note:** Each recursive call must bring the argument closer to the stopping condition; otherwise the stack will overflow.
+
+        ### Summary
+        Recursion works through two related rules: the base case stops calls, and the recursive step reduces the problem. For `factorial(4)`, the stack goes `4 → 3 → 2 → 1`, after which the results are returned back to the original call. If the depth can be large or the recursive form does not add clarity, choose iteration.
+      level: 5
+      tags:
+        - control
+        - c++
+  - title: Difficulty Score (Big-O)
+    key: otsinka-skladnosti-big-o
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 48
+    exerciseFocus: "one key idea of ​​C++ with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: Difficulty Score (Big-O)
+      content: |-
+        ### Intuitive explanation
+        Big-O shows how time/memory grows with data size. It's like estimating how much "slower" the program will become when the data is increased.
+        This is the basis for choosing the right algorithms.
+
+        ### What happens at runtime
+        You analyze the number of operations, not specific seconds. This helps to compare algorithms.
+        For example, O(n) is better than O(n^2) for big data.
+
+        ### Minimal code example
+        ```cpp
+        for (int i = 0; i < n; ++i) { }
+        ```
+
+        ### Explanation of each line of the example
+        The loop is executed `n` times, so the complexity is O(n).
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What does Big-O describe?","options":["exact time in seconds","as time increases with increasing data volume","disk size"],"answer":1,"explanation":"Big-O is asymptotic complexity."},{"question":"Which complexity is better for large n?","options":["O(n^2)","O(n)","O(2^n)"],"answer":1,"explanation":"O(n) grows more slowly than the others here."}]}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. Confuse O(n) and O(n^2).
+        2. Ignore nested loops.
+        3. Evaluate the algorithm only in the best case.
+
+        ### Difficulty rating
+        Big-O describes how the running time of the algorithm increases with the increase in the amount of data n (not exact seconds):
+        - **O(1)** — constant (access to array element);
+        - **O(log n)** — logarithmic (binary search);
+        - **O(n)** — linear (iteration of all elements);
+        - **O(n log n)** — good sorting;
+        - **O(n²)** — nested cycles; slowly for large n.
+        ```cpp
+        for (int i = 0; i < n; i++)        // O(n)
+            for (int j = 0; j < n; j++)    // разом O(n²)
+                /* ... */;
+        ```Big-O helps to compare algorithms even before launch: for large n, the difference between O(n) and O(n²) is enormous.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        for (int value : values) {
+            std::cout << value << '\n';
+        }
+        ```**Why it's here:** One pass through `n` elements takes about `n` steps, so the complexity is O(n).
+
+        **Note:** Estimate the additional memory and cost of operations inside the loop separately.
+
+        ### Summary
+        Big-O does not predict the exact time in seconds, but shows how the amount of work will change as `n` grows. A single loop is typically O(n), two nested loops are O(n²), and the range-halving algorithm is often O(log n). Compare complexity with memory and real-world constraints of the task.
+      level: 5
+      tags:
+        - practice
+        - c++
+  - title: Debugging and testing
+    key: nalahodzhennya-ta-testuvannya
+    description: distinguish the cause of the error from its symptom. choose a
+      narrow test or test for a particular risk.
+    order: 49
+    exerciseFocus: "reproduce one defect or verify one contract; the result must be
+      unambiguous for the auto-check"
+    theory:
+      title: Debugging and testing
+      content: |-
+        ### Intuitive explanation
+        Debugging helps to find errors, tests — to check correctness. It's like a flashlight and a checklist.
+        Good tests allow you to quickly verify that your code works after changes.
+
+        ### What happens at runtime
+        In the debugger, you stop the program and look at the values of the variables. Tests run the code automatically and check the result.
+        Automated tests reduce the risk of regressions.
+
+        ### Minimal code example
+        ```cpp
+        // Використовуйте breakpoints у IDE
+        ```
+
+        ### Explanation of each line of the example
+        A breakpoint allows you to view the state of the program.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is a debugger for?","options":["speed up the code","run the code step by step and look at the variables","format"],"answer":1,"explanation":"The debugger helps to find the cause of the error."},{"question":"Why write tests?","options":["decorate the code","verify that the code is working correctly","squeeze"],"answer":1,"explanation":"Tests catch errors automatically."}]}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. Do not check edge cases.
+        2. Rely only on manual tests.
+        3. Do not use logging for complex problems.
+
+        ### Debug and check
+        Two quality code tools:
+        - **Debugger** (in GDB or IDE) sets breakpoints, executes the code step by step and shows the values of the variables - this is how you look for the cause of the error without flooding the code with `cout` output.
+        - **Tests** automatically check that the code produces the expected result:
+        ```cpp
+        assert(add(2, 3) == 5);   // швидка перевірка
+        ```For serious projects, they take frameworks (Catch2, GoogleTest). Tests are "insurance": after changing the code, you immediately see whether you have broken anything. Together, the debugger and the tests save a huge amount of time.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        try {
+            throw std::runtime_error("помилка");
+        } catch (const std::exception& error) {
+            std::cout << error.what();
+        }
+        ```**Why it's here:** The exception passes information about the problem to a compatible `catch`.
+
+        **Note:** Do not use exceptions as a replacement for every conditional branch.
+
+        ### Summary
+        Robust testing starts with a reproducible defect: first narrow down the input and find the point where the actual state deviates from the expected state, then capture it with a test. The debugger helps you see the state step by step, and the test prevents the regression from returning after the next change.
+      level: 5
+      tags:
+        - quality
+        - c++
+  - title: Best practices and code style
+    key: naykrashchi-praktyky-ta-styl-kodu
+    description: explain the main idea of ​​the topic in your own words. read a
+      short example and predict its outcome.
+    order: 50
+    exerciseFocus: "one key idea of ​​C++ with short deterministic stdout and
+      boundary case checking"
+    theory:
+      title: Best practices and code style
+      content: |-
+        ### Intuitive explanation
+        Clean code is easier to read and maintain. Style is an arrangement that makes teamwork effective.
+        In C++, it is also important to keep an eye on safe resource management.
+
+        ### What happens at runtime
+        Good style doesn't affect performance, but it reduces mistakes and makes revising easier.
+        A consistent style makes the code predictable and reduces the time to understand it.
+
+        ### Minimal code example
+        ```cpp
+        // Добрі назви змінних, короткі функції, зрозумілі структури
+        ```
+
+        ### Explanation of each line of the example
+        A meaningful variable name is often more important than a comment.
+
+        ### Try to predict
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What do modern practitioners advise instead of \"raw\" pointers?","options":["more new/delete manually","smart pointers and RAII","global variables"],"answer":1,"explanation":"smart pointers manage memory safely."},{"question":"Why a single code style?","options":["slow down","to make the code easier to read in a team","to encrypt"],"answer":1,"explanation":"Common style improves readability."}]}
+        ```
+
+        ### Typical mistakes of a beginner
+        1. Inconsistent style in files.
+        2. Too long functions without clear responsibility.
+        3. Ignoring the rules about RAII and safe memory.
+
+        ### Modern C++ style
+        A few principles that make code reliable and readable:
+        - Avoid "raw" `new`/`delete` - use `vector`, `string`, `unique_ptr` (RAII will release the resources itself).
+        - Pass large objects by `const&` instead of copy.
+        - Initialize variables immediately; use `auto` where the type is obvious.
+        - Keep functions short, with one responsibility.
+        ```cpp
+        std::vector<int> data = {1, 2, 3};   // безпечно й зрозуміло, без ручної памʼяті
+        ```Uniform style (naming, indentation) is important in a team: code is read much more often than it is written. Adherence to these rules is what separates reliable C++ from code that "crashes" in production.
+
+        ### In practice
+
+        A small fragment to understand the idea of ​​the topic:
+        ```cpp
+        int total(const std::vector<int>& values) {
+            return std::accumulate(values.begin(), values.end(), 0);
+        }
+        ```**Why it's here:** A `const' reference does not copy the collection and does not allow the input data to be modified.
+
+        **Note:** A function's interface should show its intent.
+
+        ### Summary
+        You understand the importance of style and practices.
+      level: 5
+      tags:
+        - practice
+        - c++
+source: "cpp_theory.yml: advanced topics"
