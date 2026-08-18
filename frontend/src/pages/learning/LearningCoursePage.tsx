@@ -356,33 +356,26 @@ export const LearningCoursePage: React.FC = () => {
     </nav>
     <button type="button" onClick={() => navigate("/learning/catalog")} className="mb-7 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button>
 
-    <header className="mb-8 rounded-2xl border border-border bg-bg-surface p-6 sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div><p className="text-xs font-bold uppercase tracking-[.16em] text-primary">{course.runtime} · {course.level}</p><h1 className="mt-3 text-4xl font-bold tracking-tight text-text-primary">{course.title}</h1><p className="mt-3 max-w-3xl leading-7 text-text-secondary">{course.description}</p></div>
-        <div className="min-w-[220px] rounded-2xl border border-primary/20 bg-primary/[.06] p-4">
-          <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase tracking-[.12em] text-text-secondary">{tr("Прогрес курсу", "Course progress")}</span><strong className="text-2xl font-bold text-primary">{Math.round(course.enrollment.completionPercent)}%</strong></div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-base"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, Math.max(0, course.enrollment.completionPercent))}%` }} /></div>
-          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-text-secondary"><span>{completedItems} / {requiredItems.length} {tr("елементів", "items")}</span><span>{course.enrollment.status === "AVAILABLE" ? tr("Не активовано", "Not active") : course.enrollment.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("У процесі", "In progress")}</span></div>
-        </div>
-      </div>
-      {!courseIsActive ? <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/10 p-4"><div><p className="font-bold text-text-primary">{tr("Цей курс ще не активовано", "This course is not active yet")}</p><p className="mt-1 text-sm text-text-secondary">{tr("Активація відкриє теорію, послідовний roadmap і контекстну практику.", "Activation unlocks theory, the ordered roadmap, and course-scoped practice.")}</p></div><button type="button" disabled={activating} onClick={() => void activateCourse()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{activating ? tr("Активуємо…", "Activating…") : tr("Активувати курс", "Activate course")}</button></div> : null}
-      {message && <div role="status" aria-live="polite" className="mt-6 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</div>}
-      {error && <div role="alert" className="mt-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
-    </header>
+    {!courseIsActive ? <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/[.05] p-4"><div><p className="font-bold text-text-primary">{tr("Цей курс ще не активовано", "This course is not active yet")}</p><p className="mt-1 text-sm text-text-secondary">{tr("Активація відкриє теорію, послідовний roadmap і контекстну практику.", "Activation unlocks theory, the ordered roadmap, and course-scoped practice.")}</p></div><button type="button" disabled={activating} onClick={() => void activateCourse()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{activating ? tr("Активуємо…", "Activating…") : tr("Активувати курс", "Activate course")}</button></div> : null}
+    {message && <div role="status" aria-live="polite" className="mb-6 rounded-2xl border border-primary/25 bg-primary/[.05] px-4 py-3 text-sm text-primary">{message}</div>}
+    {error && <div role="alert" className="mb-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
 
-    <section className="relative mb-6 overflow-hidden rounded-2xl border border-border bg-bg-surface p-5 sm:p-7">
-      <div className="relative">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-primary"><Route className="size-4" />{tr("Навчальний маршрут", "Learning path")}</p><h2 className="mt-2 text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">{tr("Обирай тему для уроку та практики", "Choose a topic for its lesson and practice")}</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Кожна тема — це послідовний міні-маршрут: коротка теорія, приклади, практика та зрозумілий результат. Натисни активну тему, щоб почати урок.", "Each topic is a focused mini-path: concise theory, examples, practice, and a clear outcome. Choose an active topic to start the lesson.")}</p></div>
-          <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">{completedItems}/{requiredItems.length} {tr("елементів", "items")}</span>
+    <section className="mb-6 overflow-hidden rounded-[30px] border border-[#102619]/10 bg-[#f7f8f5] dark:border-white/10 dark:bg-[#0e1510]">
+      <header className="relative overflow-hidden bg-[#102619] px-5 py-7 text-white sm:px-8 sm:py-10">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-32 size-[360px] rounded-full border border-white/10" />
+        <div aria-hidden="true" className="pointer-events-none absolute -right-2 -top-10 size-[220px] rounded-full border border-[#69e9a8]/15" />
+        <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-5"><p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.18em] text-[#70edaf]"><Route className="size-4" />{course.title} · {course.runtime}</p><span className="rounded-md border border-white/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[.12em] text-[#b8d8c3]">{course.level}</span></div>
+          <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_270px] lg:items-end">
+            <div><h1 className="max-w-3xl text-[clamp(38px,5.5vw,68px)] font-bold leading-[.96] tracking-[-.065em]">{tr("Твій шлях до впевненого коду.", "Your path to confident code.")}</h1><p className="mt-5 max-w-2xl text-sm leading-6 text-[#b7d1c0] sm:text-base">{tr("Від першого поняття до задач, які ти вже можеш розв’язувати самостійно. Рухайся послідовно — кожна тема додає новий інструмент.", "From your first concept to problems you can solve independently. Move sequentially — every topic adds a new tool.")}</p></div>
+            <div className="border-t border-white/15 pt-4 lg:border-l lg:border-t-0 lg:pl-6"><div className="flex items-end justify-between gap-3"><span className="text-xs font-semibold text-[#b7d1c0]">{tr("Прогрес маршруту", "Path progress")}</span><strong className="text-4xl font-bold tracking-[-.06em] text-[#70edaf]">{Math.round(course.enrollment.completionPercent)}%</strong></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#70edaf] transition-all" style={{ width: `${Math.min(100, Math.max(0, course.enrollment.completionPercent))}%` }} /></div><p className="mt-3 text-xs text-[#8fb29d]">{completedItems} / {requiredItems.length} {tr("елементів завершено", "items completed")}</p></div>
+          </div>
+          <div className="mt-10 grid grid-cols-3 border-t border-white/10 pt-5"><div><p className="text-2xl font-bold tracking-[-.05em] text-white">{topicNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем у маршруті", "topics in path")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-white">{practiceCount}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("практичних кроків", "practice steps")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#70edaf]">{completedTopics}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем завершено", "topics completed")}</p></div></div>
         </div>
+      </header>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border bg-bg-base p-4"><p className="text-[11px] font-bold uppercase tracking-[.14em] text-text-secondary">{tr("Теми", "Topics")}</p><p className="mt-2 text-2xl font-bold text-text-primary">{completedTopics}<span className="ml-1 text-sm font-semibold text-text-muted">/ {topicNodes.length}</span></p><p className="mt-1 text-xs text-text-secondary">{tr("пройдено повністю", "completed fully")}</p></div>
-          <div className="rounded-xl border border-border bg-bg-base p-4"><p className="text-[11px] font-bold uppercase tracking-[.14em] text-text-secondary">{tr("Практика", "Practice")}</p><p className="mt-2 text-2xl font-bold text-text-primary">{practiceCount}</p><p className="mt-1 text-xs text-text-secondary">{tr("завдань для закріплення", "tasks to reinforce skills")}</p></div>
-          <div className="rounded-xl border border-primary/35 bg-primary/[.04] p-4"><p className="text-[11px] font-bold uppercase tracking-[.14em] text-primary">{tr("Наступний крок", "Next step")}</p><p className="mt-2 line-clamp-1 text-base font-bold text-text-primary">{course.nextAction?.title || tr("Маршрут завершено", "Path completed")}</p><p className="mt-1 text-xs text-text-secondary">{course.nextAction ? tr("готовий продовжити", "ready to continue") : tr("можна повернутися до практики", "you can revisit practice")}</p></div>
-        </div>
-      </div>
+      <div className="px-5 py-7 sm:px-8 sm:py-9">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#102619]/10 pb-5 dark:border-white/10"><div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#147b47] dark:text-[#70edaf]">{tr("Маршрут курсу", "Course roadmap")}</p><h3 className="mt-2 text-2xl font-bold tracking-[-.04em] text-[#17231b] dark:text-[#edf4ef] sm:text-3xl">{tr("Теми, що складаються в навичку", "Topics that become a skill")}</h3><p className="mt-2 max-w-2xl text-sm leading-6 text-[#65746a] dark:text-[#a5b4a9]">{tr("Кожен вузол поєднує пояснення, практику та наступний зрозумілий крок.", "Every node combines explanation, practice, and a clear next step.")}</p></div><span className="rounded-md border border-[#102619]/12 px-3 py-1.5 text-[11px] font-bold text-[#65746a] dark:border-white/10 dark:text-[#a5b4a9]">{completedTopics} / {topicNodes.length} {tr("готово", "complete")}</span></div>
 
       <div className="relative mt-8">
         <div aria-hidden="true" className="absolute bottom-6 left-5 top-6 w-1 rounded-full bg-primary/15 lg:bottom-8 lg:left-1/2 lg:top-8 lg:-translate-x-1/2" />
@@ -433,8 +426,9 @@ export const LearningCoursePage: React.FC = () => {
             </div>;
           })}
         </div>
-      </div>
-    </section>
+       </div>
+       </div>
+     </section>
 
     {selectedNode && selectedNode.kind !== "TOPIC" && <section className="mb-6 rounded-2xl border border-primary/25 bg-bg-surface p-5 sm:p-7">
       <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>
