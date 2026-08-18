@@ -378,7 +378,7 @@ export const LearningCoursePage: React.FC = () => {
 
       <div className="relative mt-8">
         <div aria-hidden="true" className="absolute bottom-6 left-5 top-6 w-1 rounded-full bg-primary/15 lg:hidden" />
-        <svg aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-8 top-8 hidden h-[calc(100%-4rem)] w-full lg:block" viewBox="0 0 100 1000" preserveAspectRatio="none" focusable="false">
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 hidden h-full w-full lg:block" viewBox="0 0 100 1000" preserveAspectRatio="none" focusable="false">
           <path d="M50 0 C43 7 57 13 50 20 C43 27 57 33 50 40 C43 47 57 53 50 60 C43 67 57 73 50 80 C43 87 57 93 50 100" className="fill-none stroke-primary/20" strokeWidth="0.45" vectorEffect="non-scaling-stroke" />
           <path d="M50 0 C47 7 53 13 50 20 C47 27 53 33 50 40 C47 47 53 53 50 60 C47 67 53 73 50 80 C47 87 53 93 50 100" className="fill-none stroke-primary/10" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
