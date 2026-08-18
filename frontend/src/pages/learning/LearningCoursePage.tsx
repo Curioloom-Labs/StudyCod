@@ -13,7 +13,7 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   checkCatalogProject,
   completeCatalogItem,
@@ -49,6 +49,7 @@ function markdownOf(item: LearningCourseItem | undefined): string {
 export const LearningCoursePage: React.FC = () => {
   const navigate = useNavigate();
   const { courseId } = useParams<{ courseId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [course, setCourse] = React.useState<LearningCourse | null>(null);
   const [projects, setProjects] = React.useState<Record<number, LearningProject>>({});
   const [projectFiles, setProjectFiles] = React.useState<Record<number, string>>({});
@@ -148,6 +149,26 @@ export const LearningCoursePage: React.FC = () => {
     const items = nodeItems(node);
     return items.length > 0 && items.every((item) => item.progress.status === "COMPLETED");
   };
+
+  React.useEffect(() => {
+    if (loading || !course || searchParams.get("focus") !== "practice") return;
+
+    const activeNode = roadmapNodes.find((node) => !nodeCompleted(node));
+    if (!activeNode) {
+      setMessage(tr("Усі елементи курсу вже завершені.", "All course items are already completed."));
+    } else {
+      setSelectedNodeId(activeNode.id);
+      const theoryDone = activeNode.kind === "TOPIC" && activeNode.theory?.progress.status === "COMPLETED";
+      const hasPractice = activeNode.kind === "TOPIC" && activeNode.practices.some((item) => item.progress.status !== "COMPLETED");
+      setMessage(theoryDone && hasPractice
+        ? tr("Практика цієї теми вже доступна нижче.", "This topic's practice is available below.")
+        : tr("Спочатку заверши теорію активної теми — після цього відкриється практика.", "Complete the active topic's theory first; practice will open afterward."));
+    }
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("focus");
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [course, loading, roadmapNodes, searchParams, setSearchParams]);
 
   const completeItem = async (item: LearningCourseItem) => {
     if (!courseIsActive) {
