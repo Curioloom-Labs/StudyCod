@@ -421,7 +421,7 @@ export const LearningCoursePage: React.FC = () => {
 
             return <div key={node.id} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
               {index > 0 && renderRoadmapWave(incomingThickRatio, "absolute left-5 top-0 z-[1] block h-1/2 w-16 -translate-x-1/2 lg:left-1/2 lg:w-24")}
-              {index < roadmapNodes.length - 1 && renderRoadmapWave(outgoingThickRatio, "absolute bottom-[-1.75rem] left-5 top-1/2 z-[1] block w-16 -translate-x-1/2 lg:left-1/2 lg:w-24")}
+              {index < roadmapNodes.length - 1 && renderRoadmapWave(outgoingThickRatio, "absolute left-5 top-1/2 z-[1] block h-[calc(50%+1.25rem)] w-16 -translate-x-1/2 lg:left-1/2 lg:h-[calc(50%+1.75rem)] lg:w-24")}
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
