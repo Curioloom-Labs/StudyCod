@@ -38,12 +38,60 @@ type RoadmapNode = {
   item?: LearningCourseItem;
 };
 
+type TopicPart = {
+  label: string;
+  detail: string;
+};
+
 function isProject(item: LearningCourseItem): boolean {
   return item.kind === "MANUAL" && Boolean((item.content as { project?: unknown }).project);
 }
 
 function markdownOf(item: LearningCourseItem | undefined): string {
   return typeof item?.content.markdown === "string" ? item.content.markdown : "";
+}
+
+function firstText(content: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = content[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function topicDescription(node: RoadmapNode): string {
+  const content = node.theory?.content ?? {};
+  const directDescription = firstText(content, ["description", "summary", "goal", "objective", "overview", "outcome"]);
+  if (directDescription) return directDescription.replace(/\s+/g, " ").slice(0, 180);
+
+  const markdown = markdownOf(node.theory)
+    .split(/\n+/)
+    .map((line) => line.replace(/^#+\s*/, "").replace(/[*_`>]/g, "").trim())
+    .find((line) => line.length > 30);
+  if (markdown) return markdown.replace(/\s+/g, " ").slice(0, 180);
+
+  return tr(
+    `Розберемо «${node.title}»: коротка теорія, приклади та практичне завдання для закріплення.`,
+    `Explore “${node.title}” through concise theory, examples, and a practical task.`,
+  );
+}
+
+function topicParts(node: RoadmapNode): TopicPart[] {
+  const parts: TopicPart[] = [];
+  if (node.theory) parts.push({ label: tr("Теорія", "Theory"), detail: tr("ключові поняття", "key concepts") });
+  if (node.practices.length) {
+    parts.push({
+      label: tr("Практика", "Practice"),
+      detail: `${node.practices.length} ${node.practices.length === 1 ? tr("завдання", "task") : tr("завдань", "tasks")}`,
+    });
+  }
+
+  const estimatedMinutes = ["estimatedMinutes", "durationMinutes", "timeMinutes"]
+    .map((key) => node.theory?.content[key])
+    .find((value): value is number => typeof value === "number" && value > 0);
+  if (estimatedMinutes) parts.push({ label: tr("Час", "Time"), detail: `~${Math.round(estimatedMinutes)} ${tr("хв", "min")}` });
+
+  return parts;
 }
 
 export const LearningCoursePage: React.FC = () => {
@@ -319,7 +367,7 @@ export const LearningCoursePage: React.FC = () => {
 
     <section className="mb-6 rounded-[26px] border border-border bg-bg-surface p-5 shadow-sm sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Теми курсу", "Course topics")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{tr("Обирай тему для уроку та практики", "Choose a topic for its lesson and practice")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Натисни активну тему — відкриється окрема практика, де StudyCod підготує урок із теорією та робочим завданням.", "Choose an active topic to open its separate practice page, where StudyCod prepares the lesson theory and coding task.")}</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Теми курсу", "Course topics")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{tr("Обирай тему для уроку та практики", "Choose a topic for its lesson and practice")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Кожна тема — це послідовний міні-маршрут: коротка теорія, приклади, практика та зрозумілий результат. Натисни активну тему, щоб почати урок.", "Each topic is a focused mini-path: concise theory, examples, practice, and a clear outcome. Choose an active topic to start the lesson.")}</p></div>
         <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">{completedItems}/{requiredItems.length} {tr("елементів", "items")}</span>
       </div>
 
@@ -332,9 +380,10 @@ export const LearningCoursePage: React.FC = () => {
             const locked = !courseIsActive || !roadmapNodes.slice(0, index).every(nodeCompleted);
             const doneCount = items.filter((item) => item.progress.status === "COMPLETED").length;
             const started = items.some((item) => item.progress.status === "IN_PROGRESS");
-            const touchedCount = items.filter((item) => item.progress.status !== "NOT_STARTED").length;
-            const progress = items.length ? Math.round((touchedCount / items.length) * 100) : 0;
+            const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
             const isSelected = selectedNodeId === node.id;
+            const topicNumber = roadmapNodes.slice(0, index + 1).filter((candidate) => candidate.kind === "TOPIC").length;
+            const parts = node.kind === "TOPIC" ? topicParts(node) : [];
             const Icon = completed ? CheckCircle2 : locked ? LockKeyhole : node.kind === "PROJECT" ? Rocket : node.kind === "MILESTONE" ? FileCheck2 : node.theory?.progress.status === "COMPLETED" ? Play : BookOpen;
             const status = completed
               ? tr("Завершено", "Completed")
@@ -355,10 +404,16 @@ export const LearningCoursePage: React.FC = () => {
                 <Icon className="size-4 lg:size-5" />
               </div>
               <button type="button" disabled={locked || completed} onClick={() => handleNodeClick(node, index)} className={`col-start-2 row-start-1 min-w-0 rounded-[24px] border p-4 text-left transition ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${completed ? "border-primary/30 bg-primary/10" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/10 shadow-[0_12px_28px_-18px_rgba(0,160,91,.65)]" : "border-border bg-bg-base hover:-translate-y-0.5 hover:border-primary/50"}`}>
-                <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? `${tr("Тема", "Topic")} ${index + 1}` : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
-                <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.title}</h3>
-                <p className="mt-2 text-xs leading-5 text-text-secondary">{status}</p>
-                {items.length > 1 && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>}
+                 <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? `${tr("Тема", "Topic")} ${topicNumber}` : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
+                 <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.title}</h3>
+                 {node.kind === "TOPIC" ? <>
+                   <p className="mt-2 line-clamp-3 text-xs leading-5 text-text-secondary">{topicDescription(node)}</p>
+                   <div className="mt-4 flex flex-wrap gap-2">
+                     {parts.map((part) => <span key={part.label} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary"><span className="text-text-primary">{part.label}</span><span className="text-text-muted">·</span>{part.detail}</span>)}
+                   </div>
+                   <p className="mt-3 text-xs font-semibold text-primary">{status}</p>
+                 </> : <p className="mt-2 text-xs leading-5 text-text-secondary">{status}</p>}
+                 {items.length > 1 && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>}
               </button>
             </div>;
           })}
