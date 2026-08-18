@@ -170,11 +170,25 @@ export async function getTask(id: number, uiLang?: UiLanguage): Promise<Task> {
   });
   return res.data as Task;
 }
-export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean; courseItemId?: number }): Promise<unknown> {
+export type TaskGenerationProgress = {
+  status: "running" | "ready" | "error";
+  phase: "requesting" | "context" | "condition" | "tests" | "saving" | "ready" | "error";
+  progress: number;
+  message: string;
+  updatedAt: string;
+};
+
+export async function getTaskGenerationProgress(generationId: string): Promise<TaskGenerationProgress> {
+  const res = await api.get(`/tasks/generate/progress/${encodeURIComponent(generationId)}`);
+  return res.data as TaskGenerationProgress;
+}
+
+export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean; courseItemId?: number; generationId?: string }): Promise<unknown> {
   try {
     const res = await api.post("/tasks/generate", {
       ...(language ? { language } : {}),
       ...(options?.forceControl ? { forceControl: true } : {}),
+      ...(options?.generationId ? { generationId: options.generationId } : {}),
       ...(Number.isInteger(options?.courseItemId) && Number(options?.courseItemId) > 0
         ? { courseItemId: Number(options?.courseItemId) }
         : {})

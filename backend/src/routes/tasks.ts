@@ -60,6 +60,11 @@ import { encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTask
 import { getSharedRedisClient, redisKey } from "../services/redis/sharedRedis";
 import { cleanupCompletedPersonalTaskTests } from "../services/personalTaskCleanup";
 import {
+  getTaskGenerationProgress,
+  setTaskGenerationProgress,
+  type TaskGenerationProgressPhase,
+} from "../services/taskGenerationProgress";
+import {
   buildLocalizedTopicTitleEnById as buildLocalizedTopicTitleEnByIdService,
   translateTopicTheoryUkToEn as translateTopicTheoryUkToEnService,
 } from "../services/translation/topicTitleTranslator";
@@ -1624,6 +1629,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   existingTasksForContext: Array<{ id: number; title?: string | null; description?: string | null; numInTopic?: number | null }>;
   allTopics: Topic[];
   stdinPolicyTopicIndex: number;
+  reportProgress?: (phase: TaskGenerationProgressPhase, progress: number, message: string) => Promise<void>;
 }): Promise<Task> {
   const stdinAllowed = isStdinAllowedForTopic({
     allTopics: params.allTopics,
@@ -1880,9 +1886,19 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     // Keep both personal and course practice usable during provider outages.
     // Course fallbacks are deterministic and topic-aware, so they never leave
     // the learner with an empty IDE just because the AI provider is down.
+    await params.reportProgress?.(
+      "saving",
+      88,
+      i18nText(params.userLanguage, "Зберігаємо резервну умову та тести", "Saving the fallback statement and tests"),
+    );
     return createProviderFallback();
   }
   const aiTask = aiTaskResult.data;
+  await params.reportProgress?.(
+    "tests",
+    66,
+    i18nText(params.userLanguage, "Перевіряємо приклади та готуємо автотести", "Checking examples and preparing autotests"),
+  );
   const practicalOnly = String((aiTask as any).practicalTask ?? "").trim();
   // Use a single, stable template per language (AI templates often drift and can break expectations).
   const template = (() => {
@@ -1982,11 +1998,20 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   // Catalog practice already has authored theory. Keep it in the task payload
   // so the Practice page remains self-contained even though catalog items do
   // not have a legacy Topic relation.
-  if (String(params.subtitle ?? "").startsWith("CATALOG_ITEM:") && params.theoryForAi.trim()) {
+  if (
+    String(params.subtitle ?? "").startsWith("CATALOG_ITEM:")
+    && params.numInTopic === 1
+    && params.theoryForAi.trim()
+  ) {
     saved.descriptionMarkdown = `${params.theoryForAi.trim()}\n\n${saved.descriptionMarkdown}`;
     saved.description = saved.descriptionMarkdown;
     await taskRepo().save(saved);
   }
+  await params.reportProgress?.(
+    "tests",
+    76,
+    i18nText(params.userLanguage, "Умова готова, добираємо крайові випадки", "The statement is ready; adding edge cases"),
+  );
 
   const needsInput = ioType === "STDIN_STDOUT";
   const REQUIRED_TEST_COUNT = needsInput ? 12 : 1;
@@ -2210,6 +2235,11 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     personalTask: { id: saved.id } as any
   }));
   await testDataRepo().save(newTestData);
+  await params.reportProgress?.(
+    "saving",
+    95,
+    i18nText(params.userLanguage, "Зберігаємо тести та стартовий шаблон", "Saving tests and the starter template"),
+  );
   return saved;
 }
 tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -2301,6 +2331,16 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
       message: "Internal server error"
     });
   }
+});
+tasksRouter.get("/generate/progress/:generationId", authMiddleware, async (req: AuthRequest, res: Response) => {
+  const generationId = String(req.params.generationId ?? "").trim();
+  if (!req.userId || !/^[A-Za-z0-9_-]{8,100}$/.test(generationId)) {
+    return res.status(400).json({ message: "INVALID_GENERATION_ID" });
+  }
+
+  const progress = await getTaskGenerationProgress({ userId: req.userId, generationId });
+  if (!progress) return res.status(404).json({ status: "missing" });
+  return res.json(progress);
 });
 tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -3074,8 +3114,16 @@ tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, a
 
 tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Response) => {
   let throttleKey: string | null = null;
+  let reportGenerationProgress: (
+    phase: TaskGenerationProgressPhase,
+    progress: number,
+    message: string,
+    status?: "running" | "ready" | "error",
+  ) => Promise<void> = async () => undefined;
   try {
     const requestStartedAt = Date.now();
+    const requestedGenerationId = String((req.body as any)?.generationId ?? "").trim();
+    const generationId = /^[A-Za-z0-9_-]{8,100}$/.test(requestedGenerationId) ? requestedGenerationId : null;
     const DISABLE_AI_DEADLINES = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
     // Total budget for the whole generation flow (quiz/task/tests).
     // Override with TASKS_GENERATE_BUDGET_MS to match your upstream proxy timeout.
@@ -3092,6 +3140,15 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       return Math.max(15_000, Math.min(120_000, Math.floor(v)));
     })();
     const userId = req.userId!;
+    reportGenerationProgress = async (
+      phase: TaskGenerationProgressPhase,
+      progress: number,
+      message: string,
+      status?: "running" | "ready" | "error",
+    ): Promise<void> => {
+      await setTaskGenerationProgress({ userId, generationId, phase, progress, message, status });
+    };
+    await reportGenerationProgress("requesting", 5, "Надсилаємо запит на створення практики");
     const rawLang = String(req.learningRuntime ?? "PYTHON").toUpperCase().trim();
     let lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
     const forcePersonalControl = req.body && typeof req.body === "object" && (req.body as any).forceControl === true;
@@ -3162,6 +3219,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         lang = courseRuntime;
       }
     }
+    await reportGenerationProgress(
+      "context",
+      22,
+      userLanguage === "en" ? "Topic context and learning route loaded" : "Контекст теми та маршрут навчання завантажено",
+    );
 
     const masteredUntilTopicIndex = (() => {
       const raw = lang === "JAVA"
@@ -3237,6 +3299,12 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         typeof exercise.prompt === "string" ? `Practice brief:\n${exercise.prompt}` : "",
       ].filter(Boolean).join("\n\n").trim();
 
+      await reportGenerationProgress(
+        "condition",
+        36,
+        userLanguage === "en" ? "Building a standalone task condition" : "Формуємо окрему умову практичної задачі",
+      );
+
       const saved = await generateAndPersistPersonalProgrammingTask({
         requestStartedAt,
         requestBudgetMs: REQUEST_BUDGET_MS,
@@ -3261,6 +3329,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         })),
         allTopics: topics,
         stdinPolicyTopicIndex: topicIndex,
+        reportProgress: reportGenerationProgress,
       });
 
       if (typeof exercise.starterCode === "string" && exercise.starterCode.trim()) {
@@ -3273,6 +3342,12 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       await taskRepo().save(saved);
       await startCourseItem(userId, requestedCourseItemId);
       const hydrated = await taskRepo().findOne({ where: { id: saved.id }, relations: ["topic", "topic.theoryBlock"] });
+      await reportGenerationProgress(
+        "ready",
+        100,
+        userLanguage === "en" ? "Practice is ready" : "Практика готова",
+        "ready",
+      );
       return res.json({
         status: "ok",
         task: mapTaskToDto(hydrated ?? saved, undefined, { uiLanguage: userLanguage }),
@@ -3511,7 +3586,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
               numInTopic: t.numInTopic
             })),
             allTopics: topics,
-            stdinPolicyTopicIndex: endTopicIndex
+            stdinPolicyTopicIndex: endTopicIndex,
+            reportProgress: reportGenerationProgress
           });
           return res.json({
             status: "ok",
@@ -3660,6 +3736,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // Cap low to avoid nginx 504; generation retries still happen inside this budget.
     const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
+    await reportGenerationProgress(
+      "condition",
+      36,
+      userLanguage === "en" ? "Building a standalone task condition" : "Формуємо окрему умову практичної задачі",
+    );
     const aiTaskResult = await safeAICall('generateTask', {
       topicTitle: topicTitleForAi,
       theory: topicTheoryForAi,
@@ -3689,6 +3770,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       return sendAIError(res, aiTaskResult.error);
     }
     const aiTask = aiTaskResult.data;
+    await reportGenerationProgress(
+      "tests",
+      66,
+      userLanguage === "en" ? "Checking examples and preparing autotests" : "Перевіряємо приклади та готуємо автотести",
+    );
     const practicalOnly = String(aiTask.practicalTask ?? "").trim();
     // Keep a single stable template per language; ignore AI-provided code templates.
     // (AI templates often include implementation or drift in structure.)
@@ -3852,6 +3938,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       } else {
 
       const remainingCount = REQUIRED_TEST_COUNT - testExamples.length;
+      await reportGenerationProgress(
+        "tests",
+        78,
+        userLanguage === "en" ? "Generating public and hidden test cases" : "Генеруємо відкриті та приховані тести",
+      );
       for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
         const testDataResult = await safeAICall('generateTestData', {
           taskDescription: taskDescriptionForTests || description,
@@ -4000,12 +4091,23 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       }
     }));
     await testDataRepo().save(newTestData);
+    await reportGenerationProgress(
+      "saving",
+      95,
+      userLanguage === "en" ? "Saving tests and the starter template" : "Зберігаємо тести та стартовий шаблон",
+    );
 
     const savedHydrated = await taskRepo().findOne({
       where: { id: saved.id },
       relations: ["topic", "topic.theoryBlock"]
     });
 
+    await reportGenerationProgress(
+      "ready",
+      100,
+      userLanguage === "en" ? "Practice is ready" : "Практика готова",
+      "ready",
+    );
     return res.json({
       status: "ok",
       task: mapTaskToDto(savedHydrated ?? saved, undefined, {
@@ -4022,6 +4124,12 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     } else {
       logger.error("[tasks] POST /generate error", logMeta);
     }
+    await reportGenerationProgress(
+      "error",
+      100,
+      resolveUiLanguage(req) === "en" ? "Practice generation failed" : "Генерацію практики не завершено",
+      "error",
+    );
     if (Number.isInteger(statusCode) && statusCode > 0) {
       return res.status(statusCode).json({
         message: error.message,

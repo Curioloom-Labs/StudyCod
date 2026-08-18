@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { listTasks, generateTask, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
+import { listTasks, generateTask, getTaskGenerationProgress, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
 import { recordSuccessfulStudySession } from "../../lib/uiMode";
 import { Modal } from "../../components/ui/Modal";
 import { CodeEditor } from "../../components/CodeEditor";
@@ -11,7 +11,7 @@ import { WebPreviewPane } from "../../components/WebPreviewPane";
 import type { Task, User } from "../../types";
 import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save, ArrowRight, BookOpen } from "lucide-react";
 import { tr } from "../../i18n";
-import { TaskGenerationOverlay, type TaskGenerationPhase } from "../../components/TaskGenerationOverlay";
+import { TaskGenerationOverlay, type TaskGenerationPhase, type TaskGenerationProgress } from "../../components/TaskGenerationOverlay";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
 import { buildResumeState, loadResumeState, saveResumeState } from "../../lib/resumeState";
 import { type FailureRecoveryData } from "../../components/FailureRecoveryCard";
@@ -400,6 +400,11 @@ export const TasksPage: React.FC<Props> = ({
   };
   const getTheoryMarkdown = (t: Task | null): string => {
     if (!t) return "";
+    // Catalog practices carry the authored topic theory in the generation
+    // context, but the learner should acknowledge it only on the first task
+    // in that topic. Never let a legacy description re-open theory on task 2+.
+    const isFirstInTopic = Number(t.lessonInTopic) === 1;
+    if (t.kind === "TOPIC" && !isFirstInTopic) return "";
     const direct = (t.theoryMarkdown || "").trim();
     if (direct) return direct;
     const legacyTheory = splitLegacyDescription(t.descriptionMarkdown || "").theory || "";
@@ -408,7 +413,6 @@ export const TasksPage: React.FC<Props> = ({
     // Safety net: for the first task in a topic flow we should always start from
     // the theory step. If backend theory is temporarily missing, show a clear
     // placeholder instead of skipping straight to practice.
-    const isFirstInTopic = Number(t.lessonInTopic) === 1;
     if (isFirstInTopic && t.kind === "TOPIC") {
       return tr(
         "## Теорія\n\n_Теорія для цієї теми зараз недоступна. Спробуй оновити сторінку або звернись до викладача/адміністратора._",
@@ -446,6 +450,7 @@ export const TasksPage: React.FC<Props> = ({
   const [stdin, setStdin] = useState("");
   const [loading, setLoading] = useState(false);
   const [generationPhase, setGenerationPhase] = useState<TaskGenerationPhase | null>(null);
+  const [generationProgress, setGenerationProgress] = useState<TaskGenerationProgress | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
@@ -1449,22 +1454,58 @@ export const TasksPage: React.FC<Props> = ({
     generateRequestRef.current = true;
     setLoading(true);
     setGenerationPhase("requesting");
+    const generationId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    setGenerationProgress({
+      status: "running",
+      phase: "requesting",
+      progress: 5,
+      message: tr("Надсилаємо запит на створення практики", "Sending the practice generation request"),
+      updatedAt: new Date().toISOString(),
+    });
     setAiResult(null);
     setConsoleOutput("");
     setUIState("idle");
+    let progressPolling = true;
+    let progressPollPromise: Promise<void> | null = null;
     try {
+      progressPollPromise = (async () => {
+        while (progressPolling) {
+          try {
+            const next = await getTaskGenerationProgress(generationId);
+            setGenerationProgress(next);
+            setGenerationPhase(next.phase);
+            if (next.status === "error" || next.status === "ready") break;
+          } catch {
+            // The generation request can reach a different backend worker
+            // before Redis has the first snapshot. Keep the visible request
+            // state and retry on the next tick.
+          }
+          await new Promise<void>((resolve) => setTimeout(resolve, 350));
+        }
+      })();
       await settleGenerationPhase();
-      setGenerationPhase("generating");
+      setGenerationPhase("condition");
       const res = await generateTask(uiLanguage, {
         ...(wantsControl ? { forceControl: true } : {}),
-        ...(options?.courseItemId ? { courseItemId: options.courseItemId } : {})
+        ...(options?.courseItemId ? { courseItemId: options.courseItemId } : {}),
+        generationId,
       });
+      progressPolling = false;
+      await progressPollPromise;
       const payload = asRecord(res);
       const status = String(payload?.status ?? "");
       if (status === "ok" && payload?.task && typeof payload.task === "object") {
         const generatedTask = payload.task as Task;
         const generatedTaskId = Number((generatedTask as { id?: unknown }).id ?? 0);
         const retryingSameTask = generatedTaskId > 0 && generatedTaskId === active?.id;
+        setGenerationProgress({
+          status: "ready",
+          phase: "ready",
+          progress: 100,
+          message: tr("Практика готова", "Practice is ready"),
+          updatedAt: new Date().toISOString(),
+        });
+        setGenerationPhase("ready");
         setGenerationPhase("syncing");
         await settleGenerationPhase();
         // The generation endpoint already returns the complete task DTO. Avoid
@@ -1581,10 +1622,13 @@ export const TasksPage: React.FC<Props> = ({
       setConsoleOutput(`${tr("Помилка генерації завдання:", "Task generation error:")} ${text}`);
       setUIState("error");
     } finally {
+      progressPolling = false;
+      if (progressPollPromise) await progressPollPromise;
       if (closeDelayMs > 0) {
         await new Promise<void>((resolve) => setTimeout(resolve, closeDelayMs));
       }
       setGenerationPhase(null);
+      setGenerationProgress(null);
       setLoading(false);
       generateRequestRef.current = false;
     }
@@ -2292,7 +2336,7 @@ export const TasksPage: React.FC<Props> = ({
   if (!isPersonalControlQuizTask) {
     return (
       <div className="min-h-full space-y-3 bg-bg-base p-3 text-text-primary sm:p-4">
-        <TaskGenerationOverlay open={loading} phase={generationPhase} />
+        <TaskGenerationOverlay open={loading} phase={generationPhase} progress={generationProgress} />
         <StudyCodIDEWorkspace
           task={ideTask}
           theory={ideTheory}
@@ -2363,7 +2407,7 @@ export const TasksPage: React.FC<Props> = ({
 
   return (
     <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
-      <TaskGenerationOverlay open={loading} phase={generationPhase} />
+      <TaskGenerationOverlay open={loading} phase={generationPhase} progress={generationProgress} />
 
       <div className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-[1500px] flex-col overflow-hidden rounded-[28px] border border-[#152219]/10 bg-white shadow-[0_18px_45px_-38px_rgba(18,39,24,.48)] dark:border-white/10 dark:bg-[#121b15]">
         <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-[#15231a]/10 px-4 py-3 dark:border-white/[.08] sm:px-6">

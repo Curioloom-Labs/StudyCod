@@ -952,6 +952,7 @@ ${stdinAllowed
   ? '- Якщо ти хочеш перевіряти оголошення/присвоєння змінних, але не хочеш фіксувати значення — обирай STDIN_STDOUT і читай значення зі stdin.'
   : '- STDIN_STDOUT ЗАБОРОНЕНО на цьому етапі: НЕ читай stdin (жодних input()/Scanner/cin). Навіть для завдань про оголошення/присвоєння змінних — задай конкретні значення прямо в умові (наприклад x=10, y=3.14) і вимагай точний детермінований вивід (NO_INPUT_FIXED_OUTPUT).'}
 - NO_INPUT_FREE_OUTPUT використовуй ТІЛЬКИ для завдань, де за задумом приймається будь-який непорожній stdout (наприклад: "виведіть будь-яке привітання").
+- practicalTask — ЦЕ ЛИШЕ самостійна умова задачі. НІКОЛИ не копіюй у нього theoryMarkdown і не додавай секції уроку: «Інтуїтивне пояснення», «Що відбувається під час виконання», «Мінімальний приклад коду», «Типові помилки», «Спробуй передбачити», «На практиці» чи «Підсумок».
 
 ЕТАЛОН ЯКОСТІ УМОВИ (це приклад лише СТИЛЮ — НЕ копіюй тему, сюжет чи числа):
 "Магазин щодня записує температуру у холодильній вітрині. Сьогодні зранку термометр показував 8 градусів, а до обіду температура піднялася ще на 5. Порахуй, скільки градусів показує термометр зараз. Необхідно вивести одне ціле число — підсумкову температуру."
@@ -1065,6 +1066,7 @@ ${stdinAllowed
   ? '- If you want to check variable declaration/assignment but don\'t want to fix values — choose STDIN_STDOUT and read values from stdin.'
   : '- STDIN_STDOUT is FORBIDDEN at this stage: do NOT read stdin (no input()/Scanner/cin). Even for variable declaration/assignment tasks — specify concrete values directly in the statement (e.g. x=10, y=3.14) and require an exact deterministic output (NO_INPUT_FIXED_OUTPUT).'}
 - Use NO_INPUT_FREE_OUTPUT ONLY for tasks where any non-empty stdout is intended to be accepted (e.g., "output any greeting").
+- practicalTask is ONLY the standalone problem statement. NEVER copy or reproduce theoryMarkdown inside it and NEVER add lesson sections such as "Intuitive explanation", "What happens during execution", "Minimal code example", "Common mistakes", "Try to predict", "In practice", or "Summary".
 
 QUALITY EXEMPLAR (style only — do NOT copy this topic, plot or numbers):
 "A shop logs the temperature inside its fridge display every day. This morning the thermometer read 8 degrees, and by noon it rose by another 5. Work out what the thermometer shows now. You must output a single integer — the resulting temperature."

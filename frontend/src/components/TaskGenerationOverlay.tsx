@@ -5,26 +5,41 @@ import { tr } from "../i18n";
 
 export type TaskGenerationPhase =
   | "requesting"
+  | "context"
   | "generating"
+  | "condition"
+  | "tests"
+  | "saving"
+  | "ready"
   | "syncing"
   | "opening"
   | "finishing"
   | "error";
 
+export type TaskGenerationProgress = {
+  status: "running" | "ready" | "error";
+  phase: "requesting" | "context" | "condition" | "tests" | "saving" | "ready" | "error";
+  progress: number;
+  message: string;
+  updatedAt: string;
+};
+
 const PHASE_ORDER: TaskGenerationPhase[] = [
   "requesting",
-  "generating",
-  "syncing",
-  "opening",
-  "finishing",
+  "context",
+  "condition",
+  "tests",
+  "saving",
 ];
 
 export function TaskGenerationOverlay({
   open,
   phase,
+  progress,
 }: {
   open: boolean;
   phase?: TaskGenerationPhase | null;
+  progress?: TaskGenerationProgress | null;
 }) {
   const { i18n } = useTranslation();
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -33,7 +48,12 @@ export function TaskGenerationOverlay({
   const phaseSteps = useMemo<Record<TaskGenerationPhase, string>>(
     () => ({
       requesting: tr("Надсилаємо запит", "Sending request"),
-      generating: tr("Створюємо умову й тести", "Building statement and tests"),
+      context: tr("Узгоджуємо контекст теми", "Loading topic context"),
+      generating: tr("Створюємо умову", "Building the statement"),
+      condition: tr("Створюємо умову", "Building the statement"),
+      tests: tr("Перевіряємо тести", "Preparing autotests"),
+      saving: tr("Зберігаємо результат", "Saving the result"),
+      ready: tr("Практика готова", "Practice is ready"),
       syncing: tr("Оновлюємо маршрут практики", "Refreshing your practice route"),
       opening: tr("Відкриваємо нове завдання", "Opening the new task"),
       finishing: tr("Готуємо робочий простір", "Preparing your workspace"),
@@ -91,12 +111,20 @@ export function TaskGenerationOverlay({
 
   if (!open) return null;
 
-  const activePhase = phase ?? "generating";
-  const activeIndex = Math.max(0, PHASE_ORDER.indexOf(activePhase));
-  const progress = activePhase === "error"
+  const activePhase = phase ?? progress?.phase ?? "generating";
+  const phaseForIndex = activePhase === "generating" || activePhase === "syncing"
+    ? activePhase === "syncing" ? "saving" : "condition"
+    : activePhase === "opening" || activePhase === "finishing"
+      ? "saving"
+      : activePhase === "ready"
+        ? "saving"
+      : activePhase;
+  const activeIndex = Math.max(0, PHASE_ORDER.indexOf(phaseForIndex));
+  const progressValue = progress?.progress ?? (activePhase === "error"
     ? 100
-    : Math.max(12, Math.round(((activeIndex + 1) / PHASE_ORDER.length) * 100));
+    : Math.max(5, Math.round(((activeIndex + 1) / PHASE_ORDER.length) * 100)));
   const activeTip = loadingTips[tipIndex] ?? loadingTips[0];
+  const activeMessage = progress?.message?.trim() || phaseSteps[activePhase];
 
   return (
     <div
@@ -141,14 +169,14 @@ export function TaskGenerationOverlay({
 
             <div className="mt-8">
               <div className="mb-3 flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 break-words font-semibold">{phaseSteps[activePhase]}</span>
-                <span className="shrink-0 font-bold text-primary tabular-nums">{progress}%</span>
+                <span className="min-w-0 break-words font-semibold">{activeMessage}</span>
+                <span className="shrink-0 font-bold text-primary tabular-nums">{progressValue}%</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-bg-hover">
-                <div className={`h-full rounded-full transition-all duration-700 ease-out ${activePhase === "error" ? "bg-accent-error" : "bg-primary"}`} style={{ width: `${progress}%` }} />
+                <div className={`h-full rounded-full transition-all duration-700 ease-out ${activePhase === "error" ? "bg-accent-error" : "bg-primary"}`} style={{ width: `${progressValue}%` }} />
               </div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-5">
+                <div className="mt-4 grid gap-2 sm:grid-cols-5">
                 {PHASE_ORDER.map((step, index) => {
                   const done = activePhase !== "error" && index < activeIndex;
                   const current = activePhase === step;
@@ -187,8 +215,9 @@ export function TaskGenerationOverlay({
 
               <div className="space-y-3">
                 {labItems.map((item, index) => {
-                  const done = activePhase !== "error" && index < activeIndex;
-                  const current = activePhase !== "error" && index === Math.min(activeIndex, labItems.length - 1);
+                  const labStepIndex = index + 1;
+                  const done = activePhase !== "error" && activeIndex > labStepIndex;
+                  const current = activePhase !== "error" && activeIndex === labStepIndex;
                   return (
                     <div key={item.title} className="flex min-w-0 items-center gap-3 rounded-xl bg-bg-surface px-4 py-3">
                       <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${done ? "bg-primary text-[#062211]" : current ? "bg-accent-warn/10 text-accent-warn" : "bg-bg-hover text-text-muted"}`}>

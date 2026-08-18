@@ -237,6 +237,36 @@ function looksTooShortOrVaguePracticalTask(text: string): boolean {
   return true;
 }
 
+function looksLikeTheoryInsteadOfPracticalTask(text: string): boolean {
+  const source = String(text ?? "").trim();
+  if (!source) return false;
+
+  // A model can copy the authored lesson into practicalTask when the prompt
+  // contains a large theory block. Require two structural lesson headings so
+  // a legitimate task mentioning one phrase is not rejected.
+  const normalized = source.toLowerCase().replace(/\s+/g, " ");
+  const theorySections = [
+    "### інтуїтивне пояснення",
+    "### intuitive explanation",
+    "### що відбувається під час виконання",
+    "### what happens during execution",
+    "### мінімальний приклад коду",
+    "### minimal code example",
+    "### пояснення кожного рядка",
+    "### line-by-line explanation",
+    "### типові помилки новачка",
+    "### common beginner mistakes",
+    "### спробуй передбачити",
+    "### try to predict",
+    "### на практиці",
+    "### in practice",
+    "### підсумок",
+    "### summary",
+  ];
+  const sectionHits = theorySections.reduce((count, marker) => count + (normalized.includes(marker) ? 1 : 0), 0);
+  return sectionHits >= 2;
+}
+
 function expandShortPracticalTask(data: {
   practicalTask: unknown;
   inputFormat: unknown;
@@ -399,6 +429,11 @@ const TASK_VALIDATION_RULES: TaskValidationRule[] = [
     id: "practical.too_short",
     message: "Task generation validation failed: practicalTask is too short/vague; must be a detailed multi-sentence narrative",
     fails: c => !c.isIntroTopic && looksTooShortOrVaguePracticalTask(c.practical),
+  },
+  {
+    id: "practical.theory_copy",
+    message: "Task generation validation failed: practicalTask contains lesson theory instead of a standalone programming task",
+    fails: c => looksLikeTheoryInsteadOfPracticalTask(c.practical),
   },
   {
     id: "practical.checklist",

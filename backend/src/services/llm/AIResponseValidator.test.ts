@@ -48,6 +48,36 @@ test('AIResponseValidator.validateGenerateTask: allows a concise first Hello Wor
   assert.doesNotThrow(() => AIResponseValidator.validateGenerateTask(data, 'Introduction to Java', 0));
 });
 
+test('AIResponseValidator.validateGenerateTask: rejects theory copied into practicalTask', () => {
+  const data = {
+    title: 'If and switch',
+    topic: 'Control flow',
+    difficulty: 2,
+    theoryMarkdown: 'Theory about if and switch.',
+    practicalTask: [
+      '### Інтуїтивне пояснення',
+      'Умова розгалужує виконання програми на кілька шляхів.',
+      '',
+      '### Що відбувається під час виконання',
+      'if перевіряє логічний вираз, а switch вибирає відповідний case.',
+      '',
+      '### Мінімальний приклад коду',
+      'Напишіть повну програму та виведіть результат перевірки.'
+    ].join('\n'),
+    ioType: 'NO_INPUT_FIXED_OUTPUT' as const,
+    inputFormat: 'Вхідних даних немає.',
+    outputFormat: 'Виведіть результат перевірки.',
+    constraints: 'Використайте повну програму.',
+    examples: [{ input: '', output: 'готово', explanation: 'Приклад результату.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) {} }'
+  };
+
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTask(data, 'Control flow', 1),
+    /practicalTask contains lesson theory/i
+  );
+});
+
 test('AIResponseValidator.validateGenerateTask: expands a short non-intro statement from its contracts', () => {
   const data = {
     title: 'Temperature conversion',
