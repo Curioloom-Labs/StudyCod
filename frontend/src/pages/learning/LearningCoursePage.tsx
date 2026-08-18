@@ -378,9 +378,10 @@ export const LearningCoursePage: React.FC = () => {
 
       <div className="relative mt-8">
         <div aria-hidden="true" className="absolute bottom-6 left-5 top-6 w-1 rounded-full bg-primary/15 lg:hidden" />
-        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 hidden h-full w-full lg:block" viewBox="0 0 100 1000" preserveAspectRatio="none" focusable="false">
-          <path d="M50 0 C43 7 57 13 50 20 C43 27 57 33 50 40 C43 47 57 53 50 60 C43 67 57 73 50 80 C43 87 57 93 50 100" className="fill-none stroke-primary/20" strokeWidth="0.45" vectorEffect="non-scaling-stroke" />
-          <path d="M50 0 C47 7 53 13 50 20 C47 27 53 33 50 40 C47 47 53 53 50 60 C47 67 53 73 50 80 C47 87 53 93 50 100" className="fill-none stroke-primary/10" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 bg-primary/20 lg:block" />
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] hidden h-full w-full lg:block" viewBox="0 0 100 1000" preserveAspectRatio="none" focusable="false">
+          <path d="M50 0 C43 7 57 13 50 20 C43 27 57 33 50 40 C43 47 57 53 50 60 C43 67 57 73 50 80 C43 87 57 93 50 100" className="fill-none stroke-primary/35" strokeWidth="0.55" vectorEffect="non-scaling-stroke" />
+          <path d="M50 0 C47 7 53 13 50 20 C47 27 53 33 50 40 C47 47 53 53 50 60 C47 67 53 73 50 80 C47 87 53 93 50 100" className="fill-none stroke-primary/15" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
         <div className="relative space-y-5 lg:space-y-7">
           {roadmapNodes.map((node, index) => {
