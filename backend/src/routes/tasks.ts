@@ -1669,13 +1669,51 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
   const createProviderFallback = async (): Promise<Task> => {
-    const fallbackUsesInput = stdinAllowed;
-    const fallbackTitle = i18nText(
-      params.userLanguage,
-      "Резервна практика: сума двох чисел",
-      "Fallback practice: sum of two numbers"
-    );
-    const fallbackStatement = fallbackUsesInput
+    const isCatalogRequest = String(params.subtitle ?? "").startsWith("CATALOG_ITEM:");
+    const isPythonVariablesTopic = isCatalogRequest
+      && params.lang === "PYTHON"
+      && /типи даних|змінн|variables|data types/i.test(params.topicTitleForAi);
+    const fallbackUsesInput = stdinAllowed && !isPythonVariablesTopic;
+    const fallbackTitle = isPythonVariablesTopic
+      ? i18nText(params.userLanguage, "Резервна практика: типи даних і змінні", "Fallback practice: data types and variables")
+      : isCatalogRequest
+        ? i18nText(params.userLanguage, `Резервна практика: ${params.topicTitleForAi}`, `Fallback practice: ${params.topicTitleForAi}`)
+        : i18nText(params.userLanguage, "Резервна практика: сума двох чисел", "Fallback practice: sum of two numbers");
+    const fallbackStatement = isPythonVariablesTopic
+      ? i18nText(
+          params.userLanguage,
+          [
+            "### Завдання",
+            "Створіть змінні `name = \"Ada\"`, `age = 36` та `is_student = True`.",
+            "Виведіть кожну змінну й назву її типу в окремому рядку у форматі `ім'я: значення (тип)`, як у прикладі.",
+            "",
+            "### Вихідні дані",
+            "Виведіть три рядки без введення даних.",
+            "",
+            "### Приклад виводу",
+            "```",
+            "name: Ada (str)",
+            "age: 36 (int)",
+            "is_student: True (bool)",
+            "```",
+          ].join("\n"),
+          [
+            "### Task",
+            "Create variables `name = \"Ada\"`, `age = 36`, and `is_student = True`.",
+            "Print each variable and its type name on a separate line in the format `name: value (type)`, as shown below.",
+            "",
+            "### Output",
+            "Print three lines without input.",
+            "",
+            "### Example output",
+            "```",
+            "name: Ada (str)",
+            "age: 36 (int)",
+            "is_student: True (bool)",
+            "```",
+          ].join("\n")
+        )
+      : fallbackUsesInput
       ? i18nText(
           params.userLanguage,
           [
@@ -1714,8 +1752,18 @@ async function generateAndPersistPersonalProgrammingTask(params: {
             "There is no input.",
           ].join("\n")
         );
-    const fallbackTemplate = params.lang === "PYTHON"
-      ? fallbackUsesInput
+    const fallbackTemplate = isPythonVariablesTopic
+      ? [
+          "name = \"Ada\"",
+          "age = 36",
+          "is_student = True",
+          "",
+          "print(f\"name: {name} ({type(name).__name__})\")",
+          "print(f\"age: {age} ({type(age).__name__})\")",
+          "print(f\"is_student: {is_student} ({type(is_student).__name__})\")",
+        ].join("\n")
+      : params.lang === "PYTHON"
+        ? fallbackUsesInput
         ? [
             "import sys",
             "",
@@ -1727,7 +1775,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
             "    main()",
           ].join("\n")
         : "print(8)"
-      : params.lang === "CPP"
+        : params.lang === "CPP"
         ? fallbackUsesInput
           ? [
               "#include <bits/stdc++.h>",
@@ -1771,7 +1819,9 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       ioType: fallbackUsesInput ? "STDIN_STDOUT" : "NO_INPUT_FIXED_OUTPUT",
     });
     const saved = await taskRepo().save(fallback);
-    const examples = fallbackUsesInput
+    const examples = isPythonVariablesTopic
+      ? [["", "name: Ada (str)\nage: 36 (int)\nis_student: True (bool)"]]
+      : fallbackUsesInput
       ? [
           ["1 2", "3"],
           ["10 25", "35"],
@@ -1820,13 +1870,13 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     ...(disableDeadlines ? {} : { totalTimeoutMs: taskBudgetMs })
   });
   if (!aiTaskResult.success) {
-    if (!shouldUseGenericPersonalFallback(params.subtitle)) {
-      // Never substitute an unrelated exercise for a catalog item: a passing
-      // submission would otherwise complete the wrong course topic.
+    const isCatalogRequest = String(params.subtitle ?? "").startsWith("CATALOG_ITEM:");
+    if (!shouldUseGenericPersonalFallback(params.subtitle) && !isCatalogRequest) {
       throw Object.assign(new Error("COURSE_PRACTICE_GENERATION_UNAVAILABLE"), { statusCode: 503 });
     }
-    // Keep personal practice usable during provider outages. The fallback is
-    // deliberately tiny, deterministic, and covered by server-side tests.
+    // Keep both personal and course practice usable during provider outages.
+    // Course fallbacks are deterministic and topic-aware, so they never leave
+    // the learner with an empty IDE just because the AI provider is down.
     return createProviderFallback();
   }
   const aiTask = aiTaskResult.data;
