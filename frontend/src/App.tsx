@@ -2,7 +2,7 @@ import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, sta
 import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
-import { getMe } from "./lib/api/profile";
+import { getCachedMeUser, getMe } from "./lib/api/profile";
 import type { User } from "./types";
 import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon, Search, SwatchBook, LogOut } from "lucide-react";
 import { Button } from "./components/ui/Button";
@@ -447,6 +447,26 @@ const AppContent: React.FC = React.memo(() => {
       // ignore
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    // If an already authenticated session lands on an auth URL, consume the
+    // protected destination instead of rendering the app under a stale
+    // ?auth=login&next=... address.
+    if (!user || !bootResumeHandled || location.pathname !== "/") return;
+    if (!searchParams.has("auth") && !searchParams.has("next")) return;
+
+    const next = getSafeNextAfterAuth(searchParams);
+    if (next) {
+      navigate(next, { replace: true });
+      return;
+    }
+
+    const clean = new URLSearchParams(searchParams);
+    clean.delete("auth");
+    clean.delete("next");
+    const search = clean.toString();
+    navigate({ pathname: "/", search: search ? `?${search}` : "" }, { replace: true });
+  }, [user?.id, bootResumeHandled, location.pathname, searchParams, navigate]);
 
   useEffect(() => {
     if (!user) return;
@@ -1572,7 +1592,9 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const location = useLocation();
   const previewValue = new URLSearchParams(location.search).get("preview");
   const devPreview = import.meta.env.DEV && (previewValue === "1" || previewValue === "true");
-  const [cookieSessionStatus, setCookieSessionStatus] = React.useState<"checking" | "valid" | "missing">("checking");
+  const [cookieSessionStatus, setCookieSessionStatus] = React.useState<"checking" | "valid" | "missing" | "unavailable">(
+    () => getCachedMeUser() ? "valid" : "checking"
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1581,17 +1603,21 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       return;
     }
     setCookieSessionStatus("checking");
-    getMe({ force: true, suppressAuthRedirect: true })
+    // Query-string changes (for example selecting a task) must not re-run the
+    // auth probe. A transient 429/5xx also must not be mistaken for logout.
+    getMe({ suppressAuthRedirect: true })
       .then(() => {
         if (!cancelled) setCookieSessionStatus("valid");
       })
-      .catch(() => {
-        if (!cancelled) setCookieSessionStatus("missing");
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const status = getHttpStatusFromError(error);
+        setCookieSessionStatus(isAuthErrorStatus(status) ? "missing" : "unavailable");
       });
     return () => {
       cancelled = true;
     };
-  }, [devPreview, location.pathname, location.search]);
+  }, [devPreview, location.pathname]);
 
   if (!devPreview && cookieSessionStatus === "checking") {
     return <PageLoader />;
@@ -1599,6 +1625,17 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
   if (!devPreview) {
     if (cookieSessionStatus === "valid") return <>{children}</>;
+    if (cookieSessionStatus === "unavailable") {
+      return (
+        <main className="flex min-h-[60vh] items-center justify-center p-6">
+          <div className="max-w-md rounded-2xl border border-amber-300/40 bg-amber-50 p-6 text-center text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+            <p className="font-semibold">Сесію тимчасово не вдалося перевірити</p>
+            <p className="mt-2 text-sm opacity-80">Спробуй оновити сторінку через кілька секунд.</p>
+            <Button className="mt-4" onClick={() => window.location.reload()}>Оновити</Button>
+          </div>
+        </main>
+      );
+    }
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/?auth=login&next=${next}`} replace />;
   }

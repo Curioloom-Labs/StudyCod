@@ -1428,6 +1428,16 @@ export const TaskLibraryPage: React.FC = () => {
     return `${solvePathPrefix}/${getStableSolveKey(task)}?from=${encodeURIComponent(from)}`;
   };
 
+  const buildSolveTarget = (task: LibraryTaskListItem) => {
+    const params = new URLSearchParams();
+    params.set("from", `${location.pathname}${location.search || ""}`);
+    if (isDesignPreview) params.set("preview", "true");
+    return {
+      pathname: `${solvePathPrefix}/${getStableSolveKey(task)}`,
+      search: `?${params.toString()}`,
+    };
+  };
+
   const visibleTasks = useMemo(() => {
     let list: LibraryTaskListItem[] = tasks.slice();
 
@@ -1531,10 +1541,7 @@ export const TaskLibraryPage: React.FC = () => {
       loading={loading}
       query={qDraft}
       onQuery={setQDraft}
-      onOpen={(task) => navigate({
-        pathname: buildSolvePath(task),
-        search: import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true" ? "?preview=true" : "",
-      })}
+      onOpen={(task) => navigate(buildSolveTarget(task))}
     />;
   }
 

@@ -1160,6 +1160,10 @@ export const TasksPage: React.FC<Props> = ({
   }, [requestedTaskIdFromUrl, tasks, active?.id, deriveEditorFromTask, theoryIsAcknowledged]);
 
   useEffect(() => {
+    // The task list is loaded asynchronously. Keep the requested task in the
+    // URL until that list is available; otherwise the empty initial render
+    // clears ?task= and the hydration effect adds it back a moment later.
+    if (requestedTaskIdFromUrl && tasks.length === 0) return;
     if (requestedTaskIdFromUrl && active?.id !== requestedTaskIdFromUrl) {
       const requestedExists = tasks.some((task) => task.id === requestedTaskIdFromUrl);
       if (requestedExists) return;
