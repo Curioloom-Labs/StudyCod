@@ -67,6 +67,9 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
   const learning = usePersonalLearning();
+  const nextPractice = learning.currentCourse?.modules
+    .flatMap((module) => module.items)
+    .find((item) => item.kind === "CODE_TASK" && item.progress.status !== "COMPLETED");
 
   React.useEffect(() => {
     if (!accountOpen) return;
@@ -240,7 +243,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2" />
             </div>
             <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
-            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Маршрут" : "Path", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: learning.currentCourse.nextAction?.kind === "CODE_TASK" ? `/learning/course/${learning.currentCourse.id}/practice/${learning.currentCourse.nextAction.itemId}` : `/learning/course/${learning.currentCourse.id}/path?focus=practice` }, { id: "progress", label: uk ? "Прогрес" : "Progress", path: `/learning/course/${learning.currentCourse.id}/progress` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(tab.id === "practice" && learning.currentCourse.nextAction?.kind !== "CODE_TASK" ? `/learning/course/${learning.currentCourse.id}/path?focus=practice&focusAt=${Date.now()}` : tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
+            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Маршрут" : "Path", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }, { id: "progress", label: uk ? "Прогрес" : "Progress", path: `/learning/course/${learning.currentCourse.id}/progress` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
             <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-[#657368] sm:flex dark:text-[#a5b3a9]"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dce6df] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00d782]" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
           </div>
         </div>
