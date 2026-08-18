@@ -79,7 +79,6 @@ function topicDescription(node: RoadmapNode): string {
 
 function topicParts(node: RoadmapNode): TopicPart[] {
   const parts: TopicPart[] = [];
-  if (node.theory) parts.push({ label: tr("Теорія", "Theory"), detail: tr("ключові поняття", "key concepts") });
   if (node.practices.length) {
     parts.push({
       label: tr("Практика", "Practice"),
@@ -412,13 +411,13 @@ export const LearningCoursePage: React.FC = () => {
               </div>
               <button type="button" disabled={locked || completed} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
                 {node.kind === "TOPIC" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-bg-surface text-xs font-black text-primary">{String(topicNumber).padStart(2, "0")}</span><span className="rounded-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-bold text-primary">{completed ? tr("Готово", "Done") : locked ? tr("Попереду", "Ahead") : tr("У фокусі", "In focus")}</span></div>}
-                 <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? `${tr("Тема", "Topic")} ${topicNumber}` : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
+                  <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? tr("Навчальний фокус", "Learning focus") : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
                  <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.title}</h3>
                  {node.kind === "TOPIC" ? <>
                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-text-secondary">{topicDescription(node)}</p>
-                   <div className="mt-4 flex flex-wrap gap-2">
-                     {parts.map((part) => <span key={part.label} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary"><span className="text-text-primary">{part.label}</span><span className="text-text-muted">·</span>{part.detail}</span>)}
-                   </div>
+                    {parts.length > 0 && <div className="mt-4 flex flex-wrap gap-2">
+                      {parts.map((part) => <span key={part.label} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary"><span className="text-text-primary">{part.label}</span><span className="text-text-muted">·</span>{part.detail}</span>)}
+                    </div>}
                    <p className="mt-3 text-xs font-semibold text-primary">{status}</p>
                  </> : <p className="mt-2 text-xs leading-5 text-text-secondary">{status}</p>}
                  {items.length > 1 && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>}
