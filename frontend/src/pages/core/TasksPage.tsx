@@ -398,15 +398,23 @@ export const TasksPage: React.FC<Props> = ({
       practice: practice || null
     };
   };
+  const catalogPracticeSequence = (t: Task): number | null => {
+    if (!String(t.subtitle ?? "").startsWith("CATALOG_ITEM:")) return null;
+    const match = /(?:Практика|Practice)\s+(\d+)\s*\/\s*\d+/i.exec(String(t.title ?? ""));
+    const sequence = Number(match?.[1] ?? NaN);
+    return Number.isInteger(sequence) && sequence > 0 ? sequence : null;
+  };
   const getTheoryMarkdown = (t: Task | null): string => {
     if (!t) return "";
-    // Catalog practices carry the authored topic theory in the generation
-    // context, but the learner should acknowledge it only on the first task
-    // in that topic. Never let a legacy description re-open theory on task 2+.
-    const isFirstInTopic = Number(t.lessonInTopic) === 1;
-    if (t.kind === "TOPIC" && !isFirstInTopic) return "";
+    // Catalog theory is a separate API field and is shown only before the
+    // first practice in the topic. Never recover it from the task statement.
+    const titleSequence = catalogPracticeSequence(t);
+    const isFirstInTopic = (titleSequence ?? Number(t.lessonInTopic)) === 1;
+    const isCatalogPractice = titleSequence !== null || String(t.subtitle ?? "").startsWith("CATALOG_ITEM:");
+    if ((t.kind === "TOPIC" || isCatalogPractice) && !isFirstInTopic) return "";
     const direct = (t.theoryMarkdown || "").trim();
     if (direct) return direct;
+    if (isCatalogPractice) return "";
     const legacyTheory = splitLegacyDescription(t.descriptionMarkdown || "").theory || "";
     if (legacyTheory.trim()) return legacyTheory;
 
@@ -425,7 +433,10 @@ export const TasksPage: React.FC<Props> = ({
   const getPracticeText = (t: Task | null): string => {
     if (!t) return "";
     const direct = (t.practiceText || "").trim();
+    const titleSequence = catalogPracticeSequence(t);
+    const isCatalogPractice = titleSequence !== null || String(t.subtitle ?? "").startsWith("CATALOG_ITEM:");
     if (direct) return direct;
+    if (isCatalogPractice) return "";
     return splitLegacyDescription(t.descriptionMarkdown || "").practice || "";
   };
   const computeHasTheory = (t: Task | null) => {

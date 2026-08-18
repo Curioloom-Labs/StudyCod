@@ -6,7 +6,9 @@ import { AppDataSource } from "../data-source";
 import { Task, TaskType } from "../entities/Task";
 import type { TaskIoType, TaskLang } from "../entities/Task";
 import { Topic } from "../entities/Topic";
+import { CourseItem } from "../entities/CourseItem";
 import { getCoursePracticeContext, startCourseItem, completeCourseItem } from "../services/learningCatalogService";
+import { localizeCourseItem } from "../services/curriculumLocalization";
 import { getPersonalMiniProjectDefinition, PERSONAL_MINI_PROJECT_INTERVAL } from "../data/personalMiniProjects";
 import {
   getPersonalThematicStartTopicIndex,
@@ -807,6 +809,62 @@ function stripPracticeHeader(rawPractice: string): string {
   return s.replace(/^###\s*(Практика|Practice)\b\s*/i, "").replace(/^###\s*(Практичне\s+завдання|Practical\s+task)\b\s*/i, "").trim();
 }
 
+function looksLikeStoredLessonTheory(text: string): boolean {
+  const normalized = normalizeMarkdownText(text).toLowerCase().replace(/\s+/g, " ");
+  if (!normalized) return false;
+  const markers = [
+    "### інтуїтивне пояснення",
+    "### intuitive explanation",
+    "### що відбувається під час виконання",
+    "### what happens at runtime",
+    "### мінімальний приклад коду",
+    "### minimal code example",
+    "### типові помилки новачка",
+    "### common beginner mistakes",
+    "### спробуй передбачити",
+    "### try to predict",
+    "### підсумок",
+    "### summary",
+  ];
+  return markers.reduce((count, marker) => count + (normalized.includes(marker) ? 1 : 0), 0) >= 2;
+}
+
+/**
+ * Compatibility cleanup for catalog rows created by the old mixed payload
+ * format. This only extracts a practice from already-persisted bad data; it
+ * never uses the extracted theory and never writes the separator back.
+ */
+function catalogPracticeTextFromStoredDescription(rawDescription: string): string {
+  const trimmed = normalizeMarkdownText(rawDescription).trim();
+  if (!trimmed) return "";
+  const marker = /^###\s*(Практика|Practice)\b.*$/im.exec(trimmed);
+  if (marker && typeof marker.index === "number") return stripPracticeHeader(trimmed.slice(marker.index));
+  return looksLikeStoredLessonTheory(trimmed) ? "" : trimmed;
+}
+
+function catalogPracticeSequenceFromItem(item: {
+  content?: Record<string, unknown> | null;
+  contentKey?: string | null;
+  title?: string | null;
+}): number | null {
+  const fromExercise = Number((item.content as any)?.exercise?.sequence);
+  if (Number.isInteger(fromExercise) && fromExercise > 0) return fromExercise;
+
+  const fromKey = /\.practice-(\d+)$/i.exec(String(item.contentKey ?? ""));
+  const keySequence = Number(fromKey?.[1] ?? NaN);
+  if (Number.isInteger(keySequence) && keySequence > 0) return keySequence;
+
+  const fromTitle = /(?:Практика|Practice)\s+(\d+)\s*\/\s*\d+/i.exec(String(item.title ?? ""));
+  const titleSequence = Number(fromTitle?.[1] ?? NaN);
+  return Number.isInteger(titleSequence) && titleSequence > 0 ? titleSequence : null;
+}
+
+function catalogPracticeSequenceFromTask(task: Task): number | null {
+  const fromTitle = /(?:Практика|Practice)\s+(\d+)\s*\/\s*\d+/i.exec(String(task.title ?? ""));
+  const titleSequence = Number(fromTitle?.[1] ?? NaN);
+  return Number.isInteger(titleSequence) && titleSequence > 0 ? titleSequence : null;
+}
+
 function sanitizeGeneratedTestText(raw: unknown, kind: "input" | "output"): string {
   let s = normalizeMarkdownText(String(raw ?? ""));
   if (!s) return "";
@@ -1317,6 +1375,9 @@ const FORCE_STDIN_AFTER_INPUT = envFlag('TASKS_FORCE_STDIN_AFTER_INPUT', false);
 const FORCE_STDIN_FROM_TOPIC_INDEX = envInt('TASKS_FORCE_STDIN_FROM_TOPIC_INDEX', 0);
 const STRICT_TEST_CONSISTENCY = envFlag('TASKS_STRICT_TEST_CONSISTENCY', true);
 const TEST_CONSISTENCY_RETRY_ATTEMPTS = Math.max(0, envInt('TASKS_TEST_CONSISTENCY_RETRY_ATTEMPTS', 1));
+// A model can return duplicate test cases even when the provider request succeeds.
+// Keep one bounded retry inside safeAICall so validation failures get a fresh response.
+const TEST_DATA_GENERATION_MAX_ATTEMPTS = Math.max(1, Math.min(3, envInt('TASKS_TEST_DATA_MAX_ATTEMPTS', 2)));
 
 function chooseGenerationAllowedIoTypes(params: {
   stdinAllowed: boolean;
@@ -1379,6 +1440,35 @@ function catalogItemIdFromTask(task: Task): number | null {
   if (!match) return null;
   const itemId = Number(match[1]);
   return Number.isInteger(itemId) && itemId > 0 ? itemId : null;
+}
+
+/**
+ * Catalog theory is authored on the linked THEORY course item. It is context
+ * for generation, never part of the persisted Task description. Load it
+ * separately when task DTOs are built so the IDE only receives the AI task.
+ */
+async function loadCatalogTheoryByTaskId(tasks: Task[], uiLanguage: UiLanguage): Promise<Map<number, string>> {
+  const theoryItemIdByTaskId = new Map<number, number>();
+  for (const task of tasks) {
+    if (!String(task.subtitle ?? "").startsWith("CATALOG_ITEM:")) continue;
+    const sequence = catalogPracticeSequenceFromTask(task) ?? Number(task.numInTopic ?? 1);
+    if (sequence !== 1) continue;
+    const theoryItemId = Number(((task as any).courseItem?.content as any)?.theoryItemId ?? 0);
+    if (Number.isInteger(theoryItemId) && theoryItemId > 0) theoryItemIdByTaskId.set(task.id, theoryItemId);
+  }
+  const theoryItemIds = Array.from(new Set(theoryItemIdByTaskId.values()));
+  if (!theoryItemIds.length) return new Map<number, string>();
+
+  const theoryItems = await AppDataSource.getRepository(CourseItem).find({ where: { id: In(theoryItemIds) } });
+  const theoryById = new Map(theoryItems.map((item) => [item.id, item]));
+  const result = new Map<number, string>();
+  for (const [taskId, theoryItemId] of theoryItemIdByTaskId) {
+    const theoryItem = theoryById.get(theoryItemId);
+    const localized = theoryItem ? localizeCourseItem(theoryItem, uiLanguage) : null;
+    const markdown = String((localized?.content as any)?.markdown ?? "").trim();
+    if (markdown) result.set(taskId, markdown);
+  }
+  return result;
 }
 
 async function syncCatalogPracticeProgress(params: { userId: number; task: Task; score: number; requestId?: string }) {
@@ -1500,6 +1590,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   localizedTheoryEnByBlockId?: Map<number, string>;
   localizedLegacyTheoryEnByTopicId?: Map<number, string>;
   localizedTopicTitleEnByTopicId?: Map<number, string>;
+  catalogTheoryMarkdown?: string | null;
   latestGrade?: Grade | null;
 }) {
   const uiLanguage = opts?.uiLanguage ?? "uk";
@@ -1512,22 +1603,33 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     uiLanguage
   );
   const isControlStandalone = task.type === "CONTROL" && !task.topic;
+  const isCatalogTask = String(task.subtitle ?? "").startsWith("CATALOG_ITEM:");
+  const catalogSequence = isCatalogTask ? catalogPracticeSequenceFromTask(task) : null;
+  const lessonInTopic = catalogSequence ?? (task.numInTopic ?? 1);
+  const catalogTheory = isCatalogTask && lessonInTopic === 1 ? String(opts?.catalogTheoryMarkdown ?? "").trim() : "";
 
-  const includeTheory = isControlStandalone ? false : shouldIncludeTheoryInStatement(task);
-  const theoryInfo = includeTheory
+  const includeTheory = isControlStandalone
+    ? false
+    : isCatalogTask
+      ? Boolean(catalogTheory)
+      : shouldIncludeTheoryInStatement(task);
+  const theoryInfo = includeTheory && !isCatalogTask
     ? getTopicTheoryInfo(task, {
         uiLanguage,
         localizedTheoryEnByBlockId: opts?.localizedTheoryEnByBlockId,
         localizedLegacyTheoryEnByTopicId: opts?.localizedLegacyTheoryEnByTopicId
       })
     : null;
-  const theoryMarkdown = includeTheory ? (theoryInfo?.markdown || "") : "";
-  const practiceText = isControlStandalone ? normalizeMarkdownText(rawPractice).trim() : stripPracticeHeader(rawPractice);
+  const theoryMarkdown = includeTheory ? (catalogTheory || theoryInfo?.markdown || "") : "";
+  const practiceSource = isCatalogTask ? catalogPracticeTextFromStoredDescription(rawPractice) : rawPractice;
+  const practiceText = isControlStandalone ? normalizeMarkdownText(practiceSource).trim() : stripPracticeHeader(practiceSource);
   const practiceHeader = i18nText(uiLanguage, "### Практика", "### Practice");
   const controlPlaceholder = i18nText(uiLanguage, "_Контрольне завдання ще не додано._", "_Control task has not been added yet._");
   const practicePlaceholder = i18nText(uiLanguage, "_Практичне завдання ще не додано._", "_Practical task has not been added yet._");
   const normalizedDescription = isControlStandalone
     ? (practiceText || controlPlaceholder)
+    : isCatalogTask
+      ? (practiceText || practicePlaceholder)
     : (includeTheory
         ? `${theoryMarkdown}\n\n${practiceHeader}\n\n${practiceText || practicePlaceholder}`.trim()
         : `${practiceHeader}\n\n${practiceText || practicePlaceholder}`.trim());
@@ -1597,7 +1699,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     lastGradeHints: parseStoredHints(lastGrade),
     lastGradeHintsStatus: hintStatusForGrade(lastGrade),
     status,
-    lessonInTopic: task.numInTopic ?? 1,
+    lessonInTopic,
     repeatAttempt: 0,
     kind: task.type,
     createdAt: task.createdAt,
@@ -1995,18 +2097,6 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   });
   const saved = await taskRepo().save(task);
 
-  // Catalog practice already has authored theory. Keep it in the task payload
-  // so the Practice page remains self-contained even though catalog items do
-  // not have a legacy Topic relation.
-  if (
-    String(params.subtitle ?? "").startsWith("CATALOG_ITEM:")
-    && params.numInTopic === 1
-    && params.theoryForAi.trim()
-  ) {
-    saved.descriptionMarkdown = `${params.theoryForAi.trim()}\n\n${saved.descriptionMarkdown}`;
-    saved.description = saved.descriptionMarkdown;
-    await taskRepo().save(saved);
-  }
   await params.reportProgress?.(
     "tests",
     76,
@@ -2112,7 +2202,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
         expectedCount: remainingCount,
         language: params.userLanguage,
         requestId: params.requestId,
-        maxAttempts: 1,
+        maxAttempts: TEST_DATA_GENERATION_MAX_ATTEMPTS,
         ...(disableDeadlines ? {} : { totalTimeoutMs: testsBudgetMs })
       });
       if (!testDataResult.success) {
@@ -2272,6 +2362,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
       .leftJoinAndSelect("task.user", "user")
       .leftJoinAndSelect("task.topic", "topic")
       .leftJoinAndSelect("topic.theoryBlock", "theoryBlock")
+      .leftJoinAndSelect("task.courseItem", "courseItem")
       .where("user.id = :userId", { userId: req.userId });
     if (req.learningRuntime) taskQuery.andWhere("task.lang = :runtime", { runtime: req.learningRuntime });
     if (scope === "COURSE") taskQuery.andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: requestedEnrollmentId });
@@ -2315,6 +2406,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
     const localizedTopicTitleEnByTopicId = uiLanguage === "en"
       ? await buildLocalizedTopicTitleEnById({ req, topics: tasks.map(t => (t as any)?.topic) })
       : new Map<number, string>();
+    const catalogTheoryByTaskId = await loadCatalogTheoryByTaskId(tasks, uiLanguage);
 
     if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
     return res.json(tasks.map(t => mapTaskToDto(t, gradeTaskIds, {
@@ -2323,7 +2415,8 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
       latestGrade: latestGradesByTaskId.get(t.id) ?? null,
       localizedTheoryEnByBlockId,
       localizedLegacyTheoryEnByTopicId,
-      localizedTopicTitleEnByTopicId
+      localizedTopicTitleEnByTopicId,
+      catalogTheoryMarkdown: catalogTheoryByTaskId.get(t.id) ?? null
     })));
   } catch (error) {
     logger.error("[tasks] GET /tasks error", { requestId: req.requestId, userId: req.userId, error });
@@ -2369,7 +2462,7 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
           id: req.userId
         }
       },
-      relations: ["user", "topic", "topic.theoryBlock", "testData"]
+      relations: ["user", "topic", "topic.theoryBlock", "courseItem", "testData"]
     });
     if (!task) return res.status(404).json({
       message: "Task not found"
@@ -2402,6 +2495,7 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
     const localizedTopicTitleEnByTopicId = uiLanguage === "en"
       ? await buildLocalizedTopicTitleEnById({ req, topics: [(task as any)?.topic] })
       : new Map<number, string>();
+    const catalogTheoryByTaskId = await loadCatalogTheoryByTaskId([task], uiLanguage);
 
     if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
     return res.json(mapTaskToDto(task, gradeTaskIds, {
@@ -2410,7 +2504,8 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
       latestGrade: grade,
       localizedTheoryEnByBlockId,
       localizedLegacyTheoryEnByTopicId,
-      localizedTopicTitleEnByTopicId
+      localizedTopicTitleEnByTopicId,
+      catalogTheoryMarkdown: catalogTheoryByTaskId.get(task.id) ?? null
     }));
   } catch {
     return res.status(500).json({
@@ -3293,6 +3388,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         .orderBy("task.createdAt", "ASC")
         .select(["task.id", "task.title", "task.description", "task.numInTopic"])
         .getMany();
+      const catalogPracticeSequence = catalogPracticeSequenceFromItem(context.item) ?? (existingCourseTasks.length + 1);
       const difus = await getStableDifus(userId, lang, topicIndex, userRepo, gradeRepo);
       const theoryForAi = [
         context.theoryMarkdown,
@@ -3316,7 +3412,10 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         type: "TOPIC",
         topic: null,
         topicIndex,
-        numInTopic: existingCourseTasks.length + 1,
+        // Catalog practice items are separate rows, so counting persisted
+        // tasks for the current item would make every item look like 1/1.
+        // Use the authored practice sequence (e.g. practice-3 => 3/3).
+        numInTopic: catalogPracticeSequence,
         requiredTasksInThisGroup: 1,
         topicTitleForAi: context.item.title,
         theoryForAi,
@@ -3341,7 +3440,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       saved.courseEnrollmentId = context.enrollment.id;
       await taskRepo().save(saved);
       await startCourseItem(userId, requestedCourseItemId);
-      const hydrated = await taskRepo().findOne({ where: { id: saved.id }, relations: ["topic", "topic.theoryBlock"] });
+      const hydrated = await taskRepo().findOne({ where: { id: saved.id }, relations: ["topic", "topic.theoryBlock", "courseItem"] });
       await reportGenerationProgress(
         "ready",
         100,
@@ -3350,7 +3449,10 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       );
       return res.json({
         status: "ok",
-        task: mapTaskToDto(hydrated ?? saved, undefined, { uiLanguage: userLanguage }),
+        task: mapTaskToDto(hydrated ?? saved, undefined, {
+          uiLanguage: userLanguage,
+          catalogTheoryMarkdown: context.theoryMarkdown
+        }),
       });
     }
 
@@ -3954,7 +4056,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           expectedCount: remainingCount,
           language: userLanguage,
           requestId: req.requestId,
-          maxAttempts: 1,
+          maxAttempts: TEST_DATA_GENERATION_MAX_ATTEMPTS,
           ...(DISABLE_AI_DEADLINES ? {} : { totalTimeoutMs: testsBudgetMs })
         });
         if (!testDataResult.success) {
