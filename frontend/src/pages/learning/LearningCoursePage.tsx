@@ -398,8 +398,8 @@ export const LearningCoursePage: React.FC = () => {
                 ? Math.round((previousItems.filter((item) => item.progress.status === "COMPLETED").length / previousItems.length) * 100)
                 : nodeCompleted(previousNode) ? 100 : 0
               : 0;
-            const incomingConnectorWidth = 2 + (previousProgress / 100) * 5;
-            const outgoingConnectorWidth = 2 + (progress / 100) * 5;
+            const incomingThickRatio = Math.max(0, (previousProgress - 50) / 50);
+            const outgoingThickRatio = Math.min(1, progress / 50);
             const isSelected = selectedNodeId === node.id;
             const topicNumber = roadmapNodes.slice(0, index + 1).filter((candidate) => candidate.kind === "TOPIC").length;
             const parts = node.kind === "TOPIC" ? topicParts(node) : [];
@@ -420,8 +420,8 @@ export const LearningCoursePage: React.FC = () => {
                     : tr("Відкрити практику", "Open practice");
 
             return <div key={node.id} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
-              {index > 0 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-[2] hidden -translate-x-1/2 rounded-full bg-primary/70 lg:block" style={{ width: `${incomingConnectorWidth}px`, height: "50%" }} />}
-              {index < roadmapNodes.length - 1 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[2] hidden -translate-x-1/2 rounded-full bg-primary/70 lg:block" style={{ width: `${outgoingConnectorWidth}px`, top: "50%", bottom: "-1.75rem" }} />}
+              {index > 0 && incomingThickRatio > 0 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 z-[2] hidden h-1/2 origin-top rounded-full bg-primary/75 lg:block" style={{ width: "7px", transform: `translateX(-50%) scaleY(${incomingThickRatio})` }} />}
+              {index < roadmapNodes.length - 1 && outgoingThickRatio > 0 && <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 z-[2] hidden origin-top rounded-full bg-primary/75 lg:block" style={{ width: "7px", bottom: "-1.75rem", transform: `translateX(-50%) scaleY(${outgoingThickRatio})` }} />}
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
