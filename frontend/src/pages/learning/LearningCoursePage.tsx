@@ -167,6 +167,14 @@ export const LearningCoursePage: React.FC = () => {
 
   }, [course, loading, roadmapNodes, searchParams]);
 
+  React.useEffect(() => {
+    if (searchParams.get("focus") !== "practice" || !selectedNodeId) return;
+    const focusTimer = window.setTimeout(() => {
+      document.getElementById("course-practice-focus")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [searchParams, selectedNodeId]);
+
   const completeItem = async (item: LearningCourseItem) => {
     if (!courseIsActive) {
       setError(tr("Спочатку активуйте курс.", "Activate the course first."));
@@ -376,7 +384,7 @@ export const LearningCoursePage: React.FC = () => {
       </div>
     </section>
 
-    {selectedNode && <section className="mb-6 rounded-[26px] border border-primary/25 bg-bg-surface p-5 shadow-sm sm:p-7">
+    {selectedNode && <section id="course-practice-focus" className="mb-6 scroll-mt-28 rounded-[26px] border border-primary/25 bg-bg-surface p-5 shadow-sm sm:p-7">
       <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : selectedNode.kind === "TOPIC" ? tr("Теорія теми", "Topic theory") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>
 
       {selectedTheory && <div className="mt-6"><div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedTheory)} /></div><div className="mt-5 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedTheory.progress.status === "COMPLETED" ? tr("Теорію завершено", "Theory completed") : tr("Після читання зарахуй теорію, щоб відкрити практику.", "Complete the theory after reading to unlock practice.")}</span><button type="button" disabled={selectedTheory.progress.status === "COMPLETED" || busyItem === selectedTheory.id} onClick={() => void completeItem(selectedTheory)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45">{selectedTheory.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити теорію", "Complete theory")}</button></div></div>}
