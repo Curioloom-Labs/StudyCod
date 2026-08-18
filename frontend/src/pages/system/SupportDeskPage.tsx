@@ -1,7 +1,7 @@
 import React from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, Clock3, ExternalLink, Inbox, MessageCircle, Paperclip, RefreshCw, Search, Send } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { StandaloneShell } from "../../components/layout/StandaloneShell";
+import { PersonalRouteShell } from "../../components/layout/PersonalRouteShell";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { downloadSupportChatAttachment } from "../../lib/api/support";
 import {
@@ -230,7 +230,7 @@ export const SupportDeskPage: React.FC = () => {
   const openCount = conversations.filter((item) => item.status === "OPEN").length;
   const closedCount = conversations.filter((item) => item.status === "CLOSED").length;
 
-  return <StandaloneShell current="support">
+  return <PersonalRouteShell area="lab">
     <div className="min-h-[calc(100dvh-72px)] bg-[#f5f7f4] dark:bg-[#09100c]">
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-9 lg:py-9">
         <header className="flex flex-wrap items-end justify-between gap-5">
@@ -253,7 +253,7 @@ export const SupportDeskPage: React.FC = () => {
         </div>
       </div>
     </div>
-  </StandaloneShell>;
+  </PersonalRouteShell>;
 };
 
 export default SupportDeskPage;
