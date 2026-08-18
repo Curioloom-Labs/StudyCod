@@ -1557,6 +1557,12 @@ export const TasksPage: React.FC<Props> = ({
           average: Number(er.average ?? 0),
           message: String(er.message ?? "")
         });
+        const blockedMessage = String(er.message ?? "");
+        setConsoleOutput(courseMode
+          ? (blockedMessage === "COMPLETE_PREVIOUS_TASK"
+            ? tr("Курсова практика не повинна блокуватися стороннім завданням. Онови сторінку й спробуй ще раз.", "Course practice should not be blocked by an unrelated task. Refresh the page and try again.")
+            : blockedMessage)
+          : blockedMessage);
         setUIState("logic-warning");
         return;
       }

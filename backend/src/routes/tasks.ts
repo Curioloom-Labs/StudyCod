@@ -3120,18 +3120,22 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       if (!Number.isFinite(v)) return -1;
       return Math.max(-1, Math.floor(v));
     })();
-    // Fast blocking check: if there exists an unfinished task without a grade, do not generate a new one.
-    // Avoid N+1 queries over tasks/grades.
-    const blocking = await taskRepo()
-      .createQueryBuilder("task")
-      .leftJoin("task.grades", "grade")
-      .where("task.user_id = :userId", { userId })
-      .andWhere("task.lang = :lang", { lang })
-      .andWhere("task.completed = 0")
-      .andWhere("grade.id IS NULL")
-      .orderBy("task.createdAt", "ASC")
-      .select(["task.id", "task.type", "task.subtitle"])
-      .getOne();
+    // Fast blocking check: if there exists an unfinished *personal* task
+    // without a grade, do not generate another generic task. A course
+    // practice request is already scoped to its catalog item and must not be
+    // blocked by an unrelated Lab task left in progress.
+    const blocking = requestedCourseItemId > 0
+      ? null
+      : await taskRepo()
+        .createQueryBuilder("task")
+        .leftJoin("task.grades", "grade")
+        .where("task.user_id = :userId", { userId })
+        .andWhere("task.lang = :lang", { lang })
+        .andWhere("task.completed = 0")
+        .andWhere("grade.id IS NULL")
+        .orderBy("task.createdAt", "ASC")
+        .select(["task.id", "task.type", "task.subtitle"])
+        .getOne();
     if (blocking) {
       const isControlBatch = blocking.type === "CONTROL" && !!parsePersonalControlBatchPrefix((blocking as any).subtitle);
       return res.status(400).json({
