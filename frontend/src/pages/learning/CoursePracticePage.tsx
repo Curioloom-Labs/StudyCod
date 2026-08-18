@@ -51,8 +51,10 @@ export const CoursePracticePage: React.FC = () => {
   }, [courseId, courseItemId]);
 
   if (!user || courseLookupState === "pending") return <BrandedPageLoader />;
-  if (courseLookupState === "loaded" && (!courseItem || courseItem.kind !== "CODE_TASK")) {
-    const itemKindMessage = courseItem
+  if (courseLookupState !== "loaded" || !courseItem || courseItem.kind !== "CODE_TASK") {
+    const itemKindMessage = courseLookupState === "failed"
+      ? tr("Не вдалося перевірити елемент курсу.", "Could not verify this course item.")
+      : courseItem
       ? tr(`Відкритий елемент є ${kindLabel(courseItem.kind)}.`, `The opened item is a ${kindLabel(courseItem.kind)}.`)
       : tr("Цей елемент не знайдено в поточному курсі.", "This item was not found in the current course.");
     return <main className="mx-auto flex min-h-[60vh] max-w-2xl items-center px-6 py-12">
