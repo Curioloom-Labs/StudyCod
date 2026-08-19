@@ -3,10 +3,10 @@ courses:
   python-core:
     - key: python-cli-calculator
       title: Калькулятор у терміналі
-      description: Створіть консольний калькулятор, який читає вирази, виконує базові операції, повторює обчислення в одному запуску та спокійно обробляє помилковий ввід.
+      description: Створіть консольний калькулятор, який читає два числа й оператор, виконує базові операції в циклі та зрозуміло реагує на ділення на нуль або невідомий оператор.
       estimatedMinutes: 120
-      skills: [input, змінні, умови, цикли, функції, словники, винятки]
-      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range, funktsii-ta-parametry-args-kwargs, obrobka-vynyatkiv]
+      skills: [input, змінні, умови, цикли]
+      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range]
       template: "main.py\nREADME.md"
       milestones:
         - id: contract
@@ -14,17 +14,39 @@ courses:
           description: Визначте формат виразу, підтримувані оператори та зрозумілу поведінку для команди виходу.
         - id: operations
           title: Обчислення
-          description: Реалізуйте базові арифметичні операції з окремою перевіркою ділення на нуль.
+          description: Реалізуйте базові арифметичні операції та окремо перевірте ділення на нуль.
         - id: session
           title: Сесія та історія
-          description: Дозвольте виконувати багато обчислень, завершувати сесію та зберігати коротку історію результатів.
+          description: Дозвольте виконувати багато обчислень в одному запуску та завершувати сесію командою виходу.
         - id: resilience
           title: Надійність
-          description: Обробіть нечисловий ввід і невідомі оператори без аварійного завершення програми.
+          description: Обробіть ділення на нуль і невідомі оператори без аварійного завершення програми.
       acceptanceCriteria:
         - Валідний вираз виводить один результат у визначеному форматі.
-        - Помилка вводу не завершує сесію та не потрапляє в історію успішних результатів.
+        - Ділення на нуль або невідомий оператор дають зрозумілу відповідь і не завершують сесію.
         - Команда виходу завершує програму без зайвого обчислення.
+
+    - key: python-contact-book
+      title: Контактна книга CLI
+      description: "Побудуйте консольну контактну книгу: додавання, пошук, оновлення та видалення записів із передбачуваною поведінкою для порожньої книги й невідомого імені."
+      estimatedMinutes: 150
+      skills: [списки, словники, функції, цикли, input]
+      requiredTopicKeys: [spysky-list-osnovy, slovnyky-dict, funktsii-ta-parametry-args-kwargs]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: model
+          title: Модель контакту
+          description: Визначте структуру запису та правила для імені й номера телефону.
+        - id: commands
+          title: Команди книги
+          description: Реалізуйте додавання, пошук, оновлення та видалення через окремі функції.
+        - id: session
+          title: Інтерактивна сесія
+          description: Додайте цикл команд і зрозумілі відповіді для порожньої книги та відсутнього контакту.
+      acceptanceCriteria:
+        - Додавання нового імені не знищує наявні записи.
+        - Пошук і видалення відсутнього імені не завершують програму з помилкою.
+        - Кожна команда має один визначений формат відповіді.
 
   python-extensions:
     - key: python-data-pipeline
@@ -51,6 +73,28 @@ courses:
         - Повторний запуск не створює дублікати або пошкоджений CSV.
         - Невалідна відповідь сервісу не маскується як успішний звіт.
         - У тестах немає реальних мережевих запитів.
+
+    - key: python-automation-toolkit
+      title: Набір CLI-автоматизацій
+      description: Зберіть повторно використовуваний CLI-інструмент для запуску кількох обробників даних із конфігурацією, логуванням, тестами та безпечним повторним запуском.
+      estimatedMinutes: 180
+      skills: [asyncio, threading, logging, pytest, документація]
+      requiredTopicKeys: [asynkhronnist-asyncio-async-await, potoky-ta-protsesy-threading-multiprocessing, lohuvannya, testuvannya-unittest-pytest, dokumentatsiya-i-styl-kodu-pep-8-docstring]
+      template: "src/cli.py\nsrc/jobs.py\ntests/\nREADME.md"
+      milestones:
+        - id: commands
+          title: Контракт команд
+          description: Визначте набір команд, параметри запуску та формат підсумкового статусу.
+        - id: execution
+          title: Виконання задач
+          description: Запустіть незалежні обробники з контрольованим порядком і зрозумілими статусами.
+        - id: reliability
+          title: Надійність
+          description: Додайте логування без секретів, повторний запуск і тести для успішної та невдалої задачі.
+      acceptanceCriteria:
+        - Повторний запуск не дублює результати та не залишає пошкоджений стан.
+        - Помилка однієї задачі має зрозумілий статус і не приховується як успішна.
+        - Тести не залежать від реального часу, мережі або production secrets.
 
   flask:
     - key: flask-reading-list
@@ -260,10 +304,10 @@ courses:
   java-core:
     - key: java-cli-calculator
       title: Калькулятор у терміналі
-      description: Створіть консольний калькулятор, який читає вирази, виконує базові арифметичні операції, не падає на помилковому вводі та показує історію обчислень до завершення роботи.
+      description: Створіть консольний калькулятор, який читає два числа й оператор через Scanner, виконує базові операції в циклі та зрозуміло реагує на ділення на нуль або невідомий оператор.
       estimatedMinutes: 150
-      skills: [Scanner, змінні та типи, умови, цикли, методи, колекції, винятки]
-      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while, metody-parametry-perevantazhennya, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
+      skills: [Scanner, змінні та типи, умови, цикли]
+      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: contract
@@ -271,18 +315,39 @@ courses:
           description: Визначте формат команди, підтримувані оператори та зрозумілу відповідь для порожнього або некоректного вводу.
         - id: operations
           title: Арифметичні операції
-          description: Реалізуйте додавання, віднімання, множення та ділення через окрему логіку, включно з перевіркою ділення на нуль.
+          description: Реалізуйте додавання, віднімання, множення та ділення через умовну логіку, включно з перевіркою ділення на нуль.
         - id: session
-          title: Цикл роботи та історія
-          description: Дозвольте виконувати багато обчислень в одному запуску, завершувати сесію командою виходу та зберігати коротку історію результатів.
+          title: Цикл роботи
+          description: Дозвольте виконувати багато обчислень в одному запуску та завершувати сесію командою виходу.
         - id: resilience
           title: Надійність
-          description: Обробіть нечислові значення, невідомі оператори й інші помилки без аварійного завершення програми.
+          description: Обробіть ділення на нуль і невідомі оператори без аварійного завершення програми.
       acceptanceCriteria:
         - Кожен валідний вираз виводить рівно один результат у визначеному форматі.
-        - Ділення на нуль і невідомий оператор дають зрозумілу помилку та не завершують сесію.
+        - Ділення на нуль або невідомий оператор дають зрозумілу відповідь і не завершують сесію.
         - Команда виходу завершує програму без зайвого результату обчислення.
-        - Історія не змішує невдалі спроби з успішними результатами.
+
+    - key: java-contact-book
+      title: Контактний каталог
+      description: Побудуйте консольний каталог контактів із пошуком, оновленням і видаленням записів. Програма має зберігати дані в колекції та не завершуватися через відсутній запис.
+      estimatedMinutes: 180
+      skills: [класи, методи, колекції, винятки]
+      requiredTopicKeys: [metody-parametry-perevantazhennya, klasy-ta-ob-yekty, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: model
+          title: Модель контакту
+          description: Створіть клас контакту з полями, конструктором і зрозумілим представленням запису.
+        - id: operations
+          title: Операції каталогу
+          description: Реалізуйте додавання, пошук, оновлення та видалення через окремі методи.
+        - id: resilience
+          title: Надійність
+          description: Обробіть порожній каталог, дублікати та пошук відсутнього контакту без аварійного завершення.
+      acceptanceCriteria:
+        - Операції не змінюють сторонні записи.
+        - Відсутній контакт дає зрозумілу відповідь, а не виняток назовні.
+        - Повторний запуск команд не створює неочікуваних дублікатів.
 
   java-advanced:
     - key: java-log-analyzer
@@ -306,13 +371,35 @@ courses:
         - Невалідний рядок не завершує весь аналіз без пояснення.
         - Тести покривають порожній файл і змішані рівні.
 
+    - key: java-concurrent-job-runner
+      title: Планувальник фонових задач
+      description: Побудуйте Java-сервіс, який приймає незалежні задачі, виконує їх через пул потоків і повертає детермінований звіт про успішні та невдалі запуски.
+      estimatedMinutes: 210
+      skills: [functional interfaces, executors, Future, CompletableFuture, concurrency, tests]
+      requiredTopicKeys: [funktsionalni-interfeysy, executors-future-completablefuture, konkurentnist-thread-runnable, pul-potokiv-ta-planuvannya-zadach, testuvannya-junit-5-mockito]
+      template: "src/main/java/JobRunner.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: contract
+          title: Контракт задачі
+          description: Визначте стан задачі, формат результату та контрольовану помилку виконання.
+        - id: execution
+          title: Пул виконання
+          description: Запустіть незалежні задачі через ExecutorService і дочекайтеся всіх результатів.
+        - id: safety
+          title: Завершення та тести
+          description: Коректно закрийте ресурси й перевірте успішні, невдалі та порожні набори задач.
+      acceptanceCriteria:
+        - Невдала задача не приховується як успішна й не губить результати інших задач.
+        - Пул потоків завершується після обробки всіх задач.
+        - Тести не залежать від випадкового порядку виконання.
+
   cpp-core:
     - key: cpp-cli-calculator
       title: Калькулятор у консолі
-      description: Створіть консольний калькулятор на C++, який читає вирази, виконує базові операції в циклі та обробляє некоректний ввід без аварійного завершення.
+      description: Створіть консольний калькулятор на C++, який читає два числа й оператор, виконує базові операції в циклі та зрозуміло реагує на ділення на нуль або невідомий оператор.
       estimatedMinutes: 135
-      skills: [ввід і вивід, змінні, умови, switch, цикли, функції, рядки, винятки]
-      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry, ryadky-std-string, vynyatky-exceptions]
+      skills: [ввід і вивід, змінні, умови, switch, цикли, функції]
+      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: contract
@@ -326,11 +413,33 @@ courses:
           description: Дозвольте виконувати багато виразів у межах одного запуску та коректно завершувати програму.
         - id: resilience
           title: Надійність
-          description: Обробіть нечисловий ввід і невідомі оператори без аварійного завершення.
+          description: Обробіть ділення на нуль і невідомі оператори без аварійного завершення.
       acceptanceCriteria:
         - Валідний вираз дає один результат у визначеному форматі.
-        - Помилка вводу не завершує сесію та не створює хибний результат.
+        - Ділення на нуль або невідомий оператор дають зрозумілу відповідь і не завершують сесію.
         - Команда виходу не виконується як арифметична операція.
+
+    - key: cpp-vector-report
+      title: Звіт за вимірюваннями
+      description: Створіть консольну програму, яка збирає послідовність вимірювань, обчислює підсумкові показники та формує стабільний текстовий звіт.
+      estimatedMinutes: 165
+      skills: [STL vector, рядки, алгоритми, функції]
+      requiredTopicKeys: [funktsii-ta-parametry, ryadky-std-string, stl-vector, stl-alhorytmy]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: input
+          title: Введення даних
+          description: Визначте формат послідовності та поведінку для порожнього вводу.
+        - id: aggregation
+          title: Обчислення
+          description: Збережіть значення у vector і винесіть підрахунок мінімуму, максимуму та середнього в окремі функції.
+        - id: report
+          title: Текстовий звіт
+          description: Сформуйте детермінований звіт із кількістю значень і підсумковими показниками.
+      acceptanceCriteria:
+        - Порожній ввід обробляється без невизначеної поведінки.
+        - Розрахунки не змінюють початкову послідовність без явної потреби.
+        - Для однакових даних програма формує однаковий звіт.
 
   cpp-advanced:
     - key: cpp-file-indexer
@@ -354,3 +463,25 @@ courses:
         - Ресурси звільняються автоматично через RAII.
         - Недоступна папка не викликає невизначену поведінку.
         - Є тест на порожній каталог і дубльовані імена.
+
+    - key: cpp-threaded-log-reader
+      title: Паралельний читач логів
+      description: Створіть C++-інструмент, який читає кілька лог-файлів, безпечно агрегує лічильники подій і формує один детермінований звіт.
+      estimatedMinutes: 210
+      skills: [std::thread, mutex, chrono, STL, RAII, tests]
+      requiredTopicKeys: [paralelnist-std-thread, synkhronizatsiya-mutex, chas-ta-std-chrono, naykrashchi-praktyky-ta-styl-kodu]
+      template: "src/log_reader.hpp\nsrc/log_reader.cpp\nsrc/main.cpp\ntests/\nREADME.md"
+      milestones:
+        - id: parsing
+          title: Читання записів
+          description: Визначте формат рядка логу та окремо обробіть порожній або пошкоджений запис.
+        - id: concurrency
+          title: Паралельне агрегування
+          description: Розподіліть файли між потоками та захистіть спільну статистику mutex-ом.
+        - id: report
+          title: Детермінований звіт
+          description: Зберіть результати, виміряйте тривалість і сформуйте однаковий звіт для однакових даних.
+      acceptanceCriteria:
+        - Спільні лічильники не мають data race.
+        - Пошкоджений файл не завершує обробку інших файлів.
+        - Ресурси потоків і файлів звільняються коректно.

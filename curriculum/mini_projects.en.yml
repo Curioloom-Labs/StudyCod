@@ -4,10 +4,10 @@ courses:
   python-core:
     - key: python-cli-calculator
       title: Terminal Calculator
-      description: Build a console calculator that reads expressions, performs basic operations, repeats calculations in one run, and handles invalid input safely.
+      description: Build a console calculator that reads two numbers and an operator, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 120
-      skills: [input, variables, conditions, loops, functions, dictionaries, exceptions]
-      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range, funktsii-ta-parametry-args-kwargs, obrobka-vynyatkiv]
+      skills: [input, variables, conditions, loops]
+      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range]
       template: "main.py\nREADME.md"
       milestones:
         - id: contract
@@ -15,17 +15,39 @@ courses:
           description: Define the expression format, supported operators, and clear behavior for the exit command.
         - id: operations
           title: Calculations
-          description: Implement basic arithmetic operations with an explicit division-by-zero check.
+          description: Implement basic arithmetic operations and check division by zero explicitly.
         - id: session
-          title: Session and history
-          description: Allow multiple calculations, end the session, and keep a short history of results.
+          title: Work loop
+          description: Allow multiple calculations in one run and end the session with an exit command.
         - id: resilience
           title: Resilience
-          description: Handle non-numeric input and unknown operators without terminating the program unexpectedly.
+          description: Handle division by zero and unknown operators without terminating the program unexpectedly.
       acceptanceCriteria:
         - A valid expression prints one result in the defined format.
-        - An input error does not end the session or enter the successful-results history.
+        - Division by zero or an unknown operator produces a clear response and does not end the session.
         - The exit command ends the program without an extra calculation.
+
+    - key: python-contact-book
+      title: CLI Contact Book
+      description: Build a console contact book with add, search, update, and delete operations, including predictable behavior for an empty book and an unknown name.
+      estimatedMinutes: 150
+      skills: [lists, dictionaries, functions, loops, input]
+      requiredTopicKeys: [spysky-list-osnovy, slovnyky-dict, funktsii-ta-parametry-args-kwargs]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: model
+          title: Contact model
+          description: Define the record structure and rules for a name and phone number.
+        - id: commands
+          title: Book commands
+          description: Implement add, search, update, and delete through separate functions.
+        - id: session
+          title: Interactive session
+          description: Add a command loop with clear responses for an empty book and a missing contact.
+      acceptanceCriteria:
+        - Adding a new name does not destroy existing records.
+        - Searching for or deleting a missing name does not terminate the program with an error.
+        - Every command has one defined response format.
 
   python-extensions:
     - key: python-data-pipeline
@@ -66,6 +88,28 @@ courses:
         - Restarting does not create duplicate or corrupted CSV.
         - An invalid service response is not masquerading as a successful report.
         - There are no real network requests in the tests.
+
+    - key: python-automation-toolkit
+      title: CLI Automation Toolkit
+      description: Build a reusable CLI tool that runs several data handlers with configuration, logging, tests, and safe repeatable execution.
+      estimatedMinutes: 180
+      skills: [asyncio, threading, logging, pytest, documentation]
+      requiredTopicKeys: [asynkhronnist-asyncio-async-await, potoky-ta-protsesy-threading-multiprocessing, lohuvannya, testuvannya-unittest-pytest, dokumentatsiya-i-styl-kodu-pep-8-docstring]
+      template: "src/cli.py\nsrc/jobs.py\ntests/\nREADME.md"
+      milestones:
+        - id: commands
+          title: Command contract
+          description: Define the command set, parameters, and summary status format.
+        - id: execution
+          title: Job execution
+          description: Run independent handlers with controlled ordering and clear statuses.
+        - id: reliability
+          title: Reliability
+          description: Add secret-free logging, repeatable execution, and tests for successful and failed jobs.
+      acceptanceCriteria:
+        - A repeated run does not duplicate results or leave corrupted state.
+        - A failed job has a clear status and is not hidden as successful.
+        - Tests do not depend on real time, the network, or production secrets.
 
   flask:
     - key: flask-reading-list
@@ -376,10 +420,10 @@ courses:
   java-core:
     - key: java-cli-calculator
       title: Terminal Calculator
-      description: Build a console calculator that reads expressions, performs basic arithmetic, handles invalid input without crashing, and shows a calculation history until the session ends.
+      description: Build a console calculator that reads two numbers and an operator through Scanner, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 150
-      skills: [Scanner, variables and types, conditions, loops, methods, collections, exceptions]
-      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while, metody-parametry-perevantazhennya, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
+      skills: [Scanner, variables and types, conditions, loops]
+      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: contract
@@ -387,18 +431,39 @@ courses:
           description: Define the command format, supported operators, and a clear response for empty or invalid input.
         - id: operations
           title: Arithmetic operations
-          description: Implement addition, subtraction, multiplication, and division as separate logic, including division-by-zero validation.
+          description: Implement addition, subtraction, multiplication, and division through conditional logic, including division-by-zero validation.
         - id: session
-          title: Session and history
-          description: Allow multiple calculations in one run, exit with a command, and keep a short history of results.
+          title: Work loop
+          description: Allow multiple calculations in one run and exit with a command.
         - id: resilience
           title: Resilience
-          description: Handle non-numeric values, unknown operators, and other errors without terminating the program unexpectedly.
+          description: Handle division by zero and unknown operators without terminating the program.
       acceptanceCriteria:
         - Every valid expression prints exactly one result in the defined format.
-        - Division by zero and an unknown operator produce a clear error without ending the session.
+        - Division by zero or an unknown operator produces a clear response and does not end the session.
         - The exit command ends the program without an extra calculation result.
-        - History does not mix failed attempts with successful results.
+
+    - key: java-contact-book
+      title: Contact Catalog
+      description: Build a console contact catalog with search, update, and delete operations. The program must keep records in a collection and must not terminate because a record is missing.
+      estimatedMinutes: 180
+      skills: [classes, methods, collections, exceptions]
+      requiredTopicKeys: [metody-parametry-perevantazhennya, klasy-ta-ob-yekty, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: model
+          title: Contact model
+          description: Create a contact class with fields, a constructor, and a clear record representation.
+        - id: operations
+          title: Catalog operations
+          description: Implement add, search, update, and delete through separate methods.
+        - id: resilience
+          title: Resilience
+          description: Handle an empty catalog, duplicates, and a missing contact without an uncaught failure.
+      acceptanceCriteria:
+        - Operations do not change unrelated records.
+        - A missing contact produces a clear response instead of escaping an exception.
+        - Repeating commands does not create unexpected duplicates.
 
   java-advanced:
     - key: java-log-analyzer
@@ -428,13 +493,35 @@ courses:
           explanation.
         - Tests cover empty file and mixed levels.
 
+    - key: java-concurrent-job-runner
+      title: Background Job Scheduler
+      description: Build a Java service that accepts independent jobs, runs them through a thread pool, and returns a deterministic report of successful and failed runs.
+      estimatedMinutes: 210
+      skills: [functional interfaces, executors, Future, CompletableFuture, concurrency, tests]
+      requiredTopicKeys: [funktsionalni-interfeysy, executors-future-completablefuture, konkurentnist-thread-runnable, pul-potokiv-ta-planuvannya-zadach, testuvannya-junit-5-mockito]
+      template: "src/main/java/JobRunner.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: contract
+          title: Job contract
+          description: Define job states, the result format, and a controlled execution failure.
+        - id: execution
+          title: Execution pool
+          description: Run independent jobs through ExecutorService and wait for every result.
+        - id: safety
+          title: Shutdown and tests
+          description: Close resources correctly and test successful, failed, and empty job sets.
+      acceptanceCriteria:
+        - A failed job is not hidden as successful and does not lose other job results.
+        - The thread pool shuts down after all jobs are processed.
+        - Tests do not depend on random execution order.
+
   cpp-core:
     - key: cpp-cli-calculator
       title: Console Calculator
-      description: Build a C++ console calculator that reads expressions, performs basic operations in a loop, and handles invalid input without crashing.
+      description: Build a C++ console calculator that reads two numbers and an operator, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 135
-      skills: [input and output, variables, conditions, switch, loops, functions, strings, exceptions]
-      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry, ryadky-std-string, vynyatky-exceptions]
+      skills: [input and output, variables, conditions, switch, loops, functions]
+      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: contract
@@ -448,11 +535,33 @@ courses:
           description: Allow multiple expressions in one run and finish the program correctly.
         - id: resilience
           title: Resilience
-          description: Handle non-numeric input and unknown operators without crashing.
+          description: Handle division by zero and unknown operators without crashing.
       acceptanceCriteria:
         - A valid expression returns one result in the defined format.
-        - An input error does not end the session or create a false result.
+        - Division by zero or an unknown operator produces a clear response and does not end the session.
         - The exit command is not executed as an arithmetic operation.
+
+    - key: cpp-vector-report
+      title: Measurement Report
+      description: Build a console program that collects a sequence of measurements, calculates summary values, and produces a stable text report.
+      estimatedMinutes: 165
+      skills: [STL vector, strings, algorithms, functions]
+      requiredTopicKeys: [funktsii-ta-parametry, ryadky-std-string, stl-vector, stl-alhorytmy]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: input
+          title: Data input
+          description: Define the sequence format and behavior for empty input.
+        - id: aggregation
+          title: Calculations
+          description: Store values in a vector and move minimum, maximum, and average into separate functions.
+        - id: report
+          title: Text report
+          description: Produce a deterministic report with the number of values and summary metrics.
+      acceptanceCriteria:
+        - Empty input is handled without undefined behavior.
+        - Calculations do not mutate the original sequence without an explicit reason.
+        - The same data produces the same report.
 
   cpp-advanced:
     - key: cpp-file-indexer
@@ -486,3 +595,25 @@ courses:
         - Resources are released automatically through RAII.
         - An inaccessible folder does not cause undefined behavior.
         - There is a test for an empty directory and duplicate names.
+
+    - key: cpp-threaded-log-reader
+      title: Parallel Log Reader
+      description: Build a C++ tool that reads several log files, safely aggregates event counters, and produces one deterministic report.
+      estimatedMinutes: 210
+      skills: [std::thread, mutex, chrono, STL, RAII, tests]
+      requiredTopicKeys: [paralelnist-std-thread, synkhronizatsiya-mutex, chas-ta-std-chrono, naykrashchi-praktyky-ta-styl-kodu]
+      template: "src/log_reader.hpp\nsrc/log_reader.cpp\nsrc/main.cpp\ntests/\nREADME.md"
+      milestones:
+        - id: parsing
+          title: Record reading
+          description: Define the log line format and handle empty or malformed records separately.
+        - id: concurrency
+          title: Parallel aggregation
+          description: Distribute files between threads and protect shared statistics with a mutex.
+        - id: report
+          title: Deterministic report
+          description: Collect results, measure duration, and produce the same report for the same data.
+      acceptanceCriteria:
+        - Shared counters have no data race.
+        - A malformed file does not stop processing of other files.
+        - Thread and file resources are released correctly.
