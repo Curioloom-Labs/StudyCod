@@ -661,6 +661,22 @@ ${feedbackHtml}`;
         "Це автоматичний лист від StudyCod. Будь ласка, не відповідайте на нього.",
         "This is an automatic email from StudyCod. Please do not reply to it."
       );
+    const notificationLabel = this.t(locale, "ОПОВІЩЕННЯ STUDYCOD", "STUDYCOD NOTIFICATION");
+    const ctaBlock = opts.cta
+      ? `
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:22px auto 0 auto;">
+                  <tr>
+                    <td bgcolor="#00ff88" style="border-radius:16px;">
+                      <a href="${opts.cta.url}" style="display:inline-block;padding:14px 22px;background:#00ff88;color:#07140d;text-decoration:none;border-radius:16px;font-weight:800;font-size:15px;letter-spacing:0.1px;">${this.escapeHtml(opts.cta.label)}</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:14px 0 0 0;font-size:12px;line-height:1.55;color:#9eaaa2;">
+                  Якщо кнопка не працює, відкрийте посилання нижче:
+                  <br />
+                  <a href="${opts.cta.url}" style="color:#68efb0;text-decoration:underline;word-break:break-all;">${opts.cta.url}</a>
+                </p>`
+      : "";
 
     // Email-client friendly layout: table-based, inline styles.
     return `<!DOCTYPE html>
@@ -668,77 +684,68 @@ ${feedbackHtml}`;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark light" />
-    <meta name="supported-color-schemes" content="dark light" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="supported-color-schemes" content="dark" />
     <title>${title}</title>
   </head>
-  <body style="margin:0;padding:0;background-color:#0b120d;color:#d9e5dd;font-family:'Fixel Text',Inter,'Segoe UI',Roboto,Arial,sans-serif;">
+  <body style="margin:0;padding:0;background-color:#0b100d;color:#edf3ef;font-family:'Fixel Text',Inter,'Segoe UI',Roboto,Arial,sans-serif;">
     <!-- Preheader (hidden) -->
-    <div style="display:none;font-size:1px;color:#0b120d;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
+    <div style="display:none;font-size:1px;color:#0b100d;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
 
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#0b120d;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#0b100d;">
       <tr>
-        <td align="center" style="padding:32px 12px;">
+        <td align="center" style="padding:36px 12px 42px 12px;background:radial-gradient(circle at 50% -8%,rgba(0,255,136,0.10),transparent 420px),#0b100d;">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="max-width:640px;width:100%;">
             <!-- Brand -->
             <tr>
-              <td style="padding:0 8px 18px 8px;">
+              <td style="padding:0 8px 0 8px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td style="width:40px;height:40px;border-radius:13px;background:#18271d;border:1px solid #294536;text-align:center;vertical-align:middle;color:#68efb0;font-size:19px;font-weight:800;">&lt;/&gt;</td>
+                    <td style="width:48px;height:48px;border-radius:16px;background:#18271d;border:1px solid rgba(255,255,255,0.10);text-align:center;vertical-align:middle;color:#68efb0;font-size:20px;font-weight:800;"><span style="color:#68efb0;">&lt;</span><span style="color:#ffb454;">/</span><span style="color:#68efb0;">&gt;</span></td>
                     <td style="padding-left:11px;vertical-align:middle;">
-                      <a href="${this.getFrontendUrl()}" style="text-decoration:none;color:#f4f7f4;font-weight:800;font-size:20px;letter-spacing:-0.7px;">StudyCod</a>
-                      <div style="margin-top:3px;font-size:9px;color:#8c9b91;text-transform:uppercase;letter-spacing:1.2px;">learn by building</div>
+                      <a href="${this.getFrontendUrl()}" style="text-decoration:none;color:#edf3ef;font-weight:800;font-size:23px;letter-spacing:-1px;">StudyCod</a>
+                      <div style="margin-top:4px;font-size:9px;color:#9eaaa2;text-transform:uppercase;letter-spacing:1.5px;">learn by building</div>
                     </td>
                   </tr>
                 </table>
-                <div style="margin-top:18px;font-size:11px;color:#8c9b91;text-transform:uppercase;letter-spacing:1px;">${this.escapeHtml(
+              </td>
+            </tr>
+
+            <!-- Landing-inspired hero -->
+            <tr>
+              <td align="center" style="padding:42px 20px 36px 20px;">
+                <div style="display:inline-block;padding:7px 14px;border:1px solid rgba(255,255,255,0.10);border-radius:999px;background:rgba(255,255,255,0.055);color:#b2bdb6;font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;">${this.escapeHtml(
                   preheader
                 )}</div>
+                <div style="margin-top:22px;color:#68efb0;font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;">StudyCod &mdash; learn by building</div>
+                <h1 style="max-width:600px;margin:16px auto 0 auto;color:#f5fbf7;font-size:42px;line-height:1.04;letter-spacing:-1.7px;font-weight:800;">${title}</h1>
+                ${greeting}
+                ${ctaBlock}
               </td>
             </tr>
 
-            <!-- Card -->
+            <!-- Content card -->
             <tr>
-              <td style="background:#121b15;border:1px solid #294536;border-radius:22px;padding:28px 26px;box-shadow:0 24px 64px rgba(0,0,0,0.34);">
-                <div style="height:4px;background:linear-gradient(90deg,#00ff88 0%, #68efb0 58%, #ffb454 100%);border-radius:999px;margin:0 0 20px 0;"></div>
-                <h1 style="margin:0 0 10px 0;font-size:26px;line-height:1.22;color:#f4f7f4;letter-spacing:-0.45px;">${title}</h1>
-                ${greeting}
-                <div style="font-size:15px;line-height:1.72;color:#d9e5dd;">
+              <td style="background:#151c17;border:1px solid rgba(255,255,255,0.10);border-radius:26px;padding:30px 28px;box-shadow:0 28px 72px rgba(0,0,0,0.24);">
+                <div style="height:4px;background:linear-gradient(90deg,#00ff88 0%,#68efb0 58%,#ffb454 100%);border-radius:999px;margin:0 0 24px 0;"></div>
+                <div style="display:flex;align-items:center;gap:10px;margin:0 0 22px 0;color:#68efb0;font-size:10px;font-weight:800;letter-spacing:1.7px;text-transform:uppercase;">
+                  <span style="display:inline-block;width:28px;height:28px;border-radius:10px;background:rgba(0,255,136,0.12);text-align:center;line-height:28px;font-size:14px;">✦</span>
+                  ${notificationLabel}
+                </div>
+                <div style="font-size:15px;line-height:1.75;color:#dbe7df;">
                   ${opts.contentHtml}
                 </div>
-
-                ${
-                  opts.cta
-                    ? `
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
-                  <tr>
-                    <td bgcolor="#00ff88" style="border-radius:14px;">
-                      <a href="${opts.cta.url}"
-                         style="display:inline-block;padding:13px 20px;background:#00ff88;color:#07140d;text-decoration:none;border-radius:14px;font-weight:800;font-size:15px;letter-spacing:0.1px;">
-                        ${this.escapeHtml(opts.cta.label)}
-                      </a>
-                    </td>
-                  </tr>
-                </table>
-                <p style="margin:14px 0 0 0;font-size:12px;line-height:1.55;color:#8c9b91;">
-                  Якщо кнопка не працює, відкрийте посилання нижче:
-                  <br />
-                  <a href="${opts.cta.url}" style="color:#72edb0;text-decoration:underline;word-break:break-all;">${opts.cta.url}</a>
-                </p>
-                    `.trim()
-                    : ""
-                }
               </td>
             </tr>
 
-            <!-- Footer -->
+            <!-- Landing-inspired footer -->
             <tr>
-              <td style="padding:14px 10px 0 10px;">
-                <p style="margin:0;font-size:12px;line-height:1.65;color:#7f8c84;">
+              <td style="padding:28px 10px 0 10px;border-top:1px solid rgba(255,255,255,0.10);">
+                <p style="margin:0;font-size:12px;line-height:1.65;color:#8fa598;">
                   ${this.escapeHtml(footer)}
                 </p>
-                <p style="margin:8px 0 0 0;font-size:12px;color:#7f8c84;">© ${year} StudyCod • <a href="${this.getFrontendUrl()}" style="color:#7f8c84;text-decoration:underline;">studycod.space</a></p>
+                <p style="margin:10px 0 0 0;font-size:12px;color:#8fa598;">© ${year} StudyCod · Curioloom Labs</p>
+                <p style="margin:6px 0 0 0;font-size:12px;color:#68736c;">Створено для тих, хто вчиться створювати.</p>
               </td>
             </tr>
           </table>
