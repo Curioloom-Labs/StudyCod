@@ -480,7 +480,17 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               const allowed = new Set((sanitizedParams as any).allowedIoTypes as string[]);
               const ioType = typeof (result as any)?.ioType === 'string' ? String((result as any).ioType).trim() : 'STDIN_STDOUT';
               if (!allowed.has(ioType)) {
-                throw makeAIValidationError('generateTask', `Task generation validation failed: ioType "${ioType}" is not allowed for this stage`, result);
+                const isNoInputTask = ioType === 'NO_INPUT_FIXED_OUTPUT' || ioType === 'NO_INPUT_FREE_OUTPUT';
+                const isStdinOnlyPreference = allowed.size === 1 && allowed.has('STDIN_STDOUT');
+                // STDIN-only is a curriculum preference once input has been
+                // taught, not a correctness requirement. Some providers
+                // still return a fully consistent no-input task despite the
+                // enum/prompt. Keep that task instead of turning it into a
+                // deterministic fallback; only reject genuinely unknown or
+                // otherwise unsupported IO types.
+                if (!(isStdinOnlyPreference && isNoInputTask)) {
+                  throw makeAIValidationError('generateTask', `Task generation validation failed: ioType "${ioType}" is not allowed for this stage`, result);
+                }
               }
             }
 

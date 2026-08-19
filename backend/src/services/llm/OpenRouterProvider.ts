@@ -717,10 +717,22 @@ export class OpenRouterProvider implements LLMProvider {
     } = options;
     const requestTimeoutMs = (() => {
       const disabledByEnv = envFlag('OPENROUTER_DISABLE_TIMEOUT') || envFlag('OPENROUTER_DISABLE_TIMEOUTS');
-      if (disabledByEnv) return null;
-      const raw = Number(timeout);
-      if (!Number.isFinite(raw) || raw <= 0) return null;
-      return Math.max(1, Math.floor(raw));
+      if (!disabledByEnv) {
+        const raw = Number(timeout);
+        if (!Number.isFinite(raw) || raw <= 0) return null;
+        return Math.max(1, Math.floor(raw));
+      }
+
+      // Generation deadlines can be disabled for genuinely slow tasks, but a
+      // provider connection must never remain pending forever. This is a
+      // transport-stall guard, not a user-visible task-generation deadline:
+      // once it fires, the model fallback chain can continue with another
+      // provider. Keep it configurable for unusually slow deployments.
+      const rawTransport = Number(process.env.OPENROUTER_TRANSPORT_TIMEOUT_MS);
+      if (Number.isFinite(rawTransport) && rawTransport > 0) {
+        return Math.max(1_000, Math.floor(rawTransport));
+      }
+      return 90_000;
     })();
     const requestedModel = request.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
     const model = resolveTextModel(requestedModel);

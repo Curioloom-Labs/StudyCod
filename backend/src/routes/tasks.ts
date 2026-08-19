@@ -1461,9 +1461,14 @@ function chooseGenerationAllowedIoTypes(params: {
     return ["STDIN_STDOUT"];
   }
 
-  // Default behavior: once input is learned, prefer stdin tasks frequently (roughly 2 of each 3 tasks).
-  const shouldPreferStdinTask = params.numInTopic % 3 !== 1;
-  return shouldPreferStdinTask ? ["STDIN_STDOUT"] : undefined;
+  // Once input is learned, keep all IO modes available to the generator.
+  // A previous version made roughly two out of every three practices
+  // `STDIN_STDOUT`-only. That policy was too strict: the model could produce
+  // a perfectly valid no-input loop/formatting task, which was then rejected
+  // after the provider response and converted into a fallback task. The
+  // prompt still describes stdin as available; only the explicit environment
+  // flag above may enforce stdin-only generation.
+  return undefined;
 }
 
 function sanitizeMetaOutputFormatInStatement(

@@ -39,7 +39,7 @@ function ensureKatexCssLoaded(): Promise<unknown> {
 
 interface MarkdownViewProps {
   content: string;
-  variant?: "default" | "handbook";
+  variant?: "default" | "handbook" | "task";
 }
 
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
@@ -676,7 +676,10 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     processed = normalizeLanguageLessFenceOpenings(processed);
     return processed;
   }, [content]);
-  return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-sans prose-invert"} prose max-w-none
+  const taskMarkdownClasses = variant === "task"
+    ? "prose-p:my-3 prose-p:text-[13px] prose-p:leading-[1.7] prose-p:text-[#b9c9bd] prose-headings:mb-2 prose-headings:mt-6 prose-headings:text-[15px] prose-headings:leading-6 prose-headings:tracking-[-.01em] prose-h1:text-[18px] prose-h2:text-[17px] prose-h3:text-[15px] prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:text-[13px] prose-li:leading-6 prose-strong:text-[#edf5ee] [&>pre]:my-3 [&>pre]:border-[#294333] [&>pre]:bg-[#08100b] [&>pre]:p-3 [&>pre]:shadow-none [&>pre>code]:text-[12px] [&>pre>code]:leading-6"
+    : "";
+  return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-sans prose-invert"} ${variant === "task" ? "task-markdown" : ""} prose max-w-none
       prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-4 prose-pre:border-0
       prose-code:bg-bg-code prose-code:px-1.5 prose-code:py-0.5 prose-code:border prose-code:border-border prose-code:text-sm prose-code:font-mono prose-code:text-text-primary
       prose-code:before:content-[''] prose-code:after:content-['']
@@ -699,7 +702,8 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       [&_.katex_mathit]:!text-text-primary
       [&_.katex_main]:!text-text-primary
       [&_.katex_math]:!text-text-primary
-      [&_.katex]:!bg-transparent`}>
+      [&_.katex]:!bg-transparent
+      ${taskMarkdownClasses}`}>
       <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={codeComponents}>
         {processedContent}
       </ReactMarkdown>

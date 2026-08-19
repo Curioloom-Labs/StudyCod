@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  BookOpen,
   Bot,
   Braces,
   Check,
@@ -149,7 +150,7 @@ type Props = {
   isWebTask?: boolean;
 };
 
-const LAYOUT_KEY = "studycod:ide:layout:v3";
+const LAYOUT_KEY = "studycod:ide:layout:v4";
 const HISTORY_KEY = "studycod:ide:history:v1";
 const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
 
@@ -163,9 +164,9 @@ type LayoutState = {
 };
 
 const DEFAULT_LAYOUT: LayoutState = {
-  left: 220,
-  right: 320,
-  bottom: 360,
+  left: 224,
+  right: 390,
+  bottom: 300,
   leftCollapsed: false,
   rightCollapsed: false,
   bottomCollapsed: false,
@@ -208,6 +209,24 @@ function formatMiniProjectCountdown(totalSeconds: number): string {
     return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
   }
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function removeRepeatedTaskTitle(description: string, title: string): string {
+  const source = String(description ?? "");
+  const lines = source.split("\n");
+  const firstContentLine = lines.findIndex((line) => line.trim().length > 0);
+  if (firstContentLine < 0) return source;
+
+  const firstLine = lines[firstContentLine]
+    .replace(/^\s{0,3}#{1,6}\s*/, "")
+    .replace(/[*_`]/g, "")
+    .trim()
+    .toLowerCase();
+  const normalizedTitle = String(title ?? "").replace(/[*_`]/g, "").trim().toLowerCase();
+  if (!firstLine || !normalizedTitle) return source;
+  if (firstLine !== normalizedTitle && !normalizedTitle.startsWith(firstLine)) return source;
+
+  return lines.slice(firstContentLine + 1).join("\n").replace(/^\n+/, "");
 }
 
 type PracticeCodeEditorProps = {
@@ -264,6 +283,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   };
   const taskTheoryKey = scopedStorageKey(IDE_THEORY_COMPLETION_KEY, props.task.id);
   const isEmptyTask = String(props.task.id) === "empty";
+  const taskBody = React.useMemo(
+    () => removeRepeatedTaskTitle(props.task.description, props.task.title),
+    [props.task.description, props.task.title],
+  );
   const languageOptions = props.languageOptions ?? (Object.keys(JUDGE_LANGUAGE_LABELS) as JudgeLanguage[]);
   const [mode, setMode] = React.useState<IdeMode>(() => {
     if (!props.theory) return "practice";
@@ -806,12 +829,22 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             ))}
           </div>
         ) : (
-          <p>
-            {tr(
-              "Запусти або перевір код — результати з’являться тут.",
-              "Run or test your code to see results here.",
-            )}
-          </p>
+          <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[#294333] bg-[#0c1510] px-5 py-8 text-center">
+            <div className="max-w-sm">
+              <span className="mx-auto grid size-10 place-items-center rounded-xl border border-[#00d978]/20 bg-[#00d978]/10 text-[#72edb0]">
+                <TestTube2 className="size-4" />
+              </span>
+              <p className="mt-3 text-sm font-semibold text-[#dce8df]">
+                {tr("Результати з’являться після запуску", "Results will appear after you run the code")}
+              </p>
+              <p className="mt-1.5 text-xs leading-5 text-[#82968a]">
+                {tr(
+                  "Запусти код для швидкого перегляду або натисни Test для повної перевірки.",
+                  "Run the code for a quick preview or press Test for a full check.",
+                )}
+              </p>
+            </div>
+          </div>
         )}
         {props.checkResult?.publicTestResults?.some((test) => !test.passed) ? (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -912,26 +945,30 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const miniProjectTimerExpired = activeMiniProjectRemainingSeconds === 0;
 
   return (
-    <div className="flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-white/[.1] bg-[#0d130f] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_28px_80px_-44px_rgba(15,35,21,.9)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
-      <header className="flex min-h-[72px] flex-wrap items-center gap-2 border-b border-white/[.08] bg-[#101913] px-4 py-3 sm:px-5">
+    <div className="flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
+      <header className="flex min-h-[72px] flex-wrap items-center gap-2 border-b border-[#203428] bg-[#111b14] px-4 py-3 sm:px-5">
         {props.onBack ? (
           <button
             type="button"
             onClick={props.onBack}
-            className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[.025] text-[#a7b5aa] transition hover:bg-white/[.07] hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#294333] bg-[#0d1710] text-[#a7b5aa] transition hover:border-[#00d978]/50 hover:bg-[#00d978]/10 hover:text-white"
             title={tr("Назад", "Back")}
           >
             <ChevronRight className="size-4 rotate-180" />
           </button>
         ) : null}
         <div className="mr-auto flex min-w-0 items-center gap-2.5">
-          <FolderCode className="size-4 shrink-0 text-[#72edb0]" />
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]">
+            <FolderCode className="size-4" />
+          </span>
           <div className="min-w-0">
-            <div className="truncate text-sm font-bold tracking-[-.02em] text-[#edf5ee]">
+            <div className="truncate text-[13px] font-bold tracking-[-.02em] text-[#edf5ee] sm:text-sm">
               {props.task.title}
             </div>
-            <div className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[.13em] text-[#82968a]">
-              {props.task.section || tr("Практична задача", "Practice task")}
+            <div className="mt-1 flex items-center gap-2 truncate text-[10px] font-semibold uppercase tracking-[.13em] text-[#82968a]">
+              <span>{props.task.section || tr("Практична задача", "Practice task")}</span>
+              <span className="size-1 rounded-full bg-[#00d978]/70" />
+              <span className="text-[#72edb0]">{languageLabel(props.language)}</span>
             </div>
           </div>
         </div>
@@ -1023,7 +1060,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         </button>
       </header>
 
-      <section className="shrink-0 border-b border-white/10 bg-[#111912] lg:hidden">
+      <section className="shrink-0 border-b border-[#203428] bg-[#0f1812] lg:hidden">
         <button
           type="button"
           onClick={() => setMobileContextOpen((open) => !open)}
@@ -1031,16 +1068,16 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           aria-controls="mobile-ide-context"
           className="flex min-h-11 w-full items-center gap-2 px-3 text-left"
         >
-          <FileText className="size-4 shrink-0 text-[#72edb0]" />
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#00d978]/10 text-[#72edb0]"><FileText className="size-3.5" /></span>
           <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#dce8df]">
             {tr("Умова задачі та підказки", "Task context and hints")}
           </span>
           <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${mobileContextOpen ? "rotate-180" : ""}`} />
         </button>
         {mobileContextOpen ? (
-          <div id="mobile-ide-context" className="max-h-56 overflow-y-auto border-t border-white/10 px-3 py-3">
-            <div className="prose prose-sm max-w-none text-xs leading-5 dark:prose-invert">
-              <MarkdownView content={props.task.description} />
+          <div id="mobile-ide-context" className="max-h-64 overflow-y-auto border-t border-[#203428] px-3 py-3">
+            <div className="rounded-xl border border-[#203428] bg-[#111b14] p-3">
+              <MarkdownView content={taskBody} variant="task" />
             </div>
             {props.hints?.length ? (
               <div className="mt-3 space-y-2">
@@ -1073,12 +1110,15 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         {showLeft ? (
           <aside
             style={{ width: layout.left }}
-            className="hidden shrink-0 flex-col border-r border-white/10 bg-[#111912] lg:flex"
+            className="hidden shrink-0 flex-col border-r border-[#203428] bg-[#0f1812] lg:flex"
           >
-            <div className="flex h-11 items-center justify-between border-b border-white/10 px-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#82968a]">
-                {tr("Файли", "Files")}
-              </span>
+            <div className="flex h-12 items-center justify-between border-b border-[#203428] px-3">
+              <div>
+                <span className="block text-[10px] font-bold uppercase tracking-[.16em] text-[#82968a]">
+                  {tr("Робоча область", "Workspace")}
+                </span>
+                <span className="mt-0.5 block text-[10px] text-[#5f7767]">{fileList.length} {tr("файл", "file")}</span>
+              </div>
               <button
                 type="button"
                 onClick={() => updateLayout({ leftCollapsed: true })}
@@ -1094,7 +1134,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   key={file.path}
                   type="button"
                   onClick={() => setActiveFile(file.path)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs ${activeFile === file.path ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#a7b5aa] hover:bg-white/[.05] hover:text-white"}`}
+                  className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left text-xs transition ${activeFile === file.path ? "border-[#00d978]/25 bg-[#00d978]/10 font-semibold text-[#72edb0]" : "border-transparent text-[#a7b5aa] hover:border-[#294333] hover:bg-white/[.04] hover:text-white"}`}
                 >
                   <FileCode2 className="size-3.5" />
                   {file.path}
@@ -1109,14 +1149,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     }
                     setFileAddRequestToken((value) => value + 1);
                   }}
-                  className="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-white/15 px-2.5 py-2 text-xs text-[#82968a] hover:border-[#72edb0]/40 hover:text-[#72edb0]"
+                  className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#294333] px-2.5 py-2.5 text-xs text-[#82968a] transition hover:border-[#72edb0]/50 hover:bg-[#00d978]/[.04] hover:text-[#72edb0]"
                 >
                   {props.useFiles ? <Plus className="size-3.5" /> : <Braces className="size-3.5" />}
                   {tr("Додати файл", "Add file")}
                 </button>
             </div>
-            <div className="border-t border-white/10 p-2 text-[10px] text-[#718075]">
-              {fileList.length} {tr("файл(ів)", "file(s)")}
+            <div className="border-t border-[#203428] p-3 text-[10px] text-[#718075]">
+              {fileList.length} {tr("файл(ів) підключено", "file(s) connected")}
             </div>
           </aside>
         ) : (
@@ -1137,22 +1177,25 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : null}
 
         <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 border-b border-white/10 bg-[#0f1511] px-3 py-2.5">
-            <span className="col-start-1 row-start-1 text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
-              stdin
-            </span>
+          <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 border-b border-[#203428] bg-[#0d1610] px-3 py-2.5">
+            <div className="col-start-1 row-start-1 flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[.15em] text-[#82968a]">
+                {tr("Ввід для запуску", "Run input")}
+              </span>
+              <span className="rounded-md border border-[#294333] bg-[#111f15] px-1.5 py-0.5 font-mono text-[9px] text-[#6f8877]">stdin</span>
+            </div>
             <textarea
               value={props.stdin}
               onChange={(event) => props.onStdinChange(event.target.value)}
               disabled={props.isWebTask || isEmptyTask}
-              rows={4}
+              rows={2}
               spellCheck={false}
               placeholder={
                 props.isWebTask
                   ? tr("WEB без stdin", "WEB has no stdin")
                   : tr("Власний input для Run", "Custom input for Run")
               }
-              className="col-span-2 row-start-2 min-h-24 max-h-56 min-w-0 w-full resize-y overflow-auto rounded-md border border-white/10 bg-black/20 px-2.5 py-2 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] focus:border-[#00d978]/50 disabled:opacity-50"
+              className="col-span-2 row-start-2 min-h-16 max-h-36 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-[#00d978]/60 focus:bg-[#122117] disabled:opacity-50"
             />
             {props.firstExampleInput ? (
               <button
@@ -1164,31 +1207,32 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               </button>
             ) : null}
           </div>
-          <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-white/10 bg-[#101710] px-3">
-            <div className="flex items-center gap-1.5 text-[10px] text-[#82968a]">
+          <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-[#203428] bg-[#111a14] px-3">
+            <div className="flex items-center gap-2 rounded-lg border border-[#294333] bg-[#0d1610] px-2.5 py-1.5 text-[10px] text-[#c8d6cc]">
+              <FileCode2 className="size-3.5 text-[#72edb0]" />
               <span>{activeFile}</span>
-              <ChevronRight className="size-3" />
-              <span className="text-[#c8d6cc]">{tr("Редактор", "Editor")}</span>
+              <span className="text-[#557061]">·</span>
+              <span className="text-[#82968a]">{tr("Редактор", "Editor")}</span>
             </div>
             <div className="ml-auto flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setFontSize((size) => Math.max(11, size - 1))}
-                className="grid size-7 place-items-center rounded text-xs text-[#82968a] hover:bg-white/[.07]"
+                className="grid size-7 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
               >
                 A−
               </button>
               <button
                 type="button"
                 onClick={() => setFontSize((size) => Math.min(22, size + 1))}
-                className="grid size-7 place-items-center rounded text-xs text-[#82968a] hover:bg-white/[.07]"
+                className="grid size-7 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
               >
                 A+
               </button>
               <button
                 type="button"
                 onClick={() => setWordWrap((value) => !value)}
-                className={`grid size-7 place-items-center rounded text-xs ${wordWrap ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a]"}`}
+                className={`grid size-7 place-items-center rounded-lg text-xs transition ${wordWrap ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a] hover:bg-white/[.07] hover:text-white"}`}
                 title="Word wrap"
               >
                 ↪
@@ -1196,7 +1240,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={props.onReset}
-                className="grid size-7 place-items-center rounded text-[#82968a] hover:bg-white/[.07]"
+                className="grid size-7 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
                 title={tr("Скинути шаблон", "Reset template")}
               >
                 <RotateCcw className="size-3.5" />
@@ -1273,13 +1317,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         {showRight ? (
           <aside
             style={{ width: layout.right }}
-            className="hidden shrink-0 flex-col border-l border-white/10 bg-[#111912] lg:flex"
+            className="hidden shrink-0 flex-col border-l border-[#203428] bg-[#0f1812] lg:flex"
           >
-            <div className="flex min-h-12 items-center gap-1 border-b border-white/10 bg-[#101913] px-2.5">
+            <div className="flex min-h-14 items-center gap-1 border-b border-[#203428] bg-[#111b14] px-2.5">
               <button
                 type="button"
                 onClick={() => setAssistantTab("task")}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "task" ? "bg-white/[.09] text-white shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
+                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "task" ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#edf5ee]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
               >
                 <FileText className="size-3.5" />
                 {tr("Завдання", "Task")}
@@ -1287,7 +1331,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setAssistantTab("hints")}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "bg-[#00d978]/10 text-[#72edb0] shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
+                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
               >
                 <Lightbulb className="size-3.5" />
                 {tr("Підказки", "Hints")}
@@ -1296,7 +1340,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setAssistantTab("mentor")}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "bg-[#6ca8ff]/10 text-[#9bc5ff] shadow-sm" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
+                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "border-[#6ca8ff]/25 bg-[#6ca8ff]/10 text-[#9bc5ff]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
               >
                 <Bot className="size-3.5" />
                 {tr("Ментор", "Mentor")}
@@ -1310,15 +1354,38 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 <Minimize2 className="size-3.5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-3">
+            <div className="min-h-0 flex-1 overflow-auto p-3.5">
               {assistantTab === "task" ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-[#e8f1ea]">
-                    <FileText className="size-4 text-[#72edb0]" />
-                    {props.task.title}
+                <div className="space-y-3.5">
+                  <div className="rounded-2xl border border-[#294333] bg-[#111d15] p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-[#72edb0]">
+                        <span className="grid size-7 place-items-center rounded-lg bg-[#00d978]/10"><FileText className="size-3.5" /></span>
+                        {tr("Умова", "Brief")}
+                      </div>
+                      {props.task.difficulty ? (
+                        <span className="rounded-md border border-[#294333] bg-[#0d1710] px-2 py-1 text-[10px] font-semibold text-[#a7b5aa]">
+                          {props.task.difficulty}
+                        </span>
+                      ) : null}
+                    </div>
+                    <h2 className="mt-3 text-[17px] font-bold leading-6 tracking-[-.025em] text-[#f0f7f1]">
+                      {props.task.title}
+                    </h2>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] font-semibold text-[#a7b5aa]">
+                        <Code2 className="size-3 text-[#72edb0]" /> {languageLabel(props.language)}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] font-semibold text-[#a7b5aa]">
+                        <TestTube2 className="size-3 text-[#72edb0]" /> {tr("Практика", "Practice")}
+                      </span>
+                      {props.task.tags?.slice(0, 2).map((tag) => (
+                        <span key={tag} className="rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] text-[#82968a]">{tag}</span>
+                      ))}
+                    </div>
                   </div>
                   {props.task.projectSpec ? (
-                    <div className="overflow-hidden rounded-2xl border border-[#ffb454]/20 bg-[linear-gradient(145deg,rgba(255,180,84,.1),rgba(0,217,120,.035))]">
+                    <div className="overflow-hidden rounded-2xl border border-[#ffb454]/20 bg-[#19190f]">
                       <div className="flex items-start gap-3 border-b border-white/[.08] p-3.5">
                         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#ffb454]/15 text-[#ffca7e]">
                           <Rocket className="size-4.5" />
@@ -1381,43 +1448,52 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                       </div>
                     </div>
                   ) : null}
-                  <div className="prose prose-sm max-w-none text-xs leading-6 dark:prose-invert">
-                    <MarkdownView content={props.task.description} />
+                  <div className="rounded-2xl border border-[#203428] bg-[#0c1510] p-4">
+                    <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.15em] text-[#82968a]">
+                      <span className="h-px w-5 bg-[#00d978]/60" />
+                      {tr("Що потрібно зробити", "What to build")}
+                    </div>
+                    <MarkdownView content={taskBody} variant="task" />
                   </div>
                   {props.theory ? (
-                    <details className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-                      <summary className="cursor-pointer text-xs font-semibold text-[#c8d6cc]">
-                        {tr("Відкрити теорію", "Open theory")}
+                    <details className="group rounded-2xl border border-[#294333] bg-[#111b14] p-3.5">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-[#c8d6cc] marker:hidden">
+                        <span className="grid size-7 place-items-center rounded-lg bg-[#00d978]/10 text-[#72edb0]"><BookOpen className="size-3.5" /></span>
+                        <span className="flex-1">{tr("Відкрити теорію", "Open theory")}</span>
+                        <ChevronDown className="size-4 text-[#82968a] transition-transform group-open:rotate-180" />
                       </summary>
-                      <div className="mt-3 text-xs leading-6 text-[#b9c9bd]">
-                        <MarkdownView content={props.theory} />
+                      <div className="mt-3 border-t border-[#203428] pt-3 text-xs leading-6 text-[#b9c9bd]">
+                        <MarkdownView content={props.theory} variant="task" />
                       </div>
                     </details>
                   ) : null}
-                  <div className="rounded-xl border border-white/10 bg-white/[.03] p-3 text-xs text-[#a7b5aa]">
-                    <div className="mb-2 font-semibold text-white">
-                      {tr("Прогрес", "Progress")}
+                  <div className="rounded-2xl border border-[#203428] bg-[#111b14] p-3.5 text-xs text-[#a7b5aa]">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="font-semibold text-[#edf5ee]">{tr("Стан задачі", "Task status")}</div>
+                      <span className={`rounded-md px-2 py-1 text-[10px] font-bold ${allTestsPassed ? "bg-[#00d978]/10 text-[#72edb0]" : "bg-white/[.06] text-[#82968a]"}`}>
+                        {allTestsPassed ? tr("Готово", "Ready") : tr("У роботі", "In progress")}
+                      </span>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="size-3.5 text-[#72edb0]" />
-                        {tr("Теорія", "Theory")}
+                      <div className="flex items-center gap-2.5">
+                        <span className="grid size-5 place-items-center rounded-full bg-[#00d978]/10"><CheckCircle2 className="size-3 text-[#72edb0]" /></span>
+                        <span>{tr("Теорія переглянута", "Theory reviewed")}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         {draftCodeRef.current.trim() ? (
-                          <CheckCircle2 className="size-3.5 text-[#72edb0]" />
+                          <span className="grid size-5 place-items-center rounded-full bg-[#00d978]/10"><CheckCircle2 className="size-3 text-[#72edb0]" /></span>
                         ) : (
-                          <span className="size-3.5 rounded-full border border-white/20" />
+                          <span className="size-5 rounded-full border border-[#294333]" />
                         )}
-                        {tr("Перше рішення", "First solution")}
+                        <span>{tr("Є рішення", "Solution started")}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         {allTestsPassed ? (
-                          <CheckCircle2 className="size-3.5 text-[#72edb0]" />
+                          <span className="grid size-5 place-items-center rounded-full bg-[#00d978]/10"><CheckCircle2 className="size-3 text-[#72edb0]" /></span>
                         ) : (
-                          <span className="size-3.5 rounded-full border border-white/20" />
+                          <span className="size-5 rounded-full border border-[#294333]" />
                         )}
-                        {tr("Усі тести", "All tests")}
+                        <span>{tr("Усі тести проходять", "All tests passing")}</span>
                       </div>
                     </div>
                   </div>
@@ -1591,9 +1667,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       {showBottom ? (
         <section
           style={{ "--ide-bottom-height": `${layout.bottom}px` } as React.CSSProperties}
-          className="h-[var(--ide-bottom-height)] max-lg:h-60 shrink-0 border-t border-white/10 bg-[#111912]"
+          className="h-[var(--ide-bottom-height)] max-lg:h-60 shrink-0 border-t border-[#203428] bg-[#0f1812]"
         >
-          <div className="flex h-10 items-center gap-1 overflow-x-auto border-b border-white/10 px-2">
+          <div className="flex h-11 items-center gap-1 overflow-x-auto border-b border-[#203428] bg-[#111b14] px-2">
             <BottomTabButton
               active={bottomTab === "terminal"}
               onClick={() => setBottomTab("terminal")}
@@ -1631,7 +1707,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <button
               type="button"
               onClick={() => updateLayout({ bottomCollapsed: true })}
-              className="ml-auto grid size-7 shrink-0 place-items-center rounded text-[#82968a] hover:bg-white/[.06]"
+              className="ml-auto grid size-7 shrink-0 place-items-center rounded-lg text-[#82968a] hover:bg-white/[.06]"
               title={tr("Згорнути", "Collapse")}
             >
               <ChevronDown className="size-3.5" />
@@ -1645,7 +1721,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <button
           type="button"
           onClick={() => updateLayout({ bottomCollapsed: false })}
-          className="flex h-9 shrink-0 items-center justify-center border-t border-white/10 text-[#82968a] hover:text-white"
+          className="flex h-9 shrink-0 items-center justify-center border-t border-[#203428] text-[#82968a] hover:text-white"
         >
           <ChevronDown className="size-4 rotate-180" />
         </button>
@@ -1655,7 +1731,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           {notice}
         </div>
       ) : null}
-      <footer className="hidden h-7 items-center gap-4 border-t border-white/10 bg-[#0b100c] px-3 text-[10px] text-[#718075] sm:flex">
+      <footer className="hidden h-8 items-center gap-4 border-t border-[#203428] bg-[#09100b] px-3 text-[10px] text-[#718075] sm:flex">
         <span>Ln {lineCount}, Col 1</span>
         <span>{props.language}</span>
         <span>UTF-8</span>
@@ -1685,7 +1761,7 @@ const BottomTabButton: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-[10px] font-semibold ${active ? "bg-white/[.08] text-white" : "text-[#82968a] hover:bg-white/[.05] hover:text-[#c8d6cc]"}`}
+    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-semibold transition ${active ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
   >
     {icon}
     {label}
