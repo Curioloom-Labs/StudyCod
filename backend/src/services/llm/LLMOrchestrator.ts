@@ -2313,23 +2313,39 @@ IMPORTANT:
 - Return only JSON according to this schema:
 ${JSON.stringify(jsonSchema, null, 2)}
 `.trim();
-    try {
-      const parsed = await provider.generateJSON<{
-        tests: TestDataExample[];
-      }>(userPrompt, jsonSchema, systemPrompt, {
-        timeout: 30000,
-        maxRetries: 1,
-        userId: params.userId,
-        signal: params.signal,
-        temperature: 0.08,
-        maxTokens: 3000
-      });
-      const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount);
-      return validated;
-    } catch (error: any) {
-      logger.warn('[llm] test data generation failed', { message: error?.message });
-      throw error;
+    const validationAttempts = 2;
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= validationAttempts; attempt++) {
+      try {
+        const parsed = await provider.generateJSON<{
+          tests: TestDataExample[];
+        }>(userPrompt, jsonSchema, systemPrompt, {
+          timeout: 30000,
+          maxRetries: 1,
+          userId: params.userId,
+          signal: params.signal,
+          temperature: 0.08,
+          maxTokens: 3000
+        });
+        return AIResponseValidator.validateGenerateTestData(parsed, desiredCount);
+      } catch (error: any) {
+        lastError = error;
+        const isValidationFailure = String(error?.name ?? '') === 'AIValidationError';
+        logger.warn('[llm] test data generation failed', {
+          message: error?.message,
+          attempt,
+          validationAttempts,
+          isValidationFailure,
+        });
+        // A provider can return syntactically valid JSON with duplicate input
+        // rows or conflicting outputs. Give it one fresh semantic response;
+        // network/provider errors are still handled by the outer fallback
+        // chain and should not be duplicated here.
+        if (!isValidationFailure || attempt >= validationAttempts) throw error;
+        await new Promise(resolve => setTimeout(resolve, 350));
+      }
     }
+    throw lastError instanceof Error ? lastError : new Error('AI_GENERATION_FAILED: test data validation retries exhausted');
   }
 }
 let orchestratorInstance: LLMOrchestrator | null = null;
