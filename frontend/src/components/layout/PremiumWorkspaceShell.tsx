@@ -20,6 +20,7 @@ import { PlatformFooter } from "./PlatformFooter";
 import type { User } from "../../types";
 import type { AppTheme } from "../../theme";
 import { usePersonalLearning } from "../learning/PersonalLearningProvider";
+import { SelectMenu } from "../ui/SelectMenu";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
 type NavId = Page | "library" | "playground";
@@ -233,12 +234,17 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
       {area === "learning" && page !== "admin" && learning.currentCourse ? (
         <div className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92">
           <div className="mx-auto flex max-w-[1440px] items-center gap-3 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10">
-            <div className="relative shrink-0">
-              <select aria-label={uk ? "Поточний курс" : "Current course"} value={learning.me?.currentEnrollmentId ?? ""} onChange={(event) => { const id = Number(event.target.value); if (id) void learning.selectCourse(id); else if (event.target.value === "catalog") onCourses(); }} className="appearance-none rounded-xl border border-[#00c875]/35 bg-[#e8f6ed] px-3 py-2 pr-8 text-sm font-semibold text-[#153321] outline-none dark:bg-[#00ff88]/10 dark:text-[#bfffd9]">
-                {learning.me?.enrollments.filter((item) => item.status === "IN_PROGRESS" || item.status === "COMPLETED").map((item) => <option key={item.enrollmentId} value={item.enrollmentId}>{item.title}</option>)}
-                <option value="catalog">{uk ? "Додати курс…" : "Add a course…"}</option>
-              </select>
-            </div>
+            <SelectMenu
+              value={String(learning.me?.currentEnrollmentId ?? "")}
+              options={[
+                ...(learning.me?.enrollments.filter((item) => item.status === "IN_PROGRESS" || item.status === "COMPLETED").map((item) => ({ value: String(item.enrollmentId), label: item.title })) ?? []),
+                { value: "catalog", label: uk ? "Додати курс…" : "Add a course…" },
+              ]}
+              onChange={(value) => { if (value === "catalog") onCourses(); else void learning.selectCourse(Number(value)); }}
+              ariaLabel={uk ? "Поточний курс" : "Current course"}
+              menuMinWidth={240}
+              className="shrink-0 border-[#00c875]/35 bg-[#e8f6ed] text-[#153321] dark:bg-[#00ff88]/10 dark:text-[#bfffd9]"
+            />
             <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
             {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Теми" : "Topics", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
             <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-[#657368] sm:flex dark:text-[#a5b3a9]"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dce6df] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00d782]" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>

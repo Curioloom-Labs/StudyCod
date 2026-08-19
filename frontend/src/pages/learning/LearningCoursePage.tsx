@@ -81,6 +81,19 @@ function topicDescription(node: RoadmapNode): string {
   );
 }
 
+function projectDescription(item: LearningCourseItem | undefined): string {
+  const content = item?.content ?? {};
+  const directDescription = firstText(content, ["description", "summary", "goal", "objective", "overview", "outcome"]);
+  if (directDescription) return directDescription.replace(/\s+/g, " ").slice(0, 180);
+  const markdown = markdownOf(item)
+    .split(/\n+/)
+    .map((line) => line.replace(/^#+\s*/, "").replace(/[*_`>]/g, "").trim())
+    .find((line) => line.length > 30);
+  return markdown
+    ? markdown.replace(/\s+/g, " ").slice(0, 180)
+    : tr("Збери в одному проєкті навички з пройдених тем.", "Bring the skills from the completed topics together in one project.");
+}
+
 function topicParts(node: RoadmapNode): TopicPart[] {
   const parts: TopicPart[] = [];
   if (node.practices.length) {
@@ -403,8 +416,6 @@ export const LearningCoursePage: React.FC = () => {
       <div className="px-5 py-7 sm:px-8 sm:py-9">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#102619]/10 pb-5 dark:border-white/10"><div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#147b47] dark:text-[#70edaf]">{tr("Маршрут курсу", "Course roadmap")}</p><h3 className="mt-2 text-2xl font-bold tracking-[-.04em] text-[#17231b] dark:text-[#edf4ef] sm:text-3xl">{tr("Теми, що складаються в навичку", "Topics that become a skill")}</h3><p className="mt-2 max-w-2xl text-sm leading-6 text-[#65746a] dark:text-[#a5b4a9]">{tr("Кожен вузол поєднує пояснення, практику та наступний зрозумілий крок.", "Every node combines explanation, practice, and a clear next step.")}</p></div><span className="rounded-md border border-[#102619]/12 px-3 py-1.5 text-[11px] font-bold text-[#65746a] dark:border-white/10 dark:text-[#a5b4a9]">{completedTopics} / {topicNodes.length} {tr("готово", "complete")}</span></div>
 
-      {projectNodes.length > 0 && <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-[#bd8837]/25 bg-[#bd8837]/[.07] px-4 py-3 text-sm dark:bg-[#bd8837]/[.08]"><span className="grid size-8 place-items-center rounded-xl bg-[#bd8837]/15 text-[#bd8837] dark:text-[#ffbf68]"><Rocket className="size-4" /></span><div><p className="font-bold text-text-primary">{tr("Далі — мініпроєкти", "Mini-projects are next")}</p><p className="text-xs text-text-secondary">{tr(`${projectNodes.length} інтеграційних проєктів, щоб зібрати навички в одну завершену роботу.`, `${projectNodes.length} integration projects to turn the skills into a finished piece of work.`)}</p></div></div>}
-
       <div className="relative mt-8">
         <div className="relative space-y-5 lg:space-y-7">
           {roadmapNodes.map((node, index) => {
@@ -447,7 +458,7 @@ export const LearningCoursePage: React.FC = () => {
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
-              <button type="button" disabled={locked} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
+               <button type="button" disabled={locked} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : node.kind === "PROJECT" ? "border-l-4 border-l-[#bd8837] bg-[#bd8837]/[.04]" : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
                 {node.kind === "TOPIC" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-bg-surface text-xs font-black text-primary">{String(topicNumber).padStart(2, "0")}</span><span className="rounded-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-bold text-primary">{completed ? tr("Готово", "Done") : locked ? tr("Попереду", "Ahead") : tr("У фокусі", "In focus")}</span></div>}
                   <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? tr("Навчальний фокус", "Learning focus") : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
                  <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.title}</h3>
@@ -457,8 +468,11 @@ export const LearningCoursePage: React.FC = () => {
                       {parts.map((part) => <span key={part.label} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary"><span className="text-text-primary">{part.label}</span><span className="text-text-muted">·</span>{part.detail}</span>)}
                     </div>}
                    <p className="mt-3 text-xs font-semibold text-primary">{status}</p>
-                 </> : <p className="mt-2 text-xs leading-5 text-text-secondary">{status}</p>}
-                 {items.length > 1 && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>}
+                  </> : <>
+                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-text-secondary">{node.kind === "PROJECT" ? projectDescription(node.item) : status}</p>
+                    {node.kind === "PROJECT" && <p className="mt-3 text-xs font-semibold text-[#bd8837] dark:text-[#ffbf68]">{status}</p>}
+                  </>}
+                  {(items.length > 1 || node.kind === "PROJECT") && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>}
               </button>
             </div>;
           })}

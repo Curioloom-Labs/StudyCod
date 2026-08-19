@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import {
   BookOpen,
   Bot,
@@ -34,6 +35,7 @@ import { DebugMentorChat } from "../DebugMentorChat";
 import { ErrorExplainButton } from "../ErrorExplainButton";
 import { MarkdownView } from "../MarkdownView";
 import { WebPreviewPane } from "../WebPreviewPane";
+import { SelectMenu } from "../ui/SelectMenu";
 import type {
   CodeFile,
   JudgeLanguage,
@@ -267,6 +269,7 @@ const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value,
 });
 
 export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
+  const { i18n } = useTranslation();
   const draftCodeRef = React.useRef(props.code);
   React.useEffect(() => {
     draftCodeRef.current = props.code;
@@ -276,8 +279,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     props.onCodeChange(nextCode);
   }, [props.onCodeChange]);
   const tr = (uk: string, en: string) => {
-    if (typeof document === "undefined") return uk;
-    return document.documentElement.lang?.toLowerCase().startsWith("en")
+    return i18n.language?.toLowerCase().startsWith("en")
       ? en
       : uk;
   };
@@ -986,42 +988,25 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         ) : null}
         {!props.isWebTask && languageOptions.length > 1 && (
-          <select
+          <SelectMenu
             value={props.language}
+            options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
             disabled={props.disableLanguageChange}
-            onChange={(event) =>
-              props.onLanguageChange(event.target.value as JudgeLanguage)
-            }
-            className="h-9 max-w-24 rounded-lg border border-white/10 bg-white/[.06] px-2 text-xs font-semibold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-32"
-          >
-            <option value={props.language} className="text-black">
-              {languageLabel(props.language)}
-            </option>
-            {languageOptions
-              .filter((language) => language !== props.language)
-              .map((language) => (
-                <option key={language} value={language} className="text-black">
-                  {languageLabel(language as JudgeLanguage)}
-                </option>
-              ))}
-          </select>
+            onChange={(value) => props.onLanguageChange(value as JudgeLanguage)}
+            ariaLabel={tr("Мова виконання", "Execution language")}
+            menuMinWidth={180}
+            className="!h-9 max-w-24 rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white sm:max-w-32"
+          />
         )}
         {!props.isWebTask && compilersForFamily(props.language).length > 1 && (
-          <select
+          <SelectMenu
             value={props.compiler}
-            onChange={(event) => props.onCompilerChange(event.target.value)}
-            className="hidden h-9 max-w-40 rounded-lg border border-white/10 bg-white/[.06] px-2 text-xs text-white outline-none md:block"
-          >
-            {compilersForFamily(props.language).map((compiler) => (
-              <option
-                key={compiler.id}
-                value={compiler.id}
-                className="text-black"
-              >
-                {compiler.label}
-              </option>
-            ))}
-          </select>
+            options={compilersForFamily(props.language).map((compiler) => ({ value: compiler.id, label: compiler.label }))}
+            onChange={props.onCompilerChange}
+            ariaLabel={tr("Версія компілятора", "Compiler version")}
+            menuMinWidth={220}
+            className="hidden !h-9 max-w-40 rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white md:inline-flex"
+          />
         )}
         <button
           type="button"
