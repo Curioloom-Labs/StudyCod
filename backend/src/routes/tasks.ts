@@ -1577,26 +1577,68 @@ function normalizeLegacyOutputFormatSection(
   const source = String(statementMarkdown ?? "");
   if (!source.trim()) return source;
 
-  return source.replace(
-    /(^#{2,6}\s*(?:Формат\s+вихідних\s+даних|Output\s+format)\s*$)([\s\S]*?)(?=^#{2,6}\s+|(?![\s\S]))/gim,
-    (match, heading: string, rawBody: string) => {
-      const body = String(rawBody ?? "")
-        .trim()
-        .replace(/^```(?:text)?\s*/i, "")
-        .replace(/```$/i, "")
-        .trim();
-      if (!body) return match;
+  // Parse sections line-by-line instead of using a lazy regex. The old regex
+  // allowed `\\s*` in the heading to consume line breaks, so the following
+  // `#### Constraints` heading could become part of the output code block.
+  // This is especially visible for fixed-output tasks: the whole constraints
+  // section is then rendered as if it were expected stdout.
+  const lines = source
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .flatMap((line) => {
+      // Repair rows produced by the old normalizer where a closing fence and
+      // the next heading were accidentally joined on one line.
+      const joinedHeading = line.match(/^(\s*```(?:text)?\s*)(#{2,6}\s+.+)$/i);
+      return joinedHeading ? [joinedHeading[1].trim(), joinedHeading[2]] : [line];
+    });
+  const outputHeading = /^\s*#{2,6}\s*(?:Формат\s+вихідних\s+даних|Output\s+format)\s*$/i;
+  const anyHeading = /^\s*#{2,6}\s+\S/;
+  const fence = /^\s*```(?:[a-z0-9_-]+)?\s*$/i;
+  const normalized: string[] = [];
 
+  for (let index = 0; index < lines.length;) {
+    const heading = lines[index];
+    if (!outputHeading.test(heading)) {
+      normalized.push(heading);
+      index += 1;
+      continue;
+    }
+
+    let end = index + 1;
+    let insideFence = false;
+    for (; end < lines.length; end += 1) {
+      const line = lines[end];
+      if (fence.test(line)) {
+        insideFence = !insideFence;
+        continue;
+      }
+      if (!insideFence && anyHeading.test(line)) break;
+    }
+
+    const rawBody = lines.slice(index + 1, end).join("\n");
+    const body = rawBody
+      .trim()
+      .replace(/^```(?:text)?\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+    if (!body) {
+      normalized.push(heading, ...lines.slice(index + 1, end));
+    } else {
       const outputLines = body
         .split(/\r?\n/)
-        .filter((line: string) => !/^\s*```(?:text)?\s*$/i.test(line))
-        .map((line: string) => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"));
+        .filter((line) => !fence.test(line))
+        .map((line) => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"));
       const output = compactOutputFormatForLearner(outputLines.join("\n").trim(), ioType, uiLanguage);
-      if (!output) return match;
-
-      return `${heading}\n\n\`\`\`text\n${output}\n\`\`\``;
+      if (output) {
+        normalized.push(heading, "", "```text", output, "```");
+      } else {
+        normalized.push(heading, ...lines.slice(index + 1, end));
+      }
     }
-  );
+    index = end;
+  }
+
+  return normalized.join("\n");
 }
 
 function extractHintsFromGradeFeedback(feedback: string | null | undefined): string[] {
