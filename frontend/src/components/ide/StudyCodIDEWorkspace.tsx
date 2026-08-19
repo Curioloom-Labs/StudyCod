@@ -148,6 +148,7 @@ type Props = {
   tracing?: boolean;
   onTrace?: () => void;
   emptyStateMessage?: string | null;
+  emptyStateAction?: React.ReactNode;
   webPreviewFiles?: WebTaskFile[];
   isWebTask?: boolean;
 };
@@ -1253,6 +1254,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                         {props.emptyStateMessage}
                       </p>
                     ) : null}
+                    {props.emptyStateAction ? <div className="mt-5">{props.emptyStateAction}</div> : null}
                   </div>
                 </div>
               ) : props.useFiles ? (

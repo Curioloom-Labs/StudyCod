@@ -87,7 +87,12 @@ function nextActionForItems(items: CourseItem[], progressByItem: Map<number, Cou
   };
 }
 
-async function assertSequentialAccess(enrollmentId: number, courseId: number, itemId: number): Promise<void> {
+async function assertSequentialAccess(
+  enrollmentId: number,
+  courseId: number,
+  itemId: number,
+  options?: { allowIncompleteItemIds?: number[] },
+): Promise<void> {
   const items = await itemRepo().find({
     where: { module: { course: { id: courseId } }, isActive: true },
     relations: ["module"],
@@ -97,7 +102,10 @@ async function assertSequentialAccess(enrollmentId: number, courseId: number, it
   if (targetIndex < 0) return;
   const progress = await progressRepo().find({ where: { enrollment: { id: enrollmentId } } });
   const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
-  const previous = items.slice(0, targetIndex).find((item) => requiredItem(item) && progressByItem.get(item.id)?.status !== "COMPLETED");
+  const allowedIncomplete = new Set((options?.allowIncompleteItemIds ?? []).filter((id) => Number.isInteger(id) && id > 0));
+  const previous = items.slice(0, targetIndex).find((item) => requiredItem(item)
+    && !allowedIncomplete.has(item.id)
+    && progressByItem.get(item.id)?.status !== "COMPLETED");
   if (previous) {
     throw Object.assign(new Error("COURSE_SEQUENCE_LOCKED"), { statusCode: 409, previousItemId: previous.id });
   }
@@ -586,24 +594,29 @@ export async function getCoursePracticeContext(userId: number, itemId: number, l
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
   }
-  await assertSequentialAccess(enrollment.id, item.module.course.id, item.id);
+  const content = (item.content || {}) as any;
+  const theoryItemId = Number(content.theoryItemId ?? 0);
+  await assertSequentialAccess(
+    enrollment.id,
+    item.module.course.id,
+    item.id,
+    content.generatedAfterTheory === true && theoryItemId > 0
+      ? { allowIncompleteItemIds: [theoryItemId] }
+      : undefined,
+  );
 
   const dependencyState = await getPrerequisiteState(userId, enrollment.courseId, locale);
   if (!dependencyState.satisfied && !item.module.course.isBase) {
     throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), { statusCode: 423, prerequisites: dependencyState.prerequisites });
   }
 
-  const content = (item.content || {}) as any;
-  const theoryItemId = Number(content.theoryItemId ?? 0);
   let theoryItem: CourseItem | null = null;
   if (theoryItemId > 0 && content.generatedAfterTheory === true) {
     theoryItem = await itemRepo().findOne({ where: { id: theoryItemId } });
-    const theoryProgress = await progressRepo().findOne({
-      where: { enrollment: { id: enrollment.id }, item: { id: theoryItemId }, status: "COMPLETED" },
-    });
-    if (!theoryProgress) {
-      throw Object.assign(new Error("THEORY_REQUIRED_BEFORE_PRACTICE"), { statusCode: 409, theoryItemId });
-    }
+    // The first task must be generated before the learner enters theory. The
+    // IDE displays this linked theory after generation and records completion
+    // when the learner leaves the theory panel; generation itself must not be
+    // blocked by the missing THEORY progress row.
   }
 
   const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: item.id } } });

@@ -218,6 +218,7 @@ export interface Task {
   language?: CourseLanguage;
   courseItemId?: number | null;
   courseEnrollmentId?: number | null;
+  theoryItemId?: number | null;
 }
 export interface Grade {
   id: number;

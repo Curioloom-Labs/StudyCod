@@ -100,7 +100,10 @@ const projectCheckSchema = z.object({
 });
 
 learningCatalogRouter.get("/items/:itemId/project", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  // A mini-project is a learner-facing course item. The previous guard
+  // accidentally rejected the normal STUDENT role, so the roadmap could
+  // render the card but never load its specification.
+  if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
   const itemId = Number(req.params.itemId);
   if (!Number.isFinite(itemId)) return res.status(400).json({ message: "INVALID_INPUT" });
   try {
@@ -111,7 +114,7 @@ learningCatalogRouter.get("/items/:itemId/project", authRequired, async (req: Au
 });
 
 learningCatalogRouter.put("/items/:itemId/project", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
   const itemId = Number(req.params.itemId);
   const parsed = projectProgressSchema.safeParse(req.body ?? {});
   if (!Number.isFinite(itemId) || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
@@ -124,7 +127,7 @@ learningCatalogRouter.put("/items/:itemId/project", authRequired, async (req: Au
 });
 
 learningCatalogRouter.post("/items/:itemId/project/check", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
   const itemId = Number(req.params.itemId);
   const parsed = projectCheckSchema.safeParse(req.body ?? {});
   if (!Number.isFinite(itemId) || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
@@ -136,7 +139,7 @@ learningCatalogRouter.post("/items/:itemId/project/check", authRequired, async (
 });
 
 learningCatalogRouter.post("/items/:itemId/project/submit", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
   const itemId = Number(req.params.itemId);
   const parsed = projectProgressSchema.safeParse(req.body ?? {});
   if (!Number.isFinite(itemId) || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });

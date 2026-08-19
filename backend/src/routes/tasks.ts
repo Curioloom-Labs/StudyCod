@@ -1042,8 +1042,7 @@ function formatStatementSectionValueForMarkdown(value: string, options?: {
     .map(line => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"))
     .join("\n")
     .trim();
-  const hasMultipleLines = /\n/.test(sanitized);
-  if (options?.preferCodeBlock || hasMultipleLines) {
+  if (options?.preferCodeBlock) {
     return `\`\`\`text\n${sanitized}\n\`\`\``;
   }
 
@@ -1054,8 +1053,8 @@ function compactOutputFormatForLearner(raw: string, ioType: TaskIoType | null | 
   let value = normalizeMarkdownText(String(raw ?? "")).trim();
   if (!value) return "";
 
-  // For interactive tasks the output format is a contract, not a second task
-  // statement. Examples belong in test data and make the IDE panel unreadable.
+  // For interactive tasks the output format is a short contract, not a second
+  // task statement. Public examples are rendered in their own section below.
   if (ioType !== "NO_INPUT_FIXED_OUTPUT") {
     const exampleMarker = /(?:^|\s)(?:example|examples|for example|e\.g\.|приклад|приклади|наприклад)\s*:/i.exec(value);
     if (exampleMarker && typeof exampleMarker.index === "number") {
@@ -1088,12 +1087,51 @@ function compactOutputFormatForLearner(raw: string, ioType: TaskIoType | null | 
   return value;
 }
 
+function outputFormatNeedsCodeBlock(value: string): boolean {
+  const normalized = String(value ?? "").trim();
+  if (!normalized || !/\n/.test(normalized)) return false;
+  // A multiline description is still prose when it explains lines, values, or
+  // formatting. Only render a literal block when it looks like actual output.
+  return !/(?:the\s+program|output|print|line|lines|format|integer|number|ряд(ок|ків)|вив(ід|ести)|програм(а|и)|формат|числ(о|а))/i.test(normalized);
+}
+
+function renderPublicExamples(params: {
+  examples?: Array<{ input?: unknown; output?: unknown }>;
+  ioType: TaskIoType | null | undefined;
+  uiLanguage: UiLanguage;
+}): string {
+  const examples = (Array.isArray(params.examples) ? params.examples : [])
+    .map((example) => sanitizeGeneratedTestExample({
+      input: example?.input,
+      output: example?.output,
+      ioType: params.ioType ?? "STDIN_STDOUT"
+    }))
+    .filter((example): example is { input: string; output: string } => Boolean(example))
+    .filter((example, index, all) => all.findIndex((candidate) => candidate.input === example.input && candidate.output === example.output) === index)
+    .slice(0, 2);
+
+  if (!examples.length) return "";
+  const isEnglish = params.uiLanguage === "en";
+  const sections = [isEnglish ? "#### Examples" : "#### Приклади"];
+  examples.forEach((example, index) => {
+    const input = example.input.trim() || (isEnglish ? "(no input)" : "(немає вводу)");
+    const output = example.output.trim();
+    sections.push(
+      `${isEnglish ? `##### Example ${index + 1}` : `##### Приклад ${index + 1}`}\n\n` +
+      `${isEnglish ? "**Input:**" : "**Вхідні дані:**"}\n\n\`\`\`text\n${input}\n\`\`\`\n\n` +
+      `${isEnglish ? "**Output:**" : "**Вихідні дані:**"}\n\n\`\`\`text\n${output}\n\`\`\``
+    );
+  });
+  return sections.join("\n\n");
+}
+
 function composeTaskStatementMarkdown(params: {
   practicalTask: string;
   ioType?: TaskIoType | null;
   inputFormat?: string | null;
   outputFormat?: string | null;
   constraints?: string | null;
+  examples?: Array<{ input?: unknown; output?: unknown }>;
   uiLanguage?: UiLanguage;
 }): string {
   const practical = rewriteChecklistPracticalTaskToNarrative(
@@ -1120,8 +1158,7 @@ function composeTaskStatementMarkdown(params: {
     : fallbackInputFormat;
   const renderedOutputFormat = outputFormat
     ? formatStatementSectionValueForMarkdown(outputFormat, {
-        // Output format is a strict contract for judge checks; keep it visually exact.
-        preferCodeBlock: true
+        preferCodeBlock: outputFormatNeedsCodeBlock(outputFormat)
       })
     : fallbackOutputFormat;
 
@@ -1136,6 +1173,13 @@ function composeTaskStatementMarkdown(params: {
     sections.push(i18nText(uiLanguage, "#### Обмеження", "#### Constraints"));
     sections.push(constraints);
   }
+
+  const examples = renderPublicExamples({
+    examples: params.examples,
+    ioType: params.ioType,
+    uiLanguage
+  });
+  if (examples) sections.push(examples);
 
   return sections.join("\n\n").trim();
 }
@@ -1629,7 +1673,12 @@ function normalizeLegacyOutputFormatSection(
         .map((line) => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"));
       const output = compactOutputFormatForLearner(outputLines.join("\n").trim(), ioType, uiLanguage);
       if (output) {
-        normalized.push(heading, "", "```text", output, "```");
+        normalized.push(heading, "");
+        if (outputFormatNeedsCodeBlock(output)) {
+          normalized.push("```text", output, "```");
+        } else {
+          normalized.push(output);
+        }
       } else {
         normalized.push(heading, ...lines.slice(index + 1, end));
       }
@@ -1727,6 +1776,9 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   const catalogSequence = isCatalogTask ? catalogPracticeSequenceFromTask(task) : null;
   const lessonInTopic = catalogSequence ?? (task.numInTopic ?? 1);
   const catalogTheory = isCatalogTask && lessonInTopic === 1 ? String(opts?.catalogTheoryMarkdown ?? "").trim() : "";
+  const catalogTheoryItemId = isCatalogTask && lessonInTopic === 1
+    ? Number(((task as any).courseItem?.content as any)?.theoryItemId ?? 0)
+    : 0;
 
   const includeTheory = isControlStandalone
     ? false
@@ -1787,6 +1839,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     topicIndex,
     descriptionMarkdown: normalizedDescription,
     theoryMarkdown: theoryMarkdown || undefined,
+    theoryItemId: catalogTheoryItemId > 0 ? catalogTheoryItemId : null,
     ...(opts?.includeTheoryDebug
       ? {
           theoryDebug: {
@@ -1953,6 +2006,17 @@ async function generateAndPersistPersonalProgrammingTask(params: {
             "",
             "### Вихідні дані",
             "Виведіть одне ціле число — `a + b`.",
+            "",
+            "### Приклади",
+            "#### Приклад 1",
+            "Вхідні дані:",
+            "```text",
+            "10 20",
+            "```",
+            "Вихідні дані:",
+            "```text",
+            "30",
+            "```",
           ].join("\n"),
           [
             "### Task",
@@ -1963,6 +2027,17 @@ async function generateAndPersistPersonalProgrammingTask(params: {
             "",
             "### Output",
             "Print one integer — `a + b`.",
+            "",
+            "### Examples",
+            "#### Example 1",
+            "Input:",
+            "```text",
+            "10 20",
+            "```",
+            "Output:",
+            "```text",
+            "30",
+            "```",
           ].join("\n")
         )
       : i18nText(
@@ -1972,12 +2047,34 @@ async function generateAndPersistPersonalProgrammingTask(params: {
             "Виведіть число `8`.",
             "",
             "Вхідних даних немає.",
+            "",
+            "### Приклади",
+            "#### Приклад 1",
+            "Вхідні дані:",
+            "```text",
+            "(немає вводу)",
+            "```",
+            "Вихідні дані:",
+            "```text",
+            "8",
+            "```",
           ].join("\n"),
           [
             "### Task",
             "Print the number `8`.",
             "",
             "There is no input.",
+            "",
+            "### Examples",
+            "#### Example 1",
+            "Input:",
+            "```text",
+            "(no input)",
+            "```",
+            "Output:",
+            "```text",
+            "8",
+            "```",
           ].join("\n")
         );
     const fallbackTemplate = isPythonVariablesTopic
@@ -2188,6 +2285,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       : i18nText(params.userLanguage, "Вхідних даних немає.", "No input data."),
     outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
     constraints: (aiTask as any)?.constraints,
+    examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
     uiLanguage: params.userLanguage
   });
 
@@ -4041,6 +4139,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       // For NO_INPUT_FIXED_OUTPUT we want the visible output section to match the exact expected output.
       outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
       constraints: (aiTask as any)?.constraints,
+      examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
       uiLanguage: userLanguage
     });
     description = statementMarkdown;

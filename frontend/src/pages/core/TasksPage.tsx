@@ -19,7 +19,7 @@ import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/i
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
-import { getLearningCourse, type LearningCourse } from "../../lib/api/learningCatalog";
+import { completeCatalogItem, getLearningCourse, type LearningCourse } from "../../lib/api/learningCatalog";
 interface Props {
   user: User;
 }
@@ -2183,7 +2183,15 @@ export const TasksPage: React.FC<Props> = ({
   const taskHistoryItems = useMemo(() => sidebarSections.flatMap((section) =>
     section.items.map((item) => ({ ...item, sectionTitle: section.title }))
   ), [sidebarSections]);
-  const onTheoryComplete = useCallback(() => setTheoryAcknowledged(true), []);
+  const onTheoryComplete = useCallback(() => {
+    setTheoryAcknowledged(true);
+    // Keep the course progress in sync with the IDE gate. Generation no
+    // longer waits for theory, but finishing the theory panel still records
+    // the linked THEORY item before the learner submits the practice.
+    if (courseMode && active?.theoryItemId) {
+      void completeCatalogItem(active.theoryItemId).catch(() => undefined);
+    }
+  }, [active?.theoryItemId, courseMode]);
   const noop = useCallback(() => undefined, []);
   const handleRunRef = useRef(handleRun);
   const handleSubmitRef = useRef(handleSubmit);
@@ -2211,8 +2219,10 @@ export const TasksPage: React.FC<Props> = ({
     <>
       {courseMode ? <>
         <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
-        {(uiState === "error" || !active) ? (
+        {uiState === "error" ? (
           <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
+        ) : !active ? (
+          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-50"><Sparkles className="size-3.5" />{tr("Згенерувати завдання", "Generate task")}<ArrowRight className="size-3.5" /></button>
         ) : nextCoursePracticeItemId ? (
           <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: nextCoursePracticeItemId })} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d]"><Sparkles className="size-3.5" />{tr("Згенерувати наступну", "Generate next")}<ArrowRight className="size-3.5" /></button>
         ) : null}
@@ -2366,6 +2376,7 @@ export const TasksPage: React.FC<Props> = ({
           emptyStateMessage={consoleOutput || null}
           languageOptions={ideLanguageOptions}
           toolbar={ideToolbar}
+          emptyStateAction={courseMode && !active ? <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-black text-[#062211] shadow-[0_10px_24px_-14px_rgba(0,217,120,.85)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-50"><Sparkles className="size-4" />{tr("Згенерувати завдання", "Generate task")}</button> : null}
           language={ideLanguage}
           onLanguageChange={noop}
           compiler={runtime}
