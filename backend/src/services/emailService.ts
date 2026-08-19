@@ -151,7 +151,7 @@ class EmailService {
       preheader: preview ? `${preview}` : `Нове оголошення у класі ${className}`,
       greeting: `Привіт, ${username}!`,
       contentHtml: `<p style="margin:0 0 6px 0;">Нове оголошення у класі <b>${this.escapeHtml(className)}</b>:</p>
-<div style="margin:12px 0 0 0;padding:16px 16px;border:1px solid #1f3552;border-left:4px solid #7bc9ff;border-radius:12px;background:#0a1422;color:#dbe9ff;line-height:1.7;">${this.escapeHtml(
+<div style="margin:12px 0 0 0;padding:16px 16px;border:1px solid #294536;border-left:4px solid #00ff88;border-radius:14px;background:#101e15;color:#d9e5dd;line-height:1.7;">${this.escapeHtml(
         preview
       )}</div>`,
       cta: { label: "Відкрити StudyCod", url: this.getFrontendUrl() },
@@ -172,9 +172,9 @@ class EmailService {
       greeting: `Привіт, ${username}!`,
       contentHtml: `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 14px 0;">
   <tr>
-    <td align="center" style="padding:18px 16px;border:1px solid #ff8f8f33;border-radius:16px;background:rgba(255,143,143,0.10);">
-      <div style="font-size:40px;line-height:1;font-weight:900;color:#ffcc66;">🔥 ${streak}</div>
-      <div style="margin:8px 0 0 0;font-size:13px;color:#9fb3c8;">днів поспіль</div>
+    <td align="center" style="padding:18px 16px;border:1px solid #ffb45433;border-radius:16px;background:rgba(255,180,84,0.10);">
+      <div style="font-size:40px;line-height:1;font-weight:900;color:#ffca7e;">🔥 ${streak}</div>
+      <div style="margin:8px 0 0 0;font-size:13px;color:#aab5ad;">днів поспіль</div>
     </td>
   </tr>
 </table>
@@ -201,10 +201,10 @@ class EmailService {
       preheader: `Призначено: ${taskTitle}. Дедлайн: ${deadlineStr}`,
       greeting: `Привіт, ${username}!`,
       contentHtml: `<p style="margin:0 0 12px 0;">Вам призначено ${isControl ? "контрольну роботу" : "нове завдання"}:</p>
-<div style="margin:0;padding:14px 16px;border:1px solid #1f3552;border-radius:12px;background:#0a1422;color:#f2f7ff;font-size:16px;font-weight:700;">${this.escapeHtml(taskTitle)}</div>
+<div style="margin:0;padding:14px 16px;border:1px solid #294536;border-radius:14px;background:#101e15;color:#f4f7f4;font-size:16px;font-weight:700;">${this.escapeHtml(taskTitle)}</div>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:14px 0 0 0;">
   <tr>
-    <td style="padding:10px 14px;border:1px solid #ffcc6633;border-radius:12px;background:rgba(255,204,102,0.10);color:#ffcc66;font-size:14px;font-weight:700;">⏰ Дедлайн: ${this.escapeHtml(deadlineStr)}</td>
+    <td style="padding:10px 14px;border:1px solid #ffb45433;border-radius:12px;background:rgba(255,180,84,0.10);color:#ffca7e;font-size:14px;font-weight:700;">⏰ Дедлайн: ${this.escapeHtml(deadlineStr)}</td>
   </tr>
 </table>`,
       cta: { label: "Відкрити StudyCod", url: this.getFrontendUrl() },
@@ -233,11 +233,11 @@ class EmailService {
       preheader: opts.subject,
       contentHtml: `${opts.contentHtml}
 
-<hr style="border:none;border-top:1px solid #1f3552;margin:20px 0;" />
-<p style="margin:0;font-size:12px;color:#8fa6c2;line-height:1.65;">
+<hr style="border:none;border-top:1px solid #294536;margin:20px 0;" />
+<p style="margin:0;font-size:12px;color:#8c9b91;line-height:1.65;">
   Ви отримали цей лист, бо підписані на розсилку StudyCod.
   <br />
-  Відписатися: <a href="${unsubscribeUrl}" style="color:#7bc9ff;text-decoration:underline;word-break:break-all;">${unsubscribeUrl}</a>
+  Відписатися: <a href="${unsubscribeUrl}" style="color:#72edb0;text-decoration:underline;word-break:break-all;">${unsubscribeUrl}</a>
 </p>`,
       footer: "Розсилка StudyCod"
     });
@@ -379,7 +379,7 @@ StudyCod: ${this.getFrontendUrl()}`;
 
     const feedbackHtml = feedback
       ? `<p style="margin:12px 0 6px 0;"><b>${this.t(lng, "Коментар вчителя", "Teacher comment")}:</b></p>
-<div style="margin:0;padding:12px;border:1px solid #1f3552;border-radius:10px;background:#08111d;color:#dbe9ff;white-space:pre-wrap;">${this.escapeHtml(feedback)}</div>`
+<div style="margin:0;padding:12px;border:1px solid #294536;border-radius:12px;background:#0d1811;color:#d9e5dd;white-space:pre-wrap;">${this.escapeHtml(feedback)}</div>`
       : "";
 
     const statusUk = opts.event === "updated" ? "оновлену" : "нову";
@@ -388,8 +388,8 @@ StudyCod: ${this.getFrontendUrl()}`;
     // Color + emoji depend on how good the grade is (grade is a 0..100 percent).
     const tone =
       grade >= 90 ? { accent: "#00ff88", soft: "rgba(0,255,136,0.12)", emoji: "🌟" }
-        : grade >= 75 ? { accent: "#7bc9ff", soft: "rgba(123,201,255,0.12)", emoji: "👍" }
-          : grade >= 50 ? { accent: "#ffcc66", soft: "rgba(255,204,102,0.12)", emoji: "📘" }
+        : grade >= 75 ? { accent: "#68efb0", soft: "rgba(104,239,176,0.12)", emoji: "👍" }
+          : grade >= 50 ? { accent: "#ffb454", soft: "rgba(255,180,84,0.12)", emoji: "📘" }
             : { accent: "#ff8f8f", soft: "rgba(255,143,143,0.12)", emoji: "💪" };
 
     const praiseUk =
@@ -408,9 +408,9 @@ StudyCod: ${this.getFrontendUrl()}`;
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:6px 0 4px 0;">
   <tr>
     <td align="center" style="padding:20px 16px;border:1px solid ${tone.accent}33;border-radius:16px;background:${tone.soft};">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:#9fb3c8;margin:0 0 8px 0;">${tone.emoji}&nbsp;${this.t(lng, "Оцінка", "Grade")}</div>
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:#aab5ad;margin:0 0 8px 0;">${tone.emoji}&nbsp;${this.t(lng, "Оцінка", "Grade")}</div>
       <div style="font-size:44px;line-height:1;font-weight:900;color:${tone.accent};">${this.escapeHtml(gradeDisplay)}</div>
-      <div style="margin:10px 0 0 0;font-size:13px;color:#9fb3c8;">${this.t(lng, praiseUk, praiseEn)}</div>
+      <div style="margin:10px 0 0 0;font-size:13px;color:#aab5ad;">${this.t(lng, praiseUk, praiseEn)}</div>
     </td>
   </tr>
 </table>`.trim();
@@ -649,7 +649,7 @@ ${feedbackHtml}`;
     const preheader = this.escapeHtml(opts.preheader || opts.title);
     const year = new Date().getFullYear();
     const greeting = opts.greeting
-      ? `<p style="margin:0 0 12px 0;color:#9fb3c8;font-size:14px;">${this.escapeHtml(
+      ? `<p style="margin:0 0 12px 0;color:#aab5ad;font-size:14px;">${this.escapeHtml(
           opts.greeting
         )}</p>`
       : "";
@@ -672,21 +672,27 @@ ${feedbackHtml}`;
     <meta name="supported-color-schemes" content="dark light" />
     <title>${title}</title>
   </head>
-  <body style="margin:0;padding:0;background-color:#060b14;color:#dbe9ff;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;">
+  <body style="margin:0;padding:0;background-color:#0b120d;color:#d9e5dd;font-family:'Fixel Text',Inter,'Segoe UI',Roboto,Arial,sans-serif;">
     <!-- Preheader (hidden) -->
-    <div style="display:none;font-size:1px;color:#060b14;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
+    <div style="display:none;font-size:1px;color:#0b120d;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
 
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#060b14;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#0b120d;">
       <tr>
-        <td align="center" style="padding:34px 12px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="620" style="max-width:620px;width:100%;">
+        <td align="center" style="padding:32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="max-width:640px;width:100%;">
             <!-- Brand -->
             <tr>
-              <td align="center" style="padding:0 8px 16px 8px;">
-                <a href="${this.getFrontendUrl()}" style="text-decoration:none;color:#f2f7ff;font-weight:900;font-size:19px;letter-spacing:0.35px;">
-                  StudyCod
-                </a>
-                <div style="margin-top:8px;font-size:11px;color:#8fa6c2;text-transform:uppercase;letter-spacing:0.9px;">${this.escapeHtml(
+              <td style="padding:0 8px 18px 8px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="width:40px;height:40px;border-radius:13px;background:#18271d;border:1px solid #294536;text-align:center;vertical-align:middle;color:#68efb0;font-size:19px;font-weight:800;">&lt;/&gt;</td>
+                    <td style="padding-left:11px;vertical-align:middle;">
+                      <a href="${this.getFrontendUrl()}" style="text-decoration:none;color:#f4f7f4;font-weight:800;font-size:20px;letter-spacing:-0.7px;">StudyCod</a>
+                      <div style="margin-top:3px;font-size:9px;color:#8c9b91;text-transform:uppercase;letter-spacing:1.2px;">learn by building</div>
+                    </td>
+                  </tr>
+                </table>
+                <div style="margin-top:18px;font-size:11px;color:#8c9b91;text-transform:uppercase;letter-spacing:1px;">${this.escapeHtml(
                   preheader
                 )}</div>
               </td>
@@ -694,11 +700,11 @@ ${feedbackHtml}`;
 
             <!-- Card -->
             <tr>
-              <td style="background:#0c1626;border:1px solid #1f3552;border-radius:20px;padding:24px 22px;box-shadow:0 22px 60px rgba(0,0,0,0.48);">
-                <div style="height:4px;background:linear-gradient(90deg,#00ff88 0%, #7bc9ff 55%, #9a7dff 100%);border-radius:999px;margin:0 0 16px 0;"></div>
-                <h1 style="margin:0 0 10px 0;font-size:24px;line-height:1.24;color:#f2f7ff;letter-spacing:0.2px;">${title}</h1>
+              <td style="background:#121b15;border:1px solid #294536;border-radius:22px;padding:28px 26px;box-shadow:0 24px 64px rgba(0,0,0,0.34);">
+                <div style="height:4px;background:linear-gradient(90deg,#00ff88 0%, #68efb0 58%, #ffb454 100%);border-radius:999px;margin:0 0 20px 0;"></div>
+                <h1 style="margin:0 0 10px 0;font-size:26px;line-height:1.22;color:#f4f7f4;letter-spacing:-0.45px;">${title}</h1>
                 ${greeting}
-                <div style="font-size:15px;line-height:1.72;color:#dbe9ff;">
+                <div style="font-size:15px;line-height:1.72;color:#d9e5dd;">
                   ${opts.contentHtml}
                 </div>
 
@@ -707,18 +713,18 @@ ${feedbackHtml}`;
                     ? `
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
                   <tr>
-                    <td bgcolor="#00ff88" style="border-radius:12px;">
+                    <td bgcolor="#00ff88" style="border-radius:14px;">
                       <a href="${opts.cta.url}"
-                         style="display:inline-block;padding:13px 20px;background:#00ff88;color:#04110a;text-decoration:none;border-radius:12px;font-weight:800;font-size:15px;letter-spacing:0.1px;">
+                         style="display:inline-block;padding:13px 20px;background:#00ff88;color:#07140d;text-decoration:none;border-radius:14px;font-weight:800;font-size:15px;letter-spacing:0.1px;">
                         ${this.escapeHtml(opts.cta.label)}
                       </a>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:14px 0 0 0;font-size:12px;line-height:1.55;color:#8fa6c2;">
+                <p style="margin:14px 0 0 0;font-size:12px;line-height:1.55;color:#8c9b91;">
                   Якщо кнопка не працює, відкрийте посилання нижче:
                   <br />
-                  <a href="${opts.cta.url}" style="color:#7bc9ff;text-decoration:underline;word-break:break-all;">${opts.cta.url}</a>
+                  <a href="${opts.cta.url}" style="color:#72edb0;text-decoration:underline;word-break:break-all;">${opts.cta.url}</a>
                 </p>
                     `.trim()
                     : ""
@@ -729,10 +735,10 @@ ${feedbackHtml}`;
             <!-- Footer -->
             <tr>
               <td style="padding:14px 10px 0 10px;">
-                <p style="margin:0;font-size:12px;line-height:1.65;color:#7f96b2;">
+                <p style="margin:0;font-size:12px;line-height:1.65;color:#7f8c84;">
                   ${this.escapeHtml(footer)}
                 </p>
-                <p style="margin:8px 0 0 0;font-size:12px;color:#7f96b2;">© ${year} StudyCod • <a href="${this.getFrontendUrl()}" style="color:#7f96b2;text-decoration:underline;">studycod.space</a></p>
+                <p style="margin:8px 0 0 0;font-size:12px;color:#7f8c84;">© ${year} StudyCod • <a href="${this.getFrontendUrl()}" style="color:#7f8c84;text-decoration:underline;">studycod.space</a></p>
               </td>
             </tr>
           </table>
@@ -764,10 +770,10 @@ ${feedbackHtml}`;
         lng,
         `<p>Дякуємо за реєстрацію в StudyCod.</p>
 <p>Щоб активувати акаунт, підтвердіть вашу адресу електронної пошти.</p>
-<p style="margin:14px 0 0 0;color:#9fb3c8;">Якщо ви не створювали акаунт, просто проігноруйте цей лист.</p>`,
+<p style="margin:14px 0 0 0;color:#aab5ad;">Якщо ви не створювали акаунт, просто проігноруйте цей лист.</p>`,
         `<p>Thanks for registering at StudyCod.</p>
 <p>Please confirm your email address to activate your account.</p>
-<p style="margin:14px 0 0 0;color:#9fb3c8;">If you did not create this account, just ignore this email.</p>`
+<p style="margin:14px 0 0 0;color:#aab5ad;">If you did not create this account, just ignore this email.</p>`
       ),
       cta: { label: this.t(lng, "Підтвердити email", "Verify email"), url },
       locale: lng,
@@ -814,10 +820,10 @@ ${url}
         lng,
         `<p>Ми отримали запит на відновлення паролю для вашого акаунта.</p>
 <p>Натисніть кнопку нижче, щоб встановити новий пароль.</p>
-<p style="margin:14px 0 0 0;color:#9fb3c8;">Якщо це були не ви — просто проігноруйте цей лист.</p>`,
+<p style="margin:14px 0 0 0;color:#aab5ad;">Якщо це були не ви — просто проігноруйте цей лист.</p>`,
         `<p>We received a request to reset your account password.</p>
 <p>Click the button below to set a new password.</p>
-<p style="margin:14px 0 0 0;color:#9fb3c8;">If this wasn't you, simply ignore this email.</p>`
+<p style="margin:14px 0 0 0;color:#aab5ad;">If this wasn't you, simply ignore this email.</p>`
       ),
       cta: { label: this.t(lng, "Відновити пароль", "Reset password"), url },
       locale: lng,
@@ -856,8 +862,8 @@ If this wasn't you, just ignore this email.
       title: opts.subject,
       preheader: "Відповідь від підтримки StudyCod.",
       contentHtml: `<p style="margin:0 0 12px 0;">Ми опрацювали ваше звернення та надіслали відповідь нижче:</p>
-<div style="margin:0 0 10px 0;padding:9px 11px;border-radius:10px;background:#0a1422;border:1px dashed #2a4d73;color:#9ec7ff;font-size:12px;font-weight:700;letter-spacing:0.25px;text-transform:uppercase;">Повідомлення від техпідтримки</div>
-<div style="white-space:pre-wrap;background:#08111d;border:1px solid #1f3552;border-radius:12px;padding:14px 14px;color:#dbe9ff;line-height:1.72;">${this.escapeHtml(
+<div style="margin:0 0 10px 0;padding:9px 11px;border-radius:10px;background:rgba(255,180,84,0.10);border:1px dashed #ffb45466;color:#ffca7e;font-size:12px;font-weight:700;letter-spacing:0.25px;text-transform:uppercase;">Повідомлення від техпідтримки</div>
+<div style="white-space:pre-wrap;background:#0d1811;border:1px solid #294536;border-radius:14px;padding:14px 14px;color:#d9e5dd;line-height:1.72;">${this.escapeHtml(
         opts.message
       )}</div>`,
       footer: "StudyCod Technical Support",
