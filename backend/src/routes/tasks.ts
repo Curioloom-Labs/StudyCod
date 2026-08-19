@@ -984,7 +984,7 @@ function buildTestDataPrompt(params: {
   const inputRule = params.ioType === "STDIN_STDOUT"
     ? "Every new test must use a different non-empty input from all existing tests, while preserving the exact input format."
     : "The task has no input; do not invent additional inputs and keep input as an empty string.";
-  return `--- TASK STATEMENT (SOURCE OF TRUTH) ---\n${statement}\n--- END TASK STATEMENT ---\n\n--- EXISTING TEST DATA (REFERENCE ONLY; DO NOT COPY OR MODIFY) ---\n${rendered}\n--- END EXISTING TEST DATA ---\n\nIO RULE: ${inputRule}\nCalculate every output from the TASK STATEMENT. If an existing test conflicts with the task statement, ignore that test and create a correct new one.`.trim();
+  return `--- TASK STATEMENT (SOURCE OF TRUTH) ---\n${statement}\n--- END TASK STATEMENT ---\n\n--- EXISTING TEST DATA (REFERENCE ONLY; DO NOT COPY OR MODIFY) ---\n${rendered}\n--- END EXISTING TEST DATA ---\n\nIO RULE: ${inputRule}\nTEST DEPTH: derive a coverage matrix from the statement before choosing inputs. Cover distinct behaviour classes, thresholds/boundaries, ordinary values, and default/unknown cases when allowed. Do not spend all tests on obvious sequential values or the same execution path.\nCalculate every output from the TASK STATEMENT. If an existing test conflicts with the task statement, ignore that test and create a correct new one.`.trim();
 }
 
 function looksLikeNumberedChecklistPracticalTask(text: string): boolean {
@@ -3429,7 +3429,13 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
       const content = (context.item.content || {}) as any;
       const exercise = content.exercise && typeof content.exercise === "object" ? content.exercise : {};
-      const topicIndex = Math.max(0, Number(context.item.order) || 0);
+      // `course_items.order` is only the position inside its module. The AI
+      // policy is based on the global learning topic, which is the module's
+      // order. Using the item order made every practice in a module look like
+      // an early topic and could incorrectly select NO_INPUT_FIXED_OUTPUT.
+      const moduleOrder = Number((context.item as any)?.module?.order);
+      const itemOrder = Number((context.item as any)?.order);
+      const topicIndex = Math.max(0, Number.isFinite(moduleOrder) ? moduleOrder : (itemOrder || 0));
       const existingCourseTasks = await taskRepo()
         .createQueryBuilder("task")
         .where("task.user_id = :userId", { userId })
@@ -3438,7 +3444,34 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         .orderBy("task.createdAt", "ASC")
         .select(["task.id", "task.title", "task.description", "task.numInTopic"])
         .getMany();
-      const catalogPracticeSequence = catalogPracticeSequenceFromItem(context.item) ?? (existingCourseTasks.length + 1);
+      // A catalog item represents one authored practice. If the client retries
+      // after a slow response, return the already persisted task instead of
+      // generating another task for the same item. This also keeps the
+      // authored Practice N/total sequence stable.
+      const existingCourseTask = existingCourseTasks[0];
+      if (existingCourseTask) {
+        const hydratedExisting = await taskRepo().findOne({
+          where: { id: existingCourseTask.id },
+          relations: ["topic", "topic.theoryBlock", "courseItem"],
+        });
+        if (hydratedExisting) {
+          await reportGenerationProgress(
+            "ready",
+            100,
+            userLanguage === "en" ? "Practice is ready" : "Практика готова",
+            "ready",
+          );
+          return res.json({
+            status: "ok",
+            task: mapTaskToDto(hydratedExisting, undefined, {
+              uiLanguage: userLanguage,
+              catalogTheoryMarkdown: context.theoryMarkdown,
+            }),
+          });
+        }
+      }
+
+      const catalogPracticeSequence = catalogPracticeSequenceFromItem(context.item) ?? 1;
       const difus = await getStableDifus(userId, lang, topicIndex, userRepo, gradeRepo);
       const theoryForAi = [
         context.theoryMarkdown,
@@ -3462,9 +3495,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         type: "TOPIC",
         topic: null,
         topicIndex,
-        // Catalog practice items are separate rows, so counting persisted
-        // tasks for the current item would make every item look like 1/1.
-        // Use the authored practice sequence (e.g. practice-3 => 3/3).
+        // Catalog practice items are separate rows. Use the authored practice
+        // sequence (e.g. practice-3 => 3/3), never a retry counter.
         numInTopic: catalogPracticeSequence,
         requiredTasksInThisGroup: 1,
         topicTitleForAi: context.item.title,

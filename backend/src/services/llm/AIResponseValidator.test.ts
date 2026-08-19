@@ -14,6 +14,18 @@ test('AIResponseValidator.validateGenerateTestData: rejects conflicting outputs 
   );
 });
 
+test('AIResponseValidator.validateGenerateTestData: trims one extra provider row to the requested count', () => {
+  const result = AIResponseValidator.validateGenerateTestData({
+    tests: Array.from({ length: 13 }, (_, index) => ({
+      input: String(index + 1),
+      output: String((index + 1) * 2),
+    })),
+  }, 12);
+
+  assert.equal(result.length, 12);
+  assert.equal(result[result.length - 1]?.input, '12');
+});
+
 test('AIResponseValidator.validateGenerateTask: rejects no-input task that asks for a name', () => {
   const data = {
     title: 'Персональне привітання',
@@ -87,6 +99,72 @@ test('AIResponseValidator.validateGenerateTask: rejects theory copied into pract
   assert.throws(
     () => AIResponseValidator.validateGenerateTask(data, 'Control flow', 1),
     /practicalTask contains lesson theory/i
+  );
+});
+
+test('AIResponseValidator.validateGenerateTask: rejects implementation hints in the learner statement', () => {
+  const data = {
+    title: 'Flow control: if/else; switch',
+    topic: 'Flow control: if/else; switch',
+    difficulty: 2,
+    theoryMarkdown: 'Branching lets a program choose an output from the input state.',
+    practicalTask: 'A pedestrian signal reports the current state as a number. For each valid state, print the action that pedestrians should take and keep the output to one line. Ensure your program handles all three states correctly using either if/else statements or a switch statement.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'Read one integer from stdin.',
+    outputFormat: 'Print the corresponding action on one line.',
+    constraints: 'The input is a valid state number.',
+    examples: [{ input: '1', output: 'Stop', explanation: 'The first state maps to the stop action.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) { /* TODO */ } }'
+  };
+
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTask(data, 'Flow control: if/else; switch', 2),
+    /reveals an implementation technique/i
+  );
+});
+
+test('AIResponseValidator.validateGenerateTask: rejects empty-output branches', () => {
+  const data = {
+    title: 'Array filtering',
+    topic: 'Arrays and filtering',
+    difficulty: 2,
+    theoryMarkdown: 'Arrays store a sequence of values.',
+    practicalTask:
+      'A monitoring tool receives a list of readings and must report the readings that exceed the daily limit. ' +
+      'If no reading exceeds the limit, print an empty line; otherwise print the selected readings in their original order. ' +
+      'The output must contain only the requested result and no labels or explanations.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'Read the number of readings, the readings, and the limit from stdin.',
+    outputFormat: 'Print the selected readings or an empty line.',
+    constraints: 'The list contains between 1 and 100 integers.',
+    examples: [{ input: '3 1 2 3 10', output: '1 2 3', explanation: 'No reading exceeds the limit.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) { /* TODO */ } }'
+  };
+
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTask(data, 'Arrays and filtering', 5),
+    /requires empty output/i
+  );
+});
+
+test('AIResponseValidator.validateGenerateTask: rejects a three-value decision lookup as too shallow', () => {
+  const data = {
+    title: 'Flow control: if/else; switch',
+    topic: 'Flow control: if/else; switch',
+    difficulty: 2,
+    theoryMarkdown: 'Branching lets a program choose an output from the input state.',
+    practicalTask: 'A traffic signal is represented by one integer between 1 and 3. For each possible state, print the corresponding pedestrian action on one line. The input is always one of the three valid states and the output is one message for that state.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'Read one integer between 1 and 3 from stdin.',
+    outputFormat: 'Print the corresponding action on one line.',
+    constraints: 'The input is one of the three possible states: 1, 2, or 3.',
+    examples: [{ input: '1', output: 'Stop', explanation: 'The first state maps to the stop action.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) { /* TODO */ } }'
+  };
+
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTask(data, 'Flow control: if/else; switch', 2),
+    /decision task is too shallow/i
   );
 });
 

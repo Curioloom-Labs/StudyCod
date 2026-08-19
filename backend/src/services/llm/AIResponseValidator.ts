@@ -219,6 +219,57 @@ function looksLikeMultiTaskInstruction(text: string): boolean {
   return false;
 }
 
+function looksLikeImplementationHint(text: string): boolean {
+  const source = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!source) return false;
+
+  // The learner should infer the solution from the behaviour described by the
+  // task. Reject prompts that prescribe a construct or algorithm, especially
+  // the common "using either if/else or switch" leakage from topic metadata.
+  const technique = '(?:if\\s*/\\s*else|if\\s+else|if-?else|switch(?:\\s+statement)?|ternary(?:\\s+operator)?|`?(?:for|while|do-?while)`?\\s*(?:loop|цик(?:л|ли|лом|лами))|recursion|binary\\s+search|sorting|цик(?:л|ли|лом|лами)|рекурс(?:і|и)я|бінарн(?:ий|ого)\\s+пошук|сортуван(?:ня|ням)|розгалуженн(?:я|ям))';
+  const introducer = "(?:using|use|uses|used|via|with|by|implement|solve|choose|either|використ(?:овуючи|айте|ай|ати)|застос(?:овуючи|уйте|уй|увати)|реаліз(?:овуючи|уйте|уй|увати)|розв\\'яж(?:іть|и|емо|увати)|розв’яз(?:іть|и|емо|увати)|за\\s+допомогою|через)";
+  const methodPattern = new RegExp(`${introducer}[^.!?]{0,140}${technique}|${technique}[^.!?]{0,100}${introducer}`, 'i');
+  if (methodPattern.test(source)) return true;
+
+  // Also reject meta-verbs that turn the statement into an implementation
+  // checklist when they explicitly mention the program and a technique.
+  const metaPattern = new RegExp(
+    `(?:ensure|make\\s+sure|перекона(?:йся|йтеся|йте))[^.!?]{0,180}(?:program|програм)[^.!?]{0,180}${technique}`,
+    'i'
+  );
+  return metaPattern.test(source);
+}
+
+function looksLikeEmptyOutputRequirement(text: string): boolean {
+  const source = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!source) return false;
+
+  // The judge stores a concrete non-empty expected stdout for every test.
+  // A statement that asks for a blank line/no output on a valid branch cannot
+  // be represented reliably and must be regenerated with an explicit token.
+  return /(?:print|output|display|вив(?:едіть|ести|одити)|надруку(?:йте|вати)|вивод(?:ьте|ити))[^.!?]{0,120}(?:an?\s+)?(?:empty|blank|порожн(?:ій|ю|ього)|нічого)[^.!?]{0,80}(?:line|ряд(?:ок|ка)|output|вив(?:ід|оду))/i.test(source)
+    || /(?:if|when|якщо|коли)[^.!?]{0,140}(?:none|no matches|нічого не знайдено|немає результат)/i.test(source) && /(?:empty|blank|порожн|нічого не вивод)/i.test(source);
+}
+
+function looksLikeShallowDecisionTask(context: {
+  topicTitle: string;
+  practical: string;
+  inFmt: string;
+  constraints: string;
+}): boolean {
+  const topic = String(context.topicTitle ?? '').toLowerCase();
+  if (!/(?:flow\s+control|control\s+flow|if\s*[/\-]?\s*else|switch|branch|керуван(?:ня|ням)\s+поток(?:ом|у)|розгалуженн)/i.test(topic)) {
+    return false;
+  }
+
+  const source = `${context.practical} ${context.inFmt} ${context.constraints}`
+    .replace(/\s+/g, ' ')
+    .trim();
+  const tinyDomain = /(?:between|from)\s+1\s+(?:and|to)\s+3|1\s*,\s*2\s*(?:,|or|and)\s*3|three\s+(?:possible|valid)\s+(?:states|values|inputs)|(?:між|від)\s*1\s*(?:і|та|до)\s*3|1\s*,\s*2\s*(?:,|або|і)\s*3|три\s+(?:можлив(?:і|их)|допустим(?:і|их))\s+(?:стан(?:и|ів)|значенн(?:я|ь)|вхідн(?:і|их)\s+дан(?:і|их))/i.test(source);
+  const directMapping = /(?:each|every|possible|state|value|input|for\s+the|кожн(?:ий|ого)|можлив(?:ий|ого)|стан|значенн|вхідн(?:е|і|их)|відповідн(?:о|ість)|залежно\s+від)/i.test(source);
+  return tinyDomain && directMapping;
+}
+
 function hasVagueOutputContract(text: string): boolean {
   const s = String(text ?? '').toLowerCase();
   if (!s.trim()) return true;
@@ -484,6 +535,22 @@ const TASK_VALIDATION_RULES: TaskValidationRule[] = [
     id: "practical.multi_task",
     message: "Task generation validation failed: practicalTask appears to contain multiple tasks/programs",
     fails: c => looksLikeMultiTaskInstruction(c.practical),
+  },
+  {
+    id: "practical.implementation_hint",
+    message: "Task generation validation failed: practicalTask reveals an implementation technique; describe behaviour, not the solution method",
+    fails: c => looksLikeImplementationHint(c.practical),
+  },
+  {
+    id: "practical.empty_output",
+    message: "Task generation validation failed: practicalTask requires empty output; use an explicit non-empty sentinel instead",
+    applies: c => c.ioType !== "NO_INPUT_FREE_OUTPUT",
+    fails: c => looksLikeEmptyOutputRequirement(c.practical),
+  },
+  {
+    id: "practical.shallow_decision",
+    message: "Task generation validation failed: decision task is too shallow; create richer behaviour with enough valid cases for meaningful tests",
+    fails: c => looksLikeShallowDecisionTask(c),
   },
   // IO-type gated rules.
   {
@@ -883,7 +950,16 @@ export class AIResponseValidator {
   }
   static validateGenerateTestData(data: unknown, expectedCount?: number): TestDataExample[] {
     try {
-      const tests = TestDataResponseSchema.parse(this.normalizeTestDataContainer(data));
+      const rawTests = this.normalizeTestDataContainer(data);
+      // Providers occasionally return one extra valid row despite an exact
+      // JSON-schema maxItems constraint. Keep the requested deterministic
+      // count instead of turning an otherwise usable response into a retry.
+      // Fewer rows remain a hard error because the caller cannot fill the
+      // missing coverage safely.
+      const boundedTests = expectedCount !== undefined && Array.isArray(rawTests) && rawTests.length > expectedCount
+        ? rawTests.slice(0, expectedCount)
+        : rawTests;
+      const tests = TestDataResponseSchema.parse(boundedTests);
       if (expectedCount !== undefined && tests.length !== expectedCount) {
         throw new AIValidationError('generateTestData', emptyZod(), `Test data validation failed: expected ${expectedCount} tests, got ${tests.length}`, data);
       }

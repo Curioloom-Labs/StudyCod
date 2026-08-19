@@ -87,7 +87,10 @@ function buildTaskAnchorCacheKey(params: {
   topicTitle: string;
   lang: LLMTaskLanguage;
 }): string {
-  return `${params.lang}|${String(params.topicTitle ?? '').trim().toLowerCase()}`;
+  // Bump this when the semantic anchor contract changes. Old anchors can
+  // contain implementation hints (for example, "use if/else or switch") and
+  // must not leak into otherwise clean task prompts after a deployment.
+  return `v2|${params.lang}|${String(params.topicTitle ?? '').trim().toLowerCase()}`;
 }
 
 function compactPromptText(raw: string, maxLength: number): string {
@@ -433,11 +436,12 @@ export class LLMOrchestrator {
       ? `You are a semantic architect of learning tasks. Create an anchor for a task. Return ONLY JSON.`
       : `Ти семантичний архітектор навчальних завдань. Створюй anchor для завдання. Відповідай ТІЛЬКИ JSON.`;
     const userPrompt = isEnglish
-      ? `Create a semantic anchor for a task on the topic "${params.topicTitle}" (language: ${langName}).
+        ? `Create a semantic anchor for a task on the topic "${params.topicTitle}" (language: ${langName}).
 
 CRITICALLY IMPORTANT:
 - The "topic" field in JSON MUST exactly match "${params.topicTitle}" (1:1)
-- coreOperation: ONE clear statement of what exactly needs to be done (always emphasize: "write a complete program that...")
+- coreOperation: ONE clear statement of the observable behaviour the program must produce (always emphasize: "write a complete program that..."). Describe the required result, not the implementation method.
+- If the topic is about if/else, switch, loops, recursion, sorting, or another construct, NEVER put that construct in coreOperation as an instruction such as "use if/else". The learner-facing task must test the behaviour without revealing the solution technique.
 - allowedScope: what is allowed in the task (must include "complete program with main()")
 - forbiddenScope: ALWAYS include: "standalone function/method/class implementation" and "unit tests" — even if the topic is about functions, the task must be about writing a complete program, not just implementing a function
 
@@ -446,7 +450,8 @@ Return ONLY JSON without explanations.`
 
 КРИТИЧНО ВАЖЛИВО:
 - Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.topicTitle}" точно (1:1)
-- coreOperation: ОДНА дія, що саме потрібно зробити (завжди наголошуй: "напиши повну програму, яка...")
+- coreOperation: ОДНА дія, що описує спостережувану поведінку програми (завжди наголошуй: "напиши повну програму, яка..."). Описуй очікуваний результат, а не спосіб реалізації.
+- Якщо тема про if/else, switch, цикли, рекурсію, сортування чи іншу конструкцію, НІКОЛИ не перетворюй coreOperation на інструкцію "використай if/else". Умова має перевіряти поведінку, але не розкривати техніку розв'язання.
 - allowedScope: що дозволено робити в завданні (ОБОВ'ЯЗКОВО "повна програма з main()")
 - forbiddenScope: ЗАВЖДИ включай: "реалізація окремих функцій/методів/класів" та "unit-тести" — навіть якщо тема про функції, завдання ПОВИННО бути про написання повної програми, а не просто реалізацію функції
 
@@ -797,6 +802,37 @@ QUALITY OF STATEMENT (important for students):
 - If structure is needed, do it through connected sentences; do not turn the statement into a list of steps.
 - If the task is about variables/types/operations — require to OUTPUT (print) the result so the autotest can check it (deterministic stdout).
 `;
+    const solutionLeakageInstructionsUa = `
+ПРАВИЛО БЕЗ РОЗКРИТТЯ РІШЕННЯ:
+- practicalTask — це лише умова для учня: короткий контекст, що дано, що потрібно визначити/вивести, формат вводу/виводу та необхідні обмеження.
+- НІКОЛИ не підказуй спосіб розв'язання: не пиши "використовуючи if/else", "за допомогою switch", "застосуй цикл", "відсортуй", "використай бінарний пошук", "застосуй рекурсію" або подібні назви конструкцій/алгоритмів.
+- Не додавай службові мета-фрази на кшталт "переконайтеся, що ваша програма...", "Ensure your program...", "обробіть усі випадки правильно". Замість цього прямо опиши поведінку для потрібних вхідних випадків.
+- Якщо тема про розгалуження, перелічуй бізнес-правила та очікувані повідомлення, але не називай if/else, switch чи іншу конструкцію в тексті умови.
+- Не копіюй теорію, пояснення, приклад коду, чекліст кроків або розбір рішення в practicalTask.
+`;
+    const solutionLeakageInstructionsEn = `
+NO-SOLUTION-LEAKAGE RULE:
+- practicalTask is only the learner-facing specification: a short context, what is given, what must be determined/output, the input/output contract, and necessary constraints.
+- NEVER prescribe the solution method: do not write "using if/else", "with a switch", "use a loop", "sort the data", "use binary search", "apply recursion", or similar names of constructs/algorithms.
+- Do not add service/meta sentences such as "Ensure your program..." or "make sure all cases are handled correctly". State the required behaviour for the relevant inputs directly instead.
+- For a branching topic, describe the business rules and expected messages, but never name if/else, switch, or another implementation construct in the learner-facing statement.
+- Do not copy theory, explanations, code examples, a step checklist, or a solution walkthrough into practicalTask.
+`;
+    const depthInstructionsUa = stdinAllowed && params.topicIndex !== 0 ? `
+ГЛИБИНА ПОВЕДІНКИ (НЕ ЗМІНЮЄ СКЛАДНІСТЬ):
+- Не створюй задачу, де все зводиться до трьох очевидних значень або прямої таблиці "1 → ..., 2 → ..., 3 → ...".
+- Дай достатньо допустимих вхідних даних для щонайменше 6 змістовно різних тестів: кілька класів поведінки, межі/пороги, звичайний випадок і default/невідомий випадок, якщо це дозволено умовою.
+- Це не вимога до складного алгоритму. Зроби багатшою саме поведінку задачі, не додавай зайвих тем, формул чи структур даних.
+- Умова не повинна розкривати ці класи як покроковий план розв'язання; опиши лише правила предметної області.
+` : "";
+    const depthInstructionsEn = stdinAllowed && params.topicIndex !== 0 ? `
+BEHAVIOURAL DEPTH (INDEPENDENT OF DIFFICULTY):
+- Do not create a task that reduces to three obvious values or a direct table such as "1 -> ..., 2 -> ..., 3 -> ...".
+- Provide a valid input domain for at least 6 meaningful tests: multiple behaviour classes, boundaries/thresholds, an ordinary case, and a default/unknown case when the statement allows it.
+- This is not a demand for a complex algorithm. Make the behaviour richer without adding unrelated topics, formulas, or data structures.
+- Do not expose these classes as a step-by-step solution plan; describe only the domain rules.
+` : "";
+
     const selfCheckUa = params.topicIndex === 0 ? `
 САМОПЕРЕВІРКА ПЕРЕД ВІДПОВІДДЮ:
 1) Переконайся, що програма виводить рівно "Hello, World!" один раз, без зайвих символів.
@@ -861,7 +897,7 @@ ${introInstructionsUa}
 
 КРИТИЧНО ВАЖЛИВО:
 1. Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}" (immutable)
-2. Практичне завдання (practicalTask) ОБОВ'ЯЗКОВО має містити "${params.anchor.coreOperation}"
+2. Завдання в цілому має перевіряти coreOperation "${params.anchor.coreOperation}", але practicalTask має описувати лише ситуацію, дані, потрібну поведінку та stdout — без називання способу реалізації.
 3. Будь-який контент поза allowedScope = ПОМИЛКА
 4. Будь-який контент з forbiddenScope = ПОМИЛКА
 5. ЗАБОРОНЕНО створювати multi-task структури (Завдання 1, Завдання 2, Контрольна робота з кількома завданнями)
@@ -871,6 +907,7 @@ ${introInstructionsUa}
 - Завдання має бути перевірюваним автотестом через stdout (та stdin лише якщо дозволено).
 - Студент пише рішення в ОДНОМУ файлі (Main.java / main.py / main.cpp).
 - ЗАБОРОНЕНО: вимагати реалізувати окрему функцію/метод/клас замість повної програми; завдання має бути розв'язане через stdin/stdout.
+- Практична умова НІКОЛИ не повинна вимагати порожній рядок або відсутність stdout для допустимого вводу. Якщо природний результат порожній, задай явний непорожній sentinel (наприклад "NONE", "0" або "NO_MATCH") і опиши його дослівно.
 - ЗАБОРОНЕНО: просити створювати файли/папки/проєкти, налаштовувати IDE/компілятор, CMake/Makefile, структуру src/include тощо.
 - Якщо тема про структуру проєкту — перетвори це на програмне завдання (наприклад: вивести текст/схему структури), але все одно лише через stdout.
 
@@ -885,6 +922,8 @@ ${introInstructionsUa}
   "Напиши функцію, яка перевіряє, чи число просте."
 
 ${qualityInstructionsUa}
+${solutionLeakageInstructionsUa}
+${depthInstructionsUa}
 
 ДОЗВОЛЕНІ IO-ТИПИ (allowedIoTypes): ${allowedIoTypes.join(' | ')}
 - Якщо STDIN_STDOUT НЕ дозволено — ЗАБОРОНЕНО просити введення даних, читати stdin або згадувати input()/Scanner/System.in/std::cin/cin/getline.
@@ -925,7 +964,7 @@ ${uniquenessBlock}
 - NO_INPUT_FREE_OUTPUT: немає вводу; дозволено вивести будь-який НЕПОРОЖНІЙ результат (перевірка буде лише на "не порожній stdout").
 
 КРИТИЧНО ДЛЯ АВТОТЕСТІВ:
-- Якщо ioType = STDIN_STDOUT або NO_INPUT_FIXED_OUTPUT: за заданим input існує ЄДИНИЙ правильний output.
+- Якщо ioType = STDIN_STDOUT або NO_INPUT_FIXED_OUTPUT: за заданим input існує ЄДИНИЙ правильний output, і він завжди містить хоча б один непорожній токен або рядок. Не використовуй «порожній рядок» чи «нічого не виводьте»; заміни це явним sentinel ("NONE", "0", "NO_MATCH") і вкажи його точно.
 - Якщо ioType = NO_INPUT_FREE_OUTPUT: явно напиши в outputFormat, що можна вивести будь-який НЕПОРОЖНІЙ рядок (без зайвих слів/міток).
 - Заборонені будь-які підказки/тексти у виводі типу "Введіть число" або "Відповідь:".
 
@@ -980,7 +1019,7 @@ NO FUNCTION STUBS, NO UNIT TESTS, NO CLASSES — ONLY A COMPLETE RUNNABLE PROGRA
 
 CRITICALLY IMPORTANT:
 1. The "topic" field in JSON MUST be equal to "${params.anchor.topic}" (immutable)
-2. The practical task (practicalTask) MUST contain "${params.anchor.coreOperation}"
+2. The task as a whole must test the core operation "${params.anchor.coreOperation}", but practicalTask must describe only the situation, data, required behaviour, and stdout — never the implementation method.
 3. Any content outside allowedScope = ERROR
 4. Any content from forbiddenScope = ERROR
 5. FORBIDDEN to create multi-task structures (Task 1, Task 2, Control work with multiple tasks)
@@ -990,6 +1029,7 @@ PLATFORM / AUTO-CHECK (mandatory):
 - The task must be checkable by an autotest via stdout (and stdin only if allowed).
 - The student writes the solution in ONE file (Main.java / main.py / main.cpp).
 - FORBIDDEN: ask to implement a standalone function/method/class instead of a full program; the task must be solved via stdin/stdout.
+- The learner-facing statement MUST NOT require a blank line or empty stdout for any valid input. If a natural result would be empty, define an explicit non-empty sentinel such as "NONE", "0", or "NO_MATCH" and state it literally.
 - FORBIDDEN: asking to create files/folders/projects, configure IDE/compiler, CMake/Makefile, src/include structure, etc.
 - If the topic is about project structure — turn it into a programming task (e.g., output the text/diagram of the structure), but still only via stdout.
 
@@ -1004,6 +1044,8 @@ CONCRETE EXAMPLES:
   "Write a function that checks if a number is prime."
 
 ${qualityInstructionsEn}
+${solutionLeakageInstructionsEn}
+${depthInstructionsEn}
 
 ALLOWED IO-TYPES (allowedIoTypes): ${allowedIoTypes.join(' | ')}
 - If STDIN_STDOUT is NOT allowed — FORBIDDEN to ask for data input, read stdin, or mention input()/Scanner/System.in/std::cin/cin/getline.
@@ -1044,7 +1086,7 @@ TASK TYPE (ioType) — SEPARATE FROM TEXT:
 - NO_INPUT_FREE_OUTPUT: no input; allowed to output any NON-EMPTY result (check will only be for "non-empty stdout").
 
 CRITICAL FOR AUTOTESTS:
-- If ioType = STDIN_STDOUT or NO_INPUT_FIXED_OUTPUT: for a given input, there exists a SINGLE correct output.
+- If ioType = STDIN_STDOUT or NO_INPUT_FIXED_OUTPUT: for a given input, there exists a SINGLE correct output, and it always contains at least one non-empty token or line. Never require a blank line or no output; replace it with an explicit sentinel ("NONE", "0", or "NO_MATCH") and state it exactly.
 - If ioType = NO_INPUT_FREE_OUTPUT: explicitly write in outputFormat that any NON-EMPTY line can be output (without unnecessary words/labels).
 - Any prompts/texts in output like "Enter number" or "Answer:" are forbidden.
 
@@ -1090,6 +1132,7 @@ Respond ONLY with JSON, without markdown blocks, without explanations.
 
     const practicalTaskLengthInstruction = `
 PRACTICAL TASK LENGTH (mandatory): practicalTask must be a connected narrative of at least 180 characters and at least 2 complete sentences for every non-intro topic. It must explicitly state the input (or that the statement provides all values), the required operation, and the exact output. Do not return a one-line summary; expand the statement before returning JSON.
+OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empty stdout. Never describe an empty line/no output as a valid result; use and state an explicit non-empty sentinel instead.
 `;
     const userPrompt = isEnglish
       ? (userPromptBaseEn + instructionsEn + practicalTaskLengthInstruction).trim()
@@ -2222,14 +2265,24 @@ SILENT VALIDATION BEFORE JSON:
 - Parse the input exactly as the statement describes: tokens, lines, separators, and empty input.
 - Simulate the program completely for every candidate input, including every if/else branch, switch case, mapping, loop, boundary, zero, negative value, and default branch that is allowed by the constraints.
 - Write output from the simulation, character by character: exact words, capitalization, punctuation, spaces, and line breaks. Output is stdout only; never include explanations, labels, prompts, or markdown unless the statement explicitly requires them.
+- Every expected output must contain at least one non-empty token or line. If the statement appears to allow an empty result, treat that as an invalid task and do not invent an empty expected output.
 - Re-check each candidate twice. If an output cannot be calculated with certainty, discard that candidate and choose a simpler valid input.
 - Check normalized input uniqueness within the new tests and against EXISTING TEST DATA. Never return two outputs for the same input.
+
+BEHAVIOURAL COVERAGE MATRIX (do this silently before choosing inputs):
+- First derive every distinct behaviour class from the TASK STATEMENT. A behaviour class is a different rule/output path, not merely another number.
+- Cover every allowed branch/rule at least once, then add boundary and near-boundary values, an ordinary middle value, and default/unknown values when the statement allows them.
+- For ranges, use values at the minimum, just inside, just outside a threshold, in the middle, and at the maximum. For multiple inputs, vary their relationship and order, not just one field at a time.
+- Do not generate a row of obvious sequential inputs (1, 2, 3, ...), copies of the examples, or several tests that exercise the same path.
+- If the statement permits fewer unique inputs than the requested count, do not fabricate duplicates or conflicting outputs; this indicates that the task itself needs a richer input domain.
 
 QUALITY RULES:
 - Use only valid inputs permitted by the statement; never invent an input format.
 - Cover useful cases: minimum/maximum permitted values, values immediately around every threshold, zero and negative values when allowed, default branches, and representative ordinary cases. Do not create invalid cases merely for variety.
 - For lookup tables and switch-like mappings, manually verify the exact mapping instead of guessing from a pattern.
+- Prefer non-obvious, behaviourally different inputs over cosmetic number changes. Every test must justify its place in the coverage matrix.
 - For arrays/strings, provide the complete stdin text exactly as a student would enter it.
+- Never return an empty output string. The judge requires concrete stdout; an empty-result branch must use the explicit non-empty sentinel defined by the task statement.
 - Do not use placeholders such as input="1" output="1" unless the statement mathematically requires that result.
 - Return no chain of thought, no explanations, no prose, and no markdown. Return only the JSON object matching the schema.`.trim();
     const userPrompt = `
