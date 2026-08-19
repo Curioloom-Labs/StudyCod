@@ -962,6 +962,31 @@ function mergeConsistentExamples(params: {
   return { merged: out, droppedConflicts };
 }
 
+function buildTestDataPrompt(params: {
+  statement: string;
+  existingExamples: Array<{ input: string; output: string }>;
+  ioType: TaskIoType;
+}): string {
+  const statement = String(params.statement ?? "").trim();
+  const examples = params.existingExamples
+    .map((example) => ({
+      input: String(example.input ?? "").trim(),
+      output: String(example.output ?? "").trim()
+    }))
+    .filter((example) => example.output.length > 0)
+    .filter((example, index, all) => all.findIndex((candidate) => candidate.input === example.input && candidate.output === example.output) === index)
+    .slice(0, 8);
+  if (!examples.length) return statement;
+
+  const rendered = examples
+    .map((example, index) => `EXISTING_TEST_${index + 1}: input=${JSON.stringify(example.input)}; output=${JSON.stringify(example.output)}`)
+    .join("\n");
+  const inputRule = params.ioType === "STDIN_STDOUT"
+    ? "Every new test must use a different non-empty input from all existing tests, while preserving the exact input format."
+    : "The task has no input; do not invent additional inputs and keep input as an empty string.";
+  return `${statement}\n\n--- EXISTING TEST DATA (REFERENCE ONLY; DO NOT REPEAT OR MODIFY) ---\n${rendered}\n--- END EXISTING TEST DATA ---\n${inputRule} For every new input, calculate the output from the task statement; never copy an existing input with a different output.`.trim();
+}
+
 function looksLikeNumberedChecklistPracticalTask(text: string): boolean {
   const lines = String(text ?? "")
     .split(/\r?\n/)
@@ -2175,26 +2200,16 @@ async function generateAndPersistPersonalProgrammingTask(params: {
         fixedNoInputExpected
       });
       testExamples = mergedFallback.merged.length ? mergedFallback.merged : aiExamples.slice(0, 1);
-      if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
-        await taskRepo().remove(saved);
-        throw {
-          statusCode: 400,
-          message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
-          error: "INCONSISTENT_TEST_DATA",
-          details: {
-            mode: "generateTestData",
-            droppedConflicts: mergedFallback.droppedConflicts,
-            ioType,
-            lang: params.lang
-          }
-        };
-      }
     } else {
 
     for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
       const testDataResult = await safeAICall('generateTestData', {
-        taskDescription: statementMarkdown || practicalOnly,
-        taskTitle: params.topicTitleForAi,
+        taskDescription: buildTestDataPrompt({
+          statement: statementMarkdown || practicalOnly,
+          existingExamples: [...testExamples, ...aiExamples],
+          ioType
+        }),
+        taskTitle: baseTitle,
         lang: params.lang,
         count: remainingCount,
         userId: params.userId
@@ -2207,12 +2222,13 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       });
       if (!testDataResult.success) {
         const status = Number(testDataResult.error?.statusCode ?? 0);
-        const canFallback = status === 429 || status === 503 || status === 504;
+        const isValidationFailure = testDataResult.error?.details?.mode === "generateTestData";
+        const canFallback = status === 429 || status === 503 || status === 504 || isValidationFailure;
         if (!canFallback) {
           await taskRepo().remove(saved);
           throw testDataResult.error;
         }
-        if (aiExamples.length === 0) {
+        if (aiExamples.length === 0 && testExamples.length === 0) {
           await taskRepo().remove(saved);
           throw testDataResult.error;
         }
@@ -2230,24 +2246,9 @@ async function generateAndPersistPersonalProgrammingTask(params: {
           maxCount: REQUIRED_TEST_COUNT,
           fixedNoInputExpected
         });
-        if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
-          await taskRepo().remove(saved);
-          throw {
-            statusCode: 400,
-            message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
-            error: "INCONSISTENT_TEST_DATA",
-            details: {
-              mode: "generateTestData",
-              droppedConflicts: mergedFallback.droppedConflicts,
-              ioType,
-              lang: params.lang
-            }
-          };
-        }
-
         testExamples = mergedFallback.merged.length
           ? mergedFallback.merged
-          : aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length)));
+          : (aiExamples.length ? aiExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, aiExamples.length))) : testExamples.slice(0, 1));
         break;
       }
 
@@ -2278,18 +2279,16 @@ async function generateAndPersistPersonalProgrammingTask(params: {
           });
           continue;
         }
-        await taskRepo().remove(saved);
-        throw {
-          statusCode: 400,
-          message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
-          error: "INCONSISTENT_TEST_DATA",
-          details: {
-            mode: "generateTestData",
-            droppedConflicts: mergedResult.droppedConflicts,
-            ioType,
-            lang: params.lang
-          }
-        };
+        logger.warn("[tasks] accepting non-conflicting tests after consistency retries", {
+          requestId: params.requestId,
+          userId: params.userId,
+          lang: params.lang,
+          ioType,
+          droppedConflicts: mergedResult.droppedConflicts,
+          retainedTests: mergedResult.merged.length
+        });
+        testExamples = mergedResult.merged.length ? mergedResult.merged : testExamples;
+        break;
       }
 
       testExamples = mergedResult.merged;
@@ -4022,21 +4021,6 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           fixedNoInputExpected
         });
         testExamples = mergedFallback.merged.length ? mergedFallback.merged : (fallbackExamples.slice(0, 1));
-        if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
-          await taskRepo().remove(saved);
-          return sendAIError(res, {
-            statusCode: 400,
-            message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
-            error: "INCONSISTENT_TEST_DATA",
-            details: {
-              mode: "generateTestData",
-              droppedConflicts: mergedFallback.droppedConflicts,
-              ioType,
-              topicId: topic.id,
-              lang
-            }
-          });
-        }
       } else {
 
       const remainingCount = REQUIRED_TEST_COUNT - testExamples.length;
@@ -4047,8 +4031,12 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       );
       for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
         const testDataResult = await safeAICall('generateTestData', {
-          taskDescription: taskDescriptionForTests || description,
-          taskTitle: topicTitleForAi,
+          taskDescription: buildTestDataPrompt({
+            statement: taskDescriptionForTests || description,
+            existingExamples: [...testExamples, ...aiExamples],
+            ioType
+          }),
+          taskTitle: baseTitle,
           lang,
           count: remainingCount,
           userId
@@ -4063,7 +4051,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           // If upstream AI is rate-limited/unavailable, fall back to examples produced by the task generation itself.
           // This avoids failing the whole task generation flow under provider pressure.
           const status = Number(testDataResult.error?.statusCode ?? 0);
-          const canFallback = status === 429 || status === 503 || status === 504;
+          const isValidationFailure = testDataResult.error?.details?.mode === "generateTestData";
+          const canFallback = status === 429 || status === 503 || status === 504 || isValidationFailure;
           if (!canFallback) {
             await taskRepo().remove(saved);
             return sendAIError(res, testDataResult.error);
@@ -4093,22 +4082,6 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
             maxCount: REQUIRED_TEST_COUNT,
             fixedNoInputExpected
           });
-          if (mergedFallback.droppedConflicts > 0 && STRICT_TEST_CONSISTENCY) {
-            await taskRepo().remove(saved);
-            return sendAIError(res, {
-              statusCode: 400,
-              message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
-              error: "INCONSISTENT_TEST_DATA",
-              details: {
-                mode: "generateTestData",
-                droppedConflicts: mergedFallback.droppedConflicts,
-                ioType,
-                topicId: topic.id,
-                lang
-              }
-            });
-          }
-
           testExamples = mergedFallback.merged.length
             ? mergedFallback.merged
             : fallbackExamples.slice(0, Math.max(1, Math.min(REQUIRED_TEST_COUNT, fallbackExamples.length)));
@@ -4143,19 +4116,16 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
             });
             continue;
           }
-          await taskRepo().remove(saved);
-          return sendAIError(res, {
-            statusCode: 400,
-            message: "AI_GENERATION_FAILED: Generated tests contradict task condition/examples",
-            error: "INCONSISTENT_TEST_DATA",
-            details: {
-              mode: "generateTestData",
-              droppedConflicts: mergedResult.droppedConflicts,
-              ioType,
-              topicId: topic.id,
-              lang
-            }
+          logger.warn("[tasks] accepting non-conflicting tests after consistency retries", {
+            requestId: req.requestId,
+            userId,
+            topicId: topic.id,
+            ioType,
+            droppedConflicts: mergedResult.droppedConflicts,
+            retainedTests: mergedResult.merged.length
           });
+          testExamples = mergedResult.merged.length ? mergedResult.merged : testExamples;
+          break;
         }
 
         testExamples = mergedResult.merged;

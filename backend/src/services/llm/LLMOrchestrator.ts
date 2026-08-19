@@ -2069,6 +2069,7 @@ public class Main {
     taskTitle: string;
     lang: LLMTaskLanguage;
     count: number;
+    language?: "uk" | "en";
     userId?: number;
     signal?: AbortSignal;
   }): Promise<TestDataExample[]> {
@@ -2144,6 +2145,7 @@ public class Main {
     taskTitle: string;
     lang: LLMTaskLanguage;
     count: number;
+    language?: "uk" | "en";
     userId?: number;
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<TestDataExample[]> {
@@ -2151,9 +2153,12 @@ public class Main {
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
     const taskDesc = params.taskDescription.slice(0, 2000);
     const taskDescLower = taskDesc.toLowerCase();
-    const explicitlyNoInput = /нема(є)?\s+вхідн/i.test(taskDesc) || /без\s+вхідн/i.test(taskDesc) || /no\s+input/i.test(taskDesc) || /does\s+not\s+take\s+input/i.test(taskDesc);
+    const explicitlyNoInput = /вхідн(?:і|их)\s+дан(?:і|их)\s+(?:нема|немає|відсутн)/i.test(taskDesc) || /без\s+вхідн/i.test(taskDesc) || /no\s+input/i.test(taskDesc) || /does\s+not\s+take\s+input/i.test(taskDesc);
     const needsInput = !explicitlyNoInput && (taskDescLower.includes("читати") || taskDescLower.includes("читайте") || taskDescLower.includes("зчитайте") || taskDescLower.includes("введ") || taskDescLower.includes("input") || taskDescLower.includes("stdin") || taskDescLower.includes("вхідні дані") || taskDescLower.includes("формат вхід") || taskDescLower.includes("вхід:"));
     const desiredCount = needsInput ? params.count : 1;
+    const languageInstruction = params.language === "en"
+      ? "The task statement is the source of truth. Keep the response in JSON only; do not translate, rewrite, or copy theory into input/output."
+      : "Умова задачі є єдиним джерелом істини. Відповідай лише JSON; не перекладай, не переписуй і не копіюй теорію в input/output.";
     const jsonSchema = {
       type: "object",
       properties: {
@@ -2185,26 +2190,32 @@ public class Main {
     };
     const systemPrompt = needsInput ? `Ти досвідчений викладач програмування. Твоя задача - створити тестові дані для перевірки програм учнів.
 
+${languageInstruction}
+
 ВИМОГИ:
-1. Створи РІВНО ${desiredCount} тестових прикладів
-2. Кожен тест має мати НЕПОРОЖНІ input та output
-    3. Тести мають покривати різні випадки: базові, граничні, складні
-4. Input та output мають бути у форматі, який можна прочитати з консолі
-5. Для масивів використовуй формат: числа через пробіл (наприклад: "1 2 3 4 5")
-6. Всі тести мають бути ВАЛІДНИМИ для завдання
-    7. Заборонено створювати дублікати тестів (однакові input/output)
-    8. Заборонено використовувати плейсхолдери на кшталт input="1" output="1" якщо це не випливає з умови
+1. Створи РІВНО ${desiredCount} НОВИХ тестових прикладів.
+2. Кожен тест має мати НЕПОРОЖНІ input та output.
+3. Тести мають покривати різні випадки: базові, граничні, великі/від'ємні значення, якщо вони дозволені умовою.
+4. Input та output мають бути у форматі, який можна прочитати з консолі.
+5. Для масивів використовуй формат: числа через пробіл (наприклад: "1 2 3 4 5").
+6. Всі тести мають бути ВАЛІДНИМИ для завдання; output обчислюй з умови, а не вигадуй.
+7. Заборонено повторювати будь-який input або пару input/output з блоку EXISTING TEST DATA в описі.
+8. Заборонено повертати однакові input між собою.
+9. Заборонено використовувати плейсхолдери на кшталт input="1" output="1", якщо це не випливає з умови.
 
 ВІДПОВІДАЙ ТІЛЬКИ ВАЛІДНИМ JSON БЕЗ БУДЬ-ЯКИХ ПОЯСНЕНЬ.` : `Ти досвідчений викладач програмування. Твоя задача - створити ОДИН детермінований приклад перевірки.
 
 ВИМОГИ:
-1. Створи РІВНО 1 тестовий приклад
-2. Завдання НЕ має вхідних даних: input ОБОВ'ЯЗКОВО має бути порожнім рядком ""
-3. output має бути НЕПОРОЖНІМ і має ТОЧНО відповідати тому, що вимагає умова (включно з розділовими знаками)
+1. Створи РІВНО 1 тестовий приклад.
+2. Завдання НЕ має вхідних даних: input ОБОВ'ЯЗКОВО має бути порожнім рядком "".
+3. output має бути НЕПОРОЖНІМ і має ТОЧНО відповідати умові, включно з розділовими знаками.
 4. Не вигадуй варіативні "вхідні дані". Якщо вводу немає — він завжди порожній.
+5. Не копіюй теорію або пояснення в output; output — лише фактичний stdout.
 
 ВІДПОВІДАЙ ТІЛЬКИ ВАЛІДНИМ JSON БЕЗ БУДЬ-ЯКИХ ПОЯСНЕНЬ.`;
     const userPrompt = `
+${languageInstruction}
+
 Завдання: ${params.taskTitle}
 
 Опис завдання:
@@ -2226,10 +2237,12 @@ ${needsInput ? `
 ${JSON.stringify(jsonSchema, null, 2)}
 
 ВАЖЛИВО:
-- Всі тести мають мати НЕПОРОЖНІ output
-- ${needsInput ? 'Input має бути різним для кожного тесту' : 'Input має бути порожнім рядком ""'}
-- ${needsInput ? 'Тести мають бути різноманітними (різні випадки)' : 'Не вигадуй "різні випадки" — вводу немає, тому тест один'}
-- Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень
+- Умова вище — єдине джерело істини для output.
+- Всі тести мають мати НЕПОРОЖНІ output.
+- ${needsInput ? 'Input має бути різним для кожного тесту і не повторювати EXISTING_TEST_DATA.' : 'Input має бути порожнім рядком "".'}
+- ${needsInput ? 'Тести мають бути різноманітними, але кожен output мусить бути точно обчислений з відповідного input.' : 'Не вигадуй "різні випадки" — вводу немає, тому тест один.'}
+- Не повертай дублікати. Якщо не впевнений у тесті — обери простіший коректний input, а не копіюй попередній.
+- Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
 `.trim();
     try {
       const parsed = await provider.generateJSON<{
@@ -2239,7 +2252,7 @@ ${JSON.stringify(jsonSchema, null, 2)}
         maxRetries: 1,
         userId: params.userId,
         signal: params.signal,
-        temperature: 0.4,
+        temperature: 0.15,
         maxTokens: 2000
       });
       const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount);
