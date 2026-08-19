@@ -129,6 +129,78 @@ function jsonContent(value: unknown): Record<string, any> {
   }
 }
 
+function projectRequiredTopicKeys(item: CourseItem): string[] {
+  const rawKeys = jsonContent(item.content).projectSpec?.requiredTopicKeys;
+  if (!Array.isArray(rawKeys)) return [];
+  return rawKeys
+    .filter((key): key is string => typeof key === "string" && key.trim().length > 0)
+    .map((key) => {
+      const normalized = key.trim();
+      return normalized.match(/(?:^|\.)topic\.([^.]+)$/i)?.[1] ?? normalized;
+    });
+}
+
+/**
+ * Projects are displayed in the roadmap directly after their prerequisite
+ * topics, while the catalog stores every project in one final module. Using
+ * the catalog's physical order here made a project after loops wait for all
+ * later topics as well (for example, arrays). Keep the server-side guard in
+ * the same dependency model as the roadmap instead.
+ */
+async function assertMiniProjectAccess(
+  enrollmentId: number,
+  courseId: number,
+  item: CourseItem,
+): Promise<void> {
+  const projectSpec = jsonContent(item.content).projectSpec;
+  const requiredKeys = projectRequiredTopicKeys(item);
+  if (!requiredKeys.length || projectSpec?.kind === "FINAL_ASSESSMENT") {
+    await assertSequentialAccess(enrollmentId, courseId, item.id);
+    return;
+  }
+
+  const items = await itemRepo().find({
+    where: { module: { course: { id: courseId } }, isActive: true },
+    relations: ["module"],
+  });
+  const progress = await progressRepo().find({ where: { enrollment: { id: enrollmentId } } });
+  const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
+  const topicItemsByKey = new Map<string, CourseItem[]>();
+
+  for (const candidate of items) {
+    const moduleKey = String(candidate.module?.contentKey ?? "");
+    const topicKey = moduleKey.match(/(?:^|\.)topic\.([^.]+)$/i)?.[1];
+    if (!topicKey) continue;
+    const group = topicItemsByKey.get(topicKey) ?? [];
+    group.push(candidate);
+    topicItemsByKey.set(topicKey, group);
+  }
+
+  for (const group of topicItemsByKey.values()) {
+    group.sort((left, right) => left.module.order - right.module.order || left.order - right.order || left.id - right.id);
+  }
+
+  const missingKey = requiredKeys.find((key) => !topicItemsByKey.has(key));
+  if (missingKey) {
+    throw Object.assign(new Error("COURSE_PROJECT_PREREQUISITE_MISSING"), {
+      statusCode: 409,
+      prerequisiteTopicKey: missingKey,
+    });
+  }
+
+  for (const requiredKey of requiredKeys) {
+    const topicItems = topicItemsByKey.get(requiredKey) ?? [];
+    const previous = topicItems.find((candidate) => requiredItem(candidate)
+      && progressByItem.get(candidate.id)?.status !== "COMPLETED");
+    if (previous) {
+      throw Object.assign(new Error("COURSE_SEQUENCE_LOCKED"), {
+        statusCode: 409,
+        previousItemId: previous.id,
+      });
+    }
+  }
+}
+
 /**
  * Keep the catalog roadmap in sync with tasks created before the course-aware
  * Practice route existed. The migration covers existing rows once, but users
@@ -272,7 +344,7 @@ async function getEnrolledItemContext(userId: number, itemId: number) {
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
   }
-  await assertSequentialAccess(enrollment.id, item.module.course.id, item.id);
+  await assertMiniProjectAccess(enrollment.id, item.module.course.id, item);
   const dependencyState = await getPrerequisiteState(userId, enrollment.courseId);
   if (!dependencyState.satisfied && !item.module.course.isBase) {
     throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), { statusCode: 423, prerequisites: dependencyState.prerequisites });

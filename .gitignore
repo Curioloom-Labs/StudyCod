@@ -80,6 +80,7 @@ coverage/
 *.temp
 .cache/
 tmp/
+docs/
 _svg_renderer/
 
 # Uploads (user files)
