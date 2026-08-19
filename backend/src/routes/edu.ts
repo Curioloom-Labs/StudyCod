@@ -13,7 +13,6 @@ import { Student } from "../entities/Student";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { requireClassCapability, type ClassAccessRequest } from "../middleware/orgContext";
-import { emailService } from "../services/emailService";
 import { EduLesson, LessonType } from "../entities/EduLesson";
 import { EduTask } from "../entities/EduTask";
 import { EduGrade } from "../entities/EduGrade";
@@ -25,6 +24,7 @@ import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types
 import { saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
 import { logger } from "../utils/logger";
 import { generateInteractiveLessonWithAI } from "../services/openRouterService";
+import { emailService } from "../services/emailService";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { resolveUiLocaleFromHeaders } from "../utils/uiLocale";
 import { convertGradeToRaw100, shouldConvertLegacyGrades, normalizeScaleMode, GRADE_SCALE_MODES, DEFAULT_GRADE_SCALE_MODE } from "../utils/gradingScale";
@@ -52,12 +52,19 @@ import attendanceRouter from "./edu/attendance";
 import similarityRouter from "./edu/similarity";
 import tutorRouter from "./edu/tutor";
 import { enforceAuthTurnstile } from "./auth";
+import { EduRegistrationIntent } from "../entities/EduRegistrationIntent";
+import { Organization, EDUCATIONAL_INSTITUTION_TYPES } from "../entities/Organization";
+import { listUserMemberships } from "../services/edu/membership";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
 const lessonRepo = () => AppDataSource.getRepository(EduLesson);
 const taskRepo = () => AppDataSource.getRepository(EduTask);
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
+
+function resolveRequestLocale(req: Request): "uk" | "en" {
+  return resolveUiLocaleFromHeaders(req.headers, "uk");
+}
 const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
 const STATEMENT_IMAGES_DIR = path.join(UPLOADS_ROOT, "statement-images");
 const ALLOWED_STATEMENT_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif", "image/svg+xml"]);
@@ -74,10 +81,6 @@ const statementImageUpload = multer({
     cb(null, true);
   }
 });
-
-function resolveRequestLocale(req: Request): "uk" | "en" {
-  return resolveUiLocaleFromHeaders(req.headers, "uk");
-}
 
 function ensureDir(p: string) {
   fs.mkdirSync(p, {
@@ -166,19 +169,24 @@ eduRouter.post("/generate-interactive-lesson", authRequired, async (req: AuthReq
   }
 });
 
-const registerTeacherSchema = z.object({
-  username: z.string().min(3).max(50),
-  email: z.string().email(),
-  password: z.string().min(6),
-  language: z.string().optional(),
-  turnstileToken: z.string().min(1).max(4096).optional(),
-});
-const teacherRegistrationLimiter = createRouteLimiter({
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const eduOrganizationRegistrationLimiter = createRouteLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 5,
-  message: "TOO_MANY_REGISTRATION_ATTEMPTS",
+  message: "TOO_MANY_REGISTRATION_ATTEMPTS"
 });
-const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+const eduOrganizationRegistrationSchema = z.object({
+  organizationName: z.string().trim().min(1).max(200),
+  institutionType: z.enum(EDUCATIONAL_INSTITUTION_TYPES),
+  username: z.string().trim().min(3).max(50),
+  email: z.string().trim().email(),
+  password: z.string().min(8),
+  firstName: z.string().trim().min(1).max(100),
+  lastName: z.string().trim().min(1).max(100),
+  middleName: z.string().trim().max(100).optional(),
+  turnstileToken: z.string().min(1).max(4096).optional()
+});
 
 const createLessonBodySchema = z.object({
   type: z.string().transform(v => v.trim().toUpperCase()).refine(v => v === "LESSON" || v === "CONTROL"),
@@ -302,9 +310,9 @@ eduRouter.get("/statement-images/:fileName", async (req: Request, res: Response)
   }
 });
 
-eduRouter.post("/register-teacher", teacherRegistrationLimiter, async (req: AuthRequest, res: Response) => {
+eduRouter.post("/register-organization", eduOrganizationRegistrationLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    const validated = registerTeacherSchema.safeParse(req.body);
+    const validated = eduOrganizationRegistrationSchema.safeParse(req.body);
     if (!validated.success) {
       return res.status(400).json({
         message: "INVALID_INPUT",
@@ -312,12 +320,17 @@ eduRouter.post("/register-teacher", teacherRegistrationLimiter, async (req: Auth
       });
     }
     const {
+      organizationName,
+      institutionType,
       username,
-      email,
+      email: rawEmail,
       password,
-      language,
-      turnstileToken,
+      firstName,
+      lastName,
+      middleName,
+      turnstileToken
     } = validated.data;
+    const email = rawEmail.toLowerCase();
     if (!(await enforceAuthTurnstile(req, res, turnstileToken))) return;
     const existingUser = await userRepo().findOne({
       where: [{
@@ -334,22 +347,36 @@ eduRouter.post("/register-teacher", teacherRegistrationLimiter, async (req: Auth
     const hash = await bcrypt.hash(password, 10);
     const verificationToken = crypto.randomBytes(32).toString("hex");
     const verificationExpires = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
-    const user = userRepo().create({
-      username,
-      email,
-      password: hash,
-      userMode: "EDUCATIONAL",
-      emailVerified: false,
-      emailVerificationToken: verificationToken,
-      emailVerificationExpires: verificationExpires
+    await AppDataSource.transaction(async (manager) => {
+      const user = manager.getRepository(User).create({
+        username,
+        email,
+        password: hash,
+        userMode: "EDUCATIONAL",
+        role: null,
+        firstName,
+        lastName,
+        middleName: middleName || null,
+        emailVerified: false,
+        emailVerificationToken: verificationToken,
+        emailVerificationExpires: verificationExpires
+      });
+      await manager.getRepository(User).save(user);
+      const intent = manager.getRepository(EduRegistrationIntent).create({
+        userId: user.id,
+        organizationName,
+        institutionType,
+        expiresAt: verificationExpires
+      });
+      await manager.getRepository(EduRegistrationIntent).save(intent);
     });
-    await userRepo().save(user);
     const locale = resolveRequestLocale(req);
     emailService.sendVerificationEmail(email, verificationToken, username, locale).catch(err => {
       logger.error("[edu] verification email failed", { requestId: (req as any)?.requestId, err });
     });
     res.status(201).json({
-      requiresEmailVerification: true
+      requiresEmailVerification: true,
+      message: "EDU_REGISTRATION_SUCCESSFUL_EMAIL_SENT"
     });
   } catch (error) {
     logger.error("[edu] Error registering user", { requestId: (req as any)?.requestId, err: error });
@@ -386,8 +413,14 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
       gradingSystem,
       gradeScaleMode
     } = validated.data;
+    const memberships = await listUserMemberships(user.id);
+    const teachingMembership = memberships.find((membership) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(membership.role));
+    if (!teachingMembership) {
+      return res.status(403).json({ message: "ORGANIZATION_REQUIRED" });
+    }
     const cls = classRepo().create({
       teacher: user,
+      organization: { id: teachingMembership.organizationId } as Organization,
       name,
       language: normalizeLang(language || "PYTHON"),
       gradingSystem: gradingSystem || DEFAULT_GRADING_SYSTEM,
@@ -416,12 +449,17 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
         message: "ONLY_TEACHERS_CAN_VIEW_CLASSES"
       });
     }
+    const memberships = await listUserMemberships(user.id);
+    const adminOrgIds = memberships
+      .filter((membership) => membership.role === "ORG_ADMIN")
+      .map((membership) => membership.organizationId);
     // Count students via a grouped COUNT (loadRelationCountAndMap) instead of
     // loading every student row across every class just to read `.length`.
     const classes = await classRepo()
       .createQueryBuilder("class")
       .loadRelationCountAndMap("class.studentsCount", "class.students")
       .where("class.teacher_id = :teacherId", { teacherId: user.id })
+      .orWhere(adminOrgIds.length ? "class.org_id IN (:...adminOrgIds)" : "1 = 0", { adminOrgIds })
       .orderBy("class.created_at", "DESC")
       .getMany();
     res.json({

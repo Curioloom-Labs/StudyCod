@@ -26,14 +26,12 @@ test("ORG_ADMIN reaches a class they do not own", () => {
   assert.equal(decideClassAccess(f, "STUDENT_MANAGE"), true);
 });
 
-test("ASSISTANT reaches a non-owned class but cannot delete it or manage students", () => {
-  const f = facts(false, "ASSISTANT");
-  assert.equal(decideClassAccess(f, "CLASS_EDIT"), true);
-  assert.equal(decideClassAccess(f, "CONTENT_AUTHOR"), true);
-  assert.equal(decideClassAccess(f, "GRADE_EDIT"), true);
-  assert.equal(decideClassAccess(f, "STUDENT_DATA_VIEW"), true);
-  assert.equal(decideClassAccess(f, "CLASS_DELETE"), false);
-  assert.equal(decideClassAccess(f, "STUDENT_MANAGE"), false);
+test("teaching staff do not reach a non-owned class", () => {
+  for (const role of ["ASSISTANT", "TEACHER"] as const) {
+    const f = facts(false, role);
+    assert.equal(effectiveClassRole(f), role);
+    assert.equal(decideClassAccess(f, "CLASS_VIEW"), false);
+  }
 });
 
 test("non-owner with no org role has no access (cross-org isolation)", () => {

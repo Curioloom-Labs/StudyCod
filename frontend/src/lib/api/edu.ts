@@ -1,23 +1,6 @@
 import { api } from "./client";
 import type { ClassGradingSystem, GradeScaleMode } from "../gradingSystems";
 
-type EduUserPayload = {
-  id: number;
-  username: string;
-  course: "JAVA" | "PYTHON" | "CPP";
-  difus: number;
-  avatarUrl: string | null;
-  userMode?: "PERSONAL" | "EDUCATIONAL" | "CONTEST";
-  role?: "USER" | "TEACHER" | "SUPPORT" | "SYSTEM_ADMIN";
-  studentId?: number;
-  classId?: number;
-  className?: string;
-  firstName?: string;
-  lastName?: string;
-  middleName?: string;
-  email?: string;
-};
-
 type QuizItem = {
   question: string;
   options: Record<string, string>;
@@ -366,16 +349,31 @@ export interface LearningAttemptSummary {
   highestHintLevelShown?: number;
   solvedAfterFailure?: boolean;
 }
-export async function registerTeacher(username: string, email: string, password: string, language: "JAVA" | "PYTHON" | "CPP", turnstileToken?: string): Promise<{
-  user?: EduUserPayload;
-  requiresEmailVerification?: boolean;
-}> {
-  const res = await api.post("/edu/register-teacher", {
-    username,
-    email,
-    password,
-    language,
-    ...(turnstileToken ? { turnstileToken } : {}),
+export const EDUCATIONAL_INSTITUTION_TYPES = [
+  "SCHOOL",
+  "LYCEUM",
+  "GYMNASIUM",
+  "COLLEGE",
+  "UNIVERSITY",
+  "VOCATIONAL",
+  "OTHER"
+] as const;
+export type EducationalInstitutionType = (typeof EDUCATIONAL_INSTITUTION_TYPES)[number];
+
+export async function registerEducationalOrganization(input: {
+  organizationName: string;
+  institutionType: EducationalInstitutionType;
+  username: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  turnstileToken?: string;
+}): Promise<{ requiresEmailVerification?: boolean; message?: string }> {
+  const res = await api.post("/edu/register-organization", {
+    ...input,
+    ...(input.turnstileToken ? { turnstileToken: input.turnstileToken } : {})
   });
   return res.data;
 }

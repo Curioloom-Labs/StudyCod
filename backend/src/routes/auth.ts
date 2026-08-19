@@ -18,6 +18,10 @@ import { env } from "../env";
 import { generateJti, revokeJti, revokeUserTokensBeforeTime } from "../services/auth/jwtRevocation";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { AUTH_COOKIE_NAME, clearSharedAuthCookie, setSharedAuthCookie } from "../utils/authCookie";
+import { EduRegistrationIntent } from "../entities/EduRegistrationIntent";
+import { Organization } from "../entities/Organization";
+import { Membership } from "../entities/Membership";
+import { slugifyBase } from "../services/edu/membership";
 export const authRouter = Router();
 
 // Pre-computed bcrypt hash used when the user does not exist, so bcrypt.compare
@@ -420,6 +424,10 @@ function buildUserDto(user: User) {
     userMode: user.userMode,
     role: user.role || null,
     googleId: user.googleId ?? null,
+    firstName: user.firstName ?? null,
+    lastName: user.lastName ?? null,
+    middleName: user.middleName ?? null,
+    email: user.email ?? null,
     placementDone: Boolean((user as any).placementDone),
     placementLevel: (user as any).placementLevel ?? null,
     placementScore: (user as any).placementScore ?? null,
@@ -1001,6 +1009,13 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
         message: "USERNAME_ALREADY_EXISTS"
       });
     }
+    // EDU signup must go through the institution-first onboarding so a new
+    // educational user can never exist without an organization intent.
+    if (requestedUserMode === "EDUCATIONAL") {
+      return res.status(400).json({
+        message: "EDUCATIONAL_REGISTRATION_REQUIRES_ORGANIZATION"
+      });
+    }
     const hash = await bcrypt.hash(password, 10);
     const user = userRepo().create({
       username,
@@ -1057,10 +1072,44 @@ authRouter.get("/verify-email", async (req: AuthRequest, res: Response) => {
         message: "EMAIL_ALREADY_VERIFIED"
       });
     }
-    user.emailVerified = true;
-    user.emailVerificationToken = null;
-    user.emailVerificationExpires = null;
-    await userRepo().save(user);
+    const intentRepo = AppDataSource.getRepository(EduRegistrationIntent);
+    const pendingEduRegistration = await intentRepo.findOne({
+      where: { userId: user.id }
+    });
+    await AppDataSource.transaction(async (manager) => {
+      user.emailVerified = true;
+      user.emailVerificationToken = null;
+      user.emailVerificationExpires = null;
+      await manager.getRepository(User).save(user);
+
+      if (pendingEduRegistration && pendingEduRegistration.expiresAt.getTime() > Date.now()) {
+        const baseSlug = slugifyBase(pendingEduRegistration.organizationName);
+        let slug = baseSlug;
+        let slugResolved = false;
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const candidate = attempt === 0 ? baseSlug : `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
+          const exists = await manager.getRepository(Organization).findOne({ where: { slug: candidate } });
+          if (!exists) {
+            slug = candidate;
+            slugResolved = true;
+            break;
+          }
+        }
+        if (!slugResolved) slug = `${baseSlug}-${crypto.randomBytes(6).toString("hex")}`;
+        const organization = manager.getRepository(Organization).create({
+          name: pendingEduRegistration.organizationName,
+          institutionType: pendingEduRegistration.institutionType,
+          slug
+        });
+        await manager.getRepository(Organization).save(organization);
+        await manager.getRepository(Membership).save(manager.getRepository(Membership).create({
+          user,
+          organization,
+          role: "ORG_ADMIN"
+        }));
+        await manager.getRepository(EduRegistrationIntent).remove(pendingEduRegistration);
+      }
+    });
     const jwtToken = signUserToken(user);
     setSharedAuthCookie(res, jwtToken);
     return res.json({

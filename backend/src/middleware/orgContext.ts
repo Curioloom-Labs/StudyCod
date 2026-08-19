@@ -35,8 +35,9 @@ export function authorizeClassForReq(req: AuthRequest, classId: number, capabili
  * load-bearing replacement for the legacy `class.teacher_id` ownership filter. It
  * is safe to enforce because the class owner is grandfathered to TEACHER, so no
  * existing teacher can be locked out of their own class; the only behavioural
- * changes are (a) org admins/assistants gain access to classes in their org and
- * (b) unrelated users are denied. (Org-level actions without a class — creating
+ * changes are (a) org admins gain access to classes in their org and
+ * (b) unrelated users are denied. Teaching staff remain scoped to owned classes.
+ * (Org-level actions without a class — creating
  * orgs, managing members — are guarded separately in `routes/edu/orgs.ts`.)
  *
  * On success the resolved {@link ClassAccessResult} is attached to

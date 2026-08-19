@@ -29,6 +29,16 @@
 
 **Rule for handlers:** branch on `req.studentId` (the student-side path) vs `req.userId` (the teacher/admin/User-backed-student path). Teacher-side authorization always goes through the class authorizer (`services/edu/classAccess.ts`); it only handles USER principals. Students never carry org capabilities.
 
+## Organization onboarding
+
+Public EDU signup is reserved for the first administrator of an educational institution. The
+flow collects the institution name/type first, then the administrator's name, optional middle
+name, username, email, and password. Email verification happens before the organization is
+materialized; verification creates the organization and its `ORG_ADMIN` membership atomically.
+
+Teachers and students are created from inside the institution workspace. Teaching staff are
+scoped to the classes they own; only `ORG_ADMIN` has organization-wide class visibility.
+
 ## How a Student becomes User-backed
 Three forward paths create or link a `User` to a `Student` (none delete data):
 1. **Individual teacher-add** → `services/edu/studentProvision.ts#provisionStudent`. Creates a `User` + User-backed `Student` + a `STUDENT` membership in the class's org. Falls back to a **shell** student if a clean account can't be made (email already a User, or no free username) so teacher-add never regresses. Generated credentials work on *both* `/auth/login` and `/edu/student-login`.

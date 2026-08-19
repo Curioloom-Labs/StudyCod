@@ -85,6 +85,7 @@ import { BlogCommentReport } from "./entities/BlogCommentReport";
 import { Notification } from "./entities/Notification";
 import { AuditLog } from "./entities/AuditLog";
 import { Organization } from "./entities/Organization";
+import { EduRegistrationIntent } from "./entities/EduRegistrationIntent";
 import { Membership } from "./entities/Membership";
 import { OrgInvitation } from "./entities/OrgInvitation";
 import { ParentLink } from "./entities/ParentLink";
@@ -137,7 +138,7 @@ export const AppDataSource = new DataSource({
     password: env.DB_PASS || "",
     database: env.DB_NAME || "studycod"
   }),
-  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification, AuditLog, Organization, Membership, OrgInvitation, ParentLink, Course, CourseModule, CourseItem, CourseVariant, CourseDependency, UserCourseEnrollment, CourseItemProgress, LearningEvidence, CourseAssignment, ManualSubmission, QuizAttempt, Attendance, LearningAttempt, LearningEvent],
+  entities: [User, Task, Grade, Topic, Class, Student, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification, AuditLog, Organization, Membership, OrgInvitation, EduRegistrationIntent, ParentLink, Course, CourseModule, CourseItem, CourseVariant, CourseDependency, UserCourseEnrollment, CourseItemProgress, LearningEvidence, CourseAssignment, ManualSubmission, QuizAttempt, Attendance, LearningAttempt, LearningEvent],
   synchronize: false,
   logging: ["error", "warn"],
   logger: new SlowQueryLogger(),

@@ -161,6 +161,14 @@ export class User {
     type: "varchar",
     length: 100,
     nullable: true,
+    name: "middle_name"
+  })
+  middleName?: string | null;
+
+  @Column({
+    type: "varchar",
+    length: 100,
+    nullable: true,
     name: "cf_handle"
   })
   cfHandle?: string | null;

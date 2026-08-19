@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { Student } from "../../entities/Student";
 import { Class } from "../../entities/Class";
-import { Organization } from "../../entities/Organization";
+import { Organization, EDUCATIONAL_INSTITUTION_TYPES } from "../../entities/Organization";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { createOrganization, listUserMemberships, listOrgMembers, setMembershipRole, removeMembership } from "../../services/edu/membership";
 import {
@@ -75,10 +75,13 @@ async function requireOrgCapability(
 router.post("/orgs", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!requireUser(req, res)) return;
-    const parsed = z.object({ name: z.string().min(1).max(200) }).safeParse(req.body);
+    const parsed = z.object({
+      name: z.string().min(1).max(200),
+      institutionType: z.enum(EDUCATIONAL_INSTITUTION_TYPES).optional()
+    }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
 
-    const org = await createOrganization(parsed.data.name, req.userId!);
+    const org = await createOrganization(parsed.data.name, req.userId!, parsed.data.institutionType ?? "OTHER");
     await writeAudit({
       actorType: "USER",
       actorId: req.userId!,
@@ -89,7 +92,7 @@ router.post("/orgs", authRequired, async (req: AuthRequest, res: Response) => {
       requestId: req.requestId,
       ip: req.ip
     });
-    return res.status(201).json({ org: { id: org.id, name: org.name, slug: org.slug } });
+    return res.status(201).json({ org: { id: org.id, name: org.name, slug: org.slug, institutionType: org.institutionType } });
   } catch (error: any) {
     logger.error("[edu/orgs] create org failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -106,7 +109,8 @@ router.get("/orgs", authRequired, async (req: AuthRequest, res: Response) => {
         orgId: m.organizationId,
         role: m.role,
         name: m.organization?.name ?? null,
-        slug: m.organization?.slug ?? null
+        slug: m.organization?.slug ?? null,
+        institutionType: m.organization?.institutionType ?? "OTHER"
       }))
     });
   } catch (error: any) {

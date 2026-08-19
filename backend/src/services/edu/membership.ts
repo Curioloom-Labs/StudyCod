@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import type { EntityManager } from "typeorm";
 import { AppDataSource } from "../../data-source";
-import { Organization } from "../../entities/Organization";
+import { Organization, type EducationalInstitutionType } from "../../entities/Organization";
 import { Membership } from "../../entities/Membership";
 import { User } from "../../entities/User";
 import { higherRole, type OrgRole } from "../../types/OrgRole";
@@ -42,7 +42,11 @@ async function uniqueSlug(name: string): Promise<string> {
  * Create an organization and make the given user its ORG_ADMIN, atomically.
  * This is the self-signup path (whoever creates the org owns it).
  */
-export async function createOrganization(name: string, ownerUserId: number): Promise<Organization> {
+export async function createOrganization(
+  name: string,
+  ownerUserId: number,
+  institutionType: EducationalInstitutionType = "OTHER"
+): Promise<Organization> {
   const trimmed = String(name ?? "").trim();
   if (!trimmed) throw new Error("ORG_NAME_REQUIRED");
   const slug = await uniqueSlug(trimmed);
@@ -51,7 +55,7 @@ export async function createOrganization(name: string, ownerUserId: number): Pro
     const owner = await manager.getRepository(User).findOne({ where: { id: ownerUserId } });
     if (!owner) throw new Error("OWNER_NOT_FOUND");
 
-    const org = manager.getRepository(Organization).create({ name: trimmed, slug });
+    const org = manager.getRepository(Organization).create({ name: trimmed, slug, institutionType });
     await manager.getRepository(Organization).save(org);
 
     const membership = manager.getRepository(Membership).create({

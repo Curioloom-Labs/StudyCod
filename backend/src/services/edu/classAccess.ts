@@ -19,9 +19,8 @@ import { roleCan, type Capability } from "./rbac";
  *  - The owning teacher is **grandfathered** to TEACHER in their own class, so
  *    enabling enforcement can never lock out a teacher who created a class —
  *    even one with `org_id = null` (pre-backfill) or no membership row.
- *  - A non-owner with an org role (ORG_ADMIN / ASSISTANT / TEACHER) gets the
- *    powers of that role on classes in their org — the whole point of the SaaS
- *    model, which the legacy `teacher_id` filter silently denied.
+ *  - ORG_ADMIN is the organization-wide exception. Teachers and assistants are
+ *    restricted to classes they own until explicit class-level assignment exists.
  *  - Everyone else (no ownership, no org role) is denied.
  *
  * The decision is split into a pure core ({@link effectiveClassRole} /
@@ -50,6 +49,7 @@ export function effectiveClassRole(facts: ClassAccessFacts): OrgRole | null {
 /** Pure access decision: can this caller perform `capability` on the class? */
 export function decideClassAccess(facts: ClassAccessFacts, capability: Capability): boolean {
   const role = effectiveClassRole(facts);
+  if (role !== "ORG_ADMIN" && !facts.isOwner) return false;
   return role != null && roleCan(role, capability);
 }
 
@@ -147,7 +147,11 @@ export async function authorizeClassAction(
   const orgId = cls.organizationId ?? null;
   const orgRole = orgId != null ? await orgRoleFor(userId, orgId, manager) : null;
 
-  const facts: ClassAccessFacts = { isOwner, orgRole };
+  // A staff membership alone must not expose every class in the organization.
+  // The organization administrator can manage all classes; teaching staff need
+  // to own the class (class-level assistant assignments can be added later).
+  const scopedOrgRole = isSystemAdmin || orgRole === "ORG_ADMIN" || isOwner ? orgRole : null;
+  const facts: ClassAccessFacts = { isOwner, orgRole: scopedOrgRole };
   // SYSTEM_ADMIN is a platform-wide super-admin (User.role), orthogonal to the
   // org model; it is the one place global role legitimately overrides org RBAC.
   const allowed = isSystemAdmin || decideClassAccess(facts, capability);
