@@ -728,10 +728,12 @@ ${feedbackHtml}`;
             <tr>
               <td style="background:#151c17;border:1px solid rgba(255,255,255,0.10);border-radius:26px;padding:30px 28px;box-shadow:0 28px 72px rgba(0,0,0,0.24);">
                 <div style="height:4px;background:linear-gradient(90deg,#00ff88 0%,#68efb0 58%,#ffb454 100%);border-radius:999px;margin:0 0 24px 0;"></div>
-                <div style="display:flex;align-items:center;gap:10px;margin:0 0 22px 0;color:#68efb0;font-size:10px;font-weight:800;letter-spacing:1.7px;text-transform:uppercase;">
-                  <span style="display:inline-block;width:28px;height:28px;border-radius:10px;background:rgba(0,255,136,0.12);text-align:center;line-height:28px;font-size:14px;">✦</span>
-                  ${notificationLabel}
-                </div>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px 0;">
+                  <tr>
+                    <td valign="middle" style="width:28px;height:28px;border-radius:10px;background:rgba(0,255,136,0.12);text-align:center;vertical-align:middle;color:#68efb0;font-size:14px;line-height:28px;">✦</td>
+                    <td valign="middle" style="padding-left:10px;vertical-align:middle;color:#68efb0;font-size:10px;font-weight:800;letter-spacing:1.7px;line-height:28px;text-transform:uppercase;">${notificationLabel}</td>
+                  </tr>
+                </table>
                 <div style="font-size:15px;line-height:1.75;color:#dbe7df;">
                   ${opts.contentHtml}
                 </div>
