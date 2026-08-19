@@ -934,7 +934,12 @@ ${uniquenessBlock}
 - ${stdinAllowed ? 'STDIN_STDOUT дозволено.' : 'STDIN_STDOUT ЗАБОРОНЕНО — обери NO_INPUT_*.'}
 
 ВИХІДНІ ДАНІ (outputFormat):
-- outputFormat — це контракт для автоперевірки. Опиши РІВНО те, що треба вивести, включно з усіма пробілами/двокрапками/переносами рядків, якщо вони важливі.
+- outputFormat — це коротка й зрозуміла інструкція про stdout, а не скорочена копія умови.
+- Для STDIN_STDOUT напиши 1–3 короткі речення або рядки: що виводиться, у якому порядку та скільки рядків. Наприклад: "Два рядки: спочатку повідомлення про діапазон, потім назва дня або Invalid day."
+- НЕ додавай прикладів input/output, слів "Приклад", "Наприклад", "Example", переліку конкретних запусків або довгого переказу умов.
+- Не вставляй сюди practicalTask, constraints чи пояснення алгоритму. Усі конкретні правила, від яких залежить відповідь, мають залишатися в practicalTask.
+- Для NO_INPUT_FIXED_OUTPUT outputFormat може містити лише точний очікуваний stdout; це єдиний виняток із правила стислості.
+- outputFormat має бути зрозумілим без здогадок: явно вкажи порядок рядків і допустимі буквальні значення, якщо вони є.
 - Якщо ioType = NO_INPUT_FIXED_OUTPUT: outputFormat МАЄ бути ТОЧНИМ текстом, який програма має вивести в stdout (як готовий expected output), а не описом.
 - Якщо очікується кілька рядків, outputFormat ОБОВ'ЯЗКОВО подай багаторядково: кожен рядок на новому рядку (реальні переноси \n), у правильному порядку, без злиття в один рядок.
 - КАТЕГОРИЧНО ЗАБОРОНЕНО писати у outputFormat або examples.output мета-фрази на кшталт:
@@ -1048,7 +1053,12 @@ REQUIREMENT ABOUT INPUT:
 - ${stdinAllowed ? 'STDIN_STDOUT is allowed.' : 'STDIN_STDOUT is FORBIDDEN — choose NO_INPUT_*.'}
 
 OUTPUT DATA (outputFormat):
-- outputFormat is a contract for autochecking. Describe EXACTLY what needs to be output, including all spaces/colons/newlines if they are important.
+- outputFormat is a short, learner-friendly stdout contract, not a shortened copy of the statement.
+- For STDIN_STDOUT, use 1–3 short sentences or lines: what is printed, in what order, and how many lines. Example: "Two lines: first the range message, then the day name or Invalid day."
+- Do NOT include input/output examples, words like "Example" or "For example", a list of concrete runs, or a long restatement of the condition.
+- Do not put practicalTask, constraints, or algorithm explanation here. All rules that determine the answer stay in practicalTask.
+- For NO_INPUT_FIXED_OUTPUT, outputFormat may contain only the exact expected stdout; this is the only exception to the brevity rule.
+- outputFormat must be understandable without guessing: state the line order and literal allowed values when relevant.
 - If ioType = NO_INPUT_FIXED_OUTPUT: outputFormat MUST be the EXACT text that the program should output to stdout (as a ready-made expected output), not a description.
 - If multiple lines are expected, outputFormat MUST be presented in multi-line format: each line on a new line (real \n), in the correct order, without merging into one line.
 - CATEGORICALLY FORBIDDEN to write in outputFormat or examples.output meta-phrases like:
@@ -2069,6 +2079,7 @@ public class Main {
     taskTitle: string;
     lang: LLMTaskLanguage;
     count: number;
+    ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     language?: "uk" | "en";
     userId?: number;
     signal?: AbortSignal;
@@ -2077,18 +2088,22 @@ public class Main {
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
     const canLocal = isLocalConfigured();
+    const generationCount = params.ioType && params.ioType !== "STDIN_STDOUT"
+      ? 1
+      : Math.max(1, Math.floor(params.count));
 
     const tryCloudflare = async () => {
       const raw = await this.cloudflareProvider.generateTestDataWithAI({
         taskDescription: params.taskDescription,
         taskTitle: params.taskTitle,
         lang: params.lang,
-        count: params.count,
+        count: generationCount,
+        ioType: params.ioType,
         userId: params.userId
       }, {
         signal: params.signal
       });
-      return AIResponseValidator.validateGenerateTestData(raw, params.count);
+      return AIResponseValidator.validateGenerateTestData(raw, generationCount);
     };
 
     const tryOpenRouter = async () => {
@@ -2145,20 +2160,25 @@ public class Main {
     taskTitle: string;
     lang: LLMTaskLanguage;
     count: number;
+    ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     language?: "uk" | "en";
     userId?: number;
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<TestDataExample[]> {
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
-    const taskDesc = params.taskDescription.slice(0, 2000);
+    const taskDesc = params.taskDescription.slice(0, 5000);
     const taskDescLower = taskDesc.toLowerCase();
     const explicitlyNoInput = /вхідн(?:і|их)\s+дан(?:і|их)\s+(?:нема|немає|відсутн)/i.test(taskDesc) || /без\s+вхідн/i.test(taskDesc) || /no\s+input/i.test(taskDesc) || /does\s+not\s+take\s+input/i.test(taskDesc);
-    const needsInput = !explicitlyNoInput && (taskDescLower.includes("читати") || taskDescLower.includes("читайте") || taskDescLower.includes("зчитайте") || taskDescLower.includes("введ") || taskDescLower.includes("input") || taskDescLower.includes("stdin") || taskDescLower.includes("вхідні дані") || taskDescLower.includes("формат вхід") || taskDescLower.includes("вхід:"));
-    const desiredCount = needsInput ? params.count : 1;
-    const languageInstruction = params.language === "en"
-      ? "The task statement is the source of truth. Keep the response in JSON only; do not translate, rewrite, or copy theory into input/output."
-      : "Умова задачі є єдиним джерелом істини. Відповідай лише JSON; не перекладай, не переписуй і не копіюй теорію в input/output.";
+    const needsInput = params.ioType
+      ? params.ioType === "STDIN_STDOUT"
+      : !explicitlyNoInput && (taskDescLower.includes("читати") || taskDescLower.includes("читайте") || taskDescLower.includes("зчитайте") || taskDescLower.includes("введ") || taskDescLower.includes("input") || taskDescLower.includes("stdin") || taskDescLower.includes("вхідні дані") || taskDescLower.includes("формат вхід") || taskDescLower.includes("вхід:"));
+    const desiredCount = needsInput ? Math.max(1, Math.floor(params.count)) : 1;
+    const isEnglish = params.language === "en";
+    const ioTypeLabel = params.ioType ?? (needsInput ? "STDIN_STDOUT" : "NO_INPUT_FIXED_OUTPUT");
+    const languageInstruction = isEnglish
+      ? "The task statement is the only source of truth. Return JSON only. Do not translate, rewrite, summarize, or copy theory into input/output."
+      : "Умова задачі є єдиним джерелом істини. Поверни лише JSON. Не перекладай, не переписуй, не скорочуй і не копіюй теорію в input/output.";
     const jsonSchema = {
       type: "object",
       properties: {
@@ -2188,61 +2208,57 @@ public class Main {
       },
       required: ["tests"]
     };
-    const systemPrompt = needsInput ? `Ти досвідчений викладач програмування. Твоя задача - створити тестові дані для перевірки програм учнів.
-
+    const systemPrompt = `
+You are a deterministic judge-test designer and a careful programming teacher.
 ${languageInstruction}
 
-ВИМОГИ:
-1. Створи РІВНО ${desiredCount} НОВИХ тестових прикладів.
-2. Кожен тест має мати НЕПОРОЖНІ input та output.
-3. Тести мають покривати різні випадки: базові, граничні, великі/від'ємні значення, якщо вони дозволені умовою.
-4. Input та output мають бути у форматі, який можна прочитати з консолі.
-5. Для масивів використовуй формат: числа через пробіл (наприклад: "1 2 3 4 5").
-6. Всі тести мають бути ВАЛІДНИМИ для завдання; output обчислюй з умови, а не вигадуй.
-7. Заборонено повторювати будь-який input або пару input/output з блоку EXISTING TEST DATA в описі.
-8. Заборонено повертати однакові input між собою.
-9. Заборонено використовувати плейсхолдери на кшталт input="1" output="1", якщо це не випливає з умови.
+ABSOLUTE PRIORITY:
+1. Read the entire TASK STATEMENT before generating anything.
+2. The practical task, input format, output format, and constraints define the behavior. Never infer behavior from the title alone.
+3. EXISTING TEST DATA is reference context only. Never copy it, never modify it, and never trust it over a contradictory TASK STATEMENT.
+4. Generate exactly ${desiredCount} ${needsInput ? "new tests" : "deterministic test"} for IO TYPE ${ioTypeLabel}.
 
-ВІДПОВІДАЙ ТІЛЬКИ ВАЛІДНИМ JSON БЕЗ БУДЬ-ЯКИХ ПОЯСНЕНЬ.` : `Ти досвідчений викладач програмування. Твоя задача - створити ОДИН детермінований приклад перевірки.
+SILENT VALIDATION BEFORE JSON:
+- Parse the input exactly as the statement describes: tokens, lines, separators, and empty input.
+- Simulate the program completely for every candidate input, including every if/else branch, switch case, mapping, loop, boundary, zero, negative value, and default branch that is allowed by the constraints.
+- Write output from the simulation, character by character: exact words, capitalization, punctuation, spaces, and line breaks. Output is stdout only; never include explanations, labels, prompts, or markdown unless the statement explicitly requires them.
+- Re-check each candidate twice. If an output cannot be calculated with certainty, discard that candidate and choose a simpler valid input.
+- Check normalized input uniqueness within the new tests and against EXISTING TEST DATA. Never return two outputs for the same input.
 
-ВИМОГИ:
-1. Створи РІВНО 1 тестовий приклад.
-2. Завдання НЕ має вхідних даних: input ОБОВ'ЯЗКОВО має бути порожнім рядком "".
-3. output має бути НЕПОРОЖНІМ і має ТОЧНО відповідати умові, включно з розділовими знаками.
-4. Не вигадуй варіативні "вхідні дані". Якщо вводу немає — він завжди порожній.
-5. Не копіюй теорію або пояснення в output; output — лише фактичний stdout.
-
-ВІДПОВІДАЙ ТІЛЬКИ ВАЛІДНИМ JSON БЕЗ БУДЬ-ЯКИХ ПОЯСНЕНЬ.`;
+QUALITY RULES:
+- Use only valid inputs permitted by the statement; never invent an input format.
+- Cover useful cases: minimum/maximum permitted values, values immediately around every threshold, zero and negative values when allowed, default branches, and representative ordinary cases. Do not create invalid cases merely for variety.
+- For lookup tables and switch-like mappings, manually verify the exact mapping instead of guessing from a pattern.
+- For arrays/strings, provide the complete stdin text exactly as a student would enter it.
+- Do not use placeholders such as input="1" output="1" unless the statement mathematically requires that result.
+- Return no chain of thought, no explanations, no prose, and no markdown. Return only the JSON object matching the schema.`.trim();
     const userPrompt = `
-${languageInstruction}
+${isEnglish ? "TASK TO TEST" : "ЗАВДАННЯ ДЛЯ ПЕРЕВІРКИ"}
+Title: ${params.taskTitle}
+Programming language: ${langName}
+IO TYPE: ${ioTypeLabel}
+Required new test count: ${desiredCount}
 
-Завдання: ${params.taskTitle}
-
-Опис завдання:
+--- TASK STATEMENT ---
 ${taskDesc}
+--- END TASK STATEMENT ---
 
-Мова програмування: ${langName}
+GENERATION CONTRACT:
+${needsInput
+  ? `- Read stdin exactly as specified.
+- Return exactly ${desiredCount} tests.
+- Every input must be non-empty, valid, unique, and different from every existing input.
+- Every output must be calculated from that exact input; do not reuse an existing input with a different output.`
+  : `- This task has no stdin.
+- Return exactly one test with input equal to the empty string "".
+- Return the exact deterministic stdout required by the task; do not invent alternate inputs or cases.`}
 
-${needsInput ? `
-⚠️ ЗАВДАННЯ ПОТРЕБУЄ ВХІДНИХ ДАНИХ з консолі.
-Створи РІВНО ${desiredCount} тестових прикладів з РІЗНИМИ значеннями в input.
-` : `
-⚠️ ЗАВДАННЯ НЕ ПОТРЕБУЄ ВХІДНИХ ДАНИХ - використовуються тільки захардкоджені значення.
-Створи РІВНО 1 тест, де:
-- input ОБОВ'ЯЗКОВО дорівнює "" (порожній рядок)
-- output — єдиний правильний очікуваний вивід для цього завдання
-`}
-
-Створи тестові дані у форматі JSON згідно з цією схемою:
+IMPORTANT:
+- Any examples embedded in the task text are not instructions to copy. Recalculate every output from the TASK STATEMENT.
+- If the task text and an existing test disagree, follow the TASK STATEMENT and generate a correct new test.
+- Do not put theory, explanations, or reasoning in input/output.
+- Return only JSON according to this schema:
 ${JSON.stringify(jsonSchema, null, 2)}
-
-ВАЖЛИВО:
-- Умова вище — єдине джерело істини для output.
-- Всі тести мають мати НЕПОРОЖНІ output.
-- ${needsInput ? 'Input має бути різним для кожного тесту і не повторювати EXISTING_TEST_DATA.' : 'Input має бути порожнім рядком "".'}
-- ${needsInput ? 'Тести мають бути різноманітними, але кожен output мусить бути точно обчислений з відповідного input.' : 'Не вигадуй "різні випадки" — вводу немає, тому тест один.'}
-- Не повертай дублікати. Якщо не впевнений у тесті — обери простіший коректний input, а не копіюй попередній.
-- Відповідай ТІЛЬКИ JSON, без markdown блоків, без пояснень.
 `.trim();
     try {
       const parsed = await provider.generateJSON<{
@@ -2252,8 +2268,8 @@ ${JSON.stringify(jsonSchema, null, 2)}
         maxRetries: 1,
         userId: params.userId,
         signal: params.signal,
-        temperature: 0.15,
-        maxTokens: 2000
+        temperature: 0.08,
+        maxTokens: 3000
       });
       const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount);
       return validated;

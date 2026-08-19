@@ -582,7 +582,9 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               language,
               signal: controller?.signal
             });
-            const expectedTestCount = options?.expectedCount || sanitizedParams.count || 12;
+            const expectedTestCount = options?.expectedCount
+              || (sanitizedParams.ioType && sanitizedParams.ioType !== 'STDIN_STDOUT' ? 1 : sanitizedParams.count)
+              || 12;
             result = AIResponseValidator.validateGenerateTestData(result, expectedTestCount);
             break;
           default:

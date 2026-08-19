@@ -984,7 +984,7 @@ function buildTestDataPrompt(params: {
   const inputRule = params.ioType === "STDIN_STDOUT"
     ? "Every new test must use a different non-empty input from all existing tests, while preserving the exact input format."
     : "The task has no input; do not invent additional inputs and keep input as an empty string.";
-  return `${statement}\n\n--- EXISTING TEST DATA (REFERENCE ONLY; DO NOT REPEAT OR MODIFY) ---\n${rendered}\n--- END EXISTING TEST DATA ---\n${inputRule} For every new input, calculate the output from the task statement; never copy an existing input with a different output.`.trim();
+  return `--- TASK STATEMENT (SOURCE OF TRUTH) ---\n${statement}\n--- END TASK STATEMENT ---\n\n--- EXISTING TEST DATA (REFERENCE ONLY; DO NOT COPY OR MODIFY) ---\n${rendered}\n--- END EXISTING TEST DATA ---\n\nIO RULE: ${inputRule}\nCalculate every output from the TASK STATEMENT. If an existing test conflicts with the task statement, ignore that test and create a correct new one.`.trim();
 }
 
 function looksLikeNumberedChecklistPracticalTask(text: string): boolean {
@@ -1050,8 +1050,47 @@ function formatStatementSectionValueForMarkdown(value: string, options?: {
   return sanitized;
 }
 
+function compactOutputFormatForLearner(raw: string, ioType: TaskIoType | null | undefined, uiLanguage: UiLanguage): string {
+  let value = normalizeMarkdownText(String(raw ?? "")).trim();
+  if (!value) return "";
+
+  // For interactive tasks the output format is a contract, not a second task
+  // statement. Examples belong in test data and make the IDE panel unreadable.
+  if (ioType !== "NO_INPUT_FIXED_OUTPUT") {
+    const exampleMarker = /(?:^|\s)(?:example|examples|for example|e\.g\.|приклад|приклади|наприклад)\s*:/i.exec(value);
+    if (exampleMarker && typeof exampleMarker.index === "number") {
+      value = value.slice(0, exampleMarker.index).trim();
+    }
+
+    if (uiLanguage === "en") {
+      const twoLineMatch = /^the program should (?:output|print)\s+(.+?),\s*followed by a newline character,\s*and then\s+(.+?)(?:,\s*also)?\s+followed by a newline character\.?$/i.exec(value);
+      if (twoLineMatch) {
+        return `Print two lines: ${twoLineMatch[1].trim()}, then ${twoLineMatch[2].trim()}.`;
+      }
+      value = value
+        .replace(/^the program should (?:output|print)\s+/i, "Print ")
+        .replace(/,?\s*(?:also\s+)?followed by a newline character/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+    } else {
+      const twoLineMatch = /^програма має\s+(?:вивести|надрукувати)\s+(.+?),\s*після цього новий рядок,\s*а потім\s+(.+?)(?:,\s*також)?\s*з нового рядка\.?$/i.exec(value);
+      if (twoLineMatch) {
+        return `Виведіть два рядки: ${twoLineMatch[1].trim()}, потім ${twoLineMatch[2].trim()}.`;
+      }
+      value = value
+        .replace(/^програма має\s+(?:вивести|надрукувати)\s+/i, "Виведіть ")
+        .replace(/,?\s*(?:також\s+)?(?:з нового рядка|після чого новий рядок)/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+    }
+  }
+
+  return value;
+}
+
 function composeTaskStatementMarkdown(params: {
   practicalTask: string;
+  ioType?: TaskIoType | null;
   inputFormat?: string | null;
   outputFormat?: string | null;
   constraints?: string | null;
@@ -1060,10 +1099,14 @@ function composeTaskStatementMarkdown(params: {
   const practical = rewriteChecklistPracticalTaskToNarrative(
     normalizeMarkdownText(String(params.practicalTask ?? "")).trim()
   );
-  const inputFormat = normalizeMarkdownText(String(params.inputFormat ?? "")).trim();
-  const outputFormat = normalizeMarkdownText(String(params.outputFormat ?? "")).trim();
-  const constraints = normalizeMarkdownText(String(params.constraints ?? "")).trim();
   const uiLanguage = params.uiLanguage ?? "uk";
+  const inputFormat = normalizeMarkdownText(String(params.inputFormat ?? "")).trim();
+  const outputFormat = compactOutputFormatForLearner(
+    String(params.outputFormat ?? ""),
+    params.ioType,
+    uiLanguage
+  );
+  const constraints = normalizeMarkdownText(String(params.constraints ?? "")).trim();
 
   const sections: string[] = [];
   if (practical) sections.push(practical);
@@ -1428,7 +1471,7 @@ function sanitizeMetaOutputFormatInStatement(
   ioType: TaskIoType | null | undefined,
   uiLanguage: UiLanguage = "uk"
 ): string {
-  const s = normalizeLegacyOutputFormatSection(String(statementMarkdown ?? ""));
+  const s = normalizeLegacyOutputFormatSection(String(statementMarkdown ?? ""), ioType, uiLanguage);
   if (!s) return s;
   const re = /(Програма\s+скомпілювал[а-яіїє]*\s+та\s+виконал[а-яіїє]*\s+без\s+помилок\.)|(Program\s+compiled\s+and\s+ran\s+without\s+errors\.?)/gi;
   if (!re.test(s)) return s;
@@ -1517,27 +1560,33 @@ async function syncCatalogPracticeProgress(params: { userId: number; task: Task;
 }
 
 /**
- * Older generated tasks sometimes stored each expected output line as an
- * inline Markdown code span (`7`, `25.5`, `true`). That renders as separate
- * rounded pills instead of one output sample. Normalize that persisted
- * representation when the task is read; newly generated tasks already use a
- * fenced text block.
+ * Normalize persisted output sections when tasks are read. Older rows may use
+ * inline code spans, while newer but verbose AI rows may repeat the condition
+ * and append sample runs. Keep one compact stdout contract for the learner.
  */
-function normalizeLegacyOutputFormatSection(statementMarkdown: string): string {
+function normalizeLegacyOutputFormatSection(
+  statementMarkdown: string,
+  ioType?: TaskIoType | null,
+  uiLanguage: UiLanguage = "uk"
+): string {
   const source = String(statementMarkdown ?? "");
   if (!source.trim()) return source;
 
   return source.replace(
     /(^#{2,6}\s*(?:Формат\s+вихідних\s+даних|Output\s+format)\s*$)([\s\S]*?)(?=^#{2,6}\s+|(?![\s\S]))/gim,
     (match, heading: string, rawBody: string) => {
-      const body = String(rawBody ?? "").trim();
-      if (!body || /^```/i.test(body)) return match;
+      const body = String(rawBody ?? "")
+        .trim()
+        .replace(/^```(?:text)?\s*/i, "")
+        .replace(/```$/i, "")
+        .trim();
+      if (!body) return match;
 
       const outputLines = body
         .split(/\r?\n/)
         .filter((line: string) => !/^\s*```(?:text)?\s*$/i.test(line))
         .map((line: string) => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"));
-      const output = outputLines.join("\n").trim();
+      const output = compactOutputFormatForLearner(outputLines.join("\n").trim(), ioType, uiLanguage);
       if (!output) return match;
 
       return `${heading}\n\n\`\`\`text\n${output}\n\`\`\``;
@@ -2087,6 +2136,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
 
   const statementMarkdown = composeTaskStatementMarkdown({
     practicalTask: practicalOnly,
+    ioType,
     inputFormat: ioType === "STDIN_STDOUT"
       ? (aiTask as any)?.inputFormat
       : i18nText(params.userLanguage, "Вхідних даних немає.", "No input data."),
@@ -2212,9 +2262,10 @@ async function generateAndPersistPersonalProgrammingTask(params: {
         taskTitle: baseTitle,
         lang: params.lang,
         count: remainingCount,
+        ioType,
         userId: params.userId
       }, {
-        expectedCount: remainingCount,
+        expectedCount: ioType === "STDIN_STDOUT" ? remainingCount : 1,
         language: params.userLanguage,
         requestId: params.requestId,
         maxAttempts: TEST_DATA_GENERATION_MAX_ATTEMPTS,
@@ -3905,6 +3956,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }) : null;
     const statementMarkdown = composeTaskStatementMarkdown({
       practicalTask: practicalOnly,
+      ioType,
       inputFormat: ioType === "STDIN_STDOUT"
         ? (aiTask as any)?.inputFormat
         : i18nText(userLanguage, "Вхідних даних немає.", "No input data."),
@@ -4039,9 +4091,10 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           taskTitle: baseTitle,
           lang,
           count: remainingCount,
+          ioType,
           userId
         }, {
-          expectedCount: remainingCount,
+          expectedCount: ioType === "STDIN_STDOUT" ? remainingCount : 1,
           language: userLanguage,
           requestId: req.requestId,
           maxAttempts: TEST_DATA_GENERATION_MAX_ATTEMPTS,

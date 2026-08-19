@@ -920,6 +920,19 @@ export class AIResponseValidator {
       if (uniquePairs.size !== normalized.length) {
         throw new AIValidationError('generateTestData', emptyZod(), 'Test data validation failed: duplicate tests detected', data);
       }
+      const outputByInput = new Map<string, string>();
+      for (const test of normalized) {
+        const knownOutput = outputByInput.get(test.input);
+        if (knownOutput !== undefined && knownOutput !== test.output) {
+          throw new AIValidationError(
+            'generateTestData',
+            emptyZod(),
+            `Test data validation failed: conflicting outputs for the same input (${test.input})`,
+            data
+          );
+        }
+        outputByInput.set(test.input, test.output);
+      }
       const placeholderCount = normalized.filter(t => t.input === '1' && t.output === '1').length;
       if (expectedCount !== undefined && expectedCount > 1 && placeholderCount > 0) {
         throw new AIValidationError('generateTestData', emptyZod(), 'Test data validation failed: placeholder tests (input=1/output=1) detected', data);

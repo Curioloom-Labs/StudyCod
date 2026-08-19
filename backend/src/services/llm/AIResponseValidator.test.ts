@@ -2,6 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AIResponseValidator } from './AIResponseValidator';
 
+test('AIResponseValidator.validateGenerateTestData: rejects conflicting outputs for the same input', () => {
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTestData({
+      tests: [
+        { input: '2', output: 'Tuesday' },
+        { input: '2', output: 'Wednesday' }
+      ]
+    }, 2),
+    /conflicting outputs for the same input/i
+  );
+});
+
 test('AIResponseValidator.validateGenerateTask: rejects no-input task that asks for a name', () => {
   const data = {
     title: 'Персональне привітання',

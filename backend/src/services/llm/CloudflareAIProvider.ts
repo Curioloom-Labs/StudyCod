@@ -82,9 +82,13 @@ Return ONLY the Markdown statement.${responseLanguageInstruction}`
     taskTitle: string;
     lang: "JAVA" | "PYTHON" | "CPP";
     count: number;
+    ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
   }): { prompt: string; systemPrompt: string; schema: object } {
     const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
-    const taskDesc = String(params.taskDescription || "").slice(0, 2500);
+    const taskDesc = String(params.taskDescription || "").slice(0, 5000);
+    const needsInput = params.ioType ? params.ioType === "STDIN_STDOUT" : params.count > 1;
+    const count = needsInput ? Math.max(1, Math.floor(params.count)) : 1;
+    const ioType = params.ioType ?? (needsInput ? "STDIN_STDOUT" : "NO_INPUT_FIXED_OUTPUT");
 
     const schema = {
       type: "object",
@@ -100,27 +104,33 @@ Return ONLY the Markdown statement.${responseLanguageInstruction}`
             },
             required: ["input", "output"]
           },
-          minItems: params.count,
-          maxItems: params.count
+          minItems: count,
+          maxItems: count
         }
       },
       required: ["tests"]
     } as const;
 
-    const systemPrompt = `Ти генеруєш тестові дані для перевірки розв'язків. Відповідай ТІЛЬКИ JSON-об'єктом за схемою. Заборонено markdown.`;
-    const prompt = `Згенеруй РІВНО ${params.count} тестів для задачі.
+    const systemPrompt = `Ти детермінований конструктор тестів для judge-системи. Відповідай ТІЛЬКИ JSON-об'єктом за схемою, без markdown і пояснень.
+
+Пріоритет істини: повна умова задачі та її IO-контракт важливіші за заголовок і будь-які старі приклади. Перед відповіддю мовчки розбери формат stdin, симулюй програму для кожного тесту та перевір output символ у символ. Не копіюй старі тести, не створюй дублікати й не вигадуй правила, яких немає в умові.`;
+    const prompt = `Згенеруй РІВНО ${count} НОВИХ тестів для задачі.
 
 Заголовок: ${params.taskTitle}
 Мова: ${langName}
+IO TYPE: ${ioType}
 
-Опис задачі:
+--- ПОВНА УМОВА (ЄДИНЕ ДЖЕРЕЛО ІСТИНИ) ---
 ${taskDesc}
+--- КІНЕЦЬ УМОВИ ---
 
 ВИМОГИ:
-- Кожен тест має мати НЕПОРОЖНІ output.
-- input має бути у форматі stdin (як у прикладах умови).
-- Заборонено дублікати input/output.
-- Без плейсхолдерів типу input="1" output="1" якщо це не випливає з умови.
+- ${needsInput ? `Кожен тест має мати непорожній, валідний і унікальний input; поверни рівно ${count} тестів.` : 'input кожного тесту ОБОВ’ЯЗКОВО дорівнює порожньому рядку ""; поверни рівно один тест.'}
+- output має бути непорожнім фактичним stdout: без пояснень, prompt-тексту, "Answer:", markdown і зайвих міток.
+- Обчисли кожен output саме для його input. Перевір межі, нуль, від’ємні значення, пороги, default/case та таблиці відповідностей, якщо вони дозволені умовою.
+- Не повторюй input або пару input/output з блоку EXISTING TEST DATA. Не повертай однакові input між новими тестами.
+- Якщо приклад у тексті суперечить умові, ігноруй приклад і дотримуйся умови.
+- Не використовуй плейсхолдери типу input="1" output="1", якщо це не випливає з умови.
 
 СХЕМА JSON:
 ${JSON.stringify(schema, null, 2)}
@@ -548,6 +558,7 @@ ${JSON.stringify(schema, null, 2)}
     taskTitle: string;
     lang: "JAVA" | "PYTHON" | "CPP";
     count: number;
+    ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     userId?: number;
   }, options?: LLMGenerateOptions): Promise<Array<{
     input: string;
@@ -558,7 +569,8 @@ ${JSON.stringify(schema, null, 2)}
       taskDescription: params.taskDescription,
       taskTitle: params.taskTitle,
       lang: params.lang,
-      count: params.count
+      count: params.count,
+      ioType: params.ioType
     });
     const response = await this.callCloudflareWorker('generate-test-data', {
       prompt: built.prompt,
@@ -578,7 +590,7 @@ ${JSON.stringify(schema, null, 2)}
       const tests = (parsed as any)?.tests || parsed || [];
       const taskDescLower = String(params.taskDescription ?? "").toLowerCase();
       const explicitlyNoInput = /нема(є)?\s+вхідн/i.test(taskDescLower) || /без\s+вхідн/i.test(taskDescLower) || /відсутн/i.test(taskDescLower) || /no\s+input/i.test(taskDescLower) || /does\s+not\s+take\s+input/i.test(taskDescLower);
-      const allowEmptyInput = explicitlyNoInput || params.count <= 1;
+      const allowEmptyInput = params.ioType !== "STDIN_STDOUT" || explicitlyNoInput || params.count <= 1;
 
       const validTests = (Array.isArray(tests) ? tests : []).filter((t: any) => {
         const input = typeof t?.input === "string" ? t.input : String(t?.input ?? "");
