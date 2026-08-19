@@ -632,11 +632,39 @@ courses:
   java-core:
     - key: java-cli-calculator
       title: Калькулятор у терміналі
-      description: Створіть консольний калькулятор, який читає два числа й оператор через Scanner, виконує базові операції в циклі та зрозуміло реагує на ділення на нуль або невідомий оператор.
+      description: "Створіть консольний калькулятор, який читає команди через Scanner. Команда має формат `число оператор число`, а `exit` завершує сесію без виводу. Для кожної коректної команди виводьте результат окремим рядком; підтримайте +, -, *, /. Для ділення на нуль виводьте `ERROR: division by zero`, для невідомого оператора — `ERROR: unknown operator`, після чого продовжуйте читання наступної команди."
       estimatedMinutes: 150
       skills: [Scanner, змінні та типи, умови, цикли]
       requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while]
       template: "src/Main.java"
+      tests:
+        - input: "10 + 4\nexit\n"
+          expectedOutput: "14.0"
+          points: 15
+        - input: "9 * 3\nexit\n"
+          expectedOutput: "27.0"
+          points: 15
+        - input: "12 / 4\nexit\n"
+          expectedOutput: "3.0"
+          points: 15
+        - input: "7 - 9\nexit\n"
+          expectedOutput: "-2.0"
+          points: 15
+        - input: "10 + 4\n3 * 2\nexit\n"
+          expectedOutput: "14.0\n6.0"
+          points: 15
+        - input: "12 / 0\n10 + 1\nexit\n"
+          expectedOutput: "ERROR: division by zero\n11.0"
+          points: 10
+          hidden: true
+        - input: "5 ^ 2\n10 - 3\nexit\n"
+          expectedOutput: "ERROR: unknown operator\n7.0"
+          points: 10
+          hidden: true
+        - input: "exit\n"
+          expectedOutput: ""
+          points: 5
+          hidden: true
       milestones:
         - id: contract
           title: Контракт вводу

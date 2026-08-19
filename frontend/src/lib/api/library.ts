@@ -14,6 +14,8 @@ export type LibraryTaskProjectSpec = {
   kind: "MINI_PROJECT";
   estimatedMinutes: number;
   skills: string[];
+  inputFormat?: string;
+  outputFormat?: string;
   milestones: Array<{
     id: string;
     title: string;

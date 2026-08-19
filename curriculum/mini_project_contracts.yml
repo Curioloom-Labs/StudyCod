@@ -1,0 +1,153 @@
+version: 1
+profiles:
+  calculator:
+    uk:
+      inputFormat: "Рядки формату <число> <оператор> <число>, по одному виразу за рядок. exit завершує сесію без виводу."
+      outputFormat: "Один результат на рядок. Для ділення на нуль: ERROR: division by zero; для невідомого оператора: ERROR: unknown operator."
+    en:
+      inputFormat: "Lines in the form <number> <operator> <number>, one expression per line. exit ends the session without output."
+      outputFormat: "One result per line. Division by zero: ERROR: division by zero; unknown operator: ERROR: unknown operator."
+  contact:
+    uk:
+      inputFormat: "Команди ADD name phone, GET name, UPDATE name phone, DELETE name, LIST, EXIT, по одній у рядку."
+      outputFormat: "Кожна команда друкує один рядок: OK, name phone, NOT_FOUND або відсортований список контактів."
+    en:
+      inputFormat: "Commands ADD name phone, GET name, UPDATE name phone, DELETE name, LIST, EXIT, one per line."
+      outputFormat: "Each command prints one line: OK, name phone, NOT_FOUND, or contacts sorted by name."
+  records:
+    uk:
+      inputFormat: "JSON Lines: кожен рядок має id, name та value; порожні або невалідні записи пропускаються."
+      outputFormat: "Для валідних записів виводяться нормалізовані рядки, потім підсумок rows=N total=SUM."
+    en:
+      inputFormat: "JSON Lines: each line has id, name, and value; empty or invalid records are skipped."
+      outputFormat: "Print normalized rows for valid records, then rows=N total=SUM."
+  web:
+    uk:
+      inputFormat: "JSON-сценарій HTTP: method, path і необов'язковий body. Кожен сценарій запускається окремо."
+      outputFormat: "Адаптер виводить OK, якщо застосунок відповідає без помилки 5xx; помилки валідації не мають падати."
+    en:
+      inputFormat: "JSON HTTP scenario: method, path, and optional body. Each scenario runs independently."
+      outputFormat: "The adapter prints OK when the app responds without a 5xx error; validation errors must not crash it."
+  vision:
+    uk:
+      inputFormat: "JSON-сценарій fixture: шлях до зображення/відео, режим обробки та параметри порогу."
+      outputFormat: "Для доступного fixture вивести OK; некоректний шлях або режим обробити без аварійного завершення."
+    en:
+      inputFormat: "JSON fixture scenario: image/video path, processing mode, and threshold parameters."
+      outputFormat: "Print OK for an available fixture; handle an invalid path or mode without crashing."
+  logs:
+    uk:
+      inputFormat: "Рядки timestamp level event; допустимі рівні INFO, WARN, ERROR."
+      outputFormat: "Вивести INFO=N, WARN=N, ERROR=N, events=N та malformed=N у фіксованому порядку."
+    en:
+      inputFormat: "Lines use timestamp level event; valid levels are INFO, WARN, and ERROR."
+      outputFormat: "Print INFO=N, WARN=N, ERROR=N, events=N, and malformed=N in fixed order."
+  jobs:
+    uk:
+      inputFormat: "JSON-об'єкт jobs із полями id та status: done, failed або cancelled."
+      outputFormat: "Вивести done=N, failed=N, cancelled=N, total=N у цьому порядку."
+    en:
+      inputFormat: "JSON object jobs with id and status: done, failed, or cancelled."
+      outputFormat: "Print done=N, failed=N, cancelled=N, total=N in this order."
+  numeric:
+    uk:
+      inputFormat: "Перше число N, далі N цілих чисел; для порожнього набору N дорівнює 0."
+      outputFormat: "Вивести детермінований звіт зі count, min, max, average та індексами, якщо вони потрібні умовою."
+    en:
+      inputFormat: "First N, followed by N integers; an empty dataset has N equal to 0."
+      outputFormat: "Print a deterministic report with count, min, max, average, and indexes when required."
+  grade:
+    uk:
+      inputFormat: "Перше число N, далі N оцінок від 0 до 100."
+      outputFormat: "Вивести average=Z з двома знаками, min=X та max=Y; N=0 дає NA для min і max."
+    en:
+      inputFormat: "First N, followed by N grades from 0 to 100."
+      outputFormat: "Print average=Z with two decimals, min=X, and max=Y; N=0 uses NA for min and max."
+  shape:
+    uk:
+      inputFormat: "Перше число N, далі N рядків circle r або rectangle w h."
+      outputFormat: "Для кожної фігури вивести type area з двома цифрами після крапки; порядок зберегти."
+    en:
+      inputFormat: "First N, followed by N lines circle r or rectangle w h."
+      outputFormat: "Print type area for each shape with two decimal places, preserving order."
+  array:
+    uk:
+      inputFormat: "Перше число N, далі N цілих чисел; позиції рахуються з нуля."
+      outputFormat: "Вивести min=X index=I та max=Y index=J; при однакових значеннях брати першу позицію."
+    en:
+      inputFormat: "First N, followed by N integers; positions are zero-based."
+      outputFormat: "Print min=X index=I and max=Y index=J; use the first position for ties."
+  vector:
+    uk:
+      inputFormat: "Перше число N, далі N цілих вимірювань."
+      outputFormat: "Вивести count=N, min=X, max=Y та average=Z з двома цифрами після крапки."
+    en:
+      inputFormat: "First N, followed by N integer measurements."
+      outputFormat: "Print count=N, min=X, max=Y, and average=Z with two decimals."
+  config:
+    uk:
+      inputFormat: "Один JSON-об'єкт із host, port і secret; port має бути 1..65535, secret — непорожній."
+      outputFormat: "Валідний конфіг друкує VALID; помилка друкує INVALID: <reason> без stack trace."
+    en:
+      inputFormat: "One JSON object with host, port, and secret; port must be 1..65535 and secret non-empty."
+      outputFormat: "A valid config prints VALID; an invalid one prints INVALID: <reason> without a stack trace."
+  queue:
+    uk:
+      inputFormat: "Перше число — capacity. Далі команди PUT value, GET, SIZE, STOP, по одній у рядку."
+      outputFormat: "GET друкує VALUE value або EMPTY; SIZE друкує SIZE=N; переповнення — FULL."
+    en:
+      inputFormat: "The first number is capacity. Then commands PUT value, GET, SIZE, STOP, one per line."
+      outputFormat: "GET prints VALUE value or EMPTY; SIZE prints SIZE=N; overflow prints FULL."
+  collection:
+    uk:
+      inputFormat: "Команди ADD name group value, REPORT, EXIT; value — ціле число."
+      outputFormat: "REPORT друкує групи за назвою як group total=SUM count=N; порожній набір — EMPTY."
+    en:
+      inputFormat: "Commands are ADD name group value, REPORT, EXIT; value is an integer."
+      outputFormat: "REPORT prints groups as group total=SUM count=N; an empty dataset prints EMPTY."
+projects:
+  python-cli-calculator: calculator
+  java-cli-calculator: calculator
+  cpp-cli-calculator: calculator
+  python-contact-book: contact
+  java-contact-book: contact
+  python-file-backup: records
+  python-product-catalog: collection
+  python-text-analyzer: records
+  python-data-pipeline: records
+  python-automation-toolkit: jobs
+  python-async-crawler: web
+  python-sqlite-report: records
+  python-ml-experiment: numeric
+  flask-reading-list: web
+  flask-notes-api: web
+  flask-storefront: web
+  flask-job-board: web
+  flask-operations-console: web
+  fastapi-reading-log: web
+  fastapi-team-library: web
+  fastapi-production-api: web
+  fastapi-upload-center: web
+  fastapi-realtime-feed: web
+  cv-document-scanner: vision
+  cv-color-inspector: vision
+  cv-edge-inspector: vision
+  cv-video-motion-detector: vision
+  cv-quality-batch: vision
+  java-gradebook: grade
+  java-shape-workshop: shape
+  java-collection-insights: collection
+  java-log-analyzer: logs
+  java-concurrent-job-runner: jobs
+  java-stream-report: collection
+  java-http-cache: records
+  java-secure-config: config
+  cpp-vector-report: vector
+  cpp-array-stats: array
+  cpp-raii-file-tool: records
+  cpp-stl-catalog: collection
+  cpp-file-indexer: records
+  cpp-threaded-log-reader: logs
+  cpp-move-safe-loader: records
+  cpp-build-tool: records
+  cpp-concurrent-queue: queue

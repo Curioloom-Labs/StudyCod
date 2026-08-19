@@ -1405,6 +1405,22 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                             ))}
                           </div>
                         </div>
+                        {props.task.projectSpec.inputFormat || props.task.projectSpec.outputFormat ? (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {props.task.projectSpec.inputFormat ? (
+                              <div className="rounded-xl border border-[#294333] bg-[#0d1710] p-3">
+                                <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{tr("Вхідні дані", "Input")}</p>
+                                <p className="mt-1.5 text-[11px] leading-5 text-[#b9c9bd]">{props.task.projectSpec.inputFormat}</p>
+                              </div>
+                            ) : null}
+                            {props.task.projectSpec.outputFormat ? (
+                              <div className="rounded-xl border border-[#294333] bg-[#0d1710] p-3">
+                                <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{tr("Вихідні дані", "Output")}</p>
+                                <p className="mt-1.5 text-[11px] leading-5 text-[#b9c9bd]">{props.task.projectSpec.outputFormat}</p>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">
                             {tr("Етапи", "Milestones")}

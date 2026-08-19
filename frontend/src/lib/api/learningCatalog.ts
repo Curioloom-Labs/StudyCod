@@ -65,9 +65,14 @@ export interface LearningProject {
   itemId: number;
   enrollmentId: number;
   projectKey: string | null;
+  runtime: CatalogRuntime;
+  starterCode: string;
+  entryFile: string;
   projectSpec: {
     milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
     acceptanceCriteria?: string[];
+    inputFormat?: string;
+    outputFormat?: string;
     estimatedMinutes?: number;
     skills?: string[];
     template?: string;
@@ -172,4 +177,9 @@ export async function submitCatalogProject(itemId: number, input: Omit<LearningP
 export async function checkCatalogProject(itemId: number, files: LearningProjectCheckFile[]) {
   const response = await api.post(`/learning/items/${itemId}/project/check`, { files });
   return response.data?.check;
+}
+
+export async function runCatalogProject(itemId: number, files: LearningProjectCheckFile[], stdin: string) {
+  const response = await api.post(`/learning/items/${itemId}/project/run`, { files, stdin });
+  return response.data?.result;
 }

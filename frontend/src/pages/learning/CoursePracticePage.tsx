@@ -1,21 +1,23 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, CheckCircle2, LoaderCircle, Save, Send, ShieldCheck } from "lucide-react";
+import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
 import { TasksPage } from "../core/TasksPage";
 import { BrandedPageLoader } from "../../components/ui/BrandedPageLoader";
+import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
+import type { JudgeLanguage } from "../../lib/judgeLanguages";
 import {
   checkCatalogProject,
   getCatalogProject,
   getLearningCourse,
+  runCatalogProject,
   saveCatalogProject,
-  submitCatalogProject,
   type LearningCourseItem,
   type LearningProject,
 } from "../../lib/api/learningCatalog";
-import { MarkdownView } from "../../components/MarkdownView";
+import type { CodeFile } from "../../lib/api/library";
 import { tr } from "../../i18n";
 
 const kindLabel = (kind: LearningCourseItem["kind"]): string => {
@@ -54,20 +56,24 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
   const navigate = useNavigate();
   const [project, setProject] = React.useState<LearningProject | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [busy, setBusy] = React.useState(false);
+  const [running, setRunning] = React.useState(false);
+  const [checking, setChecking] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [filesJson, setFilesJson] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [stdin, setStdin] = React.useState("");
+  const [runResult, setRunResult] = React.useState<StudyCodIdeRunResult | null>(null);
+  const [checkResult, setCheckResult] = React.useState<StudyCodIdeCheckResult | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
     void getCatalogProject(item.id)
       .then((loaded) => {
-        if (!cancelled) {
-          setProject(loaded);
-          setError(null);
-        }
+        if (cancelled) return;
+        setProject(loaded);
+        setCode(loaded.progress.draft || loaded.starterCode);
+        setError(null);
       })
       .catch((caught: any) => {
         if (!cancelled) setError(caught?.response?.data?.message === "COURSE_SEQUENCE_LOCKED"
@@ -80,87 +86,128 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
     return () => { cancelled = true; };
   }, [item.id]);
 
-  const updateProgress = (patch: Partial<LearningProject["progress"]>) => {
-    setProject((current) => current
-      ? { ...current, progress: { ...current.progress, ...patch } }
-      : current);
+  const files = React.useMemo<CodeFile[]>(() => project ? [{ path: project.entryFile, content: code }] : [], [code, project]);
+  const language = (project?.runtime || "JAVA").toLowerCase() as JudgeLanguage;
+
+  const saveDraft = async () => {
+    if (!project) return;
+    try {
+      const response = await saveCatalogProject(item.id, { milestoneIds: [], draft: code });
+      if (response?.project) setProject(response.project);
+      setMessage(tr("Код збережено.", "Code saved."));
+      setError(null);
+    } catch {
+      setError(tr("Не вдалося зберегти код.", "Could not save the code."));
+    }
   };
 
-  const saveProject = async (submit: boolean) => {
+  const run = async () => {
     if (!project) return;
-    setBusy(true);
+    setRunning(true);
     setMessage(null);
     setError(null);
     try {
-      const input = {
-        milestoneIds: project.progress.milestoneIds,
-        draft: project.progress.draft,
-      };
-      const response = submit
-        ? await submitCatalogProject(item.id, input)
-        : await saveCatalogProject(item.id, input);
-      if (response?.project) setProject(response.project);
-      setMessage(submit
-        ? tr("Мініпроєкт подано.", "Mini-project submitted.")
-        : tr("Чернетку збережено.", "Draft saved."));
+      const result = await runCatalogProject(item.id, files, stdin);
+      setRunResult(result);
     } catch (caught: any) {
-      setError(caught?.response?.data?.message === "PROJECT_REQUIREMENTS_INCOMPLETE"
-        ? tr("Виконай усі етапи та додай нотатки реалізації.", "Complete all milestones and add implementation notes.")
-        : tr("Не вдалося зберегти мініпроєкт.", "Could not save the mini-project."));
+      setError(caught?.response?.data?.message === "JUDGE_UNAVAILABLE"
+        ? tr("Перевіряльник тимчасово недоступний.", "The judge is temporarily unavailable.")
+        : tr("Не вдалося запустити код.", "Could not run the code."));
     } finally {
-      setBusy(false);
+      setRunning(false);
     }
   };
 
-  const checkProject = async () => {
-    let files: Array<{ path: string; content: string }>;
-    try {
-      const parsed = JSON.parse(filesJson);
-      if (!Array.isArray(parsed)) throw new Error("not an array");
-      files = parsed;
-    } catch {
-      setError(tr("Встав JSON-масив файлів для перевірки.", "Paste a JSON array of files for the check."));
-      return;
-    }
-    setBusy(true);
+  const check = async () => {
+    if (!project) return;
+    setChecking(true);
     setMessage(null);
     setError(null);
     try {
       const result = await checkCatalogProject(item.id, files);
+      const nextCheck: StudyCodIdeCheckResult = {
+        verdict: result?.verdict || (result?.passed ? "AC" : "WA"),
+        testsPassed: Number(result?.testsPassed || 0),
+        testsTotal: Number(result?.testsTotal || 0),
+        score: Number(result?.score || 0),
+        maxScore: Number(result?.maxScore || 100),
+        publicTestResults: Array.isArray(result?.tests) ? result.tests.map((test: any, index: number) => ({
+          testId: Number(test.test_id || index + 1),
+          input: test.input,
+          expectedOutput: test.expected,
+          actualOutput: test.actual,
+          passed: test.verdict === "AC",
+          verdict: test.verdict,
+          error: test.message,
+          stderr: test.stderr,
+        })) : [],
+      };
+      setCheckResult(nextCheck);
+      if (result?.progress) setProject((current) => current ? { ...current, progress: { ...current.progress, ...result.progress }, itemStatus: result.itemStatus || current.itemStatus } : current);
       setMessage(result?.passed
-        ? tr("Перевірку проєкту пройдено.", "Project check passed.")
-        : tr("Перевірку не пройдено.", "Project check failed."));
-    } catch {
-      setError(tr("Не вдалося запустити ізольовану перевірку.", "Could not start the isolated project check."));
+        ? tr(`Оцінка: ${nextCheck.score}/${nextCheck.maxScore}. Мініпроєкт зараховано.`, `Score: ${nextCheck.score}/${nextCheck.maxScore}. Mini-project passed.`)
+        : tr(`Оцінка: ${nextCheck.score}/${nextCheck.maxScore}. Виправ код і спробуй ще раз.`, `Score: ${nextCheck.score}/${nextCheck.maxScore}. Fix the code and try again.`));
+    } catch (caught: any) {
+      setError(caught?.response?.data?.message === "PROJECT_CHECK_NOT_CONFIGURED"
+        ? tr("Для цього мініпроєкту ще не налаштовані тести.", "Tests are not configured for this mini-project yet.")
+        : tr("Не вдалося перевірити мініпроєкт.", "Could not check the mini-project."));
     } finally {
-      setBusy(false);
+      setChecking(false);
     }
   };
 
-  const spec = project?.projectSpec;
-  return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-    <button type="button" onClick={() => navigate(`/learning/course/${courseId}/path`)} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:underline">
-      <ArrowLeft className="size-4" />{tr("До тем курсу", "Back to course topics")}
-    </button>
-    <header className="rounded-[28px] border border-[#bd8837]/30 bg-[#bd8837]/[.06] p-6 sm:p-8">
-      <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#bd8837] dark:text-[#ffbf68]">{tr("Практика курсу · мініпроєкт", "Course practice · mini-project")}</p>
-      <h1 className="mt-3 text-3xl font-bold tracking-[-.04em] text-text-primary sm:text-5xl">{projectTitle(item.title)}</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Застосуй навички з пройдених тем в одній завершеній роботі.", "Combine the skills from the completed topics in one finished piece of work.")}</p>
-    </header>
+  const ideCheckResult = checkResult;
+  const projectTask = project ? {
+    id: project.itemId,
+    title: projectTitle(item.title),
+    description: projectMarkdown(item),
+    section: tr("Мініпроєкт курсу", "Course mini-project"),
+    projectSpec: project.projectSpec as any,
+  } : null;
 
-    {message && <div role="status" className="mt-5 rounded-2xl border border-primary/25 bg-primary/[.06] px-4 py-3 text-sm text-primary">{message}</div>}
-    {error && <div role="alert" className="mt-5 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
-    {loading ? <div role="status" className="mt-6 rounded-2xl border border-border bg-bg-surface p-6 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо проєкт…", "Loading project…")}</div> : spec ? <>
-      {projectMarkdown(item) && <section className="mt-6 rounded-2xl border border-border bg-bg-surface p-5 sm:p-7"><MarkdownView content={projectMarkdown(item)} /></section>}
-      <section className="mt-6 rounded-2xl border border-border bg-bg-surface p-5 sm:p-7">
-        <div className="flex items-start justify-between gap-4"><div><p className="text-[11px] font-black uppercase tracking-[.16em] text-primary">{tr("План виконання", "Execution plan")}</p><h2 className="mt-2 text-2xl font-bold text-text-primary">{tr("Збери проєкт по етапах", "Build the project in stages")}</h2></div><span className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-text-secondary">{project?.progress.milestoneIds.length ?? 0}/{spec.milestones.length}</span></div>
-        <div className="mt-5 space-y-3">{spec.milestones.map((milestone) => <label key={milestone.id} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-bg-base p-4 transition hover:border-primary/45"><input type="checkbox" checked={project?.progress.milestoneIds.includes(milestone.id) ?? false} onChange={(event) => updateProgress({ milestoneIds: event.target.checked ? [...(project?.progress.milestoneIds ?? []), milestone.id] : (project?.progress.milestoneIds ?? []).filter((id) => id !== milestone.id) })} className="mt-1 size-4 accent-primary" /><span className="text-sm"><b className="block text-text-primary">{milestone.title}</b><span className="mt-1 block leading-6 text-text-secondary">{milestone.description}</span></span></label>)}</div>
-        {spec.acceptanceCriteria?.length ? <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/[.05] p-4"><p className="text-xs font-black uppercase tracking-[.14em] text-primary">{tr("Критерії готовності", "Definition of done")}</p><ul className="mt-3 space-y-2 text-sm leading-6 text-text-secondary">{spec.acceptanceCriteria.map((criterion) => <li key={criterion} className="flex gap-2"><CheckCircle2 className="mt-1 size-4 shrink-0 text-primary" />{criterion}</li>)}</ul></div> : null}
-        <label className="mt-6 block text-sm font-bold text-text-primary">{tr("Нотатки реалізації", "Implementation notes")}<textarea value={project?.progress.draft ?? ""} onChange={(event) => updateProgress({ draft: event.target.value })} className="mt-2 min-h-32 w-full rounded-2xl border border-border bg-bg-base px-4 py-3 text-sm font-normal leading-6 text-text-primary outline-none transition focus:border-primary" placeholder={tr("Опиши ключові рішення та перевірки.", "Describe the key decisions and checks.")} /></label>
-        {spec.checkSpec && <div className="mt-6 rounded-2xl border border-border bg-bg-base p-4"><p className="flex items-center gap-2 text-sm font-bold text-text-primary"><ShieldCheck className="size-4 text-primary" />{tr("Автоматична перевірка", "Automated check")}</p><p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Передай JSON-масив файлів проєкту для запуску перевірки.", "Pass a JSON array of project files to run the check.")}</p><textarea value={filesJson} onChange={(event) => setFilesJson(event.target.value)} className="mt-3 min-h-28 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 font-mono text-xs text-text-primary outline-none transition focus:border-primary" placeholder='[{"path":"main.py","content":"..."}]' /><button type="button" disabled={busy} onClick={() => void checkProject()} className="mt-3 rounded-xl border border-primary px-4 py-2.5 text-sm font-bold text-primary disabled:opacity-45">{tr("Запустити перевірку", "Run check")}</button></div>}
-        <div className="mt-6 flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={() => void saveProject(false)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-bold text-text-primary disabled:opacity-45"><Save className="size-4" />{tr("Зберегти", "Save")}</button><button type="button" disabled={busy} onClick={() => void saveProject(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-white disabled:opacity-45"><Send className="size-4" />{tr("Подати проєкт", "Submit project")}</button></div>
-      </section>
-    </> : null}
+  return <main className="min-h-full bg-bg-base px-3 py-4 text-text-primary sm:px-5 sm:py-6 lg:px-8">
+    <div className="mx-auto max-w-[1680px]">
+      <button type="button" onClick={() => navigate(`/learning/course/${courseId}/path`)} className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:underline">
+        <ArrowLeft className="size-4" />{tr("До тем курсу", "Back to course topics")}
+      </button>
+      <header className="mb-4 rounded-2xl border border-[#bd8837]/30 bg-[#bd8837]/[.06] p-5 sm:p-6">
+        <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#bd8837] dark:text-[#ffbf68]">{tr("Практика курсу · мініпроєкт", "Course practice · mini-project")}</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-[-.04em] text-text-primary sm:text-4xl">{projectTitle(item.title)}</h1>
+        <p className="mt-2 text-sm leading-6 text-text-secondary">{tr("Це повноцінна практична задача: пиши код в IDE, запускай його та отримуй оцінку за прихованими тестами.", "This is a full practice task: write code in the IDE, run it, and get a score from hidden tests.")}</p>
+      </header>
+      {message && <div role="status" className="mb-4 rounded-xl border border-primary/25 bg-primary/[.06] px-4 py-3 text-sm text-primary">{message}</div>}
+      {error && <div role="alert" className="mb-4 rounded-xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
+      {loading || !project || !projectTask ? <div role="status" className="h-[760px] rounded-[28px] border border-border bg-bg-surface p-6 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо мініпроєкт…", "Loading mini-project…")}</div> : <StudyCodIDEWorkspace
+        task={projectTask}
+        theory={null}
+        language={language}
+        onLanguageChange={() => undefined}
+        compiler={language}
+        onCompilerChange={() => undefined}
+        code={code}
+        onCodeChange={(next) => { setCode(next); setCheckResult(null); }}
+        files={files}
+        onFilesChange={(next) => setCode(next[0]?.content || "")}
+        useFiles={false}
+        onEnableFiles={() => undefined}
+        entryFile={project.entryFile}
+        stdin={stdin}
+        onStdinChange={setStdin}
+        firstExampleInput={undefined}
+        onUseExampleInput={() => undefined}
+        running={running}
+        checking={checking}
+        onRun={() => void run()}
+        onCheck={() => void check()}
+        onSave={() => void saveDraft()}
+        onReset={() => { setCode(project.starterCode); setCheckResult(null); setRunResult(null); }}
+        readOnly={false}
+        disableLanguageChange
+        runResult={runResult}
+        checkResult={ideCheckResult}
+        resultCards={checkResult ? <div className="rounded-xl border border-primary/20 bg-primary/[.06] p-3 text-sm text-text-secondary"><b className="text-text-primary">{tr("Поточна оцінка", "Current score")}</b><span className="ml-2 font-bold text-primary">{checkResult.score}/{checkResult.maxScore}</span></div> : null}
+      />}
+    </div>
   </main>;
 };
 

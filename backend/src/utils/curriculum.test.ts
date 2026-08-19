@@ -75,6 +75,22 @@ test("every course exposes positioned integration projects", () => {
   }
 });
 
+test("every mini-project has an explicit IO contract and at least 15 cases", () => {
+  const result = validateCurriculum();
+  let projectCount = 0;
+  for (const course of result.manifest.courses) {
+    for (const project of loadCurriculumMiniProjects(course.key)) {
+      projectCount += 1;
+      assert.ok(project.inputFormat.length >= 20, `${course.key}/${project.key} inputFormat`);
+      assert.ok(project.outputFormat.length >= 20, `${course.key}/${project.key} outputFormat`);
+      assert.ok(project.tests && project.tests.length >= 15, `${course.key}/${project.key} tests`);
+      assert.equal(project.tests?.filter((test) => test.hidden).length, 3, `${course.key}/${project.key} hidden tests`);
+      assert.ok(project.tests?.every((test) => test.input !== undefined && test.expectedOutput !== undefined), `${course.key}/${project.key} test IO`);
+    }
+  }
+  assert.equal(projectCount, 45);
+});
+
 test("English mini-project dependencies use persisted canonical topic keys", () => {
   const ukManifest = loadCurriculumManifest(undefined, "uk").manifest;
   const enManifest = loadCurriculumManifest(undefined, "en").manifest;

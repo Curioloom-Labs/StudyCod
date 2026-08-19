@@ -22,14 +22,83 @@ export type CurriculumMiniProject = {
   key: string;
   title: string;
   description: string;
+  inputFormat: string;
+  outputFormat: string;
   estimatedMinutes: number;
   skills: string[];
   template: string;
   requiredTopicKeys: string[];
+  tests: Array<{
+    input: string;
+    expectedOutput: string;
+    points?: number;
+    hidden?: boolean;
+    group?: string;
+  }>;
   checkSpec?: { kind: "flask" | "fastapi" | "computer-vision"; module?: string; probePaths?: string[]; files?: string[] };
   milestones: Array<{ id: string; title: string; description: string }>;
   acceptanceCriteria: string[];
 };
+
+type MiniProjectContractCase = {
+  input: string;
+  expectedOutput: string;
+  points: number;
+  hidden: boolean;
+  group: string;
+};
+
+const calculatorContractCases: Array<[string, string]> = [
+  ["10 + 4\nexit\n", "14"], ["9 * 3\nexit\n", "27"], ["12 / 4\nexit\n", "3"], ["7 - 9\nexit\n", "-2"], ["5 + 0\nexit\n", "5"],
+  ["-3 * 4\nexit\n", "-12"], ["0 / 7\nexit\n", "0"], ["8 / 2\n10 - 3\nexit\n", "4\n7"], ["1 + 2\n3 * 4\n5 - 6\nexit\n", "3\n12\n-1"], ["10 / 0\nexit\n", "ERROR: division by zero"],
+  ["2 ? 3\nexit\n", "ERROR: unknown operator"], ["  6 +  2  \nexit\n", "8"], ["100 - 100\nexit\n", "0"], ["-8 / 2\nexit\n", "-4"], ["7 * 0\nexit\n", "0"],
+];
+
+const contactContractCases: Array<[string, string]> = [
+  ["ADD Alice 111\nGET Alice\nEXIT\n", "OK\nAlice 111"], ["ADD Bob 222\nADD Ana 333\nLIST\nEXIT\n", "OK\nOK\nAna 333\nBob 222"],
+  ["ADD Alice 111\nUPDATE Alice 999\nGET Alice\nEXIT\n", "OK\nOK\nAlice 999"], ["ADD Alice 111\nDELETE Alice\nGET Alice\nEXIT\n", "OK\nOK\nNOT_FOUND"],
+  ["GET Missing\nDELETE Missing\nEXIT\n", "NOT_FOUND\nNOT_FOUND"], ["LIST\nEXIT\n", "EMPTY"], ["ADD Alice 111\nADD Alice 222\nGET Alice\nEXIT\n", "OK\nOK\nAlice 222"],
+  ["ADD A 1\nADD B 2\nDELETE A\nLIST\nEXIT\n", "OK\nOK\nOK\nB 2"], ["ADD Zero 0\nGET Zero\nEXIT\n", "OK\nZero 0"], ["ADD N 1\nUPDATE Missing 2\nGET Missing\nEXIT\n", "OK\nNOT_FOUND\nNOT_FOUND"],
+  ["ADD Z 9\nADD A 1\nADD M 5\nLIST\nEXIT\n", "OK\nOK\nOK\nA 1\nM 5\nZ 9"], ["ADD A 1\nDELETE A\nDELETE A\nEXIT\n", "OK\nOK\nNOT_FOUND"],
+  ["ADD Case 1\nGET case\nEXIT\n", "OK\nNOT_FOUND"], ["ADD LongName 1234567890\nGET LongName\nEXIT\n", "OK\nLongName 1234567890"], ["ADD A 1\nUPDATE A 2\nDELETE A\nLIST\nEXIT\n", "OK\nOK\nOK\nEMPTY"],
+];
+
+const logContractCases: Array<[string, string]> = [
+  ["1 INFO start", "INFO=1\nWARN=0\nERROR=0\nevents=1\nmalformed=0"], ["1 INFO start\n2 WARN slow", "INFO=1\nWARN=1\nERROR=0\nevents=2\nmalformed=0"], ["1 ERROR fail", "INFO=0\nWARN=0\nERROR=1\nevents=1\nmalformed=0"], ["bad", "INFO=0\nWARN=0\nERROR=0\nevents=0\nmalformed=1"], ["1 INFO a\n2 INFO b\n3 INFO c", "INFO=3\nWARN=0\nERROR=0\nevents=3\nmalformed=0"],
+  ["1 WARN a\n2 ERROR b\nbad", "INFO=0\nWARN=1\nERROR=1\nevents=2\nmalformed=1"], ["", "INFO=0\nWARN=0\nERROR=0\nevents=0\nmalformed=0"], ["1 DEBUG x", "INFO=0\nWARN=0\nERROR=0\nevents=0\nmalformed=1"], ["0 INFO zero", "INFO=1\nWARN=0\nERROR=0\nevents=1\nmalformed=0"], ["1 ERROR a\n2 ERROR b", "INFO=0\nWARN=0\nERROR=2\nevents=2\nmalformed=0"],
+  ["1 WARN a\n2 WARN b\n3 WARN c", "INFO=0\nWARN=3\nERROR=0\nevents=3\nmalformed=0"], ["1 INFO a\nbad\n2 INFO b", "INFO=2\nWARN=0\nERROR=0\nevents=2\nmalformed=1"], ["1 INFO a extra", "INFO=1\nWARN=0\nERROR=0\nevents=1\nmalformed=0"], ["1 INFO a\n2 WARN b\n3 ERROR c\n4 INFO d", "INFO=2\nWARN=1\nERROR=1\nevents=4\nmalformed=0"], ["1 ERROR a\nbad\n2 ERROR b\nbad", "INFO=0\nWARN=0\nERROR=2\nevents=2\nmalformed=2"],
+];
+
+function numberedCases(profile: string, output = "OK"): Array<[string, string]> {
+  return Array.from({ length: 15 }, (_, index) => [`{\"case\":${index + 1},\"profile\":\"${profile}\"}`, output]);
+}
+
+function contractCases(profile: string): Array<[string, string]> {
+  if (profile === "calculator") return calculatorContractCases;
+  if (profile === "contact") return contactContractCases;
+  if (profile === "logs") return logContractCases;
+  if (profile === "web") return [
+    ["{\"method\":\"GET\",\"path\":\"/\"}", "OK"], ["{\"method\":\"GET\",\"path\":\"/health\"}", "OK"], ["{\"method\":\"GET\",\"path\":\"/ready\"}", "OK"], ["{\"method\":\"GET\",\"path\":\"/docs\"}", "OK"], ["{\"method\":\"GET\",\"path\":\"/openapi.json\"}", "OK"],
+    ["{\"method\":\"GET\",\"path\":\"/api/items?page=1&limit=10\"}", "OK"], ["{\"method\":\"POST\",\"path\":\"/api/items\",\"body\":{\"name\":\"A\"}}", "OK"], ["{\"method\":\"POST\",\"path\":\"/api/items\",\"body\":{}}", "OK"], ["{\"method\":\"GET\",\"path\":\"/api/items/0\"}", "OK"], ["{\"method\":\"DELETE\",\"path\":\"/api/items/999\"}", "OK"],
+    ["{\"method\":\"GET\",\"path\":\"/missing\"}", "OK"], ["{\"method\":\"OPTIONS\",\"path\":\"/\"}", "OK"], ["{\"method\":\"GET\",\"path\":\"/api/items?limit=0\"}", "OK"], ["{\"method\":\"POST\",\"path\":\"/api/items\",\"body\":{\"extra\":true}}", "OK"], ["{\"method\":\"GET\",\"path\":\"/api/items?page=2&limit=100\"}", "OK"],
+  ];
+  if (profile === "vision") return ["blank.png", "object.png", "noise.png", "empty.png", "sample.jpg", "low-light.png", "high-contrast.png", "blurred.png", "short.mp4", "missing.png", "", "sample.png", "unknown-mode", "threshold-0", "threshold-255"].map((value) => [`{\"fixture\":\"${value}\",\"mode\":\"scan\"}`, "OK"]);
+  if (profile === "queue") return ["2\nGET\nSTOP\n", "2\nPUT a\nGET\nSTOP\n", "2\nPUT a\nPUT b\nSIZE\nSTOP\n", "2\nPUT a\nPUT b\nPUT c\nSIZE\nSTOP\n", "1\nPUT a\nGET\nGET\nSTOP\n", "0\nPUT a\nSIZE\nSTOP\n", "3\nPUT 1\nPUT 2\nGET\nGET\nGET\nSTOP\n", "2\nSIZE\nSTOP\n", "2\nPUT x\nSIZE\nGET\nSIZE\nSTOP\n", "1\nPUT a\nPUT b\nGET\nSTOP\n", "2\nPUT a\nPUT b\nGET\nPUT c\nSTOP\n", "2\nPUT a\nPUT b\nGET\nGET\nSTOP\n", "0\nGET\nSTOP\n", "3\nPUT a\nPUT a\nSIZE\nSTOP\n", "1\nPUT a\nGET\nPUT b\nSIZE\nSTOP\n"].map((input, index) => [input, ["EMPTY", "OK\nVALUE a", "OK\nOK\nSIZE=2", "OK\nOK\nFULL\nSIZE=2", "OK\nVALUE a\nEMPTY", "FULL\nSIZE=0", "OK\nOK\nVALUE 1\nVALUE 2\nEMPTY", "SIZE=0", "OK\nSIZE=1\nVALUE x\nSIZE=0", "OK\nFULL\nVALUE a", "OK\nOK\nVALUE a\nOK", "OK\nOK\nVALUE a\nVALUE b", "EMPTY", "OK\nOK\nSIZE=2", "OK\nVALUE a\nOK\nSIZE=1"][index]]);
+  return numberedCases(profile);
+}
+
+function materializeContract(raw: any, locale: CurriculumLocale, key: string): { inputFormat: string; outputFormat: string; tests: MiniProjectContractCase[] } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const profile = String(raw.profile || "");
+  const localized = raw[locale] && typeof raw[locale] === "object" ? raw[locale] : raw.uk;
+  if (!profile || !localized || typeof localized !== "object") return null;
+  const pairs = contractCases(profile);
+  return {
+    inputFormat: String(localized.inputFormat || "").trim(),
+    outputFormat: String(localized.outputFormat || "").trim(),
+    tests: pairs.slice(0, 15).map(([input, expectedOutput], index) => ({ input, expectedOutput, points: index < 10 ? 6 : index < 12 ? 5 : 10, hidden: index >= 12, group: index < 5 ? "basic" : index < 10 ? "edge" : "workflow" })),
+  };
+}
 
 export type CurriculumManifest = {
   version: number;
@@ -307,6 +376,8 @@ export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot(),
   const filePath = path.join(root, relative);
   assert(fs.existsSync(filePath), `projects source file not found: ${manifest.projectsSource}`);
   const parsed = YAML.parse(fs.readFileSync(filePath, "utf8")) as any;
+  const contractPath = path.join(root, "curriculum", "mini_project_contracts.yml");
+  const contractCatalog = fs.existsSync(contractPath) ? YAML.parse(fs.readFileSync(contractPath, "utf8")) as any : null;
   const source = Array.isArray(parsed?.courses?.[courseKey]) ? parsed.courses[courseKey] : [];
   const keys = new Set<string>();
   return source.map((project: any, index: number) => {
@@ -322,6 +393,20 @@ export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot(),
     const requiredTopicKeys = Array.isArray(project?.requiredTopicKeys)
       ? project.requiredTopicKeys.map(String).map((value: string) => value.trim()).filter(Boolean)
       : [];
+    const contractProfile = contractCatalog?.projects?.[key];
+    const contract = contractProfile ? materializeContract({ profile: contractProfile, ...(contractCatalog?.profiles?.[contractProfile] || {}) }, locale, key) : null;
+    const tests = contract?.tests || (Array.isArray(project?.tests) ? project.tests.map((test: any) => ({
+      input: String(test?.input ?? ""),
+      expectedOutput: String(test?.expectedOutput ?? test?.output ?? ""),
+      ...(test?.points != null ? { points: Number(test.points) } : {}),
+      ...(test?.hidden != null ? { hidden: Boolean(test.hidden) } : {}),
+      ...(test?.group ? { group: String(test.group) } : {}),
+    })) : undefined);
+    const inputFormat = String(contract?.inputFormat || project?.inputFormat || "").trim();
+    const outputFormat = String(contract?.outputFormat || project?.outputFormat || "").trim();
+    assert(inputFormat && outputFormat, `${courseKey}/${key}: inputFormat and outputFormat are required`);
+    assert(tests && tests.length >= 15, `${courseKey}/${key}: at least 15 contract tests are required`);
+    assert(tests.every((test: any) => test.input !== undefined && test.expectedOutput !== undefined), `${courseKey}/${key}: every contract test needs input and expectedOutput`);
     const milestones = Array.isArray(project?.milestones) ? project.milestones.map((milestone: any) => ({
       id: String(milestone?.id || "").trim(),
       title: String(milestone?.title || "").trim(),
@@ -339,7 +424,7 @@ export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot(),
       ...(Array.isArray(project.checkSpec.probePaths) ? { probePaths: project.checkSpec.probePaths.map(String) } : {}),
       ...(Array.isArray(project.checkSpec.files) ? { files: project.checkSpec.files.map(String) } : {}),
     } : undefined;
-    return { key, title, description, estimatedMinutes, skills, template: String(project?.template || ""), requiredTopicKeys, milestones, acceptanceCriteria, ...(checkSpec ? { checkSpec } : {}) } satisfies CurriculumMiniProject;
+    return { key, title, description, inputFormat, outputFormat, estimatedMinutes, skills, template: String(project?.template || ""), requiredTopicKeys, tests, ...(checkSpec ? { checkSpec } : {}), milestones, acceptanceCriteria } satisfies CurriculumMiniProject;
   });
 }
 

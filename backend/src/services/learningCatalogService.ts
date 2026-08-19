@@ -47,6 +47,56 @@ function projectSpecFor(item: CourseItem): any {
   return ((item.content || {}) as any).projectSpec || null;
 }
 
+function projectRuntime(enrollment: UserCourseEnrollment): "JAVA" | "PYTHON" | "CPP" {
+  const runtime = String(enrollment.variant?.runtime || "PYTHON").toUpperCase();
+  return runtime === "JAVA" || runtime === "CPP" ? runtime : "PYTHON";
+}
+
+function projectEntryFile(runtime: "JAVA" | "PYTHON" | "CPP"): string {
+  if (runtime === "JAVA") return "Main.java";
+  if (runtime === "CPP") return "main.cpp";
+  return "solution.py";
+}
+
+function projectStarterCode(runtime: "JAVA" | "PYTHON" | "CPP"): string {
+  if (runtime === "JAVA") return [
+    "import java.util.*;",
+    "",
+    "public class Main {",
+    "    public static void main(String[] args) {",
+    "        Scanner scanner = new Scanner(System.in);",
+    "        // Реалізуйте проєкт за умовою задачі.",
+    "    }",
+    "}",
+  ].join("\n");
+  if (runtime === "CPP") return [
+    "#include <bits/stdc++.h>",
+    "using namespace std;",
+    "",
+    "int main() {",
+    "    // Реалізуйте проєкт за умовою задачі.",
+    "    return 0;",
+    "}",
+  ].join("\n");
+  return [
+    "def main():",
+    "    # Реалізуйте проєкт за умовою задачі.",
+    "    pass",
+    "",
+    "if __name__ == \"__main__\":",
+    "    main()",
+  ].join("\n");
+}
+
+function learnerProjectSpec(item: CourseItem): Record<string, unknown> | null {
+  const spec = projectSpecFor(item);
+  if (!spec || typeof spec !== "object") return null;
+  // Test inputs and expected outputs are a server-side contract. Only the
+  // public project brief is sent to the learner; hidden cases never reach UI.
+  const { tests: _tests, checkSpec: _checkSpec, ...publicSpec } = spec;
+  return publicSpec;
+}
+
 function projectMilestoneIds(item: CourseItem): string[] {
   const milestones = projectSpecFor(item)?.milestones;
   if (!Array.isArray(milestones)) return [];
@@ -339,7 +389,7 @@ async function findBestCourseEnrollment(userId: number, courseId: number, relati
 async function getEnrolledItemContext(userId: number, itemId: number) {
   const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
   if (!item?.module?.course || !isMiniProject(item)) throw Object.assign(new Error("COURSE_PROJECT_NOT_FOUND"), { statusCode: 404 });
-  const enrollment = await findBestCourseEnrollment(userId, item.module.course.id);
+  const enrollment = await findBestCourseEnrollment(userId, item.module.course.id, ["variant"]);
   if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
@@ -776,7 +826,10 @@ export async function getCourseProject(userId: number, itemId: number, locale: L
     itemId: item.id,
     enrollmentId: enrollment.id,
     projectKey: (localizedItem.content as any)?.projectKey || null,
-    projectSpec: projectSpecFor(localizedItem),
+    projectSpec: learnerProjectSpec(localizedItem),
+    runtime: projectRuntime(enrollment),
+    starterCode: projectStarterCode(projectRuntime(enrollment)),
+    entryFile: projectEntryFile(projectRuntime(enrollment)),
     progress: projectProgressOrDefault(progress),
     itemStatus: progress?.status || "NOT_STARTED",
   };
@@ -812,6 +865,7 @@ function buildProjectCheckHarness(spec: any): string {
   const kind = String(spec?.kind || "");
   if (kind === "flask") {
     return [
+      "import json, sys",
       "import importlib",
       "module = importlib.import_module(" + JSON.stringify(String(spec.module || "app")) + ")",
       "factory = getattr(module, 'create_app', None)",
@@ -826,16 +880,19 @@ function buildProjectCheckHarness(spec: any): string {
       "    raise AssertionError('Flask app or create_app was not found')",
       "application.config.update(TESTING=True)",
       "client = application.test_client()",
-      "for path in " + JSON.stringify(Array.isArray(spec.probePaths) ? spec.probePaths : ["/"]) + ":",
-      "    response = client.get(path)",
-      "    if response.status_code >= 500:",
-      "        raise AssertionError(f'{path} returned {response.status_code}')",
+      "case = json.loads(sys.stdin.read() or '{}')",
+      "request = {'method': str(case.get('method', 'GET')).upper(), 'path': str(case.get('path', '/'))}",
+      "if case.get('body') is not None: request['json'] = case.get('body')",
+      "response = client.open(**request)",
+      "if response.status_code >= 500:",
+      "    raise AssertionError(f'{request[\"method\"]} {request[\"path\"]} returned {response.status_code}')",
       "print('OK')",
       "",
     ].join("\n");
   }
   if (kind === "fastapi") {
     return [
+      "import json, sys",
       "import importlib",
       "from fastapi.testclient import TestClient",
       "module = importlib.import_module(" + JSON.stringify(String(spec.module || "app.main")) + ")",
@@ -850,10 +907,12 @@ function buildProjectCheckHarness(spec: any): string {
       "if application is None:",
       "    raise AssertionError('FastAPI app or create_app was not found')",
       "client = TestClient(application)",
-      "for path in " + JSON.stringify(Array.isArray(spec.probePaths) ? spec.probePaths : ["/docs"]) + ":",
-      "    response = client.get(path)",
-      "    if response.status_code >= 500:",
-      "        raise AssertionError(f'{path} returned {response.status_code}')",
+      "case = json.loads(sys.stdin.read() or '{}')",
+      "request = {'method': str(case.get('method', 'GET')).lower(), 'url': str(case.get('path', '/docs'))}",
+      "if case.get('body') is not None: request['json'] = case.get('body')",
+      "response = client.request(**request)",
+      "if response.status_code >= 500:",
+      "    raise AssertionError(f'{request[\"method\"]} {request[\"url\"]} returned {response.status_code}')",
       "print('OK')",
       "",
     ].join("\n");
@@ -861,6 +920,7 @@ function buildProjectCheckHarness(spec: any): string {
   if (kind === "computer-vision") {
     const files = Array.isArray(spec.files) ? spec.files.map(String) : [];
     return [
+      "import json, sys",
       "from pathlib import Path",
       "import importlib.util",
       "files = " + JSON.stringify(files),
@@ -871,6 +931,7 @@ function buildProjectCheckHarness(spec: any): string {
       "    module_spec = importlib.util.spec_from_file_location(f'project_module_{index}', path)",
       "    module = importlib.util.module_from_spec(module_spec)",
       "    module_spec.loader.exec_module(module)",
+      "json.loads(sys.stdin.read() or '{}')",
       "print('OK')",
       "",
     ].join("\n");
@@ -879,31 +940,122 @@ function buildProjectCheckHarness(spec: any): string {
 }
 
 export async function checkCourseProject(userId: number, itemId: number, rawFiles: unknown) {
-  const { item } = await getEnrolledItemContext(userId, itemId);
-  const checkSpec = projectSpecFor(item)?.checkSpec;
-  if (!checkSpec || !["flask", "fastapi", "computer-vision"].includes(String(checkSpec.kind))) {
-    projectCheckError("PROJECT_CHECK_NOT_CONFIGURED", 409);
-  }
+  const { item, enrollment } = await getEnrolledItemContext(userId, itemId);
+  const spec = projectSpecFor(item) || {};
   const studentFiles = normalizeProjectCheckFiles(rawFiles);
-  const files: JudgeFile[] = [...studentFiles, { path: "main.py", content: buildProjectCheckHarness(checkSpec) }];
+  const runtime = projectRuntime(enrollment);
+  const checkSpec = spec.checkSpec;
+  const usesHarness = Boolean(checkSpec && ["flask", "fastapi", "computer-vision"].includes(String(checkSpec.kind)));
+  const authoredTests = Array.isArray(spec.tests)
+    ? spec.tests.map((test: any, index: number) => ({
+        id: `project-${index + 1}`,
+        input: String(test?.input ?? ""),
+        output: String(test?.expectedOutput ?? test?.output ?? ""),
+        hidden: Boolean(test?.hidden),
+        group: typeof test?.group === "string" ? test.group : "project",
+        weight: Number.isFinite(Number(test?.points)) ? Number(test.points) : 1,
+      }))
+    : [];
+  const files: JudgeFile[] = !usesHarness && authoredTests.length > 0
+    ? studentFiles
+    : usesHarness
+      ? [...studentFiles, { path: "main.py", content: buildProjectCheckHarness(checkSpec) }]
+      : [];
+  if (!files.length) projectCheckError("PROJECT_CHECK_NOT_CONFIGURED", 409);
+  const tests = authoredTests.length > 0 ? authoredTests : [{ id: "project-contract", input: "", output: "OK\n", hidden: false, group: "project", weight: 1 }];
   const request: JudgeRequest = {
     submission_id: `project-${userId}-${itemId}-${Date.now()}`,
-    language: "python",
-    compiler: "python-libs",
+    language: !usesHarness && authoredTests.length > 0 ? runtime.toLowerCase() as "java" | "python" | "cpp" : "python",
+    ...(!usesHarness && authoredTests.length > 0 ? {} : { compiler: "python-libs" }),
     files,
-    entry: "main.py",
-    tests: [{ id: "project-contract", input: "", output: "OK\n", hidden: false }],
+    entry: !usesHarness && authoredTests.length > 0 ? projectEntryFile(runtime) : "main.py",
+    tests,
     checker: { type: "exact" },
-    limits: { time_limit_ms: 4_000, memory_limit_mb: 256, output_limit_kb: 16 },
-    run_all: false,
+    limits: { time_limit_ms: 4_000, memory_limit_mb: 384, output_limit_kb: 16 },
+    run_all: true,
     debug: false,
   };
   const result = await judgeWithSemaphore(request, { timeoutMs: 12_000 });
+  const hiddenIds = new Set(tests.filter((test: any) => test.hidden).map((test: any) => String(test.id)));
+  const safeTests = result.tests
+    .filter((test) => !hiddenIds.has(String(test.test_id)))
+    .map((test) => ({
+      ...test,
+      input: test.input,
+      expected: test.expected,
+      actual: test.actual,
+    }));
+  const score = Number.isFinite(Number(result.score)) ? Number(result.score) : (result.verdict === "AC" ? 100 : 0);
+  const progress = await recordCourseProjectScore(userId, itemId, score);
   return {
     passed: result.verdict === "AC",
     verdict: result.verdict,
     message: result.verdict === "AC" ? "PROJECT_CHECK_PASSED" : "PROJECT_CHECK_FAILED",
-    tests: result.tests,
+    score,
+    maxScore: Number.isFinite(Number(result.max_score)) ? Number(result.max_score) : 100,
+    testsPassed: result.tests.filter((test) => test.verdict === "AC").length,
+    testsTotal: result.tests.length,
+    tests: safeTests,
+    progress: progress.progress,
+    itemStatus: progress.itemStatus,
+  };
+}
+
+export async function runCourseProject(userId: number, itemId: number, rawFiles: unknown, stdin: string) {
+  const { item, enrollment } = await getEnrolledItemContext(userId, itemId);
+  const files = normalizeProjectCheckFiles(rawFiles);
+  const runtime = projectRuntime(enrollment);
+  const entry = projectEntryFile(runtime);
+  const source = files.find((file) => file.path === entry)?.content || files[0]?.content || "";
+  if (!source.trim()) projectCheckError("PROJECT_CODE_REQUIRED", 400);
+  const request: JudgeRequest = {
+    submission_id: `project-run-${userId}-${itemId}-${Date.now()}`,
+    language: runtime.toLowerCase() as "java" | "python" | "cpp",
+    source,
+    tests: [{ id: "run", input: String(stdin || ""), output: "", hidden: false }],
+    checker: { type: "exact" },
+    limits: { time_limit_ms: 10_000, memory_limit_mb: 384, output_limit_kb: 256 },
+    run_all: true,
+    debug: true,
+  };
+  const result = await judgeWithSemaphore(request, { timeoutMs: 15_000 });
+  const test = result.tests[0];
+  const compileError = result.compile?.verdict === "CE"
+    ? [result.compile.stderr, result.compile.stdout].filter(Boolean).join("\n").trim()
+    : "";
+  return {
+    stdout: String(test?.actual || ""),
+    stderr: String(test?.stderr || compileError || ""),
+    exitCode: result.verdict === "CE" || ["RE", "TLE", "MLE"].includes(String(test?.verdict)) ? 1 : 0,
+    success: result.verdict !== "CE" && ["AC", "WA"].includes(String(test?.verdict)),
+    timeMs: test?.time_ms ?? result.time_ms ?? null,
+    memoryKb: test?.memory_kb ?? result.memory_kb ?? null,
+  };
+}
+
+async function recordCourseProjectScore(userId: number, itemId: number, score: number) {
+  const { item, enrollment, progress: existing } = await getEnrolledItemContext(userId, itemId);
+  const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
+  const normalizedScore = percent(score);
+  const previousScoreValue = Number(progress.score);
+  const previousScore = Number.isFinite(previousScoreValue) ? percent(previousScoreValue) : 0;
+  const bestScore = Math.max(previousScore, normalizedScore);
+  progress.score = bestScore;
+  const passed = bestScore >= 60;
+  progress.status = passed ? "COMPLETED" : "IN_PROGRESS";
+  progress.completedAt = passed ? (progress.completedAt || new Date()) : null;
+  progress.projectData = {
+    milestoneIds: projectMilestoneIds(item),
+    draft: typeof progress.projectData?.draft === "string" ? progress.projectData.draft : "",
+    status: passed ? "SUBMITTED" : "DRAFT",
+    submittedAt: passed ? (progress.projectData?.submittedAt || new Date().toISOString()) : (progress.projectData?.submittedAt || null),
+  };
+  await progressRepo().save(progress);
+  const updatedEnrollment = await recalculateEnrollmentProgress(enrollment);
+  return {
+    progress: projectProgressOrDefault(progress),
+    itemStatus: progress.status,
+    enrollment: updatedEnrollment,
   };
 }
 

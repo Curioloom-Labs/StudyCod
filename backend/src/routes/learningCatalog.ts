@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { z } from "zod";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
-import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject } from "../services/learningCatalogService";
+import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, runCourseProject, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject } from "../services/learningCatalogService";
 import { normalizeUiLocale, resolveUiLocaleFromHeaders, type UiLocale } from "../utils/uiLocale";
 
 export const learningCatalogRouter = Router();
@@ -100,6 +100,11 @@ const projectCheckSchema = z.object({
   files: z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) })).min(1).max(64),
 });
 
+const projectRunSchema = z.object({
+  files: z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) })).min(1).max(64),
+  stdin: z.string().max(100_000).default(""),
+});
+
 learningCatalogRouter.get("/items/:itemId/project", authRequired, async (req: AuthRequest, res: Response) => {
   // A mini-project is a learner-facing course item. The previous guard
   // accidentally rejected the normal STUDENT role, so the roadmap could
@@ -134,6 +139,18 @@ learningCatalogRouter.post("/items/:itemId/project/check", authRequired, async (
   if (!Number.isFinite(itemId) || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
   try {
     return res.json({ check: await checkCourseProject(req.userId, itemId, parsed.data.files) });
+  } catch (error: any) {
+    return res.status(Number(error?.statusCode) || 500).json({ message: String(error?.message || "INTERNAL_SERVER_ERROR") });
+  }
+});
+
+learningCatalogRouter.post("/items/:itemId/project/run", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
+  const itemId = Number(req.params.itemId);
+  const parsed = projectRunSchema.safeParse(req.body ?? {});
+  if (!Number.isFinite(itemId) || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
+  try {
+    return res.json({ result: await runCourseProject(req.userId, itemId, parsed.data.files, parsed.data.stdin) });
   } catch (error: any) {
     return res.status(Number(error?.statusCode) || 500).json({ message: String(error?.message || "INTERNAL_SERVER_ERROR") });
   }
