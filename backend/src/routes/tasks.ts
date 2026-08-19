@@ -1545,7 +1545,6 @@ async function loadCatalogTheoryByTaskId(tasks: Task[], uiLanguage: UiLanguage):
 }
 
 async function syncCatalogPracticeProgress(params: { userId: number; task: Task; score: number; requestId?: string }) {
-  if (params.score < PERSONAL_TOPIC_PASS_GRADE) return;
   const itemId = catalogItemIdFromTask(params.task);
   if (!itemId) return;
   try {

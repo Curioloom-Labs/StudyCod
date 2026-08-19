@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
+  BarChart3,
   BookOpen,
   CheckCircle2,
   ClipboardCheck,
@@ -13,6 +14,7 @@ import {
   Route,
   Save,
   Send,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -29,6 +31,7 @@ import {
   type LearningProject,
 } from "../../lib/api/learningCatalog";
 import { MarkdownView } from "../../components/MarkdownView";
+import { Modal } from "../../components/ui/Modal";
 import { tr } from "../../i18n";
 
 type RoadmapNode = {
@@ -93,6 +96,17 @@ function topicParts(node: RoadmapNode): TopicPart[] {
   if (estimatedMinutes) parts.push({ label: tr("Час", "Time"), detail: `~${Math.round(estimatedMinutes)} ${tr("хв", "min")}` });
 
   return parts;
+}
+
+function itemScore(item: LearningCourseItem): number {
+  const score = Number(item.progress.score);
+  if (item.progress.score != null && Number.isFinite(score)) return Math.max(0, Math.min(100, Math.round(score)));
+  return item.progress.status === "COMPLETED" ? 100 : 0;
+}
+
+function nodeScore(node: RoadmapNode): number {
+  const items = node.kind === "TOPIC" && node.theory ? [node.theory, ...node.practices] : node.item ? [node.item] : [];
+  return items.length ? Math.round(items.reduce((total, item) => total + itemScore(item), 0) / items.length) : 0;
 }
 
 export const LearningCoursePage: React.FC = () => {
@@ -206,6 +220,7 @@ export const LearningCoursePage: React.FC = () => {
   const topicNodes = roadmapNodes.filter((node) => node.kind === "TOPIC");
   const practiceCount = topicNodes.reduce((total, node) => total + node.practices.length, 0);
   const completedTopics = topicNodes.filter(nodeCompleted).length;
+  const projectNodes = roadmapNodes.filter((node) => node.kind === "PROJECT");
 
   React.useEffect(() => {
     if (loading || !course || !focusPractice) return;
@@ -307,22 +322,25 @@ export const LearningCoursePage: React.FC = () => {
       return;
     }
     const previousComplete = roadmapNodes.slice(0, index).every(nodeCompleted);
-    if (!previousComplete || nodeCompleted(node)) return;
+    if (!previousComplete) return;
 
     if (node.kind === "TOPIC") {
-      const nextPractice = node.practices.find((item) => item.progress.status !== "COMPLETED") ?? node.practices[0];
-      if (nextPractice && course) {
-        navigate(`/learning/course/${course.id}/practice/${nextPractice.id}?generate=1`);
-        return;
-      }
-      setMessage(tr("Для цієї теми ще не підготовлено практику.", "Practice for this topic is not available yet."));
+      setSelectedNodeId(node.id);
       return;
     }
 
+    if (nodeCompleted(node)) return;
     if (node.kind === "PROJECT" || node.kind === "MILESTONE") setSelectedNodeId(node.id);
   };
 
   const selectedNode = roadmapNodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedTopic = selectedNode?.kind === "TOPIC" ? selectedNode : null;
+  const selectedTopicItems = selectedTopic ? nodeItems(selectedTopic) : [];
+  const selectedTopicAverage = selectedTopicItems.length
+    ? Math.round(selectedTopicItems.reduce((total, item) => total + itemScore(item), 0) / selectedTopicItems.length)
+    : 0;
+  const selectedTopicCompleted = selectedTopicItems.filter((item) => item.progress.status === "COMPLETED").length;
+  const selectedTopicPractice = selectedTopic?.practices.find((item) => item.progress.status !== "COMPLETED") ?? selectedTopic?.practices[0] ?? null;
   const selectedItem = selectedNode?.kind !== "TOPIC" ? selectedNode?.item : undefined;
   const selectedProject = selectedNode?.kind === "PROJECT" && selectedNode.item ? projects[selectedNode.item.id] : undefined;
 
@@ -378,12 +396,14 @@ export const LearningCoursePage: React.FC = () => {
             <div><h1 className="max-w-3xl text-[clamp(38px,5.5vw,68px)] font-bold leading-[.96] tracking-[-.065em]">{tr("Твій шлях до впевненого коду.", "Your path to confident code.")}</h1><p className="mt-5 max-w-2xl text-sm leading-6 text-[#b7d1c0] sm:text-base">{tr("Від першого поняття до задач, які ти вже можеш розв’язувати самостійно. Рухайся послідовно — кожна тема додає новий інструмент.", "From your first concept to problems you can solve independently. Move sequentially — every topic adds a new tool.")}</p></div>
             <div className="border-t border-white/15 pt-4 lg:border-l lg:border-t-0 lg:pl-6"><div className="flex items-end justify-between gap-3"><span className="text-xs font-semibold text-[#b7d1c0]">{tr("Прогрес маршруту", "Path progress")}</span><strong className="text-4xl font-bold tracking-[-.06em] text-[#70edaf]">{Math.round(course.enrollment.completionPercent)}%</strong></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#70edaf] transition-all" style={{ width: `${Math.min(100, Math.max(0, course.enrollment.completionPercent))}%` }} /></div><p className="mt-3 text-xs text-[#8fb29d]">{completedItems} / {requiredItems.length} {tr("елементів завершено", "items completed")}</p></div>
           </div>
-          <div className="mt-10 grid grid-cols-3 border-t border-white/10 pt-5"><div><p className="text-2xl font-bold tracking-[-.05em] text-white">{topicNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем у маршруті", "topics in path")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-white">{practiceCount}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("практичних кроків", "practice steps")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#70edaf]">{completedTopics}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем завершено", "topics completed")}</p></div></div>
+          <div className="mt-10 grid grid-cols-2 border-t border-white/10 pt-5 sm:grid-cols-4"><div><p className="text-2xl font-bold tracking-[-.05em] text-white">{topicNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем у маршруті", "topics in path")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-white">{practiceCount}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("практичних кроків", "practice steps")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#70edaf]">{completedTopics}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем завершено", "topics completed")}</p></div><div className="mt-4 border-l border-white/10 pl-4 sm:mt-0 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#ffbf68]">{projectNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("мініпроєктів", "mini-projects")}</p></div></div>
         </div>
       </header>
 
       <div className="px-5 py-7 sm:px-8 sm:py-9">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#102619]/10 pb-5 dark:border-white/10"><div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#147b47] dark:text-[#70edaf]">{tr("Маршрут курсу", "Course roadmap")}</p><h3 className="mt-2 text-2xl font-bold tracking-[-.04em] text-[#17231b] dark:text-[#edf4ef] sm:text-3xl">{tr("Теми, що складаються в навичку", "Topics that become a skill")}</h3><p className="mt-2 max-w-2xl text-sm leading-6 text-[#65746a] dark:text-[#a5b4a9]">{tr("Кожен вузол поєднує пояснення, практику та наступний зрозумілий крок.", "Every node combines explanation, practice, and a clear next step.")}</p></div><span className="rounded-md border border-[#102619]/12 px-3 py-1.5 text-[11px] font-bold text-[#65746a] dark:border-white/10 dark:text-[#a5b4a9]">{completedTopics} / {topicNodes.length} {tr("готово", "complete")}</span></div>
+
+      {projectNodes.length > 0 && <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-[#bd8837]/25 bg-[#bd8837]/[.07] px-4 py-3 text-sm dark:bg-[#bd8837]/[.08]"><span className="grid size-8 place-items-center rounded-xl bg-[#bd8837]/15 text-[#bd8837] dark:text-[#ffbf68]"><Rocket className="size-4" /></span><div><p className="font-bold text-text-primary">{tr("Далі — мініпроєкти", "Mini-projects are next")}</p><p className="text-xs text-text-secondary">{tr(`${projectNodes.length} інтеграційних проєктів, щоб зібрати навички в одну завершену роботу.`, `${projectNodes.length} integration projects to turn the skills into a finished piece of work.`)}</p></div></div>}
 
       <div className="relative mt-8">
         <div className="relative space-y-5 lg:space-y-7">
@@ -391,18 +411,17 @@ export const LearningCoursePage: React.FC = () => {
             const items = nodeItems(node);
             const completed = nodeCompleted(node);
             const locked = !courseIsActive || !roadmapNodes.slice(0, index).every(nodeCompleted);
-            const doneCount = items.filter((item) => item.progress.status === "COMPLETED").length;
             const started = items.some((item) => item.progress.status === "IN_PROGRESS");
-            const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+            const progress = nodeScore(node);
             const previousNode = index > 0 ? roadmapNodes[index - 1] : null;
             const previousItems = previousNode ? nodeItems(previousNode) : [];
             const previousProgress = previousNode
               ? previousItems.length
-                ? Math.round((previousItems.filter((item) => item.progress.status === "COMPLETED").length / previousItems.length) * 100)
+                ? Math.round(previousItems.reduce((total, item) => total + itemScore(item), 0) / previousItems.length)
                 : nodeCompleted(previousNode) ? 100 : 0
               : 0;
-            const incomingThickRatio = Math.max(0, (previousProgress - 50) / 50);
-            const outgoingThickRatio = Math.min(1, progress / 50);
+            const incomingThickRatio = Math.min(1, previousProgress / 100);
+            const outgoingThickRatio = Math.min(1, progress / 100);
             const isSelected = selectedNodeId === node.id;
             const topicNumber = roadmapNodes.slice(0, index + 1).filter((candidate) => candidate.kind === "TOPIC").length;
             const parts = node.kind === "TOPIC" ? topicParts(node) : [];
@@ -428,7 +447,7 @@ export const LearningCoursePage: React.FC = () => {
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
                 <Icon className="size-4 lg:size-5" />
               </div>
-              <button type="button" disabled={locked || completed} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
+              <button type="button" disabled={locked} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
                 {node.kind === "TOPIC" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-bg-surface text-xs font-black text-primary">{String(topicNumber).padStart(2, "0")}</span><span className="rounded-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-bold text-primary">{completed ? tr("Готово", "Done") : locked ? tr("Попереду", "Ahead") : tr("У фокусі", "In focus")}</span></div>}
                   <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? tr("Навчальний фокус", "Learning focus") : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
                  <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.title}</h3>
@@ -455,6 +474,34 @@ export const LearningCoursePage: React.FC = () => {
 
       {selectedItem && selectedNode.kind === "PROJECT" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}{projectLoadingId === selectedItem.id ? <div role="status" className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо дані проєкту…", "Loading project details…")}</div> : selectedProject?.projectSpec ? <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 sm:p-6"><div className="space-y-3">{selectedProject.projectSpec.milestones.map((milestone) => <label key={milestone.id} className="flex items-start gap-3 rounded-xl border border-border bg-bg-surface p-3"><input type="checkbox" checked={selectedProject.progress.milestoneIds.includes(milestone.id)} onChange={(event) => updateProject(selectedItem.id, { milestoneIds: event.target.checked ? [...selectedProject.progress.milestoneIds, milestone.id] : selectedProject.progress.milestoneIds.filter((id) => id !== milestone.id) })} className="mt-1 size-4 accent-primary" /><span className="text-sm"><b className="block text-text-primary">{milestone.title}</b><span className="text-text-secondary">{milestone.description}</span></span></label>)}</div><label className="mt-4 block text-sm font-bold text-text-primary">{tr("Нотатки реалізації", "Implementation notes")}<textarea value={selectedProject.progress.draft} onChange={(event) => updateProject(selectedItem.id, { draft: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label><label className="mt-4 block text-sm font-bold text-text-primary">README<textarea value={selectedProject.progress.readme} onChange={(event) => updateProject(selectedItem.id, { readme: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label>{selectedProject.projectSpec.checkSpec && <><label className="mt-4 block text-sm font-bold text-text-primary">Files JSON<textarea value={projectFiles[selectedItem.id] || ""} onChange={(event) => setProjectFiles((current) => ({ ...current, [selectedItem.id]: event.target.value }))} className="mt-2 min-h-28 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-xs font-normal text-text-primary" /></label><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void checkProject(selectedItem)} className="rounded-xl border border-primary px-4 py-2 text-sm font-bold text-primary disabled:opacity-45">{tr("Запустити перевірку", "Run check")}</button></>}<div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, false)} className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-text-primary disabled:opacity-45"><Save className="mr-2 inline size-4" />{tr("Зберегти", "Save")}</button><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-45"><Send className="mr-2 inline size-4" />{tr("Подати", "Submit")}</button></div></div> : <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary">{tr("Дані проєкту ще завантажуються або недоступні.", "Project details are still loading or unavailable.")}</div>}</div>}
     </section>}
+
+    <Modal
+      open={Boolean(selectedTopic)}
+      onClose={() => setSelectedNodeId(null)}
+      title={selectedTopic?.title ?? ""}
+      description={selectedTopic ? topicDescription(selectedTopic) : undefined}
+      panelClassName="!max-w-[720px]"
+      bodyClassName="!p-0"
+    >
+      {selectedTopic && <div className="p-5 sm:p-7">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-primary/20 bg-primary/[.06] p-4"><BarChart3 className="size-5 text-primary" /><p className="mt-3 text-3xl font-black text-text-primary">{selectedTopicAverage}%</p><p className="mt-1 text-xs text-text-secondary">{tr("результат теми", "topic result")}</p></div>
+          <div className="rounded-2xl border border-border bg-bg-base p-4"><CheckCircle2 className="size-5 text-primary" /><p className="mt-3 text-3xl font-black text-text-primary">{selectedTopicCompleted}/{selectedTopicItems.length}</p><p className="mt-1 text-xs text-text-secondary">{tr("елементів завершено", "items completed")}</p></div>
+          <div className="rounded-2xl border border-border bg-bg-base p-4"><Sparkles className="size-5 text-[#bd8837]" /><p className="mt-3 text-3xl font-black text-text-primary">{selectedTopic.practices.length}</p><p className="mt-1 text-xs text-text-secondary">{tr("практичних кроків", "practice steps")}</p></div>
+        </div>
+
+        <div className="mt-7 flex items-end justify-between gap-3"><div><p className="text-[11px] font-black uppercase tracking-[.16em] text-primary">{tr("Розклад результату", "Result breakdown")}</p><h3 className="mt-2 text-xl font-bold text-text-primary">{tr("Як пройдена тема", "How the topic is going")}</h3></div><span className="text-xs text-text-secondary">{selectedTopicAverage}%</span></div>
+        <div className="mt-4 space-y-3">
+          {selectedTopicItems.map((item, index) => {
+            const score = itemScore(item);
+            const isPractice = item.kind === "CODE_TASK";
+            return <div key={item.id} className="rounded-2xl border border-border bg-bg-base p-4"><div className="flex items-start gap-3"><span className="grid size-8 shrink-0 place-items-center rounded-xl bg-bg-surface text-xs font-black text-primary">{isPractice ? index : "T"}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-text-primary">{item.title}</p><span className={`text-xs font-black ${score >= 60 ? "text-primary" : score > 0 ? "text-[#bd8837]" : "text-text-muted"}`}>{score > 0 || item.progress.status === "COMPLETED" ? `${score}%` : tr("Ще не оцінено", "Not graded yet")}</span></div><p className="mt-1 text-xs text-text-secondary">{isPractice ? tr("Практичне завдання", "Practice task") : tr("Теоретична база", "Theory foundation")}</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${score}%` }} /></div></div></div></div>;
+          })}
+        </div>
+
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5"><p className="text-xs leading-5 text-text-secondary">{tr("Оцінка теми формується з її елементів. Невдала спроба зменшує результат, але не відкриває наступну тему.", "The topic result is built from its items. A failed attempt lowers the result without unlocking the next topic.")}</p>{selectedTopicPractice && course && <button type="button" onClick={() => { const generate = selectedTopicPractice.progress.status !== "COMPLETED" ? "?generate=1" : ""; setSelectedNodeId(null); navigate(`/learning/course/${course.id}/practice/${selectedTopicPractice.id}${generate}`); }} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-white"><Play className="size-4" />{selectedTopicPractice.progress.status === "COMPLETED" ? tr("Переглянути практику", "View practice") : tr("Продовжити тему", "Continue topic")}<ArrowLeft className="size-4 rotate-180" /></button>}</div>
+      </div>}
+    </Modal>
 
     <section className="mt-6 rounded-2xl border border-border bg-bg-surface p-6"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна робота", "Final work")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{finalWork?.progress.status === "COMPLETED" ? tr("Фінальну роботу подано. Курс завершено.", "The final work was submitted. The course is complete.") : `${learningItemsCompleted} / ${learningItems.length} ${tr("навчальних елементів завершено", "learning items completed")}. ${tr("Заверши маршрут, потім подай фінальну роботу з описом рішення та перевіркою.", "Complete the path, then submit the final work with implementation notes and verification.")}`}</p>{finalWork && finalWork.progress.status !== "COMPLETED" && <button type="button" disabled={!canStartFinalWork} onClick={() => { setSelectedNodeId(`project-${finalWork.id}`); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45">{canStartFinalWork ? tr("Відкрити фінальну роботу", "Open final work") : tr("Заверши маршрут спочатку", "Complete the path first")}</button>}</div></div></section>
   </main>;

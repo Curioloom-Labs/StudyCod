@@ -9,7 +9,7 @@ import { MultiFileEditor, type CodeFile } from "../../components/MultiFileEditor
 import { MarkdownView } from "../../components/MarkdownView";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import type { Task, User } from "../../types";
-import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save, ArrowRight, BookOpen } from "lucide-react";
+import { Play, CheckCircle2, ChevronLeft, ChevronRight, History, NotebookPen, Plus, Save, ArrowRight, BookOpen, Sparkles } from "lucide-react";
 import { tr } from "../../i18n";
 import { TaskGenerationOverlay, type TaskGenerationPhase, type TaskGenerationProgress } from "../../components/TaskGenerationOverlay";
 import { useWorkspaceViewport } from "../../components/interface/WorkspaceViewport";
@@ -535,6 +535,7 @@ export const TasksPage: React.FC<Props> = ({
     }
   });
   const [courseContext, setCourseContext] = useState<{ courseId: number; courseTitle: string; itemTitle: string } | null>(null);
+  const [nextCoursePracticeItemId, setNextCoursePracticeItemId] = useState<number | null>(null);
   const [courseEnrollmentId, setCourseEnrollmentId] = useState<number | null>(null);
   const latestSubmissionBindingRef = useRef<{
     submissionId?: string;
@@ -613,6 +614,7 @@ export const TasksPage: React.FC<Props> = ({
   useEffect(() => {
     if (!requestedCourseIdFromUrl || !effectiveCourseItemId) {
       setCourseContext(null);
+      setNextCoursePracticeItemId(null);
       setCourseEnrollmentId(null);
       return;
     }
@@ -620,12 +622,21 @@ export const TasksPage: React.FC<Props> = ({
     void getLearningCourse(requestedCourseIdFromUrl)
       .then((course: LearningCourse) => {
         if (cancelled) return;
-        const item = course.modules.flatMap((module) => module.items).find((candidate) => candidate.id === effectiveCourseItemId);
+        const allCourseItems = course.modules.flatMap((module) => module.items);
+        const currentIndex = allCourseItems.findIndex((candidate) => candidate.id === effectiveCourseItemId);
+        const item = currentIndex >= 0 ? allCourseItems[currentIndex] : undefined;
+        const nextPractice = currentIndex >= 0 && item?.progress.status === "COMPLETED"
+          ? allCourseItems.slice(currentIndex + 1).find((candidate) => candidate.kind === "CODE_TASK" && candidate.progress.status !== "COMPLETED")
+          : undefined;
         setCourseContext(item ? { courseId: course.id, courseTitle: course.title, itemTitle: item.title } : null);
+        setNextCoursePracticeItemId(nextPractice?.id ?? null);
         setCourseEnrollmentId(course.enrollment.id);
       })
       .catch(() => {
-        if (!cancelled) setCourseContext(null);
+        if (!cancelled) {
+          setCourseContext(null);
+          setNextCoursePracticeItemId(null);
+        }
       });
     return () => { cancelled = true; };
   }, [requestedCourseIdFromUrl, effectiveCourseItemId]);
@@ -2199,19 +2210,19 @@ export const TasksPage: React.FC<Props> = ({
   const ideToolbar = useMemo(() => (
     <>
       {courseMode ? <>
-        <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
+        <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
         {(uiState === "error" || !active) ? (
-          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
+          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
         ) : (
-          <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211]">{tr("Наступний крок", "Next step")}<ArrowRight className="size-3.5" /></button>
+          <button type="button" onClick={() => nextCoursePracticeItemId ? void handleGenerateRef.current({ courseItemId: nextCoursePracticeItemId }) : window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d]"><Sparkles className="size-3.5" />{nextCoursePracticeItemId ? tr("Згенерувати наступну", "Generate next") : tr("До маршруту", "Back to path")}<ArrowRight className="size-3.5" /></button>
         )}
       </> : <>
-        <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]"><BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}</button>
-        <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}><History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})</button>
-        <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="size-3.5" />{tr("Нове", "New")}</button>
+        <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]"><BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}</button>
+        <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}><History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})</button>
+        <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="size-3.5" />{tr("Нове", "New")}</button>
       </>}
     </>
-  ), [courseMode, requestedCourseIdFromUrl, uiState, active?.id, loading, effectiveCourseItemId, navigate, sidebarStats.completed, sidebarStats.total, canGenerateFromToolbar]);
+  ), [courseMode, requestedCourseIdFromUrl, uiState, active?.id, loading, effectiveCourseItemId, nextCoursePracticeItemId, navigate, sidebarStats.completed, sidebarStats.total, canGenerateFromToolbar]);
 
   const consoleStateMeta = useMemo(() => {
     if (uiState === "evaluating") {

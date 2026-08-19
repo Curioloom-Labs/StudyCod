@@ -281,8 +281,17 @@ async function recalculateEnrollmentProgress(enrollment: UserCourseEnrollment): 
     .andWhere("item.is_active = 1")
     .getMany();
   const requiredItems = items.filter((candidate) => (candidate.content as any)?.required !== false);
-  const completedIds = new Set((await progressRepo().find({ where: { enrollment: { id: enrollment.id }, status: "COMPLETED" } })).map((entry) => entry.itemId));
-  enrollment.completionPercent = requiredItems.length === 0 ? 0 : percent((requiredItems.filter((candidate) => completedIds.has(candidate.id)).length / requiredItems.length) * 100);
+  const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
+  const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
+  const scoredTotal = requiredItems.reduce((total, item) => {
+    const entry = progressByItem.get(item.id);
+    const score = Number(entry?.score);
+    if (Number.isFinite(score)) {
+      return total + Math.max(0, Math.min(100, score));
+    }
+    return total + (entry?.status === "COMPLETED" ? 100 : 0);
+  }, 0);
+  enrollment.completionPercent = requiredItems.length === 0 ? 0 : percent(scoredTotal / requiredItems.length);
   if (enrollment.completionPercent >= 100 && enrollment.finalAssessmentPassed) {
     enrollment.status = "COMPLETED";
     enrollment.completedAt = enrollment.completedAt || new Date();
@@ -657,9 +666,20 @@ export async function completeCourseItem(
 
   const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: item.id } } })
     || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
-  progress.status = "COMPLETED";
-  progress.score = score == null ? null : percent(score);
-  progress.completedAt = new Date();
+  const wasCompleted = progress.status === "COMPLETED";
+  const normalizedScore = score == null ? null : percent(score);
+  const previousScoreValue = Number(progress.score);
+  const previousScore = Number.isFinite(previousScoreValue) ? percent(previousScoreValue) : null;
+  const bestScore = normalizedScore == null ? previousScore : Math.max(previousScore ?? 0, normalizedScore);
+  progress.score = bestScore;
+  const passed = normalizedScore == null || normalizedScore >= 60 || wasCompleted;
+  if (source === "practice" && normalizedScore != null && normalizedScore < 60 && !wasCompleted) {
+    progress.status = "IN_PROGRESS";
+    progress.completedAt = null;
+  } else if (passed) {
+    progress.status = "COMPLETED";
+    progress.completedAt = progress.completedAt || new Date();
+  }
   await progressRepo().save(progress);
 
   return recalculateEnrollmentProgress(enrollment);

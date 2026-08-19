@@ -238,7 +238,6 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 {learning.me?.enrollments.filter((item) => item.status === "IN_PROGRESS" || item.status === "COMPLETED").map((item) => <option key={item.enrollmentId} value={item.enrollmentId}>{item.title}</option>)}
                 <option value="catalog">{uk ? "Додати курс…" : "Add a course…"}</option>
               </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2" />
             </div>
             <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
             {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Теми" : "Topics", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
