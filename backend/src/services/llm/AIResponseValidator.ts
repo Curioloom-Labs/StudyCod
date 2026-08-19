@@ -119,6 +119,16 @@ function normalizeIoType(raw: unknown, context?: { practicalTask?: string; input
   const inputFmt = String(context?.inputFormat ?? '').trim();
   const outputFmt = String(context?.outputFormat ?? '').trim().toLowerCase();
   const requiresInput = looksLikeInputRequirement(`${practical}\n${inputFmt}`);
+  const explicitlyNoInput = mentionsNoInput(inputFmt) && !looksLikeInputRequirement(practical);
+
+  // Models occasionally return STDIN_STDOUT while their own input contract
+  // explicitly says that stdin is empty. Trust the unambiguous contract when
+  // the learner-facing statement does not require input; otherwise the whole
+  // task is needlessly rejected and regenerated from scratch.
+  if (explicitlyNoInput && !requiresInput) {
+    const freeOutputHint = /(будь-як|непорожн|any\s+non-?empty|any\s+output|free\s+output)/i.test(outputFmt);
+    return freeOutputHint ? 'NO_INPUT_FREE_OUTPUT' : 'NO_INPUT_FIXED_OUTPUT';
+  }
 
   // A model sometimes emits NO_INPUT_* while its own statement asks the
   // learner to type a value. Prefer the semantic contract so the validator

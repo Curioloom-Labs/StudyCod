@@ -278,6 +278,29 @@ test('AIResponseValidator.validateGenerateTask: coerces a disallowed stdin type 
   assert.equal(result.examples[0]?.input, '');
 });
 
+test('AIResponseValidator.validateGenerateTask: repairs STDIN type when both statement and input format say no input', () => {
+  const data = {
+    title: 'Fixed status message',
+    topic: 'Output and variables',
+    difficulty: 2,
+    theoryMarkdown: 'A program can print a fixed result without reading stdin.',
+    practicalTask:
+      'Write a complete program that prints the status message "READY" exactly once. ' +
+      'The program must not ask the user for anything and must not read from standard input. ' +
+      'Print only the required message without labels or additional explanations.',
+    ioType: 'STDIN_STDOUT' as const,
+    inputFormat: 'There is no input (stdin is empty).',
+    outputFormat: 'READY',
+    constraints: 'The output must match exactly.',
+    examples: [{ input: '', output: 'READY', explanation: 'The program prints the fixed status.' }],
+    codeTemplate: 'public class Main { public static void main(String[] args) { } }'
+  };
+
+  const result = AIResponseValidator.validateGenerateTask(data);
+  assert.equal(result.ioType, 'NO_INPUT_FIXED_OUTPUT');
+  assert.equal(result.examples[0]?.input, '');
+});
+
 test('AIResponseValidator.validateGenerateTask: allows method-oriented tasks on a methods topic', () => {
   const data = {
     title: 'Overloaded sum methods',
