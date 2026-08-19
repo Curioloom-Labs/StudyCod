@@ -1,11 +1,38 @@
 version: 1
 courses:
+  python-core:
+    - key: python-cli-calculator
+      title: Калькулятор у терміналі
+      description: Створіть консольний калькулятор, який читає вирази, виконує базові операції, повторює обчислення в одному запуску та спокійно обробляє помилковий ввід.
+      estimatedMinutes: 120
+      skills: [input, змінні, умови, цикли, функції, словники, винятки]
+      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range, funktsii-ta-parametry-args-kwargs, obrobka-vynyatkiv]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: contract
+          title: Контракт вводу
+          description: Визначте формат виразу, підтримувані оператори та зрозумілу поведінку для команди виходу.
+        - id: operations
+          title: Обчислення
+          description: Реалізуйте базові арифметичні операції з окремою перевіркою ділення на нуль.
+        - id: session
+          title: Сесія та історія
+          description: Дозвольте виконувати багато обчислень, завершувати сесію та зберігати коротку історію результатів.
+        - id: resilience
+          title: Надійність
+          description: Обробіть нечисловий ввід і невідомі оператори без аварійного завершення програми.
+      acceptanceCriteria:
+        - Валідний вираз виводить один результат у визначеному форматі.
+        - Помилка вводу не завершує сесію та не потрапляє в історію успішних результатів.
+        - Команда виходу завершує програму без зайвого обчислення.
+
   python-extensions:
     - key: python-data-pipeline
       title: Python Data Pipeline
       description: Побудуйте CLI-пайплайн, який отримує JSON із HTTP-сервісу, нормалізує записи, зберігає CSV і формує короткий звіт. Проєкт перевіряє межі мережі, формат даних, помилки та повторний запуск.
       estimatedMinutes: 150
       skills: [requests/httpx, JSON, pathlib, logging, pytest]
+      requiredTopicKeys: [http-kliyenty-requests-httpx, json-csv-xml, lohuvannya, testuvannya-unittest-pytest]
       template: "src/client.py\nsrc/transform.py\nsrc/report.py\ntests/\nREADME.md"
       milestones:
         - id: contract
@@ -31,6 +58,7 @@ courses:
       description: "Створіть серверний вебзастосунок для списку книжок: сторінка списку, форма додавання, валідація, сесія користувача та безпечні повідомлення про помилки."
       estimatedMinutes: 180
       skills: [Flask routes, Jinja2, forms, sessions, SQLite, tests]
+      requiredTopicKeys: [flask-zastosunok-i-marshruty, flask-request-i-response, flask-shablony-ta-statychni-fayly, flask-formy-ta-validatsiya, flask-sesii-ta-avtentyfikatsiya, flask-baza-danykh-i-tranzaktsii, flask-pomylky-lohuvannya-i-testy]
       template: "app/__init__.py\napp/routes.py\napp/templates/\ntests/\nREADME.md"
       checkSpec:
         kind: flask
@@ -59,6 +87,7 @@ courses:
       description: Побудуйте JSON API нотаток із Blueprints, app factory, token-based authentication, pagination і стабільним error contract.
       estimatedMinutes: 210
       skills: [Blueprints, app factory, JSON API, auth, pagination, pytest]
+      requiredTopicKeys: [flask-json-api-i-serializatsiya, flask-blueprints-i-struktura, flask-baza-danykh-i-tranzaktsii, flask-authentication-authorization-i-password-hashing, flask-pomylky-lohuvannya-i-testy]
       template: "app/__init__.py\napp/api/notes.py\napp/services/\napp/repositories/\ntests/"
       checkSpec:
         kind: flask
@@ -88,6 +117,7 @@ courses:
       description: "Побудуйте повний API журналу читання: книги, записи прогресу, Pydantic-контракти, SQLAlchemy-сесія, pagination, authentication і тести."
       estimatedMinutes: 240
       skills: [Pydantic, dependencies, SQLAlchemy, CRUD, auth, TestClient, OpenAPI]
+      requiredTopicKeys: [pydantic-modeli-ta-json-body, validatsiya-field-obov-yazkovi-polya-ta-vlasni-pravyla, zalezhnosti-depends-povtorne-vykorystannya-ta-di, baza-danykh-sqlalchemy-engine-i-session-dependency, crud-tranzaktsii-ta-repository-service-shar, pahinatsiya-sortuvannya-ta-filtratsiya, avtentyfikatsiya-oauth2-password-i-bearer-token, testuvannya-api-cherez-testclient, testing-dependencies-bd-i-async-tests]
       template: "app/main.py\napp/routers/books.py\napp/routers/entries.py\napp/schemas.py\napp/services/\napp/repositories/\ntests/\nREADME.md"
       checkSpec:
         kind: fastapi
@@ -117,6 +147,7 @@ courses:
       description: Створіть командний API бібліотеки з ролями reader/editor/admin, пошуком, фоновим імпортом і статусом job.
       estimatedMinutes: 270
       skills: [APIRouter, Depends, roles, background jobs, search, error contract]
+      requiredTopicKeys: [apirouter-i-struktura-velykoho-zastosunku, pydantic-modeli-ta-json-body, zalezhnosti-depends-povtorne-vykorystannya-ta-di, avtentyfikatsiya-oauth2-password-i-bearer-token, avtoryzatsiya-roli-ta-permission-dependencies, backgroundtasks-cherhy-ta-dovhi-operatsii, testuvannya-api-cherez-testclient, testing-dependencies-bd-i-async-tests]
       template: "app/main.py\napp/routers/\napp/dependencies.py\napp/services/\napp/workers/\ntests/\nopenapi-notes.md"
       checkSpec:
         kind: fastapi
@@ -145,6 +176,7 @@ courses:
       description: "Доведіть сервіс до production-готового стану: settings, lifespan, health/readiness, CORS, rate limits, logs, Docker-запуск і graceful shutdown."
       estimatedMinutes: 240
       skills: [Settings, lifespan, middleware, security, health checks, deployment]
+      requiredTopicKeys: [konfihuratsiya-environment-i-settings, middleware-cors-i-request-context, middleware-errors-exception-handlers-i-yedynyy-format-pomylky, lohuvannya-metryky-ta-sposterezhuvanist, production-deployment-asgi-workers-proxy-ta-health-checks]
       template: "app/main.py\napp/config.py\napp/observability.py\nDockerfile\ncompose.yml\ntests/\nRUNBOOK.md"
       checkSpec:
         kind: fastapi
@@ -174,6 +206,7 @@ courses:
       description: Побудуйте pipeline, який читає зображення документа, знаходить межі, виправляє перспективу та зберігає контрольований результат.
       estimatedMinutes: 210
       skills: [OpenCV, color spaces, edges, contours, perspective transform, evaluation]
+      requiredTopicKeys: [zobrazhennya-yak-masyv-danykh, zavantazhennya-i-kolirni-prostory, resize-crop-i-normalizatsiya, filtry-i-zhortka, hradiyenty-i-mezhi, porohy-i-binarni-masky, kontury-i-heometrychni-oznaky, otsinyuvannya-i-vidpovidalne-vykorystannya]
       template: "src/io.py\nsrc/preprocess.py\nsrc/geometry.py\nsrc/pipeline.py\ntests/\nREADME.md"
       checkSpec:
         kind: computer-vision
@@ -201,6 +234,7 @@ courses:
       description: "Створіть аналізатор кольорових об’єктів: HSV-маска, морфологічне очищення, контури, bounding boxes і звіт про confidence обмежень."
       estimatedMinutes: 180
       skills: [HSV, masks, morphology, contours, geometry, false positives]
+      requiredTopicKeys: [zobrazhennya-yak-masyv-danykh, zavantazhennya-i-kolirni-prostory, filtry-i-zhortka, porohy-i-binarni-masky, kontury-i-heometrychni-oznaky, otsinyuvannya-i-vidpovidalne-vykorystannya, cv-histohramy-ta-kontrast, cv-morfolohichni-operatsii-ta-strukturnyy-element]
       template: "src/load.py\nsrc/mask.py\nsrc/measure.py\nsrc/report.py\ntests/fixtures/\nREADME.md"
       checkSpec:
         kind: computer-vision
@@ -223,12 +257,40 @@ courses:
         - Звіт відрізняє «об’єкт не знайдено» від помилки читання.
         - Є мінімум три fixture-зображення з різними сценаріями.
 
+  java-core:
+    - key: java-cli-calculator
+      title: Калькулятор у терміналі
+      description: Створіть консольний калькулятор, який читає вирази, виконує базові арифметичні операції, не падає на помилковому вводі та показує історію обчислень до завершення роботи.
+      estimatedMinutes: 150
+      skills: [Scanner, змінні та типи, умови, цикли, методи, колекції, винятки]
+      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while, metody-parametry-perevantazhennya, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: contract
+          title: Контракт вводу
+          description: Визначте формат команди, підтримувані оператори та зрозумілу відповідь для порожнього або некоректного вводу.
+        - id: operations
+          title: Арифметичні операції
+          description: Реалізуйте додавання, віднімання, множення та ділення через окрему логіку, включно з перевіркою ділення на нуль.
+        - id: session
+          title: Цикл роботи та історія
+          description: Дозвольте виконувати багато обчислень в одному запуску, завершувати сесію командою виходу та зберігати коротку історію результатів.
+        - id: resilience
+          title: Надійність
+          description: Обробіть нечислові значення, невідомі оператори й інші помилки без аварійного завершення програми.
+      acceptanceCriteria:
+        - Кожен валідний вираз виводить рівно один результат у визначеному форматі.
+        - Ділення на нуль і невідомий оператор дають зрозумілу помилку та не завершують сесію.
+        - Команда виходу завершує програму без зайвого результату обчислення.
+        - Історія не змішує невдалі спроби з успішними результатами.
+
   java-advanced:
     - key: java-log-analyzer
       title: Java Log Analyzer
       description: Побудуйте потоковий аналізатор логів із власними типами подій, фільтрами, статистикою та тестами на malformed records.
       estimatedMinutes: 180
       skills: [streams, records, exceptions, files, tests]
+      requiredTopicKeys: [robota-z-json-xml, lohuvannya-slf4j-logback, testuvannya-junit-5-mockito]
       template: "src/main/java/LogAnalyzer.java\nsrc/test/\nREADME.md"
       milestones:
         - id: parse
@@ -244,12 +306,39 @@ courses:
         - Невалідний рядок не завершує весь аналіз без пояснення.
         - Тести покривають порожній файл і змішані рівні.
 
+  cpp-core:
+    - key: cpp-cli-calculator
+      title: Калькулятор у консолі
+      description: Створіть консольний калькулятор на C++, який читає вирази, виконує базові операції в циклі та обробляє некоректний ввід без аварійного завершення.
+      estimatedMinutes: 135
+      skills: [ввід і вивід, змінні, умови, switch, цикли, функції, рядки, винятки]
+      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry, ryadky-std-string, vynyatky-exceptions]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: contract
+          title: Контракт вводу
+          description: Визначте формат виразу, перелік операторів та команду завершення сесії.
+        - id: operations
+          title: Арифметичні операції
+          description: Реалізуйте обчислення через окрему функцію та перевірте ділення на нуль.
+        - id: session
+          title: Цикл роботи
+          description: Дозвольте виконувати багато виразів у межах одного запуску та коректно завершувати програму.
+        - id: resilience
+          title: Надійність
+          description: Обробіть нечисловий ввід і невідомі оператори без аварійного завершення.
+      acceptanceCriteria:
+        - Валідний вираз дає один результат у визначеному форматі.
+        - Помилка вводу не завершує сесію та не створює хибний результат.
+        - Команда виходу не виконується як арифметична операція.
+
   cpp-advanced:
     - key: cpp-file-indexer
       title: C++ File Indexer
       description: Створіть індексатор файлів із pathlib-подібним обходом, метаданими, пошуком і контрольованою обробкою помилок.
       estimatedMinutes: 210
       skills: [filesystem, RAII, STL, algorithms, testing, complexity]
+      requiredTopicKeys: [robota-z-faylamy, rozumni-vkazivnyky, nalahodzhennya-ta-testuvannya]
       template: "src/indexer.hpp\nsrc/indexer.cpp\nsrc/main.cpp\ntests/\nREADME.md"
       milestones:
         - id: scan

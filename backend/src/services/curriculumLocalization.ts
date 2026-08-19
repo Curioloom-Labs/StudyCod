@@ -171,6 +171,7 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
       ...(content.projectSpec as Record<string, unknown> | undefined),
       estimatedMinutes: project.estimatedMinutes,
       skills: project.skills,
+      requiredTopicKeys: project.requiredTopicKeys,
       milestones: project.milestones,
       acceptanceCriteria: project.acceptanceCriteria,
       template: project.template,

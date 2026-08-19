@@ -25,6 +25,7 @@ export type CurriculumMiniProject = {
   estimatedMinutes: number;
   skills: string[];
   template: string;
+  requiredTopicKeys: string[];
   checkSpec?: { kind: "flask" | "fastapi" | "computer-vision"; module?: string; probePaths?: string[]; files?: string[] };
   milestones: Array<{ id: string; title: string; description: string }>;
   acceptanceCriteria: string[];
@@ -318,12 +319,16 @@ export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot(),
     const estimatedMinutes = Number(project?.estimatedMinutes);
     assert(Number.isFinite(estimatedMinutes) && estimatedMinutes > 0, `${courseKey}/${key}: estimatedMinutes must be positive`);
     const skills = Array.isArray(project?.skills) ? project.skills.map(String).filter(Boolean) : [];
+    const requiredTopicKeys = Array.isArray(project?.requiredTopicKeys)
+      ? project.requiredTopicKeys.map(String).map((value: string) => value.trim()).filter(Boolean)
+      : [];
     const milestones = Array.isArray(project?.milestones) ? project.milestones.map((milestone: any) => ({
       id: String(milestone?.id || "").trim(),
       title: String(milestone?.title || "").trim(),
       description: String(milestone?.description || "").trim(),
     })) : [];
     assert(skills.length >= 2 && milestones.length >= 1, `${courseKey}/${key}: mini-project needs skills and milestones`);
+    assert(requiredTopicKeys.length >= 1, `${courseKey}/${key}: requiredTopicKeys is required`);
     assert(milestones.every((milestone: any) => milestone.id && milestone.title && milestone.description), `${courseKey}/${key}: invalid milestone`);
     const acceptanceCriteria = Array.isArray(project?.acceptanceCriteria) ? project.acceptanceCriteria.map(String).filter(Boolean) : [];
     assert(acceptanceCriteria.length >= 1, `${courseKey}/${key}: acceptanceCriteria is required`);
@@ -334,7 +339,7 @@ export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot(),
       ...(Array.isArray(project.checkSpec.probePaths) ? { probePaths: project.checkSpec.probePaths.map(String) } : {}),
       ...(Array.isArray(project.checkSpec.files) ? { files: project.checkSpec.files.map(String) } : {}),
     } : undefined;
-    return { key, title, description, estimatedMinutes, skills, template: String(project?.template || ""), milestones, acceptanceCriteria, ...(checkSpec ? { checkSpec } : {}) } satisfies CurriculumMiniProject;
+    return { key, title, description, estimatedMinutes, skills, template: String(project?.template || ""), requiredTopicKeys, milestones, acceptanceCriteria, ...(checkSpec ? { checkSpec } : {}) } satisfies CurriculumMiniProject;
   });
 }
 

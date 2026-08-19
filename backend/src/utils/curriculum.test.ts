@@ -57,17 +57,20 @@ test("specialised lessons are authored lessons, not padded generic notes", () =>
   }
 });
 
-test("FastAPI is a complete course and every specialization exposes an integration project", () => {
+test("every course exposes positioned integration projects", () => {
   const result = validateCurriculum();
   assert.ok(result.topics.fastapi.length >= 24, "FastAPI needs a complete progression, not a short overview");
   assert.match(result.topics.fastapi[0].title, /Вступ|HTTP|ASGI/i);
-  for (const course of result.manifest.courses.filter((entry) => !entry.isBase)) {
+  for (const course of result.manifest.courses) {
     const projects = loadCurriculumMiniProjects(course.key);
     assert.ok(projects.length >= 1, `${course.key} must expose a mini-project`);
+    const topicKeys = new Set(result.topics[course.key].map((topic) => topic.key));
     for (const project of projects) {
       assert.ok(project.skills.length >= 2, `${course.key}/${project.key} skills`);
       assert.ok(project.milestones.length >= 1, `${course.key}/${project.key} milestones`);
       assert.ok(project.acceptanceCriteria.length >= 1, `${course.key}/${project.key} acceptance`);
+      assert.ok(project.requiredTopicKeys.length >= 1, `${course.key}/${project.key} required topics`);
+      for (const topicKey of project.requiredTopicKeys) assert.ok(topicKeys.has(topicKey), `${course.key}/${project.key} references ${topicKey}`);
     }
   }
 });

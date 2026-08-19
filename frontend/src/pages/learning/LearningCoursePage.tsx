@@ -41,6 +41,8 @@ type RoadmapNode = {
   theory?: LearningCourseItem;
   practices: LearningCourseItem[];
   item?: LearningCourseItem;
+  topicKey?: string;
+  requiredTopicKeys?: string[];
 };
 
 type TopicPart = {
@@ -50,6 +52,19 @@ type TopicPart = {
 
 function isProject(item: LearningCourseItem): boolean {
   return item.kind === "MANUAL" && Boolean((item.content as { project?: unknown }).project);
+}
+
+function topicKeyOf(item: LearningCourseItem): string | undefined {
+  const sourceKey = typeof item.content.sourceKey === "string" ? item.content.sourceKey : "";
+  const match = /^([a-z0-9-]+)\.([a-z0-9-]+)\.(?:theory|practice(?:-\d+)?)$/i.exec(sourceKey);
+  return match?.[2];
+}
+
+function requiredTopicKeysOf(item: LearningCourseItem): string[] {
+  const projectSpec = item.content.projectSpec as { requiredTopicKeys?: unknown } | undefined;
+  return Array.isArray(projectSpec?.requiredTopicKeys)
+    ? projectSpec.requiredTopicKeys.filter((key): key is string => typeof key === "string" && key.trim().length > 0)
+    : [];
 }
 
 function markdownOf(item: LearningCourseItem | undefined): string {
@@ -87,11 +102,17 @@ function projectDescription(item: LearningCourseItem | undefined): string {
   if (directDescription) return directDescription.replace(/\s+/g, " ").slice(0, 180);
   const markdown = markdownOf(item)
     .split(/\n+/)
-    .map((line) => line.replace(/^#+\s*/, "").replace(/[*_`>]/g, "").trim())
-    .find((line) => line.length > 30);
+    .map((line) => line.trim())
+    .filter((line) => !line.startsWith("#"))
+    .map((line) => line.replace(/[*_`>]/g, "").trim())
+    .find((line) => line.length > 30 && !line.startsWith("Орієнтовний час") && !line.startsWith("Навички") && !line.startsWith("Estimated time") && !line.startsWith("Skills"));
   return markdown
     ? markdown.replace(/\s+/g, " ").slice(0, 180)
     : tr("Збери в одному проєкті навички з пройдених тем.", "Bring the skills from the completed topics together in one project.");
+}
+
+function projectTitle(title: string): string {
+  return title.replace(/^(Мініпроєкт|Mini-project):\s*/i, "");
 }
 
 function topicParts(node: RoadmapNode): TopicPart[] {
@@ -197,9 +218,10 @@ export const LearningCoursePage: React.FC = () => {
 
   const roadmapNodes = React.useMemo<RoadmapNode[]>(() => {
     const nodes: RoadmapNode[] = [];
+    const projectItems: LearningCourseItem[] = [];
     for (const item of allItems) {
       if (item.kind === "THEORY") {
-        nodes.push({ id: `topic-${item.id}`, kind: "TOPIC", title: item.title, theory: item, practices: [] });
+        nodes.push({ id: `topic-${item.id}`, kind: "TOPIC", title: item.title, theory: item, practices: [], topicKey: topicKeyOf(item) });
         continue;
       }
       if (item.kind === "CODE_TASK") {
@@ -212,14 +234,36 @@ export const LearningCoursePage: React.FC = () => {
         continue;
       }
       if (isProject(item)) {
-        nodes.push({ id: `project-${item.id}`, kind: "PROJECT", title: item.title, item, practices: [] });
+        if (item.content.finalAssessment !== true) projectItems.push(item);
         continue;
       }
       if (item.content.required !== false) {
         nodes.push({ id: `item-${item.id}`, kind: "MILESTONE", title: item.title, item, practices: [] });
       }
     }
-    return nodes;
+    const projectsAtPosition = new Map<number, RoadmapNode[]>();
+    for (const item of projectItems) {
+      const requiredKeys = requiredTopicKeysOf(item);
+      const requiredIndexes = requiredKeys
+        .map((key) => nodes.findIndex((node) => node.kind === "TOPIC" && node.topicKey === key))
+        .filter((index) => index >= 0);
+      const position = requiredIndexes.length ? Math.max(...requiredIndexes) + 1 : nodes.length;
+      const projectNode: RoadmapNode = {
+        id: `project-${item.id}`,
+        kind: "PROJECT",
+        title: item.title,
+        item,
+        practices: [],
+        requiredTopicKeys: requiredKeys,
+      };
+      projectsAtPosition.set(position, [...(projectsAtPosition.get(position) ?? []), projectNode]);
+    }
+    const ordered: RoadmapNode[] = [];
+    for (let position = 0; position <= nodes.length; position += 1) {
+      ordered.push(...(projectsAtPosition.get(position) ?? []));
+      if (position < nodes.length) ordered.push(nodes[position]);
+    }
+    return ordered;
   }, [allItems]);
 
   const nodeItems = (node: RoadmapNode): LearningCourseItem[] =>
@@ -234,6 +278,7 @@ export const LearningCoursePage: React.FC = () => {
   const practiceCount = topicNodes.reduce((total, node) => total + node.practices.length, 0);
   const completedTopics = topicNodes.filter(nodeCompleted).length;
   const projectNodes = roadmapNodes.filter((node) => node.kind === "PROJECT");
+  const miniProjectNodes = projectNodes.filter((node) => node.item?.content.finalAssessment !== true);
 
   React.useEffect(() => {
     if (loading || !course || !focusPractice) return;
@@ -346,7 +391,14 @@ export const LearningCoursePage: React.FC = () => {
     if (node.kind === "PROJECT" || node.kind === "MILESTONE") setSelectedNodeId(node.id);
   };
 
-  const selectedNode = roadmapNodes.find((node) => node.id === selectedNodeId) ?? null;
+  const finalProjectNode = finalWork ? {
+    id: `project-${finalWork.id}`,
+    kind: "PROJECT" as const,
+    title: finalWork.title,
+    item: finalWork,
+    practices: [],
+  } : null;
+  const selectedNode = [...roadmapNodes, ...(finalProjectNode ? [finalProjectNode] : [])].find((node) => node.id === selectedNodeId) ?? null;
   const selectedTopic = selectedNode?.kind === "TOPIC" ? selectedNode : null;
   const selectedTopicItems = selectedTopic ? nodeItems(selectedTopic) : [];
   const selectedTopicAverage = selectedTopicItems.length
@@ -409,7 +461,7 @@ export const LearningCoursePage: React.FC = () => {
             <div><h1 className="max-w-3xl text-[clamp(38px,5.5vw,68px)] font-bold leading-[.96] tracking-[-.065em]">{tr("Твій шлях до впевненого коду.", "Your path to confident code.")}</h1><p className="mt-5 max-w-2xl text-sm leading-6 text-[#b7d1c0] sm:text-base">{tr("Від першого поняття до задач, які ти вже можеш розв’язувати самостійно. Рухайся послідовно — кожна тема додає новий інструмент.", "From your first concept to problems you can solve independently. Move sequentially — every topic adds a new tool.")}</p></div>
             <div className="border-t border-white/15 pt-4 lg:border-l lg:border-t-0 lg:pl-6"><div className="flex items-end justify-between gap-3"><span className="text-xs font-semibold text-[#b7d1c0]">{tr("Прогрес маршруту", "Path progress")}</span><strong className="text-4xl font-bold tracking-[-.06em] text-[#70edaf]">{Math.round(course.enrollment.completionPercent)}%</strong></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#70edaf] transition-all" style={{ width: `${Math.min(100, Math.max(0, course.enrollment.completionPercent))}%` }} /></div><p className="mt-3 text-xs text-[#8fb29d]">{completedItems} / {requiredItems.length} {tr("елементів завершено", "items completed")}</p></div>
           </div>
-          <div className="mt-10 grid grid-cols-2 border-t border-white/10 pt-5 sm:grid-cols-4"><div><p className="text-2xl font-bold tracking-[-.05em] text-white">{topicNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем у маршруті", "topics in path")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-white">{practiceCount}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("практичних кроків", "practice steps")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#70edaf]">{completedTopics}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем завершено", "topics completed")}</p></div><div className="mt-4 border-l border-white/10 pl-4 sm:mt-0 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#ffbf68]">{projectNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("мініпроєктів", "mini-projects")}</p></div></div>
+          <div className="mt-10 grid grid-cols-2 border-t border-white/10 pt-5 sm:grid-cols-4"><div><p className="text-2xl font-bold tracking-[-.05em] text-white">{topicNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем у маршруті", "topics in path")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-white">{practiceCount}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("практичних кроків", "practice steps")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#70edaf]">{completedTopics}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("тем завершено", "topics completed")}</p></div><div className="mt-4 border-l border-white/10 pl-4 sm:mt-0 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-[#ffbf68]">{miniProjectNodes.length}</p><p className="mt-1 text-[11px] text-[#8fb29d]">{tr("мініпроєктів", "mini-projects")}</p></div></div>
         </div>
       </header>
 
@@ -436,6 +488,9 @@ export const LearningCoursePage: React.FC = () => {
             const isSelected = selectedNodeId === node.id;
             const topicNumber = roadmapNodes.slice(0, index + 1).filter((candidate) => candidate.kind === "TOPIC").length;
             const parts = node.kind === "TOPIC" ? topicParts(node) : [];
+            const projectNumber = node.kind === "PROJECT" ? projectNodes.findIndex((candidate) => candidate.id === node.id) + 1 : 0;
+            const projectSpec = node.kind === "PROJECT" ? (node.item?.content.projectSpec as { estimatedMinutes?: number; skills?: unknown[] } | undefined) : undefined;
+            const projectSkills = Array.isArray(projectSpec?.skills) ? projectSpec.skills.filter((skill): skill is string => typeof skill === "string").slice(0, 4) : [];
             const topicAccent = node.kind === "TOPIC" ? ["border-l-[#20a86b]", "border-l-[#3195a5]", "border-l-[#bd8837]"][Math.max(0, (topicNumber - 1) % 3)] : "";
             const Icon = completed ? CheckCircle2 : locked ? LockKeyhole : node.kind === "PROJECT" ? Rocket : node.kind === "MILESTONE" ? FileCheck2 : node.theory?.progress.status === "COMPLETED" ? Play : BookOpen;
             const status = completed
@@ -460,8 +515,9 @@ export const LearningCoursePage: React.FC = () => {
               </div>
                <button type="button" disabled={locked} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : node.kind === "PROJECT" ? "border-l-4 border-l-[#bd8837] bg-[#bd8837]/[.04]" : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
                 {node.kind === "TOPIC" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-bg-surface text-xs font-black text-primary">{String(topicNumber).padStart(2, "0")}</span><span className="rounded-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-bold text-primary">{completed ? tr("Готово", "Done") : locked ? tr("Попереду", "Ahead") : tr("У фокусі", "In focus")}</span></div>}
+                {node.kind === "PROJECT" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-[#bd8837]/35 bg-[#bd8837]/10 text-xs font-black text-[#bd8837] dark:text-[#ffbf68]">{String(projectNumber).padStart(2, "0")}</span><span className="rounded-md border border-[#bd8837]/30 bg-[#bd8837]/10 px-2.5 py-1 text-[11px] font-bold text-[#bd8837] dark:text-[#ffbf68]">{completed ? tr("Готово", "Done") : locked ? tr("Після тем", "After topics") : tr("Проєкт", "Project")}</span></div>}
                   <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? tr("Навчальний фокус", "Learning focus") : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
-                 <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.title}</h3>
+                 <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.kind === "PROJECT" ? projectTitle(node.title) : node.title}</h3>
                  {node.kind === "TOPIC" ? <>
                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-text-secondary">{topicDescription(node)}</p>
                     {parts.length > 0 && <div className="mt-4 flex flex-wrap gap-2">
@@ -470,6 +526,7 @@ export const LearningCoursePage: React.FC = () => {
                    <p className="mt-3 text-xs font-semibold text-primary">{status}</p>
                   </> : <>
                     <p className="mt-2 line-clamp-3 text-xs leading-5 text-text-secondary">{node.kind === "PROJECT" ? projectDescription(node.item) : status}</p>
+                    {node.kind === "PROJECT" && <>{projectSkills.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{projectSkills.map((skill) => <span key={skill} className="rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary">{skill}</span>)}</div>}{typeof projectSpec?.estimatedMinutes === "number" && <p className="mt-3 text-[11px] font-semibold text-text-muted">~{projectSpec.estimatedMinutes} {tr("хв на проєкт", "min project estimate")}</p>}</>}
                     {node.kind === "PROJECT" && <p className="mt-3 text-xs font-semibold text-[#bd8837] dark:text-[#ffbf68]">{status}</p>}
                   </>}
                   {(items.length > 1 || node.kind === "PROJECT") && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>}
@@ -481,8 +538,8 @@ export const LearningCoursePage: React.FC = () => {
        </div>
      </section>
 
-    {selectedNode && selectedNode.kind !== "TOPIC" && <section className="mb-6 rounded-2xl border border-primary/25 bg-bg-surface p-5 sm:p-7">
-      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>
+    {selectedNode && selectedNode.kind !== "TOPIC" && <section className="mb-6 mt-6 rounded-2xl border border-primary/25 bg-bg-surface p-5 sm:p-7">
+      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.kind === "PROJECT" ? projectTitle(selectedNode.title) : selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>
 
       {selectedItem && selectedNode.kind === "MILESTONE" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}<div className="mt-5 flex items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedItem.progress.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("Цей етап ще потрібно зарахувати.", "This milestone still needs to be completed.")}</span><button type="button" disabled={selectedItem.progress.status === "COMPLETED" || busyItem === selectedItem.id} onClick={() => void completeItem(selectedItem)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45">{selectedItem.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити етап", "Complete milestone")}</button></div></div>}
 

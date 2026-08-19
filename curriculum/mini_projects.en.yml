@@ -1,6 +1,32 @@
 version: 1
 # English curriculum projects
 courses:
+  python-core:
+    - key: python-cli-calculator
+      title: Terminal Calculator
+      description: Build a console calculator that reads expressions, performs basic operations, repeats calculations in one run, and handles invalid input safely.
+      estimatedMinutes: 120
+      skills: [input, variables, conditions, loops, functions, dictionaries, exceptions]
+      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range, funktsii-ta-parametry-args-kwargs, obrobka-vynyatkiv]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: contract
+          title: Input contract
+          description: Define the expression format, supported operators, and clear behavior for the exit command.
+        - id: operations
+          title: Calculations
+          description: Implement basic arithmetic operations with an explicit division-by-zero check.
+        - id: session
+          title: Session and history
+          description: Allow multiple calculations, end the session, and keep a short history of results.
+        - id: resilience
+          title: Resilience
+          description: Handle non-numeric input and unknown operators without terminating the program unexpectedly.
+      acceptanceCriteria:
+        - A valid expression prints one result in the defined format.
+        - An input error does not end the session or enter the successful-results history.
+        - The exit command ends the program without an extra calculation.
+
   python-extensions:
     - key: python-data-pipeline
       title: Python Data Pipeline
@@ -9,6 +35,7 @@ courses:
         project checks network boundaries, data format, errors, and restarts.
       estimatedMinutes: 150
       skills: [ requests/httpx, JSON, pathlib, logging, pytest ]
+      requiredTopicKeys: [ http-kliyenty-requests-httpx, json-csv-xml, lohuvannya, testuvannya-unittest-pytest ]
       template: "src/client.py
 
         src/transform.py
@@ -47,6 +74,7 @@ courses:
         form, validation, user session, and safe error messages."
       estimatedMinutes: 180
       skills: [ Flask routes, Jinja2, forms, sessions, SQLite, tests ]
+      requiredTopicKeys: [ flask-zastosunok-i-marshruty, flask-request-i-response, flask-shablony-ta-statychni-fayly, flask-formy-ta-validatsiya, flask-sesii-ta-avtentyfikatsiya, flask-baza-danykh-i-tranzaktsii, flask-pomylky-lohuvannya-i-testy ]
       template: "app/__init__.py
 
         app/routes.py
@@ -85,6 +113,7 @@ courses:
         authentication, pagination and stable error contract.
       estimatedMinutes: 210
       skills: [ Blueprints, app factory, JSON API, auth, pagination, pytest ]
+      requiredTopicKeys: [ flask-json-api-i-serializatsiya, flask-blueprints-i-struktura, flask-baza-danykh-i-tranzaktsii, flask-authentication-authorization-i-password-hashing, flask-pomylky-lohuvannya-i-testy ]
       template: "app/__init__.py
 
         app/api/notes.py
@@ -124,6 +153,7 @@ courses:
         tests."
       estimatedMinutes: 240
       skills: [ Pydantic, dependencies, SQLAlchemy, CRUD, auth, TestClient, OpenAPI ]
+      requiredTopicKeys: [ pydantic-modeli-ta-json-body, validatsiya-field-obov-yazkovi-polya-ta-vlasni-pravyla, zalezhnosti-depends-povtorne-vykorystannya-ta-di, baza-danykh-sqlalchemy-engine-i-session-dependency, crud-tranzaktsii-ta-repository-service-shar, pahinatsiya-sortuvannya-ta-filtratsiya, avtentyfikatsiya-oauth2-password-i-bearer-token, testuvannya-api-cherez-testclient, testing-dependencies-bd-i-async-tests ]
       template: "app/main.py
 
         app/routers/books.py
@@ -170,6 +200,7 @@ courses:
         search, background import, and job status.
       estimatedMinutes: 270
       skills: [ APIRouter, Depends, roles, background jobs, search, error contract ]
+      requiredTopicKeys: [ apirouter-i-struktura-velykoho-zastosunku, pydantic-modeli-ta-json-body, zalezhnosti-depends-povtorne-vykorystannya-ta-di, avtentyfikatsiya-oauth2-password-i-bearer-token, avtoryzatsiya-roli-ta-permission-dependencies, backgroundtasks-cherhy-ta-dovhi-operatsii, testuvannya-api-cherez-testclient, testing-dependencies-bd-i-async-tests ]
       template: "app/main.py
 
         app/routers/
@@ -214,6 +245,7 @@ courses:
         shutdown."
       estimatedMinutes: 240
       skills: [ Settings, lifespan, middleware, security, health checks, deployment ]
+      requiredTopicKeys: [ konfihuratsiya-environment-i-settings, middleware-cors-i-request-context, middleware-errors-exception-handlers-i-yedynyy-format-pomylky, lohuvannya-metryky-ta-sposterezhuvanist, production-deployment-asgi-workers-proxy-ta-health-checks ]
       template: "app/main.py
 
         app/config.py
@@ -267,6 +299,7 @@ courses:
           perspective transform,
           evaluation
         ]
+      requiredTopicKeys: [ zobrazhennya-yak-masyv-danykh, zavantazhennya-i-kolirni-prostory, resize-crop-i-normalizatsiya, filtry-i-zhortka, hradiyenty-i-mezhi, porohy-i-binarni-masky, kontury-i-heometrychni-oznaky, otsinyuvannya-i-vidpovidalne-vykorystannya ]
       template: "src/io.py
 
         src/preprocess.py
@@ -307,6 +340,7 @@ courses:
         contours, bounding boxes, and confidence constraint report."
       estimatedMinutes: 180
       skills: [ HSV, masks, morphology, contours, geometry, false positives ]
+      requiredTopicKeys: [ zobrazhennya-yak-masyv-danykh, zavantazhennya-i-kolirni-prostory, filtry-i-zhortka, porohy-i-binarni-masky, kontury-i-heometrychni-oznaky, otsinyuvannya-i-vidpovidalne-vykorystannya, cv-histohramy-ta-kontrast, cv-morfolohichni-operatsii-ta-strukturnyy-element ]
       template: "src/load.py
 
         src/mask.py
@@ -339,6 +373,33 @@ courses:
         - The report distinguishes "object not found" from a read error.
         - There are at least three fixture images with different scenarios.
 
+  java-core:
+    - key: java-cli-calculator
+      title: Terminal Calculator
+      description: Build a console calculator that reads expressions, performs basic arithmetic, handles invalid input without crashing, and shows a calculation history until the session ends.
+      estimatedMinutes: 150
+      skills: [Scanner, variables and types, conditions, loops, methods, collections, exceptions]
+      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while, metody-parametry-perevantazhennya, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: contract
+          title: Input contract
+          description: Define the command format, supported operators, and a clear response for empty or invalid input.
+        - id: operations
+          title: Arithmetic operations
+          description: Implement addition, subtraction, multiplication, and division as separate logic, including division-by-zero validation.
+        - id: session
+          title: Session and history
+          description: Allow multiple calculations in one run, exit with a command, and keep a short history of results.
+        - id: resilience
+          title: Resilience
+          description: Handle non-numeric values, unknown operators, and other errors without terminating the program unexpectedly.
+      acceptanceCriteria:
+        - Every valid expression prints exactly one result in the defined format.
+        - Division by zero and an unknown operator produce a clear error without ending the session.
+        - The exit command ends the program without an extra calculation result.
+        - History does not mix failed attempts with successful results.
+
   java-advanced:
     - key: java-log-analyzer
       title: Java Log Analyzer
@@ -346,6 +407,7 @@ courses:
         statistics, and tests for malformed records.
       estimatedMinutes: 180
       skills: [ streams, records, exceptions, files, tests ]
+      requiredTopicKeys: [ robota-z-json-xml, lohuvannya-slf4j-logback, testuvannya-junit-5-mockito ]
       template: "src/main/java/LogAnalyzer.java
 
         src/test/
@@ -366,6 +428,32 @@ courses:
           explanation.
         - Tests cover empty file and mixed levels.
 
+  cpp-core:
+    - key: cpp-cli-calculator
+      title: Console Calculator
+      description: Build a C++ console calculator that reads expressions, performs basic operations in a loop, and handles invalid input without crashing.
+      estimatedMinutes: 135
+      skills: [input and output, variables, conditions, switch, loops, functions, strings, exceptions]
+      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry, ryadky-std-string, vynyatky-exceptions]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: contract
+          title: Input contract
+          description: Define the expression format, operator list, and command that ends the session.
+        - id: operations
+          title: Arithmetic operations
+          description: Implement calculations in a separate function and check division by zero.
+        - id: session
+          title: Work loop
+          description: Allow multiple expressions in one run and finish the program correctly.
+        - id: resilience
+          title: Resilience
+          description: Handle non-numeric input and unknown operators without crashing.
+      acceptanceCriteria:
+        - A valid expression returns one result in the defined format.
+        - An input error does not end the session or create a false result.
+        - The exit command is not executed as an arithmetic operation.
+
   cpp-advanced:
     - key: cpp-file-indexer
       title: C++ File Indexer
@@ -373,6 +461,7 @@ courses:
         search, and controlled error handling.
       estimatedMinutes: 210
       skills: [ filesystem, RAII, STL, algorithms, testing, complexity ]
+      requiredTopicKeys: [ robota-z-faylamy, rozumni-vkazivnyky, nalahodzhennya-ta-testuvannya ]
       template: "src/indexer.hpp
 
         src/indexer.cpp

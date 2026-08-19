@@ -166,6 +166,7 @@ function miniProjectItem(course: CurriculumCourseDefinition, project: Curriculum
         kind: "MINI_PROJECT",
         estimatedMinutes: project.estimatedMinutes,
         skills: project.skills,
+        requiredTopicKeys: project.requiredTopicKeys,
         milestones: project.milestones,
         acceptanceCriteria: project.acceptanceCriteria,
         template: project.template,
