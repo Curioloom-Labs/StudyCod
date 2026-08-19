@@ -147,7 +147,6 @@ function miniProjectItem(course: CurriculumCourseDefinition, project: Curriculum
     "### Критерії готовності",
     ...project.acceptanceCriteria.map((criterion) => `- ${criterion}`),
     "",
-    "Це інтеграційний мініпроєкт. Спочатку спроєктуйте контракт, потім реалізовуйте milestone послідовно й залиште короткий README з рішеннями та відомими обмеженнями.",
   ].join("\n");
   return {
     contentKey: projectKey,
@@ -207,7 +206,7 @@ function finalAssessmentItem(course: CurriculumCourseDefinition, order: number) 
           { id: "implementation", title: "Реалізувати рішення", description: "Покажи основну реалізацію та ключові технічні рішення." },
           { id: "verification", title: "Перевірити результат", description: "Додай приклади перевірки, тестування або демонстрації." },
         ],
-        acceptanceCriteria: ["Усі етапи виконані", "Є короткі нотатки реалізації", "README пояснює запуск і обмеження"],
+        acceptanceCriteria: ["Усі етапи виконані", "Є короткі нотатки реалізації"],
         template: "# Фінальна робота\\n\\n## Рішення\\n\\n## Перевірка\\n",
       },
     },

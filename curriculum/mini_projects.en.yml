@@ -8,7 +8,7 @@ courses:
       estimatedMinutes: 120
       skills: [input, variables, conditions, loops]
       requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range]
-      template: "main.py\nREADME.md"
+      template: "main.py"
       milestones:
         - id: contract
           title: Input contract
@@ -33,7 +33,7 @@ courses:
       estimatedMinutes: 150
       skills: [lists, dictionaries, functions, loops, input]
       requiredTopicKeys: [spysky-list-osnovy, slovnyky-dict, funktsii-ta-parametry-args-kwargs]
-      template: "main.py\nREADME.md"
+      template: "main.py"
       milestones:
         - id: model
           title: Contact model
@@ -55,7 +55,7 @@ courses:
       estimatedMinutes: 165
       skills: [pathlib, files, context managers, exceptions]
       requiredTopicKeys: [shlyakhy-ta-fayly-pathlib, fayly-ta-kontekstni-menedzhery, obrobka-vynyatkiv]
-      template: "main.py\nREADME.md"
+      template: "main.py"
       milestones:
         - id: scan
           title: File discovery
@@ -77,7 +77,7 @@ courses:
       estimatedMinutes: 180
       skills: [classes, dataclasses, dictionaries, functions, filtering]
       requiredTopicKeys: [oop-klasy-ta-ob-yekty, klasy-danykh-dataclasses]
-      template: "main.py\nREADME.md"
+      template: "main.py"
       milestones:
         - id: model
           title: Product model
@@ -99,7 +99,7 @@ courses:
       estimatedMinutes: 150
       skills: [strings, functions, dictionaries, regular expressions]
       requiredTopicKeys: [ryadky-ta-formatuvannya, funktsii-ta-parametry-args-kwargs, rehulyarni-vyrazy-re]
-      template: "main.py\nREADME.md"
+      template: "main.py"
       milestones:
         - id: tokenize
           title: Text parsing
@@ -130,9 +130,7 @@ courses:
 
         src/report.py
 
-        tests/
-
-        README.md"
+        tests/"
       milestones:
         - id: contract
           title: Source contract
@@ -161,7 +159,7 @@ courses:
       estimatedMinutes: 180
       skills: [asyncio, threading, logging, pytest, documentation]
       requiredTopicKeys: [asynkhronnist-asyncio-async-await, potoky-ta-protsesy-threading-multiprocessing, lohuvannya, testuvannya-unittest-pytest, dokumentatsiya-i-styl-kodu-pep-8-docstring]
-      template: "src/cli.py\nsrc/jobs.py\ntests/\nREADME.md"
+      template: "src/cli.py\nsrc/jobs.py\ntests/"
       milestones:
         - id: commands
           title: Command contract
@@ -183,7 +181,7 @@ courses:
       estimatedMinutes: 180
       skills: [HTTP, asyncio, timeouts, JSON, errors]
       requiredTopicKeys: [http-kliyenty-requests-httpx, parsynh-html-beautifulsoup, asynkhronnist-asyncio-async-await]
-      template: "src/crawler.py\ntests/\nREADME.md"
+      template: "src/crawler.py\ntests/"
       milestones:
         - id: client
           title: HTTP client
@@ -205,7 +203,7 @@ courses:
       estimatedMinutes: 210
       skills: [SQLite, transactions, logging, tests, CSV]
       requiredTopicKeys: [json-csv-xml, lohuvannya, robota-z-bd-sqlite3-sqlalchemy]
-      template: "src/importer.py\nsrc/report.py\ntests/\nREADME.md"
+      template: "src/importer.py\nsrc/report.py\ntests/"
       milestones:
         - id: schema
           title: Data schema
@@ -227,7 +225,7 @@ courses:
       estimatedMinutes: 240
       skills: [NumPy, Pandas, visualization, scikit-learn, reproducibility]
       requiredTopicKeys: [numpy-osnovy, pandas-osnovy, vizualizatsiya-matplotlib-seaborn, ml-ohlyad-scikit-learn-bazovi-ponyattya]
-      template: "src/prepare.py\nsrc/train.py\nsrc/report.py\nREADME.md"
+      template: "src/prepare.py\nsrc/train.py\nsrc/report.py"
       milestones:
         - id: data
           title: Data preparation
@@ -257,9 +255,7 @@ courses:
 
         app/templates/
 
-        tests/
-
-        README.md"
+        tests/"
       checkSpec:
         kind: flask
         module: app
@@ -327,7 +323,7 @@ courses:
       estimatedMinutes: 180
       skills: [routes, templates, forms, validation, sessions]
       requiredTopicKeys: [flask-zastosunok-i-marshruty, flask-request-i-response, flask-shablony-ta-statychni-fayly, flask-formy-ta-validatsiya]
-      template: "app/__init__.py\napp/routes.py\napp/templates/\ntests/\nREADME.md"
+      template: "app/__init__.py\napp/routes.py\napp/templates/\ntests/"
       checkSpec:
         kind: flask
         module: app
@@ -353,7 +349,7 @@ courses:
       estimatedMinutes: 225
       skills: [application factory, CLI, background jobs, queues, sessions]
       requiredTopicKeys: [flask-konfihuratsiya-ta-application-factory, flask-cli-komandy-ta-kerovani-operatsii, flask-background-jobs-i-cherhy]
-      template: "app/__init__.py\napp/jobs.py\napp/routes.py\ntests/\nREADME.md"
+      template: "app/__init__.py\napp/jobs.py\napp/routes.py\ntests/"
       checkSpec:
         kind: flask
         module: app
@@ -379,7 +375,7 @@ courses:
       estimatedMinutes: 210
       skills: [observability, health checks, error handlers, logging, deployment]
       requiredTopicKeys: [flask-bezpechnyy-deployment, flask-observability-i-health-checks]
-      template: "app/__init__.py\napp/observability.py\ntests/\nREADME.md"
+      template: "app/__init__.py\napp/observability.py\ntests/"
       checkSpec:
         kind: flask
         module: app
@@ -420,9 +416,7 @@ courses:
 
         app/repositories/
 
-        tests/
-
-        README.md"
+        tests/"
       checkSpec:
         kind: fastapi
         module: app.main
@@ -440,8 +434,7 @@ courses:
           description: Add bearer authentication and log ownership verification.
         - id: quality
           title: API quality
-          description: Add pagination, 401/403/404/409/422 tests, OpenAPI metadata and
-            README.
+          description: Add pagination, 401/403/404/409/422 tests, OpenAPI metadata\.
       acceptanceCriteria:
         - No route accepts an arbitrary dict instead of the described model.
         - The DB session is closed after each request.
@@ -544,7 +537,7 @@ courses:
       estimatedMinutes: 210
       skills: [UploadFile, streaming, response models, errors, tests]
       requiredTopicKeys: [response-models-serializatsiya-ta-kontrol-poliv, statusy-httpexception-ta-obrobka-pomylok, fayly-uploadfile-ta-potokovi-vidpovidi, testuvannya-api-cherez-testclient]
-      template: "app/main.py\napp/routers/files.py\ntests/\nREADME.md"
+      template: "app/main.py\napp/routers/files.py\ntests/"
       checkSpec:
         kind: fastapi
         module: app.main
@@ -570,7 +563,7 @@ courses:
       estimatedMinutes: 240
       skills: [WebSockets, SSE, async, backpressure, tests]
       requiredTopicKeys: [async-await-event-loop-i-blokuvalni-operatsii, websockets-i-dvostoronniy-zv-yazok, streaming-server-sent-events-i-velyki-vidpovidi]
-      template: "app/main.py\napp/realtime.py\ntests/\nREADME.md"
+      template: "app/main.py\napp/realtime.py\ntests/"
       checkSpec:
         kind: fastapi
         module: app.main
@@ -614,9 +607,7 @@ courses:
 
         src/pipeline.py
 
-        tests/
-
-        README.md"
+        tests/"
       checkSpec:
         kind: computer-vision
         files: [ "src/io.py", "src/preprocess.py", "src/geometry.py", "src/pipeline.py" ]
@@ -655,9 +646,7 @@ courses:
 
         src/report.py
 
-        tests/fixtures/
-
-        README.md"
+        tests/fixtures/"
       checkSpec:
         kind: computer-vision
         files: [ "src/load.py", "src/mask.py", "src/measure.py", "src/report.py" ]
@@ -685,7 +674,7 @@ courses:
       estimatedMinutes: 180
       skills: [features, classification, preprocessing, evaluation]
       requiredTopicKeys: [oznaky-i-proste-porivnyannya, classification-detection-i-segmentation]
-      template: "src/load.py\nsrc/edges.py\nsrc/report.py\ntests/\nREADME.md"
+      template: "src/load.py\nsrc/edges.py\nsrc/report.py\ntests/"
       milestones:
         - id: preprocess
           title: Preparation
@@ -707,7 +696,7 @@ courses:
       estimatedMinutes: 225
       skills: [video, optical flow, tracking, backpressure, evaluation]
       requiredTopicKeys: [cv-videopotik-kadry-ta-backpressure, cv-optychnyy-potik-i-tracking-baseline]
-      template: "src/video.py\nsrc/motion.py\ntests/\nREADME.md"
+      template: "src/video.py\nsrc/motion.py\ntests/"
       milestones:
         - id: frames
           title: Frames
@@ -729,7 +718,7 @@ courses:
       estimatedMinutes: 240
       skills: [augmentation, reproducibility, batch processing, quality gates, reporting]
       requiredTopicKeys: [cv-data-augmentation-i-reproducibility, cv-batch-processing-i-pipeline-quality-gates]
-      template: "src/batch.py\nsrc/quality.py\ntests/\nREADME.md"
+      template: "src/batch.py\nsrc/quality.py\ntests/"
       milestones:
         - id: batch
           title: Batch contract
@@ -752,7 +741,7 @@ courses:
       estimatedMinutes: 150
       skills: [Scanner, variables and types, conditions, loops]
       requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while]
-      template: "src/Main.java\nREADME.md"
+      template: "src/Main.java"
       milestones:
         - id: contract
           title: Input contract
@@ -777,7 +766,7 @@ courses:
       estimatedMinutes: 180
       skills: [classes, methods, collections, exceptions]
       requiredTopicKeys: [metody-parametry-perevantazhennya, klasy-ta-ob-yekty, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
-      template: "src/Main.java\nREADME.md"
+      template: "src/Main.java"
       milestones:
         - id: model
           title: Contact model
@@ -799,7 +788,7 @@ courses:
       estimatedMinutes: 150
       skills: [arrays, loops, methods, conditions]
       requiredTopicKeys: [masyvy-ta-robota-z-nymy, metody-parametry-perevantazhennya]
-      template: "src/Main.java\nREADME.md"
+      template: "src/Main.java"
       milestones:
         - id: input
           title: Grade input
@@ -821,7 +810,7 @@ courses:
       estimatedMinutes: 210
       skills: [classes, encapsulation, inheritance, polymorphism, interfaces]
       requiredTopicKeys: [klasy-ta-ob-yekty, inkapsulyatsiya-hetery-setery, nasliduvannya, polimorfizm-i-piznye-zv-yazuvannya, abstraktni-klasy-ta-interfeysy]
-      template: "src/Main.java\nREADME.md"
+      template: "src/Main.java"
       milestones:
         - id: contract
           title: Shape contract
@@ -843,7 +832,7 @@ courses:
       estimatedMinutes: 210
       skills: [Generics, List, Set, Map, iterators, Comparator]
       requiredTopicKeys: [uzahalnennya-generics-osnovy, kolektsii-list-set-map, kolektsii-iteratory-ta-porivnyannya, porivnyannya-ob-yektiv-equals-hashcode-comparable-comparator]
-      template: "src/Main.java\nREADME.md"
+      template: "src/Main.java"
       milestones:
         - id: model
           title: Typed model
@@ -869,9 +858,7 @@ courses:
       requiredTopicKeys: [ robota-z-json-xml, lohuvannya-slf4j-logback, testuvannya-junit-5-mockito ]
       template: "src/main/java/LogAnalyzer.java
 
-        src/test/
-
-        README.md"
+        src/test/"
       milestones:
         - id: parse
           title: Parser
@@ -893,7 +880,7 @@ courses:
       estimatedMinutes: 210
       skills: [functional interfaces, executors, Future, CompletableFuture, concurrency, tests]
       requiredTopicKeys: [funktsionalni-interfeysy, executors-future-completablefuture, konkurentnist-thread-runnable, pul-potokiv-ta-planuvannya-zadach, testuvannya-junit-5-mockito]
-      template: "src/main/java/JobRunner.java\nsrc/test/\nREADME.md"
+      template: "src/main/java/JobRunner.java\nsrc/test/"
       milestones:
         - id: contract
           title: Job contract
@@ -915,7 +902,7 @@ courses:
       estimatedMinutes: 165
       skills: [Stream API, collectors, lambdas, grouping, sorting]
       requiredTopicKeys: [stream-api-osnovy, stream-api-kolektory-ta-paralelni-potoky]
-      template: "src/main/java/Report.java\nsrc/test/\nREADME.md"
+      template: "src/main/java/Report.java\nsrc/test/"
       milestones:
         - id: pipeline
           title: Stream pipeline
@@ -937,7 +924,7 @@ courses:
       estimatedMinutes: 225
       skills: [HTTP client, JSON, cache, timeouts, exceptions]
       requiredTopicKeys: [merezheve-prohramuvannya-sokety-http-kliyent, robota-z-json-xml]
-      template: "src/main/java/ApiClient.java\nsrc/test/\nREADME.md"
+      template: "src/main/java/ApiClient.java\nsrc/test/"
       milestones:
         - id: client
           title: Client contract
@@ -959,7 +946,7 @@ courses:
       estimatedMinutes: 210
       skills: [JSON, security, configuration, validation, tests]
       requiredTopicKeys: [bezpeka-osnovy-kryptohrafii-v-java, robota-z-json-xml]
-      template: "src/main/java/ConfigLoader.java\nsrc/test/\nREADME.md"
+      template: "src/main/java/ConfigLoader.java\nsrc/test/"
       milestones:
         - id: schema
           title: Configuration schema
@@ -982,7 +969,7 @@ courses:
       estimatedMinutes: 135
       skills: [input and output, variables, conditions, switch, loops, functions]
       requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry]
-      template: "src/main.cpp\nREADME.md"
+      template: "src/main.cpp"
       milestones:
         - id: contract
           title: Input contract
@@ -1007,7 +994,7 @@ courses:
       estimatedMinutes: 165
       skills: [STL vector, strings, algorithms, functions]
       requiredTopicKeys: [funktsii-ta-parametry, ryadky-std-string, stl-vector, stl-alhorytmy]
-      template: "src/main.cpp\nREADME.md"
+      template: "src/main.cpp"
       milestones:
         - id: input
           title: Data input
@@ -1029,7 +1016,7 @@ courses:
       estimatedMinutes: 150
       skills: [arrays, indexing, loops, functions]
       requiredTopicKeys: [masyvy-ta-indeksatsiya, funktsii-ta-parametry]
-      template: "src/main.cpp\nREADME.md"
+      template: "src/main.cpp"
       milestones:
         - id: input
           title: Array contract
@@ -1051,7 +1038,7 @@ courses:
       estimatedMinutes: 195
       skills: [RAII, pointers, references, classes, errors]
       requiredTopicKeys: [vkazivnyky-ta-adresy, posylannya-ta-const, raii-ta-keruvannya-resursamy]
-      template: "src/main.cpp\nREADME.md"
+      template: "src/main.cpp"
       milestones:
         - id: resource
           title: Resource owner
@@ -1073,7 +1060,7 @@ courses:
       estimatedMinutes: 225
       skills: [STL, vector, map, set, algorithms, iterators]
       requiredTopicKeys: [stl-vector, stl-map-ta-unordered-map, stl-set-ta-unordered-set, stl-alhorytmy, iteratory]
-      template: "src/main.cpp\nREADME.md"
+      template: "src/main.cpp"
       milestones:
         - id: model
           title: Record model
@@ -1103,9 +1090,7 @@ courses:
 
         src/main.cpp
 
-        tests/
-
-        README.md"
+        tests/"
       milestones:
         - id: scan
           title: Bypass
@@ -1128,7 +1113,7 @@ courses:
       estimatedMinutes: 210
       skills: [std::thread, mutex, chrono, STL, RAII, tests]
       requiredTopicKeys: [paralelnist-std-thread, synkhronizatsiya-mutex, chas-ta-std-chrono, naykrashchi-praktyky-ta-styl-kodu]
-      template: "src/log_reader.hpp\nsrc/log_reader.cpp\nsrc/main.cpp\ntests/\nREADME.md"
+      template: "src/log_reader.hpp\nsrc/log_reader.cpp\nsrc/main.cpp\ntests/"
       milestones:
         - id: parsing
           title: Record reading
@@ -1150,7 +1135,7 @@ courses:
       estimatedMinutes: 195
       skills: [new/delete, smart pointers, move semantics, references, RAII]
       requiredTopicKeys: [pam-yat-new-ta-delete, rozumni-vkazivnyky, kopiyuvannya-i-peremishchennya, lvalue-rvalue-ta-posylannya]
-      template: "src/loader.hpp\nsrc/loader.cpp\ntests/\nREADME.md"
+      template: "src/loader.hpp\nsrc/loader.cpp\ntests/"
       milestones:
         - id: ownership
           title: Ownership
@@ -1172,7 +1157,7 @@ courses:
       estimatedMinutes: 180
       skills: [headers, preprocessing, linking, build, diagnostics]
       requiredTopicKeys: [zaholovky-ta-kompilyatsiyni-odynytsi, preprotsesor-i-makrosy, skladannya-proyektu-ta-linkuvannya]
-      template: "include/\nsrc/\ntests/\nCMakeLists.txt\nREADME.md"
+      template: "include/\nsrc/\ntests/\nCMakeLists.txt"
       milestones:
         - id: units
           title: Translation units
@@ -1182,7 +1167,7 @@ courses:
           description: Configure a reproducible build and clear diagnostic output.
         - id: tests
           title: Build verification
-          description: Add a separate test target and a README command.
+          description: Add a separate test target and a command.
       acceptanceCriteria:
         - A clean build does not depend on local artifacts.
         - Headers do not create multiple definitions.
@@ -1194,7 +1179,7 @@ courses:
       estimatedMinutes: 225
       skills: [std::thread, mutex, condition_variable, chrono, tests]
       requiredTopicKeys: [paralelnist-std-thread, synkhronizatsiya-mutex, chas-ta-std-chrono]
-      template: "src/queue.hpp\nsrc/queue.cpp\ntests/\nREADME.md"
+      template: "src/queue.hpp\nsrc/queue.cpp\ntests/"
       milestones:
         - id: contract
           title: Queue contract

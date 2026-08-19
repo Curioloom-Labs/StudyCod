@@ -58,10 +58,9 @@ function projectProgressOrDefault(progress?: CourseItemProgress | null): CourseP
   return data && typeof data === "object" ? {
     milestoneIds: Array.isArray(data.milestoneIds) ? data.milestoneIds.map(String) : [],
     draft: typeof data.draft === "string" ? data.draft : "",
-    readme: typeof data.readme === "string" ? data.readme : "",
     status: data.status === "SUBMITTED" ? "SUBMITTED" : "DRAFT",
     submittedAt: data.submittedAt || null,
-  } : { milestoneIds: [], draft: "", readme: "", status: "DRAFT", submittedAt: null };
+  } : { milestoneIds: [], draft: "", status: "DRAFT", submittedAt: null };
 }
 
 function enrollmentPriority(status: EnrollmentStatus): number {
@@ -836,19 +835,18 @@ export async function checkCourseProject(userId: number, itemId: number, rawFile
   };
 }
 
-async function saveProjectProgress(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme: string }, submit: boolean) {
+async function saveProjectProgress(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme?: string }, submit: boolean) {
   const { item, enrollment, progress: existing } = await getEnrolledItemContext(userId, itemId);
   const allowedIds = new Set(projectMilestoneIds(item));
   const milestoneIds = [...new Set(input.milestoneIds.map((id) => String(id).trim()).filter((id) => allowedIds.has(id)))];
   const requiredIds = projectMilestoneIds(item);
-  if (submit && (requiredIds.some((id) => !milestoneIds.includes(id)) || !input.draft.trim() || !input.readme.trim())) {
+  if (submit && (requiredIds.some((id) => !milestoneIds.includes(id)) || !input.draft.trim())) {
     throw Object.assign(new Error("PROJECT_REQUIREMENTS_INCOMPLETE"), { statusCode: 422 });
   }
   const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
   progress.projectData = {
     milestoneIds,
     draft: input.draft,
-    readme: input.readme,
     status: submit ? "SUBMITTED" : "DRAFT",
     submittedAt: submit ? new Date().toISOString() : (progress.projectData?.submittedAt || null),
   };
@@ -877,11 +875,11 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
   };
 }
 
-export async function saveCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme: string }) {
+export async function saveCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme?: string }) {
   return saveProjectProgress(userId, itemId, input, false);
 }
 
-export async function submitCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme: string }) {
+export async function submitCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme?: string }) {
   return saveProjectProgress(userId, itemId, input, true);
 }
 

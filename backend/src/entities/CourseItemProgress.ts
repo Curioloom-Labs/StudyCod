@@ -19,7 +19,6 @@ export type CourseProjectProgressStatus = "DRAFT" | "SUBMITTED";
 export interface CourseProjectProgressData {
   milestoneIds: string[];
   draft: string;
-  readme: string;
   status: CourseProjectProgressStatus;
   submittedAt?: string | null;
 }

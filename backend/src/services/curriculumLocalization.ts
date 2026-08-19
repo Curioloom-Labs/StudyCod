@@ -34,6 +34,15 @@ function starterCode(runtime: CurriculumCourseDefinition["runtime"], locale: Cur
   return `# ${comment}\n`;
 }
 
+function withoutLegacyDocumentation(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !/README(?:\.md)?/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function projectMarkdown(project: CurriculumMiniProject, locale: CurriculumLocale): string {
   return [
     `## ${project.title}`,
@@ -46,21 +55,33 @@ function projectMarkdown(project: CurriculumMiniProject, locale: CurriculumLocal
     "",
     `### ${localeLabel(locale, "Стартова структура", "Starter structure")}`,
     "```text",
-    project.template,
+    withoutLegacyDocumentation(project.template),
     "```",
     "",
     `### ${localeLabel(locale, "Етапи", "Milestones")}`,
     ...project.milestones.map((milestone, index) => `${index + 1}. **${milestone.title}** — ${milestone.description}`),
     "",
     `### ${localeLabel(locale, "Критерії готовності", "Acceptance criteria")}`,
-    ...project.acceptanceCriteria.map((criterion) => `- ${criterion}`),
-    "",
-    localeLabel(
-      locale,
-      "Це інтеграційний мініпроєкт. Спочатку спроєктуйте контракт, потім реалізовуйте етапи послідовно й залиште короткий README з рішеннями та відомими обмеженнями.",
-      "This is an integration mini-project. Design the contract first, implement the milestones in order, and leave a short README with decisions and known limitations.",
-    ),
+    ...project.acceptanceCriteria.filter((criterion) => !/README/i.test(criterion)).map((criterion) => `- ${criterion}`),
   ].join("\n");
+}
+
+function sanitizeProjectContent(content: Record<string, unknown>): Record<string, unknown> {
+  if (content.project !== true) return content;
+  const projectSpec = content.projectSpec && typeof content.projectSpec === "object"
+    ? { ...(content.projectSpec as Record<string, unknown>) }
+    : null;
+  if (projectSpec) {
+    if (typeof projectSpec.template === "string") projectSpec.template = withoutLegacyDocumentation(projectSpec.template);
+    if (Array.isArray(projectSpec.acceptanceCriteria)) {
+      projectSpec.acceptanceCriteria = projectSpec.acceptanceCriteria.filter((criterion) => typeof criterion === "string" && !/README/i.test(criterion));
+    }
+  }
+  return {
+    ...content,
+    ...(typeof content.markdown === "string" ? { markdown: withoutLegacyDocumentation(content.markdown) } : {}),
+    ...(projectSpec ? { projectSpec } : {}),
+  };
 }
 
 function finalAssessment(locale: CurriculumLocale) {
@@ -135,7 +156,8 @@ export function localizedPrerequisiteTitle(courseKey: string | null | undefined,
  * and progress relationship. Progress therefore remains shared by languages.
  */
 export function localizeCourseItem<T extends { contentKey?: string | null; title: string; content?: Record<string, unknown> | null }>(item: T, locale: CurriculumLocale): T {
-  if (locale === "uk" || !item.contentKey) return item;
+  const baseContent = sanitizeProjectContent(item.content ?? {});
+  if (locale === "uk" || !item.contentKey) return { ...item, content: baseContent };
   const contentKey = String(item.contentKey);
   const courseKey = contentKey.split(".")[0] || "";
   const curriculum = getLocalizedCurriculum(locale);
@@ -143,7 +165,7 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
   if (topicMatch) {
     const topic = curriculum.topics.get(`${topicMatch[1]}.${topicMatch[2]}`);
     if (!topic) return item;
-    const content = { ...(item.content ?? {}) };
+     const content = { ...baseContent };
     if (topicMatch[3] === "theory") {
       content.markdown = topic.content;
       content.objectives = splitObjectives(topic.description);
@@ -165,7 +187,7 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
   if (projectMatch) {
     const project = curriculum.projects.get(`${projectMatch[1]}.${projectMatch[2]}`);
     if (!project) return item;
-    const content = { ...(item.content ?? {}) };
+     const content = { ...baseContent };
     content.markdown = projectMarkdown(project, locale);
     content.projectSpec = {
       ...(content.projectSpec as Record<string, unknown> | undefined),
@@ -174,7 +196,7 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
       requiredTopicKeys: project.requiredTopicKeys,
       milestones: project.milestones,
       acceptanceCriteria: project.acceptanceCriteria,
-      template: project.template,
+       template: withoutLegacyDocumentation(project.template),
       ...(project.checkSpec ? { checkSpec: project.checkSpec } : {}),
     };
     return { ...item, title: `Mini-project: ${project.title}`, content };
@@ -208,7 +230,7 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
         acceptanceCriteria: [
           localeLabel(locale, "Усі етапи виконані", "All milestones are complete"),
           localeLabel(locale, "Є короткі нотатки реалізації", "Short implementation notes are included"),
-          localeLabel(locale, "README пояснює запуск і обмеження", "The README explains setup and limitations"),
+           localeLabel(locale, "Є короткі нотатки про запуск і обмеження", "Short setup and limitation notes are included"),
         ],
         template: localeLabel(locale, "# Фінальна робота\n\n## Рішення\n\n## Перевірка\n", "# Final work\n\n## Solution\n\n## Verification\n"),
       },

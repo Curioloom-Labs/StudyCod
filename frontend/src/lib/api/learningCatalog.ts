@@ -52,7 +52,6 @@ export interface LearningCourseItem {
 export interface LearningProjectProgress {
   milestoneIds: string[];
   draft: string;
-  readme: string;
   status: "DRAFT" | "SUBMITTED";
   submittedAt?: string | null;
 }

@@ -12,23 +12,16 @@ import {
   Play,
   Rocket,
   Route,
-  Save,
-  Send,
   Sparkles,
   X,
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  checkCatalogProject,
   completeCatalogItem,
   enrollInCatalogCourse,
-  getCatalogProject,
   getLearningCourse,
-  saveCatalogProject,
-  submitCatalogProject,
   type LearningCourse,
   type LearningCourseItem,
-  type LearningProject,
 } from "../../lib/api/learningCatalog";
 import { MarkdownView } from "../../components/MarkdownView";
 import { Modal } from "../../components/ui/Modal";
@@ -150,11 +143,8 @@ export const LearningCoursePage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const [searchParams] = useSearchParams();
   const [course, setCourse] = React.useState<LearningCourse | null>(null);
-  const [projects, setProjects] = React.useState<Record<number, LearningProject>>({});
-  const [projectFiles, setProjectFiles] = React.useState<Record<number, string>>({});
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [projectLoadingId, setProjectLoadingId] = React.useState<number | null>(null);
   const [busyItem, setBusyItem] = React.useState<number | null>(null);
   const [activating, setActivating] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -166,7 +156,6 @@ export const LearningCoursePage: React.FC = () => {
     try {
       const loaded = await getLearningCourse(Number(courseId));
       setCourse(loaded);
-      setProjects({});
       setError(null);
       return loaded;
     } catch (caught: any) {
@@ -266,6 +255,8 @@ export const LearningCoursePage: React.FC = () => {
     return ordered;
   }, [allItems]);
 
+  const roadmapNodeRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+
   const nodeItems = (node: RoadmapNode): LearningCourseItem[] =>
     node.kind === "TOPIC" && node.theory ? [node.theory, ...node.practices] : node.item ? [node.item] : [];
 
@@ -279,6 +270,15 @@ export const LearningCoursePage: React.FC = () => {
   const completedTopics = topicNodes.filter(nodeCompleted).length;
   const projectNodes = roadmapNodes.filter((node) => node.kind === "PROJECT");
   const miniProjectNodes = projectNodes.filter((node) => node.item?.content.finalAssessment !== true);
+  const activeTopicNodeId = roadmapNodes.find((node) => node.kind === "TOPIC" && !nodeCompleted(node))?.id ?? null;
+
+  React.useEffect(() => {
+    if (loading || !course || focusPractice || selectedNodeId || !activeTopicNodeId) return;
+    const frame = window.requestAnimationFrame(() => {
+      roadmapNodeRefs.current[activeTopicNodeId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTopicNodeId, course, focusPractice, loading, selectedNodeId]);
 
   React.useEffect(() => {
     if (loading || !course || !focusPractice) return;
@@ -321,59 +321,6 @@ export const LearningCoursePage: React.FC = () => {
     }
   };
 
-  const updateProject = (itemId: number, patch: Partial<LearningProject["progress"]>) => {
-    setProjects((current) => current[itemId]
-      ? { ...current, [itemId]: { ...current[itemId], progress: { ...current[itemId].progress, ...patch } } }
-      : current);
-  };
-
-  const saveProject = async (item: LearningCourseItem, submit: boolean) => {
-    const project = projects[item.id];
-    if (!project) return;
-    setBusyItem(item.id);
-    setError(null);
-    setMessage(null);
-    try {
-      const input = { milestoneIds: project.progress.milestoneIds, draft: project.progress.draft, readme: project.progress.readme };
-      const response = submit ? await submitCatalogProject(item.id, input) : await saveCatalogProject(item.id, input);
-      if (response?.project) setProjects((current) => ({ ...current, [item.id]: response.project }));
-      if (submit) await load();
-      setMessage(submit
-        ? tr("Мініпроєкт подано.", "Mini-project submitted.")
-        : tr("Чернетку збережено.", "Draft saved."));
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "PROJECT_REQUIREMENTS_INCOMPLETE"
-        ? tr("Заповни всі етапи, опис реалізації та README.", "Complete all milestones, implementation notes, and README.")
-        : tr("Не вдалося зберегти мініпроєкт.", "Could not save the mini-project."));
-    } finally {
-      setBusyItem(null);
-    }
-  };
-
-  const checkProject = async (item: LearningCourseItem) => {
-    let files: Array<{ path: string; content: string }>;
-    try {
-      const parsed = JSON.parse(projectFiles[item.id] || "");
-      if (!Array.isArray(parsed)) throw new Error("not an array");
-      files = parsed;
-    } catch {
-      setError(tr("Встав JSON-масив файлів для перевірки.", "Paste a JSON array of files for the check."));
-      return;
-    }
-    setBusyItem(item.id);
-    setError(null);
-    try {
-      const result = await checkCatalogProject(item.id, files);
-      setMessage(result?.passed
-        ? tr("Перевірку проєкту пройдено.", "Project check passed.")
-        : tr("Перевірку не пройдено.", "Project check failed."));
-    } catch {
-      setError(tr("Не вдалося запустити ізольовану перевірку.", "Could not start the isolated project check."));
-    } finally {
-      setBusyItem(null);
-    }
-  };
-
   const handleNodeClick = (node: RoadmapNode, index: number) => {
     if (!courseIsActive) {
       setMessage(tr("Активуйте курс, щоб відкрити перший вузол.", "Activate the course to open the first node."));
@@ -388,17 +335,14 @@ export const LearningCoursePage: React.FC = () => {
     }
 
     if (nodeCompleted(node)) return;
-    if (node.kind === "PROJECT" || node.kind === "MILESTONE") setSelectedNodeId(node.id);
+    if (node.kind === "PROJECT" && node.item) {
+      navigate(`/learning/course/${course.id}/practice/${node.item.id}`);
+      return;
+    }
+    if (node.kind === "MILESTONE") setSelectedNodeId(node.id);
   };
 
-  const finalProjectNode = finalWork ? {
-    id: `project-${finalWork.id}`,
-    kind: "PROJECT" as const,
-    title: finalWork.title,
-    item: finalWork,
-    practices: [],
-  } : null;
-  const selectedNode = [...roadmapNodes, ...(finalProjectNode ? [finalProjectNode] : [])].find((node) => node.id === selectedNodeId) ?? null;
+  const selectedNode = roadmapNodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedTopic = selectedNode?.kind === "TOPIC" ? selectedNode : null;
   const selectedTopicItems = selectedTopic ? nodeItems(selectedTopic) : [];
   const selectedTopicAverage = selectedTopicItems.length
@@ -406,28 +350,7 @@ export const LearningCoursePage: React.FC = () => {
     : 0;
   const selectedTopicCompleted = selectedTopicItems.filter((item) => item.progress.status === "COMPLETED").length;
   const selectedTopicPractice = selectedTopic?.practices.find((item) => item.progress.status !== "COMPLETED") ?? selectedTopic?.practices[0] ?? null;
-  const selectedItem = selectedNode?.kind !== "TOPIC" ? selectedNode?.item : undefined;
-  const selectedProject = selectedNode?.kind === "PROJECT" && selectedNode.item ? projects[selectedNode.item.id] : undefined;
-
-  React.useEffect(() => {
-    const projectId = selectedNode?.kind === "PROJECT" ? selectedNode.item?.id : undefined;
-    if (!projectId || projects[projectId]) return;
-    let cancelled = false;
-    setProjectLoadingId(projectId);
-    void getCatalogProject(projectId)
-      .then((project) => {
-        if (!cancelled) setProjects((current) => ({ ...current, [projectId]: project }));
-      })
-      .catch(() => {
-        if (!cancelled) setError(tr("Не вдалося завантажити дані мініпроєкту.", "Could not load the mini-project details."));
-      })
-      .finally(() => {
-        if (!cancelled) setProjectLoadingId(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projects, selectedNode?.kind, selectedNode?.item?.id]);
+  const selectedItem = selectedNode?.kind === "MILESTONE" ? selectedNode.item : undefined;
 
   if (loading) return <div role="status" aria-live="polite" className="mx-auto max-w-5xl px-6 py-16 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо курс…", "Loading course…")}</div>;
   if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate("/learning/catalog")} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
@@ -507,7 +430,7 @@ export const LearningCoursePage: React.FC = () => {
                     ? tr("Відкрити мініпроєкт", "Open mini-project")
                     : tr("Відкрити практику", "Open practice");
 
-            return <div key={node.id} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
+            return <div key={node.id} ref={(element) => { roadmapNodeRefs.current[node.id] = element; }} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
               {index > 0 && renderRoadmapWave(incomingThickRatio, "absolute left-5 top-0 z-[1] block h-1/2 w-16 -translate-x-1/2 lg:left-1/2 lg:w-24")}
               {index < roadmapNodes.length - 1 && renderRoadmapWave(outgoingThickRatio, "absolute left-5 top-1/2 z-[1] block h-[calc(50%+1.25rem)] w-16 -translate-x-1/2 lg:left-1/2 lg:h-[calc(50%+1.75rem)] lg:w-24")}
               <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
@@ -543,7 +466,6 @@ export const LearningCoursePage: React.FC = () => {
 
       {selectedItem && selectedNode.kind === "MILESTONE" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}<div className="mt-5 flex items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedItem.progress.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("Цей етап ще потрібно зарахувати.", "This milestone still needs to be completed.")}</span><button type="button" disabled={selectedItem.progress.status === "COMPLETED" || busyItem === selectedItem.id} onClick={() => void completeItem(selectedItem)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45">{selectedItem.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити етап", "Complete milestone")}</button></div></div>}
 
-      {selectedItem && selectedNode.kind === "PROJECT" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}{projectLoadingId === selectedItem.id ? <div role="status" className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо дані проєкту…", "Loading project details…")}</div> : selectedProject?.projectSpec ? <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 sm:p-6"><div className="space-y-3">{selectedProject.projectSpec.milestones.map((milestone) => <label key={milestone.id} className="flex items-start gap-3 rounded-xl border border-border bg-bg-surface p-3"><input type="checkbox" checked={selectedProject.progress.milestoneIds.includes(milestone.id)} onChange={(event) => updateProject(selectedItem.id, { milestoneIds: event.target.checked ? [...selectedProject.progress.milestoneIds, milestone.id] : selectedProject.progress.milestoneIds.filter((id) => id !== milestone.id) })} className="mt-1 size-4 accent-primary" /><span className="text-sm"><b className="block text-text-primary">{milestone.title}</b><span className="text-text-secondary">{milestone.description}</span></span></label>)}</div><label className="mt-4 block text-sm font-bold text-text-primary">{tr("Нотатки реалізації", "Implementation notes")}<textarea value={selectedProject.progress.draft} onChange={(event) => updateProject(selectedItem.id, { draft: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label><label className="mt-4 block text-sm font-bold text-text-primary">README<textarea value={selectedProject.progress.readme} onChange={(event) => updateProject(selectedItem.id, { readme: event.target.value })} className="mt-2 min-h-24 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm font-normal text-text-primary" /></label>{selectedProject.projectSpec.checkSpec && <><label className="mt-4 block text-sm font-bold text-text-primary">Files JSON<textarea value={projectFiles[selectedItem.id] || ""} onChange={(event) => setProjectFiles((current) => ({ ...current, [selectedItem.id]: event.target.value }))} className="mt-2 min-h-28 w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-xs font-normal text-text-primary" /></label><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void checkProject(selectedItem)} className="rounded-xl border border-primary px-4 py-2 text-sm font-bold text-primary disabled:opacity-45">{tr("Запустити перевірку", "Run check")}</button></>}<div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, false)} className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-text-primary disabled:opacity-45"><Save className="mr-2 inline size-4" />{tr("Зберегти", "Save")}</button><button type="button" disabled={busyItem === selectedItem.id} onClick={() => void saveProject(selectedItem, true)} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-45"><Send className="mr-2 inline size-4" />{tr("Подати", "Submit")}</button></div></div> : <div className="mt-5 rounded-2xl border border-border bg-bg-base p-4 text-sm text-text-secondary">{tr("Дані проєкту ще завантажуються або недоступні.", "Project details are still loading or unavailable.")}</div>}</div>}
     </section>}
 
     <Modal
@@ -574,7 +496,7 @@ export const LearningCoursePage: React.FC = () => {
       </div>}
     </Modal>
 
-    <section className="mt-6 rounded-2xl border border-border bg-bg-surface p-6"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна робота", "Final work")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{finalWork?.progress.status === "COMPLETED" ? tr("Фінальну роботу подано. Курс завершено.", "The final work was submitted. The course is complete.") : `${learningItemsCompleted} / ${learningItems.length} ${tr("навчальних елементів завершено", "learning items completed")}. ${tr("Заверши маршрут, потім подай фінальну роботу з описом рішення та перевіркою.", "Complete the path, then submit the final work with implementation notes and verification.")}`}</p>{finalWork && finalWork.progress.status !== "COMPLETED" && <button type="button" disabled={!canStartFinalWork} onClick={() => { setSelectedNodeId(`project-${finalWork.id}`); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45">{canStartFinalWork ? tr("Відкрити фінальну роботу", "Open final work") : tr("Заверши маршрут спочатку", "Complete the path first")}</button>}</div></div></section>
+    <section className="mt-6 rounded-2xl border border-border bg-bg-surface p-6"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна робота", "Final work")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{finalWork?.progress.status === "COMPLETED" ? tr("Фінальну роботу подано. Курс завершено.", "The final work was submitted. The course is complete.") : `${learningItemsCompleted} / ${learningItems.length} ${tr("навчальних елементів завершено", "learning items completed")}. ${tr("Заверши маршрут, потім відкрий фінальну роботу у вкладці практики.", "Complete the path, then open the final work in the Practice tab.")}`}</p>{finalWork && finalWork.progress.status !== "COMPLETED" && <button type="button" disabled={!canStartFinalWork} onClick={() => navigate(`/learning/course/${course.id}/practice/${finalWork.id}`)} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45">{canStartFinalWork ? tr("Відкрити фінальну роботу", "Open final work") : tr("Заверши маршрут спочатку", "Complete the path first")}</button>}</div></div></section>
   </main>;
 };
 
