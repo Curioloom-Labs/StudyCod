@@ -7,7 +7,7 @@ courses:
       description: Build a console calculator that reads two numbers and an operator, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 120
       skills: [input, variables, conditions, loops]
-      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range]
+      requiredTopicKeys: [input-data-input, operators-and-expressions, flow-control-if-elif-else, for-while-and-range-loops]
       template: "main.py\nREADME.md"
       milestones:
         - id: contract
@@ -32,7 +32,7 @@ courses:
       description: Build a console contact book with add, search, update, and delete operations, including predictable behavior for an empty book and an unknown name.
       estimatedMinutes: 150
       skills: [lists, dictionaries, functions, loops, input]
-      requiredTopicKeys: [spysky-list-osnovy, slovnyky-dict, funktsii-ta-parametry-args-kwargs]
+      requiredTopicKeys: [lists-are-the-basics, dictionaries-dict, args-kwargs-functions-and-parameters]
       template: "main.py\nREADME.md"
       milestones:
         - id: model
@@ -48,6 +48,72 @@ courses:
         - Adding a new name does not destroy existing records.
         - Searching for or deleting a missing name does not terminate the program with an error.
         - Every command has one defined response format.
+
+    - key: python-file-backup
+      title: File Backup Tool
+      description: Build a CLI tool that finds files by rules, copies them to a backup directory, and does not fail the whole operation because one file is unavailable.
+      estimatedMinutes: 165
+      skills: [pathlib, files, context managers, exceptions]
+      requiredTopicKeys: [paths-and-files-pathlib, files-and-context-managers, exception-handling]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: scan
+          title: File discovery
+          description: Define selection rules and safe behavior for an empty directory.
+        - id: copy
+          title: Copying
+          description: Copy files to a controlled directory without overwriting unexpected data.
+        - id: errors
+          title: Error handling
+          description: Record problematic files and continue processing available ones.
+      acceptanceCriteria:
+        - Paths are built with pathlib and work across operating systems.
+        - A repeated run does not corrupt an existing backup.
+        - An error for one file does not hide results for other files.
+
+    - key: python-product-catalog
+      title: Product Catalog
+      description: Build a CLI product catalog with a dataclass model, search, filtering, and a stock report.
+      estimatedMinutes: 180
+      skills: [classes, dataclasses, dictionaries, functions, filtering]
+      requiredTopicKeys: [oop-classes-and-objects, data-classes-dataclasses]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: model
+          title: Product model
+          description: Describe a product with a dataclass and define required fields.
+        - id: queries
+          title: Search and filters
+          description: Implement search by name, category, and minimum stock.
+        - id: report
+          title: Report
+          description: Produce a stable report with product count and total value.
+      acceptanceCriteria:
+        - An invalid product is not silently included in the final report.
+        - Filters do not mutate the source collection.
+        - An empty catalog has a clear result.
+
+    - key: python-text-analyzer
+      title: Text Analyzer
+      description: Create a program that reads text, finds words with regular expressions, and produces a deterministic report of frequencies and suspicious matches.
+      estimatedMinutes: 150
+      skills: [strings, functions, dictionaries, regular expressions]
+      requiredTopicKeys: [strings-and-formatting, args-kwargs-functions-and-parameters, regular-expressions-re]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: tokenize
+          title: Text parsing
+          description: Normalize the input and extract tokens using a defined rule.
+        - id: analyze
+          title: Analysis
+          description: Count frequencies and find matches for the target pattern.
+        - id: output
+          title: Report
+          description: Print results in one format regardless of input order.
+      acceptanceCriteria:
+        - Empty text is handled without an exception.
+        - Case and extra punctuation do not create false duplicates.
+        - The report can be checked with a fixed input set.
 
   python-extensions:
     - key: python-data-pipeline
@@ -110,6 +176,72 @@ courses:
         - A repeated run does not duplicate results or leave corrupted state.
         - A failed job has a clear status and is not hidden as successful.
         - Tests do not depend on real time, the network, or production secrets.
+
+    - key: python-async-crawler
+      title: Async Data Crawler
+      description: Build an async CLI crawler that fetches several resources, limits concurrency, and returns a separate status for every request.
+      estimatedMinutes: 180
+      skills: [HTTP, asyncio, timeouts, JSON, errors]
+      requiredTopicKeys: [http-kliyenty-requests-httpx, parsynh-html-beautifulsoup, asynkhronnist-asyncio-async-await]
+      template: "src/crawler.py\ntests/\nREADME.md"
+      milestones:
+        - id: client
+          title: HTTP client
+          description: Define the timeout, response format, and behavior for an unsuccessful status.
+        - id: concurrency
+          title: Concurrency
+          description: Run independent requests asynchronously with a controlled limit.
+        - id: result
+          title: Results
+          description: Keep successful data and errors separate in a deterministic report.
+      acceptanceCriteria:
+        - One slow resource does not block all others forever.
+        - Corrupted JSON is not reported as a successful result.
+        - Tests make no real network requests.
+
+    - key: python-sqlite-report
+      title: Local Database Report
+      description: Build a tool that imports records into SQLite, queries them for a report, and behaves safely on a repeated run.
+      estimatedMinutes: 210
+      skills: [SQLite, transactions, logging, tests, CSV]
+      requiredTopicKeys: [json-csv-xml, lohuvannya, robota-z-bd-sqlite3-sqlalchemy]
+      template: "src/importer.py\nsrc/report.py\ntests/\nREADME.md"
+      milestones:
+        - id: schema
+          title: Data schema
+          description: Define tables, keys, and the rule for duplicate records.
+        - id: import
+          title: Import
+          description: Load data transactionally without leaving a partially written batch.
+        - id: report
+          title: Analytical report
+          description: Produce a CSV report with counts of successful and skipped records.
+      acceptanceCriteria:
+        - Repeating an import does not create duplicates.
+        - A record error does not hide the transaction state.
+        - Tests use a temporary database without production files.
+
+    - key: python-ml-experiment
+      title: Reproducible ML Experiment
+      description: Build a small pipeline for preparing tabular data, training a baseline model, and comparing metrics in a reproducible report.
+      estimatedMinutes: 240
+      skills: [NumPy, Pandas, visualization, scikit-learn, reproducibility]
+      requiredTopicKeys: [numpy-osnovy, pandas-osnovy, vizualizatsiya-matplotlib-seaborn, ml-ohlyad-scikit-learn-bazovi-ponyattya]
+      template: "src/prepare.py\nsrc/train.py\nsrc/report.py\nREADME.md"
+      milestones:
+        - id: data
+          title: Data preparation
+          description: Load the dataset, check missing values, and record the feature shape.
+        - id: model
+          title: Baseline model
+          description: Train a simple model with a fixed seed and a train/test split.
+        - id: evaluation
+          title: Evaluation
+          description: Compare metrics and save a short chart and text conclusion.
+      acceptanceCriteria:
+        - The same seed produces the same metrics on a repeated run.
+        - Train and test data are not mixed during preparation.
+        - Invalid or empty data produces a clear error.
 
   flask:
     - key: flask-reading-list
@@ -188,6 +320,84 @@ courses:
         - SQL queries are parameterized.
         - The ownership of the resource is checked on the server.
         - Tests are run without production secrets.
+
+    - key: flask-storefront
+      title: Flask Storefront
+      description: Build a small Flask storefront with a catalog, filters, an order form, and safe error messages.
+      estimatedMinutes: 180
+      skills: [routes, templates, forms, validation, sessions]
+      requiredTopicKeys: [flask-zastosunok-i-marshruty, flask-request-i-response, flask-shablony-ta-statychni-fayly, flask-formy-ta-validatsiya]
+      template: "app/__init__.py\napp/routes.py\napp/templates/\ntests/\nREADME.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/"]
+      milestones:
+        - id: catalog
+          title: Catalog
+          description: Implement a list page and filtering through a query parameter.
+        - id: order
+          title: Order form
+          description: Add form validation and a clear response after submission.
+        - id: safety
+          title: Safe UI
+          description: Do not insert untrusted HTML or expose a traceback to users.
+      acceptanceCriteria:
+        - An invalid form does not create an order.
+        - An empty catalog has a dedicated state instead of a blank page.
+        - A GET request does not mutate data.
+
+    - key: flask-job-board
+      title: Background Job Board
+      description: Build a Flask application for queuing long jobs, viewing their status, and safely retrying the same request.
+      estimatedMinutes: 225
+      skills: [application factory, CLI, background jobs, queues, sessions]
+      requiredTopicKeys: [flask-konfihuratsiya-ta-application-factory, flask-cli-komandy-ta-kerovani-operatsii, flask-background-jobs-i-cherhy]
+      template: "app/__init__.py\napp/jobs.py\napp/routes.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/jobs"]
+      milestones:
+        - id: enqueue
+          title: Enqueue
+          description: Accept a job and return a stable identifier.
+        - id: status
+          title: Status
+          description: Implement pending, running, succeeded, and failed states.
+        - id: retry
+          title: Retry
+          description: Do not create a duplicate for the same idempotency key.
+      acceptanceCriteria:
+        - A repeated request does not duplicate an active job.
+        - An exception in a worker becomes failed with a safe message.
+        - Tests do not start a real external queue.
+
+    - key: flask-operations-console
+      title: Flask Operations Console
+      description: Bring a Flask application to operational readiness with health/readiness endpoints, structured logs, and controlled errors.
+      estimatedMinutes: 210
+      skills: [observability, health checks, error handlers, logging, deployment]
+      requiredTopicKeys: [flask-bezpechnyy-deployment, flask-observability-i-health-checks]
+      template: "app/__init__.py\napp/observability.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/health", "/ready"]
+      milestones:
+        - id: health
+          title: Health contract
+          description: Separate liveness and readiness and return stable JSON.
+        - id: errors
+          title: Unified errors
+          description: Add error handlers without a traceback in production responses.
+        - id: logs
+          title: Observability
+          description: Add a request id and logging without secrets.
+      acceptanceCriteria:
+        - Readiness does not return ready when a critical dependency is unavailable.
+        - Clients receive one error format for 4xx and 5xx responses.
+        - Secrets never appear in logs.
 
   fastapi:
     - key: fastapi-reading-log
@@ -328,6 +538,58 @@ courses:
         - Readiness does not return ready when a critical dependency is not
           available.
 
+    - key: fastapi-upload-center
+      title: Upload Center
+      description: Build a FastAPI service for file uploads, streaming downloads, and validation of input size and type.
+      estimatedMinutes: 210
+      skills: [UploadFile, streaming, response models, errors, tests]
+      requiredTopicKeys: [response-models-serializatsiya-ta-kontrol-poliv, statusy-httpexception-ta-obrobka-pomylok, fayly-uploadfile-ta-potokovi-vidpovidi, testuvannya-api-cherez-testclient]
+      template: "app/main.py\napp/routers/files.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: ["/docs"]
+      milestones:
+        - id: upload
+          title: Upload contract
+          description: Define allowed types, size, and response format.
+        - id: storage
+          title: Storage
+          description: Save the file to a controlled location and do not trust the client filename.
+        - id: download
+          title: Streaming download
+          description: Stream the file and handle a missing resource with HTTPException.
+      acceptanceCriteria:
+        - An oversized or forbidden file receives a 4xx response.
+        - A client filename cannot enable path traversal.
+        - Tests do not depend on local production files.
+
+    - key: fastapi-realtime-feed
+      title: Realtime Feed
+      description: Build a FastAPI event feed with WebSocket and Server-Sent Events, controlled connections, and correct client shutdown.
+      estimatedMinutes: 240
+      skills: [WebSockets, SSE, async, backpressure, tests]
+      requiredTopicKeys: [async-await-event-loop-i-blokuvalni-operatsii, websockets-i-dvostoronniy-zv-yazok, streaming-server-sent-events-i-velyki-vidpovidi]
+      template: "app/main.py\napp/realtime.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: ["/docs"]
+      milestones:
+        - id: events
+          title: Event
+          description: Define the event format, id, and redelivery rules.
+        - id: transport
+          title: Delivery channels
+          description: Implement WebSocket and SSE with the same data contract.
+        - id: lifecycle
+          title: Lifecycle
+          description: Handle disconnects, slow clients, and server shutdown.
+      acceptanceCriteria:
+        - One disconnected client does not terminate delivery for others.
+        - Events have a valid schema and sequential identifier.
+        - Tests leave no background task after completion.
+
   computer-vision:
     - key: cv-document-scanner
       title: Document Scanner
@@ -417,13 +679,79 @@ courses:
         - The report distinguishes "object not found" from a read error.
         - There are at least three fixture images with different scenarios.
 
+    - key: cv-edge-inspector
+      title: Edge Inspector
+      description: Build a pipeline that compares several edge-detection methods and explains how noise and lighting change the result.
+      estimatedMinutes: 180
+      skills: [features, classification, preprocessing, evaluation]
+      requiredTopicKeys: [oznaky-i-proste-porivnyannya, classification-detection-i-segmentation]
+      template: "src/load.py\nsrc/edges.py\nsrc/report.py\ntests/\nREADME.md"
+      milestones:
+        - id: preprocess
+          title: Preparation
+          description: Normalize the input and record the image shape and type.
+        - id: compare
+          title: Comparison
+          description: Apply two methods and compare them with the same criteria.
+        - id: limits
+          title: Method limits
+          description: Describe false positives and unreliable scenarios.
+      acceptanceCriteria:
+        - Different image types pass through without channel confusion.
+        - A failed decode returns a controlled error.
+        - The report includes parameters as well as a metric.
+
+    - key: cv-video-motion-detector
+      title: Video Motion Detector
+      description: Build a video-stream pipeline that detects motion between frames, records events, and does not accumulate an unbounded frame queue.
+      estimatedMinutes: 225
+      skills: [video, optical flow, tracking, backpressure, evaluation]
+      requiredTopicKeys: [cv-videopotik-kadry-ta-backpressure, cv-optychnyy-potik-i-tracking-baseline]
+      template: "src/video.py\nsrc/motion.py\ntests/\nREADME.md"
+      milestones:
+        - id: frames
+          title: Frames
+          description: Define the frame format and behavior for a broken stream.
+        - id: motion
+          title: Motion
+          description: Find motion regions and filter small noise.
+        - id: limits
+          title: Limits
+          description: Check different frame rates, lighting, and pauses.
+      acceptanceCriteria:
+        - Processing uses bounded memory for a long stream.
+        - A corrupted frame does not terminate the whole pipeline.
+        - Events have a stable format and timestamp.
+
+    - key: cv-quality-batch
+      title: Batch Quality Pipeline
+      description: Build a batch pipeline for processing images with controlled augmentation, metrics, and quality gates before publishing results.
+      estimatedMinutes: 240
+      skills: [augmentation, reproducibility, batch processing, quality gates, reporting]
+      requiredTopicKeys: [cv-data-augmentation-i-reproducibility, cv-batch-processing-i-pipeline-quality-gates]
+      template: "src/batch.py\nsrc/quality.py\ntests/\nREADME.md"
+      milestones:
+        - id: batch
+          title: Batch contract
+          description: Define input structure, processing order, and file-skip rules.
+        - id: quality
+          title: Quality gates
+          description: Check metrics, thresholds, and the reason a batch was rejected.
+        - id: reproducibility
+          title: Reproducibility
+          description: Record the seed, parameter version, and final manifest.
+      acceptanceCriteria:
+        - The same seed produces the same manifest on a repeated run.
+        - One broken file does not hide batch statistics.
+        - Publishing is blocked when a quality gate fails.
+
   java-core:
     - key: java-cli-calculator
       title: Terminal Calculator
       description: Build a console calculator that reads two numbers and an operator through Scanner, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 150
       skills: [Scanner, variables and types, conditions, loops]
-      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while]
+      requiredTopicKeys: [scanner-data-entry, operators-and-expressions, flow-control-if-else-switch, loops-for-while-do-while]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: contract
@@ -448,7 +776,7 @@ courses:
       description: Build a console contact catalog with search, update, and delete operations. The program must keep records in a collection and must not terminate because a record is missing.
       estimatedMinutes: 180
       skills: [classes, methods, collections, exceptions]
-      requiredTopicKeys: [metody-parametry-perevantazhennya, klasy-ta-ob-yekty, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
+      requiredTopicKeys: [methods-parameters-overload, classes-and-objects, collections-letter-set-map, exception-handling-the-basics]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: model
@@ -464,6 +792,72 @@ courses:
         - Operations do not change unrelated records.
         - A missing contact produces a clear response instead of escaping an exception.
         - Repeating commands does not create unexpected duplicates.
+
+    - key: java-gradebook
+      title: Gradebook
+      description: Build a console gradebook that stores an array of results, calculates the average, and shows the best and worst result.
+      estimatedMinutes: 150
+      skills: [arrays, loops, methods, conditions]
+      requiredTopicKeys: [arrays-and-working-with-them, methods-parameters-overload]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: input
+          title: Grade input
+          description: Define the number of grades and behavior for an empty set.
+        - id: metrics
+          title: Metrics
+          description: Move average, minimum, and maximum into separate methods.
+        - id: output
+          title: Report
+          description: Print a deterministic summary without extra lines.
+      acceptanceCriteria:
+        - An empty set does not divide by zero.
+        - Every result is counted exactly once.
+        - Input order does not change the average.
+
+    - key: java-shape-workshop
+      title: Shape Workshop
+      description: Build a small geometry model with inheritance, encapsulation, and polymorphic area calculation.
+      estimatedMinutes: 210
+      skills: [classes, encapsulation, inheritance, polymorphism, interfaces]
+      requiredTopicKeys: [classes-and-objects, encapsulation-getters-setters, imitation, polymorphism-and-late-binding, abstract-classes-and-interfaces]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: contract
+          title: Shape contract
+          description: Define the shared interface and rules for invalid parameters.
+        - id: hierarchy
+          title: Hierarchy
+          description: Implement several shapes without duplicating shared logic.
+        - id: report
+          title: Polymorphic report
+          description: Process different shapes through a common type and produce a report.
+      acceptanceCriteria:
+        - Internal fields cannot be changed directly by client code.
+        - Adding a shape does not require rewriting the report loop.
+        - Invalid parameters produce a controlled error.
+
+    - key: java-collection-insights
+      title: Collection Insights
+      description: Build a program that groups records in collections, sorts them by several rules, and produces a report independent of hash-table order.
+      estimatedMinutes: 210
+      skills: [Generics, List, Set, Map, iterators, Comparator]
+      requiredTopicKeys: [generics-the-basics, collections-letter-set-map, collections-iterators-and-comparisons, comparison-of-objects-equals-hashcode-comparable-comparator]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: model
+          title: Typed model
+          description: Describe records with generics and define equality rules.
+        - id: aggregate
+          title: Grouping
+          description: Build List, Set, and Map indexes for different queries.
+        - id: ordering
+          title: Stable ordering
+          description: Add a Comparator and produce the same report for the same data.
+      acceptanceCriteria:
+        - Duplicates are determined through consistent equals and hashCode.
+        - Sorting does not unexpectedly mutate the source collection.
+        - Empty collections have a valid report.
 
   java-advanced:
     - key: java-log-analyzer
@@ -515,13 +909,79 @@ courses:
         - The thread pool shuts down after all jobs are processed.
         - Tests do not depend on random execution order.
 
+    - key: java-stream-report
+      title: Stream Report
+      description: Build a Java report from a collection using Stream API, collectors, and controlled result sorting.
+      estimatedMinutes: 165
+      skills: [Stream API, collectors, lambdas, grouping, sorting]
+      requiredTopicKeys: [stream-api-osnovy, stream-api-kolektory-ta-paralelni-potoky]
+      template: "src/main/java/Report.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: pipeline
+          title: Stream pipeline
+          description: Build a chain of filtering, mapping, and aggregation.
+        - id: grouping
+          title: Grouping
+          description: Produce several metrics through collectors without duplicated loops.
+        - id: order
+          title: Stable ordering
+          description: Define a Comparator and a deterministic text format.
+      acceptanceCriteria:
+        - An empty stream produces a valid report.
+        - Grouping does not mutate the source records.
+        - The result does not depend on internal HashMap order.
+
+    - key: java-http-cache
+      title: HTTP Client with Cache
+      description: Build a Java client that retrieves JSON resources, caches successful responses, and handles timeouts and repeated requests correctly.
+      estimatedMinutes: 225
+      skills: [HTTP client, JSON, cache, timeouts, exceptions]
+      requiredTopicKeys: [merezheve-prohramuvannya-sokety-http-kliyent, robota-z-json-xml]
+      template: "src/main/java/ApiClient.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: client
+          title: Client contract
+          description: Define statuses, timeout, and the error format for an external service.
+        - id: cache
+          title: Caching
+          description: Store a successful response with a time-to-live and never cache errors.
+        - id: tests
+          title: Failure tests
+          description: Test timeout, invalid JSON, and a repeated request with a mock client.
+      acceptanceCriteria:
+        - A timeout cannot block the entire process forever.
+        - An invalid response is not stored as a successful cache entry.
+        - Tests make no real external requests.
+
+    - key: java-secure-config
+      title: Secure Service Configuration
+      description: Build a Java service that reads JSON configuration, validates secrets, and refuses to start with incomplete or unsafe settings.
+      estimatedMinutes: 210
+      skills: [JSON, security, configuration, validation, tests]
+      requiredTopicKeys: [bezpeka-osnovy-kryptohrafii-v-java, robota-z-json-xml]
+      template: "src/main/java/ConfigLoader.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: schema
+          title: Configuration schema
+          description: Define required fields and validation rules.
+        - id: secrets
+          title: Secrets
+          description: Keep secrets out of logs and separate them from ordinary parameters.
+        - id: startup
+          title: Startup guard
+          description: Return a clear error for incomplete configuration.
+      acceptanceCriteria:
+        - Incomplete configuration cannot start the service in an unsafe state.
+        - Secrets do not appear in exceptions or reports.
+        - Valid JSON configuration produces the same result.
+
   cpp-core:
     - key: cpp-cli-calculator
       title: Console Calculator
       description: Build a C++ console calculator that reads two numbers and an operator, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 135
       skills: [input and output, variables, conditions, switch, loops, functions]
-      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry]
+      requiredTopicKeys: [input-and-output-to-the-console, operators-and-precedence, conditional-statements-if-else, switch-and-enumeration, while-and-do-while-loops, the-for-loop-and-ranges, features-and-options]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: contract
@@ -546,7 +1006,7 @@ courses:
       description: Build a console program that collects a sequence of measurements, calculates summary values, and produces a stable text report.
       estimatedMinutes: 165
       skills: [STL vector, strings, algorithms, functions]
-      requiredTopicKeys: [funktsii-ta-parametry, ryadky-std-string, stl-vector, stl-alhorytmy]
+      requiredTopicKeys: [features-and-options, strings-std-string, stl-vector, stl-algorithms]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: input
@@ -562,6 +1022,72 @@ courses:
         - Empty input is handled without undefined behavior.
         - Calculations do not mutate the original sequence without an explicit reason.
         - The same data produces the same report.
+
+    - key: cpp-array-stats
+      title: Array Statistics
+      description: Build a program that reads an array of numbers, finds extrema, and reports the positions of the selected values.
+      estimatedMinutes: 150
+      skills: [arrays, indexing, loops, functions]
+      requiredTopicKeys: [arrays-and-indexing, features-and-options]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: input
+          title: Array contract
+          description: Define the input format and behavior for zero elements.
+        - id: scan
+          title: Scan
+          description: Implement the search for minimum, maximum, and their indexes.
+        - id: output
+          title: Result
+          description: Produce a short report with an explicit numeric format.
+      acceptanceCriteria:
+        - An empty array is not read out of bounds.
+        - Equal extrema have a defined index rule.
+        - The algorithm scans the array without unnecessary copies.
+
+    - key: cpp-raii-file-tool
+      title: Safe Resource Tool
+      description: Build a console tool that works with a resource through RAII, records operations, and finishes correctly after an error.
+      estimatedMinutes: 195
+      skills: [RAII, pointers, references, classes, errors]
+      requiredTopicKeys: [directions-and-addresses, link-and-const, raii-and-resource-management]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: resource
+          title: Resource owner
+          description: Define an owner class and copy/move rules.
+        - id: operations
+          title: Operations
+          description: Implement commands that never use an already released resource.
+        - id: cleanup
+          title: Shutdown
+          description: Check normal exit and error paths without leaks.
+      acceptanceCriteria:
+        - The resource owner releases it exactly once.
+        - An error does not leave a dangling pointer.
+        - A repeated run does not depend on the previous run state.
+
+    - key: cpp-stl-catalog
+      title: STL Catalog
+      description: Build a console record catalog with vector, map, and set, supporting search, grouping, and stable result sorting.
+      estimatedMinutes: 225
+      skills: [STL, vector, map, set, algorithms, iterators]
+      requiredTopicKeys: [stl-vector, stl-map-and-unordered-map, stl-set-and-unordered-set, stl-algorithms, iterators]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: model
+          title: Record model
+          description: Define record fields and the lookup key.
+        - id: indexes
+          title: Indexes
+          description: Use map and set for lookup and duplicate control.
+        - id: report
+          title: Stable report
+          description: Sort results with STL algorithms and print one format.
+      acceptanceCriteria:
+        - A duplicate key has defined behavior.
+        - Search does not change the catalog.
+        - An empty catalog does not trigger an iterator error.
 
   cpp-advanced:
     - key: cpp-file-indexer
@@ -617,3 +1143,69 @@ courses:
         - Shared counters have no data race.
         - A malformed file does not stop processing of other files.
         - Thread and file resources are released correctly.
+
+    - key: cpp-move-safe-loader
+      title: Resource-Safe Loader
+      description: Build a C++ data loader with an owned resource, move semantics, and controlled transfer of large objects.
+      estimatedMinutes: 195
+      skills: [new/delete, smart pointers, move semantics, references, RAII]
+      requiredTopicKeys: [pam-yat-new-ta-delete, rozumni-vkazivnyky, kopiyuvannya-i-peremishchennya, lvalue-rvalue-ta-posylannya]
+      template: "src/loader.hpp\nsrc/loader.cpp\ntests/\nREADME.md"
+      milestones:
+        - id: ownership
+          title: Ownership
+          description: Define who owns the resource and when it is released.
+        - id: move
+          title: Move semantics
+          description: Implement move constructor/operator without double release.
+        - id: tests
+          title: Verification
+          description: Test an empty resource, moving, and a loading error.
+      acceptanceCriteria:
+        - There is no double delete or dangling pointer.
+        - Copy and move operations have defined semantics.
+        - A loading error does not leave a partially valid object.
+
+    - key: cpp-build-tool
+      title: Build Tool
+      description: Build a small C++ project with several translation units, a custom header, and a reproducible build command.
+      estimatedMinutes: 180
+      skills: [headers, preprocessing, linking, build, diagnostics]
+      requiredTopicKeys: [zaholovky-ta-kompilyatsiyni-odynytsi, preprotsesor-i-makrosy, skladannya-proyektu-ta-linkuvannya]
+      template: "include/\nsrc/\ntests/\nCMakeLists.txt\nREADME.md"
+      milestones:
+        - id: units
+          title: Translation units
+          description: Separate interface and implementation and remove duplicate symbols.
+        - id: build
+          title: Linking
+          description: Configure a reproducible build and clear diagnostic output.
+        - id: tests
+          title: Build verification
+          description: Add a separate test target and a README command.
+      acceptanceCriteria:
+        - A clean build does not depend on local artifacts.
+        - Headers do not create multiple definitions.
+        - A compilation error has a clear problem location.
+
+    - key: cpp-concurrent-queue
+      title: Thread-Safe Queue
+      description: Implement a bounded producer/consumer queue, synchronize access, and shut down all threads correctly.
+      estimatedMinutes: 225
+      skills: [std::thread, mutex, condition_variable, chrono, tests]
+      requiredTopicKeys: [paralelnist-std-thread, synkhronizatsiya-mutex, chas-ta-std-chrono]
+      template: "src/queue.hpp\nsrc/queue.cpp\ntests/\nREADME.md"
+      milestones:
+        - id: contract
+          title: Queue contract
+          description: Define full, empty, and shutdown behavior.
+        - id: sync
+          title: Synchronization
+          description: Protect state with a mutex and wake waiting threads with a condition variable.
+        - id: shutdown
+          title: Shutdown
+          description: Test producer and consumer completion without hanging or leaking resources.
+      acceptanceCriteria:
+        - The queue has no data race.
+        - Shutdown wakes every waiting thread.
+        - Tests do not depend on random thread scheduling.

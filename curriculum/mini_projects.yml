@@ -48,6 +48,72 @@ courses:
         - Пошук і видалення відсутнього імені не завершують програму з помилкою.
         - Кожна команда має один визначений формат відповіді.
 
+    - key: python-file-backup
+      title: Резервне копіювання файлів
+      description: Створіть CLI-інструмент, який знаходить файли за правилами, копіює їх до резервної директорії та не ламає всю операцію через один недоступний файл.
+      estimatedMinutes: 165
+      skills: [pathlib, файли, контекстні менеджери, винятки]
+      requiredTopicKeys: [shlyakhy-ta-fayly-pathlib, fayly-ta-kontekstni-menedzhery, obrobka-vynyatkiv]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: scan
+          title: Пошук файлів
+          description: Визначте правила відбору та безпечну поведінку для порожньої директорії.
+        - id: copy
+          title: Копіювання
+          description: Скопіюйте файли в контрольовану директорію без перезапису неочікуваних даних.
+        - id: errors
+          title: Обробка помилок
+          description: Зафіксуйте проблемні файли у звіті та продовжіть обробку доступних.
+      acceptanceCriteria:
+        - Шляхи будуються через pathlib без залежності від операційної системи.
+        - Повторний запуск не пошкоджує вже створену резервну копію.
+        - Помилка одного файлу не приховує результати інших.
+
+    - key: python-product-catalog
+      title: Каталог товарів
+      description: Побудуйте CLI-каталог товарів із dataclass-моделлю, пошуком, фільтрацією та текстовим звітом про залишки.
+      estimatedMinutes: 180
+      skills: [класи, dataclasses, словники, функції, фільтрація]
+      requiredTopicKeys: [oop-klasy-ta-ob-yekty, klasy-danykh-dataclasses]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: model
+          title: Модель товару
+          description: Опишіть товар через dataclass і визначте обов’язкові поля.
+        - id: queries
+          title: Пошук і фільтри
+          description: Реалізуйте пошук за назвою, категорією та мінімальним залишком.
+        - id: report
+          title: Звіт
+          description: Сформуйте стабільний звіт із кількістю товарів і сумарною вартістю.
+      acceptanceCriteria:
+        - Некоректний товар не потрапляє до підсумкового звіту непомітно.
+        - Фільтри не змінюють вихідну колекцію.
+        - Порожній каталог має зрозумілий результат.
+
+    - key: python-text-analyzer
+      title: Аналізатор тексту
+      description: Створіть програму, яка читає текст, знаходить слова за регулярними виразами та формує детермінований звіт про частоти й підозрілі збіги.
+      estimatedMinutes: 150
+      skills: [рядки, функції, словники, регулярні вирази]
+      requiredTopicKeys: [ryadky-ta-formatuvannya, funktsii-ta-parametry-args-kwargs, rehulyarni-vyrazy-re]
+      template: "main.py\nREADME.md"
+      milestones:
+        - id: tokenize
+          title: Розбір тексту
+          description: Нормалізуйте вхід і виділіть токени за визначеним правилом.
+        - id: analyze
+          title: Аналіз
+          description: Порахуйте частоти та знайдіть збіги, що відповідають шаблону.
+        - id: output
+          title: Звіт
+          description: Виведіть результати в одному форматі незалежно від порядку введення.
+      acceptanceCriteria:
+        - Порожній текст обробляється без винятку.
+        - Регістр і зайві розділові знаки не створюють фальшиві дублікати.
+        - Звіт можна перевірити за фіксованим набором вхідних даних.
+
   python-extensions:
     - key: python-data-pipeline
       title: Python Data Pipeline
@@ -95,6 +161,72 @@ courses:
         - Повторний запуск не дублює результати та не залишає пошкоджений стан.
         - Помилка однієї задачі має зрозумілий статус і не приховується як успішна.
         - Тести не залежать від реального часу, мережі або production secrets.
+
+    - key: python-async-crawler
+      title: Асинхронний збирач даних
+      description: Побудуйте асинхронний CLI-збирач, який отримує кілька ресурсів, обмежує паралельність і повертає окремий статус для кожного запиту.
+      estimatedMinutes: 180
+      skills: [HTTP, asyncio, таймаути, JSON, помилки]
+      requiredTopicKeys: [http-kliyenty-requests-httpx, parsynh-html-beautifulsoup, asynkhronnist-asyncio-async-await]
+      template: "src/crawler.py\ntests/\nREADME.md"
+      milestones:
+        - id: client
+          title: HTTP-клієнт
+          description: Визначте timeout, формат відповіді та поведінку для неуспішного статусу.
+        - id: concurrency
+          title: Паралельність
+          description: Запустіть незалежні запити асинхронно з контрольованим лімітом.
+        - id: result
+          title: Результати
+          description: Збережіть успішні дані та помилки окремо в детермінованому звіті.
+      acceptanceCriteria:
+        - Один повільний ресурс не блокує завершення всіх інших без timeout.
+        - Пошкоджений JSON не маскується як успішний результат.
+        - Тести не роблять реальних мережевих запитів.
+
+    - key: python-sqlite-report
+      title: Звіт із локальної бази
+      description: Створіть інструмент, який імпортує записи в SQLite, виконує запити для звіту та безпечно поводиться при повторному запуску.
+      estimatedMinutes: 210
+      skills: [SQLite, транзакції, logging, тести, CSV]
+      requiredTopicKeys: [json-csv-xml, lohuvannya, robota-z-bd-sqlite3-sqlalchemy]
+      template: "src/importer.py\nsrc/report.py\ntests/\nREADME.md"
+      milestones:
+        - id: schema
+          title: Схема даних
+          description: Визначте таблиці, ключі та правила для дубльованого запису.
+        - id: import
+          title: Імпорт
+          description: Завантажте дані транзакційно й не залишайте частково записаний batch.
+        - id: report
+          title: Аналітичний звіт
+          description: Сформуйте CSV-звіт із логуванням кількості успішних і пропущених записів.
+      acceptanceCriteria:
+        - Повторний імпорт не створює дублікати.
+        - Помилка одного запису не приховує стан транзакції.
+        - Тести працюють на тимчасовій базі без production-файлів.
+
+    - key: python-ml-experiment
+      title: Відтворюваний ML-експеримент
+      description: Побудуйте невеликий pipeline для підготовки табличних даних, навчання базової моделі та порівняння метрик у відтворюваному звіті.
+      estimatedMinutes: 240
+      skills: [NumPy, Pandas, visualization, scikit-learn, reproducibility]
+      requiredTopicKeys: [numpy-osnovy, pandas-osnovy, vizualizatsiya-matplotlib-seaborn, ml-ohlyad-scikit-learn-bazovi-ponyattya]
+      template: "src/prepare.py\nsrc/train.py\nsrc/report.py\nREADME.md"
+      milestones:
+        - id: data
+          title: Підготовка даних
+          description: Завантажте набір, перевірте пропуски та зафіксуйте форму ознак.
+        - id: model
+          title: Базова модель
+          description: Навчіть просту модель із фіксованим seed і розділенням train/test.
+        - id: evaluation
+          title: Оцінювання
+          description: Порівняйте метрики та збережіть короткий графік і текстовий висновок.
+      acceptanceCriteria:
+        - Повторний запуск із тим самим seed дає однакові метрики.
+        - Train і test не змішуються під час підготовки.
+        - Невалідні або порожні дані дають зрозумілу помилку.
 
   flask:
     - key: flask-reading-list
@@ -154,6 +286,84 @@ courses:
         - SQL-запити параметризовані.
         - Власність ресурсу перевіряється на сервері.
         - Тести запускаються без production secrets.
+
+    - key: flask-storefront
+      title: Flask-вітрина
+      description: Побудуйте невелику Flask-вітрину з каталогом, фільтрами, формою замовлення та безпечними повідомленнями про помилки.
+      estimatedMinutes: 180
+      skills: [routes, templates, forms, validation, sessions]
+      requiredTopicKeys: [flask-zastosunok-i-marshruty, flask-request-i-response, flask-shablony-ta-statychni-fayly, flask-formy-ta-validatsiya]
+      template: "app/__init__.py\napp/routes.py\napp/templates/\ntests/\nREADME.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/"]
+      milestones:
+        - id: catalog
+          title: Каталог
+          description: Реалізуйте сторінку списку та фільтрацію через query-параметр.
+        - id: order
+          title: Форма замовлення
+          description: Додайте валідацію форми та зрозумілу відповідь після відправлення.
+        - id: safety
+          title: Безпечний UI
+          description: Не вставляйте неперевірений HTML і не показуйте traceback користувачу.
+      acceptanceCriteria:
+        - Невалідна форма не створює замовлення.
+        - Порожній каталог має окремий стан, а не порожню сторінку.
+        - GET-запит не змінює дані.
+
+    - key: flask-job-board
+      title: Дошка фонових задач
+      description: Створіть Flask-застосунок для постановки довгих задач у чергу, перегляду статусу та безпечного повторного запуску.
+      estimatedMinutes: 225
+      skills: [application factory, CLI, background jobs, queues, sessions]
+      requiredTopicKeys: [flask-konfihuratsiya-ta-application-factory, flask-cli-komandy-ta-kerovani-operatsii, flask-background-jobs-i-cherhy]
+      template: "app/__init__.py\napp/jobs.py\napp/routes.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/jobs"]
+      milestones:
+        - id: enqueue
+          title: Постановка задачі
+          description: Прийміть задачу та поверніть стабільний ідентифікатор.
+        - id: status
+          title: Статус
+          description: Реалізуйте endpoint стану з pending, running, succeeded і failed.
+        - id: retry
+          title: Повторний запуск
+          description: Не створюйте дубль для того самого idempotency key.
+      acceptanceCriteria:
+        - Повторний запит не дублює активну задачу.
+        - Виняток у worker переходить у failed із безпечним повідомленням.
+        - Тести не запускають реальну зовнішню чергу.
+
+    - key: flask-operations-console
+      title: Операційна консоль Flask
+      description: "Доведіть Flask-застосунок до операційної готовності: health/readiness, структуровані логи та контрольовані помилки."
+      estimatedMinutes: 210
+      skills: [observability, health checks, error handlers, logging, deployment]
+      requiredTopicKeys: [flask-bezpechnyy-deployment, flask-observability-i-health-checks]
+      template: "app/__init__.py\napp/observability.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: flask
+        module: app
+        probePaths: ["/health", "/ready"]
+      milestones:
+        - id: health
+          title: Health contract
+          description: Розділіть liveness і readiness та поверніть стабільний JSON.
+        - id: errors
+          title: Єдині помилки
+          description: Додайте error handlers без traceback у production-відповіді.
+        - id: logs
+          title: Спостережуваність
+          description: Додайте request id і логування без секретів.
+      acceptanceCriteria:
+        - Readiness не повертає ready при недоступній критичній залежності.
+        - Клієнт отримує однаковий формат помилки для 4xx і 5xx.
+        - Секрети не потрапляють у логи.
 
   fastapi:
     - key: fastapi-reading-log
@@ -244,6 +454,58 @@ courses:
         - Debug вимкнено в production profile.
         - Readiness не повертає ready при недоступній критичній залежності.
 
+    - key: fastapi-upload-center
+      title: Центр завантажень
+      description: Створіть FastAPI-сервіс для завантаження файлів, потокової видачі та перевірки розміру й типу вхідних даних.
+      estimatedMinutes: 210
+      skills: [UploadFile, streaming, response models, errors, tests]
+      requiredTopicKeys: [response-models-serializatsiya-ta-kontrol-poliv, statusy-httpexception-ta-obrobka-pomylok, fayly-uploadfile-ta-potokovi-vidpovidi, testuvannya-api-cherez-testclient]
+      template: "app/main.py\napp/routers/files.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: ["/docs"]
+      milestones:
+        - id: upload
+          title: Контракт завантаження
+          description: Визначте допустимий тип, розмір і формат відповіді.
+        - id: storage
+          title: Збереження
+          description: Збережіть файл у контрольоване місце та не довіряйте імені від клієнта.
+        - id: download
+          title: Потокова видача
+          description: Поверніть файл потоково й обробіть відсутній ресурс через HTTPException.
+      acceptanceCriteria:
+        - Надто великий або заборонений файл отримує 4xx.
+        - Шлях з імені клієнта не дозволяє path traversal.
+        - Тести не залежать від локальних production-файлів.
+
+    - key: fastapi-realtime-feed
+      title: Realtime-стрічка
+      description: Побудуйте FastAPI-стрічку подій із WebSocket і Server-Sent Events, контрольованим підключенням та коректним завершенням клієнта.
+      estimatedMinutes: 240
+      skills: [WebSockets, SSE, async, backpressure, tests]
+      requiredTopicKeys: [async-await-event-loop-i-blokuvalni-operatsii, websockets-i-dvostoronniy-zv-yazok, streaming-server-sent-events-i-velyki-vidpovidi]
+      template: "app/main.py\napp/realtime.py\ntests/\nREADME.md"
+      checkSpec:
+        kind: fastapi
+        module: app.main
+        probePaths: ["/docs"]
+      milestones:
+        - id: events
+          title: Подія
+          description: Визначте формат події, id і правила повторної доставки.
+        - id: transport
+          title: Канали доставки
+          description: Реалізуйте WebSocket і SSE з однаковим контрактом даних.
+        - id: lifecycle
+          title: Життєвий цикл
+          description: Обробіть disconnect, повільного клієнта та завершення сервера.
+      acceptanceCriteria:
+        - Відключення одного клієнта не завершує трансляцію для інших.
+        - Події мають валідну схему й послідовний ідентифікатор.
+        - Тести не залишають фонового task після завершення.
+
   computer-vision:
     - key: cv-document-scanner
       title: Document Scanner
@@ -301,6 +563,72 @@ courses:
         - Звіт відрізняє «об’єкт не знайдено» від помилки читання.
         - Є мінімум три fixture-зображення з різними сценаріями.
 
+    - key: cv-edge-inspector
+      title: Інспектор меж
+      description: Створіть pipeline, який порівнює кілька способів пошуку меж на зображенні та пояснює, як шум і освітлення змінюють результат.
+      estimatedMinutes: 180
+      skills: [features, classification, preprocessing, evaluation]
+      requiredTopicKeys: [oznaky-i-proste-porivnyannya, classification-detection-i-segmentation]
+      template: "src/load.py\nsrc/edges.py\nsrc/report.py\ntests/\nREADME.md"
+      milestones:
+        - id: preprocess
+          title: Підготовка
+          description: Нормалізуйте вхід і зафіксуйте форму та тип зображення.
+        - id: compare
+          title: Порівняння
+          description: Застосуйте два методи й порівняйте їх за однаковими критеріями.
+        - id: limits
+          title: Межі методу
+          description: Опишіть false positives і сценарії, де результат ненадійний.
+      acceptanceCriteria:
+        - Різні типи зображень проходять pipeline без змішування каналів.
+        - Невдалий decode повертає контрольовану помилку.
+        - Звіт містить не лише метрику, а й параметри запуску.
+
+    - key: cv-video-motion-detector
+      title: Детектор руху у відео
+      description: Побудуйте обробку відеопотоку, яка виділяє рух між кадрами, зберігає події та не накопичує необмежену чергу кадрів.
+      estimatedMinutes: 225
+      skills: [video, optical flow, tracking, backpressure, evaluation]
+      requiredTopicKeys: [cv-videopotik-kadry-ta-backpressure, cv-optychnyy-potik-i-tracking-baseline]
+      template: "src/video.py\nsrc/motion.py\ntests/\nREADME.md"
+      milestones:
+        - id: frames
+          title: Кадри
+          description: Визначте формат кадру та поведінку для обірваного потоку.
+        - id: motion
+          title: Рух
+          description: Знайдіть області руху та відфільтруйте дрібний шум.
+        - id: limits
+          title: Обмеження
+          description: Перевірте різну частоту кадрів, освітлення та паузи.
+      acceptanceCriteria:
+        - Обробка має обмежену пам’ять при довгому потоці.
+        - Пошкоджений кадр не завершує весь pipeline.
+        - Події мають стабільний формат і часову мітку.
+
+    - key: cv-quality-batch
+      title: Batch-перевірка якості
+      description: Створіть batch-pipeline для обробки набору зображень із контрольованою аугментацією, метриками та quality gates перед публікацією результату.
+      estimatedMinutes: 240
+      skills: [augmentation, reproducibility, batch processing, quality gates, reporting]
+      requiredTopicKeys: [cv-data-augmentation-i-reproducibility, cv-batch-processing-i-pipeline-quality-gates]
+      template: "src/batch.py\nsrc/quality.py\ntests/\nREADME.md"
+      milestones:
+        - id: batch
+          title: Batch-контракт
+          description: Визначте структуру входу, порядок обробки та правила пропуску файлу.
+        - id: quality
+          title: Quality gates
+          description: Перевірте метрики, пороги та причину відхилення набору.
+        - id: reproducibility
+          title: Відтворюваність
+          description: Зафіксуйте seed, версію параметрів і підсумковий manifest.
+      acceptanceCriteria:
+        - Повторний запуск із тим самим seed дає той самий manifest.
+        - Один зламаний файл не приховує статистику batch.
+        - Публікація блокується, якщо quality gate не пройдено.
+
   java-core:
     - key: java-cli-calculator
       title: Калькулятор у терміналі
@@ -349,6 +677,72 @@ courses:
         - Відсутній контакт дає зрозумілу відповідь, а не виняток назовні.
         - Повторний запуск команд не створює неочікуваних дублікатів.
 
+    - key: java-gradebook
+      title: Журнал оцінок
+      description: Створіть консольний журнал оцінок, який зберігає масив результатів, обчислює середнє та показує найкращий і найгірший результат.
+      estimatedMinutes: 150
+      skills: [масиви, цикли, методи, умови]
+      requiredTopicKeys: [masyvy-ta-robota-z-nymy, metody-parametry-perevantazhennya]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: input
+          title: Введення оцінок
+          description: Визначте кількість оцінок і правила для порожнього набору.
+        - id: metrics
+          title: Показники
+          description: Винесіть середнє, мінімум і максимум в окремі методи.
+        - id: output
+          title: Звіт
+          description: Виведіть детермінований підсумок без зайвих рядків.
+      acceptanceCriteria:
+        - Порожній набір не спричиняє ділення на нуль.
+        - Кожен результат враховується рівно один раз.
+        - Порядок введення не змінює середнє значення.
+
+    - key: java-shape-workshop
+      title: Майстерня фігур
+      description: Побудуйте невелику модель геометричних фігур із наслідуванням, інкапсуляцією та поліморфним розрахунком площі.
+      estimatedMinutes: 210
+      skills: [класи, інкапсуляція, наслідування, поліморфізм, інтерфейси]
+      requiredTopicKeys: [klasy-ta-ob-yekty, inkapsulyatsiya-hetery-setery, nasliduvannya, polimorfizm-i-piznye-zv-yazuvannya, abstraktni-klasy-ta-interfeysy]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: contract
+          title: Контракт фігури
+          description: Визначте спільний інтерфейс і правила для некоректних параметрів.
+        - id: hierarchy
+          title: Ієрархія
+          description: Реалізуйте кілька фігур без дублювання спільної логіки.
+        - id: report
+          title: Поліморфний звіт
+          description: Обробіть різні фігури через спільний тип і сформуйте звіт.
+      acceptanceCriteria:
+        - Внутрішні поля не змінюються напряму з клієнтського коду.
+        - Нова фігура не вимагає переписування циклу звіту.
+        - Некоректні параметри дають контрольовану помилку.
+
+    - key: java-collection-insights
+      title: Аналізатор колекцій
+      description: Створіть програму, яка групує записи в колекціях, сортує їх за кількома правилами та формує звіт без залежності від порядку хеш-таблиці.
+      estimatedMinutes: 210
+      skills: [Generics, List, Set, Map, ітератори, Comparator]
+      requiredTopicKeys: [uzahalnennya-generics-osnovy, kolektsii-list-set-map, kolektsii-iteratory-ta-porivnyannya, porivnyannya-ob-yektiv-equals-hashcode-comparable-comparator]
+      template: "src/Main.java\nREADME.md"
+      milestones:
+        - id: model
+          title: Типізована модель
+          description: Опишіть записи через generics і визначте правила рівності.
+        - id: aggregate
+          title: Групування
+          description: Побудуйте індекси List, Set і Map для різних запитів.
+        - id: ordering
+          title: Стабільний порядок
+          description: Додайте Comparator і сформуйте однаковий звіт для однакових даних.
+      acceptanceCriteria:
+        - Дублікати визначаються через узгоджені equals і hashCode.
+        - Сортування не змінює джерельну колекцію неочікувано.
+        - Порожні колекції мають валідний звіт.
+
   java-advanced:
     - key: java-log-analyzer
       title: Java Log Analyzer
@@ -392,6 +786,72 @@ courses:
         - Невдала задача не приховується як успішна й не губить результати інших задач.
         - Пул потоків завершується після обробки всіх задач.
         - Тести не залежать від випадкового порядку виконання.
+
+    - key: java-stream-report
+      title: Потоковий звіт
+      description: Побудуйте Java-звіт із колекції записів через Stream API, collectors і контрольоване сортування результатів.
+      estimatedMinutes: 165
+      skills: [Stream API, collectors, lambdas, grouping, sorting]
+      requiredTopicKeys: [stream-api-osnovy, stream-api-kolektory-ta-paralelni-potoky]
+      template: "src/main/java/Report.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: pipeline
+          title: Stream pipeline
+          description: Побудуйте ланцюжок фільтрації, перетворення та агрегації.
+        - id: grouping
+          title: Групування
+          description: Сформуйте кілька показників через collectors без ручного дублювання циклів.
+        - id: order
+          title: Стабільний порядок
+          description: Визначте Comparator і детермінований текстовий формат.
+      acceptanceCriteria:
+        - Порожній потік дає валідний звіт.
+        - Групування не змінює початкові записи.
+        - Результат не залежить від внутрішнього порядку HashMap.
+
+    - key: java-http-cache
+      title: HTTP-клієнт із кешем
+      description: Створіть Java-клієнт, який отримує JSON-ресурси, кешує успішні відповіді та коректно обробляє timeout і повторний запит.
+      estimatedMinutes: 225
+      skills: [HTTP client, JSON, cache, timeouts, exceptions]
+      requiredTopicKeys: [merezheve-prohramuvannya-sokety-http-kliyent, robota-z-json-xml]
+      template: "src/main/java/ApiClient.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: client
+          title: Контракт клієнта
+          description: Визначте статуси, timeout і формат помилки для зовнішнього сервісу.
+        - id: cache
+          title: Кешування
+          description: Збережіть успішну відповідь із часом життя та не кешуйте помилки.
+        - id: tests
+          title: Тести відмов
+          description: Перевірте timeout, невалідний JSON і повторний запит через mock client.
+      acceptanceCriteria:
+        - Timeout не блокує весь процес назавжди.
+        - Невалідна відповідь не потрапляє в кеш як успішна.
+        - Тести не роблять реальних зовнішніх запитів.
+
+    - key: java-secure-config
+      title: Безпечна конфігурація сервісу
+      description: Побудуйте Java-сервіс, який читає JSON-конфігурацію, перевіряє секрети та відмовляється стартувати з неповними або небезпечними налаштуваннями.
+      estimatedMinutes: 210
+      skills: [JSON, security, configuration, validation, tests]
+      requiredTopicKeys: [bezpeka-osnovy-kryptohrafii-v-java, robota-z-json-xml]
+      template: "src/main/java/ConfigLoader.java\nsrc/test/\nREADME.md"
+      milestones:
+        - id: schema
+          title: Схема конфігурації
+          description: Опишіть обов’язкові поля та правила валідації.
+        - id: secrets
+          title: Секрети
+          description: Не виводьте секрети в лог і відокремте їх від звичайних параметрів.
+        - id: startup
+          title: Контроль старту
+          description: Поверніть зрозумілу помилку при неповній конфігурації.
+      acceptanceCriteria:
+        - Неповна конфігурація не запускає сервіс у небезпечному стані.
+        - Секрети не потрапляють у винятки або звіт.
+        - Валідний JSON конфігурації дає однаковий результат.
 
   cpp-core:
     - key: cpp-cli-calculator
@@ -441,6 +901,72 @@ courses:
         - Розрахунки не змінюють початкову послідовність без явної потреби.
         - Для однакових даних програма формує однаковий звіт.
 
+    - key: cpp-array-stats
+      title: Статистика масиву
+      description: Створіть програму, яка читає масив чисел, знаходить екстремуми та формує звіт із позиціями знайдених значень.
+      estimatedMinutes: 150
+      skills: [масиви, індексація, цикли, функції]
+      requiredTopicKeys: [masyvy-ta-indeksatsiya, funktsii-ta-parametry]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: input
+          title: Контракт масиву
+          description: Визначте формат вводу та поведінку для нульової кількості елементів.
+        - id: scan
+          title: Обхід
+          description: Реалізуйте пошук мінімуму, максимуму та їхніх індексів.
+        - id: output
+          title: Результат
+          description: Сформуйте короткий звіт із чітким форматом чисел.
+      acceptanceCriteria:
+        - Порожній масив не читається за межами пам’яті.
+        - Однакові екстремуми мають визначене правило вибору індексу.
+        - Алгоритм проходить масив без зайвих копій.
+
+    - key: cpp-raii-file-tool
+      title: Безпечний ресурсний інструмент
+      description: Побудуйте консольний інструмент, який працює з ресурсом через RAII, записує журнал операцій і коректно завершується після помилки.
+      estimatedMinutes: 195
+      skills: [RAII, вказівники, посилання, класи, помилки]
+      requiredTopicKeys: [vkazivnyky-ta-adresy, posylannya-ta-const, raii-ta-keruvannya-resursamy]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: resource
+          title: Власник ресурсу
+          description: Визначте клас-власник і правила копіювання та переміщення.
+        - id: operations
+          title: Операції
+          description: Реалізуйте кілька команд, які не працюють із уже звільненим ресурсом.
+        - id: cleanup
+          title: Завершення
+          description: Перевірте звичайний вихід і шлях помилки без витоків.
+      acceptanceCriteria:
+        - Власник ресурсу звільняє його рівно один раз.
+        - Помилка не залишає dangling pointer.
+        - Повторний запуск не залежить від стану попереднього запуску.
+
+    - key: cpp-stl-catalog
+      title: Каталог STL
+      description: Створіть консольний каталог записів із vector, map і set, підтримайте пошук, групування та стабільне сортування результатів.
+      estimatedMinutes: 225
+      skills: [STL, vector, map, set, алгоритми, ітератори]
+      requiredTopicKeys: [stl-vector, stl-map-ta-unordered-map, stl-set-ta-unordered-set, stl-alhorytmy, iteratory]
+      template: "src/main.cpp\nREADME.md"
+      milestones:
+        - id: model
+          title: Модель запису
+          description: Визначте поля запису та ключ для пошуку.
+        - id: indexes
+          title: Індекси
+          description: Використайте map і set для пошуку та контролю дублікатів.
+        - id: report
+          title: Стабільний звіт
+          description: Відсортуйте результати алгоритмами STL і виведіть однаковий формат.
+      acceptanceCriteria:
+        - Дублікат ключа має визначену поведінку.
+        - Пошук не змінює каталог.
+        - Порожній каталог не спричиняє помилку ітератора.
+
   cpp-advanced:
     - key: cpp-file-indexer
       title: C++ File Indexer
@@ -485,3 +1011,69 @@ courses:
         - Спільні лічильники не мають data race.
         - Пошкоджений файл не завершує обробку інших файлів.
         - Ресурси потоків і файлів звільняються коректно.
+
+    - key: cpp-move-safe-loader
+      title: Ресурсобезпечний завантажувач
+      description: Створіть C++-завантажувач даних із власником ресурсу, move-семантикою та контрольованою передачею великих об’єктів.
+      estimatedMinutes: 195
+      skills: [new/delete, smart pointers, move semantics, references, RAII]
+      requiredTopicKeys: [pam-yat-new-ta-delete, rozumni-vkazivnyky, kopiyuvannya-i-peremishchennya, lvalue-rvalue-ta-posylannya]
+      template: "src/loader.hpp\nsrc/loader.cpp\ntests/\nREADME.md"
+      milestones:
+        - id: ownership
+          title: Власність
+          description: Визначте, хто володіє ресурсом і коли він звільняється.
+        - id: move
+          title: Переміщення
+          description: Реалізуйте move constructor/operator без подвійного звільнення.
+        - id: tests
+          title: Перевірка
+          description: Перевірте порожній ресурс, переміщення та помилку завантаження.
+      acceptanceCriteria:
+        - Немає double delete або dangling pointer.
+        - Копіювання і переміщення мають визначену семантику.
+        - Помилка завантаження не залишає частково валідний об’єкт.
+
+    - key: cpp-build-tool
+      title: Інструмент складання
+      description: Побудуйте невеликий C++-проєкт із кількома translation units, власним заголовком і відтворюваною командою складання.
+      estimatedMinutes: 180
+      skills: [headers, preprocessing, linking, build, diagnostics]
+      requiredTopicKeys: [zaholovky-ta-kompilyatsiyni-odynytsi, preprotsesor-i-makrosy, skladannya-proyektu-ta-linkuvannya]
+      template: "include/\nsrc/\ntests/\nCMakeLists.txt\nREADME.md"
+      milestones:
+        - id: units
+          title: Translation units
+          description: Розділіть інтерфейс і реалізацію та приберіть дубльовані символи.
+        - id: build
+          title: Лінкування
+          description: Налаштуйте відтворюване складання і зрозумілий діагностичний вивід.
+        - id: tests
+          title: Перевірка збірки
+          description: Додайте окрему тестову ціль і README з командою запуску.
+      acceptanceCriteria:
+        - Чисте складання не залежить від локальних артефактів.
+        - Заголовки не створюють multiple definition.
+        - Помилка компіляції має зрозумілу адресу проблеми.
+
+    - key: cpp-concurrent-queue
+      title: Потокобезпечна черга
+      description: Реалізуйте bounded queue для producer/consumer, синхронізуйте доступ і коректно завершіть усі потоки.
+      estimatedMinutes: 225
+      skills: [std::thread, mutex, condition_variable, chrono, tests]
+      requiredTopicKeys: [paralelnist-std-thread, synkhronizatsiya-mutex, chas-ta-std-chrono]
+      template: "src/queue.hpp\nsrc/queue.cpp\ntests/\nREADME.md"
+      milestones:
+        - id: contract
+          title: Контракт черги
+          description: Визначте поведінку full, empty і shutdown станів.
+        - id: sync
+          title: Синхронізація
+          description: Захистіть стан mutex-ом і розбуджуйте очікувані потоки через condition_variable.
+        - id: shutdown
+          title: Завершення
+          description: Перевірте завершення producer і consumer без зависання або втрати ресурсу.
+      acceptanceCriteria:
+        - Черга не має data race.
+        - Shutdown розбуджує всі очікувані потоки.
+        - Тести не залежать від випадкового планування потоків.
