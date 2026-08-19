@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { auditCurriculum, CORE_LESSON_HEADINGS, loadCurriculumMiniProjects, loadCurriculumTopics, slug, validateCurriculum } from "./curriculum";
+import { auditCurriculum, CORE_LESSON_HEADINGS, loadCurriculumManifest, loadCurriculumMiniProjects, loadCurriculumTopics, slug, validateCurriculum } from "./curriculum";
 
 test("curriculum manifest is valid and every course has theory", () => {
   const result = validateCurriculum();
@@ -71,6 +71,21 @@ test("every course exposes positioned integration projects", () => {
       assert.ok(project.acceptanceCriteria.length >= 1, `${course.key}/${project.key} acceptance`);
       assert.ok(project.requiredTopicKeys.length >= 1, `${course.key}/${project.key} required topics`);
       for (const topicKey of project.requiredTopicKeys) assert.ok(topicKeys.has(topicKey), `${course.key}/${project.key} references ${topicKey}`);
+    }
+  }
+});
+
+test("English mini-project dependencies use persisted canonical topic keys", () => {
+  const ukManifest = loadCurriculumManifest(undefined, "uk").manifest;
+  const enManifest = loadCurriculumManifest(undefined, "en").manifest;
+
+  for (const englishCourse of enManifest.courses) {
+    const ukrainianCourse = ukManifest.courses.find((course) => course.key === englishCourse.key)!;
+    const persistedTopicKeys = new Set(loadCurriculumTopics(ukrainianCourse, undefined, "uk").map((topic) => topic.key));
+    for (const project of loadCurriculumMiniProjects(englishCourse.key, undefined, "en")) {
+      for (const topicKey of project.requiredTopicKeys) {
+        assert.ok(persistedTopicKeys.has(topicKey), `${englishCourse.key}/${project.key} references a non-canonical topic key ${topicKey}`);
+      }
     }
   }
 });

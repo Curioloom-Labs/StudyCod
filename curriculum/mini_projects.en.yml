@@ -7,7 +7,7 @@ courses:
       description: Build a console calculator that reads two numbers and an operator, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 120
       skills: [input, variables, conditions, loops]
-      requiredTopicKeys: [input-data-input, operators-and-expressions, flow-control-if-elif-else, for-while-and-range-loops]
+      requiredTopicKeys: [vvedennya-danykh-input, operatory-ta-vyrazy, keruvannya-potokom-if-elif-else, tsykly-for-while-ta-range]
       template: "main.py\nREADME.md"
       milestones:
         - id: contract
@@ -32,7 +32,7 @@ courses:
       description: Build a console contact book with add, search, update, and delete operations, including predictable behavior for an empty book and an unknown name.
       estimatedMinutes: 150
       skills: [lists, dictionaries, functions, loops, input]
-      requiredTopicKeys: [lists-are-the-basics, dictionaries-dict, args-kwargs-functions-and-parameters]
+      requiredTopicKeys: [spysky-list-osnovy, slovnyky-dict, funktsii-ta-parametry-args-kwargs]
       template: "main.py\nREADME.md"
       milestones:
         - id: model
@@ -54,7 +54,7 @@ courses:
       description: Build a CLI tool that finds files by rules, copies them to a backup directory, and does not fail the whole operation because one file is unavailable.
       estimatedMinutes: 165
       skills: [pathlib, files, context managers, exceptions]
-      requiredTopicKeys: [paths-and-files-pathlib, files-and-context-managers, exception-handling]
+      requiredTopicKeys: [shlyakhy-ta-fayly-pathlib, fayly-ta-kontekstni-menedzhery, obrobka-vynyatkiv]
       template: "main.py\nREADME.md"
       milestones:
         - id: scan
@@ -76,7 +76,7 @@ courses:
       description: Build a CLI product catalog with a dataclass model, search, filtering, and a stock report.
       estimatedMinutes: 180
       skills: [classes, dataclasses, dictionaries, functions, filtering]
-      requiredTopicKeys: [oop-classes-and-objects, data-classes-dataclasses]
+      requiredTopicKeys: [oop-klasy-ta-ob-yekty, klasy-danykh-dataclasses]
       template: "main.py\nREADME.md"
       milestones:
         - id: model
@@ -98,7 +98,7 @@ courses:
       description: Create a program that reads text, finds words with regular expressions, and produces a deterministic report of frequencies and suspicious matches.
       estimatedMinutes: 150
       skills: [strings, functions, dictionaries, regular expressions]
-      requiredTopicKeys: [strings-and-formatting, args-kwargs-functions-and-parameters, regular-expressions-re]
+      requiredTopicKeys: [ryadky-ta-formatuvannya, funktsii-ta-parametry-args-kwargs, rehulyarni-vyrazy-re]
       template: "main.py\nREADME.md"
       milestones:
         - id: tokenize
@@ -751,7 +751,7 @@ courses:
       description: Build a console calculator that reads two numbers and an operator through Scanner, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 150
       skills: [Scanner, variables and types, conditions, loops]
-      requiredTopicKeys: [scanner-data-entry, operators-and-expressions, flow-control-if-else-switch, loops-for-while-do-while]
+      requiredTopicKeys: [vvedennya-danykh-scanner, operatory-ta-vyrazy, keruvannya-potokom-if-else-switch, tsykly-for-while-do-while]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: contract
@@ -776,7 +776,7 @@ courses:
       description: Build a console contact catalog with search, update, and delete operations. The program must keep records in a collection and must not terminate because a record is missing.
       estimatedMinutes: 180
       skills: [classes, methods, collections, exceptions]
-      requiredTopicKeys: [methods-parameters-overload, classes-and-objects, collections-letter-set-map, exception-handling-the-basics]
+      requiredTopicKeys: [metody-parametry-perevantazhennya, klasy-ta-ob-yekty, kolektsii-list-set-map, obrobka-vynyatkiv-osnovy]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: model
@@ -798,7 +798,7 @@ courses:
       description: Build a console gradebook that stores an array of results, calculates the average, and shows the best and worst result.
       estimatedMinutes: 150
       skills: [arrays, loops, methods, conditions]
-      requiredTopicKeys: [arrays-and-working-with-them, methods-parameters-overload]
+      requiredTopicKeys: [masyvy-ta-robota-z-nymy, metody-parametry-perevantazhennya]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: input
@@ -820,7 +820,7 @@ courses:
       description: Build a small geometry model with inheritance, encapsulation, and polymorphic area calculation.
       estimatedMinutes: 210
       skills: [classes, encapsulation, inheritance, polymorphism, interfaces]
-      requiredTopicKeys: [classes-and-objects, encapsulation-getters-setters, imitation, polymorphism-and-late-binding, abstract-classes-and-interfaces]
+      requiredTopicKeys: [klasy-ta-ob-yekty, inkapsulyatsiya-hetery-setery, nasliduvannya, polimorfizm-i-piznye-zv-yazuvannya, abstraktni-klasy-ta-interfeysy]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: contract
@@ -842,7 +842,7 @@ courses:
       description: Build a program that groups records in collections, sorts them by several rules, and produces a report independent of hash-table order.
       estimatedMinutes: 210
       skills: [Generics, List, Set, Map, iterators, Comparator]
-      requiredTopicKeys: [generics-the-basics, collections-letter-set-map, collections-iterators-and-comparisons, comparison-of-objects-equals-hashcode-comparable-comparator]
+      requiredTopicKeys: [uzahalnennya-generics-osnovy, kolektsii-list-set-map, kolektsii-iteratory-ta-porivnyannya, porivnyannya-ob-yektiv-equals-hashcode-comparable-comparator]
       template: "src/Main.java\nREADME.md"
       milestones:
         - id: model
@@ -981,7 +981,7 @@ courses:
       description: Build a C++ console calculator that reads two numbers and an operator, performs basic operations in a loop, and responds clearly to division by zero or an unknown operator.
       estimatedMinutes: 135
       skills: [input and output, variables, conditions, switch, loops, functions]
-      requiredTopicKeys: [input-and-output-to-the-console, operators-and-precedence, conditional-statements-if-else, switch-and-enumeration, while-and-do-while-loops, the-for-loop-and-ranges, features-and-options]
+      requiredTopicKeys: [vvid-ta-vyvid-u-konsol, operatory-ta-priorytet, umovni-operatory-if-else, switch-ta-pererakhuvannya, tsykly-while-ta-do-while, tsykl-for-ta-diapazony, funktsii-ta-parametry]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: contract
@@ -1006,7 +1006,7 @@ courses:
       description: Build a console program that collects a sequence of measurements, calculates summary values, and produces a stable text report.
       estimatedMinutes: 165
       skills: [STL vector, strings, algorithms, functions]
-      requiredTopicKeys: [features-and-options, strings-std-string, stl-vector, stl-algorithms]
+      requiredTopicKeys: [funktsii-ta-parametry, ryadky-std-string, stl-vector, stl-alhorytmy]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: input
@@ -1028,7 +1028,7 @@ courses:
       description: Build a program that reads an array of numbers, finds extrema, and reports the positions of the selected values.
       estimatedMinutes: 150
       skills: [arrays, indexing, loops, functions]
-      requiredTopicKeys: [arrays-and-indexing, features-and-options]
+      requiredTopicKeys: [masyvy-ta-indeksatsiya, funktsii-ta-parametry]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: input
@@ -1050,7 +1050,7 @@ courses:
       description: Build a console tool that works with a resource through RAII, records operations, and finishes correctly after an error.
       estimatedMinutes: 195
       skills: [RAII, pointers, references, classes, errors]
-      requiredTopicKeys: [directions-and-addresses, link-and-const, raii-and-resource-management]
+      requiredTopicKeys: [vkazivnyky-ta-adresy, posylannya-ta-const, raii-ta-keruvannya-resursamy]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: resource
@@ -1072,7 +1072,7 @@ courses:
       description: Build a console record catalog with vector, map, and set, supporting search, grouping, and stable result sorting.
       estimatedMinutes: 225
       skills: [STL, vector, map, set, algorithms, iterators]
-      requiredTopicKeys: [stl-vector, stl-map-and-unordered-map, stl-set-and-unordered-set, stl-algorithms, iterators]
+      requiredTopicKeys: [stl-vector, stl-map-ta-unordered-map, stl-set-ta-unordered-set, stl-alhorytmy, iteratory]
       template: "src/main.cpp\nREADME.md"
       milestones:
         - id: model
