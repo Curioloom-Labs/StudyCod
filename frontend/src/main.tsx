@@ -4,6 +4,7 @@ import "./public.css";
 import { initTheme } from "./theme";
 import { getMe } from "./lib/api/profile";
 import { PublicErrorPage } from "./pages/public/PublicStatusPage";
+import "./i18n";
 
 const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
 let appStylesPromise: Promise<unknown> | null = null;
@@ -18,7 +19,6 @@ const AppShell = React.lazy(async () => {
   const [{ BrowserRouter }, { App }] = await Promise.all([
     import("react-router-dom"),
     import("./App"),
-    import("./i18n"),
   ]);
 
   const RoutedApp: React.FC = () => (

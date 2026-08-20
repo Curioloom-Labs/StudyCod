@@ -27,7 +27,7 @@ function loadPrivateEnv(): void {
         }
         process.env[match[1]] = value.replace(/\\n/g, "\n");
       }
-      return;
+      if (process.env.LSP_SECRET) return;
     } catch {
       // Try the next private env location.
     }
