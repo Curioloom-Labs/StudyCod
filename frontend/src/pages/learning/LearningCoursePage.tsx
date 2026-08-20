@@ -326,7 +326,12 @@ export const LearningCoursePage: React.FC = () => {
       setMessage(tr("Активуйте курс, щоб відкрити перший вузол.", "Activate the course to open the first node."));
       return;
     }
-    const previousComplete = roadmapNodes.slice(0, index).every(nodeCompleted);
+    const previousComplete = node.kind === "PROJECT" && (node.requiredTopicKeys || []).length > 0
+      ? (node.requiredTopicKeys || []).every((key) => {
+          const prerequisite = roadmapNodes.find((candidate) => candidate.kind === "TOPIC" && candidate.topicKey === key);
+          return Boolean(prerequisite && nodeCompleted(prerequisite));
+        })
+      : roadmapNodes.slice(0, index).every(nodeCompleted);
     if (!previousComplete) return;
 
     if (node.kind === "TOPIC") {

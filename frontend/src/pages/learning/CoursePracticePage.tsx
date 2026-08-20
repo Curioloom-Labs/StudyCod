@@ -14,6 +14,7 @@ import {
   getLearningCourse,
   runCatalogProject,
   saveCatalogProject,
+  submitCatalogProject,
   type LearningCourseItem,
   type LearningProject,
 } from "../../lib/api/learningCatalog";
@@ -61,6 +62,9 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [code, setCode] = React.useState("");
+  const [files, setFiles] = React.useState<CodeFile[]>([]);
+  const [starterFiles, setStarterFiles] = React.useState<CodeFile[]>([]);
+  const [milestoneIds, setMilestoneIds] = React.useState<string[]>([]);
   const [stdin, setStdin] = React.useState("");
   const [runResult, setRunResult] = React.useState<StudyCodIdeRunResult | null>(null);
   const [checkResult, setCheckResult] = React.useState<StudyCodIdeCheckResult | null>(null);
@@ -72,7 +76,16 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
       .then((loaded) => {
         if (cancelled) return;
         setProject(loaded);
-        setCode(loaded.progress.draft || loaded.starterCode);
+        const defaults = loaded.starterFiles?.length
+          ? loaded.starterFiles
+          : [{ path: loaded.entryFile, content: loaded.starterCode }];
+        const initialFiles = loaded.progress.files?.length
+          ? loaded.progress.files
+          : [{ path: loaded.entryFile, content: loaded.progress.draft || loaded.starterCode }];
+        setStarterFiles(defaults);
+        setFiles(initialFiles);
+        setCode(initialFiles.find((file) => file.path === loaded.entryFile)?.content || loaded.starterCode);
+        setMilestoneIds(loaded.progress.milestoneIds || []);
         setError(null);
       })
       .catch((caught: any) => {
@@ -86,18 +99,31 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
     return () => { cancelled = true; };
   }, [item.id]);
 
-  const files = React.useMemo<CodeFile[]>(() => project ? [{ path: project.entryFile, content: code }] : [], [code, project]);
   const language = (project?.runtime || "JAVA").toLowerCase() as JudgeLanguage;
 
   const saveDraft = async () => {
     if (!project) return;
     try {
-      const response = await saveCatalogProject(item.id, { milestoneIds: [], draft: code });
-      if (response?.project) setProject(response.project);
+      const response = await saveCatalogProject(item.id, { milestoneIds, draft: code, files });
+      if (response?.project) setProject((current) => current ? { ...current, ...response.project } : current);
       setMessage(tr("Код збережено.", "Code saved."));
       setError(null);
     } catch {
       setError(tr("Не вдалося зберегти код.", "Could not save the code."));
+    }
+  };
+
+  const submit = async () => {
+    if (!project) return;
+    try {
+      const response = await submitCatalogProject(item.id, { milestoneIds, draft: code, files });
+      if (response?.project) setProject((current) => current ? { ...current, ...response.project } : current);
+      setMessage(tr("Мініпроєкт подано й зараховано.", "Mini-project submitted and completed."));
+      setError(null);
+    } catch (caught: any) {
+      setError(caught?.response?.data?.message === "PROJECT_REQUIREMENTS_INCOMPLETE"
+        ? tr("Спочатку пройди перевірку, відміть усі milestones і збережи код.", "Run a check, complete every milestone, and save the code first.")
+        : tr("Не вдалося подати мініпроєкт.", "Could not submit the mini-project."));
     }
   };
 
@@ -145,7 +171,7 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
       setCheckResult(nextCheck);
       if (result?.progress) setProject((current) => current ? { ...current, progress: { ...current.progress, ...result.progress }, itemStatus: result.itemStatus || current.itemStatus } : current);
       setMessage(result?.passed
-        ? tr(`Оцінка: ${nextCheck.score}/${nextCheck.maxScore}. Мініпроєкт зараховано.`, `Score: ${nextCheck.score}/${nextCheck.maxScore}. Mini-project passed.`)
+        ? tr(`Оцінка: ${nextCheck.score}/${nextCheck.maxScore}. Код пройшов перевірку — тепер зафіксуй докази й подай проєкт.`, `Score: ${nextCheck.score}/${nextCheck.maxScore}. Code check passed — complete the evidence and submit the project.`)
         : tr(`Оцінка: ${nextCheck.score}/${nextCheck.maxScore}. Виправ код і спробуй ще раз.`, `Score: ${nextCheck.score}/${nextCheck.maxScore}. Fix the code and try again.`));
     } catch (caught: any) {
       setError(caught?.response?.data?.message === "PROJECT_CHECK_NOT_CONFIGURED"
@@ -177,6 +203,21 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
       </header>
       {message && <div role="status" className="mb-4 rounded-xl border border-primary/25 bg-primary/[.06] px-4 py-3 text-sm text-primary">{message}</div>}
       {error && <div role="alert" className="mb-4 rounded-xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
+      {project?.projectSpec?.assessment?.requiredEvidence?.length ? <section className="mb-4 rounded-2xl border border-border bg-bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[.14em] text-text-secondary">{tr("Докази готовності", "Readiness evidence")}</p>
+            <p className="mt-1 text-sm text-text-secondary">{tr("Перевірка коду й milestones — різні кроки. Подання відкривається лише після обох.", "Code checking and milestones are separate steps. Submission opens only after both.")}</p>
+          </div>
+          <button type="button" onClick={() => void submit()} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white">{tr("Подати проєкт", "Submit project")}</button>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {project.projectSpec.assessment.requiredEvidence.map((evidence) => <label key={evidence.id} className="flex gap-3 rounded-xl border border-border/70 p-3 text-sm">
+            <input type="checkbox" checked={milestoneIds.includes(evidence.id)} onChange={(event) => setMilestoneIds((current) => event.target.checked ? [...new Set([...current, evidence.id])] : current.filter((id) => id !== evidence.id))} className="mt-1 accent-primary" />
+            <span><span className="font-bold text-text-primary">{evidence.label}</span><span className="mt-1 block text-text-secondary">{evidence.description}</span></span>
+          </label>)}
+        </div>
+      </section> : null}
       {loading || !project || !projectTask ? <div role="status" className="h-[760px] rounded-[28px] border border-border bg-bg-surface p-6 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо мініпроєкт…", "Loading mini-project…")}</div> : <StudyCodIDEWorkspace
         task={projectTask}
         theory={null}
@@ -185,10 +226,10 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
         compiler={language}
         onCompilerChange={() => undefined}
         code={code}
-        onCodeChange={(next) => { setCode(next); setCheckResult(null); }}
+        onCodeChange={(next) => { setCode(next); setFiles((current) => current.map((file) => file.path === project.entryFile ? { ...file, content: next } : file)); setCheckResult(null); }}
         files={files}
-        onFilesChange={(next) => setCode(next[0]?.content || "")}
-        useFiles={false}
+        onFilesChange={(next) => { setFiles(next); setCode(next.find((file) => file.path === project.entryFile)?.content || next[0]?.content || ""); setCheckResult(null); }}
+        useFiles={true}
         onEnableFiles={() => undefined}
         entryFile={project.entryFile}
         stdin={stdin}
@@ -200,7 +241,7 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
         onRun={() => void run()}
         onCheck={() => void check()}
         onSave={() => void saveDraft()}
-        onReset={() => { setCode(project.starterCode); setCheckResult(null); setRunResult(null); }}
+        onReset={() => { setFiles(starterFiles); setCode(starterFiles.find((file) => file.path === project.entryFile)?.content || project.starterCode); setCheckResult(null); setRunResult(null); }}
         readOnly={false}
         disableLanguageChange
         runResult={runResult}

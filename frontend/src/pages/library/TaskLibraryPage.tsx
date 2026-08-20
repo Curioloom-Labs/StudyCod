@@ -569,6 +569,11 @@ export const TaskLibraryPage: React.FC = () => {
 
   const reload = async () => {
     setLoading(true);
+    // Never display the previous page while a new filter/page is loading.
+    // This prevents transient counters such as “1 of 6” before the server
+    // response with the authoritative total arrives.
+    setTasks([]);
+    setTotal(null);
     try {
       if (isDesignPreview) {
         setTasks(PREVIEW_LIBRARY_TASKS);

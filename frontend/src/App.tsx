@@ -86,7 +86,8 @@ const LegacyGradesRedirect: React.FC = () => {
 };
 const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
 const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherWorkspacePage").then(mod => ({ default: mod.TeacherWorkspacePage })));
-const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassHubPage").then(mod => ({ default: mod.ClassHubPage })));
+// The class route must expose roster management and join-code controls too.
+const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassDetailsPage").then(mod => ({ default: mod.ClassDetailsPage })));
 const CreateLessonPage = React.lazy(() => import("./pages/edu/TeacherComposerPages").then(mod => ({ default: mod.CreateLessonWorkspace })));
 const CreateTopicPage = React.lazy(() => import("./pages/edu/TeacherComposerPages").then(mod => ({ default: mod.CreateTopicWorkspace })));
 const TopicDetailsPage = React.lazy(() => import("./pages/edu/TopicStudioPage").then(mod => ({ default: mod.TopicStudioPage })));

@@ -1,9 +1,40 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, normalize, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { pathToFileURL } from "node:url";
+
+// PM2 must not carry credentials in its serialized process environment. Load
+// the LSP secret from the service's private env file at process startup instead.
+function loadPrivateEnv(): void {
+  const candidates = [
+    process.env.LSP_ENV_FILE,
+    join(process.cwd(), ".env"),
+    join(process.cwd(), "..", "backend", ".env"),
+    join(process.cwd(), "..", ".env"),
+  ].filter((value): value is string => Boolean(value));
+  for (const file of candidates) {
+    try {
+      const raw = readFileSync(file, "utf8");
+      for (const line of raw.split(/\r?\n/)) {
+        const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+        if (!match || process.env[match[1]] !== undefined) continue;
+        let value = match[2].trim();
+        if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        process.env[match[1]] = value.replace(/\\n/g, "\n");
+      }
+      return;
+    } catch {
+      // Try the next private env location.
+    }
+  }
+}
+
+loadPrivateEnv();
 
 type Language = "java" | "cpp" | "c" | "python";
 type JsonObject = Record<string, unknown>;

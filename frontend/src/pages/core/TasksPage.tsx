@@ -2455,6 +2455,10 @@ export const TasksPage: React.FC<Props> = ({
             </div>
           </div>
 
+          {active?.learningStage && <span className="rounded-full border border-[#00b86b]/25 bg-[#00b86b]/[.08] px-3 py-1.5 text-[11px] font-black text-[#087a4a] dark:text-[#78efb4]">
+            {active.learningStage === "FOUNDATION" ? tr("Етап: основа", "Stage: foundation") : active.learningStage === "EDGE_CASES" ? tr("Етап: граничні випадки", "Stage: edge cases") : tr("Етап: перенесення", "Stage: transfer")}
+          </span>}
+
           {isPreviewMode && (
             <span className="rounded-full bg-[#fff2dc] px-3 py-1.5 text-[11px] font-black text-[#a45a00] dark:bg-[#ff8c00]/10 dark:text-[#ffc06e]">
               {tr("Демо-сценарій", "Demo scenario")}

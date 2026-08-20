@@ -1779,6 +1779,9 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   const catalogTheoryItemId = isCatalogTask && lessonInTopic === 1
     ? Number(((task as any).courseItem?.content as any)?.theoryItemId ?? 0)
     : 0;
+  const learningStage = isCatalogTask
+    ? String(((task as any).courseItem?.content as any)?.exercise?.learningContract?.stage || "") || null
+    : null;
 
   const includeTheory = isControlStandalone
     ? false
@@ -1878,7 +1881,8 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
     createdAt: task.createdAt,
     language: task.lang,
     courseItemId: task.courseItemId ?? null,
-    courseEnrollmentId: task.courseEnrollmentId ?? null
+    courseEnrollmentId: task.courseEnrollmentId ?? null,
+    learningStage,
   };
 }
 
@@ -3620,6 +3624,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       const theoryForAi = [
         context.theoryMarkdown,
         typeof exercise.prompt === "string" ? `Practice brief:\n${exercise.prompt}` : "",
+        exercise.learningContract && typeof exercise.learningContract === "object"
+          ? `Machine-checked learning contract (follow it exactly; do not collapse the task into a copy of the theory example):\n${JSON.stringify(exercise.learningContract)}`
+          : "",
       ].filter(Boolean).join("\n\n").trim();
 
       await reportGenerationProgress(

@@ -17,7 +17,7 @@ profiles:
   records:
     uk:
       inputFormat: "JSON Lines: кожен рядок має id, name та value; порожні або невалідні записи пропускаються."
-      outputFormat: "Для валідних записів виводяться нормалізовані рядки, потім підсумок rows=N total=SUM."
+      outputFormat: "Для валідного запису виведіть рядок id|name|value, потім підсумок rows=N total=SUM; невалідні рядки пропускайте."
     en:
       inputFormat: "JSON Lines: each line has id, name, and value; empty or invalid records are skipped."
       outputFormat: "Print normalized rows for valid records, then rows=N total=SUM."
@@ -45,49 +45,49 @@ profiles:
   jobs:
     uk:
       inputFormat: "JSON-об'єкт jobs із полями id та status: done, failed або cancelled."
-      outputFormat: "Вивести done=N, failed=N, cancelled=N, total=N у цьому порядку."
+      outputFormat: "Вивести done=N, failed=N, cancelled=N, total=N у цьому порядку; невідомі статуси не рахувати."
     en:
       inputFormat: "JSON object jobs with id and status: done, failed, or cancelled."
       outputFormat: "Print done=N, failed=N, cancelled=N, total=N in this order."
   numeric:
     uk:
       inputFormat: "Перше число N, далі N цілих чисел; для порожнього набору N дорівнює 0."
-      outputFormat: "Вивести детермінований звіт зі count, min, max, average та індексами, якщо вони потрібні умовою."
+      outputFormat: "Вивести count=N min=X max=Y average=Z з двома цифрами після крапки; для N=0 — лише count=0."
     en:
       inputFormat: "First N, followed by N integers; an empty dataset has N equal to 0."
       outputFormat: "Print a deterministic report with count, min, max, average, and indexes when required."
   grade:
     uk:
       inputFormat: "Перше число N, далі N оцінок від 0 до 100."
-      outputFormat: "Вивести average=Z з двома знаками, min=X та max=Y; N=0 дає NA для min і max."
+      outputFormat: "Вивести average=Z, min=X та max=Y окремими рядками; N=0 дає average=0.00, min=NA, max=NA."
     en:
       inputFormat: "First N, followed by N grades from 0 to 100."
       outputFormat: "Print average=Z with two decimals, min=X, and max=Y; N=0 uses NA for min and max."
   shape:
     uk:
       inputFormat: "Перше число N, далі N рядків circle r або rectangle w h."
-      outputFormat: "Для кожної фігури вивести type area з двома цифрами після крапки; порядок зберегти."
+      outputFormat: "Для кожної фігури вивести type area з двома цифрами після крапки; невідому фігуру позначити ERROR."
     en:
       inputFormat: "First N, followed by N lines circle r or rectangle w h."
       outputFormat: "Print type area for each shape with two decimal places, preserving order."
   array:
     uk:
       inputFormat: "Перше число N, далі N цілих чисел; позиції рахуються з нуля."
-      outputFormat: "Вивести min=X index=I та max=Y index=J; при однакових значеннях брати першу позицію."
+      outputFormat: "Вивести min=X index=I та max=Y index=J; при N=0 вивести EMPTY, при однакових значеннях брати першу позицію."
     en:
       inputFormat: "First N, followed by N integers; positions are zero-based."
       outputFormat: "Print min=X index=I and max=Y index=J; use the first position for ties."
   vector:
     uk:
       inputFormat: "Перше число N, далі N цілих вимірювань."
-      outputFormat: "Вивести count=N, min=X, max=Y та average=Z з двома цифрами після крапки."
+      outputFormat: "Вивести count=N min=X max=Y average=Z з двома цифрами після крапки; для N=0 — лише count=0."
     en:
       inputFormat: "First N, followed by N integer measurements."
       outputFormat: "Print count=N, min=X, max=Y, and average=Z with two decimals."
   config:
     uk:
       inputFormat: "Один JSON-об'єкт із host, port і secret; port має бути 1..65535, secret — непорожній."
-      outputFormat: "Валідний конфіг друкує VALID; помилка друкує INVALID: <reason> без stack trace."
+      outputFormat: "Валідний конфіг друкує VALID; помилка друкує INVALID: host, INVALID: port, INVALID: secret або INVALID: json без stack trace."
     en:
       inputFormat: "One JSON object with host, port, and secret; port must be 1..65535 and secret non-empty."
       outputFormat: "A valid config prints VALID; an invalid one prints INVALID: <reason> without a stack trace."

@@ -19,6 +19,15 @@ export type CourseProjectProgressStatus = "DRAFT" | "SUBMITTED";
 export interface CourseProjectProgressData {
   milestoneIds: string[];
   draft: string;
+  files?: Array<{ path: string; content: string }>;
+  lastCheck?: {
+    score: number;
+    verdict: string;
+    testsPassed: number;
+    testsTotal: number;
+    checkedAt: string;
+    filesHash?: string;
+  } | null;
   status: CourseProjectProgressStatus;
   submittedAt?: string | null;
 }

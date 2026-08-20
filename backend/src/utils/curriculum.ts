@@ -73,6 +73,82 @@ function numberedCases(profile: string, output = "OK"): Array<[string, string]> 
   return Array.from({ length: 15 }, (_, index) => [`{\"case\":${index + 1},\"profile\":\"${profile}\"}`, output]);
 }
 
+function profileContractCases(profile: string): Array<[string, string]> {
+  if (profile === "records") return [
+    ['{"id":1,"name":"Alice","value":10}\n{"id":2,"name":"Bob","value":5}', "1|Alice|10\n2|Bob|5\nrows=2 total=15"],
+    ['{"id":7,"name":"A","value":0}', "7|A|0\nrows=1 total=0"],
+    ['{"id":1,"name":"A","value":-2}\ninvalid\n{"id":2,"name":"B","value":4}', "1|A|-2\n2|B|4\nrows=2 total=2"],
+    ['\n{"id":3,"name":"C","value":8}\n', "3|C|8\nrows=1 total=8"],
+    ['{"id":1,"name":"Same","value":1}\n{"id":1,"name":"Same","value":1}', "1|Same|1\n1|Same|1\nrows=2 total=2"],
+    ['{"id":10,"name":"Z","value":100}\n{"id":2,"name":"A","value":-5}', "10|Z|100\n2|A|-5\nrows=2 total=95"],
+    ['{"id":4,"name":"UTF","value":12}', "4|UTF|12\nrows=1 total=12"],
+    ['{"id":0,"name":"Zero","value":0}\n{}', "0|Zero|0\nrows=1 total=0"],
+    ['{"id":1,"name":"A","value":2}\n{"id":2,"name":"B","value":3}\n{"id":3,"name":"C","value":4}', "1|A|2\n2|B|3\n3|C|4\nrows=3 total=9"],
+    ['not-json', "rows=0 total=0"],
+    ['{"id":5,"name":"Missing"}', "rows=0 total=0"],
+    ['{"id":6,"name":"Decimal","value":3.5}', "6|Decimal|3.5\nrows=1 total=3.5"],
+    ['{"id":8,"name":"N","value":-10}\ninvalid\ninvalid', "8|N|-10\nrows=1 total=-10"],
+    ['{"id":9,"name":"Last","value":1}\n{"id":10,"name":"Last","value":2}', "9|Last|1\n10|Last|2\nrows=2 total=3"],
+    ['{}\n{}', "rows=0 total=0"],
+  ];
+  if (profile === "collection") return [
+    ["ADD A red 10\nREPORT\nEXIT\n", "red total=10 count=1"],
+    ["ADD A red 10\nADD B red 5\nREPORT\nEXIT\n", "red total=15 count=2"],
+    ["ADD A blue -2\nREPORT\nEXIT\n", "blue total=-2 count=1"],
+    ["REPORT\nEXIT\n", "EMPTY"],
+    ["ADD Z red 1\nADD A blue 2\nREPORT\nEXIT\n", "blue total=2 count=1\nred total=1 count=1"],
+    ["ADD A red 0\nREPORT\nEXIT\n", "red total=0 count=1"],
+    ["ADD A red 1\nADD A red 3\nREPORT\nEXIT\n", "red total=4 count=2"],
+    ["ADD A red 1\nADD B blue 2\nADD C red 3\nREPORT\nEXIT\n", "blue total=2 count=1\nred total=4 count=2"],
+    ["ADD A green 100\nREPORT\nEXIT\n", "green total=100 count=1"],
+    ["ADD A red -1\nADD B red -2\nREPORT\nEXIT\n", "red total=-3 count=2"],
+    ["ADD A red 1\nREPORT\nREPORT\nEXIT\n", "red total=1 count=1\nred total=1 count=1"],
+    ["ADD A red 1\nEXIT\n", ""],
+    ["ADD A red 1\nADD B yellow 2\nADD C yellow 3\nREPORT\nEXIT\n", "red total=1 count=1\nyellow total=5 count=2"],
+    ["ADD A red 7\nREPORT\nEXIT\n", "red total=7 count=1"],
+    ["ADD A red 1\nBAD\nREPORT\nEXIT\n", "red total=1 count=1"],
+  ];
+  if (profile === "jobs") return [
+    ['{"jobs":[{"id":1,"status":"done"}]}', "done=1\nfailed=0\ncancelled=0\ntotal=1"],
+    ['{"jobs":[{"id":1,"status":"failed"},{"id":2,"status":"done"}]}', "done=1\nfailed=1\ncancelled=0\ntotal=2"],
+    ['{"jobs":[{"id":1,"status":"cancelled"}]}', "done=0\nfailed=0\ncancelled=1\ntotal=1"],
+    ['{"jobs":[]}', "done=0\nfailed=0\ncancelled=0\ntotal=0"],
+    ['{"jobs":[{"id":1,"status":"done"},{"id":2,"status":"done"}]}', "done=2\nfailed=0\ncancelled=0\ntotal=2"],
+    ['{"jobs":[{"id":1,"status":"failed"},{"id":2,"status":"failed"}]}', "done=0\nfailed=2\ncancelled=0\ntotal=2"],
+    ['{"jobs":[{"id":1,"status":"cancelled"},{"id":2,"status":"failed"}]}', "done=0\nfailed=1\ncancelled=1\ntotal=2"],
+    ['{"jobs":[{"id":1,"status":"unknown"}]}', "done=0\nfailed=0\ncancelled=0\ntotal=0"],
+    ['{"jobs":[{"id":0,"status":"done"}]}', "done=1\nfailed=0\ncancelled=0\ntotal=1"],
+    ['{"jobs":[{"id":1,"status":"done"},{"id":1,"status":"failed"}]}', "done=1\nfailed=1\ncancelled=0\ntotal=2"],
+    ['{}', "done=0\nfailed=0\ncancelled=0\ntotal=0"],
+    ["not-json", "done=0\nfailed=0\ncancelled=0\ntotal=0"],
+    ['{"jobs":[{"id":1,"status":"done"},{"id":2,"status":"cancelled"},{"id":3,"status":"failed"}]}', "done=1\nfailed=1\ncancelled=1\ntotal=3"],
+    ['{"jobs":[{"id":"x","status":"done"}]}', "done=1\nfailed=0\ncancelled=0\ntotal=1"],
+    ['{"jobs":[{"id":1,"status":"done","extra":true}]}', "done=1\nfailed=0\ncancelled=0\ntotal=1"],
+  ];
+  if (profile === "numeric" || profile === "vector") return [
+    ["0\n", "count=0"], ["1\n7\n", "count=1 min=7 max=7 average=7.00"], ["3\n1 2 3\n", "count=3 min=1 max=3 average=2.00"],
+    ["3\n-2 0 5\n", "count=3 min=-2 max=5 average=1.00"], ["4\n2 2 2 2\n", "count=4 min=2 max=2 average=2.00"],
+    ["2\n100 -100\n", "count=2 min=-100 max=100 average=0.00"], ["5\n1 10 3 8 6\n", "count=5 min=1 max=10 average=5.60"],
+    ["2\n0 1\n", "count=2 min=0 max=1 average=0.50"], ["1\n-9\n", "count=1 min=-9 max=-9 average=-9.00"],
+    ["3\n10 20 30\n", "count=3 min=10 max=30 average=20.00"], ["4\n-1 -2 -3 -4\n", "count=4 min=-4 max=-1 average=-2.50"],
+    ["2\n7 13\n", "count=2 min=7 max=13 average=10.00"], ["3\n9 9 1\n", "count=3 min=1 max=9 average=6.33"],
+    ["1\n0\n", "count=1 min=0 max=0 average=0.00"], ["5\n5 4 3 2 1\n", "count=5 min=1 max=5 average=3.00"],
+  ];
+  if (profile === "grade") return [
+    ["0\n", "average=0.00\nmin=NA\nmax=NA"], ["1\n100\n", "average=100.00\nmin=100\nmax=100"], ["3\n80 90 100\n", "average=90.00\nmin=80\nmax=100"], ["2\n0 50\n", "average=25.00\nmin=0\nmax=50"], ["4\n75 75 75 75\n", "average=75.00\nmin=75\nmax=75"], ["3\n1 2 3\n", "average=2.00\nmin=1\nmax=3"], ["2\n99 1\n", "average=50.00\nmin=1\nmax=99"], ["5\n60 70 80 90 100\n", "average=80.00\nmin=60\nmax=100"], ["1\n0\n", "average=0.00\nmin=0\nmax=0"], ["2\n33 34\n", "average=33.50\nmin=33\nmax=34"], ["3\n-1 50 101\n", "average=50.00\nmin=0\nmax=100"], ["2\n25 75\n", "average=50.00\nmin=25\nmax=75"], ["4\n10 20 30 40\n", "average=25.00\nmin=10\nmax=40"], ["3\n100 100 99\n", "average=99.67\nmin=99\nmax=100"], ["2\n49 51\n", "average=50.00\nmin=49\nmax=51"],
+  ];
+  if (profile === "shape") return [
+    ["1\ncircle 1\n", "circle 3.14"], ["1\nrectangle 2 3\n", "rectangle 6.00"], ["2\ncircle 2\nrectangle 4 5\n", "circle 12.57\nrectangle 20.00"], ["1\ncircle 0\n", "circle 0.00"], ["1\nrectangle 0 4\n", "rectangle 0.00"], ["3\ncircle 1\ncircle 2\ncircle 3\n", "circle 3.14\ncircle 12.57\ncircle 28.27"], ["2\nrectangle 1 1\nrectangle 10 2\n", "rectangle 1.00\nrectangle 20.00"], ["1\ntriangle 2 3\n", "ERROR"], ["2\ncircle 1\ninvalid\n", "circle 3.14\nERROR"], ["1\nrectangle 3 7\n", "rectangle 21.00"], ["1\ncircle -1\n", "ERROR"], ["2\nrectangle 2 2\ncircle 1\n", "rectangle 4.00\ncircle 3.14"], ["1\nrectangle 1.5 2\n", "rectangle 3.00"], ["1\ncircle 10\n", "circle 314.16"], ["1\nrectangle 0 0\n", "rectangle 0.00"],
+  ];
+  if (profile === "array") return [
+    ["1\n7\n", "min=7 index=0\nmax=7 index=0"], ["3\n3 1 2\n", "min=1 index=1\nmax=3 index=0"], ["4\n5 5 2 2\n", "min=2 index=2\nmax=5 index=0"], ["2\n-1 -5\n", "min=-5 index=1\nmax=-1 index=0"], ["0\n", "EMPTY"], ["3\n0 0 1\n", "min=0 index=0\nmax=1 index=2"], ["5\n10 8 6 4 2\n", "min=2 index=4\nmax=10 index=0"], ["2\n9 1\n", "min=1 index=1\nmax=9 index=0"], ["3\n-2 -2 -2\n", "min=-2 index=0\nmax=-2 index=0"], ["1\n0\n", "min=0 index=0\nmax=0 index=0"], ["4\n1 4 2 3\n", "min=1 index=0\nmax=4 index=1"], ["2\n100 -100\n", "min=-100 index=1\nmax=100 index=0"], ["3\n7 8 9\n", "min=7 index=0\nmax=9 index=2"], ["5\n1 1 1 1 1\n", "min=1 index=0\nmax=1 index=0"], ["2\n-3 0\n", "min=-3 index=0\nmax=0 index=1"],
+  ];
+  if (profile === "config") return [
+    ['{"host":"localhost","port":8080,"secret":"x"}', "VALID"], ['{"host":"api","port":1,"secret":"s"}', "VALID"], ['{"host":"api","port":65535,"secret":"s"}', "VALID"], ['{"host":"","port":8080,"secret":"x"}', "INVALID: host"], ['{"host":"api","port":0,"secret":"x"}', "INVALID: port"], ['{"host":"api","port":65536,"secret":"x"}', "INVALID: port"], ['{"host":"api","port":80,"secret":""}', "INVALID: secret"], ['{}', "INVALID: host"], ["not-json", "INVALID: json"], ['{"host":"api","port":443,"secret":"long-secret"}', "VALID"], ['{"host":"api","port":22,"secret":"s","extra":true}', "VALID"], ['{"host":"api","port":-1,"secret":"s"}', "INVALID: port"], ['{"host":" api ","port":3000,"secret":" s "}', "VALID"], ['{"host":"api","port":null,"secret":"s"}', "INVALID: port"], ['{"host":123,"port":3000,"secret":"s"}', "INVALID: host"],
+  ];
+  return numberedCases(profile);
+}
+
 function contractCases(profile: string): Array<[string, string]> {
   if (profile === "calculator") return calculatorContractCases;
   if (profile === "contact") return contactContractCases;
@@ -84,7 +160,7 @@ function contractCases(profile: string): Array<[string, string]> {
   ];
   if (profile === "vision") return ["blank.png", "object.png", "noise.png", "empty.png", "sample.jpg", "low-light.png", "high-contrast.png", "blurred.png", "short.mp4", "missing.png", "", "sample.png", "unknown-mode", "threshold-0", "threshold-255"].map((value) => [`{\"fixture\":\"${value}\",\"mode\":\"scan\"}`, "OK"]);
   if (profile === "queue") return ["2\nGET\nSTOP\n", "2\nPUT a\nGET\nSTOP\n", "2\nPUT a\nPUT b\nSIZE\nSTOP\n", "2\nPUT a\nPUT b\nPUT c\nSIZE\nSTOP\n", "1\nPUT a\nGET\nGET\nSTOP\n", "0\nPUT a\nSIZE\nSTOP\n", "3\nPUT 1\nPUT 2\nGET\nGET\nGET\nSTOP\n", "2\nSIZE\nSTOP\n", "2\nPUT x\nSIZE\nGET\nSIZE\nSTOP\n", "1\nPUT a\nPUT b\nGET\nSTOP\n", "2\nPUT a\nPUT b\nGET\nPUT c\nSTOP\n", "2\nPUT a\nPUT b\nGET\nGET\nSTOP\n", "0\nGET\nSTOP\n", "3\nPUT a\nPUT a\nSIZE\nSTOP\n", "1\nPUT a\nGET\nPUT b\nSIZE\nSTOP\n"].map((input, index) => [input, ["EMPTY", "OK\nVALUE a", "OK\nOK\nSIZE=2", "OK\nOK\nFULL\nSIZE=2", "OK\nVALUE a\nEMPTY", "FULL\nSIZE=0", "OK\nOK\nVALUE 1\nVALUE 2\nEMPTY", "SIZE=0", "OK\nSIZE=1\nVALUE x\nSIZE=0", "OK\nFULL\nVALUE a", "OK\nOK\nVALUE a\nOK", "OK\nOK\nVALUE a\nVALUE b", "EMPTY", "OK\nOK\nSIZE=2", "OK\nVALUE a\nOK\nSIZE=1"][index]]);
-  return numberedCases(profile);
+  return profileContractCases(profile);
 }
 
 function materializeContract(raw: any, locale: CurriculumLocale, key: string): { inputFormat: string; outputFormat: string; tests: MiniProjectContractCase[] } | null {

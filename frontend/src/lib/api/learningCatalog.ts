@@ -52,6 +52,8 @@ export interface LearningCourseItem {
 export interface LearningProjectProgress {
   milestoneIds: string[];
   draft: string;
+  files?: LearningProjectCheckFile[];
+  lastCheck?: { score: number; verdict: string; testsPassed: number; testsTotal: number; checkedAt: string; filesHash?: string } | null;
   status: "DRAFT" | "SUBMITTED";
   submittedAt?: string | null;
 }
@@ -67,6 +69,7 @@ export interface LearningProject {
   projectKey: string | null;
   runtime: CatalogRuntime;
   starterCode: string;
+  starterFiles?: LearningProjectCheckFile[];
   entryFile: string;
   projectSpec: {
     milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
@@ -76,6 +79,9 @@ export interface LearningProject {
     estimatedMinutes?: number;
     skills?: string[];
     template?: string;
+    entryFile?: string;
+    files?: string[];
+    assessment?: { version: number; mode: "EXACT_IO" | "WEB_BEHAVIOR" | "STATIC_REVIEW"; requiredEvidence: Array<{ id: string; label: string; description: string }>; checkBeforeSubmit: boolean };
     checkSpec?: { kind: "flask" | "fastapi" | "computer-vision"; module?: string; probePaths?: string[]; files?: string[] };
   } | null;
   progress: LearningProjectProgress;
@@ -164,12 +170,12 @@ export async function getCatalogProject(itemId: number): Promise<LearningProject
   return response.data?.project;
 }
 
-export async function saveCatalogProject(itemId: number, input: Omit<LearningProjectProgress, "status" | "submittedAt">) {
+export async function saveCatalogProject(itemId: number, input: Omit<LearningProjectProgress, "status" | "submittedAt" | "lastCheck">) {
   const response = await api.put(`/learning/items/${itemId}/project`, input);
   return response.data;
 }
 
-export async function submitCatalogProject(itemId: number, input: Omit<LearningProjectProgress, "status" | "submittedAt">) {
+export async function submitCatalogProject(itemId: number, input: Omit<LearningProjectProgress, "status" | "submittedAt" | "lastCheck">) {
   const response = await api.post(`/learning/items/${itemId}/project/submit`, input);
   return response.data;
 }

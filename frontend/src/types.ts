@@ -219,6 +219,7 @@ export interface Task {
   courseItemId?: number | null;
   courseEnrollmentId?: number | null;
   theoryItemId?: number | null;
+  learningStage?: "FOUNDATION" | "EDGE_CASES" | "TRANSFER" | null;
 }
 export interface Grade {
   id: number;

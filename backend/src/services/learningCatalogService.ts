@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { AppDataSource } from "../data-source";
 import { Course } from "../entities/Course";
 import { CourseDependency } from "../entities/CourseDependency";
@@ -47,6 +48,10 @@ function projectSpecFor(item: CourseItem): any {
   return ((item.content || {}) as any).projectSpec || null;
 }
 
+function projectFilesHash(files: JudgeFile[] | undefined): string {
+  return crypto.createHash("sha256").update(JSON.stringify((files || []).map((file) => ({ path: file.path, content: file.content }))), "utf8").digest("hex");
+}
+
 function projectRuntime(enrollment: UserCourseEnrollment): "JAVA" | "PYTHON" | "CPP" {
   const runtime = String(enrollment.variant?.runtime || "PYTHON").toUpperCase();
   return runtime === "JAVA" || runtime === "CPP" ? runtime : "PYTHON";
@@ -88,6 +93,35 @@ function projectStarterCode(runtime: "JAVA" | "PYTHON" | "CPP"): string {
   ].join("\n");
 }
 
+function projectTemplatePaths(item: CourseItem, runtime: "JAVA" | "PYTHON" | "CPP"): string[] {
+  const raw = String(projectSpecFor(item)?.template || "");
+  const extension = runtime === "JAVA" ? ".java" : runtime === "CPP" ? ".cpp" : ".py";
+  const paths = raw
+    .split(/[\r\n]+/)
+    .map((value) => value.trim().replace(/\\/g, "/"))
+    .filter((value) => value && !value.endsWith("/") && /^[A-Za-z0-9._/-]+$/.test(value));
+  const sourcePaths = paths.filter((value) => value.toLowerCase().endsWith(extension));
+  const entry = projectEntryFile(runtime);
+  // The isolated judge intentionally accepts only language-default entry
+  // files. Normalize authored `src/Main.java`-style templates into a safe
+  // manifest while retaining additional sibling modules.
+  const normalized = sourcePaths.map((value) => value === entry || value.toLowerCase().endsWith(`/${entry.toLowerCase()}`) ? entry : value);
+  return [...new Set([entry, ...normalized])].slice(0, 64);
+}
+
+function projectStarterFiles(item: CourseItem, runtime: "JAVA" | "PYTHON" | "CPP"): JudgeFile[] {
+  const entry = projectEntryFile(runtime);
+  const starter = projectStarterCode(runtime);
+  return projectTemplatePaths(item, runtime).map((filePath) => ({
+    path: filePath,
+    content: filePath === entry
+      ? starter
+      : runtime === "PYTHON"
+        ? `# Допоміжний модуль проєкту: ${filePath}\n`
+        : `// Допоміжний файл проєкту: ${filePath}\n`,
+  }));
+}
+
 function learnerProjectSpec(item: CourseItem): Record<string, unknown> | null {
   const spec = projectSpecFor(item);
   if (!spec || typeof spec !== "object") return null;
@@ -108,9 +142,20 @@ function projectProgressOrDefault(progress?: CourseItemProgress | null): CourseP
   return data && typeof data === "object" ? {
     milestoneIds: Array.isArray(data.milestoneIds) ? data.milestoneIds.map(String) : [],
     draft: typeof data.draft === "string" ? data.draft : "",
+    files: Array.isArray(data.files)
+      ? data.files.filter((file: any) => file && typeof file.path === "string" && typeof file.content === "string").map((file: any) => ({ path: file.path, content: file.content }))
+      : undefined,
+    lastCheck: data.lastCheck && typeof data.lastCheck === "object" ? {
+      score: percent(data.lastCheck.score),
+      verdict: String(data.lastCheck.verdict || ""),
+      testsPassed: Math.max(0, Number(data.lastCheck.testsPassed) || 0),
+      testsTotal: Math.max(0, Number(data.lastCheck.testsTotal) || 0),
+      checkedAt: String(data.lastCheck.checkedAt || ""),
+      filesHash: typeof data.lastCheck.filesHash === "string" ? data.lastCheck.filesHash : undefined,
+    } : null,
     status: data.status === "SUBMITTED" ? "SUBMITTED" : "DRAFT",
     submittedAt: data.submittedAt || null,
-  } : { milestoneIds: [], draft: "", status: "DRAFT", submittedAt: null };
+  } : { milestoneIds: [], draft: "", files: undefined, lastCheck: null, status: "DRAFT", submittedAt: null };
 }
 
 function enrollmentPriority(status: EnrollmentStatus): number {
@@ -822,15 +867,27 @@ export async function completeCourseItem(
 export async function getCourseProject(userId: number, itemId: number, locale: LearningLocale = "uk") {
   const { item, enrollment, progress } = await getEnrolledItemContext(userId, itemId);
   const localizedItem = localizeCourseItem(item, locale);
+  const runtime = projectRuntime(enrollment);
+  const starterFiles = projectStarterFiles(localizedItem, runtime);
+  const progressData = projectProgressOrDefault(progress);
   return {
     itemId: item.id,
     enrollmentId: enrollment.id,
     projectKey: (localizedItem.content as any)?.projectKey || null,
-    projectSpec: learnerProjectSpec(localizedItem),
-    runtime: projectRuntime(enrollment),
-    starterCode: projectStarterCode(projectRuntime(enrollment)),
-    entryFile: projectEntryFile(projectRuntime(enrollment)),
-    progress: projectProgressOrDefault(progress),
+    projectSpec: {
+      ...(learnerProjectSpec(localizedItem) || {}),
+      entryFile: projectEntryFile(runtime),
+      files: starterFiles.map((file) => file.path),
+    },
+    runtime,
+    starterCode: starterFiles.find((file) => file.path === projectEntryFile(runtime))?.content || projectStarterCode(runtime),
+    starterFiles,
+    entryFile: projectEntryFile(runtime),
+    progress: {
+      ...progressData,
+      files: progressData.files?.length ? progressData.files : starterFiles,
+      draft: progressData.draft || starterFiles.find((file) => file.path === projectEntryFile(runtime))?.content || "",
+    },
     itemStatus: progress?.status || "NOT_STARTED",
   };
 }
@@ -850,7 +907,7 @@ function normalizeProjectCheckFiles(value: unknown): JudgeFile[] {
     if (!filePath || content == null || filePath.startsWith("/") || filePath.includes("\\") || filePath.split("/").some((part: string) => part === "..")) {
       projectCheckError("PROJECT_FILES_INVALID");
     }
-    if (!/^[A-Za-z0-9._/-]+$/.test(filePath) || filePath === "main.py" || filePath.includes("__studycod_check__")) {
+    if (!/^[A-Za-z0-9._/-]+$/.test(filePath) || filePath.includes("__studycod_check__")) {
       projectCheckError("PROJECT_FILE_PATH_NOT_ALLOWED");
     }
     if (Buffer.byteLength(content, "utf8") > 200_000) projectCheckError("PROJECT_FILE_TOO_LARGE");
@@ -961,6 +1018,9 @@ export async function checkCourseProject(userId: number, itemId: number, rawFile
     : usesHarness
       ? [...studentFiles, { path: "main.py", content: buildProjectCheckHarness(checkSpec) }]
       : [];
+  if (!usesHarness && authoredTests.length > 0 && !files.some((file) => file.path === projectEntryFile(runtime))) {
+    projectCheckError("PROJECT_ENTRY_FILE_REQUIRED");
+  }
   if (!files.length) projectCheckError("PROJECT_CHECK_NOT_CONFIGURED", 409);
   const tests = authoredTests.length > 0 ? authoredTests : [{ id: "project-contract", input: "", output: "OK\n", hidden: false, group: "project", weight: 1 }];
   const request: JudgeRequest = {
@@ -986,7 +1046,7 @@ export async function checkCourseProject(userId: number, itemId: number, rawFile
       actual: test.actual,
     }));
   const score = Number.isFinite(Number(result.score)) ? Number(result.score) : (result.verdict === "AC" ? 100 : 0);
-  const progress = await recordCourseProjectScore(userId, itemId, score);
+  const progress = await recordCourseProjectScore(userId, itemId, score, studentFiles, String(result.verdict || ""), result.tests.filter((test) => test.verdict === "AC").length, result.tests.length);
   return {
     passed: result.verdict === "AC",
     verdict: result.verdict,
@@ -1011,7 +1071,8 @@ export async function runCourseProject(userId: number, itemId: number, rawFiles:
   const request: JudgeRequest = {
     submission_id: `project-run-${userId}-${itemId}-${Date.now()}`,
     language: runtime.toLowerCase() as "java" | "python" | "cpp",
-    source,
+    files,
+    entry,
     tests: [{ id: "run", input: String(stdin || ""), output: "", hidden: false }],
     checker: { type: "exact" },
     limits: { time_limit_ms: 10_000, memory_limit_mb: 384, output_limit_kb: 256 },
@@ -1033,7 +1094,15 @@ export async function runCourseProject(userId: number, itemId: number, rawFiles:
   };
 }
 
-async function recordCourseProjectScore(userId: number, itemId: number, score: number) {
+async function recordCourseProjectScore(
+  userId: number,
+  itemId: number,
+  score: number,
+  files: JudgeFile[],
+  verdict: string,
+  testsPassed: number,
+  testsTotal: number,
+) {
   const { item, enrollment, progress: existing } = await getEnrolledItemContext(userId, itemId);
   const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
   const normalizedScore = percent(score);
@@ -1041,14 +1110,18 @@ async function recordCourseProjectScore(userId: number, itemId: number, score: n
   const previousScore = Number.isFinite(previousScoreValue) ? percent(previousScoreValue) : 0;
   const bestScore = Math.max(previousScore, normalizedScore);
   progress.score = bestScore;
-  const passed = bestScore >= 60;
-  progress.status = passed ? "COMPLETED" : "IN_PROGRESS";
-  progress.completedAt = passed ? (progress.completedAt || new Date()) : null;
+  // A check is evidence, not a submission. Completion belongs to the
+  // explicit submit action after the learner has checked every milestone.
+  progress.status = "IN_PROGRESS";
+  progress.completedAt = null;
+  const previousData = projectProgressOrDefault(progress);
   progress.projectData = {
-    milestoneIds: projectMilestoneIds(item),
-    draft: typeof progress.projectData?.draft === "string" ? progress.projectData.draft : "",
-    status: passed ? "SUBMITTED" : "DRAFT",
-    submittedAt: passed ? (progress.projectData?.submittedAt || new Date().toISOString()) : (progress.projectData?.submittedAt || null),
+    milestoneIds: previousData.milestoneIds,
+    draft: files.find((file) => file.path === projectEntryFile(projectRuntime(enrollment)))?.content || previousData.draft,
+    files,
+    lastCheck: { score: normalizedScore, verdict, testsPassed, testsTotal, filesHash: projectFilesHash(files), checkedAt: new Date().toISOString() },
+    status: "DRAFT",
+    submittedAt: previousData.submittedAt || null,
   };
   await progressRepo().save(progress);
   const updatedEnrollment = await recalculateEnrollmentProgress(enrollment);
@@ -1059,18 +1132,23 @@ async function recordCourseProjectScore(userId: number, itemId: number, score: n
   };
 }
 
-async function saveProjectProgress(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme?: string }, submit: boolean) {
+async function saveProjectProgress(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; files?: JudgeFile[]; readme?: string }, submit: boolean) {
   const { item, enrollment, progress: existing } = await getEnrolledItemContext(userId, itemId);
   const allowedIds = new Set(projectMilestoneIds(item));
   const milestoneIds = [...new Set(input.milestoneIds.map((id) => String(id).trim()).filter((id) => allowedIds.has(id)))];
   const requiredIds = projectMilestoneIds(item);
-  if (submit && (requiredIds.some((id) => !milestoneIds.includes(id)) || !input.draft.trim())) {
+  const assessment = projectSpecFor(item)?.assessment;
+  const lastCheck = projectProgressOrDefault(existing).lastCheck;
+  const savedFiles = input.files?.length ? normalizeProjectCheckFiles(input.files) : projectProgressOrDefault(existing).files;
+  if (submit && (requiredIds.some((id) => !milestoneIds.includes(id)) || !input.draft.trim() || (assessment?.checkBeforeSubmit !== false && (!lastCheck || lastCheck.score < 60 || lastCheck.filesHash !== projectFilesHash(savedFiles))))) {
     throw Object.assign(new Error("PROJECT_REQUIREMENTS_INCOMPLETE"), { statusCode: 422 });
   }
   const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
   progress.projectData = {
     milestoneIds,
     draft: input.draft,
+    files: savedFiles,
+    lastCheck,
     status: submit ? "SUBMITTED" : "DRAFT",
     submittedAt: submit ? new Date().toISOString() : (progress.projectData?.submittedAt || null),
   };
@@ -1092,18 +1170,26 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
       itemId: item.id,
       enrollmentId: enrollment.id,
       projectKey: (item.content as any)?.projectKey || null,
-      projectSpec: projectSpecFor(item),
+      projectSpec: {
+        ...(learnerProjectSpec(item) || {}),
+        entryFile: projectEntryFile(projectRuntime(enrollment)),
+        files: projectStarterFiles(item, projectRuntime(enrollment)).map((file) => file.path),
+      },
+      runtime: projectRuntime(enrollment),
+      starterCode: projectStarterCode(projectRuntime(enrollment)),
+      starterFiles: projectStarterFiles(item, projectRuntime(enrollment)),
+      entryFile: projectEntryFile(projectRuntime(enrollment)),
       progress: projectProgressOrDefault(progress),
       itemStatus: progress.status,
     },
   };
 }
 
-export async function saveCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme?: string }) {
+export async function saveCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; files?: JudgeFile[]; readme?: string }) {
   return saveProjectProgress(userId, itemId, input, false);
 }
 
-export async function submitCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; readme?: string }) {
+export async function submitCourseProject(userId: number, itemId: number, input: { milestoneIds: string[]; draft: string; files?: JudgeFile[]; readme?: string }) {
   return saveProjectProgress(userId, itemId, input, true);
 }
 

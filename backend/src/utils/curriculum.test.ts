@@ -91,6 +91,19 @@ test("every mini-project has an explicit IO contract and at least 15 cases", () 
   assert.equal(projectCount, 45);
 });
 
+test("mini-project contracts cannot be a generic all-OK placeholder", () => {
+  const result = validateCurriculum();
+  for (const course of result.manifest.courses) {
+    for (const project of loadCurriculumMiniProjects(course.key)) {
+      const outputs = project.tests.map((testCase) => testCase.expectedOutput.trim());
+      const declaresOkBehavior = /\bOK\b|без помилки 5xx|without a 5xx/i.test(project.outputFormat);
+      if (declaresOkBehavior) continue;
+      assert.ok(new Set(outputs).size >= 3, `${course.key}/${project.key} needs multiple semantic expected outputs`);
+      assert.ok(outputs.some((output) => output !== "OK"), `${course.key}/${project.key} must not accept only OK`);
+    }
+  }
+});
+
 test("English mini-project dependencies use persisted canonical topic keys", () => {
   const ukManifest = loadCurriculumManifest(undefined, "uk").manifest;
   const enManifest = loadCurriculumManifest(undefined, "en").manifest;

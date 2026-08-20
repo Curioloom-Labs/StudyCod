@@ -6,6 +6,7 @@ import { CourseItem } from "../entities/CourseItem";
 import { CourseModule } from "../entities/CourseModule";
 import { CourseVariant } from "../entities/CourseVariant";
 import { loadCurriculumMiniProjects, loadCurriculumTopics, validateCurriculum, type CurriculumCourseDefinition, type CurriculumMiniProject, type CurriculumTopic } from "../utils/curriculum";
+import { buildPracticeContract, projectAssessmentContract } from "./learning/learningContract";
 
 export type CurriculumSyncReport = {
   dryRun: boolean;
@@ -50,15 +51,25 @@ function practiceCount(topic: CurriculumTopic): number {
 }
 
 function exerciseDefinition(course: CurriculumCourseDefinition, topic: CurriculumTopic, theoryKey: string, sequence: number, total: number) {
+  const contract = buildPracticeContract({
+    courseKey: course.key,
+    topicKey: topic.key,
+    topicTitle: topic.title,
+    topicDescription: topic.description,
+    exerciseFocus: topic.exerciseFocus || extractExerciseFocus(topic.content) || undefined,
+    sequence,
+    total,
+  });
   return {
-    version: 1,
-    generation: "deterministic-v1",
+    version: 2,
+    generation: "deterministic-v2",
     exerciseKey: `${course.key}.${topic.key}.practice-${sequence}`,
     sequence,
     total,
     generatedAfterTheory: true,
     theoryItemKey: theoryKey,
-    prompt: topic.exerciseFocus || extractExerciseFocus(topic.content) || `Виконайте коротку практичну вправу за темою «${topic.title}». Продемонструйте результат у коді та перевірте його на власному прикладі.`,
+    prompt: contract.taskIntent,
+    learningContract: contract,
     starterCode: starterCode(course.runtime),
     runtime: course.runtime,
     evaluation: { mode: "MANUAL_OR_RUNTIME", solutionNotStoredInClient: true },
@@ -181,7 +192,7 @@ function miniProjectItem(course: CurriculumCourseDefinition, project: Curriculum
       generated: false,
       required: true,
       projectSpec: {
-        version: 1,
+        version: 2,
         kind: "MINI_PROJECT",
         estimatedMinutes: project.estimatedMinutes,
         skills: project.skills,
@@ -191,6 +202,11 @@ function miniProjectItem(course: CurriculumCourseDefinition, project: Curriculum
         milestones: project.milestones,
         acceptanceCriteria: project.acceptanceCriteria,
         template: project.template,
+        assessment: projectAssessmentContract({
+          hasAuthoredTests: Boolean(project.tests?.length),
+          hasWebHarness: Boolean(project.checkSpec && ["flask", "fastapi", "computer-vision"].includes(String(project.checkSpec.kind))),
+          milestones: project.milestones,
+        }),
         ...(project.tests?.length ? { tests: project.tests } : {}),
         ...(project.checkSpec ? { checkSpec: project.checkSpec } : {}),
       },
@@ -220,7 +236,7 @@ function finalAssessmentItem(course: CurriculumCourseDefinition, order: number) 
       generated: false,
       required: true,
       projectSpec: {
-        version: 1,
+        version: 2,
         kind: "FINAL_ASSESSMENT",
         estimatedMinutes: 120,
         skills: ["integration", "documentation", "verification"],
@@ -231,6 +247,15 @@ function finalAssessmentItem(course: CurriculumCourseDefinition, order: number) 
         ],
         acceptanceCriteria: ["Усі етапи виконані", "Є короткі нотатки реалізації"],
         template: "# Фінальна робота\\n\\n## Рішення\\n\\n## Перевірка\\n",
+        assessment: projectAssessmentContract({
+          hasAuthoredTests: false,
+          hasWebHarness: false,
+          milestones: [
+            { id: "scope", title: "Сформулювати задачу", description: "Опиши задачу, користувача та очікуваний результат." },
+            { id: "implementation", title: "Реалізувати рішення", description: "Покажи основну реалізацію та ключові технічні рішення." },
+            { id: "verification", title: "Перевірити результат", description: "Додай приклади перевірки, тестування або демонстрації." },
+          ],
+        }),
       },
     },
   };
@@ -249,7 +274,10 @@ async function saveCourseItem(itemRepo: ReturnType<typeof AppDataSource.getRepos
   // artifact that must remain stable when theory is edited. Preserve an
   // existing practice byte-for-byte; only a new topic gets newly generated
   // practice items. This lets us add lessons without rewriting old attempts.
-  if (item && preserveExisting) return item;
+  // Existing generated tasks remain stable, but the learning contract itself
+  // is platform policy rather than learner work. Upgrade old v1 practice
+  // rows in place so new readiness rules reach existing enrollments too.
+  if (item && preserveExisting && Number((item.content as any)?.exercise?.learningContract?.version || 0) >= 2) return item;
   if (!item) item = itemRepo.create({ module: { id: module.id } as any, contentKey: input.contentKey });
   item.contentKey = input.contentKey;
   const changed = created || item.sourceHash !== input.sourceHash || item.title !== input.title || JSON.stringify(item.content) !== JSON.stringify(input.content);

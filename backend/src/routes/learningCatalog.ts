@@ -92,6 +92,7 @@ learningCatalogRouter.post("/items/:itemId/complete", authRequired, async (req: 
 const projectProgressSchema = z.object({
   milestoneIds: z.array(z.string().trim().min(1)).max(100),
   draft: z.string().max(100_000),
+  files: z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) })).max(64).optional(),
   // Kept optional for old clients; README is no longer part of the project contract.
   readme: z.string().max(30_000).optional(),
 });
