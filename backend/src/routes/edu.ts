@@ -22,6 +22,7 @@ import { TopicNew } from "../entities/TopicNew";
 import { validateFormula } from "../utils/safeFormulaEvaluator";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
 import { saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
+import { authorizeClassAction } from "../services/edu/classAccess";
 import { logger } from "../utils/logger";
 import { generateInteractiveLessonWithAI } from "../services/openRouterService";
 import { emailService } from "../services/emailService";
@@ -458,8 +459,14 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
     const classes = await classRepo()
       .createQueryBuilder("class")
       .loadRelationCountAndMap("class.studentsCount", "class.students")
-      .where("class.teacher_id = :teacherId", { teacherId: user.id })
-      .orWhere(adminOrgIds.length ? "class.org_id IN (:...adminOrgIds)" : "1 = 0", { adminOrgIds })
+      .leftJoin("class.teachers", "assignedTeacher")
+      .where(
+        adminOrgIds.length
+          ? "(class.teacher_id = :teacherId OR assignedTeacher.id = :teacherId OR class.org_id IN (:...adminOrgIds))"
+          : "(class.teacher_id = :teacherId OR assignedTeacher.id = :teacherId)",
+        { teacherId: user.id, adminOrgIds },
+      )
+      .distinct(true)
       .orderBy("class.created_at", "DESC")
       .getMany();
     res.json({
@@ -490,6 +497,14 @@ eduRouter.get("/classes/:classId", authRequired, requireClassCapability("CLASS_V
         name: cls.name,
         language: cls.language,
         organizationId: cls.organizationId ?? null,
+        teacherId: cls.teacher?.id ?? null,
+        teacherName: cls.teacher ? `${cls.teacher.firstName ?? ""} ${cls.teacher.lastName ?? ""}`.trim() || cls.teacher.username : null,
+        teacherIds: Array.from(new Set([cls.teacher?.id, ...(cls.teachers ?? []).map((teacher) => teacher.id)].filter((value): value is number => Number.isFinite(value)))),
+        teachers: (cls.teachers ?? []).map((teacher) => ({
+          id: teacher.id,
+          name: `${teacher.firstName ?? ""} ${teacher.lastName ?? ""}`.trim() || teacher.username,
+          username: teacher.username
+        })),
         gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         gradeScaleMode: normalizeScaleMode(cls.gradeScaleMode),
         createdAt: cls.createdAt,
@@ -733,12 +748,23 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
     where: {
       id: Number(req.params.lessonId)
     },
-    relations: ["class", "class.teacher"]
+    relations: ["class", "class.teacher", "class.teachers"]
   });
-  if (!lesson || lesson.class.teacher.id !== user.id) {
+  if (!lesson) {
     return res.status(404).json({
       message: "LESSON_NOT_FOUND"
     });
+  }
+  const classAccess = req.userId
+    ? await authorizeClassAction(req.userId, lesson.class.id, "CONTENT_AUTHOR", {
+        isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+      })
+    : null;
+  if (!classAccess) {
+    return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+  }
+  if (!classAccess.allowed) {
+    return res.status(403).json({ message: "ACCESS_DENIED" });
   }
   const parsedBody = createLessonTaskBodySchema.safeParse(req.body ?? {});
   if (!parsedBody.success) {
@@ -829,10 +855,11 @@ eduRouter.put("/control-works/:controlWorkId/formula", authRequired, async (req:
       if (!controlWork.topic?.class) {
         throw new Error("TOPIC_NOT_ASSIGNED_TO_CLASS");
       }
-      if (!controlWork.topic.class.teacher) {
-        throw new Error("CLASS_TEACHER_NOT_FOUND");
-      }
-      if (controlWork.topic.class.teacher.id !== user.id) {
+      const access = await authorizeClassAction(req.userId as number, controlWork.topic.class.id, "CONTENT_AUTHOR", {
+        manager,
+        isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
+      });
+      if (!access?.allowed) {
         throw new Error("ACCESS_DENIED");
       }
       controlWork.formula = formula || null;

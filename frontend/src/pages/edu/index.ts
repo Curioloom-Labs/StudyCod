@@ -1,4 +1,5 @@
-export * from "./ClassDetailsPage";
+export * from "./ClassHubPage";
+export * from "./ClassManagementPage";
 export * from "./ClassGradebookPage";
 export * from "./ControlWorkDetailsPage";
 export * from "./CreateLessonPage";

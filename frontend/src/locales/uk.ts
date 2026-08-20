@@ -31,7 +31,6 @@ export default {
   eduNavCourses: 'Курси',
   eduNavCalendar: 'Календар',
   eduNavTutor: 'AI-тьютор',
-  eduAttendance: 'Відвідуваність',
   eduSimilarity: 'Антиплагіат',
   eduTabOverview: 'Огляд',
   eduTabLessons: 'Теми та уроки',
@@ -307,8 +306,8 @@ export default {
   deleteThisTest: 'Видалити цей тест?',
   deleteTask: 'Видалити завдання',
 
-  authEduForTeachersTitle: 'EDU — для вчителів',
-  authEduForTeachersBody: 'Режим EDU призначений для вчителів, які ведуть клас. Якщо ти учень який вчиться самостійно — обирай Personal. Учні зазвичай отримують доступ до класу від вчителя.',
+  authEduForTeachersTitle: 'EDU — класи та навчання',
+  authEduForTeachersBody: 'EDU обʼєднує роботу адміністратора, викладача та учня в класі. Учні входять за даними, які їм видав заклад.',
 
   landingBadge: 'Платформа для навчання програмуванню',
   landingTitle: 'Старт у програмуванні без зайвого стресу',

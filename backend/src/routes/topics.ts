@@ -24,6 +24,7 @@ import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { normalizeAssignedStudentIds, normalizeTargetedAssignmentForStorage } from "../utils/assignmentVisibility";
 import { validateUploadedZip, ZipValidationError, ZipExtractionBudget } from "../utils/zipUploadValidator";
 import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../services/edu/assignmentTargetsService";
+import { authorizeClassForReq } from "../middleware/orgContext";
 import type { LibraryTaskProjectSpec } from "../entities/LibraryTask";
 const topicsRouter = Router();
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
@@ -242,11 +243,9 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
           message: "CLASS_NOT_FOUND"
         });
       }
-      if (cls.teacher.id !== user.id) {
-        return res.status(403).json({
-          message: "ACCESS_DENIED"
-        });
-      }
+      const access = await authorizeClassForReq(req, cls.id, "CLASS_VIEW");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
       const topics = await topicRepo().find({
         where: {
           class: {
@@ -321,10 +320,10 @@ topicsRouter.get("/:topicId", authRequired, async (req: AuthRequest, res: Respon
         message: "TOPIC_NOT_FOUND"
       });
     }
-    if (topic.class && topic.class.teacher?.id !== user.id) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
+    if (topic.class) {
+      const access = await authorizeClassForReq(req, topic.class.id, "CLASS_VIEW");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     let progress = null;
     if (req.studentId) {
@@ -375,19 +374,10 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
       });
     }
     if (classId) {
-      const cls = await classRepo().findOne({
-        where: {
-          id: classId,
-          teacher: {
-            id: user.id
-          }
-        }
-      });
-      if (!cls) {
-        return res.status(404).json({
-          message: "CLASS_NOT_FOUND"
-        });
-      }
+      const access = await authorizeClassForReq(req, Number(classId), "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+      const cls = access.cls;
       if (cls.language !== language) {
         return res.status(400).json({
           message: "LANGUAGE_MISMATCH"
@@ -460,10 +450,10 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
         message: "TOPIC_NOT_FOUND"
       });
     }
-    if (topic.class && topic.class.teacher?.id !== user.id) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
+    if (topic.class) {
+      const access = await authorizeClassForReq(req, topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     const {
       title,
@@ -584,8 +574,10 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
 
     const topic = await topicRepo().findOne({ where: { id: topicId } as any, relations: ["class", "class.teacher"] });
     if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
-    if (topic.class && topic.class.teacher?.id !== user.id && req.userRole !== "SYSTEM_ADMIN") {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (topic.class) {
+      const access = await authorizeClassForReq(req, topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
     const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
@@ -727,8 +719,10 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
 
     const topic = await topicRepo().findOne({ where: { id: topicId } as any, relations: ["class", "class.teacher"] });
     if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
-    if (topic.class && topic.class.teacher?.id !== user.id && req.userRole !== "SYSTEM_ADMIN") {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (topic.class) {
+      const access = await authorizeClassForReq(req, topic.class.id, "CLASS_VIEW");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
     const task = await taskRepo().findOne({ where: { id: taskId, topic: { id: topicId } } as any });
@@ -1060,12 +1054,17 @@ topicsRouter.get("/control-works/:controlWorkId", authRequired, async (req: Auth
       where: {
         id: controlWorkId
       },
-      relations: ["topic"]
+      relations: ["topic", "topic.class"]
     });
     if (!controlWork) {
       return res.status(404).json({
         message: "CONTROL_WORK_NOT_FOUND"
       });
+    }
+    if (controlWork.topic.class) {
+      const access = await authorizeClassForReq(req, controlWork.topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     const controlTasks = await taskRepo().find({
       where: {
@@ -1112,12 +1111,18 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
     const controlWork = await controlWorkRepo().findOne({
       where: {
         id: controlWorkId
-      }
+      },
+      relations: ["topic", "topic.class"]
     });
     if (!controlWork) {
       return res.status(404).json({
         message: "CONTROL_WORK_NOT_FOUND"
       });
+    }
+    if (controlWork.topic.class) {
+      const access = await authorizeClassForReq(req, controlWork.topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     const {
       title,
@@ -1260,12 +1265,18 @@ topicsRouter.post("/:topicId/control-works", authRequired, async (req: AuthReque
     const topic = await topicRepo().findOne({
       where: {
         id: topicId
-      }
+      },
+      relations: ["class"]
     });
     if (!topic) {
       return res.status(404).json({
         message: "TOPIC_NOT_FOUND"
       });
+    }
+    if (topic.class) {
+      const access = await authorizeClassForReq(req, topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     const {
       title,
@@ -1656,19 +1667,10 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
       }
       classId = cls.id;
     }
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      }
-    });
-    if (!cls) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
-    }
+    const access = await authorizeClassForReq(req, classId, "CONTENT_AUTHOR");
+    if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const cls = access.cls;
     const students = await studentRepo().find({
       where: {
         class: {
@@ -1766,10 +1768,10 @@ topicsRouter.post("/tasks/:taskId/unassign", authRequired, async (req: AuthReque
         message: "TASK_NOT_FOUND"
       });
     }
-    if (task.topic.class && task.topic.class.teacher.id !== req.userId) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
+    if (task.topic.class) {
+      const access = await authorizeClassForReq(req, task.topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     await AppDataSource.transaction("SERIALIZABLE", async manager => {
       const taskRepoManager = manager.getRepository(TopicTask);
@@ -1872,19 +1874,10 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
       }
       classId = cls.id;
     }
-    const cls = await classRepo().findOne({
-      where: {
-        id: classId,
-        teacher: {
-          id: req.userId
-        }
-      }
-    });
-    if (!cls) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
-    }
+    const access = await authorizeClassForReq(req, classId, "CONTENT_AUTHOR");
+    if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const cls = access.cls;
 
     if (controlWork.hasPractice !== false) {
       const controlTasksCount = await countControlTasksForControlWork(controlWork.id);
@@ -2025,10 +2018,10 @@ topicsRouter.post("/control-works/:controlWorkId/unassign", authRequired, async 
         message: "CONTROL_WORK_NOT_FOUND"
       });
     }
-    if (controlWork.topic.class && controlWork.topic.class.teacher.id !== req.userId) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
+    if (controlWork.topic.class) {
+      const access = await authorizeClassForReq(req, controlWork.topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     await AppDataSource.transaction("SERIALIZABLE", async manager => {
       const controlWorkRepoManager = manager.getRepository(ControlWork);

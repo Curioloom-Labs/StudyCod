@@ -86,8 +86,8 @@ const LegacyGradesRedirect: React.FC = () => {
 };
 const EmailPreferencesResultPage = React.lazy(() => import("./pages/auth/EmailPreferencesResultPage").then(mod => ({ default: mod.EmailPreferencesResultPage })));
 const TeacherDashboardPage = React.lazy(() => import("./pages/edu/TeacherWorkspacePage").then(mod => ({ default: mod.TeacherWorkspacePage })));
-// The class route must expose roster management and join-code controls too.
-const ClassDetailsPage = React.lazy(() => import("./pages/edu/ClassDetailsPage").then(mod => ({ default: mod.ClassDetailsPage })));
+const ClassHubPage = React.lazy(() => import("./pages/edu/ClassHubPage").then(mod => ({ default: mod.ClassHubPage })));
+const ClassManagementPage = React.lazy(() => import("./pages/edu/ClassManagementPage").then(mod => ({ default: mod.ClassManagementPage })));
 const CreateLessonPage = React.lazy(() => import("./pages/edu/TeacherComposerPages").then(mod => ({ default: mod.CreateLessonWorkspace })));
 const CreateTopicPage = React.lazy(() => import("./pages/edu/TeacherComposerPages").then(mod => ({ default: mod.CreateTopicWorkspace })));
 const TopicDetailsPage = React.lazy(() => import("./pages/edu/TopicStudioPage").then(mod => ({ default: mod.TopicStudioPage })));
@@ -96,14 +96,13 @@ const StudentDashboardPage = React.lazy(() => import("./pages/edu/StudentJournal
 const StudentLessonsPage = React.lazy(() => import("./pages/edu/StudentPathPages").then(mod => ({ default: mod.StudentLessonsWorkspace })));
 const LessonDetailsPage = React.lazy(() => import("./pages/edu/LessonStudioPage").then(mod => ({ default: mod.LessonStudioPage })));
 const StudentTaskPage = React.lazy(() => import("./pages/edu/PracticeCanvasPage").then(mod => ({ default: mod.PracticeCanvasPage })));
-const StudentAppealsPage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.StudentAppealsWorkspace })));
+const StudentAppealsPage = React.lazy(() => import("./pages/edu/StudentAppealsPage"));
 const TeacherClassAppealsPage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.TeacherAppealsWorkspace })));
 const SummaryGradesPage = React.lazy(() => import("./pages/edu/TeacherDataPages").then(mod => ({ default: mod.SummaryGradesWorkspace })));
 const ClassGradebookPage = React.lazy(() => import("./pages/edu/TeacherDataPages").then(mod => ({ default: mod.GradebookWorkspace })));
 const JoinClassPage = React.lazy(() => import("./pages/edu/StudentPathPages").then(mod => ({ default: mod.JoinClassWorkspace })));
 const CoursesPage = React.lazy(() => import("./pages/edu/CourseStudioPages").then(mod => ({ default: mod.CourseStudioPage })));
 const CalendarPage = React.lazy(() => import("./pages/edu/AgendaWorkspacePage").then(mod => ({ default: mod.AgendaWorkspacePage })));
-const AttendancePage = React.lazy(() => import("./pages/edu/EducationOperationsPages").then(mod => ({ default: mod.AttendanceWorkspace })));
 const TutorPage = React.lazy(() => import("./pages/edu/StudyCompanionPage").then(mod => ({ default: mod.StudyCompanionPage })));
 const CourseDetailPage = React.lazy(() => import("./pages/edu/CourseStudioPages").then(mod => ({ default: mod.CourseStudioDetailPage })));
 const LessonQuizPage = React.lazy(() => import("./pages/edu/QuizCanvasPage").then(mod => ({ default: mod.QuizCanvasPage })));
@@ -168,7 +167,7 @@ const DEV_PREVIEW_USER: User = {
 
 function isPageAvailableForUser(page: Page, user: User): boolean {
   if (page === "admin") return user.role === "SYSTEM_ADMIN";
-  if (page === "teacher") return user.userMode === "EDUCATIONAL" && !user.studentId;
+  if (page === "teacher") return user.role !== "SYSTEM_ADMIN" && user.userMode === "EDUCATIONAL" && !user.studentId;
   if (page === "student") return user.userMode === "EDUCATIONAL" && !!user.studentId;
   if (page === "tasks" || page === "grades") return user.userMode !== "EDUCATIONAL";
   return true;
@@ -280,7 +279,7 @@ const delay = (ms: number) => new Promise<void>((resolve) => {
   window.setTimeout(resolve, Math.max(0, ms));
 });
 
-const getCurrentUserWithRetry = async (maxAttempts = 3): Promise<User> => {
+const getCurrentUserWithRetry = async (maxAttempts = 3, force = false): Promise<User> => {
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -288,7 +287,7 @@ const getCurrentUserWithRetry = async (maxAttempts = 3): Promise<User> => {
       // Boot-time session probing must never trigger the global 401 redirect.
       // The app needs to render the auth screen when this request is expected
       // to fail (for example on /?auth=login).
-      return await getMe({ suppressAuthRedirect: true });
+      return await getMe({ force, suppressAuthRedirect: true });
     } catch (error: unknown) {
       lastError = error;
 
@@ -875,11 +874,11 @@ const AppContent: React.FC = React.memo(() => {
       list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
       list.push({ id: "appeals", label: i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції", icon: HelpCircle, group: navLabel });
     }
-    if (user.userMode === "EDUCATIONAL" && !user.studentId) {
+    if (user.userMode === "EDUCATIONAL" && !user.studentId && user.role !== "SYSTEM_ADMIN") {
       list.push({ id: "teacher", label: t("myClasses"), icon: GraduationCap, group: navLabel });
     }
     if (user.role === "SYSTEM_ADMIN") {
-      list.push({ id: "admin", label: "Admin", icon: Shield, group: navLabel });
+      list.push({ id: "admin", label: "Адміністративний центр", icon: Shield, group: navLabel });
     }
     if (user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") {
       list.push({ id: "support-desk", label: "Support desk", icon: HelpCircle, group: navLabel });
@@ -1028,6 +1027,24 @@ const AppContent: React.FC = React.memo(() => {
     </PremiumWorkspaceShell></PersonalLearningProvider>;
   }
 
+  if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") {
+    return <PremiumModuleShell
+      product="ADMIN"
+      user={user}
+      theme={theme}
+      currentPath={location.pathname}
+      onNavigate={navigate}
+      onToggleTheme={toggleTheme}
+      onLogout={handleLogout}
+    >
+      <main className="min-h-0 overflow-y-auto">
+        <Suspense fallback={<PageLoader />}>
+          <AdminWorkspacePage />
+        </Suspense>
+      </main>
+    </PremiumModuleShell>;
+  }
+
   if (ui.mode === "classic") {
     return <div className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
         {}
@@ -1080,7 +1097,7 @@ const AppContent: React.FC = React.memo(() => {
             {}
             {user.role === "SYSTEM_ADMIN" && <button type="button" onClick={() => handleSetPage("admin")} onPointerEnter={() => prefetchNavTarget("admin")} onFocus={() => prefetchNavTarget("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <Shield className="w-4 h-4" />
-                Admin
+                Адміністративний центр
               </button>}
 
             {(user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") && <button type="button" onClick={() => navigate("/support/desk")} onPointerEnter={() => prefetchPath("/support/desk")} onFocus={() => prefetchPath("/support/desk")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
@@ -1089,7 +1106,7 @@ const AppContent: React.FC = React.memo(() => {
               </button>}
 
             {}
-            {user.userMode === "EDUCATIONAL" && !user.studentId && <button type="button" onClick={() => handleSetPage("teacher")} onPointerEnter={() => prefetchNavTarget("teacher")} onFocus={() => prefetchNavTarget("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
+            {user.userMode === "EDUCATIONAL" && !user.studentId && user.role !== "SYSTEM_ADMIN" && <button type="button" onClick={() => handleSetPage("teacher")} onPointerEnter={() => prefetchNavTarget("teacher")} onFocus={() => prefetchNavTarget("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                 <GraduationCap className="w-4 h-4" />
                 {t('myClasses')}
               </button>}
@@ -1178,8 +1195,8 @@ const AppContent: React.FC = React.memo(() => {
 
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-bg-surface/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden" aria-label={i18n.language === "uk" ? "Мобільна навігація" : "Mobile navigation"}>
           <div className="grid grid-cols-5 gap-1">
-            <button type="button" onClick={() => user.studentId ? navigate("/edu/lessons") : handleSetPage("teacher")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-              <Home className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("lessons") : t("myClasses")}</span>
+            <button type="button" onClick={() => user.studentId ? navigate("/edu/lessons") : user.role === "SYSTEM_ADMIN" ? handleSetPage("admin") : handleSetPage("teacher")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
+              <Home className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("lessons") : user.role === "SYSTEM_ADMIN" ? "Адміністративний центр" : t("myClasses")}</span>
             </button>
             <button type="button" onClick={() => user.studentId ? handleSetPage("student") : navigate("/edu/courses")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
               <BookOpen className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("myJournal") : t("eduNavCourses", { defaultValue: "Courses" })}</span>
@@ -1851,10 +1868,11 @@ const EduRoutes: React.FC = React.memo(() => {
     let cancelled = false;
     const run = async () => {
       try {
-        let u = await getCurrentUserWithRetry(6);
+        let u = await getCurrentUserWithRetry(6, true);
         if (cancelled) return;
 
-        if (u.userMode !== "EDUCATIONAL") {
+        const hasStaffContext = u.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) ?? false;
+        if (u.userMode !== "EDUCATIONAL" && u.role !== "SYSTEM_ADMIN" && !hasStaffContext) {
           navigate("/", {
             replace: true
           });
@@ -1863,7 +1881,6 @@ const EduRoutes: React.FC = React.memo(() => {
         // A User-backed account with only student memberships should enter its
         // linked Student context automatically. Accounts that also teach stay
         // in the staff context until the user explicitly switches context.
-        const hasStaffContext = u.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) ?? false;
         const firstStudent = u.eduContexts?.students?.[0];
         if (!u.studentId && !hasStaffContext && firstStudent) {
           setActiveEduStudentId(firstStudent.studentId);
@@ -1922,7 +1939,40 @@ const EduRoutes: React.FC = React.memo(() => {
       <AuthPage onAuth={handleAuth} />
     </Suspense>;
   }
+
+  if (user.role === "SYSTEM_ADMIN" && !user.studentId && location.pathname === "/edu") {
+    return <PremiumModuleShell
+      product="ADMIN"
+      user={user}
+      theme={theme}
+      currentPath={location.pathname}
+      onNavigate={navigate}
+      onToggleTheme={toggleTheme}
+      onLogout={() => {
+        void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
+        setActiveEduStudentId(null);
+        clearControlExamSession();
+        navigate("/");
+      }}
+    >
+      <main className="min-h-0 overflow-y-auto">
+        <Suspense fallback={<PageLoader />}>
+          <AdminWorkspacePage />
+        </Suspense>
+      </main>
+    </PremiumModuleShell>;
+  }
+
+  const isOrgAdmin = user.eduContexts?.organizations?.some((org) => org.role === "ORG_ADMIN") ?? false;
+  if (!user.studentId && isOrgAdmin && location.pathname === "/edu") {
+    return <Navigate to="/edu/organization" replace />;
+  }
+  if (!user.studentId && location.pathname === "/edu/organization" && !isOrgAdmin) {
+    return <Navigate to="/edu" replace />;
+  }
+
   const teacherOnly = (element: React.ReactElement) => user.studentId ? <Navigate to="/edu/lessons" replace /> : element;
+  const orgAdminOnly = (element: React.ReactElement) => isOrgAdmin ? element : <Navigate to="/edu" replace />;
   const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
   const eduMain = <main className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
@@ -1932,8 +1982,8 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route index element={user.studentId ? <Navigate to="/edu/lessons" replace /> : <AnimatedPage>
                     <TeacherDashboardPage />
                   </AnimatedPage>} />
-            <Route path="classes/:classId" element={teacherOnly(<AnimatedPage><ClassDetailsPage /></AnimatedPage>)} />
-            <Route path="classes/:classId/teacher-os" element={teacherOnly(<Navigate to=".." relative="path" replace />)} />
+            <Route path="classes/:classId" element={teacherOnly(<AnimatedPage><ClassHubPage /></AnimatedPage>)} />
+            <Route path="classes/:classId/manage" element={teacherOnly(<AnimatedPage><ClassManagementPage /></AnimatedPage>)} />
             <Route path="classes/:classId/lessons/new" element={teacherOnly(<AnimatedPage><CreateLessonPage /></AnimatedPage>)} />
             <Route path="classes/:classId/topics/new" element={teacherOnly(<AnimatedPage><CreateTopicPage /></AnimatedPage>)} />
             <Route path="topics/:topicId" element={teacherOnly(<AnimatedPage><TopicDetailsPage /></AnimatedPage>)} />
@@ -1942,7 +1992,7 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="control-works/:controlWorkId" element={teacherOnly(<AnimatedPage><ControlWorkDetailsPage /></AnimatedPage>)} />
             <Route path="classes/:classId/summary-grades" element={teacherOnly(<AnimatedPage><SummaryGradesPage /></AnimatedPage>)} />
             <Route path="classes/:classId/gradebook" element={teacherOnly(<AnimatedPage><ClassGradebookPage /></AnimatedPage>)} />
-            <Route path="classes/:classId/attendance" element={teacherOnly(<AnimatedPage><AttendancePage /></AnimatedPage>)} />
+            <Route path="classes/:classId/attendance" element={teacherOnly(<Navigate to="../gradebook" relative="path" replace />)} />
             <Route path="classes/:classId/similarity" element={<Navigate to="../gradebook" relative="path" replace />} />
             <Route path="classes/:classId/gradebook-config" element={<Navigate to="../gradebook" relative="path" replace />} />
             <Route path="join" element={<AnimatedPage><JoinClassPage /></AnimatedPage>} />
@@ -1955,14 +2005,14 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="lessons/:lessonId/quiz/review" element={teacherOnly(<AnimatedPage><TeacherQuizReviewPage /></AnimatedPage>)} />
             <Route path="manual-tasks/:taskId" element={studentOnly(<AnimatedPage><ManualTaskPage /></AnimatedPage>)} />
             <Route path="manual-tasks/:taskId/submissions" element={teacherOnly(<AnimatedPage><ManualTaskSubmissionsPage /></AnimatedPage>)} />
-            <Route path="organization" element={teacherOnly(<AnimatedPage><OrgMembersPage /></AnimatedPage>)} />
+            <Route path="organization" element={orgAdminOnly(<AnimatedPage><OrgMembersPage /></AnimatedPage>)} />
             <Route path="profile" element={<Navigate to="/profile" replace />} />
             <Route path="classes/:classId/live" element={teacherOnly(<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>)} />
             <Route path="classes/:classId/appeals" element={teacherOnly(<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>)} />
             <Route path="journal" element={studentOnly(<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>)} />
             <Route path="student" element={<Navigate to="/edu/journal" replace />} />
             <Route path="lessons" element={studentOnly(<AnimatedPage><StudentLessonsPage /></AnimatedPage>)} />
-            <Route path="lessons/:lessonId" element={studentOnly(<AnimatedPage><LessonDetailsPage student={Boolean(user.studentId)} /></AnimatedPage>)} />
+            <Route path="lessons/:lessonId" element={<AnimatedPage><LessonDetailsPage student={Boolean(user.studentId)} /></AnimatedPage>} />
             <Route path="tasks/:taskId" element={studentOnly(<AnimatedPage><StudentTaskPage /></AnimatedPage>)} />
             <Route path="grades/:gradeId" element={<Navigate to="/edu/journal" replace />} />
             <Route path="appeals" element={studentOnly(<AnimatedPage><StudentAppealsPage /></AnimatedPage>)} />

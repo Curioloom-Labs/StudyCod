@@ -62,6 +62,23 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   return [...byPath.values()];
 }
 
+// Keep generated Java starter templates runnable. Some legacy records placed
+// `// TODO` before closing braces on the same line, which commented the braces
+// out and made the untouched starter fail immediately on Run.
+function normalizeJavaStarterTemplate(template: string): string {
+  return String(template ?? "")
+    .split(/\r?\n/)
+    .map((line) => {
+      const commentIndex = line.indexOf("//");
+      if (commentIndex < 0) return line;
+      const braceIndex = line.indexOf("}", commentIndex + 2);
+      if (braceIndex < 0) return line;
+      const commentText = line.slice(commentIndex + 2, braceIndex).trim();
+      return `${line.slice(0, commentIndex)}/* ${commentText || "TODO"} */${line.slice(braceIndex)}`;
+    })
+    .join("\n");
+}
+
 function normalizeWebRules(raw: unknown): WebTaskValidationRule[] {
   return normalizeWebValidationRules(raw);
 }
@@ -481,19 +498,26 @@ async function computeTaskQualityMap(taskIds: number[]): Promise<Map<number, Lib
 function buildTaskDto(task: LibraryTask, quality: LibraryTaskQuality | null = null) {
   const taskMode = String((task as any).taskMode ?? "CODE") === "WEB" ? "WEB" : "CODE";
   const normalizedWeb = taskMode === "WEB" ? normalizeWebTaskTemplate((task as any).template) : null;
+  const template = task.lang === "JAVA" ? normalizeJavaStarterTemplate(task.template) : task.template;
+  const templatesByLanguage = (task as any).templatesByLanguage
+    ? Object.fromEntries(Object.entries((task as any).templatesByLanguage).map(([lang, value]) => [
+        lang,
+        String(lang).toLowerCase() === "java" ? normalizeJavaStarterTemplate(String(value ?? "")) : value,
+      ]))
+    : null;
   return {
     id: task.id,
     problemCode: (task as any).problemCode ?? null,
     slug: (task as any).slug ?? null,
     title: task.title,
     description: task.description,
-    template: task.template,
+    template,
     taskMode,
     projectSpec: (task as any).projectSpec ?? null,
     webTemplateFiles: taskMode === "WEB" ? normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalizedWeb?.files ?? []) : null,
     webValidationRules: taskMode === "WEB" ? normalizeWebRules((task as any).webValidationRules ?? normalizedWeb?.rules ?? []) : null,
     webValidationProfile: taskMode === "WEB" ? normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB") : null,
-    templatesByLanguage: (task as any).templatesByLanguage ?? null,
+    templatesByLanguage,
     lang: task.lang,
     difficulty: (task as any).difficulty ?? null,
     tags: (task as any).tags ?? null,

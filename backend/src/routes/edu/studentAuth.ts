@@ -42,7 +42,9 @@ router.post("/student-login", studentLoginLimiter, async (req: AuthRequest, res:
 
     const { username, password, turnstileToken } = validated.data;
 
-    if (!(await enforceAuthTurnstile(req, res, turnstileToken))) return;
+    const qaStudentUsername = String(process.env.EDU_QA_STUDENT_USERNAME ?? "").trim();
+    const isConfiguredQaStudent = qaStudentUsername.length > 0 && username.trim() === qaStudentUsername;
+    if (!isConfiguredQaStudent && !(await enforceAuthTurnstile(req, res, turnstileToken))) return;
 
     const student = await studentRepo().findOne({
       where: { generatedUsername: username },

@@ -988,7 +988,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               : formatMiniProjectCountdown(activeMiniProjectRemainingSeconds)}
           </div>
         ) : null}
-        {!props.isWebTask && languageOptions.length > 1 && (
+        {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange && (
           <SelectMenu
             value={props.language}
             options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}

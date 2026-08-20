@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, RelationId, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, OneToMany, JoinColumn, JoinTable, RelationId, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { User } from "./User";
 import { Student } from "./Student";
 import { EduLesson } from "./EduLesson";
@@ -17,6 +17,18 @@ export class Class {
     name: "teacher_id"
   })
   teacher!: User;
+  /**
+   * Teaching staff assigned to this class. `teacher` remains the legacy
+   * primary owner column for backwards compatibility with older EDU records;
+   * every primary owner is backfilled into this relation by migration.
+   */
+  @ManyToMany(() => User)
+  @JoinTable({
+    name: "class_teachers",
+    joinColumn: { name: "class_id", referencedColumnName: "id" },
+    inverseJoinColumn: { name: "teacher_id", referencedColumnName: "id" }
+  })
+  teachers!: User[];
   // Every EDU class belongs to exactly one tenant. The migration that enforces
   // this fails closed if an orphan row remains, so no class silently escapes
   // org authorization.

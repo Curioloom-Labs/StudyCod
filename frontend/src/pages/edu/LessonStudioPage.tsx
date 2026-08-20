@@ -22,6 +22,7 @@ import {
   getLesson,
   saveQuiz,
   startLessonAttempt,
+  submitQuizAnswers,
   type Lesson,
   type Task,
 } from "../../lib/api/edu";
@@ -160,7 +161,10 @@ const LessonTeacherStudio: React.FC = () => {
     const projectSpec = task.projectSpecJson?.trim()
       ? JSON.parse(task.projectSpecJson)
       : null;
-    return apiCreateTask(lessonId, { ...payload, projectSpec });
+    return apiCreateTask(lessonId, {
+      ...payload,
+      ...(projectSpec ? { projectSpec } : {}),
+    });
   };
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -619,19 +623,27 @@ const LessonTeacherStudio: React.FC = () => {
 
 const StudentLessonWorkspace: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const id = Number(lessonId);
+  const isControl = params.get("type") === "CONTROL";
   const [lesson, setLesson] = React.useState<
     (Lesson & { tasks: Task[] }) | null
   >(null);
   const [loading, setLoading] = React.useState(true);
   const [started, setStarted] = React.useState(false);
+  const [quizAnswers, setQuizAnswers] = React.useState<Record<number, string>>({});
+  const [quizSubmitted, setQuizSubmitted] = React.useState(false);
+  const [quizBusy, setQuizBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
     let active = true;
-    getLesson(id)
+    getLesson(id, isControl ? "CONTROL" : undefined)
       .then((value) => {
-        if (active) setLesson(value as Lesson & { tasks: Task[] });
+        if (!active) return;
+        const next = value as Lesson & { tasks: Task[] };
+        setLesson(next);
+        setQuizSubmitted(next.quizSubmitted === true);
       })
       .catch((caught) => {
         if (!active) return;
@@ -648,7 +660,7 @@ const StudentLessonWorkspace: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, isControl]);
   if (loading)
     return (
       <div className={shell}>
@@ -665,6 +677,32 @@ const StudentLessonWorkspace: React.FC = () => {
       </div>
     );
   const tasks = lesson.tasks || [];
+  let quiz: Quiz[] = [];
+  if (isControl && lesson.quizJson) {
+    try {
+      const parsed = JSON.parse(lesson.quizJson);
+      quiz = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      quiz = [];
+    }
+  }
+  const quizRequired = isControl && lesson.controlHasTheory === true;
+  const quizGatePassed = !quizRequired || quizSubmitted;
+  const submitStudentQuiz = async () => {
+    if (!quiz.length || Object.keys(quizAnswers).length < quiz.length) return;
+    setQuizBusy(true);
+    setError(null);
+    try {
+      await submitQuizAnswers(id, quizAnswers, true);
+      setQuizSubmitted(true);
+      const refreshed = await getLesson(id, "CONTROL");
+      setLesson(refreshed as Lesson & { tasks: Task[] });
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося надіслати квіз."));
+    } finally {
+      setQuizBusy(false);
+    }
+  };
   return (
     <div className={shell}>
       <button
@@ -745,6 +783,36 @@ const StudentLessonWorkspace: React.FC = () => {
           </ol>
         </aside>
       </main>
+      {isControl && quizRequired && (
+        <section className="mt-8 rounded-[30px] border border-[#e17800]/30 bg-white p-6 dark:border-[#ffb760]/30 dark:bg-[#111b14] sm:p-9">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#bd6800] dark:text-[#ffb760]">Теоретична частина</p>
+          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">Пройдіть короткий квіз перед практикою</h2>
+          {!quiz.length ? (
+            <p className="mt-4 rounded-2xl bg-[#fff8e5] p-4 text-sm text-[#8b5c18] dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">Квіз ще не налаштовано. Зверніться до викладача.</p>
+          ) : quizSubmitted ? (
+            <p className="mt-4 rounded-2xl bg-[#e7f6ec] p-4 text-sm font-bold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#a4f4c8]">Квіз завершено. Практичні задачі відкриті.</p>
+          ) : (
+            <>
+              <div className="mt-7 space-y-5">
+                {quiz.map((question, index) => (
+                  <fieldset key={`${question.question}-${index}`} className="rounded-2xl bg-[#f3f7f3] p-5 dark:bg-white/[.045]">
+                    <legend className="text-base font-bold leading-7">{index + 1}. {question.question}</legend>
+                    <div className="mt-4 grid gap-2">
+                      {Object.entries(question.options || {}).map(([key, value]) => (
+                        <label key={key} className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${quizAnswers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-[#00ff88]/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-[#111b14] dark:text-[#dbe6de]"}`}>
+                          <input type="radio" name={`student-quiz-${index}`} checked={quizAnswers[index] === key} onChange={() => setQuizAnswers((current) => ({ ...current, [index]: key }))} />
+                          <span className="font-bold">{key}</span><span>{value}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                ))}
+              </div>
+              <button type="button" disabled={quizBusy || Object.keys(quizAnswers).length < quiz.length} onClick={() => void submitStudentQuiz()} className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]">{quizBusy ? "Перевіряємо…" : "Надіслати квіз"}</button>
+            </>
+          )}
+        </section>
+      )}
       <section className="mt-8">
         <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
           Призначена практика
@@ -757,12 +825,13 @@ const StudentLessonWorkspace: React.FC = () => {
             <button
               type="button"
               key={task.id}
+              disabled={!quizGatePassed}
               onClick={() =>
                 navigate(
                   `/edu/tasks/${task.id}${preview() ? "?preview=true" : ""}`,
                 )
               }
-              className="group rounded-[24px] border border-[#19291d]/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/[.09] dark:bg-[#111b14]"
+              className="group rounded-[24px] border border-[#19291d]/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-[#111b14]"
             >
               <span className="grid size-10 place-items-center rounded-2xl bg-[#fff1dc] text-sm font-extrabold text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
                 {String(index + 1).padStart(2, "0")}
@@ -778,6 +847,7 @@ const StudentLessonWorkspace: React.FC = () => {
               </span>
             </button>
           ))}
+          {!quizGatePassed && <p className="rounded-2xl border border-dashed border-[#e17800]/35 bg-[#fff8e5] px-5 py-4 text-sm text-[#8b5c18] dark:border-[#ffb760]/35 dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">Спочатку завершіть квіз — після цього відкриється практична частина.</p>}
           {!tasks.length && (
             <div className="rounded-[24px] border border-dashed border-[#19291d]/15 p-8 text-sm text-[#718075] dark:border-white/10 dark:text-[#a6b4a9]">
               Викладач ще не додав задачі до уроку.

@@ -193,7 +193,7 @@ api.interceptors.response.use((response: AxiosResponse) => {
     }
   }
   return response;
-}, (error: AxiosError<MaintenanceErrorData>) => {
+}, async (error: AxiosError<MaintenanceErrorData>) => {
   const requestConfig = error.config as InternalAxiosRequestConfig | undefined;
   if (error.response?.status === 401 && !shouldSkipAuthRedirect(requestConfig)) {
     if (typeof window !== "undefined") {
@@ -231,6 +231,21 @@ api.interceptors.response.use((response: AxiosResponse) => {
   const config = error.config as InternalAxiosRequestConfig;
   if (!config) {
     return Promise.reject(error);
+  }
+
+  // A long-lived browser tab can retain an expired XSRF cookie after a
+  // session switch or backend restart. Refresh it once and replay the failed
+  // mutation instead of surfacing a misleading login failure to the user.
+  const csrfRetryConfig = config as InternalAxiosRequestConfig & { _csrfRetried?: boolean };
+  const csrfError = error.response?.status === 403
+    && String((error.response?.data as { error?: unknown } | undefined)?.error ?? "") === "CSRF_TOKEN_INVALID";
+  if (csrfError && typeof window !== "undefined" && !csrfRetryConfig._csrfRetried) {
+    csrfRetryConfig._csrfRetried = true;
+    csrfBootstrap ??= axios.get(`${config.baseURL || ""}/csrf-token`, { withCredentials: true }).then(() => undefined).finally(() => {
+      csrfBootstrap = null;
+    });
+    await csrfBootstrap;
+    return api.request(config);
   }
 
   const retryCount = getRetryCount(config);

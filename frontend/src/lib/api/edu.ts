@@ -465,6 +465,10 @@ export interface ClassDetails {
   name: string;
   language: "JAVA" | "PYTHON" | "CPP";
   organizationId?: number | null;
+  teacherId?: number | null;
+  teacherName?: string | null;
+  teacherIds?: number[];
+  teachers?: Array<{ id: number; name: string; username: string }>;
   gradingSystem: ClassGradingSystem;
   gradeScaleMode?: GradeScaleMode;
   createdAt: string;
@@ -1978,39 +1982,6 @@ export interface RiskInterventionPlanResponse {
   generatedAt: string;
 }
 
-export type TeacherOSAlertSeverity = "critical" | "warning" | "info";
-
-export interface TeacherOSAlert {
-  id: string;
-  severity: TeacherOSAlertSeverity;
-  title: string;
-  description: string;
-  metric?: string;
-}
-
-export interface TeacherOSSnapshotQuery {
-  responseLanguage?: "uk" | "en";
-  days?: number;
-  limitStudents?: number;
-  maxTasksPerStudent?: number;
-  topicId?: number;
-  deadlineDays?: number;
-}
-
-export interface TeacherOSSnapshotResponse {
-  locale: "uk" | "en";
-  classId: number;
-  className: string;
-  generatedAt: string;
-  analytics: CohortAnalyticsResponse | null;
-  copilot: TeacherCopilotResponse | null;
-  hints: HintsQualityResponse | null;
-  digest: TeacherDigestResponse | null;
-  riskPlan: RiskInterventionPlanResponse | null;
-  activeAppeals: GradeAppealItem[];
-  alerts: TeacherOSAlert[];
-}
-
 function withResponseLanguage(lang?: "uk" | "en"): string {
   if (!lang) return "";
   const params = new URLSearchParams();
@@ -2110,145 +2081,4 @@ export async function applyRiskInterventionPlan(classId: number, payload?: {
 }): Promise<RiskInterventionPlanResponse> {
   const res = await api.post(`/edu/classes/${classId}/risk-interventions/apply`, payload || {});
   return res.data;
-}
-
-export async function getTeacherOSSnapshot(classId: number, params?: TeacherOSSnapshotQuery): Promise<TeacherOSSnapshotResponse> {
-  const language = params?.responseLanguage;
-  const activeAppealStatuses: GradeAppealStatus[] = ["SUBMITTED", "IN_REVIEW", "NEEDS_INFO"];
-
-  const [
-    analyticsResult,
-    copilotResult,
-    hintsResult,
-    digestResult,
-    riskPlanResult,
-    activeAppealsResult,
-  ] = await Promise.allSettled([
-    getClassCohortAnalytics(classId, language),
-    getTeacherCopilotRecommendations(classId, language),
-    getClassHintsQuality(classId, {
-      responseLanguage: language,
-      days: params?.days,
-    }),
-    getTeacherDigest(classId, {
-      responseLanguage: language,
-      days: params?.days,
-    }),
-    getRiskInterventionPlan(classId, {
-      responseLanguage: language,
-      limitStudents: params?.limitStudents,
-      maxTasksPerStudent: params?.maxTasksPerStudent,
-      topicId: params?.topicId,
-      deadlineDays: params?.deadlineDays,
-    }),
-    getClassGradeAppeals(classId, activeAppealStatuses),
-  ]);
-
-  const analytics = analyticsResult.status === "fulfilled" ? analyticsResult.value : null;
-  const copilot = copilotResult.status === "fulfilled" ? copilotResult.value : null;
-  const hints = hintsResult.status === "fulfilled" ? hintsResult.value : null;
-  const digest = digestResult.status === "fulfilled" ? digestResult.value : null;
-  const riskPlan = riskPlanResult.status === "fulfilled" ? riskPlanResult.value : null;
-  const activeAppeals = activeAppealsResult.status === "fulfilled" ? activeAppealsResult.value : [];
-
-  const locale: "uk" | "en" =
-    language ||
-    digest?.locale ||
-    analytics?.locale ||
-    copilot?.locale ||
-    hints?.locale ||
-    riskPlan?.locale ||
-    "uk";
-
-  const className =
-    digest?.className ||
-    analytics?.className ||
-    copilot?.className ||
-    riskPlan?.className ||
-    "";
-
-  const tr = (uk: string, en: string) => (locale === "en" ? en : uk);
-  const alerts: TeacherOSAlert[] = [];
-
-  if (digest) {
-    if (digest.appeals.escalatedActive > 0) {
-      alerts.push({
-        id: "appeals-escalated",
-        severity: "critical",
-        title: tr("Ескальовані апеляції", "Escalated appeals"),
-        description: tr("Потрібна термінова реакція викладача", "Needs immediate teacher attention"),
-        metric: String(digest.appeals.escalatedActive),
-      });
-    }
-
-    if (digest.appeals.overdueActive > 0) {
-      alerts.push({
-        id: "appeals-overdue",
-        severity: "critical",
-        title: tr("Прострочені апеляції", "Overdue appeals"),
-        description: tr("SLA порушено — опрацюйте в першу чергу", "SLA breached — process first"),
-        metric: String(digest.appeals.overdueActive),
-      });
-    }
-  }
-
-  if (analytics && analytics.overview.riskStudentsCount > 0) {
-    alerts.push({
-      id: "risk-students",
-      severity: analytics.overview.riskStudentsCount >= 5 ? "critical" : "warning",
-      title: tr("Група ризику", "At-risk group"),
-      description: tr("Учні потребують цільової підтримки", "Students need targeted support"),
-      metric: `${analytics.overview.riskStudentsCount}`,
-    });
-  }
-
-  if (hints && hints.totalFeedback > 0 && hints.helpfulnessScore < 0) {
-    alerts.push({
-      id: "hints-quality",
-      severity: "warning",
-      title: tr("Погіршилась якість підказок", "Hints quality dropped"),
-      description: tr("Негативний баланс реакцій учнів", "Negative student feedback balance"),
-      metric: `${Math.round(hints.helpfulnessScore)}`,
-    });
-  }
-
-  if (riskPlan && riskPlan.studentsTargeted.length > 0 && riskPlan.tasksSelected.length > 0) {
-    alerts.push({
-      id: "risk-plan-ready",
-      severity: "info",
-      title: tr("План втручання готовий", "Intervention plan is ready"),
-      description: tr("Можна застосувати план одним кліком", "Plan can be applied in one click"),
-      metric: `${riskPlan.studentsTargeted.length}/${riskPlan.tasksSelected.length}`,
-    });
-  }
-
-  if (alerts.length === 0) {
-    alerts.push({
-      id: "all-clear",
-      severity: "info",
-      title: tr("Критичних сигналів немає", "No critical signals"),
-      description: tr("Система стабільна, можна рухатись за планом", "System is stable, follow the current plan"),
-    });
-  }
-
-  const severityRank: Record<TeacherOSAlertSeverity, number> = {
-    critical: 0,
-    warning: 1,
-    info: 2,
-  };
-  alerts.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
-
-  return {
-    locale,
-    classId,
-    className,
-    generatedAt: new Date().toISOString(),
-    analytics,
-    copilot,
-    hints,
-    digest,
-    riskPlan,
-    activeAppeals,
-    alerts,
-  };
 }

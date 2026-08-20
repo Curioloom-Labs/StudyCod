@@ -307,8 +307,8 @@ export default {
   deleteThisTest: 'Delete this test?',
   deleteTask: 'Delete task',
 
-  authEduForTeachersTitle: 'EDU is for teachers',
-  authEduForTeachersBody: 'EDU mode is intended for teachers who manage a class. If you are a student who is learning on your own, choose Personal. Students usually get access to a class from their teacher.',
+  authEduForTeachersTitle: 'EDU — classes and learning',
+  authEduForTeachersBody: 'EDU connects administrators, teachers, and students in a class. Students sign in with credentials provided by their institution.',
 
   landingBadge: 'A platform to learn programming',
   landingTitle: 'A beginner-friendly start in programming',

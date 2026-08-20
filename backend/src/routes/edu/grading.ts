@@ -287,7 +287,9 @@ router.get("/tasks/pending-review", authRequired, async (req: AuthRequest, res: 
       .createQueryBuilder("s")
       .select("s.id", "id")
       .innerJoin("s.class", "class")
-      .where("class.teacher_id = :teacherId", { teacherId: user.id })
+      .leftJoin("class.teachers", "assignedTeacher")
+      .where("(class.teacher_id = :teacherId OR assignedTeacher.id = :teacherId)", { teacherId: user.id })
+      .distinct(true)
       .getRawMany();
     const studentIds = studentIdRows.map(r => Number(r.id));
     if (studentIds.length === 0) {

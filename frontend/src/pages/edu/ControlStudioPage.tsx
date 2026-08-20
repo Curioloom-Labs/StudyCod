@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Calculator, Clock3, FileCheck2, Save, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, Calculator, Clock3, FileCheck2, Plus, Save, Sparkles, Wand2 } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { updateControlWorkFormula } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -66,6 +66,8 @@ export const ControlStudioPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [showCreateTask, setShowCreateTask] = React.useState(false);
+  const [newTask, setNewTask] = React.useState({ title: "", description: "", template: "" });
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -144,6 +146,34 @@ export const ControlStudioPage: React.FC = () => {
     }
   };
 
+  const createTask = async () => {
+    if (!control?.topic?.id) return;
+    if (!newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
+      setError("Заповніть назву, умову та стартовий код практичної задачі.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post(`/topics/${control.topic.id}/tasks`, {
+        title: newTask.title.trim(),
+        description: newTask.description.trim(),
+        template: newTask.template,
+        type: "CONTROL",
+        controlWorkId: id,
+        order: (control.tasks?.length || 0) + 1,
+        maxAttempts: 1,
+      });
+      setNewTask({ title: "", description: "", template: "" });
+      setShowCreateTask(false);
+      await load();
+      showToast({ type: "success", message: "Практичну задачу додано до контрольної." });
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося додати практичну задачу."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) return <div className={root}><div className="h-[600px] animate-pulse rounded-[34px] bg-[#e8eeea] dark:bg-white/[.05]" /></div>;
   if (!control) return <div className={root}>{error || "Контрольну не знайдено."}</div>;
 
@@ -184,6 +214,20 @@ export const ControlStudioPage: React.FC = () => {
               <StatusCard active={hasQuiz} title="Квіз" text={hasQuiz ? `${quiz.length} питань.` : "Питань ще немає."} />
             </div>
             <div className="mt-6 space-y-3">
+              <div className="flex justify-end">
+                <button type="button" onClick={() => setShowCreateTask((value) => !value)} className="inline-flex items-center gap-2 rounded-xl border border-[#e17800]/25 px-4 py-2.5 text-sm font-bold text-[#a55e00] transition hover:bg-[#fff4e4] dark:border-[#ffca7e]/25 dark:text-[#ffca7e] dark:hover:bg-[#ff8c00]/10">
+                  <Plus className="h-4 w-4" />{showCreateTask ? "Скасувати" : "Додати практичну задачу"}
+                </button>
+              </div>
+              {showCreateTask && (
+                <div className="rounded-2xl border border-[#e17800]/20 bg-[#fffaf2] p-5 dark:border-[#ffca7e]/20 dark:bg-[#241d11]">
+                  <p className="text-sm font-bold">Нова задача контрольної</p>
+                  <label className="mt-4 block text-sm font-bold">Назва<input aria-label="Назва практичної задачі" value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-[#19291d]/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <label className="mt-4 block text-sm font-bold">Умова<textarea aria-label="Умова практичної задачі" value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={4} className="mt-2 w-full resize-y rounded-xl border border-[#19291d]/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <label className="mt-4 block text-sm font-bold">Стартовий код<textarea aria-label="Стартовий код практичної задачі" value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-[#19291d]/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <button type="button" disabled={busy} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]">{busy ? "Додаємо…" : "Додати до контрольної"}</button>
+                </div>
+              )}
               {tasks.map((task, index) => <div key={task.id} className="flex items-start gap-4 rounded-2xl bg-[#f4f7f4] p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-[#a55e00] shadow-sm dark:bg-[#18251c] dark:text-[#ffca7e]">{String(index + 1).padStart(2, "0")}</span><div><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">{task.description || "Практична частина контрольної."}</p></div></div>)}
               {!tasks.length && <p className="rounded-2xl border border-dashed border-[#19291d]/15 px-5 py-8 text-center text-sm text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]">Практичних задач ще немає.</p>}
             </div>

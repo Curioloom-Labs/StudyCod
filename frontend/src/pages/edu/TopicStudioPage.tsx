@@ -65,6 +65,7 @@ type Topic = {
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "min-h-[100dvh] bg-[#f3f5f0] px-4 py-6 text-[#101812] dark:bg-[#08100b] dark:text-[#ecf5ee] sm:px-6 lg:px-10 lg:py-10";
 const defaultControlFormula = "0.35 * test + 0.65 * avg(practice)";
+const defaultAssignmentDeadline = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
 const demo: Topic = {
   id: 31,
@@ -390,7 +391,7 @@ export const TopicStudioPage: React.FC = () => {
         setTopic((old) => old ? { ...old, tasks: (old.tasks || []).map((item) => item.id === task.id ? { ...item, isAssigned: !item.isAssigned } : item) } : old);
       } else {
         if (task.isAssigned) await unassignTask(task.id);
-        else await api.post(`/topics/${id}/tasks/${task.id}/assign`, {});
+        else await api.post(`/topics/${id}/tasks/${task.id}/assign`, { deadline: defaultAssignmentDeadline() });
         await load();
       }
     } catch (caught) {
@@ -404,7 +405,7 @@ export const TopicStudioPage: React.FC = () => {
         setTopic((old) => old ? { ...old, controlWorks: (old.controlWorks || []).map((item) => item.id === control.id ? { ...item, isAssigned: !item.isAssigned } : item) } : old);
       } else {
         if (control.isAssigned) await unassignControlWork(control.id);
-        else await api.post(`/topics/control-works/${control.id}/assign`, {});
+        else await api.post(`/topics/control-works/${control.id}/assign`, { deadline: defaultAssignmentDeadline() });
         await load();
       }
     } catch (caught) {

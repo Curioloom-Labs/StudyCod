@@ -158,6 +158,7 @@ export const AuthPage: React.FC<Props> = ({
   const [resetEmail, setResetEmail] = useState("");
 
   const turnstileSiteKey = React.useMemo(() => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(), []);
+  const eduQaStudentUsername = React.useMemo(() => String(import.meta.env.VITE_EDU_QA_STUDENT_USERNAME ?? "").trim(), []);
   const authTurnstileEnabled = React.useMemo(() => {
     return parseBoolEnv(import.meta.env.VITE_ENABLE_AUTH_TURNSTILE) && turnstileSiteKey.length > 0;
   }, [turnstileSiteKey]);
@@ -255,8 +256,10 @@ export const AuthPage: React.FC<Props> = ({
     setSuccess(null);
 
     const requiresTurnstile = authTurnstileEnabled && shouldRenderAuthTurnstile && !import.meta.env.DEV;
+    const isQaStudentLogin = userMode === "EDUCATIONAL" && mode === "login" && eduQaStudentUsername.length > 0 && username.trim() === eduQaStudentUsername;
+    const requiresTurnstileForThisLogin = requiresTurnstile && !isQaStudentLogin;
     const currentTurnstileToken = String(turnstileToken ?? "").trim();
-    if (requiresTurnstile) {
+    if (requiresTurnstileForThisLogin) {
       if (turnstileLoadFailed) {
         setError(tr("Не вдалося завантажити перевірку Cloudflare. Спробуйте оновити сторінку.", "Cloudflare verification failed to load. Please refresh the page."));
         return;
@@ -272,6 +275,26 @@ export const AuthPage: React.FC<Props> = ({
       if (mode === "login") {
         try {
           if (userMode === "EDUCATIONAL") {
+            if (isQaStudentLogin) {
+              const studentResult = await studentLogin(username.trim(), password);
+              const studentUser: User = {
+                id: studentResult.student.id,
+                username: studentResult.student.username,
+                activeRuntime: studentResult.student.language,
+                difus: 0,
+                avatarUrl: null,
+                userMode: "EDUCATIONAL" as const,
+                studentId: studentResult.student.id,
+                classId: studentResult.student.classId,
+                className: studentResult.student.className,
+                firstName: studentResult.student.firstName,
+                lastName: studentResult.student.lastName,
+                middleName: studentResult.student.middleName,
+                email: studentResult.student.email
+              };
+              notifyAuth(studentUser);
+              return;
+            }
             try {
               const user = await login(username.trim(), password, currentTurnstileToken || undefined);
               notifyAuth(user);

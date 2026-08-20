@@ -12,6 +12,7 @@ import {
   type StudyCodIdeCheckResult,
   type StudyCodIdeRunResult,
 } from "../../components/ide/StudyCodIDEWorkspace";
+import { defaultCompilerForFamily } from "../../lib/judgeLanguages";
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
 
 const preview = () =>
@@ -194,7 +195,8 @@ export const PracticeCanvasPage: React.FC = () => {
           stderr: consoleTone === "bad" ? consoleText : "",
           exitCode: consoleTone === "ok" ? 0 : 1,
           success: consoleTone === "ok",
-        };
+      };
+  const ideLanguage = String(task.language).toLowerCase() as JudgeLanguage;
   return (
     <StudyCodIDEWorkspace
       task={{
@@ -204,9 +206,10 @@ export const PracticeCanvasPage: React.FC = () => {
         section: task.lesson.title,
       }}
       theory={task.lesson.theory || null}
-      language={task.language as JudgeLanguage}
+      language={ideLanguage}
       onLanguageChange={() => undefined}
-      compiler={task.language}
+      disableLanguageChange
+      compiler={defaultCompilerForFamily(ideLanguage)}
       onCompilerChange={() => undefined}
       code={code}
       onCodeChange={setCode}

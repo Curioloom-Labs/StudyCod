@@ -11,16 +11,16 @@ import { roleCan, type Capability } from "./rbac";
  * Centralized, load-bearing authorization for actions on a single Class.
  *
  * EDU has two historical access models that this unifies:
- *  1. Legacy ownership — `class.teacher_id === user.id` (the only real gate in
- *     most routes today).
- *  2. Org RBAC — the caller's {@link OrgRole} in the class's organization.
+ *  1. Legacy ownership — `class.teacher_id === user.id`.
+ *  2. Class teaching assignment — a row in `class_teachers`.
+ *  3. Org RBAC — the caller's {@link OrgRole} in the class's organization.
  *
  * The combination is deliberate and backward-compatible:
  *  - The owning teacher is **grandfathered** to TEACHER in their own class, so
  *    enabling enforcement can never lock out a teacher who created a class —
  *    even one with `org_id = null` (pre-backfill) or no membership row.
  *  - ORG_ADMIN is the organization-wide exception. Teachers and assistants are
- *    restricted to classes they own until explicit class-level assignment exists.
+ *    restricted to classes they own or are explicitly assigned to.
  *  - Everyone else (no ownership, no org role) is denied.
  *
  * The decision is split into a pure core ({@link effectiveClassRole} /
@@ -29,7 +29,7 @@ import { roleCan, type Capability } from "./rbac";
  */
 
 export interface ClassAccessFacts {
-  /** Caller owns the class (legacy `class.teacher_id`). */
+  /** Caller owns or is assigned to the class. */
   isOwner: boolean;
   /** Caller's role in the class's organization, or null (not a member / no org). */
   orgRole: OrgRole | null;
@@ -54,7 +54,7 @@ export function decideClassAccess(facts: ClassAccessFacts, capability: Capabilit
 }
 
 export interface ClassAccessResult {
-  /** The class, with `teacher` loaded. */
+  /** The class, with its primary and assigned teachers loaded. */
   cls: Class;
   facts: ClassAccessFacts;
   effectiveRole: OrgRole | null;
@@ -139,17 +139,17 @@ export async function authorizeClassAction(
   const { manager, isSystemAdmin = false } = opts;
   const cls = await classRepo(manager).findOne({
     where: { id: classId },
-    relations: ["teacher"]
+    relations: ["teacher", "teachers"]
   });
   if (!cls) return null;
 
-  const isOwner = cls.teacher?.id === userId;
+  const isOwner = cls.teacher?.id === userId || cls.teachers?.some((teacher) => teacher.id === userId) === true;
   const orgId = cls.organizationId ?? null;
   const orgRole = orgId != null ? await orgRoleFor(userId, orgId, manager) : null;
 
   // A staff membership alone must not expose every class in the organization.
   // The organization administrator can manage all classes; teaching staff need
-  // to own the class (class-level assistant assignments can be added later).
+  // to own or be explicitly assigned to the class.
   const scopedOrgRole = isSystemAdmin || orgRole === "ORG_ADMIN" || isOwner ? orgRole : null;
   const facts: ClassAccessFacts = { isOwner, orgRole: scopedOrgRole };
   // SYSTEM_ADMIN is a platform-wide super-admin (User.role), orthogonal to the
@@ -173,7 +173,7 @@ export interface StudentAccessResult {
  * authorization of the student's class. Returns `null` when the student (or its
  * class) does not exist; otherwise `access.allowed` carries the decision.
  *
- * The returned student has `class` (with `teacher`) loaded.
+ * The returned student has `class` (with primary and assigned teachers) loaded.
  */
 export async function authorizeStudentAction(
   userId: number,
@@ -185,7 +185,7 @@ export async function authorizeStudentAction(
   const studentRepo = manager ? manager.getRepository(Student) : AppDataSource.getRepository(Student);
   const student = await studentRepo.findOne({
     where: { id: studentId },
-    relations: ["class", "class.teacher"],
+    relations: ["class", "class.teacher", "class.teachers"],
     withDeleted
   });
   if (!student || !student.class) return null;

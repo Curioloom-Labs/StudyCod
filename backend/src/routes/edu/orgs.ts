@@ -1,11 +1,14 @@
 import { Router, Response } from "express";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
 import { Student } from "../../entities/Student";
 import { Class } from "../../entities/Class";
+import { Membership } from "../../entities/Membership";
+import { User } from "../../entities/User";
 import { Organization, EDUCATIONAL_INSTITUTION_TYPES } from "../../entities/Organization";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { createOrganization, listUserMemberships, listOrgMembers, setMembershipRole, removeMembership } from "../../services/edu/membership";
+import { createOrganization, getUserOrgRole, listUserMemberships, listOrgMembers, setMembershipRole, removeMembership } from "../../services/edu/membership";
 import {
   createInvitation,
   acceptInvitation,
@@ -45,6 +48,7 @@ function sendInviteEmail(email: string, role: string, token: string): void {
 }
 const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
+const userRepo = () => AppDataSource.getRepository(User);
 
 /** New endpoints → real authorization from day one (no legacy to shadow). */
 function requireUser(req: AuthRequest, res: Response): boolean {
@@ -169,6 +173,129 @@ router.patch("/orgs/:orgId", authRequired, async (req: AuthRequest, res: Respons
     return res.json({ ok: true, orgId, name });
   } catch (error: any) {
     logger.error("[edu/orgs] rename org failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Create a staff account directly. Organization admins hand the credentials
+// to the teacher; no invitation or email acceptance flow is involved.
+router.post("/orgs/:orgId/users", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const orgId = parseInt(req.params.orgId, 10);
+    if (!Number.isFinite(orgId)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
+
+    const parsed = z.object({
+      username: z.string().trim().min(3).max(50),
+      email: z.string().trim().email().optional().or(z.literal("")),
+      password: z.string().min(8).max(200),
+      firstName: z.string().trim().max(100).optional(),
+      lastName: z.string().trim().max(100).optional(),
+      role: z.enum(["TEACHER", "ASSISTANT"]).default("TEACHER")
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+
+    const data = parsed.data;
+    const email = data.email?.trim() || null;
+    const existingUsername = await userRepo().findOne({ where: { username: data.username } });
+    if (existingUsername) return res.status(409).json({ message: "USERNAME_ALREADY_EXISTS" });
+    if (email) {
+      const existingEmail = await userRepo().findOne({ where: { email } });
+      if (existingEmail) return res.status(409).json({ message: "EMAIL_ALREADY_EXISTS" });
+    }
+
+    const user = await AppDataSource.transaction(async (manager) => {
+      const created = manager.getRepository(User).create({
+        username: data.username,
+        email,
+        password: await bcrypt.hash(data.password, 10),
+        firstName: data.firstName?.trim() || null,
+        lastName: data.lastName?.trim() || null,
+        userMode: "EDUCATIONAL",
+        role: "TEACHER",
+        emailVerified: true,
+        iadJava: 0,
+        iadPython: 0,
+        iadCpp: 0
+      });
+      await manager.getRepository(User).save(created);
+      await manager.getRepository(Membership).save(manager.getRepository(Membership).create({
+        user: created,
+        organization: { id: orgId } as Organization,
+        role: data.role
+      }));
+      return created;
+    });
+
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId!,
+      action: "org.staff_account.create",
+      targetType: "user",
+      targetId: user.id,
+      orgId,
+      metadata: { username: user.username, role: data.role },
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.status(201).json({
+      user: { id: user.id, username: user.username, email: user.email, firstName: user.firstName, lastName: user.lastName, role: data.role },
+      credentials: { username: user.username, email: user.email, password: data.password, role: data.role }
+    });
+  } catch (error: any) {
+    logger.error("[edu/orgs] create staff account failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Assign one or more existing organization staff accounts to a class.
+router.patch("/orgs/:orgId/classes/:classId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const orgId = parseInt(req.params.orgId, 10);
+    const classId = parseInt(req.params.classId, 10);
+    if (!Number.isFinite(orgId) || !Number.isFinite(classId)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!(await requireOrgCapability(req, res, orgId, "CLASS_EDIT"))) return;
+    const parsed = z.object({
+      teacherId: z.number().int().positive().optional(),
+      teacherIds: z.array(z.number().int().positive()).min(1).optional()
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const teacherIds = Array.from(new Set(parsed.data.teacherIds ?? (parsed.data.teacherId ? [parsed.data.teacherId] : [])));
+    if (!teacherIds.length) return res.status(400).json({ message: "AT_LEAST_ONE_TEACHER_REQUIRED" });
+
+    const cls = await classRepo().createQueryBuilder("class")
+      .leftJoinAndSelect("class.teacher", "teacher")
+      .leftJoinAndSelect("class.teachers", "assignedTeacher")
+      .where("class.id = :classId AND class.org_id = :orgId", { classId, orgId })
+      .getOne();
+    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+    for (const teacherId of teacherIds) {
+      const targetRole = await getUserOrgRole(teacherId, orgId);
+      if (!targetRole || !["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(targetRole)) {
+        return res.status(400).json({ message: "TEACHER_NOT_IN_ORG" });
+      }
+    }
+
+    const primaryTeacherId = cls.teacher?.id && teacherIds.includes(cls.teacher.id) ? cls.teacher.id : teacherIds[0];
+    cls.teacher = { id: primaryTeacherId } as User;
+    cls.teachers = teacherIds.map((id) => ({ id } as User));
+    await classRepo().save(cls);
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId!,
+      action: "org.class.teacher_assign",
+      targetType: "class",
+      targetId: classId,
+      orgId,
+      metadata: { teacherIds, primaryTeacherId },
+      requestId: req.requestId,
+      ip: req.ip
+    });
+    return res.json({ ok: true, classId, teacherId: primaryTeacherId, teacherIds });
+  } catch (error: any) {
+    logger.error("[edu/orgs] assign class teacher failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -445,6 +572,7 @@ router.get("/orgs/:orgId/overview", authRequired, async (req: AuthRequest, res: 
     const classes = await classRepo()
       .createQueryBuilder("class")
       .leftJoinAndSelect("class.teacher", "teacher")
+      .leftJoinAndSelect("class.teachers", "assignedTeacher")
       .where("class.org_id = :orgId", { orgId })
       .getMany();
     const ids = classes.map((c) => c.id);
@@ -465,11 +593,19 @@ router.get("/orgs/:orgId/overview", authRequired, async (req: AuthRequest, res: 
       name: c.name,
       language: c.language,
       studentsCount: countByClass.get(c.id) ?? 0,
-      teacherName: c.teacher ? `${c.teacher.firstName ?? ""} ${c.teacher.lastName ?? ""}`.trim() || c.teacher.username : null
+      teacherName: c.teacher ? `${c.teacher.firstName ?? ""} ${c.teacher.lastName ?? ""}`.trim() || c.teacher.username : null,
+      teacherNames: Array.from(new Map(
+        [c.teacher, ...(c.teachers ?? [])]
+          .filter((teacher): teacher is User => Boolean(teacher?.id))
+          .map((teacher) => [teacher.id, `${teacher.firstName ?? ""} ${teacher.lastName ?? ""}`.trim() || teacher.username] as const),
+      ).values())
     }));
 
     const teacherIds = new Set<number>();
-    for (const c of classes) if (c.teacher?.id) teacherIds.add(c.teacher.id);
+    for (const c of classes) {
+      if (c.teacher?.id) teacherIds.add(c.teacher.id);
+      for (const teacher of c.teachers ?? []) if (teacher.id) teacherIds.add(teacher.id);
+    }
 
     return res.json({
       totals: {
