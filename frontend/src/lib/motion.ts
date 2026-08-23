@@ -2,11 +2,12 @@ import type { Variants, Transition } from "framer-motion";
 export const easeOutExpo: Transition["ease"] = [0.16, 1, 0.3, 1];
 export const easeOutQuint: Transition["ease"] = [0.22, 1, 0.36, 1];
 export const pageTransition: Transition = {
-  duration: 0.28,
-  ease: easeOutQuint
+  type: "spring",
+  bounce: 0,
+  duration: 0.38
 };
 export const reducedMotionTransition: Transition = {
-  duration: 0.01,
+  duration: 0.18,
   ease: "linear"
 };
 export const pageVariants: Variants = {
@@ -33,7 +34,7 @@ export const pageVariants: Variants = {
 };
 export const reducedPageVariants: Variants = {
   initial: {
-    opacity: 1,
+    opacity: 0,
     y: 0,
     scale: 1
   },
@@ -44,18 +45,23 @@ export const reducedPageVariants: Variants = {
     transition: reducedMotionTransition
   },
   exit: {
-    opacity: 1,
+    opacity: 0,
     y: 0,
     scale: 1,
-    transition: reducedMotionTransition
+    transition: {
+      duration: 0.14,
+      ease: "linear"
+    }
   }
 };
 export const overlayVariants: Variants = {
   initial: {
-    opacity: 0
+    opacity: 0,
+    backdropFilter: "blur(0px)"
   },
   animate: {
     opacity: 1,
+    backdropFilter: "blur(2px)",
     transition: {
       duration: 0.2,
       ease: easeOutExpo
@@ -63,6 +69,7 @@ export const overlayVariants: Variants = {
   },
   exit: {
     opacity: 0,
+    backdropFilter: "blur(0px)",
     transition: {
       duration: 0.15,
       ease: easeOutExpo

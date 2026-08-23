@@ -28,6 +28,7 @@ import {
 } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { MarkdownView } from "../../components/MarkdownView";
+import { useDialogA11y } from "../../components/ui/useDialogA11y";
 
 type TopicTask = {
   id: number;
@@ -97,13 +98,15 @@ const demo: Topic = {
   ],
 };
 
-const Modal: React.FC<{ title: string; caption?: string; children: React.ReactNode; onClose: () => void; wide?: boolean }> = ({ title, caption, children, onClose, wide }) => (
-  <div className="fixed inset-0 z-[90] overflow-y-auto bg-[#07100a]/50 p-4 backdrop-blur-sm">
-    <section className={`mx-auto my-8 w-full rounded-[32px] bg-[#fbfdfb] p-5 shadow-[0_28px_90px_rgba(10,31,17,.28)] dark:bg-[#101a13] sm:p-7 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
+const Modal: React.FC<{ title: string; caption?: string; children: React.ReactNode; onClose: () => void; wide?: boolean }> = ({ title, caption, children, onClose, wide }) => {
+  const titleId = React.useId();
+  const panelRef = useDialogA11y({ open: true, onClose });
+  return <div data-dialog-a11y="direct" data-material="topic-dialog-scrim" className="fixed inset-0 z-[90] overflow-y-auto bg-[#07100a]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="topic-dialog" className={`mx-auto my-8 w-full rounded-[32px] bg-[#fbfdfb] p-5 shadow-[0_28px_90px_rgba(10,31,17,.28)] dark:bg-[#101a13] sm:p-7 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#e17800]">Topic studio</p>
-          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em]">{title}</h2>
+          <h2 id={titleId} className="mt-2 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em]">{title}</h2>
           {caption && <p className="mt-2 max-w-2xl text-sm leading-6 text-[#718075] dark:text-[#a6b4a9]">{caption}</p>}
         </div>
         <button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eef3ef] text-[#536258] transition hover:-translate-y-0.5 dark:bg-white/[.07] dark:text-[#dbe6de]">
@@ -112,8 +115,8 @@ const Modal: React.FC<{ title: string; caption?: string; children: React.ReactNo
       </div>
       <div className="mt-7">{children}</div>
     </section>
-  </div>
-);
+  </div>;
+};
 
 export const TopicStudioPage: React.FC = () => {
   const { topicId } = useParams<{ topicId: string }>();

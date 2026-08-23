@@ -27,6 +27,7 @@ import { applyTheme, getCurrentTheme, type AppTheme } from "../../theme";
 import { Logo } from "../Logo";
 import { BrandedPageLoader } from "../ui/BrandedPageLoader";
 import { PlatformFooter } from "./PlatformFooter";
+import { DialogA11yObserver } from "../ui/DialogA11yObserver";
 
 type Props = {
   current: "home" | "tasks" | "grades" | "profile" | "learn" | "catalog" | "library" | "playground" | "blog" | "support" | "admin";
@@ -57,6 +58,9 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
+  const accountTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const accountMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const shellRef = React.useRef<HTMLDivElement | null>(null);
   const devPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   const shellUser: User | null = user ?? (devPreview ? {
@@ -94,7 +98,10 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       setAccountOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAccountOpen(false);
+      if (event.key === "Escape") {
+        setAccountOpen(false);
+        accountTriggerRef.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -102,6 +109,14 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
+  }, [accountOpen]);
+
+  React.useEffect(() => {
+    if (!accountOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      accountMenuRef.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [accountOpen]);
 
   const toggleTheme = () => setTheme((previous) => {
@@ -145,7 +160,8 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const displayName = shellUser.firstName || shellUser.username;
 
   return (
-    <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
+    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
+      <DialogA11yObserver rootRef={shellRef} />
       <header className="sticky top-0 z-50 border-b border-[#16281b]/10 bg-[#f5f7f4]/86 backdrop-blur-xl dark:border-white/[.08] dark:bg-[#09100c]/84">
         <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-9">
           <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex shrink-0 items-center gap-2.5 text-left">
@@ -177,7 +193,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
               {theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
             </button>
             <div className="relative hidden sm:block" ref={accountRef}>
-              <button type="button" onClick={() => setAccountOpen((open) => !open)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold transition hover:bg-[#e9efea] dark:hover:bg-white/[.07]" aria-haspopup="menu" aria-expanded={accountOpen}>
+              <button ref={accountTriggerRef} type="button" onClick={() => setAccountOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setAccountOpen(true); } }} data-motion-press className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold transition motion-safe:active:scale-[.97] hover:bg-[#e9efea] dark:hover:bg-white/[.07]" aria-haspopup="menu" aria-expanded={accountOpen} aria-label={ukrainian ? `Відкрити меню акаунта ${displayName}` : `Open account menu for ${displayName}`}>
                 <span className="grid size-7 place-items-center overflow-hidden rounded-lg bg-[#dff2e5] text-xs font-bold text-[#147645] dark:bg-[#00ff88]/12 dark:text-[#6eecad]">
                   {shellUser.avatarUrl ? <img src={shellUser.avatarUrl} alt="" className="size-full object-cover" /> : displayName.slice(0, 1).toUpperCase()}
                 </span>
@@ -185,7 +201,21 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
                 <span className={`text-xs text-[#748177] transition ${accountOpen ? "rotate-180" : ""}`}>⌄</span>
               </button>
               {accountOpen ? (
-                <div className="absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-[#152219]/10 bg-white p-2 shadow-[0_24px_70px_-38px_rgba(15,35,21,.55)] dark:border-white/10 dark:bg-[#121b15]" role="menu">
+                <div ref={accountMenuRef} data-material="standalone-account-menu" data-motion-surface className="material-popover absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-[#152219]/10 bg-white p-2 shadow-[0_24px_70px_-38px_rgba(15,35,21,.55)] dark:border-white/10 dark:bg-[#121b15]" role="menu" aria-label={ukrainian ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
+                  const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[role='menuitem']"));
+                  const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    const direction = event.key === "ArrowDown" ? 1 : -1;
+                    items[(currentIndex + direction + items.length) % items.length]?.focus();
+                  } else if (event.key === "Home") {
+                    event.preventDefault();
+                    items[0]?.focus();
+                  } else if (event.key === "End") {
+                    event.preventDefault();
+                    items[items.length - 1]?.focus();
+                  }
+                }}>
                   <div className="px-3 py-3">
                     <div className="truncate text-sm font-semibold text-[#17231b] dark:text-white">{shellUser.username}</div>
                     <div className="mt-1 truncate text-xs uppercase tracking-[.08em] text-[#718075] dark:text-[#a4b3a8]">{shellUser.userMode || "PERSONAL"}</div>
@@ -213,11 +243,11 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       </header>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-end bg-[#07100a]/38 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true">
-          <div className="flex max-h-[85dvh] w-full flex-col overflow-y-auto rounded-[28px] bg-[#fbfcfa] p-5 shadow-2xl dark:bg-[#101b13]">
+        <div data-material="standalone-drawer-scrim" className="fixed inset-0 z-[70] flex items-end bg-[#07100a]/38 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm lg:hidden" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setMobileOpen(false); }}>
+          <div data-material="standalone-drawer" className="flex max-h-[85dvh] w-full flex-col overflow-y-auto rounded-[28px] bg-[#fbfcfa] p-5 shadow-2xl dark:bg-[#101b13]" role="dialog" aria-modal="true" aria-label={ukrainian ? "Мобільна навігація" : "Mobile navigation"} tabIndex={-1}>
             <div className="flex items-center justify-between">
               <span className="font-[family-name:var(--font-display)] text-xl font-bold tracking-[-.05em]">StudyCod</span>
-              <button type="button" onClick={() => setMobileOpen(false)} className="grid size-10 place-items-center rounded-xl bg-[#eef3ee] dark:bg-white/[.06]">
+              <button type="button" onClick={() => setMobileOpen(false)} aria-label={ukrainian ? "Закрити навігацію" : "Close navigation"} className="grid size-10 place-items-center rounded-xl bg-[#eef3ee] dark:bg-white/[.06]">
                 <X className="size-5" />
               </button>
             </div>

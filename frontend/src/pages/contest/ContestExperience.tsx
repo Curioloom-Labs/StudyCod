@@ -475,9 +475,13 @@ export const ContestLobbyPage: React.FC = () => {
         </div>
       )}
       {(joinOpen || createOpen) && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm">
+        <div data-material="contest-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm" role="presentation">
           <form
             onSubmit={joinOpen ? submitCode : submitCreate}
+            role="dialog"
+            aria-modal="true"
+            aria-label={joinOpen ? "Приєднатися до контесту" : "Почати новий контест"}
+            tabIndex={-1}
             className="w-full max-w-[460px] rounded-[26px] border border-white/55 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
           >
             <div className="mb-6 flex items-start justify-between">

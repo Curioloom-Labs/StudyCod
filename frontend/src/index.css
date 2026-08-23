@@ -380,6 +380,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    font-optical-sizing: auto;
   }
 
   h1,
@@ -390,21 +391,30 @@
   h6 {
     font-family: var(--font-display);
     font-weight: var(--font-weight-bold);
-    letter-spacing: -0.025em;
+    font-optical-sizing: auto;
     line-height: var(--line-heading);
   }
 
   h1 {
     font-size: var(--font-2xl);
+    letter-spacing: -0.035em;
     line-height: var(--line-tight);
   }
 
   h2 {
     font-size: var(--font-xl);
+    letter-spacing: -0.025em;
   }
 
   h3 {
     font-size: var(--font-lg);
+    letter-spacing: -0.015em;
+  }
+
+  h4,
+  h5,
+  h6 {
+    letter-spacing: -0.01em;
   }
 
   p {
@@ -555,14 +565,64 @@
   }
 }
 
+@keyframes material-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.material-popover {
+  animation: material-popover-in 180ms var(--ease-out) both;
+  transform-origin: top right;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  [data-motion-surface] {
+    animation: none !important;
+    transition: opacity 180ms linear !important;
+    transform: none !important;
+  }
+
+  [data-motion-press]:active {
+    transform: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-material] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: var(--bg-surface) !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  [data-material] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: var(--bg-surface) !important;
+    border-color: currentColor !important;
+  }
+
+  button,
+  input,
+  textarea,
+  select,
+  [role="button"] {
+    border-color: currentColor;
   }
 }
 

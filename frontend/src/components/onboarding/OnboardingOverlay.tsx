@@ -15,6 +15,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { useDialogA11y } from "../ui/useDialogA11y";
 
 type StepId = "orientation" | "learn" | "practice" | "progress" | "help";
 type TourIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
@@ -104,6 +105,7 @@ export const OnboardingOverlay: React.FC<Props> = ({ open, onClose, persist = tr
   const { i18n } = useTranslation();
   const reduceMotion = useReducedMotion();
   const isEn = i18n.language?.toLowerCase().startsWith("en");
+  const panelRef = useDialogA11y({ open, onClose });
   const tr = (uk: string, en: string) => isEn ? en : uk;
   const [index, setIndex] = useState(0);
 
@@ -139,8 +141,8 @@ export const OnboardingOverlay: React.FC<Props> = ({ open, onClose, persist = tr
   };
 
   return <AnimatePresence>
-    {open && <motion.div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-[#050806]/80 p-3 backdrop-blur-xl sm:p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-label={tr("Тур інтерфейсом StudyCod", "StudyCod interface tour")}>
-      <motion.div initial={reduceMotion ? undefined : { opacity: 0, y: 20, scale: .985 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? undefined : { opacity: 0, y: 12, scale: .99 }} transition={{ duration: .28, ease: [0.16, 1, 0.3, 1] }} className="relative grid min-h-[min(720px,calc(100dvh_-_32px))] w-full max-w-[1160px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0d130f] shadow-[0_44px_140px_rgba(0,0,0,.55)] lg:grid-cols-[260px_1fr]">
+    {open && <motion.div data-dialog-a11y="direct" data-material="onboarding-dialog-scrim" className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-[#050806]/80 p-3 backdrop-blur-xl sm:p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <motion.div ref={panelRef as React.RefObject<HTMLDivElement>} data-dialog-a11y="direct" data-material="onboarding-dialog" initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 20, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: .99 }} transition={reduceMotion ? { duration: .16, ease: "linear" } : { duration: .28, ease: [0.16, 1, 0.3, 1] }} role="dialog" aria-modal="true" aria-label={tr("Тур інтерфейсом StudyCod", "StudyCod interface tour")} tabIndex={-1} className="relative grid min-h-[min(720px,calc(100dvh_-_32px))] w-full max-w-[1160px] overflow-hidden rounded-[30px] border border-white/10 bg-[#0d130f] shadow-[0_44px_140px_rgba(0,0,0,.55)] lg:grid-cols-[260px_1fr]">
         <button type="button" onClick={done} className="absolute right-4 top-4 z-20 grid size-11 place-items-center rounded-[14px] border border-white/10 bg-[#151c17]/90 text-[#95a299] transition hover:bg-white/10 hover:text-white lg:right-5 lg:top-5" aria-label={tr("Закрити тур", "Close tour")}><X className="size-4" /></button>
 
         <aside className="border-b border-white/10 bg-[#090e0b] p-5 lg:border-b-0 lg:border-r lg:p-6">

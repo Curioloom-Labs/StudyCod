@@ -576,9 +576,13 @@ export const OrgWorkspacePage: React.FC = () => {
         )}
       </div>
       {showCreateAccount && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm">
+        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm" role="presentation">
           <form
             onSubmit={createAccount}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Створення акаунта"
+            tabIndex={-1}
             className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
           >
             <div className="flex items-start justify-between">
@@ -691,9 +695,13 @@ export const OrgWorkspacePage: React.FC = () => {
         </div>
       )}
       {showCreateClass && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm">
+        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm" role="presentation">
           <form
             onSubmit={createOrganizationClass}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Створення класу"
+            tabIndex={-1}
             className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
           >
             <div className="flex items-start justify-between">
@@ -777,9 +785,13 @@ export const OrgWorkspacePage: React.FC = () => {
         </div>
       )}
       {false && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm">
+        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm" role="presentation">
           <form
             onSubmit={createOrganizationClass}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Створення класу"
+            tabIndex={-1}
             className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
           >
             <div className="flex items-start justify-between">
@@ -863,8 +875,8 @@ export const OrgWorkspacePage: React.FC = () => {
         </div>
       )}
       {createdCredentials && (
-        <div className="fixed inset-0 z-[90] grid place-items-center bg-[#071009]/55 px-4 backdrop-blur-sm">
-          <section className="w-full max-w-[460px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
+        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[90] grid place-items-center bg-[#071009]/55 px-4 backdrop-blur-sm" role="presentation">
+          <section role="dialog" aria-modal="true" aria-label="Обліковий запис створено" tabIndex={-1} className="w-full max-w-[460px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">
               Обліковий запис створено
             </p>

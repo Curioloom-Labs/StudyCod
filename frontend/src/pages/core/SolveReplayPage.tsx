@@ -184,7 +184,7 @@ export const SolveReplayPage: React.FC = () => {
               className="h-full rounded-full origin-left bg-primary"
               animate={{ scaleX: pct / 100 }}
               initial={false}
-              transition={reduce ? { duration: 0 } : { duration: 0.4, ease: easeOutQuint }}
+              transition={reduce ? { duration: 0.16, ease: "linear" } : { duration: 0.4, ease: easeOutQuint }}
               style={{ width: "100%", transformOrigin: "left" }}
             />
           </div>

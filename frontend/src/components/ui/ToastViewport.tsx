@@ -69,8 +69,8 @@ export const ToastViewport: React.FC = () => {
             aria-live={item.type === "error" ? "assertive" : "polite"}
             layout
             initial={shouldReduceMotion ? false : { opacity: 0, y: -10, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1, transition: shouldReduceMotion ? { duration: 0.01 } : { duration: 0.22, ease: TOAST_EASE } }}
-            exit={shouldReduceMotion ? { opacity: 0, transition: { duration: 0.01 } } : { opacity: 0, y: -8, scale: 0.985, transition: { duration: 0.16, ease: TOAST_EASE } }}
+            animate={{ opacity: 1, y: 0, scale: 1, transition: shouldReduceMotion ? { duration: 0.16, ease: "linear" } : { duration: 0.22, ease: TOAST_EASE } }}
+            exit={shouldReduceMotion ? { opacity: 0, transition: { duration: 0.14, ease: "linear" } } : { opacity: 0, y: -8, scale: 0.985, transition: { duration: 0.16, ease: TOAST_EASE } }}
             className={`pointer-events-auto relative overflow-hidden rounded-md border px-3 py-2 text-xs font-mono shadow-lg backdrop-blur-sm ${tone(item.type)}`}
           >
             {item.message}

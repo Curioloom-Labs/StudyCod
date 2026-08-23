@@ -157,6 +157,9 @@ const LAYOUT_KEY = "studycod:ide:layout:v4";
 const HISTORY_KEY = "studycod:ide:history:v1";
 const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
 
+const rubberband = (overshoot: number, dimension: number, constant = 0.55) =>
+  (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
+
 type LayoutState = {
   left: number;
   right: number;
@@ -338,6 +341,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     axis: "left" | "right" | "bottom";
     start: number;
     value: number;
+    pointerId: number;
+    min: number;
+    max: number;
+    last: number;
   } | null>(null);
   const lastHistoryCode = React.useRef(props.code);
 
@@ -454,31 +461,71 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     axis: "left" | "right" | "bottom",
     event: React.PointerEvent,
   ) => {
+    if (event.button !== 0) return;
     event.preventDefault();
+    const min = axis === "bottom" ? 150 : 170;
+    const max = axis === "bottom" ? 620 : 520;
+    event.currentTarget.setPointerCapture(event.pointerId);
     resizeRef.current = {
       axis,
       start: axis === "bottom" ? event.clientY : event.clientX,
       value: layout[axis],
+      pointerId: event.pointerId,
+      min,
+      max,
+      last: layout[axis],
     };
     const move = (moveEvent: PointerEvent) => {
       const current = resizeRef.current;
-      if (!current) return;
+      if (!current || moveEvent.pointerId !== current.pointerId) return;
       const delta =
         moveEvent[axis === "bottom" ? "clientY" : "clientX"] - current.start;
       const direction = axis === "right" || axis === "bottom" ? -1 : 1;
-      const min = axis === "bottom" ? 150 : 170;
-      const max = axis === "bottom" ? 620 : 520;
-      updateLayout({
-        [axis]: Math.min(max, Math.max(min, current.value + delta * direction)),
-      });
+      const raw = current.value + delta * direction;
+      const dimension = current.max - current.min;
+      const overshoot = raw < current.min
+        ? -rubberband(current.min - raw, dimension)
+        : raw > current.max
+          ? rubberband(raw - current.max, dimension)
+          : 0;
+      const next = Math.min(current.max + 64, Math.max(current.min - 64, raw + overshoot));
+      current.last = next;
+      updateLayout({ [axis]: next });
     };
     const stop = () => {
+      const current = resizeRef.current;
+      if (current) {
+        updateLayout({ [current.axis]: Math.min(current.max, Math.max(current.min, current.last)) });
+      }
       resizeRef.current = null;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
+    window.addEventListener("pointercancel", stop, { once: true });
+  };
+
+  const handleResizeKeyDown = (
+    axis: "left" | "right" | "bottom",
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) => {
+    const min = axis === "bottom" ? 150 : 170;
+    const max = axis === "bottom" ? 620 : 520;
+    const step = event.shiftKey ? 48 : 16;
+    let delta = 0;
+    if (axis === "left" && event.key === "ArrowRight") delta = step;
+    if (axis === "left" && event.key === "ArrowLeft") delta = -step;
+    if (axis === "right" && event.key === "ArrowLeft") delta = step;
+    if (axis === "right" && event.key === "ArrowRight") delta = -step;
+    if (axis === "bottom" && event.key === "ArrowUp") delta = step;
+    if (axis === "bottom" && event.key === "ArrowDown") delta = -step;
+    if (event.key === "Home") delta = min - layout[axis];
+    if (event.key === "End") delta = max - layout[axis];
+    if (!delta) return;
+    event.preventDefault();
+    updateLayout({ [axis]: Math.min(max, Math.max(min, layout[axis] + delta)) });
   };
 
   const resultVerdict =
@@ -1158,7 +1205,15 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         {showLeft ? (
           <div
             onPointerDown={(event) => beginResize("left", event)}
-            className="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-[#00d978]/40 lg:block"
+            onKeyDown={(event) => handleResizeKeyDown("left", event)}
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-label={tr("Змінити ширину файлової панелі", "Resize file panel")}
+            aria-valuemin={170}
+            aria-valuemax={520}
+            aria-valuenow={Math.round(layout.left)}
+            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-[#00d978]/40 focus-visible:bg-[#00d978]/60 focus-visible:outline-none lg:block"
           />
         ) : null}
 
@@ -1298,7 +1353,15 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         {showRight ? (
           <div
             onPointerDown={(event) => beginResize("right", event)}
-            className="hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-[#00d978]/40 lg:block"
+            onKeyDown={(event) => handleResizeKeyDown("right", event)}
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-label={tr("Змінити ширину панелі помічника", "Resize assistant panel")}
+            aria-valuemin={170}
+            aria-valuemax={520}
+            aria-valuenow={Math.round(layout.right)}
+            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-[#00d978]/40 focus-visible:bg-[#00d978]/60 focus-visible:outline-none lg:block"
           />
         ) : null}
         {showRight ? (
@@ -1664,7 +1727,15 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       {showBottom ? (
         <div
           onPointerDown={(event) => beginResize("bottom", event)}
-          className="h-1 shrink-0 cursor-row-resize bg-transparent hover:bg-[#00d978]/40"
+          onKeyDown={(event) => handleResizeKeyDown("bottom", event)}
+          role="separator"
+          tabIndex={0}
+          aria-orientation="horizontal"
+          aria-label={tr("Змінити висоту нижньої панелі", "Resize bottom panel")}
+          aria-valuemin={150}
+          aria-valuemax={620}
+          aria-valuenow={Math.round(layout.bottom)}
+          className="h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-[#00d978]/40 focus-visible:bg-[#00d978]/60 focus-visible:outline-none"
         />
       ) : null}
       {showBottom ? (

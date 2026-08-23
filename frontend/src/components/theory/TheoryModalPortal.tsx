@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { MarkdownView } from "../MarkdownView";
 import { Button } from "../ui/Button";
+import { useDialogA11y } from "../ui/useDialogA11y";
 type Props = {
   open: boolean;
   title: string;
@@ -18,6 +19,7 @@ export const TheoryModalPortal: React.FC<Props> = ({
 }) => {
   const titleId = React.useId();
   const onAcknowledgeRef = React.useRef(onAcknowledge);
+  const panelRef = useDialogA11y({ open, onClose: onAcknowledge });
 
   useEffect(() => {
     onAcknowledgeRef.current = onAcknowledge;
@@ -42,11 +44,11 @@ export const TheoryModalPortal: React.FC<Props> = ({
   }, [open]);
   if (!open) return null;
   if (typeof document === "undefined") return null;
-  return createPortal(<div className="fixed inset-0 z-[9999] bg-bg-base/80" style={{
+  return createPortal(<div data-dialog-a11y="direct" data-material="theory-dialog-scrim" className="fixed inset-0 z-[9999] bg-bg-base/80" role="presentation" style={{
     backdropFilter: "blur(2px)"
-  }} aria-modal="true" role="dialog" aria-labelledby={titleId}>
+  }}>
       <div className="absolute inset-0 flex items-center justify-center p-3">
-        <div className="bg-bg-surface border border-border w-[98vw] max-w-[1200px] max-h-[92dvh] flex flex-col overflow-hidden">
+        <div ref={panelRef as React.RefObject<HTMLDivElement>} data-dialog-a11y="direct" data-material="theory-dialog" className="bg-bg-surface border border-border w-[98vw] max-w-[1200px] max-h-[92dvh] flex flex-col overflow-hidden" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
           <div className="px-6 py-4 border-b border-border flex-shrink-0">
             <h2 id={titleId} className="text-lg font-mono text-text-primary">{title}</h2>
           </div>

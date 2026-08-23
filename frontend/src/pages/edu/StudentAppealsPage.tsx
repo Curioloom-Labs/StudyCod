@@ -451,7 +451,7 @@ export const StudentAppealsPage: React.FC = () => {
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={reduce ? { duration: 0 } : { duration: 0.3 }}
+          transition={reduce ? { duration: 0.16, ease: "linear" } : { duration: 0.3 }}
         >
           <Button variant="ghost" onClick={() => navigate("/edu/lessons")} className="mb-3 -ml-1">
             <ArrowLeft className="w-4 h-4 mr-2" />

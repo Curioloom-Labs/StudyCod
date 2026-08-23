@@ -124,9 +124,9 @@ export const MyLearningPage: React.FC = () => {
           <div className="mt-3 h-1.5 rounded-full bg-bg-hover overflow-hidden">
             <motion.div
               className="h-full bg-primary origin-left rounded-full"
-              initial={{ scaleX: 0 }}
+              initial={prefersReducedMotion ? { scaleX: stats.avg / 100 } : { scaleX: 0 }}
               animate={{ scaleX: stats.avg / 100 }}
-              transition={prefersReducedMotion ? { duration: 0.01 } : { duration: 0.6, ease: easeOutQuint }}
+              transition={prefersReducedMotion ? { duration: 0.16, ease: "linear" } : { duration: 0.6, ease: easeOutQuint }}
             />
           </div>
         </div>
@@ -275,9 +275,9 @@ export const MyLearningPage: React.FC = () => {
                         <div className="mt-2.5 h-1.5 rounded-full bg-bg-hover overflow-hidden">
                           <motion.div
                             className="h-full bg-primary origin-left rounded-full"
-                            initial={{ scaleX: 0 }}
+                            initial={prefersReducedMotion ? { scaleX: pct / 100 } : { scaleX: 0 }}
                             animate={{ scaleX: pct / 100 }}
-                            transition={prefersReducedMotion ? { duration: 0.01 } : { duration: 0.6, ease: easeOutQuint, delay: 0.05 * idx }}
+                            transition={prefersReducedMotion ? { duration: 0.16, ease: "linear" } : { duration: 0.6, ease: easeOutQuint, delay: 0.05 * idx }}
                           />
                         </div>
                       </div>

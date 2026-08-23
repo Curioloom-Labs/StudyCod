@@ -213,6 +213,6 @@
   .mascot-companion-trigger,
   .mascot-companion-trigger img {
     animation: none;
-    transition: none;
+    transition: opacity 160ms linear, background-color 160ms linear, border-color 160ms linear, box-shadow 160ms linear;
   }
 }

@@ -792,7 +792,7 @@ export const TopicDetailsPage: React.FC = () => {
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={reduce ? { duration: 0 } : { duration: 0.3 }}
+          transition={reduce ? { duration: 0.16, ease: "linear" } : { duration: 0.3 }}
           className="mb-6"
         >
           <Button variant="ghost" onClick={() => navigate(-1)} className="mb-3 -ml-1">

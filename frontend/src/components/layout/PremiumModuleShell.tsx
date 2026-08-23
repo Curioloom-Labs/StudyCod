@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Logo } from "../Logo";
 import { PlatformFooter } from "./PlatformFooter";
+import { DialogA11yObserver } from "../ui/DialogA11yObserver";
 import type { AppTheme } from "../../theme";
 import type { User } from "../../types";
 
@@ -51,6 +52,9 @@ export const PremiumModuleShell: React.FC<Props> = ({
   const isEduAdmin = isSystemAdmin || isOrgManager;
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
+  const accountTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const accountMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const shellRef = React.useRef<HTMLDivElement | null>(null);
 
   const nav =
     product === "ADMIN"
@@ -157,7 +161,10 @@ export const PremiumModuleShell: React.FC<Props> = ({
       setAccountOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAccountOpen(false);
+      if (event.key === "Escape") {
+        setAccountOpen(false);
+        accountTriggerRef.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -167,9 +174,18 @@ export const PremiumModuleShell: React.FC<Props> = ({
     };
   }, [accountOpen]);
 
+  React.useEffect(() => {
+    if (!accountOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      accountMenuRef.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [accountOpen]);
+
   return (
-    <div className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
-      <header className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/85 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/85">
+    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
+      <DialogA11yObserver rootRef={shellRef} />
+      <header data-material="premium-header" className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/85 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/85">
         <div className="mx-auto flex h-[72px] w-full max-w-[1480px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
           <button
             type="button"
@@ -188,13 +204,15 @@ export const PremiumModuleShell: React.FC<Props> = ({
           </button>
 
           {!navigationHidden && (
-            <nav className="hidden items-center gap-1 rounded-xl bg-[#edf1ed] p-1 dark:bg-white/[.055] md:flex">
+            <nav aria-label={uk ? "Навігація модуля" : "Module navigation"} className="hidden items-center gap-1 rounded-xl bg-[#edf1ed] p-1 dark:bg-white/[.055] md:flex">
               {nav.map(({ label, path, Icon }) => (
                 <button
                   type="button"
                   key={path}
                   onClick={() => onNavigate(path)}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${isActive(path) ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}
+                  aria-current={isActive(path) ? "page" : undefined}
+                  data-motion-press
+                  className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}
                 >
                   <Icon className="size-4" />
                   {label}
@@ -207,8 +225,9 @@ export const PremiumModuleShell: React.FC<Props> = ({
             <button
               type="button"
               onClick={onToggleTheme}
-              className="grid size-9 place-items-center rounded-xl text-[#637166] hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07]"
-              aria-label={theme === "dark" ? "Light theme" : "Dark theme"}
+              data-motion-press
+              className="grid size-9 place-items-center rounded-xl text-[#637166] transition motion-safe:active:scale-[.97] hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07]"
+              aria-label={theme === "dark" ? (uk ? "Перемкнути на світлу тему" : "Switch to light theme") : (uk ? "Перемкнути на темну тему" : "Switch to dark theme")}
             >
               {theme === "dark" ? (
                 <Sun className="size-4" />
@@ -219,11 +238,20 @@ export const PremiumModuleShell: React.FC<Props> = ({
             {!navigationHidden && (
               <div className="relative" ref={accountRef}>
                 <button
+                  ref={accountTriggerRef}
                   type="button"
                   onClick={() => setAccountOpen((open) => !open)}
-                  className="flex h-10 max-w-[320px] items-center gap-2 rounded-xl bg-[#e7f6ec] px-2 text-sm font-semibold text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#62ecaa]"
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      setAccountOpen(true);
+                    }
+                  }}
+                  data-motion-press
+                  className="flex h-10 max-w-[320px] items-center gap-2 rounded-xl bg-[#e7f6ec] px-2 text-sm font-semibold text-[#147b47] transition motion-safe:active:scale-[.97] dark:bg-[#00ff88]/10 dark:text-[#62ecaa]"
                   aria-haspopup="menu"
                   aria-expanded={accountOpen}
+                  aria-label={uk ? `Відкрити меню акаунта ${displayName}` : `Open account menu for ${displayName}`}
                   title={`${displayName} · @${user.username}`}
                 >
                   <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17251c] text-xs text-[#72edb0]">
@@ -238,8 +266,27 @@ export const PremiumModuleShell: React.FC<Props> = ({
                 </button>
                 {accountOpen && (
                   <div
-                    className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-[#152219]/10 bg-white p-1 opacity-100 shadow-xl transition dark:border-white/10 dark:bg-[#172018] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3"
+                    ref={accountMenuRef}
+                    data-material="account-menu"
+                    data-motion-surface
+                    className="material-popover absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-[#152219]/10 bg-white p-1 opacity-100 shadow-xl transition dark:border-white/10 dark:bg-[#172018] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3"
                     role="menu"
+                    aria-label={uk ? "Меню акаунта" : "Account menu"}
+                    onKeyDown={(event) => {
+                      const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[role='menuitem']"));
+                      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+                      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                        event.preventDefault();
+                        const direction = event.key === "ArrowDown" ? 1 : -1;
+                        items[(currentIndex + direction + items.length) % items.length]?.focus();
+                      } else if (event.key === "Home") {
+                        event.preventDefault();
+                        items[0]?.focus();
+                      } else if (event.key === "End") {
+                        event.preventDefault();
+                        items[items.length - 1]?.focus();
+                      }
+                    }}
                   >
                     <div className="px-3 py-2">
                       <div className="break-words text-sm font-semibold text-[#142017] dark:text-[#edf3ef]">
@@ -329,6 +376,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
       </header>
       {!navigationHidden && (
         <nav
+          data-material="premium-mobile-nav"
           className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 md:hidden"
           aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}
         >
@@ -338,7 +386,9 @@ export const PremiumModuleShell: React.FC<Props> = ({
                 key={path}
                 type="button"
                 onClick={() => onNavigate(path)}
-                className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition ${isActive(path) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}
+                aria-current={isActive(path) ? "page" : undefined}
+                data-motion-press
+                className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}
               >
                 <Icon className="size-4" />
                 <span className="max-w-full truncate leading-none">

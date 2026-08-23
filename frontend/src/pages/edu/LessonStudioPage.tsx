@@ -16,6 +16,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
+import { useDialogA11y } from "../../components/ui/useDialogA11y";
 import {
   createTask as apiCreateTask,
   generateQuiz,
@@ -72,9 +73,11 @@ const Overlay: React.FC<{
   sub?: string;
   children: React.ReactNode;
   onClose: () => void;
-}> = ({ title, sub, children, onClose }) => (
-  <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#07100a]/45 p-4 backdrop-blur-sm">
-    <section className="mx-auto mt-8 max-w-xl rounded-[30px] bg-[#fbfdfb] p-6 shadow-2xl dark:bg-[#101a13] sm:p-8">
+}> = ({ title, sub, children, onClose }) => {
+  const titleId = React.useId();
+  const panelRef = useDialogA11y({ open: true, onClose });
+  return <div data-dialog-a11y="direct" data-material="lesson-dialog-scrim" className="fixed inset-0 z-[80] overflow-y-auto bg-[#07100a]/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="lesson-dialog" className="mx-auto mt-8 max-w-xl rounded-[30px] bg-[#fbfdfb] p-6 shadow-2xl dark:bg-[#101a13] sm:p-8">
       <button type="button"
         onClick={onClose}
         className="float-right grid h-10 w-10 place-items-center rounded-full bg-[#edf2ed] text-xl dark:bg-white/[.07]"
@@ -84,7 +87,7 @@ const Overlay: React.FC<{
       <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
         Урок / редактор
       </p>
-      <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
+      <h2 id={titleId} className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
         {title}
       </h2>
       {sub && (
@@ -94,8 +97,8 @@ const Overlay: React.FC<{
       )}
       <div className="mt-7 clear-both">{children}</div>
     </section>
-  </div>
-);
+  </div>;
+};
 const markdownBlocks = (source?: string) =>
   (source || "")
     .split(/\n{2,}/)

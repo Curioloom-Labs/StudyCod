@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Check, Clock3, Download, FileText, Image as ImageIcon, LifeBuoy, Paperclip, RotateCcw, Send, ShieldCheck, X } from "lucide-react";
 import type { SupportChatConversation, SupportChatMessage } from "../../lib/api/support";
 import { PublicProductNav } from "../../components/layout/PublicProductNav";
+import { useDialogA11y } from "../../components/ui/useDialogA11y";
 
 type Translate = (uk: string, en: string) => string;
 
@@ -60,6 +61,7 @@ export const SupportExperience: React.FC<Props> = (props) => {
   const [category, setCategory] = React.useState<"learning" | "technical" | "billing">("technical");
   const [composeOpen, setComposeOpen] = React.useState(false);
   const [lightbox, setLightbox] = React.useState<{ url: string; name: string } | null>(null);
+  const lightboxRef = useDialogA11y({ open: lightbox !== null, onClose: () => setLightbox(null) });
 
   const categories = [
     { id: "learning" as const, title: tr("Навчання", "Learning"), body: tr("Курси, задачі та прогрес", "Courses, tasks, and progress"), color: "#62edaa" },
@@ -108,7 +110,7 @@ export const SupportExperience: React.FC<Props> = (props) => {
           </section>
         </div>
       </main>
-      {lightbox && <div className="fixed inset-0 z-[100] grid place-items-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-label={lightbox.name} onClick={() => setLightbox(null)}><div className="relative max-h-[92vh] max-w-[92vw] overflow-hidden rounded-2xl border border-white/10 bg-[#0b120e] p-2 shadow-2xl" onClick={event => event.stopPropagation()}><button type="button" onClick={() => setLightbox(null)} className="absolute right-3 top-3 z-10 grid size-9 place-items-center rounded-full bg-black/60 text-white"><X className="size-4" /></button><img src={lightbox.url} alt={lightbox.name} className="max-h-[86vh] max-w-[88vw] object-contain" /><div className="px-2 pb-1 pt-2 text-xs text-[#aebdb1]">{lightbox.name}</div></div></div>}
+      {lightbox && <div data-dialog-a11y="direct" data-material="support-lightbox-scrim" className="fixed inset-0 z-[100] grid place-items-center bg-black/80 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightbox(null); }}><div ref={lightboxRef as React.RefObject<HTMLDivElement>} data-dialog-a11y="direct" data-material="support-lightbox" className="relative max-h-[92vh] max-w-[92vw] overflow-hidden rounded-2xl border border-white/10 bg-[#0b120e] p-2 shadow-2xl" role="dialog" aria-modal="true" aria-label={lightbox.name} tabIndex={-1} onClick={event => event.stopPropagation()}><button type="button" onClick={() => setLightbox(null)} aria-label={tr("Закрити перегляд", "Close preview")} className="absolute right-3 top-3 z-10 grid size-9 place-items-center rounded-full bg-black/60 text-white"><X className="size-4" /></button><img src={lightbox.url} alt={lightbox.name} className="max-h-[86vh] max-w-[88vw] object-contain" /><div className="px-2 pb-1 pt-2 text-xs text-[#aebdb1]">{lightbox.name}</div></div></div>}
     </div>;
   }
 

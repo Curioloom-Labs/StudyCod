@@ -40,7 +40,7 @@ const ScoreBar: React.FC<{ percent: number; tone?: string }> = ({ percent, tone 
         style={{ width: "100%" }}
         initial={reduce ? { scaleX: clamped / 100 } : { scaleX: 0 }}
         animate={{ scaleX: clamped / 100 }}
-        transition={reduce ? { duration: 0 } : { duration: 0.6, ease: easeOutQuint }}
+        transition={reduce ? { duration: 0.16, ease: "linear" } : { duration: 0.6, ease: easeOutQuint }}
       />
     </div>
   );

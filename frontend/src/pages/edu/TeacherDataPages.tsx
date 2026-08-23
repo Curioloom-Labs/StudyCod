@@ -438,8 +438,8 @@ export const GradebookWorkspace: React.FC = () => {
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#071009]/45 p-4 backdrop-blur-sm sm:items-center">
-          <section className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
+        <div data-material="grade-dialog-scrim" className="fixed inset-0 z-[80] flex items-end justify-center bg-[#071009]/45 p-4 backdrop-blur-sm sm:items-center" role="presentation">
+          <section role="dialog" aria-modal="true" aria-label="Редагування оцінки" tabIndex={-1} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
             <div className="flex items-start justify-between gap-4">
               <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Оцінка</p><h2 className="mt-2 text-2xl font-bold tracking-[-.04em]">{editing.student.studentName}</h2><p className="mt-1 text-sm text-[#718075] dark:text-[#a6b4a9]">{editing.column.title}</p></div>
               <button type="button" onClick={() => setEditing(null)} className="rounded-xl bg-[#edf1ed] p-2 text-[#526157] dark:bg-white/[.08] dark:text-[#c0cdc2]"><X className="size-4" /></button>
@@ -452,8 +452,8 @@ export const GradebookWorkspace: React.FC = () => {
       )}
 
       {thematicOpen && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 p-4 backdrop-blur-sm">
-          <form onSubmit={addThematic} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
+        <div data-material="grade-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 p-4 backdrop-blur-sm" role="presentation">
+          <form role="dialog" aria-modal="true" aria-label="Додати тематичну оцінку" tabIndex={-1} onSubmit={addThematic} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
             <h2 className="text-2xl font-bold tracking-[-.04em]">Додати тематичну в журнал</h2>
             <p className="mt-2 text-sm leading-6 text-[#6d7c71] dark:text-[#a2b1a6]">Оберіть тему, і колонка зʼявиться в цьому журналі поруч з іншими оцінками.</p>
             <select required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-5 w-full rounded-xl border border-[#19291d]/12 px-4 py-3 dark:border-white/10 dark:bg-[#0d1510]"><option value="">Оберіть тему</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
