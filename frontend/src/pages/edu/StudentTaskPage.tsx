@@ -2036,7 +2036,7 @@ export const StudentTaskPage: React.FC = () => {
               </div>}
 
             {hints.length > 0 && <div className="mb-4 p-3 rounded-lg border border-border bg-bg-surface">
-                <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Підказки (крок за кроком)", "Hints (step-by-step)")}</div>
+                <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Підказки", "Hints")}</div>
                 <div className="space-y-2">
                   {hints.slice(0, revealedHints).map((h, i) => <div key={i} className="text-xs font-mono text-text-primary whitespace-pre-wrap">
                         {i + 1}. {h}
@@ -2195,7 +2195,7 @@ export const StudentTaskPage: React.FC = () => {
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-accent-success" />
                   <div>
                     <div className="text-xs font-semibold text-accent-success">{tr(reinforced ? "Навичку закріплено" : "Рішення перевірено", reinforced ? "Skill reinforced" : "Solution verified")}</div>
-                    <p className="mt-1 text-xs leading-5 text-text-secondary">{tr(reinforced ? "Ти виправив рішення після невдалої спроби й пройшов перевірку. Це доказ прогресу в поточній темі." : "Рішення пройшло перевірку. Продовжуй практикувати тему, щоб перетворити результат на стійку навичку.", reinforced ? "You fixed the solution after a failed attempt. This is evidence of progress in the current topic." : "The solution passed the check. Keep practicing the topic to turn this result into a durable skill.")}</p>
+                    <p className="mt-1 text-xs leading-5 text-text-secondary">{tr(reinforced ? "Ти виправив рішення після невдалої спроби й пройшов перевірку." : "Рішення пройшло перевірку. Повтори тему, якщо хочеш закріпити результат.", reinforced ? "You fixed the solution after a failed attempt and passed the check." : "The solution passed the check. Review the topic if you want more practice.")}</p>
                   </div>
                 </div>
               </div>;

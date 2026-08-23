@@ -1575,7 +1575,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-bold text-[#edf5ee]">
-                            {tr("Рухайся крок за кроком", "Take it one step at a time")}
+                            {tr("Виконуй підказки по черзі", "Follow the hints in order")}
                           </p>
                           {props.hints?.length ? (
                             <span className="rounded-full bg-white/[.08] px-2 py-0.5 text-[10px] font-bold text-[#b9c9bd]">

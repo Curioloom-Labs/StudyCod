@@ -39,7 +39,7 @@ export const PrivacyPolicyPage: React.FC = () => {
       title: tr("3. Для чого ми використовуємо дані", "3. Why we use data"),
       bullets: [
         tr("Щоб створювати акаунти, автентифікувати користувачів, відновлювати пароль і захищати доступ до платформи.", "To create accounts, authenticate users, reset passwords, and protect access to the platform."),
-        tr("Щоб перевіряти код, запускати тести, зберігати прогрес, показувати оцінки та будувати навчальну траєкторію.", "To evaluate code, run tests, save progress, show grades, and build a learning path."),
+        tr("Щоб перевіряти код, запускати тести, зберігати прогрес, показувати оцінки та формувати навчальний маршрут.", "To evaluate code, run tests, save progress, show grades, and build a learning path."),
         tr("Щоб вчителі могли вести класи, призначати завдання, оцінювати роботи, переглядати апеляції та підтримувати учнів.", "To let teachers manage classes, assign tasks, grade work, review appeals, and support students."),
         tr("Щоб проводити контести, формувати рейтинги, сертифікати й службові повідомлення учасникам.", "To run contests, generate scoreboards, certificates, and service messages for participants."),
         tr("Щоб відповідати на звернення підтримки, виправляти помилки, запобігати зловживанням і підтримувати стабільність сервісу.", "To respond to support requests, fix bugs, prevent abuse, and keep the service reliable."),

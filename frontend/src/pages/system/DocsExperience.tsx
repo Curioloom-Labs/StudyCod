@@ -184,7 +184,7 @@ export const DocsExperience: React.FC<Props> = ({
               {tr("Усе про StudyCod — зрозуміло й по суті.", "Everything about StudyCod, clearly explained.")}
             </h1>
             <p className="mt-6 max-w-[650px] text-[17px] leading-7 text-[#aab5ad]">
-              {tr("Актуальні інструкції для практики, навчання в класі та викладання. З точними станами інтерфейсу, схемами й покроковими сценаріями.", "Current guidance for practice, classroom learning, and teaching—with precise interface states, diagrams, and step-by-step workflows.")}
+              {tr("Актуальні інструкції для практики, навчання в класі та викладання. Тут описано стани інтерфейсу, схеми й основні сценарії.", "Current guidance for practice, classroom learning, and teaching. It covers interface states, diagrams, and common workflows.")}
             </p>
             <label className="mt-9 flex max-w-[660px] items-center gap-3 rounded-[18px] border border-white/10 bg-white/[.075] p-2 backdrop-blur">
               <Search className="ml-3 size-5 text-[#7f8d84]" />

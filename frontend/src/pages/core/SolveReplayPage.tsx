@@ -80,7 +80,7 @@ export const SolveReplayPage: React.FC = () => {
             {tr("Запис розв'язання", "Solve replay")}
           </motion.h1>
           <motion.p variants={fadeUpItem} className="mt-1.5 text-sm text-text-secondary">
-            {tr("Покрокове відтворення твого процесу написання коду.", "Step-by-step playback of your coding process.")}
+            {tr("Відтворення процесу написання коду.", "Playback of your coding process.")}
           </motion.p>
 
           {session && (

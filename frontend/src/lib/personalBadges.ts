@@ -92,7 +92,7 @@ export const PERSONAL_BADGES: PersonalBadge[] = [
     detailUk: "Виправ 1 задачу після невдалої спроби",
     detailEn: "Fix 1 task after an unsuccessful attempt",
     valueUk: "Доводиш, що вмієш перетворювати помилки на навички",
-    valueEn: "You turn mistakes into durable skills",
+    valueEn: "You use mistakes to improve",
     rarityUk: "Цінний",
     rarityEn: "Valuable",
     Icon: ShieldCheck,

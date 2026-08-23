@@ -59,19 +59,19 @@ const text = {
     today: "На сьогодні",
     next: "Наступна задача",
     ready: "Готово до наступного кроку",
-    empty: "Почни з першої задачі — маршрут з’явиться тут.",
+    empty: "Почни з першої задачі, і тут з’явиться маршрут.",
     queue: "Черга практики",
     allTasks: "Усі задачі",
-    progress: "Твій темп",
+    progress: "Твій прогрес",
     completed: "завершено",
     streak: "ритм навчання",
     score: "рівень впевненості",
-    smartPath: "Розумний маршрут",
-    pathCopy: "Курс, практика й повторення зібрані в одному спокійному потоці.",
+    smartPath: "План навчання",
+    pathCopy: "Курс, практика й повторення зібрані в одному плані.",
     explore: "Дослідити",
     journal: "Прогрес",
-    progressTitle: "Не просто оцінки. Твоя траєкторія.",
-    progressCopy: "Подивись, що вже закріпилося, а де варто зробити ще одну коротку практику.",
+    progressTitle: "Прогрес навчання",
+    progressCopy: "Переглянь, що вже засвоєно, а що варто повторити.",
     average: "Середній результат",
     attempts: "спроб",
     passed: "закрито",
@@ -79,9 +79,9 @@ const text = {
     topics: "Карта тем",
     recent: "Остання активність",
     noData: "Дані з’являться після першої перевіреної роботи.",
-    projectsKicker: "Колекція перемог",
+    projectsKicker: "Завершені проєкти",
     projectsTitle: "Галерея проєктів",
-    projectsCopy: "Тут зберігаються всі мініпроєкти, які ти вже завершив. Повертайся до них, щоб побачити свій шлях і надихнутися наступним кроком.",
+    projectsCopy: "Тут зберігаються завершені мініпроєкти. Відкрий їх, щоб переглянути рішення.",
     projectsEmpty: "Перший завершений мініпроєкт з’явиться тут після успішної перевірки.",
     projectSkills: "Навички",
     openProject: "Відкрити проєкт",
@@ -89,8 +89,8 @@ const text = {
     strong: "Сильна тема",
     focus: "Точка росту",
     profile: "Профіль",
-    account: "Особистий простір",
-    accountCopy: "Налаштуй свій навчальний профіль і тримай результати в одному місці.",
+    account: "Навчальний профіль",
+    accountCopy: "Налаштуй профіль і переглядай результати в ньому.",
     learningProfile: "Профіль навчання",
     language: "Основна мова",
     achievements: "Твої результати",
@@ -110,19 +110,19 @@ const text = {
     today: "For today",
     next: "Next task",
     ready: "Ready for your next step",
-    empty: "Start with your first task — your path will appear here.",
+    empty: "Start with your first task, and your path will appear here.",
     queue: "Practice queue",
     allTasks: "All tasks",
-    progress: "Your rhythm",
+    progress: "Your progress",
     completed: "completed",
     streak: "learning rhythm",
     score: "confidence level",
-    smartPath: "A clear path",
-    pathCopy: "Coursework, practice and revision live in one calm flow.",
+    smartPath: "Learning plan",
+    pathCopy: "Coursework, practice, and revision are collected in one plan.",
     explore: "Explore",
     journal: "Progress",
-    progressTitle: "Not just grades. Your trajectory.",
-    progressCopy: "See what is sticking and where one more short practice will help.",
+    progressTitle: "Learning progress",
+    progressCopy: "Review what you have learned and what needs more practice.",
     average: "Average result",
     attempts: "attempts",
     passed: "completed",
@@ -130,9 +130,9 @@ const text = {
     topics: "Topic map",
     recent: "Recent activity",
     noData: "Data will appear after your first reviewed task.",
-    projectsKicker: "Collection of wins",
+    projectsKicker: "Completed projects",
     projectsTitle: "Project gallery",
-    projectsCopy: "Every mini-project you complete stays here. Come back to see your path and find momentum for the next step.",
+    projectsCopy: "Your completed mini-projects stay here. Open one to review the solution.",
     projectsEmpty: "Your first completed mini-project will appear here after a successful check.",
     projectSkills: "Skills",
     openProject: "Open project",
@@ -140,8 +140,8 @@ const text = {
     strong: "Strong topic",
     focus: "Growth point",
     profile: "Profile",
-    account: "Personal space",
-    accountCopy: "Set up your learning profile and keep your results in one place.",
+    account: "Learning profile",
+    accountCopy: "Set up your profile and review your results there.",
     learningProfile: "Learning profile",
     language: "Primary language",
     achievements: "Your results",
@@ -200,8 +200,8 @@ export const PremiumDashboard: React.FC<{
         ? `You have ${complete} completed task${complete === 1 ? "" : "s"}. Open the next practice when you're ready.`
         : `У тебе вже ${complete} завершено. Наступна практика готова, коли захочеш продовжити.`
       : en
-        ? "Your first practice is ready. Start with a small step and the route will adapt."
-        : "Перша практика готова. Почни з короткого кроку — маршрут підлаштується під результат."
+        ? "Your first practice is ready. Start with a short task, and the next one will be based on the result."
+        : "Перша практика готова. Почни з короткої задачі, а наступну система підбере за результатом."
     : c.empty;
 
   return (
@@ -245,7 +245,7 @@ export const PremiumDashboard: React.FC<{
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(290px,.7fr)]">
           <section className="rounded-[26px] border border-[#152219]/10 bg-white p-5 shadow-[0_18px_45px_-40px_rgba(18,39,24,.48)] dark:border-white/10 dark:bg-[#121b15] sm:p-6">
             <div className="mb-5 flex items-center justify-between gap-4"><div><div className="text-xs font-semibold uppercase tracking-[.16em] text-[#00a75a] dark:text-[#62ecaa]">{c.today}</div><h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">{c.next}</h2></div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff2dd] text-[#e87d00] dark:bg-[#ff8c00]/12"><Code2 className="h-5 w-5" /></span></div>
-            {loading ? <div className="h-40 animate-pulse rounded-2xl bg-[#f0f3ef] dark:bg-white/5" role="status" aria-label={en ? "Loading next task" : "Завантаження наступної задачі"} /> : active ? <button type="button" onClick={() => activeIsWaiting ? onNavigate("grades") : onOpenTask(active)} className="group w-full rounded-2xl bg-[#18251c] p-5 text-left text-white transition hover:-translate-y-0.5 hover:shadow-xl dark:bg-[#1a2820] sm:p-6"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-medium text-[#8ba493]">{active.topicTitle || "Practice"}</div><div className="mt-2 text-lg font-semibold sm:text-xl">{active.title}</div><p className="mt-2 max-w-xl text-sm leading-6 text-[#b5c4b8]">{activeIsWaiting ? (en ? "Your solution is waiting for review." : "Твоє рішення очікує перевірки.") : (active.subtitle || "Open the task, write your solution and get a clear result without losing your flow.")}</p></div><ArrowUpRight className="h-5 w-5 shrink-0 text-[#72edb0] transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" /></div><div className="mt-6 flex items-center gap-2 text-sm font-semibold text-[#72edb0]"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10"><Play className="h-3.5 w-3.5 fill-current" /></span>{activeIsWaiting ? (en ? "View review" : "Переглянути перевірку") : c.continue}</div></button> : <div className="rounded-2xl border border-dashed border-[#152219]/15 p-7 text-center text-sm leading-6 text-[#68776d] dark:border-white/10 dark:text-[#9dada1]">{c.empty}</div>}
+            {loading ? <div className="h-40 animate-pulse rounded-2xl bg-[#f0f3ef] dark:bg-white/5" role="status" aria-label={en ? "Loading next task" : "Завантаження наступної задачі"} /> : active ? <button type="button" onClick={() => activeIsWaiting ? onNavigate("grades") : onOpenTask(active)} className="group w-full rounded-2xl bg-[#18251c] p-5 text-left text-white transition hover:-translate-y-0.5 hover:shadow-xl dark:bg-[#1a2820] sm:p-6"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-medium text-[#8ba493]">{active.topicTitle || "Practice"}</div><div className="mt-2 text-lg font-semibold sm:text-xl">{active.title}</div><p className="mt-2 max-w-xl text-sm leading-6 text-[#b5c4b8]">{activeIsWaiting ? (en ? "Your solution is waiting for review." : "Твоє рішення очікує перевірки.") : (active.subtitle || "Open the task, write a solution, and check it.")}</p></div><ArrowUpRight className="h-5 w-5 shrink-0 text-[#72edb0] transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" /></div><div className="mt-6 flex items-center gap-2 text-sm font-semibold text-[#72edb0]"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10"><Play className="h-3.5 w-3.5 fill-current" /></span>{activeIsWaiting ? (en ? "View review" : "Переглянути перевірку") : c.continue}</div></button> : <div className="rounded-2xl border border-dashed border-[#152219]/15 p-7 text-center text-sm leading-6 text-[#68776d] dark:border-white/10 dark:text-[#9dada1]">{c.empty}</div>}
           </section>
 
           <section className="rounded-[26px] border border-[#152219]/10 bg-[#fbfcfa] p-5 dark:border-white/10 dark:bg-[#101813] sm:p-6" aria-labelledby="personal-path-title">

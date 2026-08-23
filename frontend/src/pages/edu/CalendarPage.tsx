@@ -126,7 +126,7 @@ export const CalendarPage: React.FC = () => {
       <PageHero
         eyebrow="// calendar"
         title={tr("Календар", "Calendar")}
-        subtitle={tr("Усі дедлайни ваших завдань і контрольних в одному місці.", "All your task and control-work deadlines in one place.")}
+        subtitle={tr("Переглядайте дедлайни задач і контрольних у календарі.", "View task and control-work deadlines in the calendar.")}
         maxWidth="4xl"
       />
 
