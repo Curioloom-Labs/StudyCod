@@ -72,8 +72,7 @@ export const ManualTaskSubmissionsPage: React.FC = () => {
         <ArrowLeft size={16} /> {tr("Назад", "Back")}
       </Button>
       <PageHero
-        eyebrowClassic="// submissions"
-        eyebrowAurora={tr("Здачі", "Submissions")}
+        eyebrow="// submissions"
         title={tr("Здачі завдання", "Task submissions")}
       />
 

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { listTasks, generateTask, getTaskGenerationProgress, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
-import { recordSuccessfulStudySession } from "../../lib/uiMode";
+import { recordSuccessfulStudySession } from "../../lib/studySessions";
 import { Modal } from "../../components/ui/Modal";
 import { CodeEditor } from "../../components/CodeEditor";
 import { MultiFileEditor, type CodeFile } from "../../components/MultiFileEditor";

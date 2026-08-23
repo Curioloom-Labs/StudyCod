@@ -98,8 +98,7 @@ export const CourseDetailPage: React.FC = () => {
         <ArrowLeft size={16} /> {tr("До курсів", "Back to courses")}
       </Button>
       <PageHero
-        eyebrowClassic="// course"
-        eyebrowAurora={tr("Курс", "Course")}
+        eyebrow="// course"
         title={course.title}
         subtitle={`${course.variants?.[0]?.runtime ?? "COURSE"} · ${course.status === "PUBLISHED" ? tr("Опубліковано", "Published") : tr("Чернетка", "Draft")}`}
       />

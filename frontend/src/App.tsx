@@ -4,9 +4,6 @@ import { enforceSubdomain, getHostContext } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
 import { getCachedMeUser, getMe } from "./lib/api/profile";
 import type { User } from "./types";
-import { User as UserIcon, FileText, Home, Menu, X, GraduationCap, BookOpen, Shield, HelpCircle, Library, SunMoon, Search, SwatchBook, LogOut } from "lucide-react";
-import { Button } from "./components/ui/Button";
-import { Logo } from "./components/Logo";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
 import { PlatformFooter } from "./components/layout/PlatformFooter";
@@ -18,27 +15,16 @@ import { PremiumModuleShell } from "./components/layout/PremiumModuleShell";
 import { StandaloneShell } from "./components/layout/StandaloneShell";
 import { BrandedPageLoader } from "./components/ui/BrandedPageLoader";
 import type { MaintenancePayload } from "./pages/system/MaintenancePage";
-import { UIModeProvider, useUIMode } from "./components/interface/UIModeProvider";
-import { SwitchToMomentumNudge } from "./components/interface/SwitchToMomentumNudge";
-import { WorkspaceViewportProvider } from "./components/interface/WorkspaceViewport";
-import { MomentumShell, type MomentumNavTarget } from "./layout/momentum/MomentumShell";
-import { NovaShellLazy } from "./layout/nova/NovaShellLazy";
-import { AuroraShellLazy } from "./layout/aurora/AuroraShellLazy";
-import { nextUIMode } from "./lib/uiMode";
-import { CommandPalette, type PaletteItem, type PaletteAction } from "./components/interface/CommandPalette";
-import { prefetchNavTarget, prefetchPath } from "./lib/prefetchRoutes";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "./lib/resumeState";
 import { applyTheme, getCurrentTheme, type AppTheme } from "./theme";
 import { getMaintenanceStatus } from "./lib/api/maintenance";
 import { getGeoStatus } from "./lib/api/geo";
 import { getStoredLanguagePreference, isUkraineCountry, setDetectedCountry } from "./lib/localization";
 import type { GeoBlockedPayload } from "./pages/system/GeoBlockedPage";
-import { getAdminMaintenance } from "./lib/api/admin";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
 import { getControlWorkStatus } from "./lib/api/edu";
 import { api } from "./lib/api/client";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
-import { NotificationsBell } from "./components/blog/NotificationsBell";
 import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
 import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
@@ -51,7 +37,6 @@ const ResetPasswordPage = React.lazy(() => import("./pages/auth/ResetPasswordPag
 const TasksPage = React.lazy(() => import("./pages/core/TasksPage").then(mod => ({ default: mod.TasksPage })));
 const GradesPage = React.lazy(() => import("./pages/core/GradesPage").then(mod => ({ default: mod.GradesPage })));
 const ProfilePage = React.lazy(() => import("./pages/profile/ProfilePage").then(mod => ({ default: mod.ProfilePage })));
-const HomePage = React.lazy(() => import("./pages/core/HomePage").then(mod => ({ default: mod.HomePage })));
 const LearningPlanPage = React.lazy(() => import("./pages/core/LearningPlanPage").then(mod => ({ default: mod.LearningPlanPage })));
 const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfilePage").then(mod => ({ default: mod.PublicProfilePage })));
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
@@ -190,10 +175,6 @@ type MaintenanceEventDetail = {
   until?: string | null;
 };
 
-type AdminMaintenanceEventDetail = {
-  enabled?: boolean;
-};
-
 type MaintenanceApiData = {
   maintenance: boolean;
   title?: unknown;
@@ -319,10 +300,6 @@ function asPage(value: string): Page | null {
   return value === "home" || value === "tasks" || value === "grades" || value === "plan" || value === "profile" || value === "teacher" || value === "student" || value === "admin" ? value : null;
 }
 
-function toMomentumPageTarget(value: MomentumNavTarget): Page | null {
-  return asPage(value);
-}
-
 function getRequestedAppPage(searchParams: URLSearchParams): Page | null {
   return asPage(String(searchParams.get("app") ?? ""));
 }
@@ -352,15 +329,11 @@ const AppContent: React.FC = React.memo(() => {
   } = useTranslation();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const ui = useUIMode();
   const navigate = useNavigate();
   const [page, setPage] = useState<Page>("home");
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
-  const [navOpen, setNavOpen] = useState(false);
-  const navMenuRef = useRef<HTMLDivElement | null>(null);
-  const [workspaceViewportEl, setWorkspaceViewportEl] = useState<HTMLElement | null>(null);
   const [maintenance, setMaintenance] = useState<MaintenancePayload | null>(() => {
     try {
       const raw = sessionStorage.getItem("studycod.maintenance");
@@ -398,7 +371,6 @@ const AppContent: React.FC = React.memo(() => {
       return null;
     }
   });
-  const [adminMaintenanceEnabled, setAdminMaintenanceEnabled] = useState<boolean>(false);
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
   const [bootResumeHandled, setBootResumeHandled] = useState<boolean>(false);
   const requestedAppPage = useMemo(() => getRequestedAppPage(searchParams), [searchParams]);
@@ -616,16 +588,6 @@ const AppContent: React.FC = React.memo(() => {
     };
   }, []);
   useEffect(() => {
-    const handler = (e: Event) => {
-      if (!(e instanceof CustomEvent)) return;
-      const detail = (e.detail ?? null) as AdminMaintenanceEventDetail | null;
-      const enabled = !!detail?.enabled;
-      setAdminMaintenanceEnabled(enabled);
-    };
-    window.addEventListener("studycod:adminMaintenance", handler as EventListener);
-    return () => window.removeEventListener("studycod:adminMaintenance", handler as EventListener);
-  }, []);
-  useEffect(() => {
     let cancelled = false;
     if (isDevPreview) {
       setUser(previewPersona === "admin" ? { ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" } : DEV_PREVIEW_USER);
@@ -749,10 +711,6 @@ const AppContent: React.FC = React.memo(() => {
       cancelled = true;
     };
   }, [isDevPreview, previewPersona]);
-  useEffect(() => {
-    if (!user || user.role !== "SYSTEM_ADMIN") return;
-    getAdminMaintenance().then(r => setAdminMaintenanceEnabled(!!r.state?.enabled)).catch(() => setAdminMaintenanceEnabled(false));
-  }, [user?.role]);
   const handleLogout = useCallback(() => {
     // Best-effort server logout clears the httpOnly cookie and revokes the
     // current JWT. Local state is cleared immediately so a slow API cannot
@@ -771,58 +729,19 @@ const AppContent: React.FC = React.memo(() => {
     navigate("/");
   }, [navigate]);
   const handleSetPage = useCallback((newPage: Page) => {
-    if (user?.userMode !== "EDUCATIONAL") {
-      if (newPage === "home") {
-        startTransition(() => setPage("home"));
-        navigate("/");
-        setNavOpen(false);
-        return;
-      }
-      if (newPage === "tasks") { navigate("/lab/practice?workspace=personal"); setNavOpen(false); return; }
-      if (newPage === "grades") { navigate("/learning/catalog"); setNavOpen(false); return; }
+      if (user?.userMode !== "EDUCATIONAL") {
+        if (newPage === "home") {
+          startTransition(() => setPage("home"));
+          navigate("/");
+          return;
+        }
+      if (newPage === "tasks") { navigate("/lab/practice?workspace=personal"); return; }
+      if (newPage === "grades") { navigate("/learning/catalog"); return; }
     }
     startTransition(() => {
       setPage(newPage);
     });
-    setNavOpen(false);
   }, [navigate, user?.userMode]);
-  const handleGoHome = useCallback(() => {
-    startTransition(() => {
-      setPage("home");
-    });
-    if (user?.userMode !== "EDUCATIONAL") navigate("/");
-    setNavOpen(false);
-  }, [navigate, user?.userMode]);
-
-  const handleToggleNav = useCallback(() => {
-    setNavOpen(prev => !prev);
-  }, []);
-  useEffect(() => {
-    if (!navOpen) return;
-
-    const onPointerDown = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (navMenuRef.current?.contains(target)) return;
-      setNavOpen(false);
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setNavOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("touchstart", onPointerDown, { passive: true });
-    document.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("touchstart", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [navOpen]);
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
       const next: AppTheme = prev === "dark" ? "light" : "dark";
@@ -830,96 +749,6 @@ const AppContent: React.FC = React.memo(() => {
       return next;
     });
   }, []);
-  const courseLabel = useMemo(() => {
-    if (!user) return "Java";
-    const runtime = user.activeRuntime || "PYTHON";
-    return runtime === "JAVA" ? "Java" : runtime === "PYTHON" ? "Python" : "C++";
-  }, [user?.activeRuntime]);
-  const userModeLabel = useMemo(() => {
-    if (!user) return "Personal";
-    if (user.userMode === "EDUCATIONAL") return "EDU";
-    if (user.userMode === "CONTEST") return "Contest";
-    return "Personal";
-  }, [user?.userMode]);
-
-  const setWorkspaceViewportRef = useCallback((el: HTMLElement | null) => {
-    setWorkspaceViewportEl(el);
-  }, []);
-
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  useEffect(() => {
-    if (ui.mode !== "classic" || !user) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
-        e.preventDefault();
-        setPaletteOpen(v => !v);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [ui.mode, user?.id]);
-
-  const classicPaletteItems = useMemo<PaletteItem[]>(() => {
-    if (!user) return [];
-    const navLabel = t("navigation", { defaultValue: "Navigation" });
-    const list: PaletteItem[] = [{ id: "home", label: t("home"), icon: Home, group: navLabel }];
-    if (!user.userMode || user.userMode === "PERSONAL") {
-      list.push({ id: "tasks", label: t("tasks"), icon: FileText, group: navLabel });
-      list.push({ id: "grades", label: t("grades"), icon: FileText, group: navLabel });
-      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
-    }
-    if (user.userMode === "EDUCATIONAL" && user.studentId) {
-      list.push({ id: "student", label: t("myJournal"), icon: BookOpen, group: navLabel });
-      list.push({ id: "lessons", label: t("lessons"), icon: FileText, group: navLabel });
-      list.push({ id: "library", label: t("library"), icon: Library, group: navLabel });
-      list.push({ id: "appeals", label: i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції", icon: HelpCircle, group: navLabel });
-    }
-    if (user.userMode === "EDUCATIONAL" && !user.studentId && user.role !== "SYSTEM_ADMIN") {
-      list.push({ id: "teacher", label: t("myClasses"), icon: GraduationCap, group: navLabel });
-    }
-    if (user.role === "SYSTEM_ADMIN") {
-      list.push({ id: "admin", label: "Адміністративний центр", icon: Shield, group: navLabel });
-    }
-    if (user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") {
-      list.push({ id: "support-desk", label: "Support desk", icon: HelpCircle, group: navLabel });
-    }
-    list.push({ id: "profile", label: t("profile"), icon: UserIcon, group: t("account") });
-    return list;
-  }, [user?.id, user?.userMode, user?.studentId, user?.role, t, i18n.language]);
-
-  const classicPaletteActions = useMemo<PaletteAction[]>(() => [
-    { id: "help", label: t("help"), icon: HelpCircle, run: () => navigate("/docs") },
-    { id: "support", label: t("support"), icon: HelpCircle, run: () => navigate("/support") },
-    { id: "theme", label: theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme"), icon: SunMoon, run: toggleTheme },
-    { id: "interface", label: `${t("interfaceLabel")}: ${t("classicUiName")}`, icon: SwatchBook, run: () => ui.setMode("focus") },
-    { id: "logout", label: t("logout"), icon: LogOut, danger: true, run: handleLogout }
-  ], [t, navigate, theme, toggleTheme, ui, handleLogout]);
-
-  const handleClassicPaletteSelect = useCallback((id: string) => {
-    if (id === "library") {
-      if (user?.userMode === "EDUCATIONAL" && user.studentId) {
-        navigate("/edu/library");
-      } else {
-        navigate("/library");
-      }
-      return;
-    }
-    if (id === "support-desk") {
-      navigate("/support/desk");
-      return;
-    }
-    if (id === "lessons") {
-      navigate("/edu/lessons");
-      return;
-    }
-    if (id === "appeals") {
-      navigate("/edu/appeals");
-      return;
-    }
-    const pageTarget = asPage(id);
-    if (pageTarget) handleSetPage(pageTarget);
-  }, [user?.userMode, user?.studentId, navigate, handleSetPage]);
-
   if (geoBlock) {
     return <Suspense fallback={<PageLoader />}>
         <GeoBlockedPage state={geoBlock} />
@@ -994,7 +823,7 @@ const AppContent: React.FC = React.memo(() => {
       {(() => {
       if (resolvedPage === "admin" && user.role === "SYSTEM_ADMIN") return <AdminWorkspacePage />;
       if (resolvedPage === "home") {
-        return <HomePage user={user} onNavigate={handleSetPage} suppressFocusAutoResume={ui.mode !== "classic"} />;
+        return <PersonalCourseDashboard />;
       }
       if (resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL") return <TasksPage user={user} />;
       if (resolvedPage === "grades" && user.userMode !== "EDUCATIONAL") return <GradesPage onNavigate={handleSetPage} />;
@@ -1045,279 +874,25 @@ const AppContent: React.FC = React.memo(() => {
     </PremiumModuleShell>;
   }
 
-  if (ui.mode === "classic") {
-    return <div className="mobile-app-shell min-h-[100dvh] bg-bg-base text-text-primary flex flex-col">
-        {}
-        <header className="studycod-app-header sticky top-0 z-40 min-h-[72px] border-b border-[#152219]/10 bg-[#f7f8f5]/85 text-[#142017] backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/85 dark:text-[#edf3ef] flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-2 gap-2 flex-shrink-0">
-          <div className="flex items-center gap-4 min-w-0 flex-wrap md:flex-nowrap">
-            <div className="flex items-center gap-2">
-              <Logo size={24} className="text-primary" />
-              <span className="text-lg font-mono font-semibold tracking-[0.01em] text-text-primary">StudyCod</span>
-            </div>
-            <div className="hidden sm:block h-6 w-px bg-border" />
-            <div className="hidden sm:block px-3 py-1 border border-border bg-bg-surface text-sm font-mono text-text-secondary">
-              {courseLabel}
-            </div>
-            {user.userMode && <>
-                <div className="hidden sm:block h-6 w-px bg-border" />
-                <div className="hidden sm:block px-3 py-1 border border-border bg-bg-surface text-sm font-mono text-text-secondary">
-                  {userModeLabel}
-                </div>
-              </>}
-          </div>
-
-          <div className="w-full md:w-auto flex items-center gap-2 overflow-x-auto whitespace-nowrap justify-start md:justify-end">
-            {user.role === "SYSTEM_ADMIN" && adminMaintenanceEnabled && <div className="px-3 py-1 border border-accent-warning/60 bg-accent-warning/12 text-accent-warning text-xs font-mono">
-                {t("maintenanceModeEnabled")}
-              </div>}
-            {}
-            {user.userMode !== "EDUCATIONAL" && <>
-                <button type="button" onClick={handleGoHome} onPointerEnter={() => prefetchNavTarget("continue")} onFocus={() => prefetchNavTarget("continue")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "home" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
-                  <Home className="w-4 h-4" />
-                  {t('home')}
-                </button>
-                <button type="button" onClick={() => handleSetPage("tasks")} onPointerEnter={() => prefetchNavTarget("tasks")} onFocus={() => prefetchNavTarget("tasks")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "tasks" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
-                  <FileText className="w-4 h-4" />
-                  {t('tasks')}
-                </button>
-                <button type="button" onClick={() => handleSetPage("grades")} onPointerEnter={() => prefetchNavTarget("grades")} onFocus={() => prefetchNavTarget("grades")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "grades" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
-                  <FileText className="w-4 h-4" />
-                  {t('grades')}
-                </button>
-                <button type="button" onClick={() => navigate("/library")} onPointerEnter={() => prefetchNavTarget("library")} onFocus={() => prefetchNavTarget("library")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-                  <Library className="w-4 h-4" />
-                  {t("library")}
-                </button>
-                <button type="button" onClick={() => navigate("/learning/catalog")} className="shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-                  <BookOpen className="w-4 h-4" />
-                  {i18n.language?.toLowerCase().startsWith("en") ? "Courses" : "Курси"}
-                </button>
-              </>}
-
-            {}
-            {user.role === "SYSTEM_ADMIN" && <button type="button" onClick={() => handleSetPage("admin")} onPointerEnter={() => prefetchNavTarget("admin")} onFocus={() => prefetchNavTarget("admin")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "admin" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
-                <Shield className="w-4 h-4" />
-                Адміністративний центр
-              </button>}
-
-            {(user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN") && <button type="button" onClick={() => navigate("/support/desk")} onPointerEnter={() => prefetchPath("/support/desk")} onFocus={() => prefetchPath("/support/desk")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
-                <HelpCircle className="w-4 h-4" />
-                Support desk
-              </button>}
-
-            {}
-            {user.userMode === "EDUCATIONAL" && !user.studentId && user.role !== "SYSTEM_ADMIN" && <button type="button" onClick={() => handleSetPage("teacher")} onPointerEnter={() => prefetchNavTarget("teacher")} onFocus={() => prefetchNavTarget("teacher")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "teacher" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
-                <GraduationCap className="w-4 h-4" />
-                {t('myClasses')}
-              </button>}
-
-            {user.userMode === "EDUCATIONAL" && user.studentId && <>
-                <button type="button" onClick={() => handleSetPage("student")} onPointerEnter={() => prefetchNavTarget("student")} onFocus={() => prefetchNavTarget("student")} className={`shrink-0 px-4 py-2 text-sm font-mono border transition-fast flex items-center gap-2 ${resolvedPage === "student" ? "border-primary bg-bg-hover text-primary" : "border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
-                  <BookOpen className="w-4 h-4" />
-                  {t('myJournal')}
-                </button>
-                <button type="button" onClick={() => navigate("/edu/library")} onPointerEnter={() => prefetchPath("/edu/library")} onFocus={() => prefetchPath("/edu/library")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
-                  <Library className="w-4 h-4" />
-                  {t("library")}
-                </button>
-                <button type="button" onClick={() => {
-              navigate("/edu/appeals");
-            }} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4" />
-                  {i18n.language?.toLowerCase().startsWith("en") ? "Appeals" : "Апеляції"}
-                </button>
-                <button type="button" onClick={() => {
-              navigate("/edu/lessons");
-            }} onPointerEnter={() => prefetchNavTarget("lessons")} onFocus={() => prefetchNavTarget("lessons")} className="shrink-0 px-4 py-2 text-sm font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  {t('lessons')}
-                </button>
-              </>}
-
-            <div className="h-6 w-px bg-border mx-2" />
-
-            {}
-            <div className="flex items-center gap-2">
-              {}
-              <button type="button" onClick={() => setPaletteOpen(true)} className="shrink-0 px-3 py-2 text-xs font-mono border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-fast flex items-center gap-2" title={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-label={t("searchOrJump", { defaultValue: i18n.language?.toLowerCase().startsWith("uk") ? "Пошук або перехід…" : "Search or jump to…" })} aria-haspopup="dialog">
-                <Search className="w-4 h-4" />
-                <kbd className="hidden md:inline px-1.5 py-0.5 border border-border text-[10px] font-mono text-text-muted">Ctrl K</kbd>
-              </button>
-              <button type="button" onClick={() => i18n.changeLanguage(i18n.language === 'uk' ? 'en' : 'uk')} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')} aria-label={i18n.language === 'uk' ? t('switchToEnglish') : t('switchToUkrainian')}>
-                {i18n.language === 'uk' ? 'EN' : 'UA'}
-              </button>
-
-              {}
-              <button type="button" onClick={toggleTheme} className="shrink-0 px-3 py-1 text-xs font-mono font-medium tracking-[0.03em] border border-border hover:bg-bg-hover transition-fast" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-                {theme === "dark" ? "Light" : "Dark"}
-              </button>
-              
-              <button type="button" onClick={() => handleSetPage("profile")} onPointerEnter={() => prefetchNavTarget("profile")} onFocus={() => prefetchNavTarget("profile")} className={`w-11 h-11 border flex items-center justify-center hover:bg-bg-hover transition-fast ${resolvedPage === "profile" ? "border-primary" : "border-border"}`} title={t('profile')} aria-label={t('profile')}>
-                <UserIcon className="w-4 h-4 text-text-secondary" />
-              </button>
-              <div className="relative" ref={navMenuRef}>
-                <button type="button" onClick={handleToggleNav} className="w-11 h-11 border border-border flex items-center justify-center hover:bg-bg-hover transition-fast" title={t('menu')} aria-label={t('menu')} aria-haspopup="menu" aria-expanded={navOpen}>
-                  {navOpen ? <X className="w-4 h-4 text-text-secondary" /> : <Menu className="w-4 h-4 text-text-secondary" />}
-                </button>
-                {navOpen && <>
-                    <div className="absolute right-0 top-12 z-40 bg-bg-surface border border-border min-w-[200px]" role="menu" aria-label={t('menu')}>
-                      <nav className="flex flex-col">
-                        <button type="button" role="menuitem" onClick={() => {
-                      setNavOpen(false);
-                      navigate("/docs");
-                    }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary flex items-center gap-2">
-                          <HelpCircle className="w-4 h-4" />
-                          {t('help')}
-                        </button>
-                        <button type="button" role="menuitem" onClick={() => {
-                      setNavOpen(false);
-                      navigate("/support");
-                    }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary flex items-center gap-2">
-                          <HelpCircle className="w-4 h-4" />
-                          {t('support')}
-                        </button>
-                        <button type="button" role="menuitem" onClick={() => {
-                      setNavOpen(false);
-                      ui.setMode(nextUIMode(ui.mode));
-                    }} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-text-secondary border-t border-border">
-                          {t("interfaceLabel")}: {ui.mode === "classic" ? t("classicUiName") : ui.mode === "focus" ? t("momentumUiName") : ui.mode === "aurora" ? t("auroraUiName", { defaultValue: "Aurora" }) : t("novaUiName", { defaultValue: "Nova" })}
-                        </button>
-                        <button type="button" role="menuitem" onClick={handleLogout} className="px-4 py-2 text-left text-sm font-mono hover:bg-bg-hover transition-fast text-accent-error border-t border-border">
-                          {t('logout')}
-                        </button>
-                      </nav>
-                    </div>
-                  </>}
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-bg-surface/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden" aria-label={i18n.language === "uk" ? "Мобільна навігація" : "Mobile navigation"}>
-          <div className="grid grid-cols-5 gap-1">
-            <button type="button" onClick={() => user.studentId ? navigate("/edu/lessons") : user.role === "SYSTEM_ADMIN" ? handleSetPage("admin") : handleSetPage("teacher")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-              <Home className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("lessons") : user.role === "SYSTEM_ADMIN" ? "Адміністративний центр" : t("myClasses")}</span>
-            </button>
-            <button type="button" onClick={() => user.studentId ? handleSetPage("student") : navigate("/edu/courses")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-              <BookOpen className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("myJournal") : t("eduNavCourses", { defaultValue: "Courses" })}</span>
-            </button>
-            <button type="button" onClick={() => navigate(user.studentId ? "/edu/library" : "/edu/calendar")} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary">
-              <Library className="h-4 w-4" /><span className="text-[10px] font-semibold">{user.studentId ? t("library") : t("eduNavCalendar", { defaultValue: "Calendar" })}</span>
-            </button>
-            <button type="button" onClick={() => setPaletteOpen(true)} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-text-secondary hover:bg-bg-hover hover:text-text-primary" aria-label={t("searchOrJump", { defaultValue: "Search" })}>
-              <Search className="h-4 w-4" /><span className="text-[10px] font-semibold">{t("search", { defaultValue: "Search" })}</span>
-            </button>
-            <button type="button" onClick={() => handleSetPage("profile")} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl hover:bg-bg-hover hover:text-text-primary ${resolvedPage === "profile" ? "bg-primary/10 text-primary" : "text-text-secondary"}`}>
-              <UserIcon className="h-4 w-4" /><span className="text-[10px] font-semibold">{t("profile")}</span>
-            </button>
-          </div>
-        </nav>
-
-        <SwitchToMomentumNudge />
-
-        <WorkspaceViewportProvider element={workspaceViewportEl}>
-          <main ref={setWorkspaceViewportRef} className={`mobile-app-viewport flex-1 min-h-0 flex flex-col pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 ${resolvedPage === "tasks" && user.userMode !== "EDUCATIONAL" ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
-            {content}
-          </main>
-        </WorkspaceViewportProvider>
-        <PlatformFooter className="flex-shrink-0" />
-        <Suspense fallback={null}>
-            <PlacementEntry user={user} onUserChange={setUser} />
-          </Suspense>
-        <Suspense fallback={null}>
-          <OnboardingEntry />
-        </Suspense>
-        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={classicPaletteItems} onSelect={handleClassicPaletteSelect} extraActions={classicPaletteActions} />
-      </div>;
-  }
-
-        const momentumCurrent: MomentumNavTarget = resolvedPage === "home" || resolvedPage === "plan" ? "continue" : resolvedPage;
-  const Shell = ui.mode === "nova" ? NovaShellLazy : ui.mode === "aurora" ? AuroraShellLazy : MomentumShell;
-  return <>
-      <Suspense fallback={<PageLoader />}>
-      <Shell user={user} current={momentumCurrent} onNavigate={target => {
-      if (target === "library") {
-        if (user.userMode === "EDUCATIONAL" && user.studentId) {
-          navigate("/edu/library");
-        } else {
-          navigate("/library");
-        }
-        return;
-      }
-      if (target === "support") {
-        navigate("/support");
-        return;
-      }
-      if (target === "blog") {
-        navigate("/blog");
-        return;
-      }
-      if (target === "contests") {
-        navigate("/contests");
-        return;
-      }
-      if (target === "playground") {
-        navigate("/playground");
-        return;
-      }
-      if (target === "learn") {
-        // Personal learning now lives in the course catalog. Keep the old URL
-        // as a compatibility redirect so it cannot reopen the legacy skill-tree
-        // workspace.
-        navigate("/learning/catalog");
-        return;
-      }
-      if (target === "continue") {
-        handleGoHome();
-        return;
-      }
-      if (target === "lessons") {
-        navigate("/edu/lessons");
-        return;
-      }
-      if (target === "teacher") {
-        navigate("/edu");
-        return;
-      }
-      if (target === "org") {
-        navigate("/edu/organization");
-        return;
-      }
-      if (target === "courses") {
-        navigate("/edu/courses");
-        return;
-      }
-      if (target === "calendar") {
-        navigate("/edu/calendar");
-        return;
-      }
-      if (target === "tutor") {
-        navigate("/edu/tutor");
-        return;
-      }
-      if (target === "student") {
-        navigate("/edu/journal");
-        return;
-      }
-      const pageTarget = toMomentumPageTarget(target);
-      if (pageTarget) {
-        handleSetPage(pageTarget);
-      }
-        }} onLogout={handleLogout} topRight={<div className="flex items-center gap-2"><NotificationsBell /><button type="button" onClick={toggleTheme} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border border-border bg-bg-surface text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-primary/40 transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>
-          <SunMoon className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
-          </button></div>}>
-        {content}
-      </Shell>
-      </Suspense>
-      <Suspense fallback={null}>
-          <PlacementEntry user={user} onUserChange={setUser} />
-        </Suspense>
-      <Suspense fallback={null}>
-        <OnboardingEntry />
-      </Suspense>
-    </>;
+  return <PremiumModuleShell
+    product="EDU"
+    user={user}
+    theme={theme}
+    currentPath={location.pathname}
+    onNavigate={navigate}
+    onToggleTheme={toggleTheme}
+    onLogout={handleLogout}
+  >
+    <main className="min-h-0 overflow-y-auto">{content}</main>
+    <Suspense fallback={null}>
+      <PlacementEntry user={user} onUserChange={setUser} />
+    </Suspense>
+    <Suspense fallback={null}>
+      <OnboardingEntry />
+    </Suspense>
+  </PremiumModuleShell>;
 });
+AppContent.displayName = "AppContent";
 AppContent.displayName = "AppContent";
 export const App: React.FC = () => {
   const location = useLocation();
@@ -1350,7 +925,6 @@ export const App: React.FC = () => {
     else if (ctx === "contest") subdomainNavigate("/contest", { replace: true });
   }, [location.pathname, subdomainNavigate]);
   return <TheoryModalProvider>
-      <UIModeProvider>
         <ToastViewport />
         <MascotCompanion />
         <AnimatePresence mode="sync">
@@ -1589,7 +1163,6 @@ export const App: React.FC = () => {
             <Route path="*" element={<AppContent />} />
           </Routes>
         </AnimatePresence>
-      </UIModeProvider>
     </TheoryModalProvider>;
 };
 

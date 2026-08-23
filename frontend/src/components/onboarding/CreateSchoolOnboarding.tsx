@@ -50,8 +50,7 @@ export const CreateSchoolOnboarding: React.FC<Props> = ({ onCreated }) => {
   return (
     <div className="min-h-full bg-bg-base">
       <PageHero
-        eyebrowClassic="// onboarding"
-        eyebrowAurora={tr("Початок", "Getting started")}
+        eyebrow="// onboarding"
         title={tr("Створіть свою школу", "Create your school")}
         subtitle={tr(
           "Школа — це ваша організація в StudyCod. Ви станете її адміністратором.",

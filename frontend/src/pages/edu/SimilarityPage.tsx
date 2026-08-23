@@ -62,8 +62,7 @@ export const SimilarityPage: React.FC = () => {
   return (
     <div className="min-h-full bg-bg-base">
       <PageHero
-        eyebrowClassic="// similarity"
-        eyebrowAurora={tr("Антиплагіат", "Similarity")}
+        eyebrow="// similarity"
         title={tr("Схожість робіт", "Code similarity")}
         subtitle={tr(`Пари рішень із схожістю від ${Math.round(minSim * 100)}% — потенційні запозичення.`, `Solution pairs with ${Math.round(minSim * 100)}%+ similarity — potential copying.`)}
         maxWidth="4xl"

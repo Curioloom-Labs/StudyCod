@@ -169,8 +169,8 @@ export function resolveResumeRoute(user: User, state: ResumeState | null):
       return { type: "path", path: `/edu/lessons/${state.lessonId}` };
     }
 
-    // No resumable session: use in-app entry surface (Focus entry or Classic home)
-    // rather than a lessons index page.
+    // No resumable session: use the current in-app entry surface rather than a
+    // lessons index page.
     return { type: "appPage", page: "home" };
   }
 

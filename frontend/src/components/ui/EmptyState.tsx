@@ -11,7 +11,7 @@ type EmptyStateProps = {
 
 // Shared empty-state pattern (Ф3): one illustrative icon, a clear title, an
 // optional one-line description and a single primary action. Surfaces come from
-// design tokens, so it adapts to every UI mode (incl. Aurora) automatically.
+// design tokens, so it adapts to the current product surface automatically.
 export const EmptyState: React.FC<EmptyStateProps> = ({
   icon: Icon,
   title,
@@ -22,7 +22,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   return (
     <div
       className={clsx(
-        "rounded-[var(--aurora-radius,16px)] border border-dashed border-border bg-bg-surface/40 px-6 py-12 text-center flex flex-col items-center",
+        "rounded-2xl border border-dashed border-border bg-bg-surface/40 px-6 py-12 text-center flex flex-col items-center",
         className
       )}
     >

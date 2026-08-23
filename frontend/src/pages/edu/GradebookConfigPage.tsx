@@ -153,8 +153,7 @@ export const GradebookConfigPage: React.FC = () => {
         <ArrowLeft size={16} /> {tr("Назад", "Back")}
       </Button>
       <PageHero
-        eyebrowClassic="// gradebook"
-        eyebrowAurora={tr("Журнал", "Gradebook")}
+        eyebrow="// gradebook"
         title={tr("Зважений журнал оцінок", "Weighted gradebook")}
         subtitle={tr(
           "Категорії з вагами; підсумок — зважене середнє. Порожньо = тематична модель.",

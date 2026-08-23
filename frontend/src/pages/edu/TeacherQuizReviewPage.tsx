@@ -93,8 +93,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
         <ArrowLeft size={16} /> {tr("Назад", "Back")}
       </Button>
       <PageHero
-        eyebrowClassic="// quiz review"
-        eyebrowAurora={tr("Перевірка", "Review")}
+        eyebrow="// quiz review"
         title={tr("Спроби вікторини", "Quiz attempts")}
       />
 

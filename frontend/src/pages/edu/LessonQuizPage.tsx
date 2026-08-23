@@ -66,7 +66,7 @@ export const LessonQuizPage: React.FC = () => {
       <Button variant="ghost" onClick={() => navigate(-1)} style={{ marginTop: 16 }}>
         <ArrowLeft size={16} /> {tr("Назад", "Back")}
       </Button>
-      <PageHero eyebrowClassic="// quiz" eyebrowAurora={tr("Вікторина", "Quiz")} title={tr("Вікторина уроку", "Lesson quiz")} />
+      <PageHero eyebrow="// quiz" title={tr("Вікторина уроку", "Lesson quiz")} />
 
       {!questions ? (
         <p style={{ opacity: 0.6, marginTop: 16 }}>{tr("У цьому уроці немає вікторини.", "This lesson has no quiz.")}</p>

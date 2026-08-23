@@ -124,8 +124,7 @@ export const CalendarPage: React.FC = () => {
   return (
     <div className="min-h-full bg-bg-base">
       <PageHero
-        eyebrowClassic="// calendar"
-        eyebrowAurora={tr("Календар", "Calendar")}
+        eyebrow="// calendar"
         title={tr("Календар", "Calendar")}
         subtitle={tr("Усі дедлайни ваших завдань і контрольних в одному місці.", "All your task and control-work deadlines in one place.")}
         maxWidth="4xl"

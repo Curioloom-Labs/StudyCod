@@ -6,7 +6,6 @@ import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { ArrowLeft, MessageSquare, Plus, RefreshCw } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
-import { useUIMode } from "../../components/interface/UIModeProvider";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
@@ -58,7 +57,6 @@ export const StudentAppealsPage: React.FC = () => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
   const reduce = useReducedMotion();
-  const isAurora = useUIMode().mode === "aurora";
   const [searchParams, setSearchParams] = useSearchParams();
   const tr = useCallback((uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk), [i18n.language]);
 
@@ -491,7 +489,7 @@ export const StudentAppealsPage: React.FC = () => {
         <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <motion.div variants={staggerContainer} initial="initial" animate="animate" className={isAurora ? "lg:col-span-5 rounded-[var(--aurora-radius)] border border-border bg-bg-surface/40 overflow-hidden divide-y divide-border self-start" : "lg:col-span-5 space-y-3"}>
+          <motion.div variants={staggerContainer} initial="initial" animate="animate" className="lg:col-span-5 space-y-3">
             {appeals.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
                 <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
@@ -505,11 +503,7 @@ export const StudentAppealsPage: React.FC = () => {
                 <motion.div
                   key={item.id}
                   variants={fadeUpItem}
-                  className={
-                    isAurora
-                      ? `group p-5 cursor-pointer transition-fast ${selectedAppealId === item.id ? "bg-primary/8 shadow-[inset_3px_0_0_0_var(--primary)]" : "hover:bg-bg-hover"}`
-                      : `group rounded-xl border bg-bg-surface p-5 cursor-pointer transition-fast hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] ${selectedAppealId === item.id ? "border-primary/60" : "border-border hover:border-primary/40"}`
-                  }
+                  className={`group rounded-xl border bg-bg-surface p-5 cursor-pointer transition-fast hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] ${selectedAppealId === item.id ? "border-primary/60" : "border-border hover:border-primary/40"}`}
                   onClick={() => setSelectedAppealId(item.id)}
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">

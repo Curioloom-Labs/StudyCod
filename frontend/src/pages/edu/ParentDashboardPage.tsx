@@ -78,8 +78,7 @@ export const ParentDashboardPage: React.FC = () => {
   return (
     <div className="max-w-3xl mx-auto px-4 pb-12">
       <PageHero
-        eyebrowClassic="// parent"
-        eyebrowAurora={tr("Батьки", "Parent")}
+        eyebrow="// parent"
         title={tr("Прогрес дітей", "Children's progress")}
         subtitle={tr("Підсумкові оцінки ваших дітей.", "Your children's summary grades.")}
       />

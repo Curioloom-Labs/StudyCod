@@ -161,7 +161,7 @@ export const OrgMembersPage: React.FC = () => {
   if (orgs.length === 0) {
     return (
       <div className="max-w-2xl mx-auto px-4 pb-12">
-        <PageHero eyebrowClassic="// org" eyebrowAurora={tr("Організація", "Organization")} title={tr("Учасники", "Members")} />
+        <PageHero eyebrow="// org" title={tr("Учасники", "Members")} />
         <p className="mt-4 flex items-center gap-2 text-sm text-text-secondary">
           <Building2 className="w-4 h-4 shrink-0 text-primary" /> {tr("Ви не адміністратор жодної організації.", "You don't administer any organization.")}
         </p>
@@ -182,8 +182,7 @@ export const OrgMembersPage: React.FC = () => {
   return (
     <div className="max-w-3xl mx-auto px-4 pb-12">
       <PageHero
-        eyebrowClassic="// org"
-        eyebrowAurora={tr("Організація", "Organization")}
+        eyebrow="// org"
         title={tr("Учасники організації", "Organization members")}
         subtitle={tr("Запрошуйте викладачів та асистентів за email.", "Invite teachers and assistants by email.")}
       />

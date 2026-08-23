@@ -77,8 +77,7 @@ export const JoinClassPage: React.FC = () => {
         <ArrowLeft size={16} /> {tr("Назад", "Back")}
       </Button>
       <PageHero
-        eyebrowClassic="// join"
-        eyebrowAurora={tr("Приєднання", "Join")}
+        eyebrow="// join"
         title={tr("Приєднатися до класу", "Join a class")}
         subtitle={tr("Введіть код, який дав вам викладач.", "Enter the code your teacher gave you.")}
       />

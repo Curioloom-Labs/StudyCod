@@ -399,19 +399,6 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       .slice(0, 18);
   }, [solvedLibraryTasks]);
 
-  const switchCourse = async (next: CourseLanguage) => {
-    if (next === course || isStudent || isEducational) return;
-    if (isDesignPreview) {
-      setCourse(next);
-      setMsg(null);
-      return;
-    }
-    // A runtime is selected by activating a course in the catalog. The profile
-    // must not mutate a global User.lang/course field or pretend that a click
-    // changed the learning route.
-    window.location.assign("/learning/catalog");
-  };
-
   const handleFile = useCallback(
     (file: File | null) => {
       if (!file) return;
@@ -479,7 +466,6 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
         saving={saving}
         message={msg}
         onAvatar={onSelectFile}
-        onCourse={switchCourse}
         onSave={handleSave}
       />
     </>;

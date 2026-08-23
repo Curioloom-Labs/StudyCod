@@ -129,8 +129,7 @@ export const SummaryGradesPage: React.FC = () => {
   const totalGrades = summaryGrades.reduce((s, g) => s + g.grades.length, 0);
   return <div className="min-h-full bg-bg-base">
       <PageHero
-        eyebrowClassic="// summary grades"
-        eyebrowAurora={tr("Підсумок", "Summary")}
+        eyebrow="// summary grades"
         title={tr("Проміжні оцінки", "Intermediate grades")}
         subtitle={tr("Тематичні та проміжні оцінки за темами класу.", "Thematic and intermediate grades grouped by class topics.")}
         actions={<>

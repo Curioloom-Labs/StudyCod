@@ -34,7 +34,7 @@ import {
   type TaskWithGrade,
   type TestResult
 } from "../../lib/api/edu";
-import { recordSuccessfulStudySession } from "../../lib/uiMode";
+import { recordSuccessfulStudySession } from "../../lib/studySessions";
 import { easeOutQuint } from "../../lib/motion";
 import { publishLiveCode } from "../../lib/api/liveClassroom";
 import { ArrowLeft, Play, Send, Clock, FileText, Loader2, CheckCircle2, XCircle, Upload, MoreHorizontal, Terminal, BookOpen, FilePlus2, ListChecks, Lock } from "lucide-react";

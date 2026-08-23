@@ -37,8 +37,7 @@ export const TutorPage: React.FC = () => {
   return (
     <div className="min-h-full bg-bg-base">
       <PageHero
-        eyebrowClassic="// tutor"
-        eyebrowAurora={tr("Тьютор", "Tutor")}
+        eyebrow="// tutor"
         title={tr("AI-тьютор", "AI tutor")}
         subtitle={tr("Персональний помічник, що знає твої останні роботи. Питай — наведе на думку.", "A personal helper that knows your recent work. Ask — it nudges you toward the answer.")}
         maxWidth="3xl"

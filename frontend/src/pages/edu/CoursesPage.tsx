@@ -96,8 +96,7 @@ export const CoursesPage: React.FC = () => {
   return (
     <div className="max-w-3xl mx-auto px-4 pb-12">
       <PageHero
-        eyebrowClassic="// courses"
-        eyebrowAurora={tr("Курси", "Courses")}
+        eyebrow="// courses"
         title={tr("Шаблони курсів", "Course templates")}
         subtitle={tr(
           "Багаторазові курси, які призначаються класам (fork-on-assign).",

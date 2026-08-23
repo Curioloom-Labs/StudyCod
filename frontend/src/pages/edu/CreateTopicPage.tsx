@@ -64,8 +64,7 @@ export const CreateTopicPage: React.FC = () => {
   };
   return <div className="min-h-full bg-bg-base">
       <PageHero
-        eyebrowClassic="// new topic"
-        eyebrowAurora={tr("Нова тема", "New topic")}
+        eyebrow="// new topic"
         title={tr("Створити тему", "Create topic")}
         subtitle={tr("Тема обʼєднує практичні завдання та контрольні роботи для класу.", "A topic groups practice tasks and control works for the class.")}
         maxWidth="3xl"

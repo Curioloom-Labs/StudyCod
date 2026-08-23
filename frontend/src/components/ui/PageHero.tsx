@@ -10,9 +10,7 @@ export type PageHeroStat = {
 };
 
 type PageHeroProps = {
-  /** Kept for call-site compatibility; rendered as a single product eyebrow. */
-  eyebrowClassic: string;
-  eyebrowAurora?: string;
+  eyebrow: string;
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
@@ -28,8 +26,7 @@ const tone: Record<NonNullable<PageHeroStat["tone"]>, string> = {
   success: "text-[#147b47] dark:text-[#71edaf]",
 };
 
-export const PageHero: React.FC<PageHeroProps> = ({ eyebrowClassic, eyebrowAurora, title, subtitle, actions, stats, maxWidth = "6xl", className }) => {
-  const eyebrow = (eyebrowAurora || eyebrowClassic).replace(/^\s*\/\/\s*/, "");
+export const PageHero: React.FC<PageHeroProps> = ({ eyebrow, title, subtitle, actions, stats, maxWidth = "6xl", className }) => {
   const width = { "3xl": "max-w-3xl", "4xl": "max-w-4xl", "5xl": "max-w-5xl", "6xl": "max-w-6xl", "7xl": "max-w-7xl" }[maxWidth];
   return <section className={clsx("mx-auto w-full px-4 pb-6 pt-8 md:px-8 md:pt-12", width, className)}>
     <motion.div variants={staggerContainer} initial="initial" animate="animate" className="relative overflow-hidden rounded-[28px] border border-[#152219]/10 bg-[#edf4ee] p-6 shadow-[0_22px_50px_-42px_rgba(11,35,18,.55)] dark:border-white/10 dark:bg-[#121c15] sm:p-8">

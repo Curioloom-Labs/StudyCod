@@ -70,8 +70,7 @@ export const ManualTaskPage: React.FC = () => {
         <ArrowLeft size={16} /> {tr("Назад", "Back")}
       </Button>
       <PageHero
-        eyebrowClassic="// manual task"
-        eyebrowAurora={tr("Завдання", "Task")}
+        eyebrow="// manual task"
         title={tr("Завдання з ручною перевіркою", "Hand-graded task")}
         subtitle={tr("Надішліть текстову відповідь та/або файл.", "Submit a text answer and/or a file.")}
       />

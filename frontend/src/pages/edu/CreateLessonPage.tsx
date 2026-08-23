@@ -122,8 +122,7 @@ export const CreateLessonPage: React.FC = () => {
   };
   return <div className="min-h-full bg-bg-base">
       <PageHero
-        eyebrowClassic="// new lesson"
-        eyebrowAurora={tr("Новий урок", "New lesson")}
+        eyebrow="// new lesson"
         title={tr("Створити урок", "Create lesson")}
         subtitle={tr("Урок або контрольна — з теорією, практикою та обмеженням часу.", "A lesson or control work — with theory, practice and a time limit.")}
         maxWidth="3xl"
