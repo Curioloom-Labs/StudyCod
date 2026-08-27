@@ -25,7 +25,7 @@ type Props = {
   navigationHidden?: boolean;
   onNavigate: (path: string) => void;
   onToggleTheme: () => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
   onEduContextChange?: (studentId: number | null) => void | Promise<void>;
   children: React.ReactNode;
 };
@@ -360,7 +360,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                       type="button"
                       onClick={() => {
                         setAccountOpen(false);
-                        onLogout();
+                        void onLogout();
                       }}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#d84d71] hover:bg-[#fff1f4] dark:text-[#ff94b7] dark:hover:bg-[#ff6b9d]/10"
                       role="menuitem"

@@ -8,6 +8,25 @@
     <title>StudyCod — learn by building</title>
     <meta name="theme-color" content="#101713" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <style>
+      :root { color-scheme: dark; background: #0b100d; }
+      :root[data-theme="light"] { color-scheme: light; background: #f7f8f5; }
+      html, body { min-height: 100%; margin: 0; background: #0b100d; }
+      html[data-theme="light"], html[data-theme="light"] body { background: #f7f8f5; }
+      #root { min-height: 100dvh; background: inherit; }
+    </style>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('studycod_theme');
+          var theme = saved === 'light' || saved === 'dark'
+            ? saved
+            : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (_) {
+        }
+      })();
+    </script>
     <meta
       name="description"
       content="StudyCod — learn by building. Навчайся програмуванню через коротку теорію, практику, підказки та зрозумілий прогрес."

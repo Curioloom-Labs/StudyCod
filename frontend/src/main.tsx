@@ -10,6 +10,45 @@ import "./i18n";
 const PublicLandingPage = React.lazy(() => import("./pages/public/PublicLandingPage").then(mod => ({ default: mod.PublicLandingPage })));
 let appStylesPromise: Promise<unknown> | null = null;
 
+const InitialLoadingScreen: React.FC = () => (
+  <div
+    role="status"
+    aria-live="polite"
+    aria-label="Loading StudyCod…"
+    style={{
+      minHeight: "100dvh",
+      display: "grid",
+      placeItems: "center",
+      padding: "24px",
+      background: "var(--bg-base, #0b100d)",
+      color: "var(--text-primary, #edf3ef)",
+      fontFamily: '"Segoe UI", "Noto Sans", Arial, sans-serif',
+    }}
+  >
+    <div style={{ display: "grid", justifyItems: "center", gap: "16px" }}>
+      <div
+        aria-hidden="true"
+        style={{
+          width: "56px",
+          height: "56px",
+          display: "grid",
+          placeItems: "center",
+          borderRadius: "18px",
+          border: "1px solid color-mix(in srgb, currentColor 14%, transparent)",
+          background: "color-mix(in srgb, currentColor 7%, transparent)",
+          color: "var(--primary, #00d978)",
+          fontSize: "26px",
+          fontWeight: 800,
+          letterSpacing: "-0.08em",
+        }}
+      >
+        &lt;/&gt;
+      </div>
+      <span style={{ fontSize: "13px", opacity: 0.68 }}>StudyCod — learn by building…</span>
+    </div>
+  </div>
+);
+
 function ensureAppStyles() {
   appStylesPromise ??= import("./index.css");
   return appStylesPromise;
@@ -55,7 +94,7 @@ const RouteBootstrap: React.FC = () => {
     };
   }, []);
 
-  if (session === "checking") return null;
+  if (session === "checking") return <InitialLoadingScreen />;
   return session === "anonymous" ? <PublicLandingPage /> : <AppShell />;
 };
 
@@ -181,7 +220,7 @@ try {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<React.StrictMode>
       <ErrorBoundary>
-        <React.Suspense fallback={null}>
+        <React.Suspense fallback={<InitialLoadingScreen />}>
           <RouteBootstrap />
         </React.Suspense>
       </ErrorBoundary>

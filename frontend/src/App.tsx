@@ -2,7 +2,7 @@ import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, sta
 import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
-import { getCachedMeUser, getMe } from "./lib/api/profile";
+import { clearGetMeCache, getCachedMeUser, getMe } from "./lib/api/profile";
 import type { User } from "./types";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
@@ -1340,6 +1340,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [controlExamSession, setControlExamSession] = useState(() => getControlExamSession());
   useEffect(() => {
     const unsubscribe = subscribeControlExamSession(() => {
@@ -1504,7 +1505,32 @@ const EduRoutes: React.FC = React.memo(() => {
       return next;
     });
   }, []);
+  const handleLogout = useCallback(async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setUser(null);
+    setActiveEduStudentId(null);
+    clearControlExamSession();
+    // Clear both memory and the persisted snapshot before leaving EDU so the
+    // root route cannot immediately restore the old educational session.
+    clearGetMeCache({ clearSnapshot: true });
+    try {
+      await api.post("/auth/logout", undefined, {
+        headers: { "X-Skip-Auth-Redirect": "1" },
+      });
+    } catch {
+      // Local cleanup still guarantees that the user can leave EDU offline.
+    } finally {
+      // An in-flight profile request may have completed while logout was in
+      // progress. Clear again so it cannot repopulate the session cache.
+      clearGetMeCache({ clearSnapshot: true });
+      navigate("/", { replace: true });
+    }
+  }, [loggingOut, navigate]);
   const isControlExamActive = !!controlExamSession;
+  if (loggingOut) {
+    return <PageLoader />;
+  }
   if (loading) {
     return <PageLoader />;
   }
@@ -1522,12 +1548,7 @@ const EduRoutes: React.FC = React.memo(() => {
       currentPath={location.pathname}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
-      onLogout={() => {
-        void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
-        setActiveEduStudentId(null);
-        clearControlExamSession();
-        navigate("/");
-      }}
+      onLogout={handleLogout}
     >
       <main className="min-h-0 overflow-y-auto">
         <Suspense fallback={<PageLoader />}>
@@ -1607,12 +1628,7 @@ const EduRoutes: React.FC = React.memo(() => {
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
       onEduContextChange={handleEduContextChange}
-      onLogout={() => {
-        void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
-        setActiveEduStudentId(null);
-        clearControlExamSession();
-        navigate("/");
-      }}
+      onLogout={handleLogout}
     >
       {eduMain}
     </PremiumModuleShell>;
